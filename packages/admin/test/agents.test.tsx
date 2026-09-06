@@ -310,4 +310,29 @@ describe('agent detail — a real route with its own URL (fiche 71)', () => {
       expect.stringContaining('admin'),
     )
   })
+
+  // fiche feedback: saving any unrelated field used to silently drop
+  // budget.eurPerMonth (the edit form had no field for it at all) and
+  // autonomy.overrides (never carried forward) — the store replaces both
+  // wholesale when the patch names them, per-tool overrides and a limit
+  // this form never showed simply vanished.
+  it('editing the role does not silently drop the budget euros/month limit', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToAgents()
+    fireEvent.click(screen.getByRole('link', { name: 'security' }))
+    fireEvent.click(await screen.findByRole('button', { name: "Réglages de l'agent" }))
+    expect(await screen.findByText('10')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
+    fireEvent.change(await screen.findByLabelText('Rôle'), {
+      target: { value: 'Scans dependencies for known CVEs, thoroughly.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('10')).toBeDefined()
+  })
 })

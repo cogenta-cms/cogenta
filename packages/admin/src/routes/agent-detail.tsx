@@ -68,6 +68,7 @@ interface EditState {
   readonly subagents: readonly string[]
   readonly autonomyUi: AutonomyUiLevel
   readonly tokensPerDay: string
+  readonly eurPerMonth: string
   readonly callsPerHour: string
 }
 
@@ -88,6 +89,7 @@ function emptyEdit(): EditState {
     subagents: [],
     autonomyUi: 'co-pilot',
     tokensPerDay: '',
+    eurPerMonth: '',
     callsPerHour: '',
   }
 }
@@ -229,6 +231,7 @@ export function AgentDetailRoute(): JSX.Element {
         subagents: agent.subagents ?? [],
         autonomyUi: LEVEL_TO_UI[agent.autonomy?.default ?? 'propose'] ?? 'co-pilot',
         tokensPerDay: agent.budget?.tokensPerDay?.toString() ?? '',
+        eurPerMonth: agent.budget?.eurPerMonth?.toString() ?? '',
         callsPerHour: agent.budget?.callsPerHour?.toString() ?? '',
       })
       setEditModelChoice(CUSTOM_MODEL)
@@ -244,6 +247,7 @@ export function AgentDetailRoute(): JSX.Element {
     setError(null)
     try {
       const tokensPerDay = Number.parseInt(edit.tokensPerDay, 10)
+      const eurPerMonth = Number.parseInt(edit.eurPerMonth, 10)
       const callsPerHour = Number.parseInt(edit.callsPerHour, 10)
       await updateAgent(token, agent.name, {
         identity: {
@@ -262,9 +266,21 @@ export function AgentDetailRoute(): JSX.Element {
         tools: edit.tools,
         skills: edit.skills,
         subagents: edit.subagents,
-        autonomy: { default: UI_TO_LEVEL[edit.autonomyUi] },
+        // `updateAgent` replaces `autonomy`/`budget` wholesale when present
+        // (same as `skills`/`subagents` — the store's contract, not a bug):
+        // this screen only edits the default level and the three budget
+        // numbers, so per-tool overrides and any limit this form has no
+        // field for must be carried forward from `agent` or they vanish
+        // silently on the next save.
+        autonomy: {
+          ...(agent.autonomy?.overrides === undefined
+            ? {}
+            : { overrides: agent.autonomy.overrides }),
+          default: UI_TO_LEVEL[edit.autonomyUi],
+        },
         budget: {
           ...(Number.isFinite(tokensPerDay) && edit.tokensPerDay !== '' ? { tokensPerDay } : {}),
+          ...(Number.isFinite(eurPerMonth) && edit.eurPerMonth !== '' ? { eurPerMonth } : {}),
           ...(Number.isFinite(callsPerHour) && edit.callsPerHour !== '' ? { callsPerHour } : {}),
         },
       })
@@ -646,6 +662,17 @@ export function AgentDetailRoute(): JSX.Element {
                         min={0}
                         value={edit.tokensPerDay}
                         onChange={(event) => setEdit({ ...edit, tokensPerDay: event.target.value })}
+                      />
+                    )}
+                  </Field>
+                  <Field label={t('agents.budgetMetricEurPerMonth')}>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        type="number"
+                        min={0}
+                        value={edit.eurPerMonth}
+                        onChange={(event) => setEdit({ ...edit, eurPerMonth: event.target.value })}
                       />
                     )}
                   </Field>

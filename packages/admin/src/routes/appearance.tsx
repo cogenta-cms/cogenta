@@ -568,6 +568,13 @@ export function AppearanceRoute(): JSX.Element {
           {t('appearance.heading')}
         </h1>
         <p className="text-muted-foreground text-sm">{t('appearance.description')}</p>
+        {/* Fiche 73 — a theme built by hand (or by an AI agent writing real
+            code, not just tokens) lives in themes/, outside npm packages.
+            Reachable from here regardless of `aiAvailable`: a local theme
+            never needs a configured LLM provider (R2). */}
+        <Link to="/theme-sandbox" className="text-sm text-primary underline">
+          {t('appearance.themeSandboxLinkAction')}
+        </Link>
       </div>
 
       {loadError !== null && (

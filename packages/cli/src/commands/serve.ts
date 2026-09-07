@@ -394,6 +394,7 @@ import {
   cloneThemeIntoSandbox,
   createSandbox as createThemeSandbox,
   deployThemeFromSandbox,
+  listSandboxIds,
   listThemeVersions,
   renderSandboxPreview,
   restoreThemeVersion,
@@ -5131,6 +5132,14 @@ export function createRequestListener(
           'content-type': 'application/json; charset=utf-8',
           'cache-control': 'no-store',
         } as const
+
+        // GET /api/theme/sandbox — every sandbox id currently on disk.
+        if (url.pathname === '/api/theme/sandbox' && req.method === 'GET') {
+          const ids = await listSandboxIds(projectRoot)
+          res.writeHead(200, jsonHeaders)
+          res.end(JSON.stringify({ data: { ids } }))
+          return
+        }
 
         // POST /api/theme/sandbox  { id, cloneFrom? }
         if (url.pathname === '/api/theme/sandbox' && req.method === 'POST') {

@@ -700,6 +700,22 @@ export function installMockFetch(
        * old `theme-router.js` it loaded at startup.
        */
       readonly omitAvailableThemesField?: boolean
+      /** Fiche 73 — sandbox ids `GET /api/theme/sandbox` starts with. */
+      readonly sandboxIds?: readonly string[]
+      /** Fiche 73 — archived version timestamps per theme name, for `GET /api/theme/:name/versions`. */
+      readonly themeVersions?: Readonly<Record<string, readonly string[]>>
+      /** Fiche 73 — `GET /api/theme/sandbox/:id/preview`'s canned answer, keyed by sandbox id. Defaults to a real-looking success. */
+      readonly sandboxPreviews?: Readonly<
+        Record<
+          string,
+          | { readonly ok: true; readonly html: string }
+          | { readonly ok: false; readonly error: string }
+        >
+      >
+      /** Fiche 73 — `GET /api/theme/sandbox/:id/check`'s canned answer, keyed by sandbox id. Defaults to `{ok: true, reasons: []}`. */
+      readonly sandboxChecks?: Readonly<
+        Record<string, { readonly ok: boolean; readonly reasons: readonly string[] }>
+      >
     }
     /**
      * What `GET /api/config-status` answers with (fiche 23 task 5) — `null`
@@ -1717,6 +1733,16 @@ export function installMockFetch(
     updatedAt: '2026-01-01T00:00:00.000Z',
     updatedBy: null,
   }
+  // Fiche 73 — the theme sandbox screen's own state: sandbox ids that exist,
+  // and archived versions per theme name, both mutated by the handlers
+  // below exactly the way `themeOverrides` already is for `/api/theme/overrides`.
+  const mockThemeSandboxIds = new Set<string>(options.theme?.sandboxIds ?? [])
+  const mockThemeVersions = new Map<string, string[]>(
+    Object.entries(options.theme?.themeVersions ?? {}).map(([name, timestamps]) => [
+      name,
+      [...timestamps],
+    ]),
+  )
   const availableThemes = options.theme?.availableThemes ?? [
     {
       name: '@cogenta/theme-canonical',
@@ -8835,6 +8861,138 @@ export function installMockFetch(
             updatedBy: user.id,
           }
           return json(200, { data: themeOverrides })
+        }
+
+        // Fiche 73 — the theme sandbox screen. Every branch below is
+        // checked before the bare `GET /api/theme` fallback further down,
+        // the same ordering the real router needs (serve.ts's own sandbox
+        // route family is matched before its generic `/api/theme` mount).
+
+        if (
+          url.includes('/api/theme/sandbox') &&
+          method === 'GET' &&
+          !url.includes('/preview') &&
+          !url.includes('/check')
+        ) {
+          return json(200, { data: { ids: [...mockThemeSandboxIds] } })
+        }
+
+        if (url.endsWith('/api/theme/sandbox') && method === 'POST') {
+          const sandboxBody = body as { id?: string; cloneFrom?: string } | undefined
+          const id = sandboxBody?.id ?? ''
+          if (id === '') {
+            return json(400, {
+              error: {
+                code: 'THEME_SANDBOX_REQUEST_INVALID',
+                message: 'A sandbox "id" is required.',
+              },
+            })
+          }
+          mockThemeSandboxIds.add(id)
+          return json(201, { data: { id } })
+        }
+
+        const sandboxPreviewMatch = /\/api\/theme\/sandbox\/([^/?]+)\/preview/u.exec(url)
+        if (sandboxPreviewMatch !== null && method === 'GET') {
+          const id = decodeURIComponent(sandboxPreviewMatch[1] as string)
+          const canned = options.theme?.sandboxPreviews?.[id]
+          return json(200, {
+            data: canned ?? {
+              ok: true,
+              html: `<!doctype html><html><body>mock preview of ${id}</body></html>`,
+            },
+          })
+        }
+
+        const sandboxCheckMatch = /\/api\/theme\/sandbox\/([^/?]+)\/check/u.exec(url)
+        if (sandboxCheckMatch !== null && method === 'GET') {
+          const id = decodeURIComponent(sandboxCheckMatch[1] as string)
+          const canned = options.theme?.sandboxChecks?.[id]
+          return json(200, { data: canned ?? { ok: true, reasons: [] } })
+        }
+
+        const sandboxDeployMatch = /\/api\/theme\/sandbox\/([^/?]+)\/deploy/u.exec(url)
+        if (sandboxDeployMatch !== null && method === 'POST') {
+          const id = decodeURIComponent(sandboxDeployMatch[1] as string)
+          const deployBody = body as { themeName?: string } | undefined
+          const themeName = deployBody?.themeName ?? ''
+          const check = options.theme?.sandboxChecks?.[id]
+          if (check !== undefined && !check.ok) {
+            return json(200, { data: { ok: false, reasons: check.reasons } })
+          }
+          const previous = mockThemeVersions.get(themeName) ?? []
+          const timestamp = `2026-01-01T00-00-0${previous.length}-000Z`
+          mockThemeVersions.set(themeName, [timestamp, ...previous])
+          return json(200, {
+            data: {
+              ok: true,
+              themeDirectory: `themes/${themeName}`,
+              previousVersionDirectory:
+                previous.length === 0 ? null : `themes/.versions/${themeName}/${timestamp}`,
+            },
+          })
+        }
+
+        const versionsListMatch = /\/api\/theme\/([^/?]+)\/versions$/u.exec(url)
+        if (versionsListMatch !== null && method === 'GET') {
+          const themeName = decodeURIComponent(versionsListMatch[1] as string)
+          const timestamps = mockThemeVersions.get(themeName) ?? []
+          return json(200, {
+            data: {
+              versions: timestamps.map((timestamp) => ({
+                timestamp,
+                directory: `themes/.versions/${themeName}/${timestamp}`,
+              })),
+            },
+          })
+        }
+
+        const versionsRestoreMatch = /\/api\/theme\/([^/?]+)\/versions\/([^/?]+)\/restore/u.exec(
+          url,
+        )
+        if (versionsRestoreMatch !== null && method === 'POST') {
+          const themeName = decodeURIComponent(versionsRestoreMatch[1] as string)
+          const timestamp = decodeURIComponent(versionsRestoreMatch[2] as string)
+          const timestamps = mockThemeVersions.get(themeName) ?? []
+          if (!timestamps.includes(timestamp)) {
+            return json(200, {
+              data: { ok: false, reasons: [`No archived version "${timestamp}" exists.`] },
+            })
+          }
+          return json(200, {
+            data: {
+              ok: true,
+              themeDirectory: `themes/${themeName}`,
+              archivedCurrentDirectory: `themes/.versions/${themeName}/restored`,
+            },
+          })
+        }
+
+        const exportMatch = /\/api\/theme\/([^/?]+)\/export$/u.exec(url)
+        if (exportMatch !== null && method === 'GET') {
+          const themeName = decodeURIComponent(exportMatch[1] as string)
+          return new Response(`mock zip bytes for ${themeName}`, {
+            status: 200,
+            headers: {
+              'content-type': 'application/zip',
+              'content-disposition': `attachment; filename="${themeName}.zip"`,
+            },
+          })
+        }
+
+        if (url.includes('/api/theme/import') && method === 'POST') {
+          const importBody = body as { sandboxId?: string; zipBase64?: string } | undefined
+          const sandboxId = importBody?.sandboxId ?? ''
+          if (sandboxId === '' || (importBody?.zipBase64 ?? '') === '') {
+            return json(400, {
+              error: {
+                code: 'THEME_SANDBOX_REQUEST_INVALID',
+                message: 'Both "sandboxId" and "zipBase64" are required.',
+              },
+            })
+          }
+          mockThemeSandboxIds.add(sandboxId)
+          return json(200, { data: { sandboxId } })
         }
 
         if (method === 'GET') {

@@ -59,6 +59,7 @@ import { SettingsRoute } from './routes/settings.js'
 import { SitePlanRoute } from './routes/site-plan.js'
 import { TaxonomiesRoute } from './routes/taxonomies.js'
 import { ThemeGeneratorRoute } from './routes/theme-generator.js'
+import { ThemeSandboxRoute } from './routes/theme-sandbox.js'
 import { ToolsRoute } from './routes/tools.js'
 import { TranslationsRoute } from './routes/translations.js'
 import { TrashRoute } from './routes/trash.js'
@@ -134,6 +135,7 @@ export function App(): JSX.Element {
                 <Route path="commerce/payment" element={<CommercePaymentRoute />} />
                 <Route path="appearance" element={<AppearanceRoute />} />
                 <Route path="theme-generator" element={<ThemeGeneratorRoute />} />
+                <Route path="theme-sandbox" element={<ThemeSandboxRoute />} />
                 <Route path="admin-appearance" element={<AdminAppearanceRoute />} />
                 {/* Merged into `/seo`'s "Redirections" tab (fiche 21 task 3) — an old bookmark or link still lands somewhere real. */}
                 <Route path="redirects" element={<Navigate to="/seo?tab=redirects" replace />} />

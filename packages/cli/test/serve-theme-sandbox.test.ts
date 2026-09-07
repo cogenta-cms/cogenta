@@ -148,6 +148,13 @@ describe('cogenta serve — theme sandbox routes (fiche 73 tasks 4-8)', () => {
     })
     expect(created.status).toBe(201)
 
+    const listed = await fetch(`${server.base}/api/theme/sandbox`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(listed.status).toBe(200)
+    const listedBody = (await listed.json()) as { data: { ids: readonly string[] } }
+    expect(listedBody.data.ids).toEqual(['sbx-http'])
+
     // Files are written directly (no HTTP route exists for individual
     // sandbox file writes outside the AI agent tool, which needs a real LLM
     // provider — the same real filesystem `theme.write_sandbox_file` itself

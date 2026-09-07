@@ -373,14 +373,7 @@ export async function deployThemeFromSandbox(
   const sandboxDir = sandboxDirectory(projectRoot, id)
   const destination = join(projectRoot, THEMES_DIRECTORY, themeName)
 
-  let previousVersionDirectory: string | null = null
-  if (await pathExists(destination)) {
-    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
-    previousVersionDirectory = join(projectRoot, THEME_VERSIONS_DIRECTORY, themeName, timestamp)
-    await mkdir(previousVersionDirectory, { recursive: true })
-    await cp(destination, previousVersionDirectory, { recursive: true })
-    await rm(destination, { recursive: true, force: true })
-  }
+  const previousVersionDirectory = await archiveCurrentVersion(projectRoot, themeName)
 
   await mkdir(destination, { recursive: true })
   await cp(sandboxDir, destination, {
@@ -398,4 +391,101 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** A filesystem-safe timestamp — no `:` (Windows refuses it in a path), same format `deployThemeFromSandbox` already uses. */
+function versionTimestamp(): string {
+  return new Date().toISOString().replaceAll(/[:.]/g, '-')
+}
+
+/**
+ * If `themes/<themeName>/` currently exists, archives it into a fresh
+ * `themes/.versions/<themeName>/<timestamp>/` and removes the original —
+ * the same archive-then-remove ordering `deployThemeFromSandbox` already
+ * uses, shared here rather than duplicated because restoring an old version
+ * (below) needs the exact same "never overwrite in place" guarantee: a
+ * restore is itself a deploy of different content, and undoing a mistaken
+ * restore must be exactly as possible as undoing a mistaken deploy.
+ */
+async function archiveCurrentVersion(
+  projectRoot: string,
+  themeName: string,
+): Promise<string | null> {
+  const destination = join(projectRoot, THEMES_DIRECTORY, themeName)
+  if (!(await pathExists(destination))) return null
+
+  const archived = join(projectRoot, THEME_VERSIONS_DIRECTORY, themeName, versionTimestamp())
+  await mkdir(archived, { recursive: true })
+  await cp(destination, archived, { recursive: true })
+  await rm(destination, { recursive: true, force: true })
+  return archived
+}
+
+// ---------------------------------------------------------------------------
+// Task 6 — versions: listing and restore (§ 3.5)
+// ---------------------------------------------------------------------------
+
+export interface ThemeVersionInfo {
+  /** The archive's own directory name — a filesystem-safe timestamp, also this version's id for `restoreThemeVersion`. */
+  readonly timestamp: string
+  readonly directory: string
+}
+
+/** Every archived version of `themeName`, newest first — empty when the theme has never been redeployed or restored (no `.versions/<name>/` yet), never an error. */
+export async function listThemeVersions(
+  projectRoot: string,
+  themeName: string,
+): Promise<readonly ThemeVersionInfo[]> {
+  const dir = join(projectRoot, THEME_VERSIONS_DIRECTORY, themeName)
+  try {
+    const entries = await readdir(dir, { withFileTypes: true })
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => ({ timestamp: entry.name, directory: join(dir, entry.name) }))
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+  } catch {
+    return []
+  }
+}
+
+export type ThemeRestoreResult =
+  | {
+      readonly ok: true
+      readonly themeDirectory: string
+      /** The version that was active just before this restore, archived in turn — `null` only when `themes/<themeName>/` did not exist at all. */
+      readonly archivedCurrentDirectory: string | null
+    }
+  | { readonly ok: false; readonly reasons: readonly string[] }
+
+/**
+ * Recopies an archived version over `themes/<themeName>/` — "même geste
+ * conceptuel que le retour arrière déjà existant pour les mises à jour de
+ * flotte" (§ 3.5): a named, listed past state, restored on an explicit
+ * human gesture, never automatically. Not re-scanned by `verifyTheme` before
+ * restoring: this version already passed that check the moment it was first
+ * deployed (`deployThemeFromSandbox`), and nothing else in this module ever
+ * writes into `themes/.versions/` — an archive is not a place live edits
+ * happen. The currently active version is archived first, exactly like a
+ * fresh deploy, so a restore is itself undoable rather than a one-way door.
+ */
+export async function restoreThemeVersion(
+  projectRoot: string,
+  themeName: string,
+  timestamp: string,
+): Promise<ThemeRestoreResult> {
+  const versionDir = join(projectRoot, THEME_VERSIONS_DIRECTORY, themeName, timestamp)
+  if (!(await pathExists(versionDir))) {
+    return {
+      ok: false,
+      reasons: [`No archived version "${timestamp}" exists for theme "${themeName}".`],
+    }
+  }
+
+  const archivedCurrentDirectory = await archiveCurrentVersion(projectRoot, themeName)
+
+  const destination = join(projectRoot, THEMES_DIRECTORY, themeName)
+  await mkdir(destination, { recursive: true })
+  await cp(versionDir, destination, { recursive: true })
+
+  return { ok: true, themeDirectory: destination, archivedCurrentDirectory }
 }

@@ -8,7 +8,9 @@ import {
   createSandbox,
   deployThemeFromSandbox,
   listSandboxIds,
+  listThemeVersions,
   renderSandboxPreview,
+  restoreThemeVersion,
   sandboxDirectory,
 } from '../src/commands/theme-sandbox.js'
 
@@ -351,5 +353,110 @@ describe('theme deploy pipeline (fiche 73 task 5)', () => {
 
     const result = await deployThemeFromSandbox(root, 'goes-bad', 'stale-check-theme')
     expect(result.ok).toBe(false)
+  })
+})
+
+describe('theme versions (fiche 73 task 6)', () => {
+  const roots: string[] = []
+
+  afterEach(async () => {
+    while (roots.length > 0) {
+      const root = roots.pop()
+      if (root !== undefined) await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('lists no versions for a theme that has never been redeployed or restored', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    expect(await listThemeVersions(root, 'never-touched')).toEqual([])
+  })
+
+  it('archives each prior deploy, listed newest first', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+
+    const dir1 = await createSandbox(root, 'v1')
+    await writeFile(join(dir1, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir1, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    await deployThemeFromSandbox(root, 'v1', 'versioned-theme')
+    expect(await listThemeVersions(root, 'versioned-theme')).toEqual([])
+
+    const dir2 = await createSandbox(root, 'v2')
+    await writeFile(join(dir2, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir2, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    await deployThemeFromSandbox(root, 'v2', 'versioned-theme')
+
+    const dir3 = await createSandbox(root, 'v3')
+    await writeFile(join(dir3, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir3, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    await deployThemeFromSandbox(root, 'v3', 'versioned-theme')
+
+    const versions = await listThemeVersions(root, 'versioned-theme')
+    expect(versions).toHaveLength(2)
+    // Newest first — the version created by the *last* redeploy comes first.
+    const [newest, oldest] = versions
+    expect(
+      newest !== undefined && oldest !== undefined && newest.timestamp >= oldest.timestamp,
+    ).toBe(true)
+  })
+
+  it('restores an archived version over themes/<name>/, archiving the version it replaces in turn', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+
+    const dir1 = await createSandbox(root, 'v1')
+    await writeFile(join(dir1, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir1, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    await deployThemeFromSandbox(root, 'v1', 'restorable-theme')
+
+    const dir2 = await createSandbox(root, 'v2')
+    const updatedManifest = VALID_MANIFEST.replace(
+      'A theme built for the deploy pipeline suite.',
+      'The second, current version.',
+    )
+    await writeFile(join(dir2, 'theme.config.mjs'), updatedManifest, 'utf8')
+    await writeFile(join(dir2, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    await deployThemeFromSandbox(root, 'v2', 'restorable-theme')
+
+    const versions = await listThemeVersions(root, 'restorable-theme')
+    expect(versions).toHaveLength(1) // the archived v1
+
+    const restore = await restoreThemeVersion(
+      root,
+      'restorable-theme',
+      versions[0]?.timestamp ?? '',
+    )
+    expect(restore.ok).toBe(true)
+    if (restore.ok) {
+      expect(restore.archivedCurrentDirectory).not.toBeNull()
+      const restoredManifest = await readFile(
+        join(restore.themeDirectory, 'theme.config.mjs'),
+        'utf8',
+      )
+      expect(restoredManifest).toContain('A theme built for the deploy pipeline suite.')
+    }
+
+    // The restore is itself undoable: the version it replaced (v2) is now archived too.
+    const versionsAfterRestore = await listThemeVersions(root, 'restorable-theme')
+    expect(versionsAfterRestore).toHaveLength(2)
+  })
+
+  it('refuses to restore a version id that does not exist, without touching the active theme', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const dir = await createSandbox(root, 'only-version')
+    await writeFile(join(dir, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    await deployThemeFromSandbox(root, 'only-version', 'lonely-theme')
+
+    const result = await restoreThemeVersion(root, 'lonely-theme', 'not-a-real-timestamp')
+    expect(result.ok).toBe(false)
+
+    const manifest = await readFile(
+      join(root, 'themes', 'lonely-theme', 'theme.config.mjs'),
+      'utf8',
+    )
+    expect(manifest).toContain('deployable-theme')
   })
 })

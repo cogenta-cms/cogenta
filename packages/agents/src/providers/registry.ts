@@ -95,6 +95,9 @@ function buildClient(
     model: entry.model,
     baseUrl,
     name,
+    ...(catalogEntry?.supportsVision === undefined
+      ? {}
+      : { supportsVision: catalogEntry.supportsVision }),
     ...tuning,
     defaults,
   })

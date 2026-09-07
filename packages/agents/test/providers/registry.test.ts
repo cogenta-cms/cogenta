@@ -47,6 +47,29 @@ describe('createProviderRegistry', () => {
     expect(client.name).toBe('openrouter')
   })
 
+  // Fiche feedback, 2026-09-07: a reference screenshot had zero effect on
+  // theme generation against a real DeepSeek key, because the registry used
+  // to hand every openai-compatible vendor the client's own unconditional
+  // `supportsVision: true` regardless of the catalog's own knowledge that
+  // DeepSeek's endpoint does not accept images.
+  it("builds DeepSeek's client with supportsVision: false, carried from the catalog entry", () => {
+    const registry = createProviderRegistry(
+      { deepseek: { apiKey: 'ds-key', model: 'deepseek-v4-flash' } },
+      TEST_TUNING_DEFAULTS,
+    )
+
+    expect(registry.get('deepseek').supportsVision).toBe(false)
+  })
+
+  it('still builds other catalog vendors with supportsVision: true, unaffected by the DeepSeek override', () => {
+    const registry = createProviderRegistry(
+      { openrouter: { apiKey: 'or-key', model: 'openai/gpt-5.2-chat-latest' } },
+      TEST_TUNING_DEFAULTS,
+    )
+
+    expect(registry.get('openrouter').supportsVision).toBe(true)
+  })
+
   it('a name outside the catalog resolves when it carries its own baseUrl (a custom OpenAI-compatible endpoint)', () => {
     const registry = createProviderRegistry(
       {

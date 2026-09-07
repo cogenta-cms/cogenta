@@ -25,6 +25,21 @@ describe('KNOWN_PROVIDER_CATALOG', () => {
     },
   )
 
+  // Fiche feedback, 2026-09-07: DeepSeek's chat-completions endpoint does
+  // not accept an inline image — confirmed live, three theme-generation
+  // runs with an attached screenshot had zero effect against a real
+  // deepseek-v4-flash key until this was corrected.
+  it('flags DeepSeek as not vision-capable', () => {
+    expect(findProviderCatalogEntry('deepseek')?.supportsVision).toBe(false)
+  })
+
+  it('leaves every other entry unset (assume vision-capable), so only DeepSeek is singled out', () => {
+    for (const entry of KNOWN_PROVIDER_CATALOG) {
+      if (entry.id === 'deepseek') continue
+      expect(entry.supportsVision).toBeUndefined()
+    }
+  })
+
   it('every entry has at least one known model', () => {
     for (const entry of KNOWN_PROVIDER_CATALOG) {
       expect(entry.knownModels.length).toBeGreaterThan(0)

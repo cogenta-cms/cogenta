@@ -37,6 +37,24 @@ export interface ProviderCatalogEntry {
    */
   readonly defaultBaseUrl: string
   readonly knownModels: readonly string[]
+  /**
+   * Whether this vendor's chat-completions endpoint accepts an inline image
+   * in the request (an `image_url` content part) — genuinely different per
+   * vendor even though they all speak the same `openai-compatible` wire
+   * format. Absent (the default for every native and `openai-compatible`
+   * entry below except `deepseek`) means "assume yes", matching
+   * `createOpenAiClient`'s own pre-fiche-56 default — this field only
+   * narrows that default where a vendor is known NOT to support it.
+   * Verified wrong for `deepseek` in a live session (fiche feedback,
+   * 2026-09-07): a reference screenshot attached to a theme-customization
+   * request had zero effect on three separate generation runs against a
+   * real `deepseek-v4-flash` key — `createOpenAiClient`'s blanket
+   * `supportsVision: true` meant `propose-theme.ts` attached the image
+   * instead of raising the explicit "could not be analyzed" warning it is
+   * designed to raise for exactly this case. DeepSeek's chat-completions
+   * models take text only; there is no vision variant behind this endpoint.
+   */
+  readonly supportsVision?: boolean
 }
 
 export const KNOWN_PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
@@ -80,6 +98,7 @@ export const KNOWN_PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     wireFormat: 'openai-compatible',
     defaultBaseUrl: 'https://api.deepseek.com/chat/completions',
     knownModels: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+    supportsVision: false,
   },
   {
     id: 'qwen',

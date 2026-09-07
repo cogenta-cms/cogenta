@@ -142,13 +142,23 @@ describe('buildOpenAiRequest', () => {
 })
 
 describe('createOpenAiClient', () => {
-  it('reports supportsVision: true', () => {
+  it('reports supportsVision: true by default', () => {
     const client = createOpenAiClient({
       apiKey: 'k',
       model: 'gpt-5',
       defaults: TEST_TUNING_DEFAULTS,
     })
     expect(client.supportsVision).toBe(true)
+  })
+
+  it('reports supportsVision: false when the caller says so (a vendor known not to accept images, e.g. DeepSeek)', () => {
+    const client = createOpenAiClient({
+      apiKey: 'k',
+      model: 'deepseek-v4-flash',
+      supportsVision: false,
+      defaults: TEST_TUNING_DEFAULTS,
+    })
+    expect(client.supportsVision).toBe(false)
   })
 })
 

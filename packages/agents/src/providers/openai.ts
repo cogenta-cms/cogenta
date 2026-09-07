@@ -247,6 +247,14 @@ export interface OpenAiClientConfig {
    * this machine" policy scoped to a different vendor.
    */
   readonly name?: string
+  /**
+   * Overrides the default `true` — set `false` for an `openai-compatible`
+   * vendor whose chat-completions endpoint is known not to accept an inline
+   * image (`catalog.ts`'s `ProviderCatalogEntry.supportsVision`, e.g.
+   * DeepSeek). Left unset, a client reports vision support exactly as it did
+   * before this field existed.
+   */
+  readonly supportsVision?: boolean
   /** See `ProviderClient.maxOutputTokens`/`requestTimeoutMs`/`maxCorrectionAttempts`. */
   readonly maxOutputTokens?: number
   readonly requestTimeoutMs?: number
@@ -268,7 +276,7 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
   return {
     name,
     model: config.model,
-    supportsVision: true,
+    supportsVision: config.supportsVision ?? true,
     maxOutputTokens,
     requestTimeoutMs,
     maxCorrectionAttempts,

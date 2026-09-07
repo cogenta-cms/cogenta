@@ -370,7 +370,7 @@ import {
 import { createSitePlanning } from './site-plan.js'
 import { renderTermArchivePage, type TermArchiveResolution } from './term-archive-page.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
-import { availableThemes, DEFAULT_THEME_NAME } from './theme-registry.js'
+import { availableThemes, configureThemeRegistry, DEFAULT_THEME_NAME } from './theme-registry.js'
 import {
   type BrandingSettings,
   type ChromeExtras,
@@ -6000,6 +6000,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
     env,
   })
   const projectRoot = loaded.path === null ? (options.cwd ?? process.cwd()) : dirname(loaded.path)
+  // Fiche 73: a theme dropped in `<projectRoot>/themes/<name>/` becomes
+  // resolvable — set once, for the life of this process, same shape as every
+  // other `projectRoot`-derived path below (mail dir, backups, migrations).
+  configureThemeRegistry({ projectRoot })
 
   if (loaded.config.auth.signingKey === undefined) {
     stderr('COGENTA_AUTH_SIGNING_KEY is not set.\n')

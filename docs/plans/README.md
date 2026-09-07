@@ -235,6 +235,7 @@ avant).
 | 67 | [Observabilité : détails, pagination transverse, rétention](67-observabilite-details-pagination-retention.md) | — (fondation pagination) | 5–7 j |
 | 68 | [Réglages généraux : fuseau, format de date, langues, marque](68-reglages-generaux.md) | — | 2–3 j (+1–2 j si langues) |
 | 69 | [Mise à jour de la documentation du projet](69-mise-a-jour-documentation-projet.md) | toutes les autres (tâche de clôture) | continu |
+| 73 | [Thèmes en dossier local, bac à sable isolé, génération par IA](73-themes-locaux-bac-a-sable-ia.md) | — (fondation pour tout thème généré par IA) | conception validée, ADR à rédiger, découpage en 8 tâches |
 
 **Lecture** : hormis les quatre décisions ci-dessus et les trois fondations, les
 **27 fiches restantes sont mutuellement indépendantes** — aucune ne modifie un

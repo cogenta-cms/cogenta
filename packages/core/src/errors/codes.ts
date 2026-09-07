@@ -100,6 +100,11 @@ export const ERROR_CODES = [
   'THEME_IMPORT_FORBIDDEN',
   'THEME_SIGNATURE_INVALID',
 
+  // Theme sandbox (fiche 73) — a working directory outside themes/, never
+  // gated on verifyTheme the way a deployment is (task 5's job).
+  'THEME_SANDBOX_SOURCE_NOT_FOUND',
+  'THEME_SANDBOX_IMAGE_UNSUPPORTED',
+
   // Rendering — the content API a theme reads through (ADR-0016)
   'CONTENT_API_FAILED',
 

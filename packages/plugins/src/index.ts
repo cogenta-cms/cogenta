@@ -8,10 +8,16 @@ export {
 export type {
   IsolatedRunResult,
   PluginDisabledEvent,
+  RunIsolatedModuleOptions,
   RunIsolatedOptions,
   RunPluginOptions,
 } from './host/worker-runner.js'
-export { runIsolated, runIsolatedOrThrow, runPlugin } from './host/worker-runner.js'
+export {
+  runIsolated,
+  runIsolatedModule,
+  runIsolatedOrThrow,
+  runPlugin,
+} from './host/worker-runner.js'
 export type { LoadPluginOptions, PluginSource, ResolvedPlugin } from './loader.js'
 export {
   loadMarketplacePlugin,

@@ -27,7 +27,7 @@
     "directory": "packages/plugins"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"const fs=require('node:fs');fs.mkdirSync('dist/guest',{recursive:true});fs.copyFileSync('src/guest/sandbox-entry.mjs','dist/guest/sandbox-entry.mjs')\"",
+    "build": "tsc -p tsconfig.json && node -e \"const fs=require('node:fs');fs.mkdirSync('dist/guest',{recursive:true});for(const f of ['sandbox-entry.mjs','module-render-entry.mjs'])fs.copyFileSync('src/guest/'+f,'dist/guest/'+f)\"",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run --passWithNoTests"
   },

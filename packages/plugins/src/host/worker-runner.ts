@@ -10,6 +10,7 @@ import type {
   WorkerGuestMessage,
   WorkerHostReplyMessage,
   WorkerRunMessage,
+  WorkerRunModuleMessage,
   WorkerSdkCallMessage,
 } from './protocol.js'
 
@@ -29,6 +30,7 @@ import type {
  */
 
 const SANDBOX_ENTRY_URL = new URL('../guest/sandbox-entry.mjs', import.meta.url)
+const MODULE_RENDER_ENTRY_URL = new URL('../guest/module-render-entry.mjs', import.meta.url)
 
 export interface RunIsolatedOptions {
   /** Killed and reported as a timeout past this — the basic kill switch this task's tests need. */
@@ -204,6 +206,10 @@ export async function runIsolated(
         finish({ ok: false, error: message.message })
         return
       }
+      // `sandbox-entry.mjs` (the guest this worker actually runs) only ever
+      // sends `sdk-call` besides `result`/`error` — `callback-call` belongs
+      // to `runIsolatedModule`'s own, different guest entry.
+      if (message.type === 'callback-call') return
       void handleSdkCall(message, handlers, grantedCapabilities, worker)
     })
 
@@ -220,6 +226,148 @@ export async function runIsolated(
     })
 
     const request: WorkerRunMessage = { id, type: 'run', code, grantedCapabilities }
+    worker.postMessage(request)
+  })
+}
+
+/**
+ * Fiche 73 task 3's real deliverable, and the answer to piège n°1
+ * (`docs/plans/73-themes-locaux-bac-a-sable-ia.md` § 6): the true unknown
+ * was never "can an `HtmlElement` tree survive the worker boundary" — it is
+ * plain data, and `toSerializable`'s existing JSON round-trip already
+ * handles it exactly like any other plugin result. The real unknown was
+ * that a theme's `RenderContext` is NOT plain data: `t()`/`image()`/
+ * `link()`/`content.entry()` are live, host-bound methods a theme calls
+ * *during* rendering. This reuses the exact request/reply RPC shape
+ * `sdk-call` already proves for plugin capabilities (`callback-call`,
+ * `protocol.ts`), generalised past the plugin-specific capability
+ * vocabulary — a caller names whatever host callbacks the module's export
+ * may call, and the guest hands it one flat, RPC-backed callback object as
+ * its last argument.
+ *
+ * A real module — real `import` statements, unlike `runIsolated`'s
+ * import-less `vm.Script` string — so this worker carries a DIFFERENT,
+ * weaker isolation guarantee, documented rather than hidden: see
+ * `module-render-entry.mjs`'s own header, and ADR-0034's "point de
+ * vigilance". This function alone is not the sandbox fiche 73 still needs
+ * to build (task 4) — it is the proof that the sandbox's render path has
+ * somewhere real to stand on.
+ */
+export interface RunIsolatedModuleOptions {
+  /** A `file://` URL, already resolved host-side exactly as `loadTheme` resolves one — the worker does its own real `import()` against it. */
+  readonly moduleUrl: URL
+  readonly exportName: string
+  /** Structured-cloneable positional arguments, passed before the assembled callback object. */
+  readonly args?: readonly unknown[]
+  /** Real host-side implementations, keyed by the same names `callbackNames` requests — a name with no matching handler here is a caller mistake, never a security gap (the guest simply never sees a callback the host was not told to answer). */
+  readonly callbacks?: Readonly<Record<string, (args: readonly unknown[]) => unknown>>
+  readonly timeoutMs?: number
+  readonly maxOldGenerationSizeMb?: number
+}
+
+async function handleCallbackCall(
+  message: { readonly callId: number; readonly name: string; readonly args: readonly unknown[] },
+  callbacks: Readonly<Record<string, (args: readonly unknown[]) => unknown>>,
+  worker: Worker,
+): Promise<void> {
+  const handler = callbacks[message.name]
+  if (handler === undefined) {
+    worker.postMessage({
+      type: 'callback-error',
+      callId: message.callId,
+      message: `no host callback registered for "${message.name}"`,
+    })
+    return
+  }
+  try {
+    const value = await handler(message.args)
+    worker.postMessage({ type: 'callback-result', callId: message.callId, value })
+  } catch (error) {
+    worker.postMessage({
+      type: 'callback-error',
+      callId: message.callId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+export async function runIsolatedModule(
+  options: RunIsolatedModuleOptions,
+): Promise<IsolatedRunResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const callbacks = options.callbacks ?? {}
+  const id = nextRequestId
+  nextRequestId += 1
+
+  const worker = new Worker(MODULE_RENDER_ENTRY_URL, {
+    // Same structural protections `runIsolated` gives a classic-script
+    // run — empty env, bounded heap, no inherited stdio — even though this
+    // worker's own module loader is real (see this function's own doc
+    // comment on why that is a materially different guarantee).
+    env: {},
+    argv: [],
+    resourceLimits: {
+      maxOldGenerationSizeMb: options.maxOldGenerationSizeMb ?? DEFAULT_MAX_OLD_GENERATION_MB,
+      maxYoungGenerationSizeMb: 16,
+    },
+    stdout: false,
+    stderr: false,
+  })
+
+  const startedAt = Date.now()
+
+  return await new Promise<IsolatedRunResult>((resolve) => {
+    let settled = false
+    const finish = (result: Omit<IsolatedRunResult, 'durationMs'>): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      void worker.terminate()
+      resolve({ ...result, durationMs: Date.now() - startedAt })
+    }
+
+    const timer = setTimeout(() => {
+      finish({ ok: false, error: 'module render worker timed out', reason: 'timeout' })
+    }, timeoutMs)
+
+    worker.on('message', (message: WorkerGuestMessage) => {
+      if (message.type === 'result') {
+        finish({ ok: true, value: message.value })
+        return
+      }
+      if (message.type === 'error') {
+        finish({ ok: false, error: message.message })
+        return
+      }
+      if (message.type === 'callback-call') {
+        void handleCallbackCall(message, callbacks, worker)
+        return
+      }
+      // A plugin `sdk-call` message reaching this worker would mean the
+      // wrong guest entry ran — nothing sends one here, so there is
+      // nothing to route it to.
+    })
+
+    worker.once('error', (error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      finish({ ok: false, error: message, reason: classifyFailure(message) })
+    })
+
+    worker.once('exit', (exitCode) => {
+      if (exitCode !== 0) {
+        const message = `module render worker exited with code ${exitCode}`
+        finish({ ok: false, error: message, reason: 'crash' })
+      }
+    })
+
+    const request: WorkerRunModuleMessage = {
+      id,
+      type: 'run-module',
+      moduleUrl: options.moduleUrl.href,
+      exportName: options.exportName,
+      args: options.args ?? [],
+      callbackNames: Object.keys(callbacks),
+    }
     worker.postMessage(request)
   })
 }

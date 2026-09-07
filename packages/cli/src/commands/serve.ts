@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
-import { readFile, stat, statfs } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
@@ -370,6 +371,7 @@ import {
 import { createSitePlanning } from './site-plan.js'
 import { renderTermArchivePage, type TermArchiveResolution } from './term-archive-page.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
+import { exportThemeZip, importThemeZip } from './theme-export.js'
 import { availableThemes, configureThemeRegistry, DEFAULT_THEME_NAME } from './theme-registry.js'
 import {
   type BrandingSettings,
@@ -387,6 +389,15 @@ import {
   type SiteIdentityMedia,
   STYLESHEET_PATH,
 } from './theme-render.js'
+import {
+  checkThemeDeployment,
+  cloneThemeIntoSandbox,
+  createSandbox as createThemeSandbox,
+  deployThemeFromSandbox,
+  listThemeVersions,
+  renderSandboxPreview,
+  restoreThemeVersion,
+} from './theme-sandbox.js'
 import {
   computeCandidateGalleryStyles,
   computeEffectiveStyles,
@@ -4084,6 +4095,16 @@ export interface RuntimeExtras {
    * runtime nobody constructed. `cogenta serve` always passes one.
    */
   readonly observabilityRouter?: ObservabilityRouter
+  /**
+   * Fiche 73 tasks 4-8 — the theme sandbox/deploy/versions/export routes
+   * below need the real project root the same way `configureThemeRegistry`
+   * already does (it is where `.cogenta/theme-sandbox/` and `themes/` both
+   * live). Optional for the same reason every other `RuntimeExtras` field
+   * is: a caller that builds a bare `Site` by hand (a test that does not
+   * exercise these routes) is unaffected, and each route below answers 404
+   * rather than throwing when it is absent.
+   */
+  readonly projectRoot?: string
 }
 
 /**
@@ -5079,6 +5100,223 @@ export function createRequestListener(
           'cache-control': 'no-store',
         })
         res.end(JSON.stringify({ data: { html } }))
+        return
+      }
+
+      // Fiche 73 tasks 4-8 — the theme sandbox: create/clone, isolated
+      // preview, the deploy pipeline, versions, export/import. Checked
+      // before the generic `/api/theme` mount below for the same structural
+      // reason `/api/theme/preview`/`/api/theme/gallery-preview` are: none
+      // of this reaches `ThemeRouter`, and `projectRoot` (where
+      // `.cogenta/theme-sandbox/`/`themes/` both live) is only reachable
+      // here, via `extras` — `ThemeRouter` was never given it, on purpose
+      // (contract D's own theme code never sees a real filesystem path).
+      // Admin-only throughout, checked once for the whole family rather
+      // than in each branch below.
+      if (
+        extras !== undefined &&
+        extras.projectRoot !== undefined &&
+        (url.pathname.startsWith('/api/theme/sandbox') ||
+          url.pathname === '/api/theme/import' ||
+          (url.pathname.startsWith('/api/theme/') &&
+            (url.pathname.includes('/versions') || url.pathname.endsWith('/export'))))
+      ) {
+        if (!context.actor.roles.includes('admin')) {
+          jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may manage theme sandboxes.')
+          return
+        }
+        const projectRoot = extras.projectRoot
+        const segments = url.pathname.split('/').filter((segment) => segment.length > 0)
+        const jsonHeaders = {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+        } as const
+
+        // POST /api/theme/sandbox  { id, cloneFrom? }
+        if (url.pathname === '/api/theme/sandbox' && req.method === 'POST') {
+          const body = (await readBody(req)) as { id?: unknown; cloneFrom?: unknown } | undefined
+          const id = typeof body?.id === 'string' ? body.id : ''
+          if (id === '') {
+            jsonError(res, 400, 'THEME_SANDBOX_REQUEST_INVALID', 'A sandbox "id" is required.')
+            return
+          }
+          try {
+            if (typeof body?.cloneFrom === 'string' && body.cloneFrom !== '') {
+              await cloneThemeIntoSandbox(projectRoot, body.cloneFrom, id)
+            } else {
+              await createThemeSandbox(projectRoot, id)
+            }
+          } catch (error) {
+            writeRestResponse(res, errorResponse(error))
+            return
+          }
+          res.writeHead(201, jsonHeaders)
+          res.end(JSON.stringify({ data: { id } }))
+          return
+        }
+
+        // GET /api/theme/sandbox/:id/preview?siteName=
+        if (
+          segments.length === 5 &&
+          segments[2] === 'sandbox' &&
+          segments[4] === 'preview' &&
+          req.method === 'GET'
+        ) {
+          const id = segments[3] ?? ''
+          const siteName = url.searchParams.get('siteName') ?? undefined
+          const result = await renderSandboxPreview({
+            projectRoot,
+            id,
+            ...(siteName === undefined ? {} : { siteName }),
+          })
+          res.writeHead(200, jsonHeaders)
+          res.end(JSON.stringify({ data: result }))
+          return
+        }
+
+        // GET /api/theme/sandbox/:id/check?themeName=
+        if (
+          segments.length === 5 &&
+          segments[2] === 'sandbox' &&
+          segments[4] === 'check' &&
+          req.method === 'GET'
+        ) {
+          const id = segments[3] ?? ''
+          const themeName = url.searchParams.get('themeName') ?? ''
+          if (themeName === '') {
+            jsonError(
+              res,
+              400,
+              'THEME_SANDBOX_REQUEST_INVALID',
+              'A "themeName" query parameter is required.',
+            )
+            return
+          }
+          const result = await checkThemeDeployment(projectRoot, id, themeName)
+          res.writeHead(200, jsonHeaders)
+          res.end(JSON.stringify({ data: result }))
+          return
+        }
+
+        // POST /api/theme/sandbox/:id/deploy  { themeName }
+        if (
+          segments.length === 5 &&
+          segments[2] === 'sandbox' &&
+          segments[4] === 'deploy' &&
+          req.method === 'POST'
+        ) {
+          const id = segments[3] ?? ''
+          const body = (await readBody(req)) as { themeName?: unknown } | undefined
+          const themeName = typeof body?.themeName === 'string' ? body.themeName : ''
+          if (themeName === '') {
+            jsonError(res, 400, 'THEME_SANDBOX_REQUEST_INVALID', 'A "themeName" is required.')
+            return
+          }
+          const result = await deployThemeFromSandbox(projectRoot, id, themeName)
+          res.writeHead(200, jsonHeaders)
+          res.end(JSON.stringify({ data: result }))
+          return
+        }
+
+        // GET /api/theme/:name/versions
+        if (segments.length === 4 && segments[3] === 'versions' && req.method === 'GET') {
+          const themeName = segments[2] ?? ''
+          const versions = await listThemeVersions(projectRoot, themeName)
+          res.writeHead(200, jsonHeaders)
+          res.end(JSON.stringify({ data: { versions } }))
+          return
+        }
+
+        // POST /api/theme/:name/versions/:timestamp/restore
+        if (
+          segments.length === 6 &&
+          segments[3] === 'versions' &&
+          segments[5] === 'restore' &&
+          req.method === 'POST'
+        ) {
+          const themeName = segments[2] ?? ''
+          const timestamp = segments[4] ?? ''
+          const result = await restoreThemeVersion(projectRoot, themeName, timestamp)
+          res.writeHead(200, jsonHeaders)
+          res.end(JSON.stringify({ data: result }))
+          return
+        }
+
+        // GET /api/theme/:name/export — a real streamed zip download.
+        if (segments.length === 4 && segments[3] === 'export' && req.method === 'GET') {
+          const themeName = segments[2] ?? ''
+          let headersSent = false
+          try {
+            await exportThemeZip({
+              projectRoot,
+              themeName,
+              write: (chunk) => {
+                if (!headersSent) {
+                  headersSent = true
+                  res.writeHead(200, {
+                    'content-type': 'application/zip',
+                    'content-disposition': `attachment; filename="${themeName}.zip"`,
+                    'cache-control': 'no-store',
+                  })
+                }
+                return new Promise<void>((resolve, reject) => {
+                  res.write(chunk, (error) => (error ? reject(error) : resolve()))
+                })
+              },
+            })
+          } catch (error) {
+            // A failure before any byte went out (the common case — the
+            // theme does not exist) can still answer a proper JSON error;
+            // a failure mid-stream cannot, since the 200 header already
+            // went out — nothing sane to do but end the connection.
+            if (!headersSent) {
+              writeRestResponse(res, errorResponse(error))
+              return
+            }
+            res.end()
+            return
+          }
+          res.end()
+          return
+        }
+
+        // POST /api/theme/import  { sandboxId, zipBase64 }
+        if (url.pathname === '/api/theme/import' && req.method === 'POST') {
+          const body = (await readBody(req)) as
+            | { sandboxId?: unknown; zipBase64?: unknown }
+            | undefined
+          const sandboxId = typeof body?.sandboxId === 'string' ? body.sandboxId : ''
+          const zipBase64 = typeof body?.zipBase64 === 'string' ? body.zipBase64 : ''
+          if (sandboxId === '' || zipBase64 === '') {
+            jsonError(
+              res,
+              400,
+              'THEME_SANDBOX_REQUEST_INVALID',
+              'Both "sandboxId" and "zipBase64" are required.',
+            )
+            return
+          }
+          const tempDir = await mkdtemp(join(tmpdir(), 'cogenta-theme-import-'))
+          const zipPath = join(tempDir, 'theme.zip')
+          try {
+            await writeFile(zipPath, Buffer.from(zipBase64, 'base64'))
+            const result = await importThemeZip({ projectRoot, zipPath, sandboxId })
+            res.writeHead(200, jsonHeaders)
+            res.end(JSON.stringify({ data: result }))
+          } catch (error) {
+            writeRestResponse(res, errorResponse(error))
+          } finally {
+            await rm(tempDir, { recursive: true, force: true })
+          }
+          return
+        }
+
+        jsonError(
+          res,
+          404,
+          'THEME_SANDBOX_ROUTE_NOT_FOUND',
+          'No theme sandbox route matches this request.',
+        )
         return
       }
 
@@ -6776,6 +7014,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
         errorLog,
         siteName: loaded.config.site.name,
         observabilityRouter,
+        projectRoot,
       }),
       observabilityRuntime,
     ),

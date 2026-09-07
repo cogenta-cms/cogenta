@@ -95,9 +95,9 @@ function buildClient(
     model: entry.model,
     baseUrl,
     name,
-    ...(catalogEntry?.supportsVision === undefined
+    ...(catalogEntry?.usesMaxCompletionTokens === undefined
       ? {}
-      : { supportsVision: catalogEntry.supportsVision }),
+      : { usesMaxCompletionTokens: catalogEntry.usesMaxCompletionTokens }),
     ...tuning,
     defaults,
   })

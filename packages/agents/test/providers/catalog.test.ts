@@ -25,18 +25,17 @@ describe('KNOWN_PROVIDER_CATALOG', () => {
     },
   )
 
-  // Fiche feedback, 2026-09-07: DeepSeek's chat-completions endpoint does
-  // not accept an inline image — confirmed live, three theme-generation
-  // runs with an attached screenshot had zero effect against a real
-  // deepseek-v4-flash key until this was corrected.
-  it('flags DeepSeek as not vision-capable', () => {
-    expect(findProviderCatalogEntry('deepseek')?.supportsVision).toBe(false)
+  // Fiche feedback, 2026-09-07: a real gpt-5-mini request carrying
+  // max_tokens was rejected outright by OpenAI (its reasoning-tier models,
+  // unlike the older-style clones, reject the field rather than ignore it).
+  it('flags OpenAI as wanting max_completion_tokens', () => {
+    expect(findProviderCatalogEntry('openai')?.usesMaxCompletionTokens).toBe(true)
   })
 
-  it('leaves every other entry unset (assume vision-capable), so only DeepSeek is singled out', () => {
+  it('leaves every other entry unset (still max_tokens), so only OpenAI is singled out', () => {
     for (const entry of KNOWN_PROVIDER_CATALOG) {
-      if (entry.id === 'deepseek') continue
-      expect(entry.supportsVision).toBeUndefined()
+      if (entry.id === 'openai') continue
+      expect(entry.usesMaxCompletionTokens).toBeUndefined()
     }
   })
 

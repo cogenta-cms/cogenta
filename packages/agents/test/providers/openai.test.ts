@@ -9,6 +9,32 @@ import type { ChatRequest } from '../../src/providers/types.js'
 import { TEST_TUNING_DEFAULTS } from './test-tuning-defaults.js'
 
 describe('buildOpenAiRequest', () => {
+  it('sends max_tokens by default, unchanged from before useMaxCompletionTokens existed', () => {
+    const request: ChatRequest = {
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'Hi' }],
+      maxTokens: 100,
+    }
+
+    const built = buildOpenAiRequest(request, 8000)
+    expect(built.max_tokens).toBe(100)
+    expect(built.max_completion_tokens).toBeUndefined()
+  })
+
+  // Fiche feedback, 2026-09-07: a real gpt-5-mini request carrying
+  // max_tokens was rejected outright by OpenAI — confirmed live.
+  it('sends max_completion_tokens instead of max_tokens when useMaxCompletionTokens is true', () => {
+    const request: ChatRequest = {
+      model: 'gpt-5-mini',
+      messages: [{ role: 'user', content: 'Hi' }],
+      maxTokens: 100,
+    }
+
+    const built = buildOpenAiRequest(request, 8000, true)
+    expect(built.max_completion_tokens).toBe(100)
+    expect(built.max_tokens).toBeUndefined()
+  })
+
   it('prepends a system message when request.system is set', () => {
     const request: ChatRequest = {
       model: 'gpt-5',
@@ -142,23 +168,13 @@ describe('buildOpenAiRequest', () => {
 })
 
 describe('createOpenAiClient', () => {
-  it('reports supportsVision: true by default', () => {
+  it('reports supportsVision: true — every openai-compatible vendor is assumed able to take an inline image, since which ones actually can changes on their own schedule', () => {
     const client = createOpenAiClient({
       apiKey: 'k',
       model: 'gpt-5',
       defaults: TEST_TUNING_DEFAULTS,
     })
     expect(client.supportsVision).toBe(true)
-  })
-
-  it('reports supportsVision: false when the caller says so (a vendor known not to accept images, e.g. DeepSeek)', () => {
-    const client = createOpenAiClient({
-      apiKey: 'k',
-      model: 'deepseek-v4-flash',
-      supportsVision: false,
-      defaults: TEST_TUNING_DEFAULTS,
-    })
-    expect(client.supportsVision).toBe(false)
   })
 })
 

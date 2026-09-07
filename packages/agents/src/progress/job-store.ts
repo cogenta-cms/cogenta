@@ -1,4 +1,4 @@
-import { newId as generateId } from '@cogenta/core'
+import { newId as generateId, type Logger } from '@cogenta/core'
 import type { ProgressEvent, ProgressReporter } from './types.js'
 
 /**
@@ -43,10 +43,19 @@ export function createProgressJobStore<TResult>(options?: {
   readonly now?: () => number
   /** How long a finished job's record survives for a last poll to see it — default 5 minutes. */
   readonly retainMs?: number
+  /**
+   * A failed job is always visible to whoever is polling it (`error.message`
+   * on the job record, already shown by the admin UI) — this is the other
+   * half: a structured `logger.error(...)` line so a failure is traceable
+   * server-side too, for a run nobody happened to be watching live. Omitted
+   * in a caller that has no logger to hand (e.g. a unit test).
+   */
+  readonly logger?: Logger
 }): ProgressJobStore<TResult> {
   const makeId = options?.newId ?? generateId
   const now = options?.now ?? Date.now
   const retainMs = options?.retainMs ?? DEFAULT_RETAIN_MS
+  const logger = options?.logger
 
   interface MutableRecord {
     status: JobStatus
@@ -86,8 +95,10 @@ export function createProgressJobStore<TResult>(options?: {
           setTimeout(() => records.delete(id), retainMs).unref?.()
         },
         (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error)
           record.status = 'failed'
-          record.error = { message: error instanceof Error ? error.message : String(error) }
+          record.error = { message }
+          logger?.error('progress job failed', { jobId: id, error: message })
           setTimeout(() => records.delete(id), retainMs).unref?.()
         },
       )

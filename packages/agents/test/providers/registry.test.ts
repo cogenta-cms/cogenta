@@ -47,29 +47,6 @@ describe('createProviderRegistry', () => {
     expect(client.name).toBe('openrouter')
   })
 
-  // Fiche feedback, 2026-09-07: a reference screenshot had zero effect on
-  // theme generation against a real DeepSeek key, because the registry used
-  // to hand every openai-compatible vendor the client's own unconditional
-  // `supportsVision: true` regardless of the catalog's own knowledge that
-  // DeepSeek's endpoint does not accept images.
-  it("builds DeepSeek's client with supportsVision: false, carried from the catalog entry", () => {
-    const registry = createProviderRegistry(
-      { deepseek: { apiKey: 'ds-key', model: 'deepseek-v4-flash' } },
-      TEST_TUNING_DEFAULTS,
-    )
-
-    expect(registry.get('deepseek').supportsVision).toBe(false)
-  })
-
-  it('still builds other catalog vendors with supportsVision: true, unaffected by the DeepSeek override', () => {
-    const registry = createProviderRegistry(
-      { openrouter: { apiKey: 'or-key', model: 'openai/gpt-5.2-chat-latest' } },
-      TEST_TUNING_DEFAULTS,
-    )
-
-    expect(registry.get('openrouter').supportsVision).toBe(true)
-  })
-
   it('a name outside the catalog resolves when it carries its own baseUrl (a custom OpenAI-compatible endpoint)', () => {
     const registry = createProviderRegistry(
       {
@@ -145,12 +122,41 @@ describe('createProviderRegistry', () => {
       expect(openRouterCalls[0]?.url).toBe('https://openrouter.ai/api/v1/chat/completions')
       expect(openAiCalls[0]?.url).not.toBe(openRouterCalls[0]?.url)
 
-      const openAiBody = openAiCalls[0]?.body as { model: string }
-      const openRouterBody = openRouterCalls[0]?.body as { model: string }
-      const { model: openAiModel, ...openAiBodyRest } = openAiBody
-      const { model: openRouterModel, ...openRouterBodyRest } = openRouterBody
-      expect(openAiModel).toBe('gpt-5')
-      expect(openRouterModel).toBe('anthropic/claude-sonnet-5')
+      const openAiBody = openAiCalls[0]?.body as {
+        model: string
+        max_tokens?: number
+        max_completion_tokens?: number
+      }
+      const openRouterBody = openRouterCalls[0]?.body as {
+        model: string
+        max_tokens?: number
+        max_completion_tokens?: number
+      }
+      expect(openAiBody.model).toBe('gpt-5')
+      expect(openRouterBody.model).toBe('anthropic/claude-sonnet-5')
+      // The one deliberate difference (fiche feedback, 2026-09-07): OpenAI's
+      // own reasoning-tier models reject `max_tokens` outright, so only the
+      // genuine `openai` catalog entry sends `max_completion_tokens`
+      // instead — everything else about the two requests still matches.
+      expect(openAiBody.max_completion_tokens).toBe(10)
+      expect(openAiBody.max_tokens).toBeUndefined()
+      expect(openRouterBody.max_tokens).toBe(10)
+      expect(openRouterBody.max_completion_tokens).toBeUndefined()
+
+      const {
+        model: openAiModel,
+        max_tokens: _oaMaxTokens,
+        max_completion_tokens: _oaMaxCompletionTokens,
+        ...openAiBodyRest
+      } = openAiBody
+      const {
+        model: openRouterModel,
+        max_tokens: _orMaxTokens,
+        max_completion_tokens: _orMaxCompletionTokens,
+        ...openRouterBodyRest
+      } = openRouterBody
+      void openAiModel
+      void openRouterModel
       expect(openRouterBodyRest).toEqual(openAiBodyRest)
     })
   })

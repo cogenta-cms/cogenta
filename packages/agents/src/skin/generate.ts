@@ -102,9 +102,11 @@ export interface GenerateSkinOptions {
    * used to reach `chooseTheme` in `theme-creator/propose-theme.ts` (which
    * theme *package*) and then be silently dropped: this function, the one
    * that actually fills contract D's colour/font/spacing tokens, never saw
-   * it. Already gated by the caller on `client.supportsVision` (see
-   * `processAttachments` in `propose-theme.ts`) — this function trusts that
-   * gate rather than re-checking it.
+   * it. Forwarded unconditionally by the caller (`processAttachments` in
+   * `propose-theme.ts`) — no "does this provider support vision" check
+   * gates it; if the vendor's endpoint cannot take an inline image, its own
+   * response says so and that failure surfaces as this function's own
+   * `{ ok: false, reason }`, not a silent drop.
    */
   readonly images?: readonly ChatImagePart[]
 }

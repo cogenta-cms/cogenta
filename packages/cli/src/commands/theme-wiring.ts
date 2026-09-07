@@ -17,7 +17,7 @@ import {
   type ThemeCreatorTargetTheme,
 } from '@cogenta/agents'
 import type { ThemeRouterOptions } from '@cogenta/api'
-import type { CogentaConfig, DatabaseHandle } from '@cogenta/core'
+import type { CogentaConfig, DatabaseHandle, Logger } from '@cogenta/core'
 import { createSkinGallery, ensureRegistryTables } from '@cogenta/plugins'
 import { mergeSkinTokens, renderSkin, validateSkin } from '@cogenta/render'
 import {
@@ -82,6 +82,8 @@ export interface ThemeWiringOptions {
    * is the sole fallback then.
    */
   readonly agentStore?: AgentDeclarationStore
+  /** Fed to `createProgressJobStore` so a failed generation job is logged server-side, not only visible to whoever was polling it live. */
+  readonly logger?: Logger
 }
 
 function providerClient(
@@ -282,7 +284,9 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
           // Fiche feedback — "je ne sais pas si le traitement est en cours
           // ou pas". Own store per `createThemeWiring` call (one per
           // `cogenta serve` boot), same lifetime as `generator` itself.
-          progressJobs: createProgressJobStore(),
+          progressJobs: createProgressJobStore({
+            ...(options.logger === undefined ? {} : { logger: options.logger }),
+          }),
         }),
     ...(options.development && !options.readOnly
       ? {

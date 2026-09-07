@@ -224,6 +224,37 @@ describe('createOpenAiClient', () => {
     const sentBody = JSON.parse(init.body as string) as { max_tokens: number }
     expect(sentBody.max_tokens).toBe(12000)
   })
+
+  // Fiche feedback, 2026-09-07: a real gpt-5-mini request carrying
+  // max_tokens was rejected outright by OpenAI — confirmed live. This is
+  // the wiring test: `usesMaxCompletionTokens` on the client config actually
+  // changes what field name reaches the wire, not just what
+  // `buildOpenAiRequest` returns in isolation.
+  it('sends max_completion_tokens, not max_tokens, when usesMaxCompletionTokens is set (the gpt-5 fix)', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, {
+        choices: [{ message: { content: 'Hi.' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }),
+    )
+    const client = createOpenAiClient({
+      apiKey: 'k',
+      model: 'gpt-5-mini',
+      name: 'openai',
+      fetchImpl,
+      usesMaxCompletionTokens: true,
+      maxOutputTokens: 16000,
+      defaults: TEST_TUNING_DEFAULTS,
+    })
+    await client.chat({ model: 'x', messages: [{ role: 'user', content: 'hi' }] })
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
+    const sentBody = JSON.parse(init.body as string) as {
+      max_tokens?: number
+      max_completion_tokens?: number
+    }
+    expect(sentBody.max_completion_tokens).toBe(16000)
+    expect(sentBody.max_tokens).toBeUndefined()
+  })
 })
 
 describe('createGoogleClient', () => {

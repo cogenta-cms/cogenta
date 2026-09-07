@@ -45,10 +45,7 @@ interface FakeThemeCreatorClient extends ProviderClient {
  * because `generateSkinCandidates` runs its directions with `Promise.all`,
  * so ordering across the two kinds of call is not guaranteed.
  */
-function fakeClient(
-  choiceReplies: readonly string[],
-  options?: { readonly supportsVision?: boolean },
-): FakeThemeCreatorClient {
+function fakeClient(choiceReplies: readonly string[]): FakeThemeCreatorClient {
   const requests: ChatRequest[] = []
   const chooseRequests: ChatRequest[] = []
   let choiceIndex = 0
@@ -60,7 +57,6 @@ function fakeClient(
     maxOutputTokens: 8000,
     requestTimeoutMs: 180_000,
     maxCorrectionAttempts: 3,
-    ...(options?.supportsVision === undefined ? {} : { supportsVision: options.supportsVision }),
     requests,
     chooseRequests,
     async chat(request: ChatRequest): Promise<ChatResponse> {
@@ -181,11 +177,18 @@ describe('proposeThemeCandidates', () => {
     expect(dataMessage.match(/<\/data>/g)).toHaveLength(1)
   })
 
-  it('attaches an image as a real content block when the provider supports vision', async () => {
-    const client = fakeClient(
-      [choiceReply({ themeName: '@cogenta/theme-canonical', rationale: 'Matches the mockup.' })],
-      { supportsVision: true },
-    )
+  // No `supportsVision` declared on the fake client at all — the image is
+  // attached regardless. Fiche feedback, 2026-09-07: whether a given vendor
+  // or model actually accepts an inline image changes on its own schedule;
+  // hard-coding a static per-vendor allow/deny list here would silently go
+  // stale. The request is simply sent with the image attached, and if a
+  // vendor's own endpoint rejects it, that surfaces as this call's own
+  // failure (see "surfaces the vendor's own rejection" below) — not a
+  // pre-emptive guess made before ever attempting the call.
+  it('attaches an image as a real content block, without checking any declared vision capability first', async () => {
+    const client = fakeClient([
+      choiceReply({ themeName: '@cogenta/theme-canonical', rationale: 'Matches the mockup.' }),
+    ])
     const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 13, 10, 26, 10, 1, 2, 3])
 
     const result = await proposeThemeCandidates({
@@ -210,10 +213,9 @@ describe('proposeThemeCandidates', () => {
   // the theme *package* but never the visible colours/typography, which is
   // what "personnalise ce thème comme cette capture" is actually asking for.
   it('also attaches the same image to the skin-candidate calls, not only the theme choice', async () => {
-    const client = fakeClient(
-      [choiceReply({ themeName: '@cogenta/theme-canonical', rationale: 'Matches the mockup.' })],
-      { supportsVision: true },
-    )
+    const client = fakeClient([
+      choiceReply({ themeName: '@cogenta/theme-canonical', rationale: 'Matches the mockup.' }),
+    ])
     const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 13, 10, 26, 10, 1, 2, 3])
 
     const result = await proposeThemeCandidates({
@@ -238,9 +240,34 @@ describe('proposeThemeCandidates', () => {
     }
   })
 
-  it('drops an image and warns, never claiming to have seen it, when the provider has no vision', async () => {
-    const client = fakeClient([choiceReply({ themeName: '@cogenta/theme-canonical' })])
+  // Fiche feedback, 2026-09-07: don't pre-emptively decide "this vendor
+  // doesn't support images" and silently drop the attachment — attempt the
+  // real call, and if the vendor's own endpoint rejects it, that failure is
+  // what the caller sees (shown in the admin UI, logged server-side by
+  // `createProgressJobStore`'s own `logger.error`), not a guess made before
+  // ever trying.
+  it("surfaces the vendor's own rejection when it cannot actually take the image, instead of guessing in advance", async () => {
     const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 13, 10, 26, 10, 1, 2, 3])
+    const client: ProviderClient & { readonly calls: number[] } = {
+      name: 'fake-no-vision',
+      model: 'fake-model',
+      maxOutputTokens: 8000,
+      requestTimeoutMs: 180_000,
+      maxCorrectionAttempts: 2,
+      calls: [],
+      async chat(request: ChatRequest): Promise<ChatResponse> {
+        this.calls.push(1)
+        if (Array.isArray(request.messages.at(-1)?.content)) {
+          throw new Error('this vendor does not accept image content')
+        }
+        return {
+          content: choiceReply({ themeName: '@cogenta/theme-canonical' }),
+          toolCalls: [],
+          stopReason: 'end_turn',
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      },
+    }
 
     const result = await proposeThemeCandidates({
       ...BASE_INPUT,
@@ -248,15 +275,13 @@ describe('proposeThemeCandidates', () => {
       attachments: [{ filename: 'mockup.png', mimeType: 'image/png', data: imageBytes }],
     })
 
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.warnings).toEqual([
-      'mockup.png: could not be analyzed — the configured provider does not support image input',
-    ])
-    // The model was never handed the image at all — content stayed plain text.
-    const content = client.chooseRequests[0]?.messages.at(-1)?.content
-    expect(typeof content).toBe('string')
-    expect(content as string).not.toContain(imageBytes.toString('base64'))
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toContain('this vendor does not accept image content')
+    // It did try — the real call was attempted (and retried up to
+    // maxCorrectionAttempts, the correction loop's normal behaviour for any
+    // failed attempt) — not skipped on a pre-emptive guess.
+    expect(client.calls.length).toBeGreaterThan(0)
   })
 
   it('steers the skin description towards adjusting the current theme when a baseline is given', async () => {

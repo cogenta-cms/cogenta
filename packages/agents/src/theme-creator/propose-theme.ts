@@ -108,15 +108,19 @@ function base64Of(bytes: Uint8Array): string {
 
 /**
  * Splits attachments into what `assembleContext`'s `data` channel can carry
- * (document text — R8) and what only a vision-capable client's content
- * blocks can carry (images). An image dropped for lack of vision support
- * never reaches `imageParts`, which is what makes it structurally impossible
- * for the classification call below to have "seen" it.
+ * (document text — R8) and what a multimodal content block carries (images).
+ *
+ * An attached image is always forwarded — this deliberately does not ask any
+ * static "does this provider support vision" declaration first. Which
+ * vendors and models accept an inline image changes on their own schedule,
+ * outside this codebase's control; hard-coding a per-vendor allow/deny list
+ * here would silently go stale the day a vendor adds (or drops) support.
+ * Instead, the request is simply sent with the image attached, and if the
+ * vendor's own API rejects it, that failure surfaces as a normal job error —
+ * shown to the operator, logged, and the run stops there. That is real
+ * information about what actually happened, not a guess made ahead of time.
  */
-function processAttachments(
-  attachments: readonly ThemeCreatorAttachment[],
-  client: ProviderClient,
-): ProcessedAttachments {
+function processAttachments(attachments: readonly ThemeCreatorAttachment[]): ProcessedAttachments {
   const documentData: DataItem[] = []
   const imageParts: ChatImagePart[] = []
   const warnings: string[] = []
@@ -144,17 +148,11 @@ function processAttachments(
     }
 
     if (attachment.mimeType.startsWith('image/')) {
-      if (client.supportsVision === true) {
-        imageParts.push({
-          type: 'image',
-          mediaType: attachment.mimeType,
-          data: base64Of(attachment.data),
-        })
-      } else {
-        warnings.push(
-          `${attachment.filename}: could not be analyzed — the configured provider does not support image input`,
-        )
-      }
+      imageParts.push({
+        type: 'image',
+        mediaType: attachment.mimeType,
+        data: base64Of(attachment.data),
+      })
       continue
     }
 
@@ -323,7 +321,6 @@ export async function proposeThemeCandidates(
 
   const { documentData, imageParts, warnings, contributedFilenames } = processAttachments(
     input.attachments ?? [],
-    input.client,
   )
   for (const warning of warnings) progress.report(warning)
 

@@ -2707,7 +2707,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             // lifetime as every other per-request-runtime singleton here
             // (`mcpConnections`, `agentsRuntime` itself) — in-memory,
             // per-process, watched by whichever browser tab started a job.
-            progressJobs: createProgressJobStore(),
+            progressJobs: createProgressJobStore({ logger }),
           }),
           providersRouter: createProvidersRouter({ providers: agentsRuntime.providerRegistry }),
           agentSkillsRouter: createAgentSkillsRouter({ skills: agentsRuntime.skillRegistry }),
@@ -6217,6 +6217,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     agentStore: createFileAgentDeclarationStore({
       dir: join(agentsRuntimeDataDir, AGENTS_SUBDIR),
     }),
+    logger,
   }
   const themeCreatorTools = await createThemeCreatorToolWiring(themeWiringOptions)
 

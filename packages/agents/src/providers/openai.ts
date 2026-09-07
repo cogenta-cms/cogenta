@@ -34,7 +34,21 @@ interface OpenAiMessage {
 
 export interface OpenAiRequestBody {
   readonly model: string
-  readonly max_tokens: number
+  /**
+   * Exactly one of `max_tokens`/`max_completion_tokens` is ever set — never
+   * both — because OpenAI's own reasoning-tier models (o1, o3, and this
+   * catalog's gpt-5 family) reject a request carrying `max_tokens` outright
+   * (400 `Unsupported parameter`), rather than merely ignoring it. Which one
+   * a given request carries is decided by `buildOpenAiRequest`'s
+   * `useMaxCompletionTokens` parameter, itself driven by
+   * `ProviderCatalogEntry.usesMaxCompletionTokens` — `true` only for the
+   * `openai` catalog entry (fiche feedback, 2026-09-07: confirmed live
+   * against a real `gpt-5-mini` key). Every other `openai-compatible` vendor
+   * (OpenRouter, DeepSeek, Qwen, GLM, a custom endpoint) still speaks the
+   * older, more widely cloned `max_tokens` field.
+   */
+  readonly max_tokens?: number
+  readonly max_completion_tokens?: number
   readonly messages: readonly OpenAiMessage[]
   readonly tools?: readonly {
     readonly type: 'function'
@@ -128,6 +142,7 @@ function toOpenAiMessage(message: ChatMessage): OpenAiMessage {
 export function buildOpenAiRequest(
   request: ChatRequest,
   fallbackMaxTokens: number,
+  useMaxCompletionTokens = false,
 ): OpenAiRequestBody {
   const messages: OpenAiMessage[] = []
   if (request.system !== undefined) {
@@ -135,9 +150,11 @@ export function buildOpenAiRequest(
   }
   messages.push(...request.messages.map(toOpenAiMessage))
 
+  const maxTokens = request.maxTokens ?? fallbackMaxTokens
+
   return {
     model: request.model,
-    max_tokens: request.maxTokens ?? fallbackMaxTokens,
+    ...(useMaxCompletionTokens ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
     messages,
     ...(request.tools === undefined
       ? {}
@@ -248,13 +265,13 @@ export interface OpenAiClientConfig {
    */
   readonly name?: string
   /**
-   * Overrides the default `true` — set `false` for an `openai-compatible`
-   * vendor whose chat-completions endpoint is known not to accept an inline
-   * image (`catalog.ts`'s `ProviderCatalogEntry.supportsVision`, e.g.
-   * DeepSeek). Left unset, a client reports vision support exactly as it did
-   * before this field existed.
+   * `true` sends `max_completion_tokens` instead of `max_tokens` — set for
+   * an `openai-compatible` vendor whose endpoint rejects the older field
+   * outright (`catalog.ts`'s `ProviderCatalogEntry.usesMaxCompletionTokens`,
+   * currently only the genuine `openai` entry). Left unset, a client builds
+   * its request exactly as it did before this field existed.
    */
-  readonly supportsVision?: boolean
+  readonly usesMaxCompletionTokens?: boolean
   /** See `ProviderClient.maxOutputTokens`/`requestTimeoutMs`/`maxCorrectionAttempts`. */
   readonly maxOutputTokens?: number
   readonly requestTimeoutMs?: number
@@ -276,7 +293,7 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
   return {
     name,
     model: config.model,
-    supportsVision: config.supportsVision ?? true,
+    supportsVision: true,
     maxOutputTokens,
     requestTimeoutMs,
     maxCorrectionAttempts,
@@ -288,7 +305,9 @@ export function createOpenAiClient(config: OpenAiClientConfig): ProviderClient {
           'content-type': 'application/json',
           authorization: `Bearer ${config.apiKey}`,
         },
-        body: JSON.stringify(buildOpenAiRequest(request, maxOutputTokens)),
+        body: JSON.stringify(
+          buildOpenAiRequest(request, maxOutputTokens, config.usesMaxCompletionTokens ?? false),
+        ),
         signal,
       }).catch((cause: unknown) => {
         if (signal.aborted && options?.signal?.aborted !== true) {

@@ -241,9 +241,17 @@ export/import) sans jamais invoquer l'IA, exactement la garantie demandée.
    comporter comme le fait déjà un thème npm manquant aujourd'hui (repli sur
    `theme-canonical`, jamais un crash) — même logique, pas une nouvelle branche à
    inventer.
-6. **`verifyTheme` accepte déjà des avertissements vs des refus** — bien garder cette
-   distinction dans l'affichage du pipeline de déploiement plutôt que de tout
-   remonter comme bloquant.
+6. **Correction (tâche 5) : `verifyTheme`/`inspectTheme` n'ont en réalité aucune
+   distinction avertissement/refus** — cette section le supposait à tort. Le code
+   réel (`packages/render/src/theme/verify/verify-theme.ts`) traite chaque
+   `finding` (import interdit, `import()` illisible, CommonJS) et chaque bloc de
+   vocabulaire manquant comme un refus, sans exception — cohérent avec le contrat D
+   lui-même (« Un thème qui importe [un module interdit] est **refusé**, pas
+   averti »). Le pipeline de déploiement (tâche 5, `checkThemeDeployment`) rapporte
+   donc fidèlement ce que le scan refuse réellement, sans fabriquer une liste
+   « avertissements » qui serait toujours vide. Si un vrai avertissement (non
+   bloquant) doit un jour exister, il faudra d'abord l'ajouter à `verifyTheme` lui-même
+   — ce n'est pas le travail de la tâche 5 ni de la tâche 6.
 
 ## 7. Tests exigés
 

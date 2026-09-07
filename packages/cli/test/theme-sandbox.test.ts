@@ -3,8 +3,10 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  checkThemeDeployment,
   cloneThemeIntoSandbox,
   createSandbox,
+  deployThemeFromSandbox,
   listSandboxIds,
   renderSandboxPreview,
   sandboxDirectory,
@@ -37,6 +39,68 @@ export function renderChrome() {
 
 const THROWING_RENDER_MODULE = `
 export function renderPage() { throw new Error('fixture render failure') }
+export function renderChrome() { return { header: '', footer: '' } }
+`
+
+// The full contract B vocabulary (`@cogenta/blocks`'s `VOCABULARY_NAMES`),
+// hardcoded rather than imported — same reasoning `theme-registry-filesystem.
+// test.ts` already documents: a fixture theme lives outside this monorepo's
+// own `node_modules` resolution for the manifest's own purposes, and
+// `verifyTheme` (task 1, exercised for real by `checkThemeDeployment`)
+// refuses a manifest that does not cover it.
+const FULL_VOCABULARY = [
+  'hero',
+  'prose',
+  'mediaFigure',
+  'featureGrid',
+  'cta',
+  'gallery',
+  'quote',
+  'faq',
+  'stats',
+  'logos',
+  'collectionList',
+  'embed',
+  'testimonial',
+  'pricingTable',
+  'accordion',
+  'statCounter',
+  'logoStrip',
+]
+
+const VALID_MANIFEST = `
+export default {
+  name: 'deployable-theme',
+  version: '1.0.0',
+  engine: '^1.0.0',
+  blocks: '^1.0.0',
+  implements: ${JSON.stringify(FULL_VOCABULARY)},
+  collections: '*',
+  runtime: 'server',
+  tokens: 'theme.tokens.json',
+  description: 'A theme built for the deploy pipeline suite.',
+  author: 'A developer, not an agent',
+}
+`
+
+const INCOMPLETE_MANIFEST = `
+export default {
+  name: 'deployable-theme',
+  version: '1.0.0',
+  engine: '^1.0.0',
+  blocks: '^1.0.0',
+  implements: [],
+  collections: '*',
+  runtime: 'server',
+  tokens: 'theme.tokens.json',
+  description: 'Missing every block on purpose.',
+  author: 'A developer, not an agent',
+}
+`
+
+const FORBIDDEN_IMPORT_RENDER_MODULE = `
+import { readFileSync } from 'node:fs'
+export function renderPage() { readFileSync('/etc/passwd'); return { tag: 'main', attrs: {}, children: [] } }
 export function renderChrome() { return { header: '', footer: '' } }
 `
 
@@ -153,5 +217,139 @@ describe('theme sandbox (fiche 73 task 4)', () => {
     await writeFile(join(dir, 'theme.render.mjs'), THROWING_RENDER_MODULE, 'utf8')
     const second = await renderSandboxPreview({ projectRoot: root, id: 'live-edit' })
     expect(second.ok).toBe(false)
+  })
+})
+
+describe('theme deploy pipeline (fiche 73 task 5)', () => {
+  const roots: string[] = []
+
+  afterEach(async () => {
+    while (roots.length > 0) {
+      const root = roots.pop()
+      if (root !== undefined) await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses to deploy a sandbox with no render module, and touches nothing in themes/', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    await createSandbox(root, 'empty')
+
+    const check = await checkThemeDeployment(root, 'empty', 'my-theme')
+    expect(check.ok).toBe(false)
+    expect(check.reasons[0]).toContain('nothing to deploy')
+
+    const result = await deployThemeFromSandbox(root, 'empty', 'my-theme')
+    expect(result.ok).toBe(false)
+    await expect(
+      readFile(join(root, 'themes', 'my-theme', 'theme.config.mjs'), 'utf8'),
+    ).rejects.toThrow()
+  })
+
+  it('refuses to deploy a theme missing vocabulary blocks — the same rule a built-in theme already meets', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const dir = await createSandbox(root, 'incomplete')
+    await writeFile(join(dir, 'theme.config.mjs'), INCOMPLETE_MANIFEST, 'utf8')
+    await writeFile(join(dir, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+
+    const check = await checkThemeDeployment(root, 'incomplete', 'my-theme')
+    expect(check.ok).toBe(false)
+    expect(check.reasons[0]).toContain('does not implement every block')
+  })
+
+  it('refuses to deploy a theme with a forbidden import — never copies it into themes/', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const dir = await createSandbox(root, 'forbidden')
+    await writeFile(join(dir, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir, 'theme.render.mjs'), FORBIDDEN_IMPORT_RENDER_MODULE, 'utf8')
+
+    const check = await checkThemeDeployment(root, 'forbidden', 'my-theme')
+    expect(check.ok).toBe(false)
+    expect(check.reasons[0]).toContain('node:fs')
+
+    const result = await deployThemeFromSandbox(root, 'forbidden', 'my-theme')
+    expect(result.ok).toBe(false)
+    await expect(
+      readFile(join(root, 'themes', 'my-theme', 'theme.config.mjs'), 'utf8'),
+    ).rejects.toThrow()
+  })
+
+  it('deploys a valid sandbox theme into themes/<name>/, without its own disposable preview adapter', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const dir = await createSandbox(root, 'ready')
+    await writeFile(join(dir, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    // A stray preview adapter, as if a preview had been requested earlier —
+    // it must never end up inside the deployed theme.
+    await renderSandboxPreview({ projectRoot: root, id: 'ready' })
+
+    const check = await checkThemeDeployment(root, 'ready', 'my-first-theme')
+    expect(check.ok).toBe(true)
+
+    const result = await deployThemeFromSandbox(root, 'ready', 'my-first-theme')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.previousVersionDirectory).toBeNull()
+      const manifest = await readFile(join(result.themeDirectory, 'theme.config.mjs'), 'utf8')
+      expect(manifest).toContain('deployable-theme')
+      await expect(
+        readFile(join(result.themeDirectory, '.cogenta-preview-adapter.mjs'), 'utf8'),
+      ).rejects.toThrow()
+    }
+  })
+
+  it('archives the previous version, timestamped, on a redeploy — never overwritten in place', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const dir = await createSandbox(root, 'v1')
+    await writeFile(join(dir, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    const first = await deployThemeFromSandbox(root, 'v1', 'redeployed-theme')
+    expect(first.ok).toBe(true)
+
+    const dir2 = await createSandbox(root, 'v2')
+    const updatedManifest = VALID_MANIFEST.replace(
+      'A theme built for the deploy pipeline suite.',
+      'A second, updated version.',
+    )
+    await writeFile(join(dir2, 'theme.config.mjs'), updatedManifest, 'utf8')
+    await writeFile(join(dir2, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    const second = await deployThemeFromSandbox(root, 'v2', 'redeployed-theme')
+    expect(second.ok).toBe(true)
+    if (second.ok) {
+      expect(second.previousVersionDirectory).not.toBeNull()
+      const archivedManifest =
+        second.previousVersionDirectory === null
+          ? ''
+          : await readFile(join(second.previousVersionDirectory, 'theme.config.mjs'), 'utf8')
+      expect(archivedManifest).toContain('A theme built for the deploy pipeline suite.')
+
+      const currentManifest = await readFile(
+        join(second.themeDirectory, 'theme.config.mjs'),
+        'utf8',
+      )
+      expect(currentManifest).toContain('A second, updated version.')
+    }
+  })
+
+  it('re-checks right before deploying — a sandbox that becomes invalid between the check and the confirm click is still refused', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const dir = await createSandbox(root, 'goes-bad')
+    await writeFile(join(dir, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+
+    const check = await checkThemeDeployment(root, 'goes-bad', 'stale-check-theme')
+    expect(check.ok).toBe(true)
+
+    // The sandbox changes after the check ran but before deploy is called —
+    // the same real-world gap a human clicking "confirm" leaves open.
+    await writeFile(join(dir, 'theme.render.mjs'), FORBIDDEN_IMPORT_RENDER_MODULE, 'utf8')
+
+    const result = await deployThemeFromSandbox(root, 'goes-bad', 'stale-check-theme')
+    expect(result.ok).toBe(false)
   })
 })

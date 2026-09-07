@@ -1,19 +1,17 @@
-import { access, cp, mkdir, readdir, writeFile } from 'node:fs/promises'
+import { access, cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { CogentaError } from '@cogenta/core'
 import { runIsolatedModule } from '@cogenta/plugins'
+import { loadTheme } from '@cogenta/render'
 import { escapeText } from '@cogenta/theme-kit'
 
 /**
- * Fiche 73 task 4 — the sandbox itself: a working directory outside
- * `themes/`, so a developer's or the AI's in-progress edits never touch a
- * theme a visitor's request could resolve mid-edit (§ 3.3). This module owns
- * only the sandbox's own lifecycle (create, clone, preview) — writing to a
- * sandbox file is a separate concern (task 7's agent tool, or the
- * developer's own editor, per the fiche's explicit "pas d'éditeur de
- * fichiers dans l'admin pour cette fiche"), and deploying one into
- * `themes/<name>/` is task 5's pipeline, not this file's.
+ * Fiche 73 tasks 4-5 — the sandbox itself (create, clone, isolated preview —
+ * task 4), and the deploy pipeline that promotes one into `themes/<name>/`
+ * (task 5, § 3.4). Writing to a sandbox file is a separate concern (task 7's
+ * agent tool, or the developer's own editor, per the fiche's explicit "pas
+ * d'éditeur de fichiers dans l'admin pour cette fiche").
  */
 
 const SANDBOX_DIRECTORY = join('.cogenta', 'theme-sandbox')
@@ -272,5 +270,132 @@ export async function listSandboxIds(projectRoot: string): Promise<readonly stri
     return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
   } catch {
     return []
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Task 5 — deploy pipeline (§ 3.4)
+// ---------------------------------------------------------------------------
+
+const THEMES_DIRECTORY = 'themes'
+const THEME_VERSIONS_DIRECTORY = join(THEMES_DIRECTORY, '.versions')
+
+export interface ThemeDeploymentCheck {
+  readonly ok: boolean
+  /**
+   * Human-readable refusal reasons, empty when `ok`. Every reason here is a
+   * genuine refusal, never a soft warning — `inspectTheme`/`verifyTheme`
+   * (`@cogenta/render`, task 1) do not currently distinguish a "warning"
+   * severity from a "refusal" one: every finding (a forbidden import, an
+   * unreadable dynamic import, CommonJS) and a missing vocabulary block are
+   * all refusal-grade today. The fiche's own § 3.4 step 3 anticipates a
+   * future warnings-vs-refusals split in the admin display; this function
+   * does not invent one that does not exist in the underlying scan — it
+   * reports exactly what `verifyTheme` actually refuses, honestly, rather
+   * than fabricating a "warnings" list that would always be empty.
+   */
+  readonly reasons: readonly string[]
+}
+
+/**
+ * Steps 1-2 of § 3.4 — structure and security scan, reusing `verifyTheme`
+ * (task 1, `@cogenta/render`) exactly as written rather than re-implementing
+ * any part of it. Read-only: safe to call on every keystroke of a
+ * confirmation screen without side effects, and called again by
+ * `deployThemeFromSandbox` itself right before it ever touches `themes/` —
+ * a check run once and trusted across the async gap of "a human reads the
+ * result and clicks confirm" is a check that can go stale.
+ */
+export async function checkThemeDeployment(
+  projectRoot: string,
+  id: string,
+  themeName: string,
+): Promise<ThemeDeploymentCheck> {
+  const dir = sandboxDirectory(projectRoot, id)
+
+  const renderModuleFile = await findRenderModuleFile(dir)
+  if (renderModuleFile === undefined) {
+    return {
+      ok: false,
+      reasons: ['No theme.render.{js,mjs,ts} file exists in this sandbox yet — nothing to deploy.'],
+    }
+  }
+
+  try {
+    await loadTheme({ theme: { name: themeName, root: dir }, verify: true })
+  } catch (error) {
+    const message =
+      error instanceof CogentaError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : String(error)
+    return { ok: false, reasons: [message] }
+  }
+
+  return { ok: true, reasons: [] }
+}
+
+export type ThemeDeploymentResult =
+  | {
+      readonly ok: true
+      readonly themeDirectory: string
+      /** `null` when nothing named `themeName` was already installed — the "new theme" deploy, not a redeploy. */
+      readonly previousVersionDirectory: string | null
+    }
+  | { readonly ok: false; readonly reasons: readonly string[] }
+
+/**
+ * Step 4 (confirmation) is the caller's own responsibility — this function
+ * is only called *after* a human has explicitly confirmed, never on its
+ * own initiative (R6). What it does, in order, is steps 1-2 (re-checked,
+ * never trusted from an earlier call), 5 (the copy, with the previous
+ * version archived first — § 3.5 — rather than overwritten in place) and 6
+ * (the theme is now installed and activable; activating it is a separate,
+ * later gesture this function does not take).
+ *
+ * The archived copy is a real, recursive file copy under
+ * `themes/.versions/<themeName>/<timestamp>/` — filesystem-safe timestamp
+ * (no `:` — Windows, the platform this session runs on, refuses it in a
+ * path), so a theme's history is plain files, no database needed for it
+ * (§ 3.5's own reasoning). The old `themes/<themeName>/` is removed only
+ * after that archive copy has completed, and the sandbox's own disposable
+ * preview adapter file is never carried into the deployed theme.
+ */
+export async function deployThemeFromSandbox(
+  projectRoot: string,
+  id: string,
+  themeName: string,
+): Promise<ThemeDeploymentResult> {
+  const check = await checkThemeDeployment(projectRoot, id, themeName)
+  if (!check.ok) return { ok: false, reasons: check.reasons }
+
+  const sandboxDir = sandboxDirectory(projectRoot, id)
+  const destination = join(projectRoot, THEMES_DIRECTORY, themeName)
+
+  let previousVersionDirectory: string | null = null
+  if (await pathExists(destination)) {
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-')
+    previousVersionDirectory = join(projectRoot, THEME_VERSIONS_DIRECTORY, themeName, timestamp)
+    await mkdir(previousVersionDirectory, { recursive: true })
+    await cp(destination, previousVersionDirectory, { recursive: true })
+    await rm(destination, { recursive: true, force: true })
+  }
+
+  await mkdir(destination, { recursive: true })
+  await cp(sandboxDir, destination, {
+    recursive: true,
+    filter: (source) => !source.endsWith(PREVIEW_ADAPTER_FILE),
+  })
+
+  return { ok: true, themeDirectory: destination, previousVersionDirectory }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
   }
 }

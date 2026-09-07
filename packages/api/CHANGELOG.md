@@ -1,5 +1,14 @@
 # @cogenta/api
 
+## 2.2.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/channels@0.3.3
+  - @cogenta/mcp@0.3.2
+  - @cogenta/forms@0.2.3
+
 ## 2.2.0
 
 ### Minor Changes

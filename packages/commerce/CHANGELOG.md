@@ -1,5 +1,12 @@
 # @cogenta/commerce
 
+## 0.4.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/channels@0.3.3
+
 ## 0.4.1
 
 ### Patch Changes

@@ -511,6 +511,20 @@ un défaut silencieux.
 > l'action humaine déjà existante (`PUT /api/theme/overrides`), exactement comme
 > choisir un skin de la galerie l'était déjà avant ce lot.
 
+> **`tools@1.6` le 2026-09-07** (fiche 73 tâche 7) : ajout de la permission
+> `theme.write_sandbox`, pour l'outil `theme.write_sandbox_file` — le second
+> outil, et seulement le second, de « Cogenta Theme Creator ». Contrairement à
+> `theme.propose_theme`, il est `sideEffects: true`/`reversible: true` : un
+> appel réel, gouverné par `withAutonomy` (R4) comme tout outil à effet de
+> bord. Sa portée reste structurellement bornée : il écrit un seul fichier à
+> la fois, jamais ailleurs que dans un bac à sable de thème
+> (`<projectRoot>/.cogenta/theme-sandbox/<id>/`, fiche 73 tâche 4) — jamais
+> dans `themes/`, jamais un chemin qu'une requête réelle pourrait résoudre. Un
+> chemin qui tenterait de sortir du bac à sable (`../`, un chemin absolu) est
+> refusé structurellement (`THEME_SANDBOX_PATH_ESCAPE`, `@cogenta/core`), pas
+> seulement par convention. `revert` supprime exactement le fichier que
+> l'appel a écrit, jamais plus.
+
 ```ts
 defineTool({
   name: 'content.publish',
@@ -561,6 +575,7 @@ logs.read · redirects.write
 code.patch
 mcp.external:<connexionId>.<nomOutilDistant>
 theme.customize
+theme.write_sandbox
 ```
 
 `document.extract` (ajoutée en `tools@1.1`, L19 tâche 1) autorise la lecture du texte
@@ -595,6 +610,14 @@ de pièces jointes optionnelles — jamais à en générer le HTML/CSS lui-même
 reste des paquets TypeScript typés) et jamais à appliquer quoi que ce soit sur le
 site : choisir un candidat reste l'action humaine existante sur
 `PUT /api/theme/overrides`.
+
+`theme.write_sandbox` (ajoutée en `tools@1.6`, fiche 73 tâche 7) autorise un agent à
+écrire un fichier de code de thème réel — mais seulement dans un bac à sable isolé
+(`<projectRoot>/.cogenta/theme-sandbox/<id>/`), jamais dans `themes/`. Aucun outil ne
+porte cette permission avec un autre effet que « écrire un fichier dans ce seul
+dossier » ; déployer un bac à sable vers `themes/` reste un pipeline séparé (fiche 73
+tâche 5) qui exige un scan de sécurité et une confirmation humaine explicite avant
+toute copie.
 
 ### Définition d'un agent
 

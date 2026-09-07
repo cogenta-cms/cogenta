@@ -7,15 +7,19 @@ import { type AgentDeclaration, defineAgent } from '@cogenta/agents'
  * système détaillé pour ça." (L26 tâche 5, demandé en direct.)
  *
  * `theme.propose_theme` (`tools@1.5`) is `sideEffects: false` and has no
- * write path at any autonomy level — there is nothing this agent can do
- * other than propose, structurally, the same guarantee `designerAgent`
- * documents for its own lack of a write tool. `autonomy: propose` is set
- * anyway, for the same reason `developerAgent` pins it despite
- * `code.propose_patch` already being reversible: this is a user-facing,
- * review-worthy action (a new theme candidate an admin will look at before
- * doing anything), and `propose` is this codebase's established default
- * posture for that shape of feature, not a gate against a write this tool
- * could not perform anyway.
+ * write path at any autonomy level — the same guarantee `designerAgent`
+ * documents for its own lack of a write tool.
+ *
+ * `theme.write_sandbox_file` (`tools@1.6`, fiche 73 task 7) is different:
+ * `sideEffects: true`, `reversible: true`, and it does write — but only ever
+ * into one sandbox directory (`.cogenta/theme-sandbox/<id>/`), never into
+ * `themes/`, never anything a live request could resolve. `autonomy:
+ * propose` still governs both tools identically: for `theme.propose_theme`
+ * it is this codebase's established default posture for a review-worthy
+ * feature, not a gate against a write the tool could not perform anyway; for
+ * `theme.write_sandbox_file` it is a real, load-bearing gate — `withAutonomy`
+ * (R4) requires human approval for every sandbox write at this pinned level,
+ * exactly as it would for any other `sideEffects: true` tool.
  *
  * Disabled by default, the same structural mechanism as every other seed in
  * this package: nothing exports a "theme-creator" entry from
@@ -35,7 +39,7 @@ export const themeCreatorAgent: AgentDeclaration = defineAgent({
   name: 'theme-creator',
   identity: './identity.md',
   model: { preferred: 'claude-sonnet', fallback: 'local' },
-  tools: ['theme.propose_theme'],
+  tools: ['theme.propose_theme', 'theme.write_sandbox_file'],
   autonomy: { default: 'propose' },
   budget: { tokensPerDay: 100_000, eurPerMonth: 6, callsPerHour: 20 },
   memory: { episodic: false, semantic: false, scope: 'site' },

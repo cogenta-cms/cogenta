@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { themeCreatorAgent } from '../../src/theme-creator/agent.js'
 import { createProposeThemeTool } from '../../src/theme-creator/propose-theme-tool.js'
+import { createWriteSandboxFileTool } from '../../src/theme-creator/write-sandbox-file-tool.js'
 
 describe('themeCreatorAgent — declared scope', () => {
   it('is a frozen, valid AgentDeclaration', () => {
@@ -20,8 +21,8 @@ describe('themeCreatorAgent — declared scope', () => {
     expect(themeCreatorAgent.name).toBe('theme-creator')
   })
 
-  it('grants only theme.propose_theme', () => {
-    expect(themeCreatorAgent.tools).toEqual(['theme.propose_theme'])
+  it('grants exactly theme.propose_theme and theme.write_sandbox_file, nothing else', () => {
+    expect(themeCreatorAgent.tools).toEqual(['theme.propose_theme', 'theme.write_sandbox_file'])
   })
 
   it('never lists a content-writing or deployment tool', () => {
@@ -131,7 +132,11 @@ describe('themeCreatorAgent — runtime enforcement', () => {
       resolveProvider: async () => ({ client: fakeClient(), model: 'fake-model' }),
       availableThemes: AVAILABLE_THEMES,
     })
-    const registry = createToolRegistry([tool, outOfScopeTool])
+    const writeTool = createWriteSandboxFileTool({
+      writeFile: async (input) => ({ path: input.path }),
+      deleteFile: async () => undefined,
+    })
+    const registry = createToolRegistry([tool, writeTool, outOfScopeTool])
 
     const manifest = buildManifest(registry, themeCreatorAgent.tools, CONTEXT)
 
@@ -144,7 +149,11 @@ describe('themeCreatorAgent — runtime enforcement', () => {
       resolveProvider: async () => ({ client: fakeClient(), model: 'fake-model' }),
       availableThemes: AVAILABLE_THEMES,
     })
-    const registry = createToolRegistry([tool])
+    const writeTool = createWriteSandboxFileTool({
+      writeFile: async (input) => ({ path: input.path }),
+      deleteFile: async () => undefined,
+    })
+    const registry = createToolRegistry([tool, writeTool])
     const manifest = buildManifest(registry, themeCreatorAgent.tools, CONTEXT)
     const gated = withAutonomyForManifest(manifest, {
       agentName: themeCreatorAgent.name,
@@ -193,5 +202,80 @@ describe('themeCreatorAgent — runtime enforcement', () => {
     for (const candidate of result.candidates) {
       expect(candidate.themeName).toBe('@cogenta/theme-canonical')
     }
+  })
+})
+
+describe('theme.write_sandbox_file — fiche 73 task 7', () => {
+  it('writes through the injected callback and returns the sandbox-relative path', async () => {
+    const written: { sandboxId: string; path: string; content: string }[] = []
+    const tool = createWriteSandboxFileTool({
+      writeFile: async (input) => {
+        written.push({ ...input })
+        return { path: input.path }
+      },
+      deleteFile: async () => undefined,
+    })
+
+    const result = await tool.execute(
+      { sandboxId: 'sbx-1', path: 'theme.render.mjs', content: 'export function renderPage() {}' },
+      { ...CONTEXT, signal: new AbortController().signal },
+    )
+
+    expect(result).toEqual({ sandboxId: 'sbx-1', path: 'theme.render.mjs' })
+    expect(written).toEqual([
+      { sandboxId: 'sbx-1', path: 'theme.render.mjs', content: 'export function renderPage() {}' },
+    ])
+  })
+
+  it('revert deletes exactly the file it wrote, nothing else', async () => {
+    const deleted: { sandboxId: string; path: string }[] = []
+    const tool = createWriteSandboxFileTool({
+      writeFile: async (input) => ({ path: input.path }),
+      deleteFile: async (input) => {
+        deleted.push({ ...input })
+      },
+    })
+
+    const receipt = await tool.execute(
+      { sandboxId: 'sbx-2', path: 'theme.config.mjs', content: 'export default {}' },
+      { ...CONTEXT, signal: new AbortController().signal },
+    )
+    expect(tool.revert).toBeDefined()
+    await tool.revert?.(receipt, { ...CONTEXT, signal: new AbortController().signal })
+
+    expect(deleted).toEqual([{ sandboxId: 'sbx-2', path: 'theme.config.mjs' }])
+  })
+
+  it('is sideEffects: true and reversible: true — unlike theme.propose_theme, withAutonomy actually gates it', async () => {
+    const proposeTool = createProposeThemeTool({
+      resolveProvider: async () => ({ client: fakeClient(), model: 'fake-model' }),
+      availableThemes: AVAILABLE_THEMES,
+    })
+    const writeTool = createWriteSandboxFileTool({
+      writeFile: async (input) => ({ path: input.path }),
+      deleteFile: async () => undefined,
+    })
+    const registry = createToolRegistry([proposeTool, writeTool])
+    const manifest = buildManifest(registry, themeCreatorAgent.tools, CONTEXT)
+    const gated = withAutonomyForManifest(manifest, {
+      agentName: themeCreatorAgent.name,
+      autonomy: themeCreatorAgent.autonomy ?? { default: 'propose' },
+      approvalQueue: createMemoryApprovalQueue(),
+    })
+
+    const gatedWriteTool = gated.find((t) => t.spec.name === 'theme.write_sandbox_file')
+    expect(gatedWriteTool).toBeDefined()
+
+    const controller = new AbortController()
+    const result = await gatedWriteTool?.execute(
+      { sandboxId: 'sbx-3', path: 'theme.render.mjs', content: 'export function renderPage() {}' },
+      { signal: controller.signal },
+    )
+
+    // sideEffects: true + reversible: true under `propose` autonomy is
+    // proposed, not executed — the real write callback above never runs
+    // yet, the same forced-approval path every other reversible write tool
+    // in this codebase already goes through.
+    expect(result).toMatchObject({ proposed: true })
   })
 })

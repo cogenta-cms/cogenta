@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -6,12 +6,14 @@ import {
   checkThemeDeployment,
   cloneThemeIntoSandbox,
   createSandbox,
+  deleteSandboxFile,
   deployThemeFromSandbox,
   listSandboxIds,
   listThemeVersions,
   renderSandboxPreview,
   restoreThemeVersion,
   sandboxDirectory,
+  writeSandboxFile,
 } from '../src/commands/theme-sandbox.js'
 
 /**
@@ -458,5 +460,147 @@ describe('theme versions (fiche 73 task 6)', () => {
       'utf8',
     )
     expect(manifest).toContain('deployable-theme')
+  })
+})
+
+describe('writing a single sandbox file (fiche 73 task 7)', () => {
+  const roots: string[] = []
+
+  afterEach(async () => {
+    while (roots.length > 0) {
+      const root = roots.pop()
+      if (root !== undefined) await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('writes a file into a sandbox it also creates on first write', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+
+    const result = await writeSandboxFile(root, 'fresh', 'theme.config.mjs', VALID_MANIFEST)
+    expect(result.path).toBe('theme.config.mjs')
+
+    const content = await readFile(
+      join(sandboxDirectory(root, 'fresh'), 'theme.config.mjs'),
+      'utf8',
+    )
+    expect(content).toBe(VALID_MANIFEST)
+  })
+
+  it('creates intermediate subdirectories a nested path names', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+
+    await writeSandboxFile(root, 'nested', 'blocks/hero.mjs', 'export const hero = 1')
+    const content = await readFile(
+      join(sandboxDirectory(root, 'nested'), 'blocks', 'hero.mjs'),
+      'utf8',
+    )
+    expect(content).toBe('export const hero = 1')
+  })
+
+  it('refuses a path that escapes the sandbox with "../", never writing outside it', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    await createSandbox(root, 'contained')
+
+    await expect(
+      writeSandboxFile(root, 'contained', '../../escaped.txt', 'malicious'),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_PATH_ESCAPE' })
+
+    await expect(readFile(join(root, 'escaped.txt'), 'utf8')).rejects.toThrow()
+  })
+
+  it('refuses an absolute path, same guard as a relative escape', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    await createSandbox(root, 'contained-2')
+
+    await expect(
+      writeSandboxFile(root, 'contained-2', join(root, 'themes', 'evil.mjs'), 'malicious'),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_PATH_ESCAPE' })
+  })
+
+  it("refuses to overwrite the sandbox's own reserved preview-adapter file", async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    await createSandbox(root, 'reserved')
+
+    await expect(
+      writeSandboxFile(root, 'reserved', '.cogenta-preview-adapter.mjs', 'anything'),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_PATH_ESCAPE' })
+  })
+
+  // Security review, fiche 73 task 7 — the reserved-file guard originally
+  // compared the raw string, so a differently-spelled equivalent path (a
+  // leading "./", here) that resolves to the exact same file slipped past
+  // it. Fixed to compare resolved paths instead; this is the regression test.
+  it('refuses the reserved preview-adapter file under an equivalent, differently-spelled path too', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    await createSandbox(root, 'reserved-variant')
+
+    await expect(
+      writeSandboxFile(root, 'reserved-variant', './.cogenta-preview-adapter.mjs', 'anything'),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_PATH_ESCAPE' })
+  })
+
+  // Security review, fiche 73 task 7 — a lexical path check alone cannot
+  // see a symlink already sitting inside the sandbox (e.g. carried in by
+  // cloneThemeIntoSandbox, which copies a symlink as a symlink). This
+  // proves the real-filesystem half of the guard actually stops a write
+  // that would otherwise land outside the sandbox by following that link.
+  it('refuses to write through a symlink inside the sandbox that points outside it', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const outsideDir = await mkdtemp(join(TMP_ROOT, 'outside-'))
+    roots.push(outsideDir)
+    const dir = await createSandbox(root, 'symlinked')
+
+    try {
+      await symlink(outsideDir, join(dir, 'escape-link'), 'junction')
+    } catch {
+      // Creating a symlink/junction can be unprivileged-blocked in some CI
+      // environments — skip rather than fail the suite on an environment
+      // limitation unrelated to the guard itself.
+      return
+    }
+
+    await expect(
+      writeSandboxFile(root, 'symlinked', 'escape-link/evil.mjs', 'malicious'),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_PATH_ESCAPE' })
+    await expect(readFile(join(outsideDir, 'evil.mjs'), 'utf8')).rejects.toThrow()
+  })
+
+  it('deletes a file it previously wrote — the tool revert path', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    await writeSandboxFile(root, 'to-delete', 'theme.render.mjs', RENDER_MODULE)
+
+    await deleteSandboxFile(root, 'to-delete', 'theme.render.mjs')
+
+    await expect(
+      readFile(join(sandboxDirectory(root, 'to-delete'), 'theme.render.mjs'), 'utf8'),
+    ).rejects.toThrow()
+  })
+
+  it('deleting an already-absent file succeeds — reverting twice is not an error', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    await createSandbox(root, 'idempotent-delete')
+
+    await expect(
+      deleteSandboxFile(root, 'idempotent-delete', 'never-written.mjs'),
+    ).resolves.toBeUndefined()
+  })
+
+  it('a file written by the agent tool is picked up by the next preview, end to end', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    await writeSandboxFile(root, 'agent-written', 'theme.render.mjs', RENDER_MODULE)
+
+    const result = await renderSandboxPreview({ projectRoot: root, id: 'agent-written' })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.html).toContain('<header>Fixture header</header>')
   })
 })

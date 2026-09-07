@@ -51,7 +51,7 @@ import {
   type ToolDefinition,
   type ToolRegistry,
 } from '@cogenta/agents'
-import { createProposeThemeTool } from '@cogenta/agents-builtin'
+import { createProposeThemeTool, createWriteSandboxFileTool } from '@cogenta/agents-builtin'
 import type {
   AgentConversationStoreLike,
   AgentRegistryLike,
@@ -182,6 +182,28 @@ export interface BuildAgentRuntimeOptions {
       { readonly client: ProviderClient; readonly model: string } | undefined
     >
     readonly availableThemes: readonly ThemeCreatorTargetTheme[]
+  }
+  /**
+   * Fiche 73 task 7 — the "Cogenta Theme Creator" agent's second tool,
+   * `theme.write_sandbox_file`. Unlike `themeCreator` above, this needs no
+   * LLM provider of its own to exist (writing a file is not a model call) —
+   * built by `@cogenta/cli`'s `createThemeSandboxToolWiring`
+   * (`theme-wiring.ts`) from `projectRoot` alone, so it is always present
+   * once `cogenta serve` boots at all. Optional here only for the same
+   * "an older call site or a test is unaffected" reason every other
+   * optional field on this interface already has — `runServe` always
+   * supplies it.
+   */
+  readonly themeSandbox?: {
+    readonly writeFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+      readonly content: string
+    }) => Promise<{ readonly path: string }>
+    readonly deleteFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+    }) => Promise<void>
   }
 }
 
@@ -438,6 +460,18 @@ function buildToolRegistry(options: {
     >
     readonly availableThemes: readonly ThemeCreatorTargetTheme[]
   }
+  /** Fiche 73 task 7 — see `BuildAgentRuntimeOptions.themeSandbox`. Absent means `theme.write_sandbox_file` is not registered at all. */
+  readonly themeSandbox?: {
+    readonly writeFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+      readonly content: string
+    }) => Promise<{ readonly path: string }>
+    readonly deleteFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+    }) => Promise<void>
+  }
 }) {
   const contentServiceLike: ContentServiceLike = contentServiceLikeOf(options.contentService)
   const contentBrowseServiceLike = contentBrowseServiceLikeOf(
@@ -470,6 +504,11 @@ function buildToolRegistry(options: {
     // L26 task 5 — "Cogenta Theme Creator"'s only tool. `sideEffects: false`,
     // no write path at any autonomy level (see the tool's own doc comment).
     ...(options.themeCreator === undefined ? [] : [createProposeThemeTool(options.themeCreator)]),
+    // Fiche 73 task 7 — the same agent's second tool, for the sandbox
+    // code-writing mode (see the tool's and the agent's own doc comments).
+    ...(options.themeSandbox === undefined
+      ? []
+      : [createWriteSandboxFileTool(options.themeSandbox)]),
   ]
   return createToolRegistry(definitions)
 }
@@ -680,6 +719,7 @@ export async function buildAgentRuntime(
     notFoundLog: options.notFoundLog,
     redirects: options.redirects,
     ...(options.themeCreator === undefined ? {} : { themeCreator: options.themeCreator }),
+    ...(options.themeSandbox === undefined ? {} : { themeSandbox: options.themeSandbox }),
   }
 
   // Fiche 58 task 4 — built once, here, before the tool registry: every

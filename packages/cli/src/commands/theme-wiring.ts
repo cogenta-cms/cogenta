@@ -28,6 +28,7 @@ import {
 } from '@cogenta/schema'
 import { availableThemes } from './theme-registry.js'
 import { joinStyles } from './theme-render.js'
+import { deleteSandboxFile, writeSandboxFile } from './theme-sandbox.js'
 
 /**
  * Assembles `ThemeRouterOptions` for `cogenta serve` (fiche 14).
@@ -327,6 +328,34 @@ export async function createThemeCreatorToolWiring(options: ThemeWiringOptions):
     availableThemes: (await availableThemes()).map(
       (theme): ThemeCreatorTargetTheme => ({ name: theme.name, label: theme.label }),
     ),
+  }
+}
+
+/**
+ * The ingredients `theme.write_sandbox_file` (`@cogenta/agents-builtin`,
+ * fiche 73 task 7) needs — unlike `createThemeCreatorToolWiring` above, this
+ * needs no `ProviderClient` at all (writing a file is not a model call), so
+ * it is never gated on R2's "no provider configured" check and is always
+ * returned: `runServe` always knows its own `projectRoot`. The two functions
+ * this closes over (`writeSandboxFile`/`deleteSandboxFile`, `theme-sandbox
+ * .ts`) already carry the real path-escape guard (piège n°3-adjacent, see
+ * their own doc comments) — this wiring adds nothing on top of them, it only
+ * binds `projectRoot`.
+ */
+export function createThemeSandboxToolWiring(projectRoot: string): {
+  readonly writeFile: (input: {
+    readonly sandboxId: string
+    readonly path: string
+    readonly content: string
+  }) => Promise<{ readonly path: string }>
+  readonly deleteFile: (input: {
+    readonly sandboxId: string
+    readonly path: string
+  }) => Promise<void>
+} {
+  return {
+    writeFile: (input) => writeSandboxFile(projectRoot, input.sandboxId, input.path, input.content),
+    deleteFile: (input) => deleteSandboxFile(projectRoot, input.sandboxId, input.path),
   }
 }
 

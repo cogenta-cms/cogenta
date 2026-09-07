@@ -97,3 +97,9 @@ export type {
   ProposeThemeToolOptions,
 } from './theme-creator/propose-theme-tool.js'
 export { createProposeThemeTool } from './theme-creator/propose-theme-tool.js'
+export type {
+  WriteSandboxFileInput,
+  WriteSandboxFileOutput,
+  WriteSandboxFileToolOptions,
+} from './theme-creator/write-sandbox-file-tool.js'
+export { createWriteSandboxFileTool } from './theme-creator/write-sandbox-file-tool.js'

@@ -1,5 +1,5 @@
-import { access, cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { access, cp, lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { CogentaError } from '@cogenta/core'
 import { runIsolatedModule } from '@cogenta/plugins'
@@ -7,11 +7,11 @@ import { loadTheme } from '@cogenta/render'
 import { escapeText } from '@cogenta/theme-kit'
 
 /**
- * Fiche 73 tasks 4-5 — the sandbox itself (create, clone, isolated preview —
- * task 4), and the deploy pipeline that promotes one into `themes/<name>/`
- * (task 5, § 3.4). Writing to a sandbox file is a separate concern (task 7's
- * agent tool, or the developer's own editor, per the fiche's explicit "pas
- * d'éditeur de fichiers dans l'admin pour cette fiche").
+ * Fiche 73 tasks 4-7 — the sandbox itself (create, clone, isolated preview —
+ * task 4), the deploy pipeline that promotes one into `themes/<name>/`
+ * (task 5, § 3.4), its version history (task 6, § 3.5), and single-file
+ * writes into a sandbox (task 7, § 3.6) — the primitive both the AI agent's
+ * `theme.write_sandbox_file` tool and, later, any other writer call into.
  */
 
 const SANDBOX_DIRECTORY = join('.cogenta', 'theme-sandbox')
@@ -488,4 +488,129 @@ export async function restoreThemeVersion(
   await cp(versionDir, destination, { recursive: true })
 
   return { ok: true, themeDirectory: destination, archivedCurrentDirectory }
+}
+
+// ---------------------------------------------------------------------------
+// Task 7 — writing a single file into a sandbox (§ 3.6)
+// ---------------------------------------------------------------------------
+
+function pathEscapeError(sandboxDir: string, relativePath: string): CogentaError {
+  return new CogentaError({
+    code: 'THEME_SANDBOX_PATH_ESCAPE',
+    message: `"${relativePath}" resolves outside the sandbox directory.`,
+    hint: 'A sandbox file path is always relative to the sandbox root — it can never use ".." to leave it.',
+    details: { sandboxDir, relativePath },
+  })
+}
+
+/**
+ * Resolves `relativePath` against `sandboxDir`, refusing anything that
+ * escapes it — a `../../.env` or an absolute path handed to
+ * `theme.write_sandbox_file` by a model (or by a prompt-injection payload
+ * hiding inside a document the agent read, R8) must never land outside the
+ * one sandbox directory it was scoped to. The same class of check task 8
+ * (zip import) will need for the same reason (piège n°3, § 6) — written
+ * once here since this is the first real caller.
+ *
+ * Purely lexical (`resolve` + `startsWith`), on purpose fast and
+ * dependency-free — but a lexical check alone cannot see a symlink already
+ * sitting inside the sandbox (security review, fiche 73 task 7): a link a
+ * cloned theme happened to carry (`cloneThemeIntoSandbox` copies a symlink
+ * as a symlink, never dereferencing it) could point outside the sandbox
+ * while every path segment still resolves, lexically, underneath it.
+ * `assertNoSymlinkEscape` below is the real-filesystem half of this guard;
+ * this function alone is not the full story.
+ */
+function resolveWithinSandbox(sandboxDir: string, relativePath: string): string {
+  const root = resolve(sandboxDir)
+  const target = resolve(root, relativePath)
+  if (target !== root && !target.startsWith(root + sep)) {
+    throw pathEscapeError(sandboxDir, relativePath)
+  }
+  return target
+}
+
+/**
+ * Walks every path segment between `sandboxDir` and `target`, refusing if
+ * any segment that already exists on disk is a symlink — closing the gap
+ * `resolveWithinSandbox`'s lexical check cannot see: a pre-existing symlink
+ * inside the sandbox pointing outside it, which the OS would happily follow
+ * at the real `writeFile`/`rm` even though every path segment "looks" like
+ * it resolves inside the sandbox. A segment that does not exist yet is not
+ * a symlink to anything — nothing further to check past the first missing
+ * one, since the filesystem is hierarchical and `mkdir`/`writeFile` will
+ * only ever create real directories and files under it.
+ */
+async function assertNoSymlinkEscape(sandboxDir: string, target: string): Promise<void> {
+  const root = resolve(sandboxDir)
+  const segments = target === root ? [] : target.slice(root.length + 1).split(sep)
+  let current = root
+  for (const segment of segments) {
+    current = join(current, segment)
+    let stats: Awaited<ReturnType<typeof lstat>>
+    try {
+      stats = await lstat(current)
+    } catch {
+      return
+    }
+    if (stats.isSymbolicLink()) {
+      throw pathEscapeError(sandboxDir, target.slice(root.length + 1))
+    }
+  }
+}
+
+/** The combined guard both `writeSandboxFile` and `deleteSandboxFile` use — lexical resolution, then a real-filesystem symlink check. */
+async function resolveRealPathWithinSandbox(
+  sandboxDir: string,
+  relativePath: string,
+): Promise<string> {
+  const target = resolveWithinSandbox(sandboxDir, relativePath)
+  await assertNoSymlinkEscape(sandboxDir, target)
+  return target
+}
+
+/**
+ * Writes one file into a sandbox — task 7's real deliverable, and what
+ * `theme.write_sandbox_file` (`@cogenta/agents-builtin`) actually calls.
+ * Creates the sandbox directory itself if it does not exist yet (so a first
+ * write can also be the thing that starts a new sandbox), and any
+ * intermediate subdirectory the path names. Refuses to overwrite the
+ * sandbox's own disposable preview-adapter file (task 4) — a real name
+ * collision would silently vanish the moment the next preview regenerates
+ * it, confusing rather than dangerous, but there is no reason to allow it.
+ * The reserved-file check compares *resolved* paths, not the raw string, so
+ * `./`-prefixed or otherwise differently-spelled equivalents are caught the
+ * same way (security review, fiche 73 task 7 — a raw string comparison here
+ * missed exactly this).
+ */
+export async function writeSandboxFile(
+  projectRoot: string,
+  id: string,
+  relativePath: string,
+  content: string,
+): Promise<{ readonly path: string }> {
+  const dir = sandboxDirectory(projectRoot, id)
+  const target = await resolveRealPathWithinSandbox(dir, relativePath)
+  if (target === resolveWithinSandbox(dir, PREVIEW_ADAPTER_FILE)) {
+    throw new CogentaError({
+      code: 'THEME_SANDBOX_PATH_ESCAPE',
+      message: `"${PREVIEW_ADAPTER_FILE}" is reserved for the sandbox's own preview mechanism.`,
+      hint: 'Choose a different file name — this one is regenerated automatically on every preview.',
+      details: { relativePath },
+    })
+  }
+  await mkdir(dirname(target), { recursive: true })
+  await writeFile(target, content, 'utf8')
+  return { path: relativePath }
+}
+
+/** `revert`'s counterpart — deletes one file previously written by `writeSandboxFile`. A file that is already gone is not an error (`force: true`): reverting twice, or reverting after a human already deleted it by hand, both succeed. */
+export async function deleteSandboxFile(
+  projectRoot: string,
+  id: string,
+  relativePath: string,
+): Promise<void> {
+  const dir = sandboxDirectory(projectRoot, id)
+  const target = await resolveRealPathWithinSandbox(dir, relativePath)
+  await rm(target, { force: true })
 }

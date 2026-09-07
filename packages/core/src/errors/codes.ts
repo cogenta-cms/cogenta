@@ -104,6 +104,7 @@ export const ERROR_CODES = [
   // gated on verifyTheme the way a deployment is (task 5's job).
   'THEME_SANDBOX_SOURCE_NOT_FOUND',
   'THEME_SANDBOX_IMAGE_UNSUPPORTED',
+  'THEME_SANDBOX_PATH_ESCAPE',
 
   // Rendering — the content API a theme reads through (ADR-0016)
   'CONTENT_API_FAILED',

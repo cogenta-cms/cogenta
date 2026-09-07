@@ -392,6 +392,7 @@ import {
   computeEffectiveStyles,
   computePreviewStyles,
   createThemeCreatorToolWiring,
+  createThemeSandboxToolWiring,
   createThemeWiring,
 } from './theme-wiring.js'
 import { buildToolBodies, createToolRunner, TOOL_DEFINITIONS } from './tools.js'
@@ -1125,6 +1126,24 @@ interface AssembleSiteOptions {
     readonly availableThemes: readonly ThemeCreatorTargetTheme[]
   }
   /**
+   * Fiche 73 task 7 — "Cogenta Theme Creator"'s second tool,
+   * `theme.write_sandbox_file`. Unlike `themeCreatorTools` above, never
+   * gated on R2 (no model call involved) — built by
+   * `createThemeSandboxToolWiring(projectRoot)` and always present once
+   * `cogenta serve` boots.
+   */
+  readonly themeSandboxTools?: {
+    readonly writeFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+      readonly content: string
+    }) => Promise<{ readonly path: string }>
+    readonly deleteFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+    }) => Promise<void>
+  }
+  /**
    * Resizes and re-encodes images at upload (L10 task 5).
    *
    * `null` when no image driver loads on this host: uploads still work and
@@ -1843,6 +1862,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           ...(options.themeCreatorTools === undefined
             ? {}
             : { themeCreator: options.themeCreatorTools }),
+          // Fiche 73 task 7 — see `AssembleSiteOptions.themeSandboxTools`.
+          ...(options.themeSandboxTools === undefined
+            ? {}
+            : { themeSandbox: options.themeSandboxTools }),
         })
   if (agentsRuntime !== undefined) logger.info(agentsRuntime.summary)
 
@@ -6224,6 +6247,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     logger,
   }
   const themeCreatorTools = await createThemeCreatorToolWiring(themeWiringOptions)
+  const themeSandboxTools = createThemeSandboxToolWiring(projectRoot)
 
   const site = await assembleSite({
     db: selection.instance,
@@ -6250,6 +6274,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // its own `generator`. Absent (no LLM provider) means `undefined`, and
     // `theme.propose_theme` is then simply not registered (R2).
     ...(themeCreatorTools === undefined ? {} : { themeCreatorTools }),
+    themeSandboxTools,
     images: images?.processor ?? null,
     security: loaded.config.security,
     notFoundLog: loaded.config.notFoundLog,

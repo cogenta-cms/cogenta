@@ -587,7 +587,8 @@ export async function writeSandboxFile(
   projectRoot: string,
   id: string,
   relativePath: string,
-  content: string,
+  /** A string for ordinary text-file writes (the agent tool, task 7); a `Buffer` for task 8's zip import, which must not assume every entry is UTF-8 text. */
+  content: string | Buffer,
 ): Promise<{ readonly path: string }> {
   const dir = sandboxDirectory(projectRoot, id)
   const target = await resolveRealPathWithinSandbox(dir, relativePath)
@@ -600,7 +601,7 @@ export async function writeSandboxFile(
     })
   }
   await mkdir(dirname(target), { recursive: true })
-  await writeFile(target, content, 'utf8')
+  await writeFile(target, content)
   return { path: relativePath }
 }
 

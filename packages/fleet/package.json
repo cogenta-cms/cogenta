@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/fleet",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Multi-site fleet control plane — pairing, telemetry, inventory, rollouts, reporting.",
   "license": "MPL-2.0",
   "type": "module",

@@ -1,5 +1,12 @@
 # @cogenta/comments
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [[`89e7579`](https://github.com/cogenta-cms/cogenta/commit/89e7579129712a5978ff57b884151731f5c340ea)]:
+  - @cogenta/core@0.7.0
+
 ## 0.2.1
 
 ### Patch Changes

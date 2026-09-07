@@ -1,5 +1,14 @@
 # @cogenta/theme-saas
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/blocks@1.0.2
+  - @cogenta/render@0.2.2
+  - @cogenta/theme-kit@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes

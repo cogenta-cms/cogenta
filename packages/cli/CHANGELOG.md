@@ -1,5 +1,100 @@
 # @cogenta/cli
 
+## 0.7.0
+
+### Minor Changes
+
+- [`13a7989`](https://github.com/cogenta-cms/cogenta/commit/13a79891c3e0c64137ac74e838c4a30fc03e9f7f) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The LLM tuning floor every provider client falls back to — `maxOutputTokens` (8000), `requestTimeoutMs` (180s), `maxCorrectionAttempts` (3) — used to be plain TypeScript constants in `@cogenta/agents` (`FALLBACK_MAX_OUTPUT_TOKENS`, `FALLBACK_MAX_CORRECTION_ATTEMPTS`, `DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS`), invisible and unreachable from the admin, only ever mentioned as static hint text on `/admin/providers` ("laissez vide pour le défaut (8000)"). An admin who wanted to change that floor for every provider at once had no way to.
+  
+  They are now real, persisted, admin-editable site settings — `assistant.defaultMaxOutputTokens`, `assistant.defaultRequestTimeoutSeconds`, `assistant.defaultMaxCorrectionAttempts` (`@cogenta/schema`'s `SITE_SETTINGS_REGISTRY`, `group: 'assistant'`) — with the exact same bounds as the existing per-provider override validation (`TUNING_BOUNDS` in `@cogenta/agents`'s `providers/store.ts`), so the two can never silently disagree on what a valid value is.
+  
+  - **`@cogenta/agents` — breaking**: `ProviderClient.maxOutputTokens`/`.requestTimeoutMs`/`.maxCorrectionAttempts` are now always concrete numbers, never `undefined` — every resolved adapter (`createAnthropicClient`/`createOpenAiClient`/`createGoogleClient`) now requires a `defaults: ProviderTuningDefaults` field on its config, merged in whenever the admin has not set a per-provider override. `createProviderRegistry(config, defaults)` takes this floor as a new required second argument. New exports: `ProviderTuningDefaults`, `resolveProviderTuningDefaults(store)` (reads the three site settings from a live `SiteSettingsStore`), and `staticProviderTuningDefaults()` (the registry's own declared defaults, for the rare caller with no site database to read from at all — `cogenta skin generate`, `npm create cogenta`'s key-validation step). The six duplicated local `DEFAULT_MAX_ATTEMPTS` constants scattered across `runtime/loop.ts`, `theme-creator/propose-theme.ts`, `site-plan/analyse-brief.ts`, `site-plan/content-model.ts`, `site-plan/demo-content.ts`, `skin/generate.ts` are gone — each now trusts `client.maxCorrectionAttempts` directly, since it can no longer be absent.
+  - **`@cogenta/cli`**: `buildAgentRuntime` (`agent-runtime.ts`) takes a new required `siteSettings: SiteSettingsStore` option; `createLiveProviderRegistry` re-resolves the three site-wide defaults, alongside the per-provider config, on every `refresh()` — the same "no restart needed" guarantee an edit to a per-provider override already had, though a change to *only* the site-wide floor (with no accompanying provider-config write) still needs a restart to take effect, an honest known gap. `theme-wiring.ts` and `assistant.ts`'s own provider resolution read the same live setting. `cogenta skin generate` (no database at all) uses the registry's static defaults instead.
+  - **Admin**: `/admin/providers` gains a "Réglages par défaut" card (generic `SiteSettingsField` rendering, zero bespoke UI) above the provider list; the per-provider tuning form's hint text no longer names a hardcoded number, and instead points at that card.
+
+- [`89e7579`](https://github.com/cogenta-cms/cogenta/commit/89e7579129712a5978ff57b884151731f5c340ea) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche feedback, two bugs reported live from the same test session: "je ne sais pas si le
+  traitement est en cours ou pas" (no feedback during a long agent run or theme generation),
+  and a reference screenshot attached to "personnalise le theme actuel pour qu'il soit comme
+  cette capture" that only ever changed accent colors, never the layout it showed.
+  
+  **The reference-image bug, fixed**: `propose-theme.ts`'s `chooseTheme()` step already
+  received an attached image, but `generateSkinCandidates()` (the step that actually
+  produces the color/font/spacing tokens) never did — `generateSkin` had zero image support
+  at all. `@cogenta/agents`'s `GenerateSkinOptions`/`GenerateSkinCandidatesOptions` gain an
+  optional `images: readonly ChatImagePart[]`, threaded through to the model call alongside
+  an explicit "derive the colour palette from it" instruction when present.
+  
+  **What is still a genuine limit, not fixed here**: a theme's page *structure* (which
+  blocks render where) is owned by the installed theme package's own render code — contract
+  D only ever describes tokens (color, font, spacing, radius, shadow, motion). No amount of
+  image analysis can turn a token-generation call into a layout generator; that would be a
+  different, much larger feature.
+  
+  **Live progress**: new `@cogenta/agents` module `progress/` — `ProgressReporter`,
+  `ProgressEvent`, `createProgressJobStore<TResult>()` (in-memory, per-process; a progress
+  job is short-lived and watched by one open tab, unlike `@cogenta/core`'s durable `queue`).
+  `RunAgentLoopInput.onProgress`/`RunAgentOptions.onProgress` report `"Thinking…"`,
+  `"Calling tool "X"…"`, retry attempts, and tool outcomes as the agent loop runs — the same
+  engine behind both agent chat and every other agent, so instrumenting it once covers both.
+  `GenerateSkinCandidatesOptions.onProgress` and `ProposeThemeCandidatesInput.onProgress`
+  report each design direction as it starts/finishes. `RetryOptions.onRetry` is a new hook
+  `retryModelCall` invokes before backing off.
+  
+  `@cogenta/core` gains two error codes, `AGENT_RUN_JOB_UNKNOWN` and
+  `THEME_GENERATE_JOB_UNKNOWN` (mapped to 404).
+  
+  `@cogenta/api` adds three watchable job route pairs, additive alongside the existing
+  synchronous ones (nothing is removed or changed for a caller that doesn't care about
+  progress): `POST/GET /api/agents/:name/conversation/jobs[/:jobId]`,
+  `POST/GET /api/agents/:name/run/jobs[/:jobId]`, `POST/GET /api/theme/generate/jobs[/:jobId]`.
+  `AgentsRouterOptions`/`ThemeRouterOptions` gain an optional `progressJobs` store; without
+  one, only the job routes are unavailable — the pre-existing synchronous routes are
+  untouched.
+  
+  `@cogenta/cli` wires `createProgressJobStore()` into `cogenta serve`'s agents and theme
+  routers, and forwards `onProgress` through `agent-runtime.ts`'s `AgentRunnerLike` adapter
+  (a real gap caught by an e2e test: the adapter's `run()` silently dropped the parameter
+  before this fix).
+  
+  Admin UI (private, no changeset): the floating chat widget and the theme generator
+  workshop both poll their job's `GET` endpoint and render a live, growing progress list
+  (`data-testid="agent-chat-progress"` / `"theme-generator-progress"`, both `aria-live="polite"`)
+  instead of a static "thinking…" placeholder.
+
+### Patch Changes
+
+- Updated dependencies [[`13a7989`](https://github.com/cogenta-cms/cogenta/commit/13a79891c3e0c64137ac74e838c4a30fc03e9f7f), [`89e7579`](https://github.com/cogenta-cms/cogenta/commit/89e7579129712a5978ff57b884151731f5c340ea)]:
+  - @cogenta/schema@0.5.0
+  - @cogenta/agents@0.5.0
+  - @cogenta/core@0.7.0
+  - @cogenta/api@2.2.0
+  - @cogenta/auth@0.5.1
+  - @cogenta/blocks@1.0.2
+  - @cogenta/export@0.2.2
+  - @cogenta/import@0.2.2
+  - @cogenta/plugins@0.3.2
+  - @cogenta/seo@0.3.2
+  - @cogenta/agents-builtin@0.3.1
+  - @cogenta/channels@0.3.2
+  - @cogenta/mcp@0.3.1
+  - @cogenta/analytics@0.3.2
+  - @cogenta/comments@0.2.2
+  - @cogenta/commerce@0.4.1
+  - @cogenta/forms@0.2.2
+  - @cogenta/observability@0.2.2
+  - @cogenta/render@0.2.2
+  - @cogenta/theme-association@0.3.1
+  - @cogenta/theme-blog@0.3.1
+  - @cogenta/theme-canonical@1.1.1
+  - @cogenta/theme-docs@0.3.1
+  - @cogenta/theme-ecommerce@1.1.1
+  - @cogenta/theme-entreprise@1.1.1
+  - @cogenta/theme-kit@0.3.1
+  - @cogenta/theme-magazine@1.1.1
+  - @cogenta/theme-portfolio@1.1.1
+  - @cogenta/theme-restaurant@0.3.1
+  - @cogenta/theme-saas@0.3.1
+
 ## 0.6.0
 
 ### Minor Changes

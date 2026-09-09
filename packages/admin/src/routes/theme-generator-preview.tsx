@@ -1,7 +1,12 @@
 import { type JSX, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
-import { previewTheme, previewThemeGallery, type SkinCandidate } from '../api/theme-client.js'
+import {
+  previewTheme,
+  previewThemeGallery,
+  type ThemeGenerateCandidate,
+} from '../api/theme-client.js'
+import { previewSandbox } from '../api/theme-sandbox-client.js'
 
 /**
  * One AI-generated theme candidate's live preview, inside the theme
@@ -12,18 +17,21 @@ import { previewTheme, previewThemeGallery, type SkinCandidate } from '../api/th
  * before it: an iframe on a real render, never a screenshot and never a
  * React reimplementation of the twelve blocks.
  *
- * Two real pages a candidate can end up rendered on, chosen by which theme
- * it targets:
+ * Three real pages a candidate can end up rendered on:
  *
- * - Targets the theme already active (or names none at all — the common
- *   case, since most candidates adjust the theme already running):
- *   `previewTheme` (`POST /api/theme/preview`) — the site's own real home
- *   page, with the candidate's tokens overlaid.
- * - Targets a *different* installed theme package: `previewThemeGallery`
- *   (`POST /api/theme/gallery-preview`, widened in L26 task 5 to take an
- *   optional `tokens` field) — the gallery's fixed demo page, rendered
- *   through that theme with the candidate's own tokens, not the theme's own
- *   on-disk default.
+ * - A `sandbox` candidate: `previewSandbox` (`GET
+ *   /api/theme/sandbox/:id/preview`) — the same real, isolated-worker render
+ *   the "Gérer les thèmes locaux" screen's own "Aperçu" button already uses,
+ *   pointed at the sandbox this candidate's own agent run just wrote.
+ * - A `tokens` candidate targeting the theme already active (or naming none
+ *   at all — the common case, since most candidates adjust the theme already
+ *   running): `previewTheme` (`POST /api/theme/preview`) — the site's own
+ *   real home page, with the candidate's tokens overlaid.
+ * - A `tokens` candidate targeting a *different* installed theme package:
+ *   `previewThemeGallery` (`POST /api/theme/gallery-preview`, widened in L26
+ *   task 5 to take an optional `tokens` field) — the gallery's fixed demo
+ *   page, rendered through that theme with the candidate's own tokens, not
+ *   the theme's own on-disk default.
  */
 const CANDIDATE_PREVIEW_VIEWPORT_WIDTH = 1280
 const DEFAULT_UNSCALED_HEIGHT = 800
@@ -34,8 +42,8 @@ export function ThemeCandidatePreview({
   activeThemeName,
 }: {
   readonly token: string
-  readonly candidate: SkinCandidate
-  /** The theme package currently rendering the public site — decides which of the two preview endpoints above this candidate actually needs. */
+  readonly candidate: ThemeGenerateCandidate
+  /** The theme package currently rendering the public site — decides which of the tokens-candidate preview endpoints above this candidate actually needs. */
   readonly activeThemeName: string
 }): JSX.Element {
   const { t } = useTranslation()
@@ -46,17 +54,23 @@ export function ThemeCandidatePreview({
   const [unscaledHeight, setUnscaledHeight] = useState(DEFAULT_UNSCALED_HEIGHT)
 
   const targetsActiveTheme =
-    candidate.themeName === undefined || candidate.themeName === activeThemeName
+    candidate.kind === 'tokens' &&
+    (candidate.themeName === undefined || candidate.themeName === activeThemeName)
 
   useEffect(() => {
     let cancelled = false
     setHtml(null)
     setError(null)
-    const load = targetsActiveTheme
-      ? previewTheme(token, { tokens: candidate.tokens }).then((result) => result.html)
-      : previewThemeGallery(token, candidate.themeName as string, candidate.tokens).then(
-          (result) => result.html,
-        )
+    const load =
+      candidate.kind === 'sandbox'
+        ? previewSandbox(token, candidate.sandboxId).then((result) =>
+            result.ok ? result.html : Promise.reject(new Error(result.error)),
+          )
+        : targetsActiveTheme
+          ? previewTheme(token, { tokens: candidate.tokens }).then((result) => result.html)
+          : previewThemeGallery(token, candidate.themeName as string, candidate.tokens).then(
+              (result) => result.html,
+            )
     load
       .then((resolvedHtml) => {
         if (!cancelled) setHtml(resolvedHtml)
@@ -72,7 +86,7 @@ export function ThemeCandidatePreview({
     // response, so it is deliberately not in this dependency list — only
     // identity-stable inputs decide when to re-fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, candidate.id, candidate.themeName, targetsActiveTheme, activeThemeName, t])
+  }, [token, candidate.id, candidate.kind, targetsActiveTheme, activeThemeName, t])
 
   useEffect(() => {
     const el = container.current

@@ -272,11 +272,14 @@ export type {
 } from './providers/store.js'
 export { createFileProviderConfigStore } from './providers/store.js'
 export type {
+  ChatContentPart,
+  ChatImagePart,
   ChatMessage,
   ChatOptions,
   ChatRequest,
   ChatResponse,
   ChatRole,
+  ChatTextPart,
   ProviderClient,
   ProviderToolCall,
   ProviderToolSpec,
@@ -493,9 +496,18 @@ export { runSubagent } from './subagents/run-subagent.js'
 export type { AgentToolsDeclaration } from './subagents/types.js'
 export { validateSubagentTools } from './subagents/validate.js'
 export type {
+  ProcessedAttachments,
+  ThemeCreatorAttachment,
+} from './theme-creator/attachments.js'
+export { processAttachments } from './theme-creator/attachments.js'
+export type {
+  ClassifyLayoutNeedInput,
+  ClassifyLayoutNeedResult,
+} from './theme-creator/layout-classifier.js'
+export { classifyThemeLayoutNeed } from './theme-creator/layout-classifier.js'
+export type {
   ProposeThemeCandidatesInput,
   ProposeThemeCandidatesResult,
-  ThemeCreatorAttachment,
   ThemeCreatorCandidate,
   ThemeCreatorChromeInput,
   ThemeCreatorTargetTheme,

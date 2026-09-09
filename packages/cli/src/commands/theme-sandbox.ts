@@ -1,10 +1,13 @@
-import { access, cp, lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { access, cp, lstat, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { CogentaError } from '@cogenta/core'
 import { runIsolatedModule } from '@cogenta/plugins'
-import { loadTheme } from '@cogenta/render'
+import { loadTheme, parseThemeManifest, renderSkin } from '@cogenta/render'
 import { escapeText } from '@cogenta/theme-kit'
+import { invalidateThemeCss, loadLocalThemeCss } from './theme-css.js'
+import { invalidateFilesystemTheme } from './theme-registry.js'
 
 /**
  * Fiche 73 tasks 4-7 — the sandbox itself (create, clone, isolated preview —
@@ -240,6 +243,8 @@ export async function renderSandboxPreview(
     }
   }
 
+  const styleTag = await previewStyleTag(options.projectRoot, dir)
+
   const html = `<!doctype html>
 <html lang="en" dir="auto">
 <head>
@@ -247,6 +252,7 @@ export async function renderSandboxPreview(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>${escapeText(previewTitle(siteName))}</title>
+${styleTag}
 </head>
 <body>
 <a class="cg-skip-link" href="#cg-main">Skip to content</a>
@@ -257,6 +263,47 @@ ${rendered.footer}
 </html>
 `
   return { ok: true, html }
+}
+
+/**
+ * Fiche 73's own live E2E test: a preview with no CSS at all made every
+ * sandbox look identical — plain, unstyled text — whether the agent had
+ * written a real design or nothing, so nobody could tell the two apart
+ * before deploying. Inlined here as a real `<style>` tag (never a `<link>`
+ * to a route — the preview iframe's origin is `sandbox-preview.invalid`,
+ * fiche 73 task 4's own deliberate database-free demo page, nothing it can
+ * fetch a stylesheet from), same two layers a real page gets: the site's
+ * own skin tokens as `--cogenta-*` custom properties on `:root` (read from
+ * this project's own `theme.tokens.json` — a preview always previews
+ * against the real, currently-configured colours/fonts, never invented
+ * ones), then whatever `*.css` the sandbox has written on top, under any
+ * name (`loadLocalThemeCss`'s own doc comment). Never a hard failure: a
+ * project with no `theme.tokens.json` yet, or a sandbox with no CSS yet,
+ * previews with whichever half it has.
+ */
+async function previewStyleTag(projectRoot: string, sandboxDir: string): Promise<string> {
+  const parts: string[] = []
+
+  try {
+    const raw = await readFile(join(projectRoot, 'theme.tokens.json'), 'utf8')
+    parts.push(renderSkin(JSON.parse(raw)).css)
+  } catch {
+    // No theme.tokens.json, or it does not validate — the sandbox's own
+    // theme.css (below) still previews, just without real token values.
+  }
+
+  // No required file name — any `*.css` sitting in the sandbox root is
+  // picked up (`loadLocalThemeCss`'s own doc comment), matching exactly
+  // what a deployed theme resolves once it lands in `themes/<name>/`.
+  const sandboxCss = await loadLocalThemeCss(sandboxDir, { read: (url) => readFile(url, 'utf8') })
+  if (sandboxCss !== null) {
+    parts.push(sandboxCss)
+  } else {
+    // No CSS written yet — an unstyled preview, honestly.
+  }
+
+  if (parts.length === 0) return ''
+  return `<style>\n${parts.join('\n')}\n</style>`
 }
 
 function previewTitle(siteName: string): string {
@@ -306,6 +353,43 @@ export interface ThemeDeploymentCheck {
  * a check run once and trusted across the async gap of "a human reads the
  * result and clicks confirm" is a check that can go stale.
  */
+const CONFIG_MODULE_CANDIDATES = ['theme.config.js', 'theme.config.mjs', 'theme.config.ts'] as const
+
+/**
+ * `loadTheme`'s own default `importManifest` has no cache-busting — the
+ * right choice for an *installed* theme (`theme-registry.ts` memoizes on
+ * top of it anyway, so a real site never re-imports the same theme twice in
+ * one process), but exactly wrong for a sandbox: an agent editing the same
+ * `theme.config.mjs` across several write-then-check cycles within one long
+ * `cogenta serve` process would have every check after the first silently
+ * re-validate whatever was on disk the *first* time this path was ever
+ * imported — reporting the original failure forever, even after the file is
+ * actually fixed. Live proof this was a real bug, not a hypothetical: an
+ * agent's fix that made a sandbox's manifest genuinely complete kept being
+ * reported as still missing every block, because this check had already
+ * cached the pre-fix module. `loadTheme`'s `importManifest` option exists
+ * precisely so a host that knows better about its own module loading can
+ * override it — used here, rather than changing the shared default and
+ * risking the production hot path.
+ */
+async function importManifestCacheBusted(root: string): Promise<unknown> {
+  for (const file of CONFIG_MODULE_CANDIDATES) {
+    const path = join(root, file)
+    try {
+      await access(path)
+    } catch {
+      continue
+    }
+    return import(`${pathToFileURL(path).href}?t=${randomUUID()}`)
+  }
+  throw new CogentaError({
+    code: 'THEME_NOT_FOUND',
+    message: `No theme manifest was found in ${root}.`,
+    hint: `A theme root holds one of: ${CONFIG_MODULE_CANDIDATES.join(', ')}.`,
+    details: { root, looked: CONFIG_MODULE_CANDIDATES },
+  })
+}
+
 export async function checkThemeDeployment(
   projectRoot: string,
   id: string,
@@ -322,7 +406,11 @@ export async function checkThemeDeployment(
   }
 
   try {
-    await loadTheme({ theme: { name: themeName, root: dir }, verify: true })
+    await loadTheme({
+      theme: { name: themeName, root: dir },
+      verify: true,
+      importManifest: importManifestCacheBusted,
+    })
   } catch (error) {
     const message =
       error instanceof CogentaError
@@ -380,6 +468,17 @@ export async function deployThemeFromSandbox(
     recursive: true,
     filter: (source) => !source.endsWith(PREVIEW_ADAPTER_FILE),
   })
+  // `theme-registry.ts`'s own cache has no other invalidation path — see its
+  // doc comment on `invalidateFilesystemTheme` for the live bug this closes
+  // (a name looked up, and cached as unresolvable, before this deploy would
+  // otherwise stay invisible — to the gallery, and to `resolveTheme` itself
+  // — for the rest of this `cogenta serve` process's life). `theme-css.ts`'s
+  // stylesheet cache has the exact same shape of bug — a redeploy that adds
+  // or edits `theme.css` must be visible on the very next page render, not
+  // stuck on whatever (or nothing) this process read the first time it
+  // rendered this theme.
+  invalidateFilesystemTheme(themeName)
+  invalidateThemeCss(themeName)
 
   return { ok: true, themeDirectory: destination, previousVersionDirectory }
 }
@@ -486,8 +585,56 @@ export async function restoreThemeVersion(
   const destination = join(projectRoot, THEMES_DIRECTORY, themeName)
   await mkdir(destination, { recursive: true })
   await cp(versionDir, destination, { recursive: true })
+  // Same real bug `deployThemeFromSandbox` closes above — a restore changes
+  // `themes/<name>/` just as much as a deploy does.
+  invalidateFilesystemTheme(themeName)
+  invalidateThemeCss(themeName)
 
   return { ok: true, themeDirectory: destination, archivedCurrentDirectory }
+}
+
+export type ThemeDeleteResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reasons: readonly string[] }
+
+/**
+ * Fiche "supprimer un thème" — the one destructive action this file did not
+ * yet have: every other operation here (deploy, restore) only ever *adds* a
+ * new state to keep around, never removes one for good. A real folder under
+ * `themes/<name>/` only, never a built-in — `theme-registry.ts`'s own
+ * `filesystemThemeNames()` already refuses to let a local folder shadow a
+ * built-in package's name, so this function can never reach one by
+ * construction; a name that resolves to no folder here (a built-in, or a
+ * typo) is refused with the same honest reason either way.
+ *
+ * Genuinely complete, matching what the admin's own confirmation warns
+ * about: both `themes/<name>/` (the live deployed code) and
+ * `themes/.versions/<name>/` (every archived version `restoreThemeVersion`
+ * could otherwise still bring back) are removed — a theme deleted this way
+ * really does disappear entirely, not just "until someone restores an old
+ * version". Whether the deleted theme was the site's own `activeTheme`, and
+ * clearing that override if so, is the caller's job (`serve.ts`'s route
+ * handler) — this function only ever touches the filesystem, the same
+ * boundary every other function in this file already keeps.
+ */
+export async function deleteTheme(projectRoot: string, name: string): Promise<ThemeDeleteResult> {
+  const destination = join(projectRoot, THEMES_DIRECTORY, name)
+  if (!(await pathExists(destination))) {
+    return {
+      ok: false,
+      reasons: [`No local theme named "${name}" exists in this project's themes/ folder.`],
+    }
+  }
+
+  await rm(destination, { recursive: true, force: true })
+  await rm(join(projectRoot, THEME_VERSIONS_DIRECTORY, name), { recursive: true, force: true })
+  // Same live-process-cache bug class as a deploy/restore — a name this
+  // process already resolved (even to "found") must not keep answering that
+  // way once the folder behind it is gone.
+  invalidateFilesystemTheme(name)
+  invalidateThemeCss(name)
+
+  return { ok: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -583,6 +730,165 @@ async function resolveRealPathWithinSandbox(
  * same way (security review, fiche 73 task 7 — a raw string comparison here
  * missed exactly this).
  */
+const CONFIG_MODULE_NAME = /^theme\.config\.(m?js|ts)$/u
+const RENDER_MODULE_NAME = /^theme\.render\.(m?js|ts)$/u
+/**
+ * A real, live-observed agent mistake, not a hypothetical: a model asked to
+ * write `theme.render.*` named its file `theme.render.tsx` — plausible-
+ * sounding (TypeScript, "renders JSX"), and CONFIG_MODULE_NAME/
+ * RENDER_MODULE_NAME above silently ignore it (neither regex matches, so
+ * `validateSandboxModuleWrite` returns early as if the file were unrelated to
+ * the manifest/render module at all). The write itself still succeeds — the
+ * sandbox now has a real-looking file nothing ever imports, since `.tsx`
+ * needs a JSX transform this loader (a plain `import()`, no build step) does
+ * not have and never will. The preview then fails with the generic "no
+ * theme.render.{js,mjs,ts} yet" message, which does not explain *why* a file
+ * that is clearly right there was never found — a dead end for the very
+ * self-correction loop this whole file exists to support. Caught here
+ * instead, with the specific, actionable reason.
+ */
+const NEAR_MISS_CONFIG_NAME = /^theme\.config\.(?!m?js$|ts$)[^.]+$/u
+const NEAR_MISS_RENDER_NAME = /^theme\.render\.(?!m?js$|ts$)[^.]+$/u
+
+/**
+ * Real feedback, not a prompt: fiche 73 task 7's own live E2E test (an actual
+ * gpt-5-mini session, twice) showed a model asked to write these two files
+ * inventing a `ThemeManifest`/`RenderContext` shape that only superficially
+ * resembles the real one — `blocks` as an array of block names instead of the
+ * block-vocabulary semver range it actually is, `tokens` as inline token data
+ * instead of the path string it actually is, `runtime` as an object instead of
+ * one of three literal strings, a `ctx.theme.tokens` a real `RenderContext`
+ * has never had (skin tokens are CSS custom properties applied separately by
+ * `renderSkin`, never JS values a render module reads). A better tool
+ * *description* alone did not fix this — improving it is still worth doing,
+ * but the durable fix is the one this codebase already uses everywhere else
+ * for a model-authored artifact (contract A entries via
+ * `collectionInputSchema`, contract D skins via `validateSkin`): reject a
+ * write that doesn't validate, with the *real* error, and let the agent loop
+ * try again — never let invalid contract-D source ship into a sandbox
+ * silently, only to fail later at preview or deploy with no path back to what
+ * was actually wrong.
+ *
+ * `theme.config.*`'s own `defineTheme()` call already throws `THEME_INVALID`
+ * with a precise, field-by-field message the instant the module loads — this
+ * only needs to actually load it. `theme.render.*` has no such built-in
+ * check, so this does the minimum a real theme module must satisfy: export
+ * `renderPage` and `renderChrome` as callables. Import is cache-busted with
+ * a fresh id per call so editing a file already written earlier in the same
+ * process re-validates the new content, not a stale cached module.
+ */
+async function validateSandboxModuleWrite(
+  projectRoot: string,
+  id: string,
+  target: string,
+  relativePath: string,
+): Promise<void> {
+  const basename = relativePath.split(/[/\\]/u).pop() ?? relativePath
+  const isConfig = CONFIG_MODULE_NAME.test(basename)
+  const isRender = RENDER_MODULE_NAME.test(basename)
+  if (!isConfig && !isRender) {
+    if (NEAR_MISS_CONFIG_NAME.test(basename) || NEAR_MISS_RENDER_NAME.test(basename)) {
+      throw new CogentaError({
+        code: 'THEME_SANDBOX_FILE_INVALID',
+        message: `"${relativePath}" is not a recognised theme module file name.`,
+        hint: 'theme.config.* and theme.render.* must use exactly one of these extensions: .js, .mjs or .ts — never .tsx or .jsx. Nothing transforms JSX in this sandbox (no build step, a plain ESM import()), so write plain h()-based code instead.',
+        details: { relativePath },
+      })
+    }
+    return
+  }
+
+  let imported: Record<string, unknown>
+  try {
+    // `?t=` alone collided under fast, sub-millisecond-apart rewrites in the
+    // same process (two calls landing in the same `Date.now()` millisecond
+    // resolve to the same cached module — the second write's own validation
+    // then silently ran against the *first* write's already-cached content).
+    // `randomUUID()` never repeats within a process, cache-busting for real.
+    imported = (await import(`${pathToFileURL(target).href}?t=${randomUUID()}`)) as Record<
+      string,
+      unknown
+    >
+  } catch (error) {
+    throw new CogentaError({
+      code: 'THEME_SANDBOX_FILE_INVALID',
+      message: `"${relativePath}" failed to load: ${error instanceof Error ? error.message : String(error)}`,
+      hint: isConfig
+        ? 'theme.config.* must be an ES module whose default export is the result of defineTheme({...}) from @cogenta/theme-kit — see that error for which field is wrong.'
+        : 'theme.render.* must be an ES module that imports { h } from @cogenta/theme-kit and exports renderPage and renderChrome.',
+      details: { relativePath },
+    })
+  }
+
+  if (isConfig) {
+    // `defineTheme` (re-exported from `@cogenta/render`) already validated
+    // the manifest at module-evaluation time above; parsing again here would
+    // only repeat work `import` already did. What is left to check is the
+    // shape `import` cannot: that the module actually has a default export
+    // to have been the manifest at all (e.g. `export const config = ...`
+    // instead of `export default ...`).
+    if (imported.default === undefined) {
+      throw new CogentaError({
+        code: 'THEME_SANDBOX_FILE_INVALID',
+        message: `"${relativePath}" has no default export.`,
+        hint: 'theme.config.* must `export default defineTheme({...})` — a named export is never read.',
+        details: { relativePath },
+      })
+    }
+    // Re-validates the already-evaluated object — this is what actually
+    // catches a raw `export default {...}` (no `defineTheme()` call at all,
+    // so nothing validated it at import time) as well as a `defineTheme()`
+    // call whose own throw this function's `catch` above already reports.
+    // Wrapped in this function's own error code so every rejection this
+    // write can produce is consistently `THEME_SANDBOX_FILE_INVALID`.
+    try {
+      parseThemeManifest(imported.default, relativePath)
+    } catch (error) {
+      throw new CogentaError({
+        code: 'THEME_SANDBOX_FILE_INVALID',
+        message: error instanceof Error ? error.message : String(error),
+        hint: 'theme.config.* must `export default defineTheme({...})` from @cogenta/theme-kit, with every contract D manifest field — see that error for which one is wrong.',
+        details: { relativePath },
+      })
+    }
+  } else {
+    const missing = ['renderPage', 'renderChrome'].filter(
+      (name) => typeof imported[name] !== 'function',
+    )
+    if (missing.length > 0) {
+      throw new CogentaError({
+        code: 'THEME_SANDBOX_FILE_INVALID',
+        message: `"${relativePath}" does not export ${missing.map((name) => `${name}()`).join(' and ')} as a function.`,
+        hint: "theme.render.* must export both renderPage(page, ctx, options) and renderChrome(input) — see @cogenta/theme-kit's RenderContext.",
+        details: { relativePath, missing },
+      })
+    }
+
+    // Exporting two functions is necessary but nowhere near sufficient —
+    // fiche 73's own live E2E test showed a model write a `renderPage` that
+    // returns a plain data object shaped like a wishful "template payload"
+    // instead of the `HtmlElement` tree `serialize()` (`@cogenta/theme-kit`)
+    // actually requires, and a `renderChrome` returning `{site, header,
+    // footer}` instead of the `{header, footer}` strings a real chrome
+    // point requires — both exported functions, both silently wrong, and
+    // both would only have surfaced at the *next* preview click, with no
+    // path back to this write for the agent that made it. Running the exact
+    // same real preview this sandbox's own "Aperçu" button runs — same
+    // isolated worker, same demo page and chrome input, same `serialize()`
+    // call — is the only check that actually proves this module renders,
+    // rather than merely exists.
+    const preview = await renderSandboxPreview({ projectRoot, id })
+    if (!preview.ok) {
+      throw new CogentaError({
+        code: 'THEME_SANDBOX_FILE_INVALID',
+        message: `"${relativePath}" does not render: ${preview.error}`,
+        hint: "renderPage must return an HtmlElement built with h() from @cogenta/theme-kit (not a plain data object), and renderChrome must return { header, footer } as HTML strings — see @cogenta/theme-kit's RenderContext and serialize().",
+        details: { relativePath },
+      })
+    }
+  }
+}
+
 export async function writeSandboxFile(
   projectRoot: string,
   id: string,
@@ -600,8 +906,20 @@ export async function writeSandboxFile(
       details: { relativePath },
     })
   }
+  const previousContent = await readFile(target).catch(() => undefined)
   await mkdir(dirname(target), { recursive: true })
   await writeFile(target, content)
+  try {
+    await validateSandboxModuleWrite(projectRoot, id, target, relativePath)
+  } catch (error) {
+    // Reject, don't ship: restore whatever was there before (or remove the
+    // file if this was its first write) so a rejected write never leaves the
+    // sandbox in a half-invalid state the agent's next call would build on
+    // top of.
+    if (previousContent === undefined) await rm(target, { force: true })
+    else await writeFile(target, previousContent)
+    throw error
+  }
   return { path: relativePath }
 }
 

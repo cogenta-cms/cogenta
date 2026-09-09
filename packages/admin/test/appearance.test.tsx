@@ -404,6 +404,150 @@ describe('the appearance screen — theme picker (fiche L23)', () => {
   })
 })
 
+describe('the appearance screen — deleting a local theme (fiche "supprimer un thème")', () => {
+  it('offers "Supprimer" only on a local theme, never on a built-in one', async () => {
+    signedIn(['admin'], {
+      availableThemes: [
+        {
+          name: '@cogenta/theme-canonical',
+          label: 'Canonical',
+          description: 'The reference theme.',
+          local: false,
+        },
+        {
+          name: 'my-local-theme',
+          label: 'my-local-theme',
+          description: 'Deployed from a sandbox.',
+          local: true,
+        },
+      ],
+    })
+    render(<App />)
+    await goToAppearance()
+
+    const canonicalCard = (await screen.findByText('Canonical')).closest('li') as HTMLElement
+    expect(within(canonicalCard).queryByRole('button', { name: 'Supprimer' })).toBeNull()
+
+    const localCard = screen.getByText('my-local-theme').closest('li') as HTMLElement
+    expect(within(localCard).getByRole('button', { name: 'Supprimer' })).toBeDefined()
+  })
+
+  it('warns, irreversibly, before deleting — and only removes the theme once confirmed', async () => {
+    signedIn(['admin'], {
+      availableThemes: [
+        {
+          name: '@cogenta/theme-canonical',
+          label: 'Canonical',
+          description: 'The reference theme.',
+          local: false,
+        },
+        {
+          name: 'my-local-theme',
+          label: 'my-local-theme',
+          description: 'Deployed from a sandbox.',
+          local: true,
+        },
+      ],
+    })
+    render(<App />)
+    await goToAppearance()
+
+    const localCard = (await screen.findByText('my-local-theme')).closest('li') as HTMLElement
+    fireEvent.click(within(localCard).getByRole('button', { name: 'Supprimer' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).getByText(
+        'Cette action est irréversible : le thème et tout son historique de versions vont complètement disparaître de ce site. Rien ne pourra les restaurer ensuite.',
+      ),
+    ).toBeDefined()
+
+    // Cancelling leaves the theme exactly where it was.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Annuler' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByText('my-local-theme')).toBeDefined()
+
+    fireEvent.click(within(localCard).getByRole('button', { name: 'Supprimer' }))
+    const secondDialog = await screen.findByRole('dialog')
+    fireEvent.click(within(secondDialog).getByRole('button', { name: 'Supprimer définitivement' }))
+
+    await waitFor(() => expect(screen.queryByText('my-local-theme')).toBeNull())
+    // The built-in theme is unaffected.
+    expect(screen.getByText('Canonical')).toBeDefined()
+  })
+
+  it('additionally warns that the site will fall back to the default theme when deleting the active one', async () => {
+    signedIn(['admin'], {
+      activeTheme: 'my-local-theme',
+      availableThemes: [
+        {
+          name: '@cogenta/theme-canonical',
+          label: 'Canonical',
+          description: 'The reference theme.',
+          local: false,
+        },
+        {
+          name: 'my-local-theme',
+          label: 'my-local-theme',
+          description: 'Deployed from a sandbox.',
+          local: true,
+        },
+      ],
+    })
+    render(<App />)
+    await goToAppearance()
+
+    const localCard = (await screen.findByText('my-local-theme')).closest('li') as HTMLElement
+    expect(within(localCard).queryByText('Actif')).not.toBeNull()
+    fireEvent.click(within(localCard).getByRole('button', { name: 'Supprimer' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).getByText(
+        "C'est le thème actuellement actif sur le site public. Une fois supprimé, le site basculera automatiquement sur le thème par défaut.",
+      ),
+    ).toBeDefined()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Supprimer définitivement' }))
+    await waitFor(() => expect(screen.queryByText('my-local-theme')).toBeNull())
+
+    // Canonical, the only theme left, is now the active one — the fallback actually applied.
+    const canonicalCard = screen.getByText('Canonical').closest('li') as HTMLElement
+    expect(within(canonicalCard).queryByText('Actif')).not.toBeNull()
+  })
+
+  it('does not warn about the active theme when deleting a different, inactive one', async () => {
+    signedIn(['admin'], {
+      availableThemes: [
+        {
+          name: '@cogenta/theme-canonical',
+          label: 'Canonical',
+          description: 'The reference theme.',
+          local: false,
+        },
+        {
+          name: 'my-local-theme',
+          label: 'my-local-theme',
+          description: 'Deployed from a sandbox.',
+          local: true,
+        },
+      ],
+    })
+    render(<App />)
+    await goToAppearance()
+
+    const localCard = (await screen.findByText('my-local-theme')).closest('li') as HTMLElement
+    fireEvent.click(within(localCard).getByRole('button', { name: 'Supprimer' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).queryByText(
+        "C'est le thème actuellement actif sur le site public. Une fois supprimé, le site basculera automatiquement sur le thème par défaut.",
+      ),
+    ).toBeNull()
+  })
+})
+
 describe('the appearance screen — the sub-view has its own URL (fiche 71)', () => {
   it('writes ?view=customize into the URL when opening the personalization screen', async () => {
     signedIn(['admin'])

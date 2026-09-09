@@ -393,6 +393,7 @@ import {
   checkThemeDeployment,
   cloneThemeIntoSandbox,
   createSandbox as createThemeSandbox,
+  deleteTheme,
   deployThemeFromSandbox,
   listSandboxIds,
   listThemeVersions,
@@ -5119,8 +5120,25 @@ export function createRequestListener(
         extras.projectRoot !== undefined &&
         (url.pathname.startsWith('/api/theme/sandbox') ||
           url.pathname === '/api/theme/import' ||
+          // `/api/theme/<name>/export`, never the bare `/api/theme/export`:
+          // that one is `ThemeRouter`'s own pre-existing "write the merged
+          // tokens to theme.tokens.json" route, and matching it here swallowed
+          // it into this family's 404 instead.
           (url.pathname.startsWith('/api/theme/') &&
-            (url.pathname.includes('/versions') || url.pathname.endsWith('/export'))))
+            (url.pathname.includes('/versions') ||
+              (url.pathname.endsWith('/export') &&
+                url.pathname.split('/').filter((segment) => segment.length > 0).length === 4))) ||
+          // DELETE /api/theme/:name — fiche "supprimer un thème". Excludes
+          // "overrides": `DELETE /api/theme/overrides` already means "clear
+          // the token/activeTheme overlay" and is handled by `ThemeRouter`
+          // itself, below — a bare theme *name* never collides with that
+          // one reserved segment (a real local theme folder can be named
+          // almost anything, but never literally "overrides", the same way
+          // none can be named "sandbox", "import", "skins" or "generate").
+          (req.method === 'DELETE' &&
+            url.pathname.startsWith('/api/theme/') &&
+            url.pathname.split('/').filter((segment) => segment.length > 0).length === 3 &&
+            !url.pathname.endsWith('/overrides')))
       ) {
         if (!context.actor.roles.includes('admin')) {
           jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may manage theme sandboxes.')
@@ -5317,6 +5335,51 @@ export function createRequestListener(
           } finally {
             await rm(tempDir, { recursive: true, force: true })
           }
+          return
+        }
+
+        // DELETE /api/theme/:name — fiche "supprimer un thème". Removes
+        // themes/<name>/ and its whole themes/.versions/<name>/ archive for
+        // real (`deleteTheme`, `theme-sandbox.ts`) — matching what the
+        // admin's own confirmation dialog warns the operator about before
+        // ever reaching here. If the deleted theme was this site's
+        // `activeTheme`, the override is cleared too (through the exact
+        // same `PUT /api/theme/overrides` path the appearance screen's own
+        // "Sélectionner" already uses) so the site falls back to the
+        // default theme rather than the row staying stuck naming a theme
+        // that no longer exists on disk.
+        if (
+          segments.length === 3 &&
+          segments[0] === 'api' &&
+          segments[1] === 'theme' &&
+          req.method === 'DELETE'
+        ) {
+          const themeName = segments[2] ?? ''
+          const result = await deleteTheme(projectRoot, themeName)
+          if (result.ok && site.themeRouter !== undefined) {
+            const current = await site.themeRouter.handle(
+              { method: 'GET', path: '/api/theme', query: {} },
+              context.actor,
+            )
+            const activeTheme =
+              current.status === 200
+                ? ((current.body as { data?: { overrides?: { activeTheme?: unknown } } })?.data
+                    ?.overrides?.activeTheme ?? null)
+                : null
+            if (activeTheme === themeName) {
+              await site.themeRouter.handle(
+                {
+                  method: 'PUT',
+                  path: '/api/theme/overrides',
+                  query: {},
+                  body: { activeTheme: null },
+                },
+                context.actor,
+              )
+            }
+          }
+          res.writeHead(result.ok ? 200 : 404, jsonHeaders)
+          res.end(JSON.stringify({ data: result }))
           return
         }
 
@@ -6310,7 +6373,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // and flattening a theme's stylesheet is real file I/O, so it happens once
   // per theme this process actually renders with, not on every request that
   // merely re-reads which one is currently active.
-  const themeCssFor = createThemeCssResolver({ read: (url) => readFile(url, 'utf8') })
+  const themeCssFor = createThemeCssResolver({
+    read: (url) => readFile(url, 'utf8'),
+    projectRoot,
+  })
   const themeCss = await themeCssFor(DEFAULT_THEME_NAME)
   const styles = joinStyles(
     await loadSkinCss((path) => readFile(path, 'utf8'), join(projectRoot, 'theme.tokens.json')),
@@ -6492,6 +6558,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
       dir: join(agentsRuntimeDataDir, AGENTS_SUBDIR),
     }),
     logger,
+    // R6 — every real sandbox write a custom-layout "Générer" run makes is
+    // journalled through the same audit table `site.auth.audit` reads once
+    // `assembleSite` opens it below (see that variable's own comment).
+    auditLog: updatesAuditLog,
   }
   const themeCreatorTools = await createThemeCreatorToolWiring(themeWiringOptions)
   const themeSandboxTools = createThemeSandboxToolWiring(projectRoot)

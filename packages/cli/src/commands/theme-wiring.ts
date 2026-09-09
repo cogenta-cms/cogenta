@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   type AgentDeclarationStore,
+  type AuditLogLike,
   createAnthropicClient,
   createGoogleClient,
   createOpenAiClient,
@@ -10,12 +12,12 @@ import {
   type ProviderClient,
   type ProviderConfigStore,
   type ProviderTuningDefaults,
-  proposeThemeCandidates,
   resolveProviderRegistryConfig,
   resolveProviderTuningDefaults,
   THEME_CREATOR_AGENT_NAME,
   type ThemeCreatorTargetTheme,
 } from '@cogenta/agents'
+import { generateThemeCandidates } from '@cogenta/agents-builtin'
 import type { ThemeRouterOptions } from '@cogenta/api'
 import type { CogentaConfig, DatabaseHandle, Logger } from '@cogenta/core'
 import { createSkinGallery, ensureRegistryTables } from '@cogenta/plugins'
@@ -48,6 +50,11 @@ import { deleteSandboxFile, writeSandboxFile } from './theme-sandbox.js'
  */
 
 const TOKENS_FILE = 'theme.tokens.json'
+
+/** A fresh sandbox id for a custom-layout generation run — sortable (timestamp-first) and never guessable, so two concurrent "Générer" calls can never collide on the same sandbox directory. */
+function mintSandboxId(): string {
+  return `ai-theme-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`
+}
 
 export interface ThemeWiringOptions {
   readonly projectRoot: string
@@ -85,6 +92,16 @@ export interface ThemeWiringOptions {
   readonly agentStore?: AgentDeclarationStore
   /** Fed to `createProgressJobStore` so a failed generation job is logged server-side, not only visible to whoever was polling it live. */
   readonly logger?: Logger
+  /**
+   * R6 — every real sandbox file write a "Générer un thème avec l'IA"
+   * custom-layout run makes is journalled through this, same as any other
+   * agent tool call. Absent only when no audit log is available yet at the
+   * point `createThemeWiring` is called (`runServe`'s own `updatesAuditLog`
+   * covers this before `site.auth.audit` opens) — generation still runs,
+   * simply unaudited, R2's own "a missing ingredient degrades a feature, it
+   * never blocks it" posture applied here too.
+   */
+  readonly auditLog?: AuditLogLike
 }
 
 function providerClient(
@@ -218,7 +235,11 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
 
   return {
     store: themeStore,
-    availableThemes: await availableThemes(),
+    // A function, not a resolved array — `theme-router.ts`'s own doc comment
+    // on `availableThemes` explains why: a theme deployed while this process
+    // is already running must show up on the very next request, not only
+    // after a restart.
+    availableThemes: () => availableThemes(),
     loadFileTokens,
     validateTokens: (candidate) => validateSkin(candidate) as unknown as Record<string, unknown>,
     mergeTokens: (base, overrides) =>
@@ -248,7 +269,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
               const { client, model } = resolved
               const baselineTokens =
                 input.baseline === undefined ? null : await resolveBaselineTokens()
-              const result = await proposeThemeCandidates({
+              const result = await generateThemeCandidates({
                 client,
                 model,
                 description: input.description,
@@ -256,6 +277,11 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                 availableThemes: (await availableThemes()).map(
                   (theme): ThemeCreatorTargetTheme => ({ name: theme.name, label: theme.label }),
                 ),
+                mintSandboxId,
+                writeFile: (write) =>
+                  writeSandboxFile(options.projectRoot, write.sandboxId, write.path, write.content),
+                deleteFile: (del) =>
+                  deleteSandboxFile(options.projectRoot, del.sandboxId, del.path),
                 ...(input.attachments === undefined || input.attachments.length === 0
                   ? {}
                   : { attachments: input.attachments }),
@@ -263,20 +289,33 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                   ? {}
                   : { baseline: { themeName: input.baseline.themeName, tokens: baselineTokens } }),
                 ...(onProgress === undefined ? {} : { onProgress }),
+                ...(options.auditLog === undefined ? {} : { auditLog: options.auditLog }),
               })
               return result.ok
                 ? {
                     ok: true as const,
-                    candidates: result.candidates.map((candidate) => ({
-                      id: candidate.id,
-                      label: candidate.label,
-                      rationale: candidate.rationale,
-                      tokens: candidate.tokens,
-                      themeName: candidate.themeName,
-                      ...(candidate.chromeInput === undefined
-                        ? {}
-                        : { chromeInput: { ...candidate.chromeInput } }),
-                    })),
+                    candidates: result.candidates.map((candidate) =>
+                      candidate.kind === 'sandbox'
+                        ? {
+                            kind: 'sandbox' as const,
+                            id: candidate.id,
+                            label: candidate.label,
+                            rationale: candidate.rationale,
+                            sandboxId: candidate.sandboxId,
+                            filesWritten: candidate.filesWritten,
+                          }
+                        : {
+                            kind: 'tokens' as const,
+                            id: candidate.id,
+                            label: candidate.label,
+                            rationale: candidate.rationale,
+                            tokens: candidate.tokens,
+                            themeName: candidate.themeName,
+                            ...(candidate.chromeInput === undefined
+                              ? {}
+                              : { chromeInput: { ...candidate.chromeInput } }),
+                          },
+                    ),
                     warnings: [...result.warnings],
                   }
                 : { ok: false as const, reason: result.reason }

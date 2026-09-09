@@ -60,6 +60,7 @@ const AVAILABLE_THEMES = [
     description: 'The reference theme.',
     version: '1.1.0',
     author: 'Cogenta',
+    local: false,
   },
 ]
 
@@ -119,6 +120,7 @@ function router(overrides: {
   readonly generator?: Parameters<typeof createThemeRouter>[0]['generator']
   readonly fileExporter?: Parameters<typeof createThemeRouter>[0]['fileExporter']
   readonly progressJobs?: Parameters<typeof createThemeRouter>[0]['progressJobs']
+  readonly availableThemes?: Parameters<typeof createThemeRouter>[0]['availableThemes']
 }) {
   return createThemeRouter({
     store: overrides.store ?? memoryStore(),
@@ -126,7 +128,7 @@ function router(overrides: {
     validateTokens: (candidate) => validateSkin(candidate) as unknown as Record<string, unknown>,
     mergeTokens: (base, patch) =>
       mergeSkinTokens(base as never, patch as never) as unknown as Record<string, unknown>,
-    availableThemes: AVAILABLE_THEMES,
+    availableThemes: overrides.availableThemes ?? (async () => AVAILABLE_THEMES),
     ...(overrides.skinGallery === undefined ? {} : { skinGallery: overrides.skinGallery }),
     ...(overrides.generator === undefined ? {} : { generator: overrides.generator }),
     ...(overrides.fileExporter === undefined ? {} : { fileExporter: overrides.fileExporter }),
@@ -270,6 +272,40 @@ describe('createThemeRouter — PUT /api/theme/overrides', () => {
     expect(body.data.availableThemes).toEqual(AVAILABLE_THEMES)
   })
 
+  // Fiche 73's own live E2E test: a theme deployed while `cogenta serve` is
+  // already running never showed up here — `availableThemes` used to be a
+  // snapshot resolved once when the router's options were built, not a
+  // function called per request. A theme dropped in mid-process must appear
+  // on the very next GET, exactly like a token override already does.
+  it('GET reflects a theme that only became available after this router was built, no restart required', async () => {
+    let currentlyAvailable = AVAILABLE_THEMES
+    const r = router({ availableThemes: async () => currentlyAvailable })
+
+    const before = await r.handle({ method: 'GET', path: '/api/theme', query: {} }, ADMIN)
+    const beforeBody = before.body as { data: { availableThemes: readonly { name: string }[] } }
+    expect(beforeBody.data.availableThemes.some((t) => t.name === 'deployed-mid-process')).toBe(
+      false,
+    )
+
+    // The same real-world shape as a real deploy: the underlying source of
+    // truth changes while this process (and this router) is already alive.
+    currentlyAvailable = [
+      ...AVAILABLE_THEMES,
+      {
+        name: 'deployed-mid-process',
+        label: 'Deployed Mid Process',
+        description: '',
+        version: '1.0.0',
+        author: 'Cogenta',
+        local: true,
+      },
+    ]
+
+    const after = await r.handle({ method: 'GET', path: '/api/theme', query: {} }, ADMIN)
+    const afterBody = after.body as { data: { availableThemes: readonly { name: string }[] } }
+    expect(afterBody.data.availableThemes.some((t) => t.name === 'deployed-mid-process')).toBe(true)
+  })
+
   it('saves a valid activeTheme switch (fiche L23)', async () => {
     const store = memoryStore()
     const r = router({ store })
@@ -389,8 +425,20 @@ describe('createThemeRouter — AI generation (R2/R6)', () => {
           return {
             ok: true,
             candidates: [
-              { id: 'editorial', label: 'Warm editorial', rationale: 'warm', tokens: FILE_TOKENS },
-              { id: 'bold', label: 'Bold', rationale: 'bold', tokens: FILE_TOKENS },
+              {
+                kind: 'tokens' as const,
+                id: 'editorial',
+                label: 'Warm editorial',
+                rationale: 'warm',
+                tokens: FILE_TOKENS,
+              },
+              {
+                kind: 'tokens' as const,
+                id: 'bold',
+                label: 'Bold',
+                rationale: 'bold',
+                tokens: FILE_TOKENS,
+              },
             ],
           }
         },
@@ -445,7 +493,13 @@ describe('createThemeRouter — AI generation (R2/R6)', () => {
           return {
             ok: true,
             candidates: [
-              { id: 'editorial', label: 'Warm editorial', rationale: 'warm', tokens: FILE_TOKENS },
+              {
+                kind: 'tokens' as const,
+                id: 'editorial',
+                label: 'Warm editorial',
+                rationale: 'warm',
+                tokens: FILE_TOKENS,
+              },
             ],
           }
         },
@@ -491,6 +545,7 @@ describe('createThemeRouter — AI generation (R2/R6)', () => {
             ok: true,
             candidates: [
               {
+                kind: 'tokens' as const,
                 id: 'editorial',
                 label: 'Warm editorial',
                 rationale: 'warm',
@@ -676,7 +731,13 @@ describe('POST /api/theme/generate/jobs, GET …/generate/jobs/:jobId', () => {
           return {
             ok: true,
             candidates: [
-              { id: 'editorial', label: 'Warm editorial', rationale: 'warm', tokens: FILE_TOKENS },
+              {
+                kind: 'tokens' as const,
+                id: 'editorial',
+                label: 'Warm editorial',
+                rationale: 'warm',
+                tokens: FILE_TOKENS,
+              },
             ],
           }
         },

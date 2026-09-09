@@ -690,6 +690,8 @@ export function installMockFetch(
         /** Omit to simulate an older server predating fiche 48's manifest fields — the gallery card must degrade, not crash. */
         readonly version?: string
         readonly author?: string | null
+        /** Fiche "supprimer un thème" — `true` shows "Supprimer" on this card. Defaults to `false` (a built-in), same as the real server's own `local` field on a fixture that predates it. */
+        readonly local?: boolean
       }[]
       /**
        * Simulates a server process running code from before this field
@@ -1743,15 +1745,30 @@ export function installMockFetch(
       [...timestamps],
     ]),
   )
-  const availableThemes = options.theme?.availableThemes ?? [
-    {
-      name: '@cogenta/theme-canonical',
-      label: 'Canonical',
-      description: 'The reference theme: all twelve blocks, zero client JavaScript.',
-      version: '1.1.0',
-      author: 'Cogenta',
-    },
-  ]
+  // `let`, not `const` — fiche "supprimer un thème"'s DELETE handler below
+  // actually removes an entry, the same "real, stateful per install" shape
+  // `themeOverrides` already has. `local` is normalised to a real boolean
+  // here (the option type leaves it optional, for tests that do not care),
+  // matching the real server's own `AvailableThemeLike.local`, which is
+  // never optional on the wire.
+  let availableThemes: readonly {
+    readonly name: string
+    readonly label: string
+    readonly description: string
+    readonly version?: string
+    readonly author?: string | null
+    readonly local: boolean
+  }[] = (
+    options.theme?.availableThemes ?? [
+      {
+        name: '@cogenta/theme-canonical',
+        label: 'Canonical',
+        description: 'The reference theme: all twelve blocks, zero client JavaScript.',
+        version: '1.1.0',
+        author: 'Cogenta',
+      },
+    ]
+  ).map((theme) => ({ ...theme, local: theme.local ?? false }))
   function themeEffectiveTokens(): Record<string, unknown> {
     const file = options.theme?.fileTokens ?? DEFAULT_THEME_TOKENS
     if (themeOverrides.tokenOverrides === null) return file
@@ -8993,6 +9010,29 @@ export function installMockFetch(
           }
           mockThemeSandboxIds.add(sandboxId)
           return json(200, { data: { sandboxId } })
+        }
+
+        // DELETE /api/theme/:name — fiche "supprimer un thème". Placed after
+        // every other, more specific `/api/theme/...` branch above (the
+        // overrides DELETE included), the same ordering the real server's
+        // route guard uses so a bare theme name never collides with a
+        // reserved segment. Removes the entry for real, and clears
+        // `activeTheme` if it named the deleted theme — mirroring
+        // `serve.ts`'s own DELETE handler exactly.
+        const deleteThemeMatch = /\/api\/theme\/([^/?]+)$/u.exec(url)
+        if (deleteThemeMatch !== null && method === 'DELETE') {
+          const themeName = decodeURIComponent(deleteThemeMatch[1] as string)
+          const existed = availableThemes.some((theme) => theme.name === themeName)
+          if (!existed) {
+            return json(404, {
+              data: { ok: false, reasons: [`No local theme named "${themeName}" exists.`] },
+            })
+          }
+          availableThemes = availableThemes.filter((theme) => theme.name !== themeName)
+          if (themeOverrides.activeTheme === themeName) {
+            themeOverrides = { ...themeOverrides, activeTheme: null }
+          }
+          return json(200, { data: { ok: true } })
         }
 
         if (method === 'GET') {

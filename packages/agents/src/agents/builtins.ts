@@ -139,17 +139,17 @@ export function builtinAgentSeeds(): readonly AgentDeclarationInput[] {
     {
       name: THEME_CREATOR_AGENT_NAME,
       identity: {
-        role: 'Designs and adjusts this site’s visual theme from a description and, optionally, attached files (documents, screenshots) — the Appearance screen’s theme generator workshop talks to this agent, not the other way around.',
+        role: 'Designs and adjusts this site’s visual theme from a description and, optionally, attached files (documents, screenshots) — the Appearance screen’s theme generator workshop talks to this agent, not the other way around. Has two distinct tools for two distinct jobs: theme.propose_theme (recolour/retune an installed theme package, tokens only) and theme.write_sandbox_file (write real, custom theme.config.*/theme.render.* source code into a sandbox, for a design no installed theme package already renders).',
         objectives: [
-          'Read the brief and any attachments, then call theme.propose_theme with them.',
+          'When the request only needs different colours, fonts, spacing or motion on an already-installed theme, read the brief and attachments then call theme.propose_theme — produces contract D skin tokens only, never raw HTML or CSS.',
+          'When the request needs custom layout or markup that no installed theme package renders, call theme.write_sandbox_file for real, one file at a time, writing actual theme.config.*/theme.render.* module code (contract D ThemeManifest/ThemeModule shape) — never describe the files in prose, never claim the tool is unavailable.',
           'Pick the base theme from the packages this instance actually ships — never invent one.',
-          'Produce contract D skin tokens only, never raw HTML or CSS.',
-          'Propose 1-3 candidates and stop — this tool never applies anything itself (sideEffects: false); an admin activates a candidate from the workshop.',
+          'Propose 1-3 candidates and stop when using theme.propose_theme (sideEffects: false); when using theme.write_sandbox_file, stop once the sandbox holds working files — an admin previews and deploys it separately from the workshop.',
         ],
         style: 'Concrete design rationale, one sentence per candidate, no filler.',
       },
       model: DEFAULT_MODEL,
-      tools: ['theme.propose_theme'],
+      tools: ['theme.propose_theme', 'theme.write_sandbox_file'],
       autonomy: { default: 'propose' },
       budget: { tokensPerDay: 100_000, callsPerHour: 20 },
       enabled: true,
@@ -170,7 +170,10 @@ export async function ensureBuiltinAgents(store: AgentDeclarationStore): Promise
   for (const seed of builtinAgentSeeds()) {
     const existing = await store.get(seed.name)
     if (existing === undefined) await store.create(seed, true)
-    else await grantContentBrowse(store, existing)
+    else {
+      await grantContentBrowse(store, existing)
+      await grantThemeSandboxWrite(store, existing)
+    }
   }
 }
 
@@ -192,4 +195,32 @@ async function grantContentBrowse(
   const missing = CONTENT_BROWSE_TOOLS.filter((tool) => !existing.tools.includes(tool))
   if (missing.length === 0) return
   await store.update(existing.name, { tools: [...existing.tools, ...missing] })
+}
+
+/**
+ * Fiche 73 task 7's own real-world bug, found by actually running an
+ * existing site against the built dist rather than trusting the unit
+ * suite: `theme.write_sandbox_file` was added to `themeCreatorAgent`'s
+ * in-code declaration, but "never touch an existing seed" (this file's own
+ * policy, above) meant a site whose `theme-creator` agent record already
+ * existed from before this tool shipped never gained it — its persisted
+ * `tools` array stayed frozen at `['theme.propose_theme']` forever, and the
+ * model, never even offered the second tool in its own function-calling
+ * schema, had no way to call it no matter how explicitly it was asked to.
+ * Same narrow-exception shape as `grantContentBrowse`: only the one named
+ * builtin, only an addition, never touching whatever an operator may have
+ * customised on top (the tool list gains one entry; the identity text this
+ * agent's own record carries is left exactly as it is, since that is the
+ * one field an operator is explicitly meant to be able to rewrite from the
+ * Prompt Settings screen).
+ */
+async function grantThemeSandboxWrite(
+  store: AgentDeclarationStore,
+  existing: StoredAgent,
+): Promise<void> {
+  if (existing.name !== THEME_CREATOR_AGENT_NAME) return
+  if (existing.tools.includes('theme.write_sandbox_file')) return
+  await store.update(existing.name, {
+    tools: [...existing.tools, 'theme.write_sandbox_file'],
+  })
 }

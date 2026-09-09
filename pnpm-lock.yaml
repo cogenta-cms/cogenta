@@ -192,6 +192,9 @@ importers:
       '@cogenta/theme-canonical':
         specifier: workspace:*
         version: link:../../packages/theme-canonical
+      '@cogenta/theme-kit':
+        specifier: workspace:*
+        version: link:../../packages/theme-kit
 
   examples/plugin-starter:
     dependencies:

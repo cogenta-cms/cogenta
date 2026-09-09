@@ -46,7 +46,10 @@ describe('ensureBuiltinAgents', () => {
     ])
     expect(byName.get(THEME_CREATOR_AGENT_NAME)?.enabled).toBe(true)
     expect(byName.get(THEME_CREATOR_AGENT_NAME)?.builtin).toBe(true)
-    expect(byName.get(THEME_CREATOR_AGENT_NAME)?.tools).toEqual(['theme.propose_theme'])
+    expect(byName.get(THEME_CREATOR_AGENT_NAME)?.tools).toEqual([
+      'theme.propose_theme',
+      'theme.write_sandbox_file',
+    ])
   })
 
   it('is idempotent — does not duplicate or reset an already-seeded, edited agent', async () => {
@@ -87,6 +90,38 @@ describe('ensureBuiltinAgents', () => {
       'content.schema',
     ])
     expect(all.find((agent) => agent.name === SECURITY_AGENT_NAME)?.tools).toEqual(['deps.scan'])
+  })
+
+  it('grants theme.write_sandbox_file to a theme creator seeded before it existed', async () => {
+    await ensureBuiltinAgents(store)
+    // A theme-creator agent as it shipped before fiche 73 task 7 added
+    // theme.write_sandbox_file — the real state of any site upgraded from
+    // that version, since re-seeding never rewrites an existing agent.
+    await store.update(THEME_CREATOR_AGENT_NAME, { tools: ['theme.propose_theme'] })
+
+    await ensureBuiltinAgents(store)
+
+    const all = await store.list()
+    expect(all.find((agent) => agent.name === THEME_CREATOR_AGENT_NAME)?.tools).toEqual([
+      'theme.propose_theme',
+      'theme.write_sandbox_file',
+    ])
+  })
+
+  it('does not touch theme.write_sandbox_file on an unrelated agent', async () => {
+    await ensureBuiltinAgents(store)
+    await store.update(SUPERAGENT_NAME, {
+      tools: ['content.read', 'content.write_draft', 'media.read'],
+    })
+
+    await ensureBuiltinAgents(store)
+
+    const all = await store.list()
+    expect(
+      all
+        .find((agent) => agent.name === SUPERAGENT_NAME)
+        ?.tools.includes('theme.write_sandbox_file'),
+    ).toBe(false)
   })
 
   it('only ever seeds exactly five agents', async () => {

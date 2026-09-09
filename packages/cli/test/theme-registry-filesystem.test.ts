@@ -6,6 +6,7 @@ import {
   availableThemes,
   configureThemeRegistry,
   DEFAULT_THEME_NAME,
+  invalidateFilesystemTheme,
   resolveTheme,
 } from '../src/commands/theme-registry.js'
 
@@ -209,5 +210,40 @@ describe('theme registry — themes/ directory (fiche 73)', () => {
     expect(entries[0]?.author).toBe('Cogenta')
     expect(entries[0]?.author).not.toBe('A developer, not an agent')
     expect(typeof theme.renderPage).toBe('function')
+  })
+
+  // Fiche 73 task 7's own live E2E test: an agent deployed a fully valid
+  // theme, but the admin gallery kept not showing it, and activating it as
+  // `activeTheme` kept silently rendering the default theme instead — both
+  // because *something* had already resolved this exact name before the
+  // deploy (an admin's earlier failed deploy attempt with the same name, in
+  // this live case), caching `undefined` in a Map with no other
+  // invalidation. `deployThemeFromSandbox`/`restoreThemeVersion`
+  // (`theme-sandbox.ts`) now call `invalidateFilesystemTheme` right after
+  // changing `themes/<name>/` — this proves the fix at the level that
+  // actually matters: a name resolved once, before it existed, must resolve
+  // correctly once real content lands there, in the same process.
+  it('re-resolves correctly after content appears — a name resolved once before it existed is not stuck on that first miss forever', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    configureThemeRegistry({ projectRoot: root })
+
+    // Nothing at this name yet — falls back, and (without the fix) caches
+    // that fallback for the rest of this process's life.
+    const before = await resolveTheme('theme-delta')
+    expect(before.renderPage).toBe((await resolveTheme(DEFAULT_THEME_NAME)).renderPage)
+
+    await writeFixtureTheme(root, 'theme-delta', {
+      'theme.config.mjs': CANONICAL_MANIFEST,
+      'theme.render.mjs': RENDER_MODULE,
+    })
+    invalidateFilesystemTheme('theme-delta')
+
+    const after = await resolveTheme('theme-delta')
+    expect(after.renderPage).not.toBe(before.renderPage)
+    expect(typeof after.renderPage).toBe('function')
+
+    const themes = await availableThemes()
+    expect(themes.some((info) => info.name === 'theme-delta')).toBe(true)
   })
 })

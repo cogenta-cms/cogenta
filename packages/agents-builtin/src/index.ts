@@ -92,6 +92,17 @@ export type {
 } from './seo/types.js'
 export { themeCreatorAgent } from './theme-creator/agent.js'
 export type {
+  GenerateSandboxThemeInput,
+  GenerateSandboxThemeResult,
+} from './theme-creator/generate-sandbox-theme.js'
+export { generateSandboxTheme } from './theme-creator/generate-sandbox-theme.js'
+export type {
+  GenerateThemeCandidatesInput,
+  GenerateThemeCandidatesResult,
+  ThemeCandidate,
+} from './theme-creator/generate-theme-candidates.js'
+export { generateThemeCandidates } from './theme-creator/generate-theme-candidates.js'
+export type {
   ProposeThemeInput,
   ProposeThemeOutput,
   ProposeThemeToolOptions,

@@ -6,12 +6,13 @@ import {
   type AvailableTheme,
   getTheme,
   getThemeGenerateJob,
-  type SkinCandidate,
   saveThemeOverrides,
   startThemeGenerateJob,
+  type ThemeGenerateCandidate,
   type ThemeState,
   toGenerateThemeAttachment,
 } from '../api/theme-client.js'
+import { checkSandboxDeployment, deploySandbox } from '../api/theme-sandbox-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
   Button,
@@ -106,7 +107,7 @@ export function ThemeGeneratorRoute(): JSX.Element {
 
   const [description, setDescription] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<readonly File[]>([])
-  const [candidates, setCandidates] = useState<readonly SkinCandidate[] | null>(null)
+  const [candidates, setCandidates] = useState<readonly ThemeGenerateCandidate[] | null>(null)
   const [warnings, setWarnings] = useState<readonly string[]>([])
   const [generating, setGenerating] = useState(false)
   /** Fiche feedback — "je ne sais pas si le traitement est en cours ou pas": the growing log of what the generator is doing right now (choosing a base theme, filling each design direction), rendered while `generating` is `true`. */
@@ -168,22 +169,49 @@ export function ThemeGeneratorRoute(): JSX.Element {
     }
   }
 
-  async function activate(candidate: SkinCandidate): Promise<void> {
+  async function activate(candidate: ThemeGenerateCandidate): Promise<void> {
     if (token === null) return
     setActivatingId(candidate.id)
     setActivateError(null)
     try {
-      // Wholesale, not a diff: contract D tokens are opaque here, and the
-      // gallery's own "choose an AI candidate" flow (pre-workshop, in
-      // `appearance.tsx`) never diffed against the file either — it replaced
-      // the whole draft with the candidate's tokens and left "Enregistrer"
-      // to persist it. `activeTheme` is only sent when the candidate names
-      // one: omitting the key (not sending `null`) is what `PUT
-      // /api/theme/overrides` reads as "leave the active theme alone".
-      await saveThemeOverrides(token, {
-        tokenOverrides: candidate.tokens,
-        ...(candidate.themeName === undefined ? {} : { activeTheme: candidate.themeName }),
-      })
+      if (candidate.kind === 'sandbox') {
+        // A custom-layout candidate has no tokens to overlay — activating it
+        // means promoting its sandbox into themes/ (the same deploy pipeline
+        // the "Gérer les thèmes locaux" screen's own "Déployer" button uses)
+        // and then pointing the site at it, same as any other theme switch.
+        // The sandbox's own id (minted fresh per generation run — never
+        // colliding, already a valid lowercase/digits/hyphen name) doubles
+        // as the deployed theme's name, so there is nothing further to ask
+        // the operator to name.
+        const themeName = candidate.sandboxId
+        const check = await checkSandboxDeployment(token, candidate.sandboxId, themeName)
+        if (!check.ok) {
+          setActivateError({
+            message: check.reasons.join(' ') || t('themeGenerator.activateError'),
+          })
+          return
+        }
+        const deployed = await deploySandbox(token, candidate.sandboxId, themeName)
+        if (!deployed.ok) {
+          setActivateError({
+            message: deployed.reasons.join(' ') || t('themeGenerator.activateError'),
+          })
+          return
+        }
+        await saveThemeOverrides(token, { activeTheme: themeName })
+      } else {
+        // Wholesale, not a diff: contract D tokens are opaque here, and the
+        // gallery's own "choose an AI candidate" flow (pre-workshop, in
+        // `appearance.tsx`) never diffed against the file either — it replaced
+        // the whole draft with the candidate's tokens and left "Enregistrer"
+        // to persist it. `activeTheme` is only sent when the candidate names
+        // one: omitting the key (not sending `null`) is what `PUT
+        // /api/theme/overrides` reads as "leave the active theme alone".
+        await saveThemeOverrides(token, {
+          tokenOverrides: candidate.tokens,
+          ...(candidate.themeName === undefined ? {} : { activeTheme: candidate.themeName }),
+        })
+      }
       setActivatedId(candidate.id)
       activatedIndicator.show()
       await load()
@@ -397,12 +425,23 @@ export function ThemeGeneratorRoute(): JSX.Element {
                     candidate={candidate}
                     activeThemeName={activeThemeName}
                   />
-                  <strong className="text-sm text-foreground">{candidate.label}</strong>
+                  <strong className="text-sm text-foreground">
+                    {candidate.kind === 'sandbox'
+                      ? t('themeGenerator.candidateCustomLayoutLabel')
+                      : candidate.label}
+                  </strong>
                   <span className="text-xs text-muted-foreground">{candidate.rationale}</span>
-                  {candidate.chromeInput?.tagline !== undefined && (
+                  {candidate.kind === 'tokens' && candidate.chromeInput?.tagline !== undefined && (
                     <span className="text-xs text-muted-foreground">
                       {t('themeGenerator.candidateTagline', {
                         tagline: candidate.chromeInput.tagline,
+                      })}
+                    </span>
+                  )}
+                  {candidate.kind === 'sandbox' && (
+                    <span className="text-xs text-muted-foreground">
+                      {t('themeGenerator.candidateFilesWritten', {
+                        count: candidate.filesWritten.length,
                       })}
                     </span>
                   )}

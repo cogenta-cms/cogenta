@@ -165,13 +165,21 @@ describe('a well-formed theme', () => {
 })
 
 describe('an incomplete theme', () => {
-  it('is refused when it does not implement the twelve blocks', async () => {
-    const error = await refusalOf(PARTIAL)
+  // Product decision, overriding the original acceptance criterion above:
+  // a Cogenta theme has the same design freedom a WordPress theme or a
+  // Strapi frontend already has, including a custom block vocabulary and no
+  // requirement to cover every shared block before it can go live. Missing
+  // coverage is still visible (the deploy screen can show it), never a
+  // refusal — content on an unimplemented block simply renders nothing for
+  // that theme, an accepted trade-off, not a bug.
+  it('installs even when it does not implement every shared block, with the gap only reported', async () => {
+    const inspection = await inspectFixture(PARTIAL)
 
-    expect(isCogentaError(error)).toBe(true)
-    if (!isCogentaError(error)) return
-    expect(error.code).toBe('THEME_BLOCK_MISSING')
-    expect(error.message).toContain('mediaFigure')
-    expect(error.message).toContain('collectionList')
+    expect(inspection.ok).toBe(true)
+    expect(inspection.missingBlocks).toContain('mediaFigure')
+    expect(inspection.missingBlocks).toContain('collectionList')
+
+    const result = await refusalOf(PARTIAL)
+    expect(isCogentaError(result)).toBe(false)
   })
 })

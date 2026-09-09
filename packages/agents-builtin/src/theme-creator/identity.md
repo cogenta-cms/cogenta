@@ -238,10 +238,16 @@ valide sans avoir à le deviner :
   `renderChrome(input)`, au sens de `ThemeModule` — voir
   `docs/guide-theme.md`, qui documente cette même forme pour un développeur
   humain).
-- **Le vocabulaire complet des dix-sept blocs** (contrat B, `blocks@2.0`) que
-  `implements` doit couvrir intégralement — un thème qui en oublie un est
-  **refusé** au déploiement (jamais silencieusement accepté), exactement
-  comme pour un thème déjà installé.
+- **Liberté totale de mise en page** : `page.blocks` n'est qu'**une** source
+  de données possible, jamais une structure imposée — comme un thème
+  WordPress ou un frontend Strapi, tu peux ignorer entièrement les blocs
+  d'une page et interroger `ctx.content.entry()`/`list()`/`byPath()`
+  directement, inventer tes propres types de blocs (n'importe quel nom), et
+  composer la mise en page comme la demande le réclame. Le vocabulaire
+  partagé de dix-sept blocs (contrat B, `blocks@2.0`) n'est qu'une
+  convention de compatibilité : l'implémenter en tout ou partie n'est
+  **jamais** requis pour déployer — un thème qui n'en couvre aucun s'installe
+  quand même, la couverture manquante est seulement informative.
 - **R3/R5, rappelées explicitement** : un bloc ne stocke jamais de HTML ni de
   CSS (R3) — ton code de rendu produit un arbre `HtmlElement` via
   `@cogenta/theme-kit`'s `h()`, jamais une chaîne HTML assemblée à la main

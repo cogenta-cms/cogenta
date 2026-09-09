@@ -16,8 +16,10 @@ import { Link, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import {
+  type AvailableTheme,
   applyGallerySkin,
   clearThemeOverrides,
+  deleteTheme,
   exportThemeToFile,
   type GallerySkin,
   getTheme,
@@ -42,6 +44,7 @@ import {
   Field,
   Input,
   Label,
+  Modal,
   Notice,
   SavedIndicator,
   Select,
@@ -369,6 +372,9 @@ export function AppearanceRoute(): JSX.Element {
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [switchingTheme, setSwitchingTheme] = useState<string | null>(null)
   const [switchThemeError, setSwitchThemeError] = useState<string | null>(null)
+  const [deletingTheme, setDeletingTheme] = useState<AvailableTheme | null>(null)
+  const [deleteThemeInProgress, setDeleteThemeInProgress] = useState(false)
+  const [deleteThemeError, setDeleteThemeError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -485,6 +491,31 @@ export function AppearanceRoute(): JSX.Element {
       )
     } finally {
       setSwitchingTheme(null)
+    }
+  }
+
+  /**
+   * "Supprimer" (fiche « supprimer un thème ») — real, irreversible removal
+   * of a local theme (`themes/<name>/` and its whole archived version
+   * history), never offered for a built-in (`candidate.local` gates the
+   * button itself). If the deleted theme was `activeTheme`, the server
+   * clears that override too — `load()` picks up the fallback the very same
+   * way `switchTheme` already does for an ordinary switch.
+   */
+  async function confirmDeleteTheme(): Promise<void> {
+    if (token === null || deletingTheme === null) return
+    setDeleteThemeInProgress(true)
+    setDeleteThemeError(null)
+    try {
+      await deleteTheme(token, deletingTheme.name)
+      setDeletingTheme(null)
+      await load()
+    } catch (caught) {
+      setDeleteThemeError(
+        caught instanceof ApiError ? caught.message : t('appearance.themeDeleteError'),
+      )
+    } finally {
+      setDeleteThemeInProgress(false)
     }
   }
 
@@ -640,6 +671,11 @@ export function AppearanceRoute(): JSX.Element {
                     <p>{switchThemeError}</p>
                   </Notice>
                 )}
+                {deleteThemeError !== null && (
+                  <Notice tone="danger" live="assertive">
+                    <p>{deleteThemeError}</p>
+                  </Notice>
+                )}
                 <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
                   {(theme.availableThemes ?? []).map((candidate) => {
                     const active =
@@ -731,6 +767,16 @@ export function AppearanceRoute(): JSX.Element {
                             >
                               {t('appearance.themePersonalizeAiAction')}
                             </Link>
+                          )}
+                          {candidate.local && (
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => setDeletingTheme(candidate)}
+                            >
+                              {t('appearance.themeDeleteAction')}
+                            </Button>
                           )}
                         </div>
                       </li>
@@ -1077,6 +1123,49 @@ export function AppearanceRoute(): JSX.Element {
           )}
         </>
       )}
+
+      <Modal
+        open={deletingTheme !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingTheme(null)
+            setDeleteThemeError(null)
+          }
+        }}
+        title={t('appearance.themeDeleteConfirmTitle', { name: deletingTheme?.label ?? '' })}
+        closeLabel={t('appearance.close')}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setDeletingTheme(null)}
+              disabled={deleteThemeInProgress}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmDeleteTheme()}
+              disabled={deleteThemeInProgress}
+            >
+              {deleteThemeInProgress
+                ? t('appearance.themeDeleting')
+                : t('appearance.themeDeleteConfirmButton')}
+            </Button>
+          </>
+        }
+      >
+        <Notice tone="danger" live="off">
+          <p>{t('appearance.themeDeleteWarning')}</p>
+        </Notice>
+        {deletingTheme !== null && theme?.overrides.activeTheme === deletingTheme.name && (
+          <Notice tone="warning" live="off">
+            <p>{t('appearance.themeDeleteWarningActive')}</p>
+          </Notice>
+        )}
+      </Modal>
     </section>
   )
 }

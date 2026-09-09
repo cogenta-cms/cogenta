@@ -235,11 +235,13 @@ export { createSiteSettingsRouter } from './site-settings-router.js'
 export type { TaxonomyRouter, TaxonomyRouterOptions } from './taxonomy-router.js'
 export { createTaxonomyRouter } from './taxonomy-router.js'
 export type {
+  SandboxCandidateLike,
   SetThemeOverridesInputLike,
   SkinCandidateLike,
   SkinGalleryEntryLike,
   SkinGalleryLike,
   SkinGeneratorLike,
+  ThemeGenerateCandidateLike,
   ThemeOverridesLike,
   ThemeRouter,
   ThemeRouterOptions,

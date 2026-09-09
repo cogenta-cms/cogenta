@@ -50,11 +50,15 @@ export interface ThemeRegistry {
    * contract inspection runs, the same way an unlinked channel identity is
    * refused before a command is even looked up (L6 task 3's precedent).
    * (2) **Contrat vérifié** — contract D's real install-time check
-   * (`verifyTheme`, `@cogenta/render`): every vocabulary block is declared in
-   * `implements`, no forbidden import (`node:fs`, `@cogenta/core`, ...)
-   * appears anywhere in the theme's real sources, and its default skin
-   * (`tokens.json`) passes `validateSkin` — contract D's token rules, reused
-   * exactly as the Skins gallery (task 10) reused them, not reimplemented.
+   * (`verifyTheme`, `@cogenta/render`): no forbidden import (`node:fs`,
+   * `@cogenta/core`, ...) appears anywhere in the theme's real sources, and
+   * its default skin (`tokens.json`) passes `validateSkin` — contract D's
+   * token rules, reused exactly as the Skins gallery (task 10) reused them,
+   * not reimplemented. Block-vocabulary coverage is no longer part of this
+   * gate (product decision: a theme has the same design freedom a WordPress
+   * theme or a Strapi frontend already has, custom blocks included) — a
+   * submission missing coverage of a shared block still accepts, the gap
+   * only shown as information.
    *
    * No human-review step exists for themes ("Signature, contrat vérifié" is
    * the lot's whole named requirement — no "revue" column value, unlike

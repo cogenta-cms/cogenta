@@ -248,6 +248,18 @@ function packageJsonContents(answers: ScaffoldAnswers, defaultTheme?: string): s
       '@cogenta/core': 'latest',
       '@cogenta/cli': 'latest',
       '@cogenta/theme-canonical': 'latest',
+      // Fiche 73 task 7's own real-world bug, found by actually running
+      // theme.write_sandbox_file against a real scaffolded site: the tool
+      // (correctly) tells a model to `import { h } from '@cogenta/theme-kit'`
+      // for a custom theme.render.*, but no scaffolded site ever declared
+      // this as a direct dependency — only @cogenta/theme-canonical did,
+      // transitively. Under a package manager that does not hoist a
+      // transitive dependency into the site's own resolvable node_modules
+      // (pnpm's default, and not guaranteed by any manager), that import
+      // fails at preview/deploy time with "Cannot find package
+      // '@cogenta/theme-kit'" — every sandbox a Theme Creator agent writes
+      // is unusable until this is a direct dependency of the site itself.
+      '@cogenta/theme-kit': 'latest',
       ...(defaultTheme === undefined ? {} : { [defaultTheme]: 'latest' }),
     },
   }

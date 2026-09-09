@@ -7,6 +7,7 @@ import {
   cloneThemeIntoSandbox,
   createSandbox,
   deleteSandboxFile,
+  deleteTheme,
   deployThemeFromSandbox,
   listSandboxIds,
   listThemeVersions,
@@ -250,7 +251,10 @@ describe('theme deploy pipeline (fiche 73 task 5)', () => {
     ).rejects.toThrow()
   })
 
-  it('refuses to deploy a theme missing vocabulary blocks — the same rule a built-in theme already meets', async () => {
+  // Product decision: a theme has the same design freedom a WordPress theme
+  // or a Strapi frontend already has, including a custom block vocabulary —
+  // missing coverage of the shared vocabulary no longer blocks a deploy.
+  it('deploys a theme missing vocabulary blocks — a custom block vocabulary is not a deploy blocker', async () => {
     const root = await makeProjectRoot()
     roots.push(root)
     const dir = await createSandbox(root, 'incomplete')
@@ -258,8 +262,7 @@ describe('theme deploy pipeline (fiche 73 task 5)', () => {
     await writeFile(join(dir, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
 
     const check = await checkThemeDeployment(root, 'incomplete', 'my-theme')
-    expect(check.ok).toBe(false)
-    expect(check.reasons[0]).toContain('does not implement every block')
+    expect(check.ok).toBe(true)
   })
 
   it('refuses to deploy a theme with a forbidden import — never copies it into themes/', async () => {
@@ -355,6 +358,34 @@ describe('theme deploy pipeline (fiche 73 task 5)', () => {
 
     const result = await deployThemeFromSandbox(root, 'goes-bad', 'stale-check-theme')
     expect(result.ok).toBe(false)
+  })
+
+  // Fiche 73 task 7's own live E2E test: a real agent fixed an invalid
+  // manifest, but a second check in the same long-running `cogenta serve`
+  // process kept reporting the original failure — `loadTheme`'s default
+  // `importManifest` has no cache-busting, so Node's own ESM cache silently
+  // served the *first* import of this path forever. The opposite direction
+  // of the test above: a sandbox that becomes VALID between two checks must
+  // be reported valid, not stuck on its first, since-fixed failure.
+  it('re-checks correctly after a fix — a sandbox that becomes valid between two checks in the same process is reported valid', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const dir = await createSandbox(root, 'gets-fixed')
+    // Genuinely invalid (runtime is not one of the three literal strings) —
+    // missing block-vocabulary coverage is no longer a failure to fix here.
+    const invalidRuntimeManifest = VALID_MANIFEST.replace("runtime: 'server'", 'runtime: 123')
+    await writeFile(join(dir, 'theme.config.mjs'), invalidRuntimeManifest, 'utf8')
+    await writeFile(join(dir, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+
+    const first = await checkThemeDeployment(root, 'gets-fixed', 'was-incomplete-theme')
+    expect(first.ok).toBe(false)
+
+    // Same path, fixed content — the same real-world shape as an agent
+    // retrying `theme.write_sandbox_file` after reading a rejection.
+    await writeFile(join(dir, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+
+    const second = await checkThemeDeployment(root, 'gets-fixed', 'was-incomplete-theme')
+    expect(second.ok).toBe(true)
   })
 })
 
@@ -463,6 +494,70 @@ describe('theme versions (fiche 73 task 6)', () => {
   })
 })
 
+describe('deleting a theme (fiche "supprimer un thème")', () => {
+  const roots: string[] = []
+
+  afterEach(async () => {
+    while (roots.length > 0) {
+      const root = roots.pop()
+      if (root !== undefined) await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('removes a deployed theme entirely — nothing left under themes/<name>/', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const dir = await createSandbox(root, 'to-delete')
+    await writeFile(join(dir, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    await deployThemeFromSandbox(root, 'to-delete', 'deletable-theme')
+
+    const result = await deleteTheme(root, 'deletable-theme')
+    expect(result.ok).toBe(true)
+    await expect(
+      readFile(join(root, 'themes', 'deletable-theme', 'theme.config.mjs'), 'utf8'),
+    ).rejects.toThrow()
+  })
+
+  // The whole point the admin's own warning names: a deleted theme really
+  // disappears, not just "until someone restores an old version" — its
+  // archive must go with it, or `restoreThemeVersion` could bring back a
+  // theme the operator just asked to delete entirely.
+  it('also removes every archived version — a deleted theme cannot be brought back by restoring', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const dir1 = await createSandbox(root, 'v1')
+    await writeFile(join(dir1, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir1, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    await deployThemeFromSandbox(root, 'v1', 'versioned-deletable-theme')
+
+    const dir2 = await createSandbox(root, 'v2')
+    await writeFile(join(dir2, 'theme.config.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir2, 'theme.render.mjs'), RENDER_MODULE, 'utf8')
+    await deployThemeFromSandbox(root, 'v2', 'versioned-deletable-theme')
+    expect(await listThemeVersions(root, 'versioned-deletable-theme')).toHaveLength(1)
+
+    const result = await deleteTheme(root, 'versioned-deletable-theme')
+    expect(result.ok).toBe(true)
+    expect(await listThemeVersions(root, 'versioned-deletable-theme')).toEqual([])
+  })
+
+  it('refuses a name with no real folder under themes/, rather than silently doing nothing', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const result = await deleteTheme(root, 'never-deployed')
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reasons.join(' ')).toContain('never-deployed')
+  })
+
+  it('never touches a built-in theme name — there is no folder for it to find', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    const result = await deleteTheme(root, '@cogenta/theme-canonical')
+    expect(result.ok).toBe(false)
+  })
+})
+
 describe('writing a single sandbox file (fiche 73 task 7)', () => {
   const roots: string[] = []
 
@@ -485,6 +580,120 @@ describe('writing a single sandbox file (fiche 73 task 7)', () => {
       'utf8',
     )
     expect(content).toBe(VALID_MANIFEST)
+  })
+
+  // Fiche 73 task 7's own live E2E test: a real model asked to write
+  // theme.config.mjs invented a manifest shape that looks plausible but
+  // isn't — `blocks` as a list of block names instead of the block-vocabulary
+  // semver range it actually is, `runtime` as an object instead of one of
+  // three literal strings, `tokens` as inline data instead of a path string.
+  // This must be rejected at write time, with the real field-by-field error,
+  // not shipped into the sandbox to fail silently at preview or deploy.
+  it('refuses a theme.config.* whose manifest fields have the wrong shape', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+
+    const hallucinatedManifest = `
+export default {
+  name: 'hallucinated-theme',
+  version: '0.1.0',
+  engine: 'cogenta:theme-engine',
+  blocks: ['hero', 'recentPosts'],
+  implements: ['theme.skin', 'layout.blog'],
+  collections: ['posts'],
+  runtime: { apiVersion: 1 },
+  tokens: { color: { bg: '#fff' } },
+}
+`
+    await expect(
+      writeSandboxFile(root, 'hallucinated', 'theme.config.mjs', hallucinatedManifest),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_FILE_INVALID' })
+
+    await expect(
+      readFile(join(sandboxDirectory(root, 'hallucinated'), 'theme.config.mjs'), 'utf8'),
+    ).rejects.toThrow()
+  })
+
+  it('restores the previous content when a rewrite of an existing file fails validation', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    await writeSandboxFile(root, 'rewritten', 'theme.config.mjs', VALID_MANIFEST)
+
+    await expect(
+      writeSandboxFile(root, 'rewritten', 'theme.config.mjs', 'export default { name: 1 }'),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_FILE_INVALID' })
+
+    const content = await readFile(
+      join(sandboxDirectory(root, 'rewritten'), 'theme.config.mjs'),
+      'utf8',
+    )
+    expect(content).toBe(VALID_MANIFEST)
+  })
+
+  // Live-observed real agent mistake: a model asked to write theme.render.*
+  // named the file theme.render.tsx — plausible-sounding, but this sandbox
+  // has no build step (a plain ESM import()), which cannot transform JSX.
+  // Before this guard, the write silently succeeded (neither the config nor
+  // the render regex matches ".tsx") and the file was never found by the
+  // preview/deploy pipeline at all, with no error pointing back at why.
+  it('refuses theme.render.tsx and theme.config.tsx by name, with a corrective hint about JSX', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+
+    await expect(
+      writeSandboxFile(root, 'jsx-render', 'theme.render.tsx', 'export function renderPage() {}'),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_FILE_INVALID' })
+    await expect(
+      readFile(join(sandboxDirectory(root, 'jsx-render'), 'theme.render.tsx'), 'utf8'),
+    ).rejects.toThrow()
+
+    await expect(
+      writeSandboxFile(root, 'jsx-config', 'theme.config.tsx', 'export default {}'),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_FILE_INVALID' })
+  })
+
+  it('refuses a theme.render.* that does not export renderPage and renderChrome', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+
+    await expect(
+      writeSandboxFile(root, 'no-exports', 'theme.render.mjs', 'export const notAFunction = 1'),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_FILE_INVALID' })
+  })
+
+  // The exact live failure fiche 73's own E2E test found: a model wrote a
+  // theme.render.mjs exporting two real functions (passing the shallow
+  // "are these exports callable" check) that each returned a plain data
+  // object instead of an HtmlElement built with h() — a shape `serialize()`
+  // cannot handle, which used to only ever surface at the next preview
+  // click, disconnected from the write that caused it.
+  it('refuses a theme.render.* whose functions return the wrong shape, even though both exist', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+
+    const wrongShapeRenderModule = `
+export function renderPage(page) {
+  return { title: page.title, hero: { wordmark: 'BLOG' } }
+}
+export function renderChrome() {
+  return { site: { name: 'x' }, header: { text: 'hi' } }
+}
+`
+    await expect(
+      writeSandboxFile(root, 'wrong-shape', 'theme.render.mjs', wrongShapeRenderModule),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_FILE_INVALID' })
+
+    await expect(
+      readFile(join(sandboxDirectory(root, 'wrong-shape'), 'theme.render.mjs'), 'utf8'),
+    ).rejects.toThrow()
+  })
+
+  it('accepts a well-formed theme.render.* module', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+
+    const result = await writeSandboxFile(root, 'well-formed', 'theme.render.mjs', RENDER_MODULE)
+    expect(result.path).toBe('theme.render.mjs')
   })
 
   it('creates intermediate subdirectories a nested path names', async () => {

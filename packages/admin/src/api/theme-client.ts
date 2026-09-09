@@ -28,6 +28,8 @@ export interface AvailableTheme {
   readonly version: string
   /** Who publishes the theme, or `null` when it does not declare one. */
   readonly author: string | null
+  /** `true` for a real local theme (a folder under `themes/`, deletable); `false` for an npm-packaged built-in — decides whether the appearance gallery offers "Supprimer" on this card at all. */
+  readonly local: boolean
 }
 
 export interface GallerySkin {
@@ -49,6 +51,7 @@ export interface ThemeState {
 }
 
 export interface SkinCandidate {
+  readonly kind: 'tokens'
   readonly id: string
   readonly label: string
   readonly rationale: string
@@ -67,6 +70,28 @@ export interface SkinCandidate {
     readonly footerNote?: string
   }
 }
+
+/**
+ * The other shape `POST /api/theme/generate` can now return: a fully custom
+ * page layout, written by a real agent run into one sandbox directory
+ * (`@cogenta/agents-builtin`'s `generateSandboxTheme`) rather than contract D
+ * tokens overlaid on an already-installed theme — the fix for a real report
+ * that this screen could only ever recolour whichever theme was already
+ * active, never change the actual layout a reference screenshot showed.
+ * Never applied by this response either: previewing it reuses the sandbox
+ * screen's own `previewSandbox`, and activating it reuses its own
+ * `checkSandboxDeployment`/`deploySandbox`, both already existing.
+ */
+export interface SandboxThemeCandidate {
+  readonly kind: 'sandbox'
+  readonly id: string
+  readonly label: string
+  readonly rationale: string
+  readonly sandboxId: string
+  readonly filesWritten: readonly string[]
+}
+
+export type ThemeGenerateCandidate = SkinCandidate | SandboxThemeCandidate
 
 /**
  * A file read into the base64 envelope `POST /api/theme/generate` takes for
@@ -116,6 +141,21 @@ export function clearThemeOverrides(token: string): Promise<ThemeOverrides> {
   })
 }
 
+/**
+ * `DELETE /api/theme/:name` — removes a local theme (`themes/<name>/`) and
+ * its whole archived version history entirely. Never offered for a built-in
+ * theme (`AvailableTheme.local` decides that on the calling screen); if the
+ * deleted theme was the site's own `activeTheme`, the server clears that
+ * override too, so the site falls back to the default theme rather than
+ * the row staying stuck naming a theme that no longer exists.
+ */
+export function deleteTheme(token: string, name: string): Promise<{ readonly ok: boolean }> {
+  return request<{ readonly ok: boolean }>(`/api/theme/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
 export function applyGallerySkin(token: string, id: string): Promise<ThemeOverrides> {
   return request<ThemeOverrides>(`/api/theme/skins/${encodeURIComponent(id)}/apply`, {
     method: 'POST',
@@ -140,11 +180,11 @@ export function generateSkinCandidates(
     readonly baseline?: GenerateThemeBaseline
   },
 ): Promise<{
-  readonly candidates: readonly SkinCandidate[]
+  readonly candidates: readonly ThemeGenerateCandidate[]
   readonly warnings?: readonly string[]
 }> {
   return request<{
-    readonly candidates: readonly SkinCandidate[]
+    readonly candidates: readonly ThemeGenerateCandidate[]
     readonly warnings?: readonly string[]
   }>('/api/theme/generate', {
     method: 'POST',
@@ -169,7 +209,7 @@ export interface ThemeGenerateJob {
   readonly status: 'running' | 'done' | 'failed'
   readonly events: readonly ThemeGenerateProgressEvent[]
   readonly result?: {
-    readonly candidates: readonly SkinCandidate[]
+    readonly candidates: readonly ThemeGenerateCandidate[]
     readonly warnings?: readonly string[]
   }
   readonly error?: { readonly message: string }

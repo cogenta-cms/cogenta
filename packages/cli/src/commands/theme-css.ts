@@ -1,3 +1,7 @@
+import { readdir } from 'node:fs/promises'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+
 /**
  * The theme's stylesheet, flattened and minified for `cogenta serve`.
  *
@@ -125,19 +129,46 @@ export function cssEtag(css: string): string {
 
 /**
  * The whole theme stylesheet as one minified string, or `null` when the named
- * theme package cannot be resolved — a site then renders with the skin's
- * custom properties alone rather than refusing to serve, the same degradation
+ * theme cannot be resolved — a site then renders with the skin's custom
+ * properties alone rather than refusing to serve, the same degradation
  * `loadSkinCss` already chose for a missing `theme.tokens.json`.
  *
- * Every theme package publishes its stylesheet at the same `./styles/theme.css`
- * export subpath (contract D, mirrored by every theme package's `package.json`)
- * so this stays a one-line lookup regardless of which theme is active — a
- * per-theme convention, not a per-theme code branch.
+ * Two resolution routes, tried in order:
+ *
+ * 1. **Local** — `<projectRoot>/themes/<name>/theme.css`, next to that
+ *    theme's own `theme.config.*`/`theme.render.*` (fiche 73's own real bug,
+ *    found by a live E2E test that deployed and activated a real
+ *    agent-written theme, then looked at the actual rendered page: the class
+ *    names `theme.write_sandbox_file` tells a model to emit were always
+ *    there, but nothing ever served a stylesheet to give them any visual
+ *    meaning — every sandbox-deployed theme rendered as unstyled text
+ *    forever, silently, since this route did not exist at all). Optional:
+ *    a theme that ships no `theme.css` is not an error, only unstyled.
+ * 2. **npm package** — every theme package publishes its stylesheet at the
+ *    same `./styles/theme.css` export subpath (contract D, mirrored by
+ *    every theme package's `package.json`), so this stays a one-line lookup
+ *    regardless of which built-in theme is active.
+ *
+ * Tried in this order because a local theme has no `package.json` `exports`
+ * map for `import.meta.resolve` to find in the first place — the local
+ * route is the only one a theme dropped straight into `themes/` can ever
+ * satisfy, and a name that happens to collide with an installed package is
+ * already resolved to the local folder everywhere else in this file
+ * (`theme-registry.ts`'s own `BY_NAME` shadow-prevention aside — a local
+ * theme is never given a name a built-in already owns).
  */
 export async function loadThemeCss(
   options: InlineImportsOptions,
   themeName: string,
+  localThemeRoot?: string,
 ): Promise<string | null> {
+  if (localThemeRoot !== undefined) {
+    const local = await loadLocalThemeCss(localThemeRoot, options)
+    // A built-in theme's *name* never has a local folder in the first
+    // place, so a local theme root with nothing to find always falls
+    // through to the npm route below rather than short-circuiting here.
+    if (local !== null) return local
+  }
   try {
     const entry = new URL(import.meta.resolve(`${themeName}/styles/theme.css`))
     return minifyCss(await inlineImports(entry, options))
@@ -147,23 +178,78 @@ export async function loadThemeCss(
 }
 
 /**
- * A theme's own stylesheet is code, not data — installing a second theme
- * package is a redeploy, unlike the skin tokens `resolveStyles` re-reads on
- * every request. So each theme's CSS is loaded and flattened once per name
- * and kept for the life of the process, memoised by this factory rather than
- * reloaded on a request that merely switched *which* already-installed theme
- * is active — switching is still live (fiche L23): only the file I/O is not
- * repeated for a theme this process has already read.
+ * No required file name — `theme.render.*` names three candidates because a
+ * theme is exactly one render module, but a theme's CSS is not "one file
+ * with a fixed name" the same way: every `*.css` sitting directly in the
+ * theme's own root is read and concatenated, in name order (deterministic,
+ * and matching how a human would expect `1-base.css` before `2-blocks.css`
+ * to read). Call it `theme.css`, `style.css`, `main.css`, split across ten
+ * files — all of it is picked up, none of it needs a name this function
+ * happens to expect. `@import "./x.css"` inside any of them still resolves
+ * relatively, same as the npm route already does.
+ */
+export async function loadLocalThemeCss(
+  themeRoot: string,
+  options: InlineImportsOptions,
+): Promise<string | null> {
+  let entries: string[]
+  try {
+    entries = (await readdir(themeRoot, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.css'))
+      .map((entry) => entry.name)
+      .sort()
+  } catch {
+    return null
+  }
+  if (entries.length === 0) return null
+
+  const sheets = await Promise.all(
+    entries.map((name) => inlineImports(pathToFileURL(join(themeRoot, name)), options)),
+  )
+  return minifyCss(sheets.join('\n'))
+}
+
+export interface ThemeCssResolverOptions extends InlineImportsOptions {
+  /** Enables the local route above for every call — absent only in a test harness that never renders a local theme. */
+  readonly projectRoot?: string
+}
+
+const themeCssCache = new Map<string, Promise<string | null>>()
+
+/**
+ * A theme's own stylesheet is code, not data — installing a second npm
+ * theme package is a redeploy, unlike the skin tokens `resolveStyles`
+ * re-reads on every request. So each theme's CSS is loaded and flattened
+ * once per name and kept for the life of the process — switching *which*
+ * already-installed theme is active is still live (fiche L23): only the
+ * file I/O is not repeated for a theme this process has already read.
+ *
+ * A **local** theme's `theme.css` breaks that assumption: fiche 73's own
+ * live E2E test deploys, edits and redeploys a local theme's files while
+ * `cogenta serve` keeps running, exactly the "changes mid-process" case the
+ * comment above says never happens for an npm package. `invalidateThemeCss`
+ * exists for exactly that gap — the module-level cache here, not a closure
+ * per resolver instance, so `deployThemeFromSandbox`/`restoreThemeVersion`
+ * (`theme-sandbox.ts`) can call it without holding a reference to whichever
+ * resolver `runServe` happened to build, the same shape
+ * `invalidateFilesystemTheme` (`theme-registry.ts`) already uses for the
+ * exact same reason.
  */
 export function createThemeCssResolver(
-  options: InlineImportsOptions,
+  options: ThemeCssResolverOptions,
 ): (themeName: string) => Promise<string | null> {
-  const cache = new Map<string, Promise<string | null>>()
   return (themeName) => {
-    const cached = cache.get(themeName)
+    const cached = themeCssCache.get(themeName)
     if (cached !== undefined) return cached
-    const promise = loadThemeCss(options, themeName)
-    cache.set(themeName, promise)
+    const localThemeRoot =
+      options.projectRoot === undefined ? undefined : join(options.projectRoot, 'themes', themeName)
+    const promise = loadThemeCss(options, themeName, localThemeRoot)
+    themeCssCache.set(themeName, promise)
     return promise
   }
+}
+
+/** Clears the cached stylesheet for one theme name — see `createThemeCssResolver`'s own doc comment. */
+export function invalidateThemeCss(themeName: string): void {
+  themeCssCache.delete(themeName)
 }

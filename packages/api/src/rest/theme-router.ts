@@ -59,6 +59,8 @@ export interface AvailableThemeLike {
   readonly version: string
   /** `ThemeManifest.author`, or `null` for a theme that does not declare one. */
   readonly author: string | null
+  /** `true` for a real folder under `themes/` this project owns and can delete; `false` for an npm-packaged built-in. Additive — decides whether the appearance gallery offers "Supprimer" on a card. */
+  readonly local: boolean
 }
 
 export interface ThemeStoreLike {
@@ -81,6 +83,7 @@ export interface SkinGalleryLike {
 }
 
 export interface SkinCandidateLike {
+  readonly kind: 'tokens'
   readonly id: string
   readonly label: string
   readonly rationale: string
@@ -94,6 +97,28 @@ export interface SkinCandidateLike {
   readonly themeName?: string
   readonly chromeInput?: { readonly tagline?: string; readonly footerNote?: string }
 }
+
+/**
+ * Fiche 73 follow-up — the other real shape `generate()` can now return: a
+ * fully custom page layout, written by a real tool-calling agent run into
+ * one sandbox directory (`@cogenta/agents-builtin`'s `generateSandboxTheme`)
+ * rather than contract D tokens overlaid on an already-installed theme.
+ * Never applied by this route either — same R6 posture as `SkinCandidateLike`
+ * — the client previews it (`GET /api/theme/sandbox/:id/preview`, already
+ * existing) and, to activate it, calls the already-existing sandbox deploy
+ * pipeline (`POST /api/theme/sandbox/:id/deploy` then `PUT
+ * /api/theme/overrides`), never a new write path invented here.
+ */
+export interface SandboxCandidateLike {
+  readonly kind: 'sandbox'
+  readonly id: string
+  readonly label: string
+  readonly rationale: string
+  readonly sandboxId: string
+  readonly filesWritten: readonly string[]
+}
+
+export type ThemeGenerateCandidateLike = SkinCandidateLike | SandboxCandidateLike
 
 /**
  * One file the client attached to a `generate()` request — never applied on
@@ -133,7 +158,7 @@ export interface SkinGeneratorLike {
   ): Promise<
     | {
         readonly ok: true
-        readonly candidates: readonly SkinCandidateLike[]
+        readonly candidates: readonly ThemeGenerateCandidateLike[]
         readonly warnings?: readonly string[]
       }
     | { readonly ok: false; readonly reason: string }
@@ -201,8 +226,18 @@ export interface ThemeRouterOptions {
    * can still switch its layout theme (R2). `GET /api/theme` echoes this list
    * so the picker never hardcodes theme names of its own, and `PUT
    * /api/theme/overrides` refuses an `activeTheme` that is not one of them.
+   *
+   * A function, called fresh on every request, not a snapshot resolved once
+   * at wiring time — fiche 73's own live E2E test found a theme deployed
+   * (or a `themes/` folder dropped in by hand) *after* `cogenta serve` had
+   * already booted was invisible here forever, no matter how many times the
+   * gallery was reloaded, because the array used to be computed once and
+   * captured in this options object at boot. `theme-registry.ts`'s own
+   * per-name cache already re-resolves correctly mid-process (fixed
+   * alongside this); this was the second, separate half of the same "no
+   * restart needed" promise the appearance screen already makes for tokens.
    */
-  readonly availableThemes: readonly AvailableThemeLike[]
+  readonly availableThemes: () => Promise<readonly AvailableThemeLike[]>
   /** Fiche feedback — backs `POST/GET …/generate/jobs`. Omitted means those two routes answer `THEME_NO_PROVIDER`-shaped unavailability like `generate` itself does when there's no generator; the synchronous `POST …/generate` route is unaffected either way. */
   readonly progressJobs?: ThemeGenerateJobStoreLike
   readonly basePath?: string
@@ -481,7 +516,7 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
               aiAvailable:
                 options.generator === undefined ? false : await options.generator.isAvailable(),
               exportAvailable: options.fileExporter !== undefined,
-              availableThemes: options.availableThemes,
+              availableThemes: await options.availableThemes(),
             },
           })
         }
@@ -507,12 +542,11 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
             options.validateTokens(merged)
           }
           checkAdditionalCss(body.additionalCss)
-          if (
-            body.activeTheme !== undefined &&
-            body.activeTheme !== null &&
-            !options.availableThemes.some((theme) => theme.name === body.activeTheme)
-          ) {
-            throw unknownTheme(body.activeTheme, options.availableThemes)
+          if (body.activeTheme !== undefined && body.activeTheme !== null) {
+            const available = await options.availableThemes()
+            if (!available.some((theme) => theme.name === body.activeTheme)) {
+              throw unknownTheme(body.activeTheme, available)
+            }
           }
 
           const written = await options.store.set({ ...body, updatedBy: actor.id })

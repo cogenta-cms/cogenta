@@ -125,7 +125,10 @@ describe('createThemeRegistry', () => {
     expect(entry.rejectionCode).toBe('THEME_SIGNATURE_INVALID')
   })
 
-  it('rejects a validly-signed theme that does not implement the whole block vocabulary', async () => {
+  // Product decision: a theme has the same design freedom a WordPress theme
+  // or a Strapi frontend already has, including a custom block vocabulary —
+  // missing coverage of a shared block is no longer a submission rejection.
+  it('accepts a validly-signed theme that does not implement the whole block vocabulary', async () => {
     const db = await testDb()
     const { publicKey, privateKey } = generateSigningKeyPair()
     const manifest = { ...validManifest('incomplete-theme'), implements: ['hero', 'prose'] }
@@ -140,8 +143,8 @@ describe('createThemeRegistry', () => {
       signatureBase64: signContent(manifest, privateKey),
     })
 
-    expect(entry.status).toBe('rejected')
-    expect(entry.rejectionCode).toBe('THEME_BLOCK_MISSING')
+    expect(entry.status).toBe('accepted')
+    expect(entry.rejectionCode).toBeNull()
   })
 
   it('rejects a validly-signed theme that imports a forbidden module', async () => {

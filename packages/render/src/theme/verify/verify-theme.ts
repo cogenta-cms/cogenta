@@ -11,11 +11,23 @@ import type { SourceFinding } from './scanner.js'
 /**
  * The installation check of contract D.
  *
- * Two refusals, and the word the contract uses for both is *refused*, not
- * *warned*: a theme that declares fewer than the twelve blocks would silently
- * drop content on a theme switch, and a theme that reaches for `node:fs` or
- * the database has left the sandbox the two-plane architecture gives it for
- * free (ADR-0004, ADR-0016).
+ * Only one of these is a refusal: a theme that reaches for `node:fs` or the
+ * database has left the sandbox the two-plane architecture gives it for free
+ * (ADR-0004, ADR-0016), and there is no design freedom that justifies that —
+ * it is a real security boundary.
+ *
+ * Full block-vocabulary coverage used to be a second, hard refusal — the
+ * reasoning being that a theme declaring fewer than the seventeen shared
+ * blocks would silently drop content on a theme switch. Overridden on direct
+ * product instruction: a Cogenta theme is meant to have the same freedom a
+ * WordPress theme or a Strapi frontend already has — arbitrary custom blocks,
+ * a custom content shape, no closed vocabulary and no governance gate before
+ * a theme can go live. `missingBlocks` is still computed and returned (the
+ * deploy screen can still *show* it, as information, not as a blocker) so a
+ * theme author can still see at a glance which of the shared blocks their
+ * theme has no opinion on — those simply render nothing for that theme
+ * (`resolveBlockForRender`'s existing fallback-to-null), exactly as
+ * accepted risk, not a bug.
  *
  * This module reads the filesystem, so it belongs to the control plane — the
  * install path — and never to the process that renders pages.
@@ -65,7 +77,9 @@ export async function inspectTheme(options: VerifyThemeOptions): Promise<ThemeIn
   findings.push(...(await manifestAliasFindings(options.root)))
 
   return {
-    ok: missingBlocks.length === 0 && findings.length === 0,
+    // Block-vocabulary coverage is no longer a pass/fail condition — see
+    // this file's own doc comment. Only a forbidden import refuses.
+    ok: findings.length === 0,
     missingBlocks,
     findings,
     filesScanned,
@@ -84,25 +98,16 @@ export async function verifyTheme(options: VerifyThemeOptions): Promise<ThemeIns
 
   const name = options.manifest.name
 
-  if (inspection.findings.length > 0) {
-    throw new CogentaError({
-      code: 'THEME_IMPORT_FORBIDDEN',
-      message: `The theme "${name}" is refused: ${describeFindings(inspection.findings)}`,
-      hint: 'A theme runs without secrets and without a database connection (R5, ADR-0004). It reads content through `ctx.content`, which is an HTTP client carrying a read-only token. Remove the imports above; there is no flag to allow them.',
-      details: {
-        theme: name,
-        root: options.root,
-        findings: inspection.findings,
-        missingBlocks: inspection.missingBlocks,
-      },
-    })
-  }
-
   throw new CogentaError({
-    code: 'THEME_BLOCK_MISSING',
-    message: `The theme "${name}" does not implement every block of the vocabulary. Missing: ${inspection.missingBlocks.join(', ')}.`,
-    hint: 'Every theme implements the twelve blocks, so that switching theme never drops content. Add a component for each missing block and list it in `implements`.',
-    details: { theme: name, root: options.root, missingBlocks: inspection.missingBlocks },
+    code: 'THEME_IMPORT_FORBIDDEN',
+    message: `The theme "${name}" is refused: ${describeFindings(inspection.findings)}`,
+    hint: 'A theme runs without secrets and without a database connection (R5, ADR-0004). It reads content through `ctx.content`, which is an HTTP client carrying a read-only token. Remove the imports above; there is no flag to allow them.',
+    details: {
+      theme: name,
+      root: options.root,
+      findings: inspection.findings,
+      missingBlocks: inspection.missingBlocks,
+    },
   })
 }
 

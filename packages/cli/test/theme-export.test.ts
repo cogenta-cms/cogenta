@@ -52,9 +52,14 @@ export default {
 }
 `
 
+// Real h()-based markup, not a plain data object — `importThemeZip` writes
+// each extracted file through `writeSandboxFile`, which now validates a
+// theme.render.* by actually rendering it (fiche 73 task 7's own live E2E
+// test found the old placeholder shape here would have been rejected too).
 const RENDER_MODULE = `
+import { h } from '@cogenta/theme-kit'
 export function renderPage(page) {
-  return { tag: 'main', attrs: {}, children: [page.title] }
+  return h('main', { class: 'cg-main' }, page.title)
 }
 export function renderChrome() {
   return { header: '<header>Exportable</header>', footer: '<footer>Exportable</footer>' }

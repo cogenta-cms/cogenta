@@ -180,6 +180,27 @@ interface FilesystemTheme {
 const filesystemThemeCache = new Map<string, Promise<FilesystemTheme | undefined>>()
 
 /**
+ * Fiche 73's own live E2E test: a name looked up (by the admin gallery, by
+ * `theme.propose_theme`'s own `availableThemes()` call, or by a real page
+ * request naming an about-to-exist theme) before its sandbox was deployed —
+ * or before a fix to a first, invalid deploy attempt — gets `undefined`
+ * cached here forever, since nothing ever invalidated this Map. The gallery
+ * card silently never appears, and worse: `resolveTheme` (the real
+ * per-request active-theme resolver, same cache) would silently keep
+ * falling back to the default theme even after this name became the site's
+ * own configured `activeTheme`, with no error anywhere (R1/R2's "unknown
+ * name falls back" swallows it). `deployThemeFromSandbox` and
+ * `restoreThemeVersion` (fiche 73 tasks 5-6, `theme-sandbox.ts`) are the two
+ * places `themes/<name>/` content changes while a `cogenta serve` process
+ * is already running — both call this immediately after, so the very next
+ * lookup re-reads what is actually on disk now instead of what any earlier
+ * lookup found.
+ */
+export function invalidateFilesystemTheme(name: string): void {
+  filesystemThemeCache.delete(name)
+}
+
+/**
  * Looks up `<projectRoot>/themes/<name>/`, never anywhere else — a name that
  * is not a real directory there, or whose structure does not validate,
  * resolves to `undefined` rather than throwing: the caller (`resolveTheme`)
@@ -242,7 +263,25 @@ async function importFirstExisting(
 ): Promise<unknown | undefined> {
   for (const file of candidates) {
     try {
-      return await import(pathToFileURL(join(root, file)).href)
+      // Node's ESM loader caches a module forever by its exact URL, for the
+      // life of the process — invisible to `filesystemThemeCache` above,
+      // which only remembers *this file's own* lookup, not what Node itself
+      // already imported. Without this, redeploying the same theme name
+      // (fiche 73's own edit/redeploy loop) re-reads the manifest and
+      // re-verifies it, but silently keeps serving the FIRST render module
+      // this process ever imported for that name, forever — the same "a
+      // name resolved once before real content existed stays broken/invisible
+      // forever in this process" bug class already found and fixed three
+      // times this session (`invalidateFilesystemTheme`,
+      // `theme-wiring.ts`'s `availableThemes`, `invalidateThemeCss`), one
+      // layer deeper than any of those three could reach. A cache-busting
+      // query param makes each fresh call (this function only ever runs
+      // after `loadFilesystemTheme`'s own cache was empty or invalidated) a
+      // distinct specifier Node has never seen, so it actually re-reads the
+      // file from disk.
+      const url = pathToFileURL(join(root, file))
+      url.search = `v=${Date.now()}`
+      return await import(url.href)
     } catch (error) {
       if (isModuleNotFoundAt(error, join(root, file))) continue
       return undefined
@@ -283,6 +322,15 @@ export interface AvailableThemeInfo {
   readonly version: string
   /** `manifest.author`, or `null` for a theme that does not declare one. */
   readonly author: string | null
+  /**
+   * `true` for a real folder under `themes/` (an operator- or agent-authored
+   * theme this project owns and can delete); `false` for an npm-packaged
+   * built-in (`@cogenta/theme-canonical` and the rest) — those ship with the
+   * install and have no folder here to delete in the first place. Additive
+   * (fiche "supprimer un thème") — decides whether the appearance gallery
+   * offers a "Supprimer" action on a given card at all.
+   */
+  readonly local: boolean
 }
 
 const manifestCache = new Map<string, Promise<ThemeManifest>>()
@@ -325,6 +373,7 @@ export async function availableThemes(): Promise<readonly AvailableThemeInfo[]> 
         description: manifest.description ?? theme.label,
         version: manifest.version,
         author: manifest.author ?? null,
+        local: false,
       }
     }),
   )
@@ -345,6 +394,7 @@ export async function availableThemes(): Promise<readonly AvailableThemeInfo[]> 
           description: loaded.manifest.description ?? name,
           version: loaded.manifest.version,
           author: loaded.manifest.author ?? null,
+          local: true,
         }
       }),
   )

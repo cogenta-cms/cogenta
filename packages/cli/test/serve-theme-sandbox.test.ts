@@ -349,4 +349,114 @@ describe('cogenta serve — theme sandbox routes (fiche 73 tasks 4-8)', () => {
     })
     expect(response.status).toBe(404)
   })
+
+  // Fiche "supprimer un thème" — the admin's own confirmation warns that a
+  // deleted theme disappears entirely; this proves the HTTP route actually
+  // does that, and clears `activeTheme` if the deleted theme was the one
+  // running, rather than leaving the site pointed at a name nothing
+  // resolves to any more.
+  it('DELETE /api/theme/:name removes a deployed theme, and clears it as activeTheme if it was running', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminToken(root, server.base)
+    const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+    await writeSandboxFixture(root, 'sbx-delete')
+    await fetch(`${server.base}/api/theme/sandbox/sbx-delete/deploy`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ themeName: 'deletable-http-theme' }),
+    })
+    await fetch(`${server.base}/api/theme/overrides`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ activeTheme: 'deletable-http-theme' }),
+    })
+
+    const before = await fetch(`${server.base}/api/theme`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const beforeBody = (await before.json()) as {
+      data: { overrides: { activeTheme: string | null } }
+    }
+    expect(beforeBody.data.overrides.activeTheme).toBe('deletable-http-theme')
+
+    const deleted = await fetch(`${server.base}/api/theme/deletable-http-theme`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(deleted.status).toBe(200)
+    const deletedBody = (await deleted.json()) as { data: { ok: boolean } }
+    expect(deletedBody.data.ok).toBe(true)
+
+    // No longer offered in the gallery at all.
+    const after = await fetch(`${server.base}/api/theme`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const afterBody = (await after.json()) as {
+      data: {
+        availableThemes: readonly { name: string }[]
+        overrides: { activeTheme: string | null }
+      }
+    }
+    expect(
+      afterBody.data.availableThemes.some((theme) => theme.name === 'deletable-http-theme'),
+    ).toBe(false)
+    // The override that named it is cleared, not left dangling.
+    expect(afterBody.data.overrides.activeTheme).toBeNull()
+  })
+
+  it('DELETE /api/theme/:name answers 404 for a theme that was never deployed', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminToken(root, server.base)
+
+    const response = await fetch(`${server.base}/api/theme/never-existed`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.status).toBe(404)
+  })
+
+  it('DELETE /api/theme/:name refuses a non-admin', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+    const editorToken = await loginWithMfaSetup(
+      server.base,
+      'editor@example.com',
+      'correct horse battery staple',
+    )
+
+    const response = await fetch(`${server.base}/api/theme/anything`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${editorToken}` },
+    })
+    expect(response.status).toBe(403)
+  })
+
+  // DELETE /api/theme/overrides (clearing the token overlay) is a separate,
+  // pre-existing route this new branch must never intercept — the guard
+  // excludes it by name specifically because "overrides" is a real,
+  // reserved segment here, never a theme a local folder could be named.
+  it('DELETE /api/theme/overrides still clears the token overlay, not routed into theme deletion', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminToken(root, server.base)
+    const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+    await fetch(`${server.base}/api/theme/overrides`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ tokenOverrides: { color: { accent: '#123456' } } }),
+    })
+
+    const response = await fetch(`${server.base}/api/theme/overrides`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { data: { tokenOverrides: unknown } }
+    expect(body.data.tokenOverrides).toBeNull()
+  })
 })

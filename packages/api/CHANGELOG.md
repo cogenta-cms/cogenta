@@ -1,5 +1,100 @@
 # @cogenta/api
 
+## 2.3.0
+
+### Minor Changes
+
+- **Delete a local theme, for real.** The theme sandbox pipeline (fiche 73)
+  could deploy, redeploy, version and restore a local theme (`themes/<name>/`)
+  but never remove one for good — the only way to make one disappear was to
+  delete the folder by hand outside the CMS entirely.
+  
+  New `deleteTheme` (`@cogenta/cli`'s `theme-sandbox.ts`) removes both
+  `themes/<name>/` and its whole `themes/.versions/<name>/` archive — a
+  genuinely complete removal, not "until someone restores an old version" —
+  and invalidates the same live-process caches a deploy/restore already does
+  (`invalidateFilesystemTheme`/`invalidateThemeCss`). Wired as
+  `DELETE /api/theme/:name` in `cogenta serve` (admin-only, same guard as every
+  other theme-sandbox route), excluding the pre-existing, reserved
+  `DELETE /api/theme/overrides` route. If the deleted theme was the site's own
+  `activeTheme`, the override is cleared too (through the same
+  `PUT /api/theme/overrides` path the appearance screen's "Sélectionner"
+  already uses), so the site falls back to the default theme rather than the
+  stored override staying stuck naming a theme that no longer exists on disk.
+  
+  `AvailableThemeLike`/`AvailableThemeInfo` (`@cogenta/api`/`@cogenta/cli`)
+  gain a required `local: boolean` — `true` for a real folder under `themes/`
+  this project owns and can delete, `false` for an npm-packaged built-in.
+  Additive on the wire; a client (`@cogenta/admin`, no changeset — private)
+  uses it to offer "Supprimer" only where deleting is actually possible. The
+  appearance gallery's own confirmation dialog names the theme, warns
+  explicitly that the action is irreversible and that the theme's whole
+  version history disappears with it, and adds a second warning when the
+  theme being deleted is the one currently running on the public site.
+
+- **"Générer un thème avec l'IA" can now actually write a custom page layout, not only
+  recolour an already-installed one.** A live user report: the admin screen only ever called
+  `theme.propose_theme` directly (`POST /api/theme/generate`, `@cogenta/cli`'s
+  `theme-wiring.ts`) — a pure token-adjustment path — so no request, however detailed, and no
+  attached reference screenshot, however different, could ever change more than colours/fonts
+  of the theme already active. `theme.write_sandbox_file` (fiche 73) already existed and could
+  write a real layout, but nothing on this screen ever reached for it.
+  
+  New in `@cogenta/agents`: `classifyThemeLayoutNeed` (`theme-creator/layout-classifier.ts`) —
+  a small classification call deciding whether a request needs a genuinely different page
+  structure or whether adjusting an installed theme's tokens is enough, reusing the same
+  attachment-processing (`theme-creator/attachments.ts`, extracted from `propose-theme.ts` so
+  both share one implementation).
+  
+  New in `@cogenta/agents-builtin`: `generateSandboxTheme` (a real tool-calling agent run,
+  `theme.write_sandbox_file` as its only tool, `autonomy: 'autonomous'` scoped to this one
+  call — legitimate because a sandbox write is inert until the pre-existing, separately
+  human-confirmed deploy step promotes it, never the catalog "Cogenta Theme Creator"
+  declaration's own `propose` default used by its other entry points) and
+  `generateThemeCandidates`, the new single entry point tying classification, token
+  candidates and a sandbox candidate together. **A reference image always forces the
+  custom-layout attempt**, regardless of the classifier's own verdict — a live run against a
+  real screenshot showed the classifier alone judged "tokens are enough" for a request an
+  installed theme could not actually reproduce (a floating review badge over the hero, an
+  icon-stat band, a circular experience badge) because it *does* have a hero/stats/about
+  section "in some form"; an attached image is the strongest, least ambiguous signal an
+  operator wants visual fidelity to a specific composition, not a plausible section list.
+  
+  Also fixed, found by the same live run: a model asked to write `theme.render.*` named its
+  file `theme.render.tsx` — a name neither `CONFIG_MODULE_NAME` nor `RENDER_MODULE_NAME`
+  recognised, so the write silently succeeded while the file was never importable (this
+  sandbox has no build step; a plain ESM `import()` cannot transform JSX) and the preview
+  failed with a generic, unhelpful "no theme.render.{js,mjs,ts} yet". `theme-sandbox.ts`
+  (`@cogenta/cli`) now recognises this specific near-miss and rejects it with the real reason,
+  letting the agent's own self-correction loop actually fix it instead of dead-ending.
+  
+  `@cogenta/api`'s `theme-router.ts` gains `SandboxCandidateLike`/`ThemeGenerateCandidateLike`
+  (additive — existing `SkinCandidateLike` gains a required `kind: 'tokens'` discriminator).
+  The admin screen (`@cogenta/admin`, no changeset — private) renders either candidate kind:
+  a sandbox candidate previews through the same real, isolated-worker render the "Gérer les
+  thèmes locaux" screen's own "Aperçu" already uses, and "Activer" runs the existing
+  check → deploy → `PUT /api/theme/overrides` pipeline, never a new write path.
+  
+  Verified live end-to-end against a real reference screenshot and a real provider: the
+  classifier's own decision, a real multi-file agent run (manifest + render module + CSS,
+  self-correcting on a rejected write), a real preview render, a real deploy, activation, and
+  the public site serving the generated layout — not a recolour of `@cogenta/theme-portfolio`,
+  a distinct header/hero/stats/about composition matching the reference's actual structure.
+
+### Patch Changes
+
+- Updated dependencies [[`10db071`](https://github.com/cogenta-cms/cogenta/commit/10db07162f24b56d750770480ebb2b5e2868773a), [`b0c8677`](https://github.com/cogenta-cms/cogenta/commit/b0c86775f2fe8d68bce3a5b248803911b57ed71f), `c9dffa4`, [`858aec8`](https://github.com/cogenta-cms/cogenta/commit/858aec8a332fe434975e34b6f9b2a1ec173b65cd)]:
+  - @cogenta/core@0.8.0
+  - @cogenta/channels@0.3.4
+  - @cogenta/mcp@0.3.3
+  - @cogenta/analytics@0.3.3
+  - @cogenta/auth@0.5.2
+  - @cogenta/blocks@1.0.3
+  - @cogenta/export@0.2.3
+  - @cogenta/forms@0.2.4
+  - @cogenta/schema@0.5.1
+  - @cogenta/seo@0.3.3
+
 ## 2.2.1
 
 ### Patch Changes

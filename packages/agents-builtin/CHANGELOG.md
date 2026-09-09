@@ -1,5 +1,162 @@
 # @cogenta/agents-builtin
 
+## 0.4.0
+
+### Minor Changes
+
+- **"Générer un thème avec l'IA" can now actually write a custom page layout, not only
+  recolour an already-installed one.** A live user report: the admin screen only ever called
+  `theme.propose_theme` directly (`POST /api/theme/generate`, `@cogenta/cli`'s
+  `theme-wiring.ts`) — a pure token-adjustment path — so no request, however detailed, and no
+  attached reference screenshot, however different, could ever change more than colours/fonts
+  of the theme already active. `theme.write_sandbox_file` (fiche 73) already existed and could
+  write a real layout, but nothing on this screen ever reached for it.
+  
+  New in `@cogenta/agents`: `classifyThemeLayoutNeed` (`theme-creator/layout-classifier.ts`) —
+  a small classification call deciding whether a request needs a genuinely different page
+  structure or whether adjusting an installed theme's tokens is enough, reusing the same
+  attachment-processing (`theme-creator/attachments.ts`, extracted from `propose-theme.ts` so
+  both share one implementation).
+  
+  New in `@cogenta/agents-builtin`: `generateSandboxTheme` (a real tool-calling agent run,
+  `theme.write_sandbox_file` as its only tool, `autonomy: 'autonomous'` scoped to this one
+  call — legitimate because a sandbox write is inert until the pre-existing, separately
+  human-confirmed deploy step promotes it, never the catalog "Cogenta Theme Creator"
+  declaration's own `propose` default used by its other entry points) and
+  `generateThemeCandidates`, the new single entry point tying classification, token
+  candidates and a sandbox candidate together. **A reference image always forces the
+  custom-layout attempt**, regardless of the classifier's own verdict — a live run against a
+  real screenshot showed the classifier alone judged "tokens are enough" for a request an
+  installed theme could not actually reproduce (a floating review badge over the hero, an
+  icon-stat band, a circular experience badge) because it *does* have a hero/stats/about
+  section "in some form"; an attached image is the strongest, least ambiguous signal an
+  operator wants visual fidelity to a specific composition, not a plausible section list.
+  
+  Also fixed, found by the same live run: a model asked to write `theme.render.*` named its
+  file `theme.render.tsx` — a name neither `CONFIG_MODULE_NAME` nor `RENDER_MODULE_NAME`
+  recognised, so the write silently succeeded while the file was never importable (this
+  sandbox has no build step; a plain ESM `import()` cannot transform JSX) and the preview
+  failed with a generic, unhelpful "no theme.render.{js,mjs,ts} yet". `theme-sandbox.ts`
+  (`@cogenta/cli`) now recognises this specific near-miss and rejects it with the real reason,
+  letting the agent's own self-correction loop actually fix it instead of dead-ending.
+  
+  `@cogenta/api`'s `theme-router.ts` gains `SandboxCandidateLike`/`ThemeGenerateCandidateLike`
+  (additive — existing `SkinCandidateLike` gains a required `kind: 'tokens'` discriminator).
+  The admin screen (`@cogenta/admin`, no changeset — private) renders either candidate kind:
+  a sandbox candidate previews through the same real, isolated-worker render the "Gérer les
+  thèmes locaux" screen's own "Aperçu" already uses, and "Activer" runs the existing
+  check → deploy → `PUT /api/theme/overrides` pipeline, never a new write path.
+  
+  Verified live end-to-end against a real reference screenshot and a real provider: the
+  classifier's own decision, a real multi-file agent run (manifest + render module + CSS,
+  self-correcting on a rejected write), a real preview render, a real deploy, activation, and
+  the public site serving the generated layout — not a recolour of `@cogenta/theme-portfolio`,
+  a distinct header/hero/stats/about composition matching the reference's actual structure.
+
+- [`858aec8`](https://github.com/cogenta-cms/cogenta/commit/858aec8a332fe434975e34b6f9b2a1ec173b65cd) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 task 7 — `theme.write_sandbox_file` (`tools@1.6`, permission `theme.write_sandbox`):
+  "Cogenta Theme Creator"'s second tool, for writing real theme code (not just proposing
+  tokens) into a sandbox.
+  
+  Unlike `theme.propose_theme`, this tool is `sideEffects: true`/`reversible: true` — a real
+  write, gated by `withAutonomy` (R4) like any other effectful tool, `revert` deleting
+  exactly the file it wrote. Its scope is structurally bounded, not just documented: it can
+  only ever write inside one sandbox directory
+  (`<projectRoot>/.cogenta/theme-sandbox/<id>/`, fiche 73 task 4) — never `themes/`, never
+  anything a live request could resolve. A path that tries to escape the sandbox (`../`, an
+  absolute path) is refused (`THEME_SANDBOX_PATH_ESCAPE`, new `@cogenta/core` error code),
+  enforced host-side in `@cogenta/cli`'s new `writeSandboxFile`/`deleteSandboxFile`
+  (`theme-sandbox.ts`) — the tool itself has no filesystem of its own to guard, by design
+  (the same `resolveProvider`/`prClient` injection shape every other AI-backed tool in this
+  codebase uses).
+  
+  `themeCreatorAgent`'s declared tool list grows to `['theme.propose_theme',
+  'theme.write_sandbox_file']`, wired end to end through `agent-runtime.ts` →
+  `theme-wiring.ts` (`createThemeSandboxToolWiring`, never gated on a configured LLM
+  provider — writing a file is not a model call) → `runServe`.
+  
+  `identity.md` rewritten where it previously asserted, repeatedly and now falsely, that
+  this agent "n'écrit jamais de code de thème" and that "aucun outil, à aucun niveau
+  d'autonomie" could ever let it write anything real — a new, explicit second mode ("Écrire
+  du code de thème dans un bac à sable") replaces those claims, describing exactly when it
+  applies, the injected structure (manifest shape, the full seventeen-block vocabulary,
+  R3/R5, the sandbox path), and that it never bypasses the human-confirmed deploy pipeline
+  (fiche 73 task 5).
+  
+  `docs/04-contrats.md` updated: `tools@1.6`, the new `theme.write_sandbox` permission
+  documented in the taxonomy.
+  
+  New real tests: 8 in `packages/cli/test/theme-sandbox.test.ts` (real filesystem fixtures —
+  write, nested subdirectories, path-escape refusal for both a relative `../` and an
+  absolute path, refusing to clobber the sandbox's own reserved preview-adapter file,
+  delete, idempotent double-delete, and an end-to-end proof that a file written this way is
+  picked up by the very next preview); 3 new/updated in
+  `packages/agents-builtin/test/theme-creator/agent.test.ts` (execute, revert, and — the
+  important behavioral proof — that this tool actually gets gated by `withAutonomy` under
+  `propose` autonomy, unlike `theme.propose_theme`'s `sideEffects: false`).
+
+### Patch Changes
+
+- Fiche 73 task 7's own live end-to-end test (a real `cogenta serve`, a real browser session,
+  a real gpt-5-mini) found five real, distinct gaps in `theme.write_sandbox_file` — none of
+  them visible in the unit suite alone — all fixed here:
+  
+  1. **Migration gap**: a site whose "Cogenta Theme Creator" agent record was created before
+     this tool shipped never gained it — `ensureBuiltinAgents`'s "never touch an existing
+     seed" policy had no exception for it (unlike the existing `grantContentBrowse`
+     precedent). New `grantThemeSandboxWrite` (`packages/agents/src/agents/builtins.ts`)
+     closes it the same way, additively, on every `cogenta serve` boot.
+  
+  2. **Missing dependency**: no site `create-cogenta` scaffolds ever declared
+     `@cogenta/theme-kit` as a direct dependency — only transitively, through
+     `@cogenta/theme-canonical` — so a custom sandbox theme's own `import { h } from
+     '@cogenta/theme-kit'` (exactly what this tool tells a model to write) failed to resolve
+     under a package manager that does not hoist transitive dependencies. Added to
+     `packageJsonContents` (`create-cogenta/src/scaffold.ts`).
+  
+  3. **Silent, deferred failures**: a written `theme.config.*`/`theme.render.*` that doesn't
+     conform to contract D used to only fail much later, at the next preview or deploy click,
+     disconnected from the write that caused it. `writeSandboxFile` (`theme-sandbox.ts`) now
+     validates for real before a write lands — importing `theme.config.*` and re-checking it
+     with `parseThemeManifest`, and for `theme.render.*`, running the exact same real preview
+     (`renderSandboxPreview`, same isolated worker, same `serialize()` call) the sandbox's own
+     "Aperçu" button runs. A write that fails either check is rejected with the real error
+     (new `THEME_SANDBOX_FILE_INVALID`) and rolled back to whatever was there before, so the
+     agent's next call always builds on a sandbox that is at least self-consistent. Proven live:
+     a real agent run that used to fail silently now retries against the real error until both
+     files actually render.
+  
+  4. **No worked example**: the tool's own description named the contract by number but never
+     showed its actual shape, so a model reliably reinvented a plausible-looking but wrong one
+     (`blocks` as a block-name array instead of a semver range, `runtime` as an object instead
+     of a literal, inline token data instead of a `tokens` path, a `ctx.theme.tokens` that does
+     not exist in the real `RenderContext`). The description now carries one concrete, minimal,
+     real `h()`-based `renderPage`/`renderChrome` pair. Measured live on the same live agent,
+     same brief, same model: 12+ failed attempts without the example, 2 with it.
+  
+  5. **Deploying (or restoring) a theme while `cogenta serve` is already running could leave it
+     permanently invisible** — to the Appearance gallery, and, worse, silently unresolvable as
+     the actual `activeTheme` (falling back to the default theme with no error anywhere). Root
+     cause: `theme-registry.ts`'s `filesystemThemeCache` has no invalidation of its own — a name
+     resolved once (an earlier failed deploy attempt with the same name, `theme.propose_theme`'s
+     own `availableThemes()` call, or any other lookup before the real files existed) stayed
+     cached as unresolvable for the rest of the process's life. New `invalidateFilesystemTheme`,
+     called by `deployThemeFromSandbox` and `restoreThemeVersion` right after they change
+     `themes/<name>/`. Proven live: deployed and activated a real agent-written theme, and the
+     public site immediately served real content through it — no restart needed.
+  
+  New tests: 6 in `packages/cli/test/theme-sandbox.test.ts` (wrong-shape manifest rejected,
+  rollback on a failed rewrite, missing exports rejected, the exact live failure — two real
+  functions returning plain data instead of an `HtmlElement` — rejected even though both
+  exports exist, a well-formed module accepted, and a sandbox that becomes valid between two
+  checks is reported valid rather than stuck on its first, since-fixed failure); 2 in
+  `packages/agents/test/agents/builtins.test.ts` (an existing theme-creator record gains the
+  tool, an unrelated agent is left alone); 1 in
+  `packages/cli/test/theme-registry-filesystem.test.ts` (a theme name resolved once before it
+  existed resolves correctly once real content lands at that name, in the same process).
+- Updated dependencies [`c9dffa4`, [`10db071`](https://github.com/cogenta-cms/cogenta/commit/10db07162f24b56d750770480ebb2b5e2868773a), [`b0c8677`](https://github.com/cogenta-cms/cogenta/commit/b0c86775f2fe8d68bce3a5b248803911b57ed71f), `c9dffa4`, [`858aec8`](https://github.com/cogenta-cms/cogenta/commit/858aec8a332fe434975e34b6f9b2a1ec173b65cd)]:
+  - @cogenta/agents@0.6.0
+  - @cogenta/core@0.8.0
+
 ## 0.3.2
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-portfolio",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "An ultra-modern creative-portfolio theme for Cogenta: brutalist-meets-editorial typography, an oversized display scale, and zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

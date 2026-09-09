@@ -1,5 +1,414 @@
 # @cogenta/cli
 
+## 0.8.0
+
+### Minor Changes
+
+- **Delete a local theme, for real.** The theme sandbox pipeline (fiche 73)
+  could deploy, redeploy, version and restore a local theme (`themes/<name>/`)
+  but never remove one for good — the only way to make one disappear was to
+  delete the folder by hand outside the CMS entirely.
+  
+  New `deleteTheme` (`@cogenta/cli`'s `theme-sandbox.ts`) removes both
+  `themes/<name>/` and its whole `themes/.versions/<name>/` archive — a
+  genuinely complete removal, not "until someone restores an old version" —
+  and invalidates the same live-process caches a deploy/restore already does
+  (`invalidateFilesystemTheme`/`invalidateThemeCss`). Wired as
+  `DELETE /api/theme/:name` in `cogenta serve` (admin-only, same guard as every
+  other theme-sandbox route), excluding the pre-existing, reserved
+  `DELETE /api/theme/overrides` route. If the deleted theme was the site's own
+  `activeTheme`, the override is cleared too (through the same
+  `PUT /api/theme/overrides` path the appearance screen's "Sélectionner"
+  already uses), so the site falls back to the default theme rather than the
+  stored override staying stuck naming a theme that no longer exists on disk.
+  
+  `AvailableThemeLike`/`AvailableThemeInfo` (`@cogenta/api`/`@cogenta/cli`)
+  gain a required `local: boolean` — `true` for a real folder under `themes/`
+  this project owns and can delete, `false` for an npm-packaged built-in.
+  Additive on the wire; a client (`@cogenta/admin`, no changeset — private)
+  uses it to offer "Supprimer" only where deleting is actually possible. The
+  appearance gallery's own confirmation dialog names the theme, warns
+  explicitly that the action is irreversible and that the theme's whole
+  version history disappears with it, and adds a second warning when the
+  theme being deleted is the one currently running on the public site.
+
+- [`43b209d`](https://github.com/cogenta-cms/cogenta/commit/43b209d1bcea6d9bfee20981bfb9ca13cb9c9ef5) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 task 5 — the deploy pipeline (§ 3.4): `checkThemeDeployment`/`deployThemeFromSandbox`
+  in `theme-sandbox.ts`, promoting a sandbox into `themes/<name>/`.
+  
+  `checkThemeDeployment` reuses `verifyTheme`/`loadTheme` (task 1, `@cogenta/render`) exactly
+  as written — the structure and security scans, never re-implemented. It is read-only, safe
+  to call repeatedly (an admin confirmation screen can call it on every keystroke), and
+  `deployThemeFromSandbox` re-runs it itself right before ever touching `themes/`, rather than
+  trusting a check a human read a moment earlier: a sandbox that becomes invalid in the gap
+  between "here's what's wrong" and "confirm" is still refused.
+  
+  Deploying archives the previous `themes/<name>/`, if one existed, into
+  `themes/.versions/<name>/<timestamp>/` first (a real, recursive file copy — a filesystem-safe
+  timestamp, since Windows refuses `:` in a path) rather than overwriting it in place, then
+  replaces it with the sandbox's contents. The sandbox's own disposable preview-adapter file
+  (task 4) is filtered out of the copy — never carried into a deployed theme.
+  
+  Honest note carried from task 4: `inspectTheme`'s findings (a forbidden import, an
+  unanalysable dynamic import, CommonJS, a missing vocabulary block) have no "warning" severity
+  distinct from "refusal" today — every one of them already blocks. `checkThemeDeployment`
+  reports exactly what the scan actually refuses; it does not invent a separate warnings list
+  that would always be empty.
+  
+  6 new real tests (`packages/cli/test/theme-sandbox.test.ts`, real filesystem fixtures, no
+  mocks): refusal with no render module, refusal on missing vocabulary blocks, refusal on a
+  forbidden import (never copied into `themes/`), a successful deploy, a redeploy that archives
+  the prior version and updates the manifest, and the stale-check race described above.
+  
+  No HTTP route or admin screen for this pipeline yet — same honest gap as task 4: the
+  mechanism is delivered and tested, wiring it into `cogenta serve` is separate follow-on work.
+
+- [`08b3f63`](https://github.com/cogenta-cms/cogenta/commit/08b3f6349e76ab69aa96c4929bbb05eb0ad36a14) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 task 1 — a theme dropped in `<projectRoot>/themes/<name>/` is now activable,
+  with no npm package, no dependency added to `@cogenta/cli`, no code change here. Follows
+  `create-cogenta`'s "site owns its own TypeScript file" precedent (`cogenta.schema.ts`,
+  already dynamically imported at boot) rather than inventing a new pattern.
+  
+  `@cogenta/render`'s `loadTheme()` already searched `themes/` in its resolution order —
+  it was simply never called by `cogenta serve`, only by `cogenta theme install`. This
+  change wires it in: `resolveTheme(name)` tries the built-in npm-packaged list first
+  (unchanged, byte for byte), then `<projectRoot>/themes/<name>/` before falling back to
+  the default theme — the same graceful-fallback behavior an unrecognised or uninstalled
+  theme name already had (R1/R2: an optional feature never takes a whole site down).
+  `availableThemes()` (the appearance screen's gallery) lists valid local themes the same
+  way, alongside the built-in ones.
+  
+  A local theme's structure is unchanged from what a theme package already exports:
+  `theme.config.{js,mjs,ts}` for the manifest (contract D, unchanged), and a new required
+  `theme.render.{js,mjs,ts}` beside it, exporting `renderPage`/`renderChrome` — the exact
+  shape `ThemeModule` already is. A folder that fails to load or does not export that
+  shape is silently left out of the gallery, and a stored `activeTheme` naming it falls
+  back to the default theme, rather than crashing every request; a `themes/` folder never
+  shadows a real built-in theme package of the same name.
+  
+  New: `configureThemeRegistry({ projectRoot })`, called once at boot (`runServe`) — the
+  `themes/` lookup is entirely opt-in and is a no-op for every existing caller that never
+  calls it (every test, `cogenta skin generate`, and any host embedding `@cogenta/cli`
+  that has not adopted this yet).
+  
+  Part of fiche 73 (`docs/plans/73-themes-locaux-bac-a-sable-ia.md`) — a developer can now
+  write a theme by hand and drop it in `themes/`, with zero involvement from the AI theme
+  generator. The sandbox, the deploy pipeline with security scanning, AI-driven generation
+  into that sandbox, and export/import are separate, later tasks of the same fiche.
+
+- [`f9b21bc`](https://github.com/cogenta-cms/cogenta/commit/f9b21bc3a371f62329c97f8bc0ab6e9a0686d3c2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 task 8 — export/import (§ 3.7), the last piece of the fiche: a theme leaves and
+  re-enters the mechanism as one portable zip file.
+  
+  `exportThemeZip` zips `themes/<name>/` exactly as it sits on disk, streaming to a
+  caller-supplied sink. `importThemeZip` extracts an archive into a fresh sandbox —
+  **never directly into `themes/`**. This closes piège n°3 (zip-slip) by reuse rather than
+  a parallel implementation: every extracted entry goes through task 7's
+  `writeSandboxFile`, so an entry name that tries to escape the sandbox (`../../.env`, an
+  absolute path) is refused by the exact same guard a hand-typed agent path already has to
+  pass. Deploying the imported sandbox into `themes/<name>/` — where `verifyTheme`'s real
+  security scan runs — stays a separate, explicit next step
+  (`checkThemeDeployment`/`deployThemeFromSandbox`, task 5): an imported theme gets no
+  shortcut past that gate, matching the fiche's own "un import n'est jamais un raccourci
+  qui contourne la vérification".
+  
+  Zero new dependency (R9): reuses `@cogenta/export`'s `createZipWriter`/`openZip`, the
+  same zero-dependency, store-mode ZIP reader/writer `cogenta backup` already uses.
+  
+  `writeSandboxFile`'s `content` parameter widens from `string` to `string | Buffer`
+  (additive) — a zip entry is not assumed to be UTF-8 text.
+  
+  5 new real tests (`packages/cli/test/theme-export.test.ts`, real filesystem and real ZIP
+  round trips, nothing mocked): export refusal for a nonexistent theme, a real exported zip
+  readable back by `openZip`, import into a fresh sandbox with byte-identical content, a
+  full deploy → export → import → deploy-again round trip, and a zip-slip regression test
+  built with the real writer (a genuine malicious archive, not a hand-typed fixture) proving
+  `importThemeZip` refuses and never writes outside the target sandbox.
+  
+  With this task, fiche 73 (`docs/plans/73-themes-locaux-bac-a-sable-ia.md`) is complete:
+  all 8 tasks delivered as tested, reviewed mechanisms. No HTTP route or admin screen for
+  any of tasks 4-8 yet — an honest, consistently documented gap across every one of them:
+  each ships the underlying, tested primitive; wiring the admin UI on top is separate,
+  later work.
+
+- [`10db071`](https://github.com/cogenta-cms/cogenta/commit/10db07162f24b56d750770480ebb2b5e2868773a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 follow-on — wires tasks 4-8's mechanisms into real `cogenta serve` HTTP routes,
+  admin-only throughout (the same gate every other theme route already has):
+  
+  - `POST /api/theme/sandbox` — create a sandbox, or clone an existing local theme into one
+    (`{id, cloneFrom?}`).
+  - `GET /api/theme/sandbox/:id/preview` — renders the sandbox through the isolated worker
+    (task 4), `?siteName=` optional.
+  - `GET /api/theme/sandbox/:id/check?themeName=` — the deploy pipeline's read-only scan
+    (task 5), safe to poll from a confirmation screen.
+  - `POST /api/theme/sandbox/:id/deploy` — promotes a sandbox into `themes/<name>/`
+    (`{themeName}`), re-checking itself before touching anything.
+  - `GET /api/theme/:name/versions` — lists archived versions (task 6), newest first.
+  - `POST /api/theme/:name/versions/:timestamp/restore` — restores one.
+  - `GET /api/theme/:name/export` — a real streamed zip download.
+  - `POST /api/theme/import` — `{sandboxId, zipBase64}`, extracts into a fresh sandbox
+    (task 8) — never deploys on its own.
+  
+  `RuntimeExtras` gains an optional `projectRoot` — `createRequestListener` needed it and
+  had no prior access (`ThemeRouter` deliberately never gets a real filesystem path, per
+  contract D). Two new `@cogenta/core` error codes:
+  `THEME_SANDBOX_REQUEST_INVALID`/`THEME_SANDBOX_ROUTE_NOT_FOUND`.
+  
+  7 new real HTTP tests (`packages/cli/test/serve-theme-sandbox.test.ts`, a real
+  `cogenta serve` instance, real auth, no mocks): admin-only gating (refused for both an
+  anonymous and an `editor` caller), the full create → preview → check → deploy round trip,
+  a real refusal reason surfaced through `/check` without deploying, versions
+  list-then-restore across two real redeploys, a real downloadable zip re-opened and
+  verified with `openZip`, base64 zip import over HTTP, and the route's own 404 for an
+  unmatched sub-path. The underlying mechanisms already have their own thorough unit
+  suites (including every security-hardened path guard) — this suite proves the HTTP layer
+  routes to them correctly, not the guards again.
+  
+  No admin screen (React UI) yet for any of this — an honest, deliberately scoped-out next
+  step: this delivers the API surface an admin screen would call, tested end to end over
+  real HTTP.
+
+- [`b0c8677`](https://github.com/cogenta-cms/cogenta/commit/b0c86775f2fe8d68bce3a5b248803911b57ed71f) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 task 4 — the theme sandbox itself: a working directory outside `themes/`
+  (`<projectRoot>/.cogenta/theme-sandbox/<id>/`), so in-progress edits — hand-written or
+  AI-generated — never touch a theme a real request could resolve mid-edit.
+  
+  New in `@cogenta/cli`'s `theme-sandbox.ts`: `createSandbox` (a fresh, empty working
+  directory), `cloneThemeIntoSandbox` (a real, recursive file copy from an existing local
+  theme — never a symlink or junction, which behaves differently across platforms — and a
+  clear, actionable error for a built-in npm-packaged theme, which has no folder here to
+  clone from), `listSandboxIds`, and `renderSandboxPreview`.
+  
+  `renderSandboxPreview` re-reads the sandbox directory on every call (no reload daemon —
+  a preview is one explicit click, never a continuous stream) and renders it through fiche
+  73 task 3's `runIsolatedModule` — never in the `cogenta serve` process itself. It is
+  deliberately NOT gated on `verifyTheme`'s security scan the way a deployment will be
+  (task 5): a preview has to show the sandbox's code exactly as it behaves right now, valid
+  for deployment or not. The isolation this preview carries is `runIsolatedModule`'s own,
+  already-documented, worker-level guarantee — not a full sandbox against a forbidden
+  import — matching ADR-0034's "point de vigilance" rather than overselling it. Preview
+  content is fixed and database-free, the same reasoning `renderThemeGalleryPreview`
+  already uses: nothing here can leak a real entry.
+  
+  `@cogenta/plugins`: `runIsolatedModule`/`RunIsolatedModuleOptions` (task 3) are now
+  re-exported from the package's public entry point, not just internal.
+  
+  `@cogenta/core`: two new error codes, `THEME_SANDBOX_SOURCE_NOT_FOUND` and
+  `THEME_SANDBOX_IMAGE_UNSUPPORTED`.
+  
+  Not yet included, honestly: no `GET /admin/theme-sandbox/<id>` HTTP route is wired into
+  `cogenta serve` yet — this task delivers the underlying mechanism, tested end to end
+  with real filesystem fixtures and real isolated-worker renders, for a route to be wired
+  onto next. Nothing here is reachable from outside the process yet, so there is no new
+  public surface to secure in the meantime.
+
+- [`d9fd597`](https://github.com/cogenta-cms/cogenta/commit/d9fd5971881e02d62c9f5cbaf3fc3fb17d3b3aa1) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 task 6 — versions (§ 3.5): `listThemeVersions`/`restoreThemeVersion` in
+  `theme-sandbox.ts`.
+  
+  The timestamped archive task 5's deploy pipeline already writes into
+  `themes/.versions/<name>/<timestamp>/` on every redeploy is now listable
+  (`listThemeVersions`, newest first, empty when a theme has never been redeployed —
+  never an error) and restorable (`restoreThemeVersion`) — "même geste conceptuel que
+  le retour arrière déjà existant pour les mises à jour de flotte" (§ 3.5), on an
+  explicit human gesture, never automatic.
+  
+  A restore is itself undoable: the version it replaces is archived in turn, using the
+  exact same archive-then-remove ordering (never overwritten in place) task 5 already
+  established — now shared as `archiveCurrentVersion`, a single helper both
+  `deployThemeFromSandbox` and `restoreThemeVersion` call. A restored version is not
+  re-scanned by `verifyTheme`: it already passed that check the moment it was first
+  deployed, and nothing else in this module ever writes into `themes/.versions/`.
+  
+  4 new real tests (`packages/cli/test/theme-sandbox.test.ts`): no versions for an
+  untouched theme, versions accumulate newest-first across redeploys, a full
+  restore-and-verify-it's-undoable round trip, and a refusal for an id that does not
+  exist (touching nothing).
+  
+  No admin screen for this yet — same honest, documented gap as tasks 4-5: the
+  mechanism is delivered and tested; wiring it into the admin is separate follow-on
+  work.
+
+- [`858aec8`](https://github.com/cogenta-cms/cogenta/commit/858aec8a332fe434975e34b6f9b2a1ec173b65cd) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 task 7 — `theme.write_sandbox_file` (`tools@1.6`, permission `theme.write_sandbox`):
+  "Cogenta Theme Creator"'s second tool, for writing real theme code (not just proposing
+  tokens) into a sandbox.
+  
+  Unlike `theme.propose_theme`, this tool is `sideEffects: true`/`reversible: true` — a real
+  write, gated by `withAutonomy` (R4) like any other effectful tool, `revert` deleting
+  exactly the file it wrote. Its scope is structurally bounded, not just documented: it can
+  only ever write inside one sandbox directory
+  (`<projectRoot>/.cogenta/theme-sandbox/<id>/`, fiche 73 task 4) — never `themes/`, never
+  anything a live request could resolve. A path that tries to escape the sandbox (`../`, an
+  absolute path) is refused (`THEME_SANDBOX_PATH_ESCAPE`, new `@cogenta/core` error code),
+  enforced host-side in `@cogenta/cli`'s new `writeSandboxFile`/`deleteSandboxFile`
+  (`theme-sandbox.ts`) — the tool itself has no filesystem of its own to guard, by design
+  (the same `resolveProvider`/`prClient` injection shape every other AI-backed tool in this
+  codebase uses).
+  
+  `themeCreatorAgent`'s declared tool list grows to `['theme.propose_theme',
+  'theme.write_sandbox_file']`, wired end to end through `agent-runtime.ts` →
+  `theme-wiring.ts` (`createThemeSandboxToolWiring`, never gated on a configured LLM
+  provider — writing a file is not a model call) → `runServe`.
+  
+  `identity.md` rewritten where it previously asserted, repeatedly and now falsely, that
+  this agent "n'écrit jamais de code de thème" and that "aucun outil, à aucun niveau
+  d'autonomie" could ever let it write anything real — a new, explicit second mode ("Écrire
+  du code de thème dans un bac à sable") replaces those claims, describing exactly when it
+  applies, the injected structure (manifest shape, the full seventeen-block vocabulary,
+  R3/R5, the sandbox path), and that it never bypasses the human-confirmed deploy pipeline
+  (fiche 73 task 5).
+  
+  `docs/04-contrats.md` updated: `tools@1.6`, the new `theme.write_sandbox` permission
+  documented in the taxonomy.
+  
+  New real tests: 8 in `packages/cli/test/theme-sandbox.test.ts` (real filesystem fixtures —
+  write, nested subdirectories, path-escape refusal for both a relative `../` and an
+  absolute path, refusing to clobber the sandbox's own reserved preview-adapter file,
+  delete, idempotent double-delete, and an end-to-end proof that a file written this way is
+  picked up by the very next preview); 3 new/updated in
+  `packages/agents-builtin/test/theme-creator/agent.test.ts` (execute, revert, and — the
+  important behavioral proof — that this tool actually gets gated by `withAutonomy` under
+  `propose` autonomy, unlike `theme.propose_theme`'s `sideEffects: false`).
+
+### Patch Changes
+
+- **"Générer un thème avec l'IA" can now actually write a custom page layout, not only
+  recolour an already-installed one.** A live user report: the admin screen only ever called
+  `theme.propose_theme` directly (`POST /api/theme/generate`, `@cogenta/cli`'s
+  `theme-wiring.ts`) — a pure token-adjustment path — so no request, however detailed, and no
+  attached reference screenshot, however different, could ever change more than colours/fonts
+  of the theme already active. `theme.write_sandbox_file` (fiche 73) already existed and could
+  write a real layout, but nothing on this screen ever reached for it.
+  
+  New in `@cogenta/agents`: `classifyThemeLayoutNeed` (`theme-creator/layout-classifier.ts`) —
+  a small classification call deciding whether a request needs a genuinely different page
+  structure or whether adjusting an installed theme's tokens is enough, reusing the same
+  attachment-processing (`theme-creator/attachments.ts`, extracted from `propose-theme.ts` so
+  both share one implementation).
+  
+  New in `@cogenta/agents-builtin`: `generateSandboxTheme` (a real tool-calling agent run,
+  `theme.write_sandbox_file` as its only tool, `autonomy: 'autonomous'` scoped to this one
+  call — legitimate because a sandbox write is inert until the pre-existing, separately
+  human-confirmed deploy step promotes it, never the catalog "Cogenta Theme Creator"
+  declaration's own `propose` default used by its other entry points) and
+  `generateThemeCandidates`, the new single entry point tying classification, token
+  candidates and a sandbox candidate together. **A reference image always forces the
+  custom-layout attempt**, regardless of the classifier's own verdict — a live run against a
+  real screenshot showed the classifier alone judged "tokens are enough" for a request an
+  installed theme could not actually reproduce (a floating review badge over the hero, an
+  icon-stat band, a circular experience badge) because it *does* have a hero/stats/about
+  section "in some form"; an attached image is the strongest, least ambiguous signal an
+  operator wants visual fidelity to a specific composition, not a plausible section list.
+  
+  Also fixed, found by the same live run: a model asked to write `theme.render.*` named its
+  file `theme.render.tsx` — a name neither `CONFIG_MODULE_NAME` nor `RENDER_MODULE_NAME`
+  recognised, so the write silently succeeded while the file was never importable (this
+  sandbox has no build step; a plain ESM `import()` cannot transform JSX) and the preview
+  failed with a generic, unhelpful "no theme.render.{js,mjs,ts} yet". `theme-sandbox.ts`
+  (`@cogenta/cli`) now recognises this specific near-miss and rejects it with the real reason,
+  letting the agent's own self-correction loop actually fix it instead of dead-ending.
+  
+  `@cogenta/api`'s `theme-router.ts` gains `SandboxCandidateLike`/`ThemeGenerateCandidateLike`
+  (additive — existing `SkinCandidateLike` gains a required `kind: 'tokens'` discriminator).
+  The admin screen (`@cogenta/admin`, no changeset — private) renders either candidate kind:
+  a sandbox candidate previews through the same real, isolated-worker render the "Gérer les
+  thèmes locaux" screen's own "Aperçu" already uses, and "Activer" runs the existing
+  check → deploy → `PUT /api/theme/overrides` pipeline, never a new write path.
+  
+  Verified live end-to-end against a real reference screenshot and a real provider: the
+  classifier's own decision, a real multi-file agent run (manifest + render module + CSS,
+  self-correcting on a rejected write), a real preview render, a real deploy, activation, and
+  the public site serving the generated layout — not a recolour of `@cogenta/theme-portfolio`,
+  a distinct header/hero/stats/about composition matching the reference's actual structure.
+
+- [`7f59ac9`](https://github.com/cogenta-cms/cogenta/commit/7f59ac9b6890c0e59def1f7af7c94c9209be047b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 — adds the one missing route the new admin screen needs: `GET /api/theme/sandbox`,
+  listing every sandbox id currently on disk (`listThemeVersions`'s sibling for sandboxes,
+  already existed as a function — `listSandboxIds` — just never had an HTTP route). Same
+  admin-only gate as the rest of the sandbox route family.
+
+- Fiche 73 task 7's own live end-to-end test (a real `cogenta serve`, a real browser session,
+  a real gpt-5-mini) found five real, distinct gaps in `theme.write_sandbox_file` — none of
+  them visible in the unit suite alone — all fixed here:
+  
+  1. **Migration gap**: a site whose "Cogenta Theme Creator" agent record was created before
+     this tool shipped never gained it — `ensureBuiltinAgents`'s "never touch an existing
+     seed" policy had no exception for it (unlike the existing `grantContentBrowse`
+     precedent). New `grantThemeSandboxWrite` (`packages/agents/src/agents/builtins.ts`)
+     closes it the same way, additively, on every `cogenta serve` boot.
+  
+  2. **Missing dependency**: no site `create-cogenta` scaffolds ever declared
+     `@cogenta/theme-kit` as a direct dependency — only transitively, through
+     `@cogenta/theme-canonical` — so a custom sandbox theme's own `import { h } from
+     '@cogenta/theme-kit'` (exactly what this tool tells a model to write) failed to resolve
+     under a package manager that does not hoist transitive dependencies. Added to
+     `packageJsonContents` (`create-cogenta/src/scaffold.ts`).
+  
+  3. **Silent, deferred failures**: a written `theme.config.*`/`theme.render.*` that doesn't
+     conform to contract D used to only fail much later, at the next preview or deploy click,
+     disconnected from the write that caused it. `writeSandboxFile` (`theme-sandbox.ts`) now
+     validates for real before a write lands — importing `theme.config.*` and re-checking it
+     with `parseThemeManifest`, and for `theme.render.*`, running the exact same real preview
+     (`renderSandboxPreview`, same isolated worker, same `serialize()` call) the sandbox's own
+     "Aperçu" button runs. A write that fails either check is rejected with the real error
+     (new `THEME_SANDBOX_FILE_INVALID`) and rolled back to whatever was there before, so the
+     agent's next call always builds on a sandbox that is at least self-consistent. Proven live:
+     a real agent run that used to fail silently now retries against the real error until both
+     files actually render.
+  
+  4. **No worked example**: the tool's own description named the contract by number but never
+     showed its actual shape, so a model reliably reinvented a plausible-looking but wrong one
+     (`blocks` as a block-name array instead of a semver range, `runtime` as an object instead
+     of a literal, inline token data instead of a `tokens` path, a `ctx.theme.tokens` that does
+     not exist in the real `RenderContext`). The description now carries one concrete, minimal,
+     real `h()`-based `renderPage`/`renderChrome` pair. Measured live on the same live agent,
+     same brief, same model: 12+ failed attempts without the example, 2 with it.
+  
+  5. **Deploying (or restoring) a theme while `cogenta serve` is already running could leave it
+     permanently invisible** — to the Appearance gallery, and, worse, silently unresolvable as
+     the actual `activeTheme` (falling back to the default theme with no error anywhere). Root
+     cause: `theme-registry.ts`'s `filesystemThemeCache` has no invalidation of its own — a name
+     resolved once (an earlier failed deploy attempt with the same name, `theme.propose_theme`'s
+     own `availableThemes()` call, or any other lookup before the real files existed) stayed
+     cached as unresolvable for the rest of the process's life. New `invalidateFilesystemTheme`,
+     called by `deployThemeFromSandbox` and `restoreThemeVersion` right after they change
+     `themes/<name>/`. Proven live: deployed and activated a real agent-written theme, and the
+     public site immediately served real content through it — no restart needed.
+  
+  New tests: 6 in `packages/cli/test/theme-sandbox.test.ts` (wrong-shape manifest rejected,
+  rollback on a failed rewrite, missing exports rejected, the exact live failure — two real
+  functions returning plain data instead of an `HtmlElement` — rejected even though both
+  exports exist, a well-formed module accepted, and a sandbox that becomes valid between two
+  checks is reported valid rather than stuck on its first, since-fixed failure); 2 in
+  `packages/agents/test/agents/builtins.test.ts` (an existing theme-creator record gains the
+  tool, an unrelated agent is left alone); 1 in
+  `packages/cli/test/theme-registry-filesystem.test.ts` (a theme name resolved once before it
+  existed resolves correctly once real content lands at that name, in the same process).
+- Updated dependencies [[`b787f61`](https://github.com/cogenta-cms/cogenta/commit/b787f61d271325ef731f725793a323a2269e5e2a), `c9dffa4`, `c9dffa4`, [`10db071`](https://github.com/cogenta-cms/cogenta/commit/10db07162f24b56d750770480ebb2b5e2868773a), [`b0c8677`](https://github.com/cogenta-cms/cogenta/commit/b0c86775f2fe8d68bce3a5b248803911b57ed71f), `c9dffa4`, [`858aec8`](https://github.com/cogenta-cms/cogenta/commit/858aec8a332fe434975e34b6f9b2a1ec173b65cd)]:
+  - @cogenta/plugins@0.4.0
+  - @cogenta/api@2.3.0
+  - @cogenta/agents@0.6.0
+  - @cogenta/agents-builtin@0.4.0
+  - @cogenta/core@0.8.0
+  - @cogenta/channels@0.3.4
+  - @cogenta/mcp@0.3.3
+  - @cogenta/analytics@0.3.3
+  - @cogenta/auth@0.5.2
+  - @cogenta/blocks@1.0.3
+  - @cogenta/comments@0.2.3
+  - @cogenta/commerce@0.4.3
+  - @cogenta/export@0.2.3
+  - @cogenta/forms@0.2.4
+  - @cogenta/import@0.2.3
+  - @cogenta/observability@0.2.3
+  - @cogenta/render@0.2.3
+  - @cogenta/schema@0.5.1
+  - @cogenta/seo@0.3.3
+  - @cogenta/theme-association@0.3.2
+  - @cogenta/theme-blog@0.3.2
+  - @cogenta/theme-canonical@1.1.2
+  - @cogenta/theme-docs@0.3.2
+  - @cogenta/theme-ecommerce@1.1.2
+  - @cogenta/theme-entreprise@1.1.2
+  - @cogenta/theme-kit@0.3.2
+  - @cogenta/theme-magazine@1.1.2
+  - @cogenta/theme-portfolio@1.1.2
+  - @cogenta/theme-restaurant@0.3.2
+  - @cogenta/theme-saas@0.3.2
+
 ## 0.7.1
 
 ### Patch Changes

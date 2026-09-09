@@ -1,5 +1,75 @@
 # @cogenta/plugins
 
+## 0.4.0
+
+### Minor Changes
+
+- [`b787f61`](https://github.com/cogenta-cms/cogenta/commit/b787f61d271325ef731f725793a323a2269e5e2a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 task 3 — new `runIsolatedModule(options)`, a sibling to `runIsolated` that
+  does a real `await import()` of an ES module inside an isolated worker and calls one
+  of its named exports, rather than `runIsolated`'s import-less `vm.Script` string.
+  
+  This is the sizing/proof the fiche's own piège n°1 asked for before the rest of the
+  theme sandbox could be estimated: the real unknown was never "can a plain
+  `HtmlElement`-shaped tree cross the worker boundary" (it already does, via the same
+  JSON round-trip `runIsolated` already uses) — it is that a theme's `RenderContext`
+  carries live, host-bound methods (`t()`, `content.entry()`, ...) a theme calls
+  *during* rendering. `runIsolatedModule` answers that with a generalised version of
+  the same request/reply RPC `runIsolated` already proves for plugin capabilities: a
+  caller names arbitrary host callbacks, and the worker hands the module one flat,
+  RPC-backed callback object as its last argument.
+  
+  Carries a real, weaker isolation guarantee than `runIsolated`, on purpose and
+  documented rather than hidden: a genuine `import()` has no `vm` boundary stopping it
+  from reaching `node:fs`/`node:net` (proven by a dedicated test). Safety for a real
+  theme has to come from elsewhere — `verifyTheme`'s static import scan, already wired
+  in fiche 73's task 1, refusing a theme before its code ever reaches a worker like
+  this one — plus the same `env: {}`/bounded `resourceLimits`/host-side timeout
+  `runIsolated` already gives every worker.
+  
+  Nothing in this change wires `runIsolatedModule` into `cogenta serve` or into real
+  theme rendering — that remains fiche 73's task 4 (the sandbox/preview route), which
+  this task's own estimate now has a concrete mechanism to build on.
+
+- [`b0c8677`](https://github.com/cogenta-cms/cogenta/commit/b0c86775f2fe8d68bce3a5b248803911b57ed71f) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fiche 73 task 4 — the theme sandbox itself: a working directory outside `themes/`
+  (`<projectRoot>/.cogenta/theme-sandbox/<id>/`), so in-progress edits — hand-written or
+  AI-generated — never touch a theme a real request could resolve mid-edit.
+  
+  New in `@cogenta/cli`'s `theme-sandbox.ts`: `createSandbox` (a fresh, empty working
+  directory), `cloneThemeIntoSandbox` (a real, recursive file copy from an existing local
+  theme — never a symlink or junction, which behaves differently across platforms — and a
+  clear, actionable error for a built-in npm-packaged theme, which has no folder here to
+  clone from), `listSandboxIds`, and `renderSandboxPreview`.
+  
+  `renderSandboxPreview` re-reads the sandbox directory on every call (no reload daemon —
+  a preview is one explicit click, never a continuous stream) and renders it through fiche
+  73 task 3's `runIsolatedModule` — never in the `cogenta serve` process itself. It is
+  deliberately NOT gated on `verifyTheme`'s security scan the way a deployment will be
+  (task 5): a preview has to show the sandbox's code exactly as it behaves right now, valid
+  for deployment or not. The isolation this preview carries is `runIsolatedModule`'s own,
+  already-documented, worker-level guarantee — not a full sandbox against a forbidden
+  import — matching ADR-0034's "point de vigilance" rather than overselling it. Preview
+  content is fixed and database-free, the same reasoning `renderThemeGalleryPreview`
+  already uses: nothing here can leak a real entry.
+  
+  `@cogenta/plugins`: `runIsolatedModule`/`RunIsolatedModuleOptions` (task 3) are now
+  re-exported from the package's public entry point, not just internal.
+  
+  `@cogenta/core`: two new error codes, `THEME_SANDBOX_SOURCE_NOT_FOUND` and
+  `THEME_SANDBOX_IMAGE_UNSUPPORTED`.
+  
+  Not yet included, honestly: no `GET /admin/theme-sandbox/<id>` HTTP route is wired into
+  `cogenta serve` yet — this task delivers the underlying mechanism, tested end to end
+  with real filesystem fixtures and real isolated-worker renders, for a route to be wired
+  onto next. Nothing here is reachable from outside the process yet, so there is no new
+  public surface to secure in the meantime.
+
+### Patch Changes
+
+- Updated dependencies [`c9dffa4`, [`10db071`](https://github.com/cogenta-cms/cogenta/commit/10db07162f24b56d750770480ebb2b5e2868773a), [`b0c8677`](https://github.com/cogenta-cms/cogenta/commit/b0c86775f2fe8d68bce3a5b248803911b57ed71f), `c9dffa4`, [`858aec8`](https://github.com/cogenta-cms/cogenta/commit/858aec8a332fe434975e34b6f9b2a1ec173b65cd)]:
+  - @cogenta/agents@0.6.0
+  - @cogenta/core@0.8.0
+  - @cogenta/render@0.2.3
+
 ## 0.3.3
 
 ### Patch Changes

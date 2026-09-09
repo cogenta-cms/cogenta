@@ -1,5 +1,14 @@
 # @cogenta/theme-ecommerce
 
+## 1.1.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/blocks@1.0.3
+  - @cogenta/render@0.2.3
+  - @cogenta/theme-kit@0.3.2
+
 ## 1.1.1
 
 ### Patch Changes

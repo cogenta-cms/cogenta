@@ -250,3 +250,38 @@ describe('a theme writer that can see its own output', () => {
     expect(body.length).toBeLessThan(40_000)
   })
 })
+
+/**
+ * A theme is a container for the site's content. A writer that does not know
+ * the container's shape guesses at it — and a guessed collection name renders
+ * nothing, which invites the far worse fix of hardcoding articles into the
+ * markup, where nobody can edit or translate them.
+ */
+describe('a theme writer that knows what the site actually stores', () => {
+  it('is told the real collections, their fields, and which ones have a public page', async () => {
+    const client = fakeClient([textResponse('noted')])
+    await generateSandboxTheme({
+      ...BASE,
+      client,
+      sandboxId: 'cm-1',
+      contentModel: [
+        '- article: title (text), excerpt (text), coverImage (media). has a public page — link to entries with ctx.link({collection, id}).',
+        '- setting: siteTagline (text). no public page — render it inline, never link to it.',
+      ].join('\n'),
+    })
+
+    const system = client.requests[0]?.system ?? ''
+    expect(system).toContain('article: title (text)')
+    expect(system).toContain('coverImage (media)')
+    expect(system).toContain('never invent entries')
+    // The distinction matters: linking to an unrouted collection is a dead link.
+    expect(system).toContain('no public page')
+  })
+
+  it('says nothing about content when the caller has no schema to describe', async () => {
+    const client = fakeClient([textResponse('noted')])
+    await generateSandboxTheme({ ...BASE, client, sandboxId: 'cm-2' })
+
+    expect(client.requests[0]?.system ?? '').not.toContain('never invent entries')
+  })
+})

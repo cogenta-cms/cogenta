@@ -96,6 +96,17 @@ export interface GenerateSandboxThemeInput {
     /** What was already said, oldest first — so a third request can refer to what the second one settled. */
     readonly priorTurns?: readonly { readonly role: 'user' | 'assistant'; readonly text: string }[]
   }
+  /**
+   * What this site actually stores, described in plain terms — collection
+   * names, their fields, and whether each has a public page.
+   *
+   * A theme renders the site's content, so a writer that does not know the
+   * real collection names invents them; an invented `posts` on a site whose
+   * entries live in `article` renders nothing, and the tempting fix is to
+   * hardcode articles into the markup, where nobody can edit or translate
+   * them. Absent only when the caller has no schema in hand.
+   */
+  readonly contentModel?: string
   /** Lists what is already in the sandbox. Required, with `readFile`, for a run that adjusts an existing theme rather than writing a new one. */
   readonly listFiles?: (input: { readonly sandboxId: string }) => Promise<readonly string[]>
   /** Reads one existing sandbox file, so a change can be made to what is really there instead of to what the agent assumes is there. */
@@ -268,6 +279,13 @@ export async function generateSandboxTheme(
           : [
               '',
               'A reference image is attached as a real visual content block. It is the design to reproduce: study its actual composition before writing anything, and treat visible fidelity to it as what this run is judged on.',
+            ]),
+        ...(input.contentModel === undefined
+          ? []
+          : [
+              '',
+              "This site's own content — fetch from these, never invent entries, and never rename them:",
+              input.contentModel,
             ]),
         ...(processed.contributedFilenames.length === 0
           ? []

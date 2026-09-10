@@ -23,6 +23,7 @@ import type { ThemeRouterOptions } from '@cogenta/api'
 import type { CogentaConfig, DatabaseHandle, Logger } from '@cogenta/core'
 import { createSkinGallery, ensureRegistryTables } from '@cogenta/plugins'
 import { mergeSkinTokens, renderSkin, validateSkin } from '@cogenta/render'
+import type { CollectionDefinition } from '@cogenta/schema'
 import {
   createSiteSettingsStore,
   createThemeStore,
@@ -57,6 +58,32 @@ import {
  */
 
 const TOKENS_FILE = 'theme.tokens.json'
+
+/**
+ * The site's collections, written out for a theme writer: what exists, what
+ * each entry carries, and whether it has a public URL worth linking to.
+ *
+ * Deliberately a plain description rather than the schema objects — the
+ * reader is a model deciding what to fetch and what to render, and it needs
+ * "article: title, excerpt, coverImage, publishedAt — has a public page", not
+ * a serialised `CollectionDefinition`.
+ */
+function describeContentModel(collections: readonly CollectionDefinition[]): string | undefined {
+  if (collections.length === 0) return undefined
+  return collections
+    .map((collection) => {
+      const fields = Object.entries(collection.fields)
+        .slice(0, 24)
+        .map(([name, field]) => `${name} (${field.kind})`)
+        .join(', ')
+      const routed =
+        collection.routing === undefined
+          ? 'no public page — render it inline, never link to it'
+          : 'has a public page — link to entries with ctx.link({collection, id})'
+      return `- ${collection.name}: ${fields === '' ? 'no fields' : fields}. ${routed}.`
+    })
+    .join('\n')
+}
 
 /** A fresh sandbox id for a custom-layout generation run — sortable (timestamp-first) and never guessable, so two concurrent "Générer" calls can never collide on the same sandbox directory. */
 function mintSandboxId(): string {
@@ -99,6 +126,17 @@ export interface ThemeWiringOptions {
   readonly agentStore?: AgentDeclarationStore
   /** Fed to `createProgressJobStore` so a failed generation job is logged server-side, not only visible to whoever was polling it live. */
   readonly logger?: Logger
+  /**
+   * The site's real content model, so a generated theme renders what this
+   * site actually stores.
+   *
+   * A theme is a container for content; a writer that does not know the
+   * container's shape guesses at it, and a guessed collection name renders
+   * nothing — which invites the worse fix of hardcoding articles into the
+   * markup, where they cannot be edited from the admin or translated. Passing
+   * the real names and fields removes the reason to guess.
+   */
+  readonly collections?: readonly CollectionDefinition[]
   /**
    * R6 — every real sandbox file write a "Générer un thème avec l'IA"
    * custom-layout run makes is journalled through this, exactly like every
@@ -204,6 +242,12 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
   await ensureRegistryTables(options.db)
   await ensureSiteSettingsTables(options.db)
 
+  // Computed once, at wiring time: a site's collections do not change while
+  // the process runs (ADR-0010 keeps the schema read-only in production), so
+  // re-deriving this string on every generation would be work for no answer.
+  const contentModel =
+    options.collections === undefined ? undefined : describeContentModel(options.collections)
+
   const tokensPath = join(options.projectRoot, TOKENS_FILE)
   const themeStore = createThemeStore({ db: options.db })
   const loadFileTokens = async (): Promise<Record<string, unknown> | null> => {
@@ -303,6 +347,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                 // what is really there.
                 listFiles: (list) => listSandboxFiles(options.projectRoot, list.sandboxId),
                 readFile: (read) => readSandboxFile(options.projectRoot, read.sandboxId, read.path),
+                ...(contentModel === undefined ? {} : { contentModel }),
                 ...(input.attachments === undefined || input.attachments.length === 0
                   ? {}
                   : { attachments: input.attachments }),
@@ -461,6 +506,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                   }),
                 listFiles: (list) => listSandboxFiles(options.projectRoot, list.sandboxId),
                 readFile: (read) => readSandboxFile(options.projectRoot, read.sandboxId, read.path),
+                ...(contentModel === undefined ? {} : { contentModel }),
                 ...(input.attachments === undefined || input.attachments.length === 0
                   ? {}
                   : { attachments: input.attachments }),

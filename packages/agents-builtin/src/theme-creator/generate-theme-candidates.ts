@@ -61,6 +61,8 @@ export interface GenerateThemeCandidatesInput {
   }) => Promise<
     { readonly ok: true; readonly html: string } | { readonly ok: false; readonly error: string }
   >
+  /** The site's real content model, forwarded so a generated theme fetches what this site actually stores instead of inventing collections. */
+  readonly contentModel?: string
   /** Also threaded through — together they let a run change an existing theme instead of only writing a new one. */
   readonly listFiles?: (input: { readonly sandboxId: string }) => Promise<readonly string[]>
   readonly readFile?: (input: {
@@ -190,6 +192,7 @@ export async function generateThemeCandidates(
       writeFile: input.writeFile,
       deleteFile: input.deleteFile,
       ...(input.renderPreview === undefined ? {} : { renderPreview: input.renderPreview }),
+      ...(input.contentModel === undefined ? {} : { contentModel: input.contentModel }),
       ...(input.listFiles === undefined ? {} : { listFiles: input.listFiles }),
       ...(input.readFile === undefined ? {} : { readFile: input.readFile }),
       ...(input.attachments === undefined ? {} : { attachments: input.attachments }),

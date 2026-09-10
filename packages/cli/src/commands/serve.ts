@@ -6558,6 +6558,12 @@ export async function runServe(options: ServeOptions): Promise<number> {
       dir: join(agentsRuntimeDataDir, AGENTS_SUBDIR),
     }),
     logger,
+    // What this site actually stores. A theme renders the site's content, so
+    // a theme writer that has to guess collection names invents them — and an
+    // invented `posts` collection on a site whose entries live in `article`
+    // renders nothing, or gets "solved" by hardcoding fake articles into the
+    // markup, which is the failure this passes real names to prevent.
+    collections,
     // R6 — every real sandbox write a custom-layout "Générer" run makes is
     // journalled through the same audit table `site.auth.audit` reads once
     // `assembleSite` opens it below (see that variable's own comment).

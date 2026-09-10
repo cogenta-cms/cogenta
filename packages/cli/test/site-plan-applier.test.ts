@@ -6,7 +6,9 @@ import {
   type CollectionDefinition,
   createContentStore,
   createSchemaTables,
+  createTaxonomyStore,
   f,
+  type TaxonomyDefinition,
 } from '@cogenta/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createSitePlanApplier } from '../src/commands/site-plan.js'
@@ -293,5 +295,115 @@ describe('creating the pages a human approved', () => {
     expect(report.pagesCreated).toBe(0)
     const store = createContentStore({ db, collection: ROUTED_PAGE, defaultLocale: 'fr' })
     expect((await store.list({ state: 'working' })).items).toHaveLength(0)
+  })
+})
+
+/**
+ * Categories, at last.
+ *
+ * They were excluded by design: a proposal could not declare a taxonomy, so a
+ * `taxonomy` field would always have pointed at nothing, and a plan answered
+ * "my articles need categories" with a `select` of frozen strings nobody
+ * could rename. Declaring them is what removes that reason.
+ */
+describe('declaring the taxonomies a plan proposes', () => {
+  const CATEGORY: TaxonomyDefinition = {
+    name: 'category',
+    labels: { singular: { fr: 'Catégorie' }, plural: { fr: 'Catégories' } },
+    hierarchical: true,
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+  }
+
+  function draftWithTaxonomy(taxonomies: readonly TaxonomyDefinition[]) {
+    const base = draft([DISH])
+    return {
+      ...base,
+      contentModel: {
+        ...base.contentModel,
+        taxonomies: taxonomies.map((definition) => ({ definition, rationale: 'x' })),
+      },
+      demoContent: [],
+    }
+  }
+
+  const DECIDE = {
+    'brief:locales': 'accepted',
+    'contentModel:dish': 'accepted',
+    'taxonomies:category': 'accepted',
+  } as const
+
+  it('writes them as the named export contract A actually reads, and creates their tables', async () => {
+    const { schemaPath, db, root } = await workspace([PAGE])
+    const applier = createSitePlanApplier({
+      projectRoot: root,
+      db,
+      collections: [PAGE],
+      defaultLocale: 'fr',
+      logger: createLogger({ level: 'silent' }),
+      schemaPath,
+    })
+
+    const report = await applier.apply({
+      draft: draftWithTaxonomy([CATEGORY]),
+      decisions: DECIDE,
+      actorId: null,
+    })
+
+    expect(report.added).toContain('dish')
+
+    // A default export alone would have created the tables and then handed
+    // the site a file that never mentions the taxonomy.
+    const schema = await readFile(schemaPath, 'utf8')
+    expect(schema).toContain('export const taxonomies')
+    expect(schema).toContain('"name": "category"')
+
+    // And the table is really there — a term can be written.
+    const terms = createTaxonomyStore({ db, taxonomy: CATEGORY })
+    await terms.create({ slug: 'entrees', labels: { fr: 'Entrées' } })
+    expect((await terms.list()).map((term) => term.slug)).toContain('entrees')
+  })
+
+  it('refuses one the site already declares rather than redefining it', async () => {
+    const { schemaPath, db, root } = await workspace([PAGE])
+    const applier = createSitePlanApplier({
+      projectRoot: root,
+      db,
+      collections: [PAGE],
+      taxonomies: [CATEGORY],
+      defaultLocale: 'fr',
+      logger: createLogger({ level: 'silent' }),
+      schemaPath,
+    })
+
+    const report = await applier.apply({
+      draft: draftWithTaxonomy([CATEGORY]),
+      decisions: DECIDE,
+      actorId: null,
+    })
+
+    expect(report.skipped.map((entry) => entry.name)).toContain('category')
+    expect(report.skipped.find((entry) => entry.name === 'category')?.reason).toContain('migration')
+  })
+
+  it('says a taxonomy needs `cogenta dev`, and still applies the rest', async () => {
+    const { db, root } = await workspace([PAGE])
+    // No schemaPath: the `cogenta serve` shape.
+    const applier = createSitePlanApplier({
+      projectRoot: root,
+      db,
+      collections: [PAGE],
+      defaultLocale: 'fr',
+      logger: createLogger({ level: 'silent' }),
+    })
+
+    const report = await applier.apply({
+      draft: draftWithTaxonomy([CATEGORY]),
+      decisions: DECIDE,
+      actorId: null,
+    })
+
+    const refused = report.skipped.find((entry) => entry.name === 'category')
+    expect(refused?.reason).toContain('cogenta dev')
+    expect(report.added).toEqual([])
   })
 })

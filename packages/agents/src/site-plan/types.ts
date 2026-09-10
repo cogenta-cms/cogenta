@@ -1,5 +1,5 @@
 import type { SkinTokens } from '@cogenta/render'
-import type { CollectionDefinition } from '@cogenta/schema'
+import type { CollectionDefinition, TaxonomyDefinition } from '@cogenta/schema'
 import type { DocumentFormat } from '../documents/extract-text.js'
 import type { DetectedConstraint } from './constraints.js'
 import type { StructuralGapSuggestion } from './structural-gaps.js'
@@ -58,6 +58,20 @@ export interface ProposedCollection {
 
 export interface ContentModelProposal {
   readonly collections: readonly ProposedCollection[]
+  /**
+   * Taxonomies this plan declares — categories, tags.
+   *
+   * Absent on a plan proposed before they could be: a stored draft from
+   * then still loads and reviews, it simply has none.
+   */
+  readonly taxonomies?: readonly ProposedTaxonomy[]
+}
+
+export interface ProposedTaxonomy {
+  /** A real contract A taxonomy, built by `defineTaxonomy` — never a parallel format. */
+  readonly definition: TaxonomyDefinition
+  /** Why the agent proposed it, in one sentence, for the human reading the plan. */
+  readonly rationale: string
 }
 
 export interface ProposedPage {

@@ -116,6 +116,7 @@ describe('presenting a plan for review', () => {
     expect(sections.map((section) => section.id)).toEqual([
       'brief',
       'contentModel',
+      'taxonomies',
       'pages',
       'structuralGaps',
       'skin',

@@ -180,6 +180,8 @@ export interface SitePlanApplierOptions {
   readonly db: DatabaseHandle
   /** What the site is serving right now — the names that may not be redefined. */
   readonly collections: readonly CollectionDefinition[]
+  /** The taxonomies this site already declares — preserved when the schema file is rewritten, and what a proposed one may not redefine. */
+  readonly taxonomies?: readonly TaxonomyDefinition[]
   readonly defaultLocale: string
   readonly logger: Logger
   /**
@@ -272,12 +274,47 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         added.push(collection)
       }
 
+      const existingTaxonomies = options.taxonomies ?? []
+      const takenTaxonomies = new Set(existingTaxonomies.map((taxonomy) => taxonomy.name))
+      const addedTaxonomies: TaxonomyDefinition[] = []
+      for (const taxonomy of approved.taxonomies) {
+        if (takenTaxonomies.has(taxonomy.name)) {
+          skipped.push({
+            name: taxonomy.name,
+            reason:
+              'this site already has a taxonomy with that name, and replacing a live one is a migration, not an edit',
+          })
+          continue
+        }
+        if (schemaPath === undefined) {
+          skipped.push({
+            name: taxonomy.name,
+            reason:
+              'declaring a taxonomy rewrites the schema, which only `cogenta dev` may do (ADR-0010) — everything in this plan that is content was applied anyway',
+          })
+          continue
+        }
+        takenTaxonomies.add(taxonomy.name)
+        addedTaxonomies.push(taxonomy)
+      }
+
       const followUp: string[] = []
 
-      if (added.length > 0 && schemaPath !== undefined) {
+      if ((added.length > 0 || addedTaxonomies.length > 0) && schemaPath !== undefined) {
         const all = [...options.collections, ...added]
-        await writeFile(schemaPath, `export default ${JSON.stringify(all, null, 2)}\n`, 'utf8')
-        await createSchemaTables(options.db, added)
+        const allTaxonomies = [...existingTaxonomies, ...addedTaxonomies]
+        // Contract A reads taxonomies from a *named* export
+        // (`export const taxonomies = [...]`, see `serve.ts`'s own
+        // `loadCollections`), so writing only the default export would create
+        // the tables and then hand the site a file that never mentions them.
+        const body =
+          allTaxonomies.length === 0
+            ? `export default ${JSON.stringify(all, null, 2)}\n`
+            : `export default ${JSON.stringify(all, null, 2)}\n\nexport const taxonomies = ${JSON.stringify(allTaxonomies, null, 2)}\n`
+        await writeFile(schemaPath, body, 'utf8')
+        // Taxonomies first: a collection whose field names one needs that
+        // table to exist before its foreign key can be created.
+        await createSchemaTables(options.db, added, addedTaxonomies)
         followUp.push(
           `${schemaPath} was rewritten — commit it (ADR-0010: the schema lives in git), then restart: the running process loaded its collections at start-up and does not see the new ones yet.`,
         )
@@ -548,6 +585,7 @@ export async function createSitePlanning(
             projectRoot: options.projectRoot,
             db: options.db,
             collections: options.collections,
+            ...(options.taxonomies === undefined ? {} : { taxonomies: options.taxonomies }),
             defaultLocale: options.config.site.defaultLocale,
             logger: options.logger,
             ...(schemaPath === undefined ? {} : { schemaPath }),

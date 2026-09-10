@@ -4,6 +4,7 @@ import type {
   ContentModelProposal,
   ProposedCollection,
   ProposedPage,
+  ProposedTaxonomy,
 } from './types.js'
 
 /**
@@ -93,7 +94,36 @@ export function enforceOnContentModel(
     })
   }
 
-  return { kept, violations, proposal: { collections: kept } }
+  // Taxonomies face the same rule for the same reason: a document that rules
+  // out a blog rules out a `blog` category just as squarely, and rebuilding
+  // the proposal from `collections` alone would have dropped every taxonomy
+  // the plan declared — silently, which is worse than refusing one.
+  const keptTaxonomies: ProposedTaxonomy[] = []
+  for (const taxonomy of proposal.taxonomies ?? []) {
+    const breach = excluded.find(
+      (constraint) =>
+        constraint.topic !== undefined && matchesTopic(taxonomy.definition.name, constraint.topic),
+    )
+    if (breach === undefined) {
+      keptTaxonomies.push(taxonomy)
+      continue
+    }
+    violations.push({
+      constraint: breach,
+      proposed: `taxonomy "${taxonomy.definition.name}"`,
+      action: 'removed',
+      explanation: `The document rules out ${breach.topic}: “${breach.quote}”. The proposed “${taxonomy.definition.name}” taxonomy was removed from the plan.`,
+    })
+  }
+
+  return {
+    kept,
+    violations,
+    proposal: {
+      collections: kept,
+      ...(keptTaxonomies.length === 0 ? {} : { taxonomies: keptTaxonomies }),
+    },
+  }
 }
 
 export function enforceOnPages(

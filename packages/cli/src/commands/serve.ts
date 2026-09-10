@@ -6641,9 +6641,11 @@ export async function runServe(options: ServeOptions): Promise<number> {
       config: loaded.config,
       logger,
       readOnly: options.readOnly ?? false,
-      // ADR-0010: the schema is writable in development only. `cogenta dev`
-      // says development; `cogenta serve` does not, and a plan can then be
-      // proposed and reviewed but never applied.
+      // ADR-0010: the *schema* is writable in development only. `cogenta dev`
+      // says development; `cogenta serve` does not, and a plan applied there
+      // creates its pages and entries and applies its palette, while naming
+      // every collection and taxonomy it had to refuse for want of a schema
+      // it may not rewrite.
       development: options.development ?? false,
     }),
     // The signed outbound webhook channel, connected to the content lifecycle

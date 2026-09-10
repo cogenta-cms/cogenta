@@ -3,9 +3,11 @@ import {
   CONTENT_ACTIONS,
   type CollectionDefinition,
   defineCollection,
+  defineTaxonomy,
   FIELD_KINDS,
   type FieldDefinition,
   f,
+  type TaxonomyDefinition,
   validateCollectionSet,
 } from '@cogenta/schema'
 import { z } from 'zod'
@@ -73,8 +75,31 @@ const CollectionSpecSchema = z.object({
   rationale: z.string().min(1),
 })
 
+/**
+ * A taxonomy the plan proposes — categories, tags, a cuisine list.
+ *
+ * Withheld until now for a real reason: a proposal could not declare one, so
+ * a `taxonomy` field would always have pointed at nothing. Declaring them
+ * here is what removes that reason, and what finally lets a plan answer "my
+ * articles need categories" with categories rather than with a `select` of
+ * frozen strings nobody can rename afterwards.
+ */
+const TaxonomySpecSchema = z.object({
+  name: z.string().min(1),
+  labels: z.object({ singular: z.string().min(1), plural: z.string().min(1) }),
+  /** Nested terms, for a category tree. Tags are flat and say so. */
+  hierarchical: z.boolean().optional(),
+  permissions: z.object(
+    Object.fromEntries(
+      CONTENT_ACTIONS.map((action) => [action, z.array(z.string()).optional()]),
+    ) as Record<(typeof CONTENT_ACTIONS)[number], z.ZodOptional<z.ZodArray<z.ZodString>>>,
+  ),
+  rationale: z.string().min(1),
+})
+
 const ProposalSchema = z.object({
   collections: z.array(CollectionSpecSchema).min(1).max(15),
+  taxonomies: z.array(TaxonomySpecSchema).max(8).optional(),
   pages: z
     .array(
       z.object({
@@ -88,6 +113,7 @@ const ProposalSchema = z.object({
 
 type FieldSpec = z.infer<typeof FieldSpecSchema>
 type CollectionSpec = z.infer<typeof CollectionSpecSchema>
+type TaxonomySpec = z.infer<typeof TaxonomySpecSchema>
 
 /**
  * Builds a real `FieldDefinition` through contract A's own constructors.
@@ -114,7 +140,12 @@ function compact<T extends object>(value: T): WithoutUndefined<T> {
   ) as WithoutUndefined<T>
 }
 
-function buildField(name: string, spec: FieldSpec): FieldDefinition {
+function buildField(
+  name: string,
+  spec: FieldSpec,
+  /** Every taxonomy this plan declares, plus any the site already has — what a `taxonomy` field is allowed to point at. */
+  knownTaxonomies: ReadonlySet<string>,
+): FieldDefinition {
   const base = {
     ...(spec.required === undefined ? {} : { required: spec.required }),
     ...(spec.localized === undefined ? {} : { localized: spec.localized }),
@@ -193,18 +224,24 @@ function buildField(name: string, spec: FieldSpec): FieldDefinition {
       return f.color(base)
     case 'blocks':
       return f.blocks({ ...base, ...(options as Parameters<typeof f.blocks>[0]) })
-    // A proposal never declares a taxonomy (`defineTaxonomy`) alongside its
-    // collections, so a "taxonomy" field would always name one that does not
-    // exist. `describeFieldKinds` already omits it from what the model is
-    // offered — this is the correction path for a model that proposes it
-    // anyway (hallucination, or a stale memory of an older prompt).
-    case 'taxonomy':
-      throw new CogentaError({
-        code: 'CONTENT_MODEL_PROPOSAL_INVALID',
-        message: `Field "${name}" uses kind "taxonomy", which this proposer does not support.`,
-        hint: 'A site plan cannot declare a taxonomy for this field to reference. Use "select" for a closed set of values, or "relation" if the terms are their own collection.',
-        details: { field: name },
-      })
+    // A taxonomy field is only meaningful if something declares the taxonomy
+    // it names. A plan may now declare them, so the check is no longer "this
+    // is unsupported" but "does this one exist" — the correction a model can
+    // actually act on.
+    case 'taxonomy': {
+      const of = (options as { of?: unknown }).of
+      if (typeof of !== 'string' || !knownTaxonomies.has(of)) {
+        throw new CogentaError({
+          code: 'CONTENT_MODEL_PROPOSAL_INVALID',
+          message: `Field "${name}" is a taxonomy field naming "${String(of)}", which this plan does not declare.`,
+          hint: `Declare it in "taxonomies", or point the field at one of: ${
+            knownTaxonomies.size === 0 ? '(none declared)' : [...knownTaxonomies].join(', ')
+          }.`,
+          details: { field: name, of: String(of) },
+        })
+      }
+      return f.taxonomy({ ...base, ...(options as { of: string; many?: boolean }) })
+    }
     default: {
       // `FIELD_KINDS` is a closed set and the Zod enum is built from it, so
       // this is only reachable if contract A grew a kind without this
@@ -248,11 +285,46 @@ function rejectUnsafePublicWrites(spec: CollectionSpec): void {
   })
 }
 
-function buildCollection(spec: CollectionSpec): CollectionDefinition {
+/**
+ * A real contract A taxonomy, through `defineTaxonomy` — never a parallel
+ * format, for the same reason collections go through `defineCollection`:
+ * whatever this rejects, the site would have rejected later and worse.
+ *
+ * `labels` are per-locale in contract A; a proposal names one string, which
+ * is filed under the site's default locale here rather than invented for
+ * every language the site might have.
+ */
+function buildTaxonomy(spec: TaxonomySpec, locale: string): TaxonomyDefinition {
+  const unsafe = FORBIDDEN_PUBLIC_ACTIONS.filter((action) =>
+    (spec.permissions[action] ?? []).includes('public'),
+  )
+  if (unsafe.length > 0) {
+    throw new CogentaError({
+      code: 'CONTENT_MODEL_PROPOSAL_PERMISSIONS_UNSAFE',
+      message: `Taxonomy "${spec.name}" grants the public role ${unsafe.join(', ')}, which would let any anonymous visitor write its terms.`,
+      hint: 'A proposal may never grant create, update or delete to the public role.',
+      details: { taxonomy: spec.name, actions: unsafe },
+    })
+  }
+  return defineTaxonomy({
+    name: spec.name,
+    labels: {
+      singular: { [locale]: spec.labels.singular },
+      plural: { [locale]: spec.labels.plural },
+    },
+    ...(spec.hierarchical === undefined ? {} : { hierarchical: spec.hierarchical }),
+    permissions: compact(spec.permissions),
+  })
+}
+
+function buildCollection(
+  spec: CollectionSpec,
+  knownTaxonomies: ReadonlySet<string>,
+): CollectionDefinition {
   rejectUnsafePublicWrites(spec)
   const fields: Record<string, FieldDefinition> = {}
   for (const [name, fieldSpec] of Object.entries(spec.fields)) {
-    fields[name] = buildField(name, fieldSpec)
+    fields[name] = buildField(name, fieldSpec, knownTaxonomies)
   }
   return defineCollection({
     name: spec.name,
@@ -279,12 +351,10 @@ function describeFieldKinds(): string {
     geo: 'a point, {lat,lng}',
     color: 'a hex colour',
     blocks: 'a block zone for page composition; options: allow ("*" or a list)',
+    taxonomy:
+      'a link to terms of a taxonomy you also declare in "taxonomies"; options: of (REQUIRED — the taxonomy name), many (defaults to true)',
   }
-  // "taxonomy" is deliberately withheld: a proposal never declares one with
-  // `defineTaxonomy`, so a field referencing it would always be dangling.
-  return FIELD_KINDS.filter((kind) => kind !== 'taxonomy')
-    .map((kind) => `- "${kind}": ${notes[kind] ?? 'no options'}`)
-    .join('\n')
+  return FIELD_KINDS.map((kind) => `- "${kind}": ${notes[kind] ?? 'no options'}`).join('\n')
 }
 
 /**
@@ -386,6 +456,8 @@ export interface ProposeContentModelOptions {
   readonly brief: SiteBrief
   /** Fiche 60 tasks 3-4 — steers the proposal towards addition, and filters what is proposed regardless (see `skippedExisting`). */
   readonly existingSite?: ExistingSiteSnapshot
+  /** Which locale a proposed taxonomy's labels are filed under — contract A indexes them by locale, and a proposal names one string. Defaults to the brief's first language, then `en`. */
+  readonly defaultLocale?: string
   readonly maxAttempts?: number
 }
 
@@ -428,6 +500,10 @@ export async function proposeContentModel(
   const existingNames = new Set(
     (options.existingSite?.collections ?? []).map((collection) => collection.name),
   )
+  const existingTaxonomyNames = new Set(
+    (options.existingSite?.taxonomies ?? []).map((taxonomy) => taxonomy.name),
+  )
+  const defaultLocale = options.defaultLocale ?? options.brief.languages[0] ?? 'en'
 
   const context = assembleContext({
     site: { name: 'a new site', locales: options.brief.languages },
@@ -506,9 +582,20 @@ export async function proposeContentModel(
       return false
     })
 
+    const taxonomySpecs = (parsed.data.taxonomies ?? []).filter(
+      (spec) => !existingTaxonomyNames.has(spec.name),
+    )
     let definitions: readonly CollectionDefinition[]
+    let taxonomyDefinitions: readonly TaxonomyDefinition[]
     try {
-      definitions = specs.map(buildCollection)
+      taxonomyDefinitions = taxonomySpecs.map((spec) => buildTaxonomy(spec, defaultLocale))
+      // Both what this plan declares and what the site already has: a field
+      // may legitimately point at a taxonomy that predates the plan.
+      const knownTaxonomies = new Set<string>([
+        ...existingTaxonomyNames,
+        ...taxonomyDefinitions.map((definition) => definition.name),
+      ])
+      definitions = specs.map((spec) => buildCollection(spec, knownTaxonomies))
       validateCollectionSet(definitions)
     } catch (error) {
       if (!isCogentaError(error)) throw error
@@ -521,6 +608,10 @@ export async function proposeContentModel(
       collections: definitions.map((definition, index) => ({
         definition,
         rationale: specs[index]?.rationale ?? '',
+      })),
+      taxonomies: taxonomyDefinitions.map((definition, index) => ({
+        definition,
+        rationale: taxonomySpecs[index]?.rationale ?? '',
       })),
     }
 

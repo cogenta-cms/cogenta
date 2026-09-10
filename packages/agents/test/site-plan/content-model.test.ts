@@ -72,21 +72,21 @@ describe('proposing a content model', () => {
     expect(result.pages.map((page) => page.slug)).toEqual(['contact'])
   })
 
-  it('offers the model exactly the field kinds contract A declares, minus taxonomy, which no proposal can ever satisfy', async () => {
+  // Taxonomy is offered now that a plan can declare one — withholding it made
+  // sense only while a `taxonomy` field would always have named nothing.
+  it('offers the model exactly the field kinds contract A declares', async () => {
     const { client, requests } = scriptedClient([proposalJson()])
 
     await proposeContentModel({ client, model: 'm', brief: brief() })
 
     const prompt = requests[0]?.messages.at(-1)?.content ?? ''
     for (const kind of FIELD_KINDS) {
-      if (kind === 'taxonomy') continue
       expect(prompt).toContain(`"${kind}"`)
     }
-    expect(prompt).not.toContain('"taxonomy"')
     expect(prompt).toContain('This list is closed')
   })
 
-  it('refuses a proposed "taxonomy" field, because a proposal never declares one with defineTaxonomy', async () => {
+  it('refuses a "taxonomy" field naming a taxonomy nothing declares', async () => {
     const { client } = scriptedClient([
       proposalJson({
         collections: [
@@ -457,5 +457,112 @@ describe('evolving an existing site (fiche 60 task 4)', () => {
     expect(siteMessage?.content).toContain('&lt;/data&gt;')
     expect(siteMessage?.content).toContain('&lt;constitution&gt;')
     expect(textOnlyContent(siteMessage?.content)?.match(/<\/data>/g)).toHaveLength(1)
+  })
+})
+
+/**
+ * Taxonomies were withheld for a real reason — a proposal could not declare
+ * one, so a `taxonomy` field would always have named nothing. Declaring them
+ * is what removes it, and the check becomes "does this one exist" rather than
+ * "this is unsupported".
+ */
+describe('proposing taxonomies', () => {
+  const withCategory = {
+    taxonomies: [
+      {
+        name: 'category',
+        labels: { singular: 'Catégorie', plural: 'Catégories' },
+        hierarchical: true,
+        permissions: { read: ['public'], create: ['editor'], delete: ['admin'] },
+        rationale: 'Dishes are grouped by course.',
+      },
+    ],
+  }
+
+  it('builds a real contract A taxonomy, with its labels under the site locale', async () => {
+    const { client } = scriptedClient([proposalJson(withCategory)])
+
+    const result = await proposeContentModel({ client, model: 'm', brief: brief() })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    const proposed = result.proposal.taxonomies ?? []
+    expect(proposed).toHaveLength(1)
+    expect(proposed[0]?.definition.name).toBe('category')
+    expect(proposed[0]?.definition.hierarchical).toBe(true)
+    // The brief is in French, so that is where the label is filed.
+    expect(proposed[0]?.definition.labels.singular.fr).toBe('Catégorie')
+  })
+
+  it('accepts a taxonomy field that names a taxonomy the same plan declares', async () => {
+    const { client } = scriptedClient([
+      proposalJson({
+        ...withCategory,
+        collections: [
+          {
+            name: 'dish',
+            labels: { singular: 'Dish', plural: 'Dishes' },
+            fields: {
+              title: { kind: 'text', required: true, options: {} },
+              course: { kind: 'taxonomy', options: { of: 'category' } },
+            },
+            permissions: { read: ['public'], create: ['editor'] },
+            rationale: 'x',
+          },
+        ],
+      }),
+    ])
+
+    const result = await proposeContentModel({ client, model: 'm', brief: brief() })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.proposal.collections[0]?.definition.fields.course?.kind).toBe('taxonomy')
+  })
+
+  it('sends back a correction when a taxonomy field names one nothing declares', async () => {
+    const dangling = proposalJson({
+      collections: [
+        {
+          name: 'dish',
+          labels: { singular: 'Dish', plural: 'Dishes' },
+          fields: {
+            title: { kind: 'text', required: true, options: {} },
+            course: { kind: 'taxonomy', options: { of: 'nowhere' } },
+          },
+          permissions: { read: ['public'], create: ['editor'] },
+          rationale: 'x',
+        },
+      ],
+    })
+    // Rejected, then corrected on the second attempt — the loop's whole point.
+    const { client, requests } = scriptedClient([dangling, proposalJson(withCategory)])
+
+    const result = await proposeContentModel({ client, model: 'm', brief: brief() })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.attempts).toBe(2)
+    const second = textOnlyContent(requests[1]?.messages.at(-1)?.content) ?? ''
+    expect(second).toContain('nowhere')
+  })
+
+  it('never redeclares a taxonomy the site already has', async () => {
+    const existing: ExistingSiteSnapshot = {
+      ...EMPTY_EXISTING_SITE,
+      taxonomies: [{ name: 'category', termCount: 4 }],
+    }
+    const { client } = scriptedClient([proposalJson(withCategory)])
+
+    const result = await proposeContentModel({
+      client,
+      model: 'm',
+      brief: brief(),
+      existingSite: existing,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.proposal.taxonomies ?? []).toEqual([])
   })
 })

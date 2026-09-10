@@ -1,6 +1,10 @@
 import { CogentaError } from '@cogenta/core'
 import type { SkinTokens } from '@cogenta/render'
-import { type CollectionDefinition, normalisePermissionRule } from '@cogenta/schema'
+import {
+  type CollectionDefinition,
+  normalisePermissionRule,
+  type TaxonomyDefinition,
+} from '@cogenta/schema'
 import type { DemoEntry, ProposedPage, SitePlanDraft } from './types.js'
 
 /**
@@ -24,6 +28,7 @@ import type { DemoEntry, ProposedPage, SitePlanDraft } from './types.js'
 export const PLAN_SECTIONS = [
   'brief',
   'contentModel',
+  'taxonomies',
   'pages',
   'structuralGaps',
   'skin',
@@ -32,6 +37,12 @@ export const PLAN_SECTIONS = [
 export type PlanSectionId = (typeof PLAN_SECTIONS)[number]
 
 export type PlanItemDecision = 'accepted' | 'rejected'
+
+/** A taxonomy's labels are indexed by locale; a reviewer wants a word, not a map. */
+function labelOf(labels: Readonly<Record<string, string>> | undefined): string | undefined {
+  if (labels === undefined) return undefined
+  return Object.values(labels)[0]
+}
 
 export interface PlanItem {
   /** Stable within a draft: `section:key`. */
@@ -60,6 +71,15 @@ export interface ApprovedPlan {
   /** Only the constraints the human confirmed. */
   readonly constraints: readonly { readonly quote: string; readonly source: string }[]
   readonly collections: readonly CollectionDefinition[]
+  /**
+   * Taxonomies the human accepted.
+   *
+   * A collection field that names one is only as accepted as the taxonomy
+   * itself: accepting a collection whose `taxonomy` field points at a
+   * refused taxonomy would create a dangling reference, which is why the
+   * caller applies these before the collections that use them.
+   */
+  readonly taxonomies: readonly TaxonomyDefinition[]
   readonly pages: readonly ProposedPage[]
   readonly skinId?: string
   readonly skin?: SkinTokens
@@ -128,6 +148,23 @@ export function summarisePlan(draft: SitePlanDraft): readonly PlanSection[] {
             ? ''
             : ` Routed at ${collection.definition.routing.pattern}.`
         }`,
+      })),
+    },
+    {
+      id: 'taxonomies',
+      title: 'Taxonomies',
+      description:
+        'How content is classified — categories, tags. Each is judged on its own, and a collection field that names one is only as accepted as the taxonomy itself.',
+      mode: 'each',
+      items: (draft.contentModel.taxonomies ?? []).map((taxonomy) => ({
+        id: `taxonomies:${taxonomy.definition.name}`,
+        section: 'taxonomies' as const,
+        title: `${labelOf(taxonomy.definition.labels.plural) ?? taxonomy.definition.name} (${taxonomy.definition.name})`,
+        detail: `${taxonomy.rationale} ${
+          taxonomy.definition.hierarchical === true
+            ? 'Terms can be nested.'
+            : 'Terms are a flat list.'
+        } Permissions: ${describePermissions(taxonomy.definition.permissions)}.`,
       })),
     },
     {
@@ -284,6 +321,9 @@ export function resolveApprovedPlan(
     collections: draft.contentModel.collections
       .filter((collection) => accepted(`contentModel:${collection.definition.name}`))
       .map((collection) => collection.definition),
+    taxonomies: (draft.contentModel.taxonomies ?? [])
+      .filter((taxonomy) => accepted(`taxonomies:${taxonomy.definition.name}`))
+      .map((taxonomy) => taxonomy.definition),
     pages: [...draft.pages.filter((page) => accepted(`pages:${page.slug}`)), ...acceptedGapPages],
     ...(chosenSkin === undefined ? {} : { skinId: chosenSkin.id, skin: chosenSkin.tokens }),
     demoContent: draft.demoContent.filter((_entry, index) => accepted(`demoContent:${index}`)),

@@ -189,7 +189,7 @@ export interface SitePlanApplierOptions {
    * `cogenta.schema.ts`, and writing `.mjs` on a project that has a `.ts`
    * would create the tables and then write a file nothing reads.
    */
-  readonly schemaPath: string
+  readonly schemaPath?: string
   /** Named in the provenance of anything this writes. */
   readonly model?: string
 }
@@ -242,7 +242,8 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         input.decisions,
       )
 
-      assertSerialisableSchema(options.collections, options.schemaPath)
+      const schemaPath = options.schemaPath
+      if (schemaPath !== undefined) assertSerialisableSchema(options.collections, schemaPath)
 
       const taken = new Set(options.collections.map((collection) => collection.name))
       const added: CollectionDefinition[] = []
@@ -256,29 +257,41 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
           })
           continue
         }
+        if (schemaPath === undefined) {
+          // ADR-0010: the schema is read-only outside development. Named
+          // rather than swallowed — and the rest of the plan still applies,
+          // because pages and entries are rows, not schema.
+          skipped.push({
+            name: collection.name,
+            reason:
+              'adding a collection rewrites the schema, which only `cogenta dev` may do (ADR-0010) — everything in this plan that is content was applied anyway',
+          })
+          continue
+        }
         taken.add(collection.name)
         added.push(collection)
       }
 
       const followUp: string[] = []
 
-      if (added.length > 0) {
+      if (added.length > 0 && schemaPath !== undefined) {
         const all = [...options.collections, ...added]
-        await writeFile(
-          options.schemaPath,
-          `export default ${JSON.stringify(all, null, 2)}\n`,
-          'utf8',
-        )
+        await writeFile(schemaPath, `export default ${JSON.stringify(all, null, 2)}\n`, 'utf8')
         await createSchemaTables(options.db, added)
         followUp.push(
-          `${options.schemaPath} was rewritten — commit it (ADR-0010: the schema lives in git), then restart: the running process loaded its collections at start-up and does not see the new ones yet.`,
+          `${schemaPath} was rewritten — commit it (ADR-0010: the schema lives in git), then restart: the running process loaded its collections at start-up and does not see the new ones yet.`,
         )
       }
 
       let entriesSeeded = 0
-      if (added.length > 0 && approved.demoContent.length > 0) {
+      if (approved.demoContent.length > 0) {
+        // Every collection this site has, not only the ones this plan just
+        // created. Seeding into the newly-added ones alone meant demo content
+        // aimed at a collection the site already had was dropped without a
+        // word — and under `cogenta serve`, where nothing can be added, it
+        // meant no entry was ever seeded at all.
         const stores = new Map(
-          added.map((collection) => [
+          [...options.collections, ...added].map((collection) => [
             collection.name,
             createContentStore({
               db: options.db,
@@ -390,13 +403,32 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
 
       let skinApplied = false
       if (approved.skin !== undefined) {
-        await writeFile(
-          join(options.projectRoot, 'theme.tokens.json'),
-          `${JSON.stringify(approved.skin, null, 2)}\n`,
-          'utf8',
-        )
+        if (schemaPath === undefined) {
+          // Outside development this instance may not write project files —
+          // the same rule `theme-wiring.ts` applies to `theme.tokens.json`
+          // through its own dev-only `fileExporter`. The palette still
+          // applies, through the database overlay the appearance screen
+          // already writes: live on the next page view, reversible from that
+          // same screen, and no restart to ask for.
+          await ensureThemeTable(options.db)
+          await createThemeStore({ db: options.db }).set({
+            // A whole validated contract D token set, stored as the overlay
+            // — the same shape `PUT /api/theme/overrides` accepts from the
+            // appearance screen, which is why the cast is a widening rather
+            // than a claim about a different shape.
+            tokenOverrides: approved.skin as unknown as Record<string, unknown>,
+            updatedBy: input.actorId,
+          })
+          followUp.push('The new palette is live — no restart needed.')
+        } else {
+          await writeFile(
+            join(options.projectRoot, 'theme.tokens.json'),
+            `${JSON.stringify(approved.skin, null, 2)}\n`,
+            'utf8',
+          )
+          followUp.push('Restart `cogenta serve` to serve the new design.')
+        }
         skinApplied = true
-        followUp.push('Restart `cogenta serve` to serve the new design.')
       }
 
       options.logger.info('site plan applied', {
@@ -481,9 +513,16 @@ export async function createSitePlanning(
     })
   }
 
-  // No applier outside development, and none when the schema file cannot be
-  // found — writing a guessed filename would create tables the site never
-  // loads.
+  // ADR-0010 makes the *schema* read-only outside development. It says
+  // nothing about rows — and refusing to create a page or seed an entry under
+  // `cogenta serve` was a strictness the decision never asked for, with a
+  // real cost: an ordinary operator never runs `cogenta dev`, so applying a
+  // plan did nothing for them at all.
+  //
+  // So the applier now exists whenever this instance may write at all, and
+  // `schemaPath` — the permission to add collections — is what stays
+  // development-only. A plan whose collections cannot be added says so,
+  // collection by collection, and still creates everything that is only rows.
   const schemaPath =
     options.development === true && options.readOnly !== true
       ? await findSchemaFile(options.projectRoot)
@@ -502,7 +541,7 @@ export async function createSitePlanning(
             config: options.config,
           }),
         }),
-    ...(schemaPath === undefined
+    ...(options.readOnly === true
       ? {}
       : {
           applier: createSitePlanApplier({
@@ -511,7 +550,7 @@ export async function createSitePlanning(
             collections: options.collections,
             defaultLocale: options.config.site.defaultLocale,
             logger: options.logger,
-            schemaPath,
+            ...(schemaPath === undefined ? {} : { schemaPath }),
             ...(llm === undefined ? {} : { model: llm.model }),
           }),
         }),

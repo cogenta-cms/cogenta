@@ -343,7 +343,11 @@ describe('a site plan waiting on a live site', () => {
     await server.stop()
   }, 60_000)
 
-  it('refuses to apply on `cogenta serve`, because ADR-0010 keeps the schema read-only in production', async () => {
+  // ADR-0010 makes the *schema* read-only outside development. It says
+  // nothing about rows — and refusing everything under `cogenta serve` was a
+  // strictness the decision never asked for, with a real cost: an ordinary
+  // operator never runs `cogenta dev`, so applying a plan did nothing at all.
+  it('refuses only the collections on `cogenta serve`, and still applies the content', async () => {
     const root = await project()
     // No `development: true` — this is `cogenta serve`, the production shape.
     const server = await startServer(root, { registry: activeServers })
@@ -368,19 +372,34 @@ describe('a site plan waiting on a live site', () => {
       headers: auth(token),
     })
 
-    expect(response.status).toBe(403)
-    const error = (await response.json()) as { error: { code: string; hint?: string } }
-    expect(error.error.code).toBe('CONTENT_READ_ONLY')
-    expect(error.error.hint).toContain('cogenta dev')
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      data: {
+        report: {
+          added: string[]
+          skipped: { name: string; reason: string }[]
+          pagesCreated: number
+          skinApplied: boolean
+          followUp: string[]
+        }
+      }
+    }
+    const report = body.data.report
 
-    // Reviewing is still possible, and the decisions really were kept —
-    // refusing to apply is not refusing to work.
-    const detail = (await (
-      await fetch(`${server.base}/api/site-plans/draft-1`, { headers: auth(token) })
-    ).json()) as { data: { decisions: Record<string, string> } }
-    expect(detail.data.decisions['contentModel:dish']).toBe('accepted')
+    // The collection is refused, and says why rather than failing silently.
+    expect(report.added).toEqual([])
+    expect(report.skipped.map((entry) => entry.name)).toContain('dish')
+    expect(report.skipped[0]?.reason).toContain('cogenta dev')
 
-    // And nothing was written.
+    // The page the human approved is a real row, because a row is not schema.
+    expect(report.pagesCreated).toBe(1)
+
+    // And the palette applied through the database overlay, live, rather than
+    // by writing a project file this instance may not touch.
+    expect(report.skinApplied).toBe(true)
+    expect(report.followUp.join(' ')).toContain('no restart needed')
+
+    // The schema file really was left alone.
     const schema = await readFile(join(root, 'cogenta.schema.mjs'), 'utf8')
     expect(schema).not.toContain('"name": "dish"')
     await server.stop()

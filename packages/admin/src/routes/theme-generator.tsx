@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
+import { getSitePlan } from '../api/site-plan-client.js'
 import {
   type AvailableTheme,
   getTheme,
@@ -148,6 +149,52 @@ export function ThemeGeneratorRoute(): JSX.Element {
   const [turns, setTurns] = useState<readonly Turn[]>([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+
+  /**
+   * Arriving from a site plan (`?plan=<id>`), the first message starts written.
+   *
+   * The two halves of "the AI builds my site" were watertight: `/create-site`
+   * analysed a brief — what the activity is, who it is for, how it should
+   * sound — and the theme workshop then asked the same operator to describe
+   * their site again, from scratch, in a blank box. This carries the analysed
+   * brief across as an editable starting point.
+   *
+   * The uploaded documents themselves do not come with it: a plan stores the
+   * brief it derived, not the files it derived it from. A reference
+   * screenshot is therefore attached here, in the drop zone, which is also
+   * where it belongs — the plan never needed it.
+   */
+  const planId = searchParams.get('plan')
+  const [planBrief, setPlanBrief] = useState<string | null>(null)
+  const planApplied = useRef(false)
+
+  useEffect(() => {
+    if (token === null || !isAdmin || planId === null || planApplied.current) return
+    planApplied.current = true
+    void (async () => {
+      try {
+        const plan = await getSitePlan(token, planId)
+        const brief = plan.draft.brief
+        const description = [
+          brief.activity,
+          brief.audience === undefined
+            ? ''
+            : t('themeGenerator.fromPlanAudience', { audience: brief.audience }),
+          brief.tone === undefined ? '' : t('themeGenerator.fromPlanTone', { tone: brief.tone }),
+          brief.summary,
+        ]
+          .map((line) => line.trim())
+          .filter((line) => line !== '')
+          .join('\n')
+        if (description === '') return
+        setDraft((current) => (current === '' ? description : current))
+        setPlanBrief(description)
+      } catch {
+        // A plan that no longer exists is not a reason to refuse the
+        // workshop: the operator can still describe a theme themselves.
+      }
+    })()
+  }, [token, isAdmin, planId, t])
 
   /** Everything the last settled turn produced, and which of it the preview is showing. */
   const [candidates, setCandidates] = useState<readonly ThemeGenerateCandidate[]>([])
@@ -392,7 +439,7 @@ export function ThemeGeneratorRoute(): JSX.Element {
         // A custom-layout candidate has no tokens to overlay — activating it
         // means promoting its sandbox into themes/ (the same deploy pipeline
         // the "Gérer les thèmes locaux" screen's own "Déployer" button uses)
-        // and then pointing the site at it, same as any other theme switch.
+        // and then pointing the site at it, exactly like every other switch.
         const chosenName = themeName ?? candidate.sandboxId
         const check = await checkSandboxDeployment(token, candidate.sandboxId, chosenName)
         if (!check.ok) {
@@ -507,6 +554,12 @@ export function ThemeGeneratorRoute(): JSX.Element {
                 : t('themeGenerator.modeGenerateNote')}
             </p>
           </Notice>
+
+          {planBrief !== null && !started && (
+            <Notice tone="info" live="off">
+              <p>{t('themeGenerator.fromPlanNote')}</p>
+            </Notice>
+          )}
 
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
             <Card aria-labelledby="theme-generator-form-heading" className="flex flex-col">

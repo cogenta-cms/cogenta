@@ -4411,6 +4411,11 @@ export function installMockFetch(
           draft: {
             brief: {
               activity: 'A neighbourhood restaurant.',
+              // Sent by the real server all along; present here since the
+              // theme workshop turns a reviewed brief into its opening
+              // description.
+              audience: 'Local families.',
+              tone: 'Warm and unfussy.',
               summary: 'A small showcase site.',
               languages: ['fr'],
               warnings: [],

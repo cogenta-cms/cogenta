@@ -43,6 +43,15 @@ export interface SitePlanDetail extends SitePlanSummary {
     readonly brief: {
       readonly activity: string
       readonly summary: string
+      /**
+       * Who the site is for and how it should sound. Sent by the server as
+       * part of the same brief all along; typed here only once something
+       * needed them — the theme generator, which turns a plan's brief into a
+       * starting description so an operator does not retype what they have
+       * already had analysed.
+       */
+      readonly audience?: string
+      readonly tone?: string
       readonly languages: readonly string[]
       readonly warnings: readonly string[]
     }

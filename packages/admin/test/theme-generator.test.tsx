@@ -913,6 +913,35 @@ describe('the theme generator workshop', () => {
     })
   })
 
+  // The two halves of "the AI builds my site" used to be watertight: a brief
+  // was analysed on one screen, and the other asked for it again in an empty
+  // box.
+  it('opens with the brief already written when it arrives from a site plan', async () => {
+    signedIn(['admin'], { aiAvailable: true })
+    await goToWorkshop('/theme-generator?plan=draft-1')
+    await waitForAiReady()
+
+    const description = (await screen.findByLabelText('Description')) as HTMLTextAreaElement
+    await waitFor(
+      () => {
+        expect(description.value).toContain('A neighbourhood restaurant.')
+      },
+      { timeout: 3000 },
+    )
+    expect(description.value).toContain('Local families.')
+    expect(description.value).toContain('Warm and unfussy.')
+    // And says where it came from, so nobody wonders who typed it.
+    expect(screen.getByText(/reprise du plan de site/)).toBeDefined()
+  })
+
+  it('still opens empty when no plan is named', async () => {
+    signedIn(['admin'], { aiAvailable: true })
+    await goToWorkshop()
+    await waitForAiReady()
+
+    expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe('')
+  })
+
   it('lets an operator switch between "new theme" and "customize current" from inside the workshop', async () => {
     signedIn(['admin'], { aiAvailable: true })
     await goToWorkshop()

@@ -206,4 +206,34 @@ describe('applying a fully reviewed plan', () => {
     // A page that could not be created is named, never dropped in silence.
     expect(screen.getByText(/Mentions légales/)).toBeDefined()
   })
+
+  // A plan settles what the site is; the theme workshop settles what it looks
+  // like. They were watertight, so an operator who had just had their brief
+  // analysed was asked to describe their site again in an empty box.
+  it('offers to carry the reviewed brief into the theme workshop', async () => {
+    signIn(['admin'])
+
+    render(<App />)
+    await goToSitePlan()
+    await openTheDraft()
+
+    for (const button of screen.getAllByRole('button', { name: 'Garder' })) {
+      fireEvent.click(button)
+    }
+    fireEvent.click(screen.getByRole('radio', { name: 'Clean and clinical' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: "Appliquer ce que j'ai accepté" })).toHaveProperty(
+        'disabled',
+        false,
+      )
+    })
+    fireEvent.click(screen.getByRole('button', { name: "Appliquer ce que j'ai accepté" }))
+
+    const link = await screen.findByRole('link', {
+      name: 'Générer le thème à partir de ce plan',
+    })
+    // Carrying the plan's id is what lets the workshop start from the brief
+    // instead of from nothing.
+    expect(link.getAttribute('href')).toContain('/theme-generator?plan=')
+  })
 })

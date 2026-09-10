@@ -1,5 +1,6 @@
 import { type ChangeEvent, type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   type AppliedPlanReport,
@@ -18,6 +19,7 @@ import {
 import { useAuth } from '../auth/auth-context.js'
 import {
   Button,
+  buttonVariants,
   Card,
   CardBody,
   CardDescription,
@@ -321,6 +323,24 @@ export function SitePlanRoute(): JSX.Element {
           {report.followUp.map((line) => (
             <p key={line}>{line}</p>
           ))}
+          {/*
+            The other half of "the AI builds my site". A plan settles what the
+            site *is* — its collections, its pages, its palette — and stops
+            there; the theme workshop settles what it *looks like*. They were
+            watertight, so an operator who had just had their brief analysed
+            was asked to describe their site again in an empty box. This
+            carries the brief across.
+          */}
+          {selected !== null && (
+            <p>
+              <Link
+                className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                to={`/theme-generator?plan=${encodeURIComponent(selected.id)}`}
+              >
+                {t('sitePlan.generateTheme')}
+              </Link>
+            </p>
+          )}
         </Notice>
       )}
 

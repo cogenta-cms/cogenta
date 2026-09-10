@@ -83,8 +83,13 @@ export function createProgressJobStore<TResult>(options?: {
       records.set(id, record)
 
       const reporter: ProgressReporter = {
-        report(message) {
-          record.events.push({ at: now(), message })
+        report(message, detail) {
+          record.events.push({
+            at: now(),
+            message,
+            ...(detail === undefined ? {} : { kind: detail.kind }),
+            ...(detail?.tool === undefined ? {} : { tool: detail.tool }),
+          })
         },
       }
 

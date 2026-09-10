@@ -889,13 +889,34 @@ async function validateSandboxModuleWrite(
   }
 }
 
+/**
+ * Things a theme file can contain that are *valid* and still wrong — a dead
+ * link, a title typed in rather than fetched.
+ *
+ * Reported, never refused. Each pattern has a legitimate use somewhere (a
+ * `#main` fragment target, a genuinely static legal notice), so rejecting
+ * would block real work to prevent a likely mistake. A warning handed back in
+ * the write receipt reaches the one reader who can act on it — the agent
+ * writing the file, which sees it before its next call.
+ */
+function contentSmellsIn(relativePath: string, content: string): readonly string[] {
+  if (!/\.(?:js|mjs|ts)$/u.test(relativePath)) return []
+  const warnings: string[] = []
+  if (/href\s*[:=]\s*['"`]#['"`]/u.test(content)) {
+    warnings.push(
+      'This file contains href="#". A link must go where the content says it goes — ctx.link({collection, id}) for an entry, or the headerNav/footerNav you were handed. A "#" ships a dead link to a real visitor.',
+    )
+  }
+  return warnings
+}
+
 export async function writeSandboxFile(
   projectRoot: string,
   id: string,
   relativePath: string,
   /** A string for ordinary text-file writes (the agent tool, task 7); a `Buffer` for task 8's zip import, which must not assume every entry is UTF-8 text. */
   content: string | Buffer,
-): Promise<{ readonly path: string }> {
+): Promise<{ readonly path: string; readonly warnings?: readonly string[] }> {
   const dir = sandboxDirectory(projectRoot, id)
   const target = await resolveRealPathWithinSandbox(dir, relativePath)
   if (target === resolveWithinSandbox(dir, PREVIEW_ADAPTER_FILE)) {
@@ -920,7 +941,71 @@ export async function writeSandboxFile(
     else await writeFile(target, previousContent)
     throw error
   }
-  return { path: relativePath }
+  const warnings =
+    typeof content === 'string' ? contentSmellsIn(relativePath, content) : ([] as const)
+  return { path: relativePath, ...(warnings.length === 0 ? {} : { warnings }) }
+}
+
+/**
+ * Every file in a sandbox, as sandbox-relative paths, sorted, recursing into
+ * subdirectories.
+ *
+ * The counterpart `writeSandboxFile` never had: a theme could be written and
+ * rendered but never read back, which is exactly what a *second* request
+ * ("make it darker") needs before it can change anything. The preview
+ * adapter is filtered out for the same reason `writeSandboxFile` refuses to
+ * overwrite it — it is regenerated on every preview and is not part of the
+ * theme.
+ *
+ * An unknown sandbox lists as empty rather than throwing: "there is nothing
+ * here" is the honest answer to the question asked, and the caller that
+ * cares about existence has `listSandboxIds`.
+ */
+export async function listSandboxFiles(
+  projectRoot: string,
+  id: string,
+): Promise<readonly string[]> {
+  const dir = sandboxDirectory(projectRoot, id)
+
+  async function walk(current: string, prefix: string): Promise<string[]> {
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => [])
+    const found: string[] = []
+    for (const entry of entries) {
+      const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
+      if (entry.isDirectory()) {
+        found.push(...(await walk(join(current, entry.name), relative)))
+        continue
+      }
+      if (relative === PREVIEW_ADAPTER_FILE) continue
+      found.push(relative)
+    }
+    return found
+  }
+
+  return (await walk(dir, '')).sort((a, b) => a.localeCompare(b))
+}
+
+/**
+ * One file's current contents, through the same path-escape guard every other
+ * sandbox file operation uses — a read is as capable of `../` as a write is.
+ */
+export async function readSandboxFile(
+  projectRoot: string,
+  id: string,
+  relativePath: string,
+): Promise<string> {
+  const dir = sandboxDirectory(projectRoot, id)
+  const target = await resolveRealPathWithinSandbox(dir, relativePath)
+  try {
+    return await readFile(target, 'utf8')
+  } catch {
+    throw new CogentaError({
+      code: 'THEME_SANDBOX_FILE_NOT_FOUND',
+      message: `"${relativePath}" does not exist in this theme sandbox.`,
+      hint: 'List the sandbox first — a theme file can be named anything, and this one is not there.',
+      details: { relativePath },
+    })
+  }
 }
 
 /** `revert`'s counterpart — deletes one file previously written by `writeSandboxFile`. A file that is already gone is not an error (`force: true`): reverting twice, or reverting after a human already deleted it by hand, both succeed. */

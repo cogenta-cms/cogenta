@@ -103,11 +103,29 @@ export type {
 } from './theme-creator/generate-theme-candidates.js'
 export { generateThemeCandidates } from './theme-creator/generate-theme-candidates.js'
 export type {
+  PreviewSandboxInput,
+  PreviewSandboxOutput,
+  PreviewSandboxToolOptions,
+} from './theme-creator/preview-sandbox-tool.js'
+export { createPreviewSandboxTool } from './theme-creator/preview-sandbox-tool.js'
+export type {
   ProposeThemeInput,
   ProposeThemeOutput,
   ProposeThemeToolOptions,
 } from './theme-creator/propose-theme-tool.js'
 export { createProposeThemeTool } from './theme-creator/propose-theme-tool.js'
+export type {
+  ListSandboxFilesInput,
+  ListSandboxFilesOutput,
+  ReadSandboxFileInput,
+  ReadSandboxFileOutput,
+  ReadSandboxToolsOptions,
+} from './theme-creator/read-sandbox-tool.js'
+export {
+  createListSandboxFilesTool,
+  createReadSandboxFileTool,
+} from './theme-creator/read-sandbox-tool.js'
+export { COGENTA_THEME_SPECIFICATION } from './theme-creator/theme-spec.js'
 export type {
   WriteSandboxFileInput,
   WriteSandboxFileOutput,

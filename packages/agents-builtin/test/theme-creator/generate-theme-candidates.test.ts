@@ -71,7 +71,7 @@ describe('generateThemeCandidates', () => {
     expect(mintSandboxId).not.toHaveBeenCalled()
   })
 
-  it('generates a sandbox candidate plus a tokens fallback when a custom layout is needed', async () => {
+  it('answers a custom-layout request with the custom layout alone', async () => {
     classifyThemeLayoutNeed.mockResolvedValue({
       ok: true,
       needsCustomLayout: true,
@@ -106,9 +106,12 @@ describe('generateThemeCandidates', () => {
       needsCustomLayout: true,
       reason: 'different hero and nav structure',
     })
+    // One answer, not an answer plus alternatives nobody asked for: a live
+    // run returned the real custom layout buried under three recolours of an
+    // installed blog theme, and the tokens path is now a rescue only.
     const kinds = result.candidates.map((c) => c.kind)
-    expect(kinds).toContain('sandbox')
-    expect(kinds).toContain('tokens')
+    expect(kinds).toEqual(['sandbox'])
+    expect(proposeThemeCandidates).not.toHaveBeenCalled()
     const sandboxCandidate = result.candidates.find((c) => c.kind === 'sandbox')
     expect(sandboxCandidate).toMatchObject({
       sandboxId: 'ai-theme-fixed',
@@ -116,7 +119,7 @@ describe('generateThemeCandidates', () => {
     })
   })
 
-  it('still returns the sandbox candidate when the tokens fallback fails', async () => {
+  it('does not reach for the tokens path at all once a custom layout worked', async () => {
     classifyThemeLayoutNeed.mockResolvedValue({
       ok: true,
       needsCustomLayout: true,
@@ -128,6 +131,7 @@ describe('generateThemeCandidates', () => {
       sandboxId: 'ai-theme-fixed',
       filesWritten: ['theme.config.mjs'],
       rationale: 'Done.',
+      summary: 'Done.',
     })
     proposeThemeCandidates.mockResolvedValue({ ok: false, reason: 'model refused' })
 
@@ -137,7 +141,7 @@ describe('generateThemeCandidates', () => {
     if (!result.ok) return
     expect(result.candidates).toHaveLength(1)
     expect(result.candidates[0]?.kind).toBe('sandbox')
-    expect(result.warnings.some((w) => w.includes('model refused'))).toBe(true)
+    expect(proposeThemeCandidates).not.toHaveBeenCalled()
   })
 
   it('fails only when neither path produced anything', async () => {
@@ -172,6 +176,7 @@ describe('generateThemeCandidates', () => {
       sandboxId: 'ai-theme-fixed',
       filesWritten: ['theme.config.mjs', 'theme.render.mjs', 'style.css'],
       rationale: 'Matched the reference layout.',
+      summary: 'Matched the reference layout.',
     })
     proposeThemeCandidates.mockResolvedValue({ ok: true, candidates: [], warnings: [] })
 
@@ -186,6 +191,69 @@ describe('generateThemeCandidates', () => {
     expect(result.layoutDecision.needsCustomLayout).toBe(true)
     expect(generateSandboxTheme).toHaveBeenCalledTimes(1)
     expect(result.candidates.some((c) => c.kind === 'sandbox')).toBe(true)
+  })
+
+  it('produces exactly one design by default, and as many as the brief asked for', async () => {
+    classifyThemeLayoutNeed.mockResolvedValue({
+      ok: true,
+      needsCustomLayout: true,
+      reason: 'x',
+      requestedVariants: 1,
+      processed: { documentData: [], imageParts: [], warnings: [], contributedFilenames: [] },
+    })
+    generateSandboxTheme.mockResolvedValue({
+      ok: true,
+      sandboxId: 'ai-theme-fixed',
+      filesWritten: ['theme.render.mjs'],
+      rationale: 'Done.',
+      summary: 'Done.',
+    })
+
+    const single = await generateThemeCandidates(baseInput())
+    expect(single.ok).toBe(true)
+    if (!single.ok) return
+    expect(single.candidates).toHaveLength(1)
+    expect(generateSandboxTheme).toHaveBeenCalledTimes(1)
+
+    generateSandboxTheme.mockClear()
+    classifyThemeLayoutNeed.mockResolvedValue({
+      ok: true,
+      needsCustomLayout: true,
+      reason: 'x',
+      requestedVariants: 3,
+      processed: { documentData: [], imageParts: [], warnings: [], contributedFilenames: [] },
+    })
+
+    const several = await generateThemeCandidates(
+      baseInput({ description: 'Propose-moi trois designs' }),
+    )
+    expect(several.ok).toBe(true)
+    if (!several.ok) return
+    expect(generateSandboxTheme).toHaveBeenCalledTimes(3)
+    expect(several.candidates).toHaveLength(3)
+  })
+
+  it('still produces one design when the classifier omits a count entirely', async () => {
+    // A loop bound read straight from an optional field is how a feature
+    // ends up silently answering with nothing.
+    classifyThemeLayoutNeed.mockResolvedValue({
+      ok: true,
+      needsCustomLayout: true,
+      reason: 'x',
+      processed: { documentData: [], imageParts: [], warnings: [], contributedFilenames: [] },
+    })
+    generateSandboxTheme.mockResolvedValue({
+      ok: true,
+      sandboxId: 'ai-theme-fixed',
+      filesWritten: ['theme.render.mjs'],
+      rationale: 'Done.',
+      summary: 'Done.',
+    })
+
+    const result = await generateThemeCandidates(baseInput())
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.candidates).toHaveLength(1)
   })
 
   it('propagates a classifier failure without calling either generation path', async () => {

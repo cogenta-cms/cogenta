@@ -55,6 +55,17 @@ export interface SkinCandidate {
   readonly id: string
   readonly label: string
   readonly rationale: string
+  /**
+   * One short sentence about this candidate, safe to put on a card.
+   *
+   * `rationale` is whatever the agent wrote, and a real run has returned
+   * several thousand words in it — which is worth reading in the
+   * conversation, and unreadable in a fixed-height panel. A caller shows
+   * `summary` and keeps `rationale` behind a disclosure. Optional here
+   * because a `tokens` candidate is not guaranteed to carry one; falling back
+   * to `rationale` is the caller's job.
+   */
+  readonly summary?: string
   readonly tokens: Record<string, unknown>
   /** Which installed theme *package* this candidate targets — absent means the currently active theme. */
   readonly themeName?: string
@@ -87,6 +98,8 @@ export interface SandboxThemeCandidate {
   readonly id: string
   readonly label: string
   readonly rationale: string
+  /** Short and guaranteed on this shape — see `SkinCandidate.summary` for why it exists at all. */
+  readonly summary?: string
   readonly sandboxId: string
   readonly filesWritten: readonly string[]
 }
@@ -197,6 +210,14 @@ export function generateSkinCandidates(
 export interface ThemeGenerateProgressEvent {
   readonly at: number
   readonly message: string
+  /**
+   * What the line is, decided by the runtime that produced it rather than
+   * by reading its wording here. Optional because a job started before
+   * structured events existed carries none — the log falls back to
+   * classifying the message itself (`classifyActivityMessage`).
+   */
+  readonly kind?: 'thinking' | 'tool-call' | 'tool-ok' | 'tool-failed' | 'stage' | 'warning'
+  readonly tool?: string
 }
 
 /**
@@ -224,6 +245,61 @@ export function startThemeGenerateJob(
   },
 ): Promise<{ readonly jobId: string }> {
   return request<{ readonly jobId: string }>('/api/theme/generate/jobs', {
+    method: 'POST',
+    headers: { ...authHeader(token), 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+/**
+ * One already-exchanged turn of the theme conversation, as the refinement
+ * route needs to be told about it. `message` is what was said in human
+ * terms — the operator's own words for a `user` turn, the agent's own
+ * `summary`/`rationale` for an `agent` one. Never a tool trace: the run log
+ * belongs to the screen, not to the next prompt.
+ */
+export interface ThemeConversationTurn {
+  readonly role: 'user' | 'agent'
+  readonly message: string
+}
+
+/**
+ * The second half of the workshop conversation: "make it darker", "put the
+ * grid on two columns" — a change to the theme the agent has *already*
+ * written into a sandbox, rather than a fresh generation from scratch.
+ *
+ * Watchable exactly like `startThemeGenerateJob`: it answers with a job id
+ * polled through the same `getThemeGenerateJob` below, reports the same
+ * progress events, and settles into the same `result.candidates` — which is
+ * why the screen has one polling loop rather than two.
+ *
+ * `POST /api/theme/refine/jobs` deliberately answers with a job the
+ * *generate* endpoint polls: one job store, one polling loop, and a
+ * conversation that does not care which kind of turn it is waiting on.
+ */
+export function startThemeRefineJob(
+  token: string,
+  input: {
+    /** The sandbox the agent wrote on the turn being refined — what it re-reads before changing anything. Present for a custom-layout candidate. */
+    readonly sandboxId?: string
+    /**
+     * The token candidate being adjusted, for the other shape — its current
+     * values become the starting point. Without them the server would
+     * re-derive a palette from the brief, which is what made every follow-up
+     * come back as a different theme instead of the same one, changed.
+     */
+    readonly baseline?: {
+      readonly themeName?: string
+      readonly tokens: Record<string, unknown>
+    }
+    /** The operator's follow-up, in their own words. */
+    readonly message: string
+    readonly attachments?: readonly GenerateThemeAttachment[]
+    /** Every earlier turn, oldest first, so the agent sees the conversation and not just the last sentence. */
+    readonly previousTurns?: readonly ThemeConversationTurn[]
+  },
+): Promise<{ readonly jobId: string }> {
+  return request<{ readonly jobId: string }>('/api/theme/refine/jobs', {
     method: 'POST',
     headers: { ...authHeader(token), 'content-type': 'application/json' },
     body: JSON.stringify(input),

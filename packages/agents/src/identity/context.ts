@@ -29,6 +29,35 @@ export interface TaskContext {
 }
 
 /**
+ * A compile-time domain specification: the durable "here is how this kind of
+ * artefact is built" knowledge an agent needs before it can do the work at
+ * all — the structure and composition of a Cogenta theme, for the theme
+ * creator that motivated this field.
+ *
+ * It is a separate level from `agent` on purpose. `role`/`objectives` say who
+ * an agent is and how it should proceed; a specification says what the thing
+ * it produces actually is. Folding one into the other is what left the theme
+ * writer with a one-sentence role while its entire structural brief sat in a
+ * tool `description` — the place a model reads as API reference rather than
+ * as standing instruction.
+ *
+ * **Never escaped, and therefore never a channel for anything external.**
+ * Like `task.instruction` (see `assembleContext` below) this is trusted text,
+ * and for the same reason: it is a constant in this repository's own source,
+ * not a site owner's input, not a model's output, and not content that
+ * arrived from a comment, an import, or a fetch. That matters concretely
+ * here — a specification is mostly code and markup examples, and escaping
+ * would turn every `<header>` in them into `&lt;header&gt;`, teaching the
+ * model to emit exactly the wrong thing. Anything whose origin is not a
+ * literal in this codebase belongs in `data`, which is escaped.
+ */
+export interface SpecificationContext {
+  /** Names what is being specified, e.g. `"Cogenta theme"` — shown as the section's own label. */
+  readonly subject: string
+  readonly body: string
+}
+
+/**
  * One piece of untrusted content — a comment, an import, a fetched page
  * (R8: "Tout contenu externe... est balisé comme tel"). `source` is shown to
  * the model so it can reason about provenance, never to grant trust: it goes
@@ -43,11 +72,13 @@ export interface AssembleContextInput {
   readonly site: SiteContext
   readonly agent: AgentIdentity
   readonly task: TaskContext
+  /** Optional and additive — an agent that needs no domain specification simply omits it, and the assembled system prompt has no such section. */
+  readonly specification?: SpecificationContext
   readonly data?: readonly DataItem[]
 }
 
 export interface AssembledContext {
-  /** CONSTITUTION → SITE → AGENT → TASK, in that fixed order — this is `ChatRequest.system`. */
+  /** CONSTITUTION → SITE → AGENT → SPECIFICATION (when given) → TASK, in that fixed order — this is `ChatRequest.system`. */
   readonly system: string
   /** DATA, one tagged message per item, appended after `system` — never merged into it. */
   readonly dataMessages: readonly ChatMessage[]
@@ -125,6 +156,16 @@ export function assembleContext(input: AssembleContextInput): AssembledContext {
     tag('constitution', CONSTITUTION_TEXT),
     tag('site', siteSection(input.site)),
     tag('agent', agentSection(input.agent)),
+    // Sits between AGENT and TASK because that is the order the levels are
+    // read in: who you are, then what the thing you build is, then what is
+    // being asked of you this time. Not escaped — see `SpecificationContext`.
+    ...(input.specification === undefined
+      ? []
+      : [
+          tag('specification', input.specification.body, {
+            subject: input.specification.subject,
+          }),
+        ]),
     // Not escaped: unlike `data`, a task instruction is runtime-generated
     // (a trigger, an operator, a schedule), not external content — R8 only
     // requires balisage for content that entered from a comment, import, or

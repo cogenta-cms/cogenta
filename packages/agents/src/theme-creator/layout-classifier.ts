@@ -49,6 +49,8 @@ export type ClassifyLayoutNeedResult =
       readonly ok: true
       readonly needsCustomLayout: boolean
       readonly reason: string
+      /** How many distinct designs to produce — 1 unless the request explicitly asked for more. Clamped. */
+      readonly requestedVariants: number
       /** Re-exported so a caller that already paid for attachment processing here does not pay for it twice. */
       readonly processed: ReturnType<typeof processAttachments>
     }
@@ -57,7 +59,21 @@ export type ClassifyLayoutNeedResult =
 const VerdictSchema = z.object({
   needsCustomLayout: z.boolean(),
   reason: z.string().min(1),
+  /**
+   * How many distinct designs the operator actually asked for.
+   *
+   * One, unless they said otherwise. Producing a spread of alternatives by
+   * default looked generous and was not: three recolours of the same
+   * installed theme alongside the one real answer diluted the result and
+   * buried it. This is read by the same call that already reads the brief,
+   * so asking costs nothing extra, and it is clamped below rather than
+   * trusted — a model that answers 40 gets 5.
+   */
+  requestedVariants: z.number().int().min(1).max(20).optional(),
 })
+
+/** Nobody is served by ten near-identical proposals, and each one is a real generation run. */
+const MAX_REQUESTED_VARIANTS = 5
 
 function themeListText(themes: readonly ThemeCreatorTargetTheme[]): string {
   return themes.map((theme) => `- ${theme.name} (${theme.label})`).join('\n')
@@ -85,7 +101,8 @@ function buildAsk(input: ClassifyLayoutNeedInput, correction: string | undefined
     'Reply with a single JSON object, and nothing else:',
     '{',
     '  "needsCustomLayout": true or false,',
-    '  "reason": "one sentence naming the specific structural element that does (or does not) require a custom layout"',
+    '  "reason": "one sentence naming the specific structural element that does (or does not) require a custom layout",',
+    '  "requestedVariants": how many distinct designs the request explicitly asks for — 1 unless it really says otherwise (e.g. "propose-moi trois designs", "give me a couple of options" → 3, 2)',
     '}',
     '',
     'Reply with ONLY the JSON object. No prose, no markdown fence.',
@@ -115,7 +132,7 @@ export async function classifyThemeLayoutNeed(
 ): Promise<ClassifyLayoutNeedResult> {
   const progress = input.onProgress ?? NOOP_PROGRESS
   const processed = processAttachments(input.attachments ?? [])
-  for (const warning of processed.warnings) progress.report(warning)
+  for (const warning of processed.warnings) progress.report(warning, { kind: 'warning' })
 
   if (input.availableThemes.length === 0) {
     return { ok: false, reason: 'no theme package is installed on this instance to choose from' }
@@ -139,7 +156,7 @@ export async function classifyThemeLayoutNeed(
     data: processed.documentData,
   })
 
-  progress.report('Deciding whether this request needs a custom layout…')
+  progress.report('Deciding whether this request needs a custom layout…', { kind: 'stage' })
 
   let correction: string | undefined
   let lastReason = 'no attempt was made'
@@ -194,6 +211,7 @@ export async function classifyThemeLayoutNeed(
       ok: true,
       needsCustomLayout: parsed.data.needsCustomLayout,
       reason: parsed.data.reason,
+      requestedVariants: Math.min(parsed.data.requestedVariants ?? 1, MAX_REQUESTED_VARIANTS),
       processed,
     }
   }
@@ -202,5 +220,5 @@ export async function classifyThemeLayoutNeed(
   // the whole feature — fall back to the always-available tokens-only path
   // rather than failing the request outright.
   progress.report(`Could not classify the request (${lastReason}) — defaulting to tokens only.`)
-  return { ok: true, needsCustomLayout: false, reason: lastReason, processed }
+  return { ok: true, needsCustomLayout: false, reason: lastReason, requestedVariants: 1, processed }
 }

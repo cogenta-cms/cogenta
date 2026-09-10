@@ -12,12 +12,13 @@ import {
   type ProviderClient,
   type ProviderConfigStore,
   type ProviderTuningDefaults,
+  proposeThemeCandidates,
   resolveProviderRegistryConfig,
   resolveProviderTuningDefaults,
   THEME_CREATOR_AGENT_NAME,
   type ThemeCreatorTargetTheme,
 } from '@cogenta/agents'
-import { generateThemeCandidates } from '@cogenta/agents-builtin'
+import { generateSandboxTheme, generateThemeCandidates } from '@cogenta/agents-builtin'
 import type { ThemeRouterOptions } from '@cogenta/api'
 import type { CogentaConfig, DatabaseHandle, Logger } from '@cogenta/core'
 import { createSkinGallery, ensureRegistryTables } from '@cogenta/plugins'
@@ -30,7 +31,13 @@ import {
 } from '@cogenta/schema'
 import { availableThemes } from './theme-registry.js'
 import { joinStyles } from './theme-render.js'
-import { deleteSandboxFile, writeSandboxFile } from './theme-sandbox.js'
+import {
+  deleteSandboxFile,
+  listSandboxFiles,
+  readSandboxFile,
+  renderSandboxPreview,
+  writeSandboxFile,
+} from './theme-sandbox.js'
 
 /**
  * Assembles `ThemeRouterOptions` for `cogenta serve` (fiche 14).
@@ -94,8 +101,8 @@ export interface ThemeWiringOptions {
   readonly logger?: Logger
   /**
    * R6 — every real sandbox file write a "Générer un thème avec l'IA"
-   * custom-layout run makes is journalled through this, same as any other
-   * agent tool call. Absent only when no audit log is available yet at the
+   * custom-layout run makes is journalled through this, exactly like every
+   * other agent tool call. Absent only when no audit log is available yet at the
    * point `createThemeWiring` is called (`runServe`'s own `updatesAuditLog`
    * covers this before `site.auth.audit` opens) — generation still runs,
    * simply unaudited, R2's own "a missing ingredient degrades a feature, it
@@ -282,6 +289,20 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                   writeSandboxFile(options.projectRoot, write.sandboxId, write.path, write.content),
                 deleteFile: (del) =>
                   deleteSandboxFile(options.projectRoot, del.sandboxId, del.path),
+                // The same render the admin's own preview iframe shows,
+                // handed to the writing agent as a tool so it can see what
+                // it produced instead of writing blind.
+                renderPreview: (preview) =>
+                  renderSandboxPreview({
+                    projectRoot: options.projectRoot,
+                    id: preview.sandboxId,
+                    siteName: options.config.site.name,
+                  }),
+                // Reading is what makes "make it darker" possible at all: a
+                // write replaces a whole file, so a change has to start from
+                // what is really there.
+                listFiles: (list) => listSandboxFiles(options.projectRoot, list.sandboxId),
+                readFile: (read) => readSandboxFile(options.projectRoot, read.sandboxId, read.path),
                 ...(input.attachments === undefined || input.attachments.length === 0
                   ? {}
                   : { attachments: input.attachments }),
@@ -301,6 +322,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                             id: candidate.id,
                             label: candidate.label,
                             rationale: candidate.rationale,
+                            summary: candidate.summary,
                             sandboxId: candidate.sandboxId,
                             filesWritten: candidate.filesWritten,
                           }
@@ -317,6 +339,150 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                           },
                     ),
                     warnings: [...result.warnings],
+                  }
+                : { ok: false as const, reason: result.reason }
+            },
+            /**
+             * The conversation's later turns. Unlike `generate`, this never
+             * mints a sandbox and never classifies anything: the theme
+             * already exists and the operator has already decided they want
+             * it — the only question is what to change. It goes straight to
+             * `generateSandboxTheme` in `refine` mode, which reads the
+             * theme back before touching it.
+             */
+            refine: async (
+              input: {
+                readonly sandboxId?: string
+                readonly baseline?: {
+                  readonly themeName?: string
+                  readonly tokens: Record<string, unknown>
+                }
+                readonly message: string
+                readonly attachments?: readonly {
+                  readonly filename: string
+                  readonly mimeType: string
+                  readonly data: Uint8Array
+                }[]
+                readonly previousTurns?: readonly {
+                  readonly role: 'user' | 'agent'
+                  readonly message: string
+                }[]
+              },
+              onProgress?: {
+                report(message: string, detail?: { kind?: string; tool?: string }): void
+              },
+            ) => {
+              const resolved = await resolveThemeProvider(options)
+              if (resolved === undefined) {
+                return { ok: false as const, reason: 'No LLM provider is configured.' }
+              }
+              const { client, model } = resolved
+
+              // The original brief is whatever the conversation opened with.
+              // Absent (a page reloaded mid-discussion, say) the change
+              // itself still stands on its own — the agent reads the theme.
+              const originalBrief =
+                input.previousTurns?.find((turn) => turn.role === 'user')?.message ??
+                'A theme generated earlier in this conversation.'
+
+              // A token candidate has no sandbox to re-read; what it
+              // continues from is its own current token values. Passing them
+              // as the baseline is what makes this an adjustment instead of
+              // a fresh design that happens to follow a question.
+              if (input.sandboxId === undefined) {
+                if (input.baseline === undefined) {
+                  return { ok: false as const, reason: 'Nothing was given to adjust.' }
+                }
+                const tokensResult = await proposeThemeCandidates({
+                  client,
+                  model,
+                  description: input.message,
+                  siteName: options.config.site.name,
+                  availableThemes: (await availableThemes()).map(
+                    (theme): ThemeCreatorTargetTheme => ({ name: theme.name, label: theme.label }),
+                  ),
+                  baseline: {
+                    themeName:
+                      input.baseline.themeName ?? (await themeStore.get()).activeTheme ?? '',
+                    tokens: input.baseline.tokens,
+                  },
+                  maxCandidates: 1,
+                  ...(input.attachments === undefined || input.attachments.length === 0
+                    ? {}
+                    : { attachments: input.attachments }),
+                  ...(onProgress === undefined ? {} : { onProgress }),
+                })
+                return tokensResult.ok
+                  ? {
+                      ok: true as const,
+                      candidates: tokensResult.candidates.map((candidate) => ({
+                        kind: 'tokens' as const,
+                        id: candidate.id,
+                        label: candidate.label,
+                        rationale: candidate.rationale,
+                        tokens: candidate.tokens,
+                        themeName: candidate.themeName,
+                        ...(candidate.chromeInput === undefined
+                          ? {}
+                          : { chromeInput: { ...candidate.chromeInput } }),
+                      })),
+                      warnings: [...tokensResult.warnings],
+                    }
+                  : { ok: false as const, reason: tokensResult.reason }
+              }
+              const sandboxId = input.sandboxId
+
+              const result = await generateSandboxTheme({
+                client,
+                model,
+                description: input.message,
+                siteName: options.config.site.name,
+                sandboxId,
+                refine: {
+                  originalBrief,
+                  ...(input.previousTurns === undefined
+                    ? {}
+                    : {
+                        priorTurns: input.previousTurns.map((turn) => ({
+                          role: turn.role === 'agent' ? ('assistant' as const) : ('user' as const),
+                          text: turn.message,
+                        })),
+                      }),
+                },
+                writeFile: (write) =>
+                  writeSandboxFile(options.projectRoot, write.sandboxId, write.path, write.content),
+                deleteFile: (del) =>
+                  deleteSandboxFile(options.projectRoot, del.sandboxId, del.path),
+                renderPreview: (preview) =>
+                  renderSandboxPreview({
+                    projectRoot: options.projectRoot,
+                    id: preview.sandboxId,
+                    siteName: options.config.site.name,
+                  }),
+                listFiles: (list) => listSandboxFiles(options.projectRoot, list.sandboxId),
+                readFile: (read) => readSandboxFile(options.projectRoot, read.sandboxId, read.path),
+                ...(input.attachments === undefined || input.attachments.length === 0
+                  ? {}
+                  : { attachments: input.attachments }),
+                ...(onProgress === undefined ? {} : { onProgress }),
+                ...(options.auditLog === undefined ? {} : { auditLog: options.auditLog }),
+              })
+
+              return result.ok
+                ? {
+                    ok: true as const,
+                    candidates: [
+                      {
+                        kind: 'sandbox' as const,
+                        id: result.sandboxId,
+                        label: 'Custom layout',
+                        rationale: result.rationale,
+                        summary: result.summary,
+                        sandboxId: result.sandboxId,
+                        filesWritten: result.filesWritten,
+                      },
+                    ],
+                    warnings: [],
                   }
                 : { ok: false as const, reason: result.reason }
             },

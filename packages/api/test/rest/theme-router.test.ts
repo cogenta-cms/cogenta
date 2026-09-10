@@ -788,3 +788,148 @@ describe('POST /api/theme/generate/jobs, GET …/generate/jobs/:jobId', () => {
     )
   })
 })
+
+/**
+ * The conversation's later turns. Deliberately answers with a job the
+ * *generate* poller reads: one job store, one polling loop, and a screen that
+ * does not care which kind of turn it is waiting on.
+ */
+describe('POST /api/theme/refine/jobs', () => {
+  const refiningGenerator = {
+    async isAvailable() {
+      return true
+    },
+    async generate() {
+      return { ok: true as const, candidates: [] }
+    },
+    async refine(
+      input: { readonly sandboxId: string; readonly message: string },
+      onProgress?: { report(message: string): void },
+    ) {
+      onProgress?.report(`Adjusting ${input.sandboxId}…`)
+      return {
+        ok: true as const,
+        candidates: [
+          {
+            kind: 'sandbox' as const,
+            id: input.sandboxId,
+            label: 'Custom layout',
+            rationale: `Applied: ${input.message}`,
+            summary: 'Darkened.',
+            sandboxId: input.sandboxId,
+            filesWritten: ['style.css'],
+          },
+        ],
+      }
+    },
+  }
+
+  it('refuses when this instance has no way to adjust a theme at all', async () => {
+    const r = router({
+      generator: {
+        async isAvailable() {
+          return true
+        },
+        async generate() {
+          return { ok: true, candidates: [] }
+        },
+      },
+      progressJobs: createProgressJobStore(),
+    })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/refine/jobs',
+        query: {},
+        body: { sandboxId: 'ai-theme-1', message: 'plus sombre' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(501)
+  })
+
+  it('refuses a request that names no sandbox to change', async () => {
+    const r = router({ generator: refiningGenerator, progressJobs: createProgressJobStore() })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/refine/jobs',
+        query: {},
+        body: { message: 'plus sombre' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('refuses a request that says nothing to change', async () => {
+    const r = router({ generator: refiningGenerator, progressJobs: createProgressJobStore() })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/refine/jobs',
+        query: {},
+        body: { sandboxId: 'ai-theme-1', message: '   ' },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it('starts a job the generate poller can read, and answers with the adjusted theme', async () => {
+    const r = router({ generator: refiningGenerator, progressJobs: createProgressJobStore() })
+
+    const started = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/refine/jobs',
+        query: {},
+        body: {
+          sandboxId: 'ai-theme-1',
+          message: 'rends-le plus sombre',
+          previousTurns: [{ role: 'user', message: 'un thème éditorial' }],
+        },
+      },
+      ADMIN,
+    )
+    expect(started.status).toBe(202)
+    const jobId = (started.body as { data: { jobId: string } }).data.jobId
+
+    let job:
+      | {
+          status: string
+          events: { message: string }[]
+          result?: { candidates: { rationale: string }[] }
+        }
+      | undefined
+    for (let attempt = 0; attempt < 20; attempt++) {
+      // Polled through the *generate* job route — that shared poller is the
+      // point, not an accident.
+      const polled = await r.handle(
+        { method: 'GET', path: `/api/theme/generate/jobs/${jobId}`, query: {} },
+        ADMIN,
+      )
+      job = (polled.body as { data: typeof job }).data
+      if (job?.status !== 'running') break
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+
+    expect(job?.status).toBe('done')
+    expect(job?.events.map((event) => event.message)).toContain('Adjusting ai-theme-1…')
+    expect(job?.result?.candidates[0]?.rationale).toBe('Applied: rends-le plus sombre')
+  })
+
+  it('is refused for a non-admin, like every other write on this router', async () => {
+    const r = router({ generator: refiningGenerator, progressJobs: createProgressJobStore() })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/refine/jobs',
+        query: {},
+        body: { sandboxId: 'ai-theme-1', message: 'plus sombre' },
+      },
+      EDITOR,
+    )
+    expect(response.status).toBe(403)
+  })
+})

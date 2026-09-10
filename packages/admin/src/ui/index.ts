@@ -14,9 +14,21 @@
  * numbered pager, both copied by hand elsewhere), and the fiche that adds it
  * names five screens meant to consume it.
  *
+ * `ActivityLog` is the eighth, on the same terms: two screens already
+ * hand-rolled a run trace as a list of grey italic lines (the theme
+ * generator workshop, the agent chat feed) and both threw it away the
+ * moment the run ended.
+ *
  * The palette they render with is `../styles/theme.css`.
  */
 
+export type {
+  ActivityEntry,
+  ActivityKind,
+  ActivityLogLabels,
+  ActivityLogProps,
+} from './activity-log.js'
+export { ActivityLog, classifyActivityMessage } from './activity-log.js'
 export type { BadgeProps } from './badge.js'
 export { Badge } from './badge.js'
 export type { ButtonProps } from './button.js'

@@ -133,7 +133,10 @@ function buildAgentGraph(input: RunAgentLoopInput) {
       }
     }
 
-    progress.report(state.stepIndex === 0 ? 'Thinking…' : `Thinking… (step ${state.stepIndex + 1})`)
+    progress.report(
+      state.stepIndex === 0 ? 'Thinking…' : `Thinking… (step ${state.stepIndex + 1})`,
+      { kind: 'thinking' },
+    )
     const response = await retryModelCall(
       () =>
         withTimeout(
@@ -220,7 +223,7 @@ function buildAgentGraph(input: RunAgentLoopInput) {
     const toolOutcomes: ToolCallOutcome[] = []
     let messages = state.messages
     for (const call of state.pendingToolCalls) {
-      progress.report(`Calling tool "${call.name}"…`)
+      progress.report(`Calling tool "${call.name}"…`, { kind: 'tool-call', tool: call.name })
       const outcome = await runTool(
         toolIndex.get(call.name),
         call,
@@ -230,6 +233,7 @@ function buildAgentGraph(input: RunAgentLoopInput) {
         outcome.ok
           ? `Tool "${call.name}" finished.`
           : `Tool "${call.name}" failed: ${outcome.error ?? 'unknown error'}`,
+        { kind: outcome.ok ? 'tool-ok' : 'tool-failed', tool: call.name },
       )
       toolOutcomes.push(outcome)
       messages = [

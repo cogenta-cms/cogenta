@@ -251,9 +251,9 @@ export async function proposeThemeCandidates(
   const { documentData, imageParts, warnings, contributedFilenames } = processAttachments(
     input.attachments ?? [],
   )
-  for (const warning of warnings) progress.report(warning)
+  for (const warning of warnings) progress.report(warning, { kind: 'warning' })
 
-  progress.report('Choosing a base theme…')
+  progress.report('Choosing a base theme…', { kind: 'stage' })
   const themeChoice = await chooseTheme(
     input,
     documentData,
@@ -278,6 +278,12 @@ export async function proposeThemeCandidates(
     model: input.model,
     description: `${baseDescription}${attachmentNote}`,
     blueprintLabel: input.siteName,
+    // The baseline's actual token VALUES, not merely a sentence saying a
+    // baseline exists. Until this was passed, "adjust the current theme"
+    // only reworded the brief and then re-derived every value from scratch,
+    // so each turn of a conversation produced a different theme rather than
+    // the same one, adjusted.
+    ...(input.baseline === undefined ? {} : { baseTokens: input.baseline.tokens }),
     ...(input.maxCandidates === undefined ? {} : { count: input.maxCandidates }),
     ...(imageParts.length === 0 ? {} : { images: imageParts }),
     onProgress: progress,

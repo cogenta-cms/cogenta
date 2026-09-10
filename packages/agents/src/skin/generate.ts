@@ -88,6 +88,20 @@ export interface GenerateSkinOptions {
   /** "trois tentatives" by default. */
   readonly maxAttempts?: number
   /**
+   * The tokens this run is *adjusting*, when it is adjusting rather than
+   * designing.
+   *
+   * Absent, this function derives a whole skin from `description` — which is
+   * right for a first request and wrong for every one after it. A live
+   * session made the cost plain: each follow-up re-derived a fresh palette
+   * from the brief, so "make it a bit darker" came back as a different theme
+   * rather than the same theme, darker. Present, these values are shown to
+   * the model as the starting point, with an instruction to change only what
+   * was asked and keep the rest — the difference between a conversation and
+   * a series of unrelated attempts.
+   */
+  readonly baseTokens?: Record<string, unknown>
+  /**
    * Fiche 60 task 3 — untrusted background about the site (e.g. what
    * `generateSkinCandidates` renders from an `ExistingSiteSnapshot`),
    * carried through `assembleContext`'s `data` channel (R8) rather than
@@ -121,7 +135,16 @@ function buildPrompt(options: GenerateSkinOptions, correction: string | undefine
     'You are configuring the visual design tokens of a Cogenta CMS site.',
     'You do not write CSS or markup — only the JSON data below.',
     `Site type: ${options.blueprintLabel}.`,
-    `Description from the site owner: ${options.description}`,
+    ...(options.baseTokens === undefined
+      ? [`Description from the site owner: ${options.description}`]
+      : [
+          'These are the tokens currently in use. This is an ADJUSTMENT of them, not a new design:',
+          JSON.stringify(options.baseTokens, null, 2),
+          '',
+          `What the site owner is asking you to change: ${options.description}`,
+          '',
+          'Return the complete token object with that change applied and everything else kept exactly as it is above. Re-deriving values that were not mentioned would undo choices the owner has already accepted.',
+        ]),
     ...(hasImages
       ? [
           '',

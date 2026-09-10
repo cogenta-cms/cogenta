@@ -106,20 +106,39 @@ describe('offering a real choice of designs', () => {
     for (const prompt of prompts) expect(prompt).toContain('wedding photographer')
   })
 
-  it('clamps the count to between two and five, so there is always a choice and never a wall', async () => {
-    const tooFew = await generateSkinCandidates({
+  it('honours a request for exactly one skin instead of rounding it up to a choice', async () => {
+    // Asking for one is answering a request, not offering options — and
+    // offering options nobody asked for is what buried the real answer under
+    // three recolours in a live run. Two remains the floor for a run that
+    // never named a count.
+    const one = await generateSkinCandidates({
       ...BASE,
       client: perDirectionClient().client,
       count: 1,
     })
+
+    expect(one.ok).toBe(true)
+    expect(one.candidates).toHaveLength(1)
+  })
+
+  it('never returns a wall of near-identical proposals, whatever was asked for', async () => {
     const tooMany = await generateSkinCandidates({
       ...BASE,
       client: perDirectionClient().client,
       count: 9,
     })
 
-    expect(tooFew.candidates).toHaveLength(MIN_SKIN_CANDIDATES)
     expect(tooMany.candidates).toHaveLength(MAX_SKIN_CANDIDATES)
+  })
+
+  it('still refuses to call a single surviving candidate a choice when several were asked for', async () => {
+    const asked = await generateSkinCandidates({
+      ...BASE,
+      client: perDirectionClient().client,
+      count: MIN_SKIN_CANDIDATES,
+    })
+
+    expect(asked.candidates.length).toBeGreaterThanOrEqual(MIN_SKIN_CANDIDATES)
   })
 
   it('applies the existing validation loop to every candidate, not only the first', async () => {

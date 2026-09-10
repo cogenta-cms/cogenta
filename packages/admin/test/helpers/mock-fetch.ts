@@ -408,6 +408,16 @@ function mockUploadBody(jsonBody: Record<string, unknown>, form: FormData | null
 }
 
 /**
+ * Every `POST /api/theme/refine/jobs` body the screen sent during the current
+ * test, oldest first. Module-level because `installMockFetch` returns nothing
+ * to hang a handle off, and cleared on every install so one test never reads
+ * another's requests. A test asserts on this to check the *conversation* was
+ * carried — the sandbox being refined, and the earlier turns — not merely
+ * that a request went out.
+ */
+export const themeRefineRequests: Record<string, unknown>[] = []
+
+/**
  * A fetch stub that answers exactly the `/api/auth/*` shape the real server
  * returns — this is a network mock for a browser unit test, not the database
  * mock AGENTS.md forbids: the actual request/response wiring is exercised
@@ -671,13 +681,46 @@ export function installMockFetch(
         readonly tokens: Record<string, unknown> | null
       }[]
       readonly generateCandidates?: readonly {
+        /** Absent means the `tokens` shape, the only one this mock could express before the Theme Creator wrote real sandbox layouts. */
+        readonly kind?: 'tokens' | 'sandbox'
         readonly id: string
         readonly label: string
         readonly rationale: string
-        readonly tokens: Record<string, unknown>
+        /** The short, card-safe line the server now sends alongside the (possibly thousands of words long) `rationale`. Absent reproduces an older server that only ever sent `rationale`. */
+        readonly summary?: string
+        readonly tokens?: Record<string, unknown>
         readonly themeName?: string
         readonly chromeInput?: { readonly tagline?: string; readonly footerNote?: string }
+        /** `kind: 'sandbox'` only — the sandbox the agent run wrote, and the files it wrote into it. */
+        readonly sandboxId?: string
+        readonly filesWritten?: readonly string[]
       }[]
+      /**
+       * What a *refinement* turn (`POST /api/theme/refine/jobs`) answers
+       * with, when it should differ from the first turn's answer — which is
+       * the whole point of a conversation: "make it darker" must come back
+       * as a visibly different theme, not as the same one replayed. Absent
+       * falls back to `generateCandidates`.
+       */
+      readonly refineCandidates?: readonly {
+        readonly kind?: 'tokens' | 'sandbox'
+        readonly id: string
+        readonly label: string
+        readonly rationale: string
+        readonly summary?: string
+        readonly tokens?: Record<string, unknown>
+        readonly themeName?: string
+        readonly chromeInput?: { readonly tagline?: string; readonly footerNote?: string }
+        readonly sandboxId?: string
+        readonly filesWritten?: readonly string[]
+      }[]
+      /**
+       * The progress lines `GET /api/theme/generate/jobs/:id` reports, in
+       * order. Defaults to a single "Mock progress." line; a test that cares
+       * about how a real run's trace is *rendered* (a thinking step, a tool
+       * call, a tool that failed) passes the real wording here.
+       */
+      readonly generateProgressEvents?: readonly string[]
       /** What `POST /api/theme/generate` answers with alongside `candidates` — e.g. "an attachment could not be analyzed". Absent by default, the same "server never sent the field" shape a caller has to tolerate. */
       readonly generateWarnings?: readonly string[]
       /** The active theme *package* name (fiche L23), `null` for the built-in default. */
@@ -1162,7 +1205,10 @@ export function installMockFetch(
     { readonly name: string; readonly message: string; polls: number }
   > = {}
   /** Same pending-job bookkeeping as `mockAgentMessageJobs` above, for `POST /api/theme/generate/jobs`. */
-  const mockThemeGenerateJobs: Record<string, { polls: number }> = {}
+  const mockThemeGenerateJobs: Record<string, { polls: number; refine?: boolean }> = {}
+  /** How many generation runs this conversation has started — see the POST branch for why a later one may answer differently. */
+  let themeGenerateRuns = 0
+  themeRefineRequests.length = 0
   // Kept in sync with `mockAgents.security.enabled` for the pre-existing
   // enable/disable tests, which read `securityAgentEnabled` directly.
   const syncSecurityEnabled = (): void => {
@@ -5041,7 +5087,7 @@ export function installMockFetch(
       }
 
       if (url.includes('/api/prompt-templates')) {
-        // Real router: any signed-in actor may read, only `admin` may write.
+        // Real router: every signed-in actor may read, only `admin` may write.
         const templateMatch = /\/api\/prompt-templates\/([^/?]+)/u.exec(url)
         if (templateMatch === null) {
           if (method === 'GET') return json(200, { data: mockPromptTemplates })
@@ -8753,10 +8799,45 @@ export function installMockFetch(
               error: { code: 'THEME_NO_PROVIDER', message: 'No LLM provider is configured.' },
             })
           }
-          const id = `theme-job-${Date.now()}`
-          mockThemeGenerateJobs[id] = { polls: 0 }
+          themeGenerateRuns += 1
+          const id = `theme-job-${Date.now()}-${themeGenerateRuns}`
+          // A later run in the same conversation answers with something else
+          // when the test says so — a real second turn does, and a mock that
+          // always replays the first answer cannot catch a screen that fails
+          // to show the new one.
+          mockThemeGenerateJobs[id] = { polls: 0, refine: themeGenerateRuns > 1 }
           return json(202, { data: { jobId: id } })
         }
+        // `POST /api/theme/refine/jobs` — the conversation's later turns.
+        // It answers with a job the *generate* poller reads, exactly as the
+        // real router does, which is what lets the screen keep one polling
+        // loop for both kinds of turn. `refineCandidates` lets a test say
+        // "the second turn produced a visibly different theme" rather than
+        // replaying the first turn's answer forever.
+        if (url.includes('/api/theme/refine/jobs') && method === 'POST') {
+          if (options.theme?.aiAvailable !== true) {
+            return json(501, {
+              error: { code: 'THEME_NO_PROVIDER', message: 'No LLM provider is configured.' },
+            })
+          }
+          const body = init?.body === undefined ? {} : JSON.parse(String(init.body))
+          const continuesFromSomething =
+            typeof body.sandboxId === 'string' ||
+            (typeof body.baseline === 'object' && body.baseline !== null)
+          if (!continuesFromSomething || typeof body.message !== 'string') {
+            return json(400, {
+              error: {
+                code: 'CONTENT_INVALID',
+                message: 'A message and something to continue from are required.',
+              },
+            })
+          }
+          themeRefineRequests.push(body)
+          const id = `theme-refine-job-${themeRefineRequests.length}`
+          mockThemeGenerateJobs[id] = { polls: 0, refine: true }
+          return json(202, { data: { jobId: id } })
+        }
+
         const themeJobPollMatch = /\/api\/theme\/generate\/jobs\/([^/?]+)/u.exec(url)
         if (themeJobPollMatch !== null && method === 'GET') {
           const jobId = themeJobPollMatch[1] as string
@@ -8766,19 +8847,26 @@ export function installMockFetch(
               error: { code: 'THEME_GENERATE_JOB_UNKNOWN', message: 'No such job.' },
             })
           }
+          const themeJobEvents = (options.theme?.generateProgressEvents ?? ['Mock progress.']).map(
+            (message, index) => ({ at: 1_767_225_600_000 + index * 1000, message }),
+          )
           if (job.polls === 0) {
             job.polls += 1
             return json(200, {
-              data: { status: 'running', events: [{ at: Date.now(), message: 'Mock progress.' }] },
+              data: { status: 'running', events: themeJobEvents.slice(0, 1) },
             })
           }
+          const wasRefine = job.refine === true
           delete mockThemeGenerateJobs[jobId]
           return json(200, {
             data: {
               status: 'done',
-              events: [{ at: Date.now(), message: 'Mock progress.' }],
+              events: themeJobEvents,
               result: {
-                candidates: options.theme?.generateCandidates ?? [],
+                candidates:
+                  (wasRefine ? options.theme?.refineCandidates : undefined) ??
+                  options.theme?.generateCandidates ??
+                  [],
                 ...(options.theme?.generateWarnings === undefined
                   ? {}
                   : { warnings: options.theme.generateWarnings }),
@@ -8940,6 +9028,16 @@ export function installMockFetch(
           const previous = mockThemeVersions.get(themeName) ?? []
           const timestamp = `2026-01-01T00-00-0${previous.length}-000Z`
           mockThemeVersions.set(themeName, [timestamp, ...previous])
+          // A deployed sandbox becomes a real, installable theme — the same
+          // reason `DELETE /api/theme/:name` below takes one out of this
+          // list. Without it, `PUT /api/theme/overrides` would 404 on the
+          // very theme this route just created.
+          if (!availableThemes.some((theme) => theme.name === themeName)) {
+            availableThemes = [
+              ...availableThemes,
+              { name: themeName, label: themeName, description: '', local: true },
+            ]
+          }
           return json(200, {
             data: {
               ok: true,

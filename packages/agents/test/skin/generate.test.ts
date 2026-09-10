@@ -191,3 +191,75 @@ describe('generateSkin', () => {
     }
   })
 })
+
+/**
+ * The difference between a conversation and a series of unrelated attempts.
+ *
+ * Without `baseTokens`, every follow-up re-derived a whole palette from the
+ * brief, so "make it a bit darker" answered with a *different* theme rather
+ * than the same theme, darker — the exact behaviour the product owner
+ * rejected: "si on repart du début on va avoir à chaque fois un résultat
+ * différent."
+ */
+describe('adjusting an existing skin rather than designing a new one', () => {
+  function capturingClient(response: string): ProviderClient & { readonly asks: string[] } {
+    const asks: string[] = []
+    return {
+      name: 'fake',
+      model: 'fake-model',
+      maxOutputTokens: 8000,
+      requestTimeoutMs: 180_000,
+      maxCorrectionAttempts: 3,
+      asks,
+      async chat(request: ChatRequest): Promise<ChatResponse> {
+        const content = request.messages.at(-1)?.content
+        asks.push(
+          typeof content === 'string'
+            ? content
+            : (content ?? []).map((part) => (part.type === 'text' ? part.text : '')).join(' '),
+        )
+        return {
+          content: response,
+          toolCalls: [],
+          stopReason: 'end_turn',
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      },
+    }
+  }
+
+  it('shows the model the tokens in use and asks it to change only what was named', async () => {
+    const client = capturingClient(JSON.stringify(VALID_TOKENS))
+
+    const result = await generateSkin({
+      client,
+      model: 'fake-model',
+      description: 'rends-le un peu plus sombre',
+      blueprintLabel: 'Acme',
+      baseTokens: VALID_TOKENS,
+    })
+
+    expect(result.ok).toBe(true)
+    const ask = client.asks[0] ?? ''
+    // The current values are actually in the prompt — not merely a sentence
+    // saying a baseline exists somewhere.
+    expect(ask).toContain('#1d4ed8')
+    expect(ask).toContain('This is an ADJUSTMENT of them, not a new design')
+    expect(ask).toContain('rends-le un peu plus sombre')
+  })
+
+  it('still designs from the brief alone when there is nothing to adjust yet', async () => {
+    const client = capturingClient(JSON.stringify(VALID_TOKENS))
+
+    await generateSkin({
+      client,
+      model: 'fake-model',
+      description: 'warm, editorial',
+      blueprintLabel: 'Acme',
+    })
+
+    const ask = client.asks[0] ?? ''
+    expect(ask).toContain('Description from the site owner: warm, editorial')
+    expect(ask).not.toContain('This is an ADJUSTMENT')
+  })
+})

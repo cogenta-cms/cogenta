@@ -55,6 +55,18 @@ export interface GenerateThemeCandidatesInput {
     readonly sandboxId: string
     readonly path: string
   }) => Promise<void>
+  /** Threaded straight through to `generateSandboxTheme`, where it becomes the run's `theme.preview_sandbox` tool — the difference between a writer that sees its own output and one that does not. */
+  readonly renderPreview?: (input: {
+    readonly sandboxId: string
+  }) => Promise<
+    { readonly ok: true; readonly html: string } | { readonly ok: false; readonly error: string }
+  >
+  /** Also threaded through — together they let a run change an existing theme instead of only writing a new one. */
+  readonly listFiles?: (input: { readonly sandboxId: string }) => Promise<readonly string[]>
+  readonly readFile?: (input: {
+    readonly sandboxId: string
+    readonly path: string
+  }) => Promise<string>
   readonly onProgress?: ProgressReporter
   readonly auditLog?: AuditLogLike
   readonly signal?: AbortSignal
@@ -66,7 +78,10 @@ export type ThemeCandidate =
       readonly kind: 'sandbox'
       readonly id: string
       readonly label: string
+      /** The agent's whole closing text — for the conversation, where it has room. */
       readonly rationale: string
+      /** The card-sized version of it, guaranteed short. */
+      readonly summary: string
       readonly sandboxId: string
       readonly filesWritten: readonly string[]
     }
@@ -125,6 +140,18 @@ export async function generateThemeCandidates(
   const warnings: string[] = [...classification.processed.warnings]
   const candidates: ThemeCandidate[] = []
 
+  // One answer unless more were asked for. A live run made the case against
+  // the old behaviour better than any argument could: a request for "un thème
+  // complet à partir du design sur la capture" came back as the one real
+  // custom layout plus three recolours of an installed blog theme, and the
+  // answer was buried among alternatives nobody wanted. The classifier reads
+  // the brief for an explicit count; everything else gets exactly one.
+  // Defended rather than trusted, even though the type says it is always
+  // there: this number is a loop bound, and an `undefined` one silently
+  // produces zero candidates — a feature that answers with nothing at all
+  // rather than with an error anyone could act on.
+  const requestedVariants = classification.requestedVariants ?? 1
+
   async function tryTokensCandidates(): Promise<void> {
     const result = await proposeThemeCandidates({
       client: input.client,
@@ -134,7 +161,9 @@ export async function generateThemeCandidates(
       availableThemes: input.availableThemes,
       ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
       ...(input.baseline === undefined ? {} : { baseline: input.baseline }),
-      ...(input.maxCandidates === undefined ? {} : { maxCandidates: input.maxCandidates }),
+      // The brief's own count wins; an explicit caller-supplied ceiling
+      // still overrides it, which is what keeps existing callers unchanged.
+      maxCandidates: input.maxCandidates ?? requestedVariants,
       ...(input.onProgress === undefined ? {} : { onProgress: input.onProgress }),
     })
     if (!result.ok) {
@@ -149,7 +178,9 @@ export async function generateThemeCandidates(
 
   async function trySandboxCandidate(): Promise<void> {
     const sandboxId = input.mintSandboxId()
-    progress.report(`Writing a custom layout into sandbox "${sandboxId}"…`)
+    progress.report(`Writing a custom layout into sandbox "${sandboxId}"…`, {
+      kind: 'stage',
+    })
     const result = await generateSandboxTheme({
       client: input.client,
       model: input.model,
@@ -158,6 +189,9 @@ export async function generateThemeCandidates(
       sandboxId,
       writeFile: input.writeFile,
       deleteFile: input.deleteFile,
+      ...(input.renderPreview === undefined ? {} : { renderPreview: input.renderPreview }),
+      ...(input.listFiles === undefined ? {} : { listFiles: input.listFiles }),
+      ...(input.readFile === undefined ? {} : { readFile: input.readFile }),
       ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
       ...(input.onProgress === undefined ? {} : { onProgress: input.onProgress }),
       ...(input.auditLog === undefined ? {} : { auditLog: input.auditLog }),
@@ -172,17 +206,20 @@ export async function generateThemeCandidates(
       id: result.sandboxId,
       label: 'Custom layout',
       rationale: result.rationale,
+      summary: result.summary,
       sandboxId: result.sandboxId,
       filesWritten: result.filesWritten,
     })
   }
 
   if (needsCustomLayout) {
-    // Sandbox generation first — it is the point of this request, and the
-    // slower, more expensive of the two; the tokens-only fallback runs
-    // after so a failure in one never blocks the other from being reported.
-    await trySandboxCandidate()
-    await tryTokensCandidates()
+    for (let index = 0; index < requestedVariants; index++) {
+      await trySandboxCandidate()
+    }
+    // Only as a rescue: if writing a custom layout produced nothing at all,
+    // a tokens-only proposal is still better than an empty screen. When the
+    // custom layout worked, adding recolours beside it is noise.
+    if (candidates.length === 0) await tryTokensCandidates()
   } else {
     await tryTokensCandidates()
   }

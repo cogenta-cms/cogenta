@@ -30,7 +30,7 @@ export interface WriteSandboxFileToolOptions {
     readonly sandboxId: string
     readonly path: string
     readonly content: string
-  }) => Promise<{ readonly path: string }>
+  }) => Promise<{ readonly path: string; readonly warnings?: readonly string[] }>
   readonly deleteFile: (input: {
     readonly sandboxId: string
     readonly path: string
@@ -46,7 +46,12 @@ const WriteSandboxFileInputSchema = z.object({
 })
 export type WriteSandboxFileInput = z.infer<typeof WriteSandboxFileInputSchema>
 
-const WriteSandboxFileOutputSchema = z.object({ sandboxId: z.string(), path: z.string() })
+const WriteSandboxFileOutputSchema = z.object({
+  sandboxId: z.string(),
+  path: z.string(),
+  /** Present when the file was accepted but contains something worth fixing — a dead `href="#"`, say. Read them: a warning here is a real defect that simply was not worth refusing the write over. */
+  warnings: z.array(z.string()).optional(),
+})
 export type WriteSandboxFileOutput = z.infer<typeof WriteSandboxFileOutputSchema>
 
 export function createWriteSandboxFileTool(
@@ -131,7 +136,13 @@ This example is deliberately generic (it renders whatever block types a real pag
         path: input.path,
         content: input.content,
       })
-      return { sandboxId: input.sandboxId, path: result.path }
+      return {
+        sandboxId: input.sandboxId,
+        path: result.path,
+        ...(result.warnings === undefined || result.warnings.length === 0
+          ? {}
+          : { warnings: [...result.warnings] }),
+      }
     },
     async revert(receipt) {
       await options.deleteFile({ sandboxId: receipt.sandboxId, path: receipt.path })

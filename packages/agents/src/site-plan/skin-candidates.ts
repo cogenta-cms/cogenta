@@ -70,6 +70,17 @@ export const SKIN_DIRECTIONS: readonly SkinDirection[] = [
   },
 ]
 
+/**
+ * The floor for a run that is *offering a choice* — two genuinely distinct
+ * skins, or it is not a choice and this function says so rather than
+ * pretending (L26's own rule, unchanged).
+ *
+ * A caller that explicitly asks for exactly one is doing something different:
+ * answering a request, not presenting options. That became the default after
+ * a live run returned one real custom layout buried under three recolours
+ * nobody had asked for, so `count: 1` is now honoured literally instead of
+ * being rounded up to a choice the operator never wanted.
+ */
 export const MIN_SKIN_CANDIDATES = 2
 export const MAX_SKIN_CANDIDATES = 5
 
@@ -83,6 +94,8 @@ export interface GenerateSkinCandidatesOptions {
   readonly count?: number
   /** Passed to each candidate's own validation loop. */
   readonly maxAttemptsPerCandidate?: number
+  /** The tokens being adjusted, when this run continues a conversation rather than opening one — forwarded to every candidate's `generateSkin`. */
+  readonly baseTokens?: Record<string, unknown>
   /**
    * Fiche 60 task 3 — the site these candidates would style, when one
    * already exists. Threaded to every `generateSkin` call as tagged,
@@ -117,7 +130,7 @@ export type GenerateSkinCandidatesResult =
 
 function clampCount(count: number | undefined): number {
   if (count === undefined) return 3
-  return Math.min(MAX_SKIN_CANDIDATES, Math.max(MIN_SKIN_CANDIDATES, Math.trunc(count)))
+  return Math.min(MAX_SKIN_CANDIDATES, Math.max(1, Math.trunc(count)))
 }
 
 export async function generateSkinCandidates(
@@ -142,7 +155,15 @@ export async function generateSkinCandidates(
       const result = await generateSkin({
         client: options.client,
         model: options.model,
-        description: `${options.description}\n\nDesign direction for this proposal: ${direction.direction}`,
+        // A run that is adjusting existing tokens is not choosing a design
+        // direction — it already has one, and steering it toward "warm and
+        // editorial" while the owner asked for "a bit darker" is exactly how
+        // a conversation loses what it just agreed to.
+        description:
+          options.baseTokens === undefined
+            ? `${options.description}\n\nDesign direction for this proposal: ${direction.direction}`
+            : options.description,
+        ...(options.baseTokens === undefined ? {} : { baseTokens: options.baseTokens }),
         blueprintLabel: options.blueprintLabel,
         ...(options.maxAttemptsPerCandidate === undefined
           ? {}
@@ -189,7 +210,13 @@ export async function generateSkinCandidates(
     })
   }
 
-  if (candidates.length < MIN_SKIN_CANDIDATES) {
+  // "Not a choice" only applies when a choice was the point. A run asked for
+  // exactly one skin succeeds with exactly one; a run asked for several and
+  // able to deliver only one still fails, because presenting it as a spread
+  // of options would be a lie about what happened.
+  const wanted = clampCount(options.count)
+  const floor = wanted === 1 ? 1 : MIN_SKIN_CANDIDATES
+  if (candidates.length < floor) {
     return {
       ok: false,
       reason:

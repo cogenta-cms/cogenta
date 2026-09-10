@@ -163,16 +163,68 @@ export interface SkinGeneratorLike {
       }
     | { readonly ok: false; readonly reason: string }
   >
+  /**
+   * The second turn and every one after it: the operator has seen the theme
+   * and is asking for a change to it.
+   *
+   * Separate from `generate` rather than another optional field on it,
+   * because the two produce genuinely different runs — a refinement reads the
+   * theme that already exists and changes only what was named, where a
+   * generation analyses a brief and writes from nothing. Folding them
+   * together would mean one prompt trying to be both, which is how "make it
+   * darker" turns into a rewritten theme.
+   *
+   * Optional so an instance that cannot refine (no sandbox, no filesystem)
+   * simply does not offer it, the same way `generator` itself is optional.
+   */
+  refine?(
+    input: {
+      /** The sandbox holding the theme to change, for a custom-layout candidate. */
+      readonly sandboxId?: string
+      /**
+       * The token candidate being adjusted, for the other shape.
+       *
+       * Every turn after the first has to continue from what exists — a
+       * follow-up that re-derives the theme from the brief answers with a
+       * *different* theme each time, which is the opposite of a
+       * conversation. A token candidate has no sandbox to re-read, so what
+       * it continues from is its own current token values.
+       */
+      readonly baseline?: {
+        readonly themeName?: string
+        readonly tokens: Record<string, unknown>
+      }
+      /** What to change, in the operator's own words. */
+      readonly message: string
+      readonly attachments?: readonly ThemeGenerateAttachmentLike[]
+      /** Oldest first — so a follow-up like "un peu moins" has something to refer to. */
+      readonly previousTurns?: readonly {
+        readonly role: 'user' | 'agent'
+        readonly message: string
+      }[]
+    },
+    onProgress?: ThemeGenerateProgressReporter,
+  ): Promise<
+    | {
+        readonly ok: true
+        readonly candidates: readonly ThemeGenerateCandidateLike[]
+        readonly warnings?: readonly string[]
+      }
+    | { readonly ok: false; readonly reason: string }
+  >
 }
 
 /** Structural, matching `@cogenta/agents`' `ProgressReporter` — see `agents-router.ts`'s own `AgentRunProgressReporter` for the identical reasoning. */
 export interface ThemeGenerateProgressReporter {
-  report(message: string): void
+  report(message: string, detail?: { readonly kind?: string; readonly tool?: string }): void
 }
 
 export interface ThemeGenerateProgressEvent {
   readonly at: number
   readonly message: string
+  /** What the line is, as classified by the runtime that produced it — absent on a job started before structured events existed. */
+  readonly kind?: string
+  readonly tool?: string
 }
 
 /**
@@ -418,6 +470,99 @@ function parseGenerateBody(body: unknown): {
   }
 }
 
+function parseRefineBody(body: unknown): {
+  readonly sandboxId?: string
+  readonly baseline?: { readonly themeName?: string; readonly tokens: Record<string, unknown> }
+  readonly message: string
+  readonly attachments?: readonly ThemeGenerateAttachmentLike[]
+  readonly previousTurns?: readonly { readonly role: 'user' | 'agent'; readonly message: string }[]
+} {
+  const parsed = body as
+    | {
+        sandboxId?: unknown
+        baseline?: unknown
+        message?: unknown
+        attachments?: unknown
+        previousTurns?: unknown
+      }
+    | undefined
+
+  const rawSandboxId = parsed?.sandboxId
+  const sandboxId =
+    typeof rawSandboxId === 'string' && rawSandboxId.trim() !== '' ? rawSandboxId : undefined
+
+  const rawBaseline = parsed?.baseline as
+    | { themeName?: unknown; tokens?: unknown }
+    | null
+    | undefined
+  const baselineTokens =
+    typeof rawBaseline?.tokens === 'object' && rawBaseline.tokens !== null
+      ? (rawBaseline.tokens as Record<string, unknown>)
+      : undefined
+  const baseline =
+    baselineTokens === undefined
+      ? undefined
+      : {
+          tokens: baselineTokens,
+          ...(typeof rawBaseline?.themeName === 'string'
+            ? { themeName: rawBaseline.themeName }
+            : {}),
+        }
+
+  // One or the other, never neither: without something to continue from,
+  // this would be a fresh generation wearing a refinement's name — and
+  // answering a follow-up with an unrelated theme is the exact failure this
+  // route exists to prevent.
+  if (sandboxId === undefined && baseline === undefined) {
+    throw new CogentaError({
+      code: 'CONTENT_INVALID',
+      message: 'Adjusting a theme needs the theme being adjusted.',
+      hint: 'Send either { "sandboxId": "ai-theme-…" } for a custom layout, or { "baseline": { "tokens": … } } for a token candidate — plus the "message" describing the change.',
+    })
+  }
+
+  const message = parsed?.message
+  if (typeof message !== 'string' || message.trim() === '') {
+    throw new CogentaError({
+      code: 'CONTENT_INVALID',
+      message: 'A message is required — there is nothing to change without one.',
+      hint: 'Send { "sandboxId": "ai-theme-…", "message": "rends-le plus sombre" }.',
+    })
+  }
+
+  const attachments = requireAttachments(parsed?.attachments)
+
+  // Anything that is not a well-formed turn is dropped rather than refused:
+  // a malformed history is a degraded conversation, not a reason to refuse a
+  // change the operator is entitled to make.
+  const previousTurns: readonly { readonly role: 'user' | 'agent'; readonly message: string }[] =
+    Array.isArray(parsed?.previousTurns)
+      ? parsed.previousTurns.flatMap((entry) => {
+          const turn = entry as { role?: unknown; message?: unknown }
+          if (turn?.role !== 'user' && turn?.role !== 'agent') return []
+          if (typeof turn.message !== 'string' || turn.message.trim() === '') return []
+          const role: 'user' | 'agent' = turn.role
+          return [{ role, message: turn.message }]
+        })
+      : []
+
+  return {
+    ...(sandboxId === undefined ? {} : { sandboxId }),
+    ...(baseline === undefined ? {} : { baseline }),
+    message,
+    ...(attachments === undefined ? {} : { attachments }),
+    ...(previousTurns.length === 0 ? {} : { previousTurns }),
+  }
+}
+
+function noRefiner(): CogentaError {
+  return new CogentaError({
+    code: 'THEME_NO_PROVIDER',
+    message: 'This instance cannot adjust a generated theme.',
+    hint: 'Adjusting needs both an LLM provider and a real project directory holding the theme sandbox — `cogenta serve` inside a project provides the second.',
+  })
+}
+
 function noGenerator(): CogentaError {
   return new CogentaError({
     code: 'THEME_NO_PROVIDER',
@@ -652,6 +797,40 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
           const job = options.progressJobs.get(third)
           if (job === undefined) throw jobUnknown()
           return jsonResponse(200, { data: job })
+        }
+
+        // POST /api/theme/refine/jobs — the conversation's second turn and
+        // every one after it. A job, never a synchronous call: adjusting runs
+        // a real agent loop, and the screen showing it is a discussion whose
+        // whole point is watching the work happen. Deliberately pollable
+        // through `…/generate/jobs/:id` above rather than through a route of
+        // its own — one job store, one polling loop, and a conversation that
+        // does not care which kind of turn it is waiting on.
+        if (first === 'refine' && second === 'jobs' && third === undefined) {
+          if (method !== 'POST') return methodNotAllowed(['POST'])
+          const refine = options.generator?.refine
+          const generator = options.generator
+          if (generator === undefined || refine === undefined) throw noRefiner()
+          if (!(await generator.isAvailable())) throw noGenerator()
+          if (options.progressJobs === undefined) throw noRefiner()
+          const refineInput = parseRefineBody(request.body)
+          const id = options.progressJobs.start(async (reporter) => {
+            const result = await refine.call(generator, refineInput, reporter)
+            if (!result.ok) {
+              throw new CogentaError({
+                code: 'THEME_OVERRIDE_INVALID',
+                message: `The theme could not be adjusted: ${result.reason}`,
+                hint: 'Try describing the change differently, or start a new theme.',
+              })
+            }
+            return {
+              candidates: result.candidates,
+              ...(result.warnings === undefined || result.warnings.length === 0
+                ? {}
+                : { warnings: result.warnings }),
+            }
+          })
+          return jsonResponse(202, { data: { jobId: id } })
         }
 
         // POST /api/theme/export — freezes the current effective tokens into theme.tokens.json. Development only.

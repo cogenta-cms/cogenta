@@ -9,7 +9,24 @@
  * nothing and the run behaves exactly as it always has.
  */
 export interface ProgressReporter {
-  report(message: string): void
+  report(message: string, detail?: ProgressDetail): void
+}
+
+/**
+ * What a progress line *is*, alongside what it says.
+ *
+ * Added because the admin was reading `message` with a regular expression to
+ * decide whether a line meant "thinking", "a tool ran" or "a tool failed" —
+ * a UI guessing at English prose produced by another package, which breaks
+ * the day a message is reworded or translated. Optional on purpose: every
+ * existing `report(message)` call still compiles and still behaves the same,
+ * and a consumer that receives no detail is expected to degrade to showing
+ * the plain line rather than to fail.
+ */
+export interface ProgressDetail {
+  readonly kind: 'thinking' | 'tool-call' | 'tool-ok' | 'tool-failed' | 'stage' | 'warning'
+  /** The tool this line is about, when it is about one — never parsed back out of the message. */
+  readonly tool?: string
 }
 
 /** The reporter every long-running function defaults to when its caller supplies none — reporting nowhere is free. */
@@ -19,4 +36,7 @@ export const NOOP_PROGRESS: ProgressReporter = { report: () => undefined }
 export interface ProgressEvent {
   readonly at: number
   readonly message: string
+  /** Absent for a line reported before this was carried, or by a reporter that supplies none. */
+  readonly kind?: ProgressDetail['kind']
+  readonly tool?: string
 }

@@ -63,6 +63,10 @@ export interface AppliedPlanReport {
   readonly added: readonly string[]
   readonly skipped: readonly { readonly name: string; readonly reason: string }[]
   readonly entriesSeeded: number
+  /** Pages actually created as drafts — approving them used to change nothing at all. */
+  readonly pagesCreated: number
+  /** Pages that could not be created, and why. Absent from an older server's response. */
+  readonly pagesSkipped?: readonly { readonly title: string; readonly reason: string }[]
   readonly skinApplied: boolean
   readonly followUp: readonly string[]
 }

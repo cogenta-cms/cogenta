@@ -179,4 +179,31 @@ describe('applying a fully reviewed plan', () => {
 
     expect(await screen.findByText(/Restart `cogenta serve`/)).toBeDefined()
   })
+
+  // Approving pages used to change nothing: the applier never read them, so
+  // the operator was told the plan applied while every page they had just
+  // accepted was silently dropped.
+  it('says how many pages were created, and names every one that could not be', async () => {
+    signIn(['admin'])
+
+    render(<App />)
+    await goToSitePlan()
+    await openTheDraft()
+
+    for (const button of screen.getAllByRole('button', { name: 'Garder' })) {
+      fireEvent.click(button)
+    }
+    fireEvent.click(screen.getByRole('radio', { name: 'Clean and clinical' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: "Appliquer ce que j'ai accepté" })).toHaveProperty(
+        'disabled',
+        false,
+      )
+    })
+    fireEvent.click(screen.getByRole('button', { name: "Appliquer ce que j'ai accepté" }))
+
+    expect(await screen.findByText(/2 page\(s\)/)).toBeDefined()
+    // A page that could not be created is named, never dropped in silence.
+    expect(screen.getByText(/Mentions légales/)).toBeDefined()
+  })
 })

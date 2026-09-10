@@ -3773,7 +3773,7 @@
     "remaining_other": "{{count}} items still to decide.",
     "saveProgress": "Save progress",
     "apply": "Apply what I accepted",
-    "appliedSummary": "Applied: {{added}} collection(s) added, {{entries}} demonstration entries created as drafts.",
+    "appliedSummary": "Applied: {{added}} collection(s) added, {{pages}} page(s) and {{entries}} demonstration entries created as drafts.",
     "loadError": "The proposals could not be loaded.",
     "proposeError": "The document could not be turned into a plan.",
     "saveError": "Your decisions could not be saved.",

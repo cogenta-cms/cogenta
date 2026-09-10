@@ -314,6 +314,80 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         )
       }
 
+      // The pages the human approved, created for real.
+      //
+      // They were proposed, listed, accepted one by one and then dropped:
+      // `approved.pages` was never read here. A page is an ordinary content
+      // entry, so the only real question is which collection can hold one —
+      // answered from the site's own schema rather than assumed, and
+      // answered out loud when nothing can.
+      const pagesSkipped: { title: string; reason: string }[] = []
+      let pagesCreated = 0
+      if (approved.pages.length > 0) {
+        const everyCollection = [...options.collections, ...added]
+        const target =
+          everyCollection.find(
+            (collection) => collection.name === 'page' && 'title' in collection.fields,
+          ) ??
+          everyCollection.find(
+            (collection) =>
+              collection.routing !== undefined &&
+              'title' in collection.fields &&
+              'slug' in collection.fields,
+          )
+
+        if (target === undefined) {
+          for (const page of approved.pages) {
+            pagesSkipped.push({
+              title: page.title,
+              reason:
+                'this site has no collection that can hold a page — one with a title and a slug, routed to a public URL',
+            })
+          }
+        } else {
+          const store = createContentStore({
+            db: options.db,
+            collection: target,
+            defaultLocale: options.defaultLocale,
+          })
+          // Only fields this collection actually declares: contract A refuses
+          // an unknown one, and a page invented against the wrong shape would
+          // fail the whole apply rather than one page.
+          const purposeField = ['excerpt', 'summary', 'description', 'body'].find(
+            (name) => name in target.fields,
+          )
+          for (const page of approved.pages) {
+            const values: Record<string, unknown> = { title: page.title }
+            if ('slug' in target.fields) values.slug = page.slug
+            if (purposeField !== undefined) values[purposeField] = page.purpose
+            try {
+              await store.create({
+                status: 'draft',
+                createdBy: input.actorId,
+                provenance: 'generated',
+                provenanceDetail: {
+                  agent: 'site-planner',
+                  ...(options.model === undefined ? {} : { model: options.model }),
+                  at: new Date().toISOString(),
+                },
+                values,
+              })
+              pagesCreated++
+            } catch (error) {
+              pagesSkipped.push({
+                title: page.title,
+                reason: error instanceof Error ? error.message : String(error),
+              })
+            }
+          }
+          if (pagesCreated > 0) {
+            followUp.push(
+              `${pagesCreated} page${pagesCreated === 1 ? ' is' : 's are'} waiting as draft${pagesCreated === 1 ? '' : 's'} in "${target.name}" — they carry a title and a purpose, not their content yet.`,
+            )
+          }
+        }
+      }
+
       let skinApplied = false
       if (approved.skin !== undefined) {
         await writeFile(
@@ -330,6 +404,8 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         added: added.length,
         skipped: skipped.length,
         entriesSeeded,
+        pagesCreated,
+        pagesSkipped: pagesSkipped.length,
         skinApplied,
       })
 
@@ -337,6 +413,8 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         added: added.map((collection) => collection.name),
         skipped,
         entriesSeeded,
+        pagesCreated,
+        pagesSkipped,
         skinApplied,
         followUp,
       }

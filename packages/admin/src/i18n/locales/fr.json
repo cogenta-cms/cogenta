@@ -3773,7 +3773,7 @@
     "remaining_other": "{{count}} éléments restent à trancher.",
     "saveProgress": "Enregistrer l'avancement",
     "apply": "Appliquer ce que j'ai accepté",
-    "appliedSummary": "Appliqué : {{added}} collection(s) ajoutée(s), {{entries}} entrée(s) de démonstration créée(s) en brouillon.",
+    "appliedSummary": "Appliqué : {{added}} collection(s) ajoutée(s), {{pages}} page(s) et {{entries}} entrée(s) de démonstration créées en brouillon.",
     "loadError": "Les propositions n'ont pas pu être chargées.",
     "proposeError": "Le document n'a pas pu être transformé en plan.",
     "saveError": "Vos décisions n'ont pas pu être enregistrées.",

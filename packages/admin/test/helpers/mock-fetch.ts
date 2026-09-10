@@ -4447,6 +4447,10 @@ export function installMockFetch(
                 added: ['dish'],
                 skipped: [],
                 entriesSeeded: 0,
+                pagesCreated: 2,
+                pagesSkipped: [
+                  { title: 'Mentions légales', reason: 'no collection that can hold a page' },
+                ],
                 skinApplied: true,
                 followUp: ['Restart `cogenta serve` to pick up the new collections.'],
               },

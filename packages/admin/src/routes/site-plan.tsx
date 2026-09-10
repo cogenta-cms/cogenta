@@ -304,12 +304,18 @@ export function SitePlanRoute(): JSX.Element {
             {t('sitePlan.appliedSummary', {
               added: report.added.length,
               entries: report.entriesSeeded,
+              pages: report.pagesCreated ?? 0,
             })}
           </p>
           {report.added.length > 0 && <p>{report.added.join(', ')}</p>}
           {report.skipped.map((entry) => (
             <p key={entry.name}>
               {entry.name}: {entry.reason}
+            </p>
+          ))}
+          {(report.pagesSkipped ?? []).map((page) => (
+            <p key={page.title}>
+              {page.title}: {page.reason}
             </p>
           ))}
           {report.followUp.map((line) => (

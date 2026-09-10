@@ -99,6 +99,17 @@ export interface AppliedPlanReport {
   /** Proposals refused because the site already has a collection of that name. */
   readonly skipped: readonly { readonly name: string; readonly reason: string }[]
   readonly entriesSeeded: number
+  /**
+   * Pages actually created as drafts.
+   *
+   * Approving pages used to change nothing at all: the plan proposed them,
+   * the screen asked a human to accept them one by one, and the applier
+   * never read the list — the worst shape a gap can take, since it looks
+   * exactly like success.
+   */
+  readonly pagesCreated: number
+  /** Pages that could not be created, and why — never a silent drop. */
+  readonly pagesSkipped: readonly { readonly title: string; readonly reason: string }[]
   readonly skinApplied: boolean
   /** What the operator still has to do by hand — a restart, most often. Never claimed to be automatic. */
   readonly followUp: readonly string[]

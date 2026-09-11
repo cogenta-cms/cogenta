@@ -356,6 +356,7 @@ import { DEFAULT_LOGO_CONTENT_TYPE, DEFAULT_LOGO_PATH, defaultLogoBytes } from '
 import { runDoctor } from './doctor.js'
 import { renderFormNotFoundPage, renderFormPage } from './forms-page.js'
 import { applySecurity, type SecurityConfig } from './http-security.js'
+import { createImageLibrary } from './image-library.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
 import { renderSearchPage } from './search-page.js'
@@ -1860,6 +1861,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           },
           contentService: service,
           mediaStore,
+          // The host side of `media.store_generated_image`: this is the only
+          // place both a storage driver and a media store are in scope, and
+          // storing a file needs both.
+          storeGeneratedImage: createImageLibrary({ mediaStore, storage }),
           auditLog: auth.audit,
           logger,
           siteSettings: siteSettingsStore,

@@ -557,7 +557,16 @@ export type {
   HttpFetchToolOptions,
 } from './tools/core/http-fetch.js'
 export { createHttpFetchTool } from './tools/core/http-fetch.js'
-export { createMediaReadTool, createMediaWriteTool } from './tools/core/media.js'
+export type {
+  MediaStoreImageToolOptions,
+  StoreImageInput,
+  StoreImageOutput,
+} from './tools/core/media.js'
+export {
+  createMediaReadTool,
+  createMediaStoreImageTool,
+  createMediaWriteTool,
+} from './tools/core/media.js'
 export type { NotFoundLogReader } from './tools/core/not-found-log.js'
 export { createNotFoundLogReadTool } from './tools/core/not-found-log.js'
 export type { RedirectWriter } from './tools/core/redirects.js'

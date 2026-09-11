@@ -504,6 +504,9 @@ export function installMockFetch(
       readonly baseUrl?: string
       readonly maskedKey: string
       readonly updatedAt: string
+      /** Present means this vendor renders images too — capability is derived from the model, never a flag. */
+      readonly imageModel?: string
+      readonly imageBaseUrl?: string
     }[]
     /** What `GET /api/notices` answers with. Empty by default: most screens have nothing to recommend. */
     readonly notices?: readonly {
@@ -1225,6 +1228,8 @@ export function installMockFetch(
     baseUrl?: string
     maskedKey: string
     updatedAt: string
+    imageModel?: string
+    imageBaseUrl?: string
   }[] =
     options.providers === undefined ? [] : options.providers.map((provider) => ({ ...provider }))
   // Mirrors `@cogenta/agents`' `KNOWN_PROVIDER_CATALOG` (fiche 56) closely
@@ -5198,6 +5203,8 @@ export function installMockFetch(
               maxOutputTokens?: number
               requestTimeoutMs?: number
               maxCorrectionAttempts?: number
+              imageModel?: string
+              imageBaseUrl?: string
             }
             const providerId = body.provider ?? 'anthropic'
             const isCatalogId = MOCK_PROVIDER_CATALOG.some((entry) => entry.id === providerId)
@@ -5230,6 +5237,16 @@ export function installMockFetch(
               ...(typeof body.maxCorrectionAttempts === 'number'
                 ? { maxCorrectionAttempts: body.maxCorrectionAttempts }
                 : {}),
+              // Stored for any provider id, exactly like the real store: it is
+              // the *resolution* of an image client that ignores a vendor with
+              // no image support, never the record, so a summary keeps saying
+              // what was typed.
+              ...(typeof body.imageModel === 'string' && body.imageModel.length > 0
+                ? { imageModel: body.imageModel }
+                : {}),
+              ...(typeof body.imageBaseUrl === 'string' && body.imageBaseUrl.length > 0
+                ? { imageBaseUrl: body.imageBaseUrl }
+                : {}),
             }
             const existingIndex = mockProviders.findIndex((p) => p.provider === created.provider)
             if (existingIndex >= 0) mockProviders[existingIndex] = created
@@ -5252,10 +5269,16 @@ export function installMockFetch(
             if (typeof body[key] === 'string' && (body[key] as string).length > 0)
               next[key] = body[key]
           }
+          // `imageModel`/`imageBaseUrl` share that same tri-state, and it is
+          // load-bearing for them: emptying the model IS "this vendor stops
+          // offering images", so `null` has to erase the field rather than be
+          // ignored the way an empty `model` above is.
           for (const key of [
             'maxOutputTokens',
             'requestTimeoutMs',
             'maxCorrectionAttempts',
+            'imageModel',
+            'imageBaseUrl',
           ] as const) {
             if (!(key in body)) continue
             const value = body[key]

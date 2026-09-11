@@ -28,6 +28,7 @@ import {
   createFileProviderConfigStore,
   createKillSwitch,
   createMediaReadTool,
+  createMediaStoreImageTool,
   createMediaWriteTool,
   createMemoryApprovalQueue,
   createNotFoundLogReadTool,
@@ -129,6 +130,18 @@ export interface BuildAgentRuntimeOptions {
   }
   readonly contentService: ContentService
   readonly mediaStore: MediaStore
+  /**
+   * Where `media.store_generated_image` puts a file. Absent means the tool is
+   * not registered at all — a host with no storage driver cannot keep an
+   * image, and a tool that always fails is worse than one that is simply not
+   * offered (R2).
+   */
+  readonly storeGeneratedImage?: (input: {
+    readonly dataUrl: string
+    readonly filename: string
+    readonly alt: string
+    readonly provenanceDetail: Readonly<Record<string, unknown>>
+  }) => Promise<{ readonly id: string; readonly filename: string; readonly byteLength: number }>
   readonly auditLog: AuditLog
   readonly logger: Logger
   /**
@@ -446,6 +459,18 @@ function createLiveProviderRegistry(
 
 function buildToolRegistry(options: {
   readonly contentService: ContentService
+  /**
+   * Where `media.store_generated_image` puts a file — see
+   * `image-library.ts`. Absent means the tool is simply not registered: a
+   * host with no storage driver cannot keep an image, and offering a tool
+   * that always fails is worse than not offering it (R2).
+   */
+  readonly storeGeneratedImage?: (input: {
+    readonly dataUrl: string
+    readonly filename: string
+    readonly alt: string
+    readonly provenanceDetail: Readonly<Record<string, unknown>>
+  }) => Promise<{ readonly id: string; readonly filename: string; readonly byteLength: number }>
   readonly mediaStore: MediaStore
   readonly projectRoot: string
   readonly collections: readonly CollectionDefinition[]
@@ -489,6 +514,17 @@ function buildToolRegistry(options: {
     createContentDeleteTool(contentServiceLike),
     createMediaReadTool(options.mediaStore),
     createMediaWriteTool(options.mediaStore),
+    // The one path from a generated candidate to a real file in the library.
+    // `sideEffects: true` + `reversible: false` means `withAutonomy` forces a
+    // human approval whatever the level — keeping a file is a decision.
+    ...(options.storeGeneratedImage === undefined
+      ? []
+      : [
+          createMediaStoreImageTool({
+            save: options.storeGeneratedImage,
+            agentName: 'image-creator',
+          }),
+        ]),
     createSiteConfigReadTool(),
     createDocumentExtractTool(),
     createDepsScanTool({ projectRoot: options.projectRoot }),
@@ -720,6 +756,9 @@ export async function buildAgentRuntime(
     redirects: options.redirects,
     ...(options.themeCreator === undefined ? {} : { themeCreator: options.themeCreator }),
     ...(options.themeSandbox === undefined ? {} : { themeSandbox: options.themeSandbox }),
+    ...(options.storeGeneratedImage === undefined
+      ? {}
+      : { storeGeneratedImage: options.storeGeneratedImage }),
   }
 
   // Fiche 58 task 4 — built once, here, before the tool registry: every

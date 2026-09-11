@@ -20,11 +20,24 @@ const FocalPointSchema = z.object({ x: z.number(), y: z.number() })
  * wire output is byte-for-byte what it was before this fiche — an agent
  * asking to move a file between folders needs a new, separate tool, not
  * this one grown quietly.
+ *
+ * `provenance`/`provenanceDetail` are stripped for exactly the same reason,
+ * and it was nearly missed: they were added to `MediaAsset` (so that a
+ * generated image is never mistaken for a photograph someone took), which
+ * would have widened this already-shipped tool's output as a side effect. An
+ * agent that needs to know what made a file needs a tool that says so in its
+ * own signature — `media.store_generated_image` below reports it for what it
+ * writes — not `media.read` grown quietly.
  */
-type MediaToolAsset = Omit<MediaAsset, 'folderId'>
+type MediaToolAsset = Omit<MediaAsset, 'folderId' | 'provenance' | 'provenanceDetail'>
 
 function toToolAsset(asset: MediaAsset): MediaToolAsset {
-  const { folderId: _folderId, ...rest } = asset
+  const {
+    folderId: _folderId,
+    provenance: _provenance,
+    provenanceDetail: _provenanceDetail,
+    ...rest
+  } = asset
   return rest
 }
 
@@ -45,9 +58,6 @@ const MediaAssetSchema = z.object({
   contentHash: z.string(),
   createdAt: z.string(),
   createdBy: z.string().nullable(),
-  /** Who or what made the file — an agent reading the library has to be able to tell a photograph from something a model produced. */
-  provenance: z.enum(['human', 'assisted', 'generated']),
-  provenanceDetail: z.record(z.string(), z.unknown()).nullable(),
 }) satisfies z.ZodType<MediaToolAsset>
 
 const ReadInputSchema = z.object({ id: z.string() })
@@ -126,6 +136,111 @@ export function createMediaWriteTool(
         ...(input.focal === undefined ? {} : { focal: input.focal }),
       }
       return toToolAsset(await store.update(input.id, update))
+    },
+  })
+}
+
+/**
+ * `media.store_generated_image` — the step that turns a generated candidate
+ * into a real file in the library.
+ *
+ * `assist.generate_image` deliberately stores nothing: it returns data URLs
+ * and says `applied: false`, because generating is cheap to undo and storing
+ * is not. Nothing bridged the two, so an image a model produced could be
+ * looked at and never kept. This is that bridge, and it is deliberately the
+ * *only* one: every file it writes is recorded as `generated`, with the
+ * agent and model that made it, because the alternative — a picture nobody
+ * can tell apart from a photograph the owner took — is the claim contract A
+ * made provenance non-optional to prevent.
+ *
+ * `sideEffects: true` with `reversible: false` puts it through
+ * `withAutonomy`'s forced-approval path whatever the configured level
+ * (`autonomy/with-autonomy.ts`): a human confirms every file that lands in
+ * the library. That is the design, not a limitation to route around.
+ *
+ * `alt` is required rather than optional for the same reason the media store
+ * refuses an empty one on a non-decorative asset: a model that just described
+ * an image well enough to generate it can describe it well enough to be read
+ * aloud.
+ */
+export interface MediaStoreImageToolOptions {
+  /**
+   * Writes the bytes through the host's storage driver and creates the media
+   * row. Injected rather than taken as a `MediaStore`, because storing a file
+   * needs a `StorageDriver` too and this package has no business choosing
+   * where bytes live.
+   */
+  readonly save: (input: {
+    readonly dataUrl: string
+    readonly filename: string
+    readonly alt: string
+    readonly provenanceDetail: Readonly<Record<string, unknown>>
+  }) => Promise<{ readonly id: string; readonly filename: string; readonly byteLength: number }>
+  /** Named in the provenance of everything this writes. */
+  readonly agentName: string
+  readonly model?: string
+  readonly now?: () => Date
+}
+
+const StoreImageInputSchema = z.object({
+  /** Exactly the `dataUrl` `assist.generate_image` returned — never a URL to fetch. */
+  dataUrl: z.string().min(1),
+  /** What a screen reader should say. Required: an image nobody can describe is an image nobody should publish. */
+  alt: z.string().min(1).max(1000),
+  /** Without an extension — the store derives one from the bytes' real type. */
+  filename: z.string().min(1).max(200).optional(),
+})
+export type StoreImageInput = z.infer<typeof StoreImageInputSchema>
+
+const StoreImageOutputSchema = z.object({
+  id: z.string(),
+  filename: z.string(),
+  byteLength: z.number().int().nonnegative(),
+  /** Always `generated` — this tool has no other honest answer, and says so in its own signature rather than leaving a caller to assume. */
+  provenance: z.literal('generated'),
+})
+export type StoreImageOutput = z.infer<typeof StoreImageOutputSchema>
+
+export function createMediaStoreImageTool(
+  options: MediaStoreImageToolOptions,
+): ToolDefinition<StoreImageInput, StoreImageOutput> {
+  const now = options.now ?? (() => new Date())
+  return defineTool({
+    name: 'media.store_generated_image',
+    version: '1.0.0',
+    description: `Keeps one generated image in the site's media library, so a page or a theme can point at it. Pass the dataUrl exactly as assist.generate_image returned it, plus the alt text a screen reader should read.
+
+The file is recorded as generated, naming the agent and model that made it — a visitor's country may require that, and a reader deserves it either way. Generating costs money and storing costs a decision, which is why they are two steps: generate several, look at them, keep the one that is right.`,
+    input: StoreImageInputSchema,
+    output: StoreImageOutputSchema,
+    permissions: ['media.write'],
+    sideEffects: true,
+    reversible: false,
+    cost: 'low',
+    async execute(input) {
+      if (!input.dataUrl.startsWith('data:image/')) {
+        throw new CogentaError({
+          code: 'MEDIA_INVALID',
+          message: 'Only an inline image data URL can be stored by this tool.',
+          hint: 'Pass the `dataUrl` from assist.generate_image verbatim — this tool never fetches a remote URL.',
+        })
+      }
+      const saved = await options.save({
+        dataUrl: input.dataUrl,
+        filename: input.filename ?? 'generated-image',
+        alt: input.alt,
+        provenanceDetail: {
+          agent: options.agentName,
+          ...(options.model === undefined ? {} : { model: options.model }),
+          at: now().toISOString(),
+        },
+      })
+      return {
+        id: saved.id,
+        filename: saved.filename,
+        byteLength: saved.byteLength,
+        provenance: 'generated',
+      }
     },
   })
 }

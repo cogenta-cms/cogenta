@@ -19,6 +19,7 @@ export type {
   CodePatchToolOptions,
 } from './developer/patch-tool.js'
 export { createCodePatchTool } from './developer/patch-tool.js'
+export { imageCreatorAgent } from './image-creator/agent.js'
 export { performanceAgent } from './performance/agent.js'
 export { compareToBudget } from './performance/budget.js'
 export type { CruxFormFactor, QueryCruxOptions } from './performance/crux-client.js'

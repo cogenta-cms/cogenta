@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
+import { expectNoSeriousA11yViolations } from './helpers/axe.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
 
 const TOKEN_STORAGE_KEY = 'cogenta.session.token'
@@ -208,6 +209,140 @@ describe('providers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     expect(await screen.findByText('my-vllm-server')).toBeDefined()
+  })
+})
+
+// A multimodal vendor is ONE entry sharing ONE API key: the "can render
+// images" capability is derived from an image model being named, never stored
+// as a separate flag — so these tests only ever fill in (or empty) a model
+// field, and never look for a checkbox.
+describe('providers — image model', () => {
+  it('shows "Texte seulement" for a provider saved without an image model', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToProviders()
+    await screen.findByText(/Aucun fournisseur configuré/)
+
+    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+      target: { value: 'sk-ant-secret-value' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+      target: { value: 'claude-sonnet' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('Texte seulement')).toBeDefined()
+  })
+
+  it('saves an image model on a multimodal provider and shows the capability in the table', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToProviders()
+    await screen.findByText(/Aucun fournisseur configuré/)
+
+    fireEvent.change(screen.getByLabelText('Fournisseur'), { target: { value: 'openai' } })
+    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+      target: { value: 'sk-openai-secret' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+      target: { value: 'gpt-5' },
+    })
+
+    // The image endpoint is secondary: it means nothing until a model names
+    // what would be rendered, so it stays hidden until then.
+    expect(screen.queryByLabelText("Point d'accès image")).toBeNull()
+    fireEvent.change(screen.getByLabelText("Modèle d'image"), {
+      target: { value: 'gpt-image-1' },
+    })
+    expect(screen.getByLabelText("Point d'accès image")).toBeDefined()
+    // Naming a model on a vendor that really does images warns about nothing.
+    expect(screen.queryByText(/ne sait pas générer d'images/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('gpt-image-1')).toBeDefined()
+    expect(screen.queryByText('Texte seulement')).toBeNull()
+  })
+
+  it('warns that an image model on a text-only vendor will be ignored, without blocking the save', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    render(<App />)
+    await goToProviders()
+    await screen.findByText(/Aucun fournisseur configuré/)
+
+    // anthropic is the first catalog entry, and has no image client server-side.
+    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+      target: { value: 'sk-ant-secret-value' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+      target: { value: 'claude-sonnet' },
+    })
+    fireEvent.change(screen.getByLabelText("Modèle d'image"), {
+      target: { value: 'some-image-model' },
+    })
+
+    expect(screen.getByText(/« anthropic » ne sait pas générer d'images/)).toBeDefined()
+    // The server, not this screen, decides: the save stays available.
+    expect(screen.getByRole('button', { name: 'Enregistrer' })).toHaveProperty('disabled', false)
+  })
+
+  it('emptying the image model in the edit dialog takes the capability back', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({
+      roles: ['admin'],
+      providers: [
+        {
+          provider: 'openai',
+          enabled: true,
+          model: 'gpt-5',
+          maskedKey: '••••cdef',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+          imageModel: 'gpt-image-1',
+          imageBaseUrl: 'https://proxy.internal/v1/images/generations',
+        },
+      ],
+    })
+
+    render(<App />)
+    await goToProviders()
+    await screen.findByText('gpt-image-1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
+    const dialog = await screen.findByRole('dialog', { name: /Modifier —/ })
+    expect(within(dialog).getByLabelText("Modèle d'image")).toHaveProperty('value', 'gpt-image-1')
+
+    fireEvent.change(within(dialog).getByLabelText("Modèle d'image"), { target: { value: '' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('Texte seulement')).toBeDefined()
+    expect(screen.queryByText('gpt-image-1')).toBeNull()
+  })
+
+  it('has no serious accessibility violation with the image fields and their warning on screen', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({ roles: ['admin'] })
+
+    const { container } = render(<App />)
+    await goToProviders()
+    await screen.findByText(/Aucun fournisseur configuré/)
+
+    fireEvent.change(screen.getByLabelText("Modèle d'image"), {
+      target: { value: 'some-image-model' },
+    })
+    await screen.findByText(/ne sait pas générer d'images/)
+
+    await expectNoSeriousA11yViolations(container)
   })
 })
 

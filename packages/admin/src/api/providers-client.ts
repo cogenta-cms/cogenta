@@ -42,6 +42,22 @@ export interface ProviderSummary {
   readonly maxOutputTokens?: number
   readonly requestTimeoutMs?: number
   readonly maxCorrectionAttempts?: number
+  /**
+   * The model this vendor renders images with, when it can. Capability is
+   * derived from its presence rather than stored as a separate flag: a
+   * multimodal vendor is ONE entry sharing ONE API key, never two entries and
+   * never a "does images" checkbox that a record could contradict by having
+   * no model to render with.
+   */
+  readonly imageModel?: string
+  /**
+   * The complete image endpoint, for a proxy. Deliberately distinct from
+   * `baseUrl`: on the image side that is the full
+   * `…/v1/images/generations` URL, while the text side is a different full
+   * URL (chat completions). Reusing one for the other would POST an image
+   * payload at a chat endpoint.
+   */
+  readonly imageBaseUrl?: string
 }
 
 export function getProviderCatalog(token: string): Promise<readonly ProviderCatalogEntry[]> {
@@ -63,6 +79,8 @@ export function saveProvider(
     readonly maxOutputTokens?: number
     readonly requestTimeoutMs?: number
     readonly maxCorrectionAttempts?: number
+    readonly imageModel?: string
+    readonly imageBaseUrl?: string
   },
 ): Promise<ProviderSummary> {
   return request('/api/providers', {
@@ -92,6 +110,10 @@ export function setProviderEnabled(
  * tuning value nobody but the admin who owns the key could otherwise touch
  * again. `null` on a tuning field clears it back to "use the built-in
  * default"; a field left out of `patch` entirely is left exactly as saved.
+ *
+ * The same tri-state carries the image half: `null` on `imageModel` means
+ * "this vendor stops offering images" — the only way to take the capability
+ * back, since it is derived from that model's presence.
  */
 export function updateProviderSettings(
   token: string,
@@ -102,6 +124,8 @@ export function updateProviderSettings(
     readonly maxOutputTokens?: number | null
     readonly requestTimeoutMs?: number | null
     readonly maxCorrectionAttempts?: number | null
+    readonly imageModel?: string | null
+    readonly imageBaseUrl?: string | null
   },
 ): Promise<ProviderSummary> {
   return request(`/api/providers/${encodeURIComponent(provider)}`, {

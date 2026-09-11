@@ -32,8 +32,19 @@ const ASSET: MediaAsset = {
   provenanceDetail: null,
 }
 
-/** `ASSET` minus `folderId` — what `media.read`/`media.write` actually return (see `media.ts`'s own comment on why). */
-const { folderId: _assetFolderId, ...EXPECTED_TOOL_ASSET } = ASSET
+/**
+ * `ASSET` minus the fields contract C keeps out of this already-shipped
+ * tool's output — `folderId` (fiche 46) and provenance, which was added to
+ * `MediaAsset` so a generated image is never mistaken for a photograph and
+ * would otherwise have widened this signature as a side effect. See
+ * `media.ts`'s own comment.
+ */
+const {
+  folderId: _assetFolderId,
+  provenance: _assetProvenance,
+  provenanceDetail: _assetProvenanceDetail,
+  ...EXPECTED_TOOL_ASSET
+} = ASSET
 
 function fakeStore(overrides: Partial<MediaStore> = {}): MediaStore {
   return {
@@ -57,6 +68,21 @@ describe('media.read', () => {
 
     expect(result).toEqual(EXPECTED_TOOL_ASSET)
     expect(store.get).toHaveBeenCalledWith('m1')
+  })
+
+  // The same rule, and it was nearly broken: provenance was added to
+  // `MediaAsset` so a generated image is never mistaken for a photograph,
+  // which would have widened this already-shipped tool's output as a side
+  // effect. An agent that needs to know what made a file needs a tool whose
+  // own signature says so.
+  it('never exposes provenance either — contract C figures a shipped signature', async () => {
+    const store = fakeStore()
+    const tool = createMediaReadTool(store)
+
+    const result = await tool.execute({ id: 'm1' }, CTX)
+
+    expect(result).not.toHaveProperty('provenance')
+    expect(result).not.toHaveProperty('provenanceDetail')
   })
 
   it('never exposes folderId — contract C keeps this tool exactly as figured (fiche 46)', async () => {

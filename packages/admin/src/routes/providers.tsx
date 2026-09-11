@@ -17,6 +17,7 @@ import { useAutosaveEnabled } from '../lib/autosave-prefs.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
 import { useSectionAutosave } from '../settings/site-settings-section.js'
 import {
+  Badge,
   Button,
   Card,
   CardBody,
@@ -58,6 +59,17 @@ import {
 const CUSTOM_PROVIDER = '__custom__'
 /** Sentinel model-select value meaning "leave the free-text model field alone". */
 const CUSTOM_MODEL = ''
+
+/**
+ * The vendors `@cogenta/agents`' `createImageProviderRegistry` actually has an
+ * image client for. The text registry accepts any provider id; images are
+ * served by a closed set of two, and the server deliberately *ignores* an
+ * image model typed onto a third rather than failing the whole resolution
+ * (R2). Ignoring it silently in the UI too would let an admin believe they
+ * had configured image generation, so this list exists to say so out loud —
+ * it never blocks the save, which stays the server's call.
+ */
+const IMAGE_CAPABLE_PROVIDERS: ReadonlySet<string> = new Set(['openai', 'stability'])
 
 /** `undefined` for a blank field ("use the built-in default") or anything that is not a positive whole number — the server's own bounds check (`PROVIDER_TUNING_INVALID`) is the source of truth on the upper end, this just keeps an obviously-wrong value from ever being sent. */
 function parsePositiveInt(text: string): number | undefined {
@@ -194,6 +206,9 @@ export function ProvidersRoute(): JSX.Element {
   const [formMaxOutputTokens, setFormMaxOutputTokens] = useState('')
   const [formTimeoutSeconds, setFormTimeoutSeconds] = useState('')
   const [formMaxCorrectionAttempts, setFormMaxCorrectionAttempts] = useState('')
+  /** Empty means "text only" — the capability is this field being filled in, never a separate flag. */
+  const [formImageModel, setFormImageModel] = useState('')
+  const [formImageBaseUrl, setFormImageBaseUrl] = useState('')
 
   // Fiche feedback: a saved provider's row had no way to change its own
   // model/baseUrl/tuning without re-pasting the API key (the top form's own
@@ -205,6 +220,8 @@ export function ProvidersRoute(): JSX.Element {
   const [editMaxOutputTokens, setEditMaxOutputTokens] = useState('')
   const [editTimeoutSeconds, setEditTimeoutSeconds] = useState('')
   const [editMaxCorrectionAttempts, setEditMaxCorrectionAttempts] = useState('')
+  const [editImageModel, setEditImageModel] = useState('')
+  const [editImageBaseUrl, setEditImageBaseUrl] = useState('')
   const [editBusy, setEditBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -240,6 +257,11 @@ export function ProvidersRoute(): JSX.Element {
   )
   const isCustomProvider = formProviderId === CUSTOM_PROVIDER
   const effectiveProviderId = isCustomProvider ? formCustomProviderId.trim() : formProviderId
+  const formWantsImages = formImageModel.trim().length > 0
+  const formImagesUnsupported = formWantsImages && !IMAGE_CAPABLE_PROVIDERS.has(effectiveProviderId)
+  const editWantsImages = editImageModel.trim().length > 0
+  const editImagesUnsupported =
+    editWantsImages && editing !== null && !IMAGE_CAPABLE_PROVIDERS.has(editing.provider)
 
   function selectProvider(id: string): void {
     setFormProviderId(id)
@@ -275,6 +297,10 @@ export function ProvidersRoute(): JSX.Element {
         ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
         ...(timeoutSeconds === undefined ? {} : { requestTimeoutMs: timeoutSeconds * 1000 }),
         ...(maxCorrectionAttempts === undefined ? {} : { maxCorrectionAttempts }),
+        ...(formImageModel.trim().length > 0 ? { imageModel: formImageModel.trim() } : {}),
+        ...(formImageModel.trim().length > 0 && formImageBaseUrl.trim().length > 0
+          ? { imageBaseUrl: formImageBaseUrl.trim() }
+          : {}),
       })
       setFormKey('')
       setFormModel('')
@@ -284,6 +310,8 @@ export function ProvidersRoute(): JSX.Element {
       setFormMaxOutputTokens('')
       setFormTimeoutSeconds('')
       setFormMaxCorrectionAttempts('')
+      setFormImageModel('')
+      setFormImageBaseUrl('')
       await load()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('providers.saveError'))
@@ -307,6 +335,8 @@ export function ProvidersRoute(): JSX.Element {
     setEditMaxCorrectionAttempts(
       provider.maxCorrectionAttempts === undefined ? '' : String(provider.maxCorrectionAttempts),
     )
+    setEditImageModel(provider.imageModel ?? '')
+    setEditImageBaseUrl(provider.imageBaseUrl ?? '')
     setError(null)
   }
 
@@ -328,6 +358,16 @@ export function ProvidersRoute(): JSX.Element {
         maxOutputTokens: maxOutputTokens ?? null,
         requestTimeoutMs: timeoutSeconds === undefined ? null : timeoutSeconds * 1000,
         maxCorrectionAttempts: maxCorrectionAttempts ?? null,
+        // Same reasoning for the image half, and the only way to take the
+        // capability back: emptying the model field IS "this vendor stops
+        // offering images", so it must travel as `null` rather than be
+        // omitted. Clearing the model clears the endpoint with it — an image
+        // endpoint for a vendor that renders no images means nothing.
+        imageModel: editImageModel.trim().length === 0 ? null : editImageModel.trim(),
+        imageBaseUrl:
+          editImageModel.trim().length === 0 || editImageBaseUrl.trim().length === 0
+            ? null
+            : editImageBaseUrl.trim(),
       })
       setEditing(null)
       await load()
@@ -533,6 +573,46 @@ export function ProvidersRoute(): JSX.Element {
                 />
               )}
             </Field>
+            <Field
+              label={t('providers.imageModel')}
+              className="min-w-[200px]"
+              description={t('providers.imageModelHint')}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  value={formImageModel}
+                  onChange={(event) => setFormImageModel(event.target.value)}
+                  placeholder={t('providers.imageModelPlaceholder')}
+                />
+              )}
+            </Field>
+            {/* Secondary by design: an image endpoint only means anything once
+                a model is named, so it stays out of the way until then rather
+                than sitting there as a field nobody can act on. */}
+            {formWantsImages && (
+              <Field
+                label={t('providers.imageBaseUrl')}
+                className="min-w-[220px]"
+                description={t('providers.imageBaseUrlHint')}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    value={formImageBaseUrl}
+                    onChange={(event) => setFormImageBaseUrl(event.target.value)}
+                    placeholder={t('providers.imageBaseUrlPlaceholder')}
+                  />
+                )}
+              </Field>
+            )}
+            {formImagesUnsupported && (
+              <div className="w-full">
+                <Notice tone="warning">
+                  <p>{t('providers.imageUnsupported', { provider: effectiveProviderId })}</p>
+                </Notice>
+              </div>
+            )}
             <Button
               disabled={
                 busy === 'save' ||
@@ -560,6 +640,7 @@ export function ProvidersRoute(): JSX.Element {
                 <TableHeader>{t('providers.model')}</TableHeader>
                 <TableHeader>{t('providers.apiKey')}</TableHeader>
                 <TableHeader>{t('providers.tuningColumn')}</TableHeader>
+                <TableHeader>{t('providers.imagesColumn')}</TableHeader>
                 <TableHeader>{t('providers.state')}</TableHeader>
                 <TableHeader>{t('agents.actions')}</TableHeader>
               </TableRow>
@@ -597,6 +678,15 @@ export function ProvidersRoute(): JSX.Element {
                       </span>
                     )}
                   </TableCell>
+                  {/* The capability, read exactly the way the server derives
+                      it: a model is named, or this vendor does text only. */}
+                  <TableCell>
+                    {provider.imageModel === undefined || provider.imageModel === '' ? (
+                      <span className="text-muted-foreground">{t('providers.imageTextOnly')}</span>
+                    ) : (
+                      <Badge tone="info">{provider.imageModel}</Badge>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {provider.enabled ? t('providers.enabled') : t('providers.disabled')}
                   </TableCell>
@@ -626,7 +716,7 @@ export function ProvidersRoute(): JSX.Element {
                 </TableRow>
               ))}
               {providers.length === 0 && (
-                <TableEmpty colSpan={6}>{t('providers.noProviders')}</TableEmpty>
+                <TableEmpty colSpan={7}>{t('providers.noProviders')}</TableEmpty>
               )}
             </TableBody>
           </Table>
@@ -720,6 +810,36 @@ export function ProvidersRoute(): JSX.Element {
               />
             )}
           </Field>
+          <Field label={t('providers.imageModel')} description={t('providers.imageModelHint')}>
+            {(control) => (
+              <Input
+                {...control}
+                value={editImageModel}
+                onChange={(event) => setEditImageModel(event.target.value)}
+                placeholder={t('providers.imageModelPlaceholder')}
+              />
+            )}
+          </Field>
+          {editWantsImages && (
+            <Field
+              label={t('providers.imageBaseUrl')}
+              description={t('providers.imageBaseUrlHint')}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  value={editImageBaseUrl}
+                  onChange={(event) => setEditImageBaseUrl(event.target.value)}
+                  placeholder={t('providers.imageBaseUrlPlaceholder')}
+                />
+              )}
+            </Field>
+          )}
+          {editImagesUnsupported && (
+            <Notice tone="warning">
+              <p>{t('providers.imageUnsupported', { provider: editing.provider })}</p>
+            </Notice>
+          )}
         </Modal>
       )}
     </section>

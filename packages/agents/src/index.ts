@@ -263,7 +263,10 @@ export type {
   ProviderRegistryConfig,
 } from './providers/registry.js'
 export { createProviderRegistry } from './providers/registry.js'
-export { resolveProviderRegistryConfig } from './providers/resolve.js'
+export {
+  resolveImageProviderRegistryConfig,
+  resolveProviderRegistryConfig,
+} from './providers/resolve.js'
 export type {
   FileProviderConfigStoreOptions,
   ProviderConfigInput,

@@ -2,7 +2,10 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resolveProviderRegistryConfig } from '../../src/providers/resolve.js'
+import {
+  resolveImageProviderRegistryConfig,
+  resolveProviderRegistryConfig,
+} from '../../src/providers/resolve.js'
 import type { ProviderConfigStore } from '../../src/providers/store.js'
 import { createFileProviderConfigStore } from '../../src/providers/store.js'
 
@@ -330,5 +333,115 @@ describe('resolveProviderRegistryConfig', () => {
 
   it('is empty when nothing is configured (R2)', async () => {
     expect(await resolveProviderRegistryConfig(store)).toEqual({})
+  })
+})
+
+/**
+ * Multimodal vendors are one entry, not two.
+ *
+ * A provider that does text and images shares an API key and a base URL and
+ * simply has a second model name — so capability is derived from the models
+ * declared rather than stored as a flag, and a record can never claim a
+ * capability it has no model for.
+ */
+describe('a provider that also generates images', () => {
+  it('is text-only until an image model says otherwise', async () => {
+    await store.upsert({
+      provider: 'deepseek',
+      apiKey: 'sk-deepseek-value',
+      model: 'deepseek-v4-flash',
+    })
+
+    const [saved] = await store.list()
+    expect(saved?.imageModel).toBeUndefined()
+    expect(await resolveImageProviderRegistryConfig(store)).toEqual({})
+    // And it is still a perfectly good text provider.
+    expect((await resolveProviderRegistryConfig(store)).deepseek?.model).toBe('deepseek-v4-flash')
+  })
+
+  it('serves both halves from one entry, one key', async () => {
+    await store.upsert({
+      provider: 'openai',
+      apiKey: 'sk-openai-value',
+      model: 'gpt-5-mini',
+      imageModel: 'gpt-image-1',
+    })
+
+    const text = await resolveProviderRegistryConfig(store)
+    const images = await resolveImageProviderRegistryConfig(store)
+
+    expect(text.openai?.model).toBe('gpt-5-mini')
+    expect(images.openai?.model).toBe('gpt-image-1')
+    expect(images.openai?.apiKey).toBe('sk-openai-value')
+  })
+
+  it('never hands the text endpoint to the image client', async () => {
+    // `baseUrl` is a *complete* endpoint on both sides, and they are
+    // different endpoints — sharing one would POST an image payload at a
+    // chat URL.
+    await store.upsert({
+      provider: 'openai',
+      apiKey: 'sk-openai-value',
+      model: 'gpt-5-mini',
+      baseUrl: 'https://proxy.example.com/v1/chat/completions',
+      imageModel: 'gpt-image-1',
+    })
+
+    const images = await resolveImageProviderRegistryConfig(store)
+    expect(images.openai?.baseUrl).toBeUndefined()
+
+    await store.upsert({
+      provider: 'openai',
+      apiKey: 'sk-openai-value',
+      model: 'gpt-5-mini',
+      baseUrl: 'https://proxy.example.com/v1/chat/completions',
+      imageModel: 'gpt-image-1',
+      imageBaseUrl: 'https://proxy.example.com/v1/images/generations',
+    })
+    expect((await resolveImageProviderRegistryConfig(store)).openai?.baseUrl).toBe(
+      'https://proxy.example.com/v1/images/generations',
+    )
+  })
+
+  it('ignores an image model on a vendor no image client serves', async () => {
+    await store.upsert({
+      provider: 'deepseek',
+      apiKey: 'sk-deepseek-value',
+      model: 'deepseek-v4-flash',
+      imageModel: 'something-imagined',
+    })
+
+    // Degrades rather than failing the whole resolution: the entry is still
+    // a working text provider.
+    expect(await resolveImageProviderRegistryConfig(store)).toEqual({})
+  })
+
+  it('leaves a disabled provider out of both registries', async () => {
+    await store.upsert({
+      provider: 'openai',
+      apiKey: 'sk-openai-value',
+      model: 'gpt-5-mini',
+      imageModel: 'gpt-image-1',
+      enabled: false,
+    })
+
+    expect(await resolveImageProviderRegistryConfig(store)).toEqual({})
+    expect(await resolveProviderRegistryConfig(store)).toEqual({})
+  })
+
+  it('adds images to a vendor already saved, and takes them away again', async () => {
+    await store.upsert({ provider: 'openai', apiKey: 'sk-openai-value', model: 'gpt-5-mini' })
+    expect(await resolveImageProviderRegistryConfig(store)).toEqual({})
+
+    await store.updateSettings('openai', { imageModel: 'gpt-image-1' })
+    expect((await resolveImageProviderRegistryConfig(store)).openai?.model).toBe('gpt-image-1')
+    // The text half is untouched by an image-only patch.
+    expect((await resolveProviderRegistryConfig(store)).openai?.model).toBe('gpt-5-mini')
+
+    // `null` really deletes it rather than being overwritten back by the
+    // saved value — the case a spread-then-merge implementation gets wrong.
+    await store.updateSettings('openai', { imageModel: null })
+    expect(await resolveImageProviderRegistryConfig(store)).toEqual({})
+    expect((await store.get('openai'))?.imageModel).toBeUndefined()
   })
 })

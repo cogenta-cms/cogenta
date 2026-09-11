@@ -94,6 +94,25 @@ export interface StoredProviderConfig {
   readonly maxOutputTokens?: number
   readonly requestTimeoutMs?: number
   readonly maxCorrectionAttempts?: number
+  /**
+   * The model this vendor renders *images* with, when it can.
+   *
+   * Capability is derived from the models declared, never stored as a
+   * separate flag: a multimodal vendor shares one key and one base URL and
+   * simply has a second model name, and an explicit `capabilities: ['image']`
+   * alongside an absent image model would be a record contradicting itself.
+   * Absent means this entry is text-only, which is what every entry saved
+   * before this field was.
+   */
+  readonly imageModel?: string
+  /**
+   * The full image endpoint, when a proxy or a self-hosted gateway serves
+   * one. Separate from `baseUrl` on purpose: on both image clients this is
+   * the complete URL (`…/v1/images/generations`), and the text `baseUrl` is
+   * a different complete URL — sharing one field would send an image payload
+   * to a chat endpoint.
+   */
+  readonly imageBaseUrl?: string
 }
 
 export interface ProviderConfigInput {
@@ -105,6 +124,9 @@ export interface ProviderConfigInput {
   readonly maxOutputTokens?: number
   readonly requestTimeoutMs?: number
   readonly maxCorrectionAttempts?: number
+  /** Set it to declare this vendor can also generate images; clear it (empty string) to say it cannot any more. */
+  readonly imageModel?: string
+  readonly imageBaseUrl?: string
 }
 
 /** Bounds wide enough for any real model/deployment, narrow enough to catch a typo (a negative, a zero, or a value nobody would deliberately set) before it reaches an HTTP request. */
@@ -160,6 +182,9 @@ export interface ProviderConfigStore {
       readonly maxOutputTokens?: number | null
       readonly requestTimeoutMs?: number | null
       readonly maxCorrectionAttempts?: number | null
+      /** `null` clears it: this vendor stops offering images. */
+      readonly imageModel?: string | null
+      readonly imageBaseUrl?: string | null
     },
   ): Promise<StoredProviderConfig>
   remove(provider: ProviderName): Promise<void>
@@ -180,6 +205,8 @@ interface EncryptedRecord {
   readonly maxOutputTokens?: number
   readonly requestTimeoutMs?: number
   readonly maxCorrectionAttempts?: number
+  readonly imageModel?: string
+  readonly imageBaseUrl?: string
 }
 
 const KEY_DERIVATION_SALT = 'cogenta-provider-secrets-v1'
@@ -215,6 +242,12 @@ function toSummary(record: EncryptedRecord): StoredProviderConfig {
     ...(record.maxCorrectionAttempts === undefined
       ? {}
       : { maxCorrectionAttempts: record.maxCorrectionAttempts }),
+    ...(record.imageModel === undefined || record.imageModel === ''
+      ? {}
+      : { imageModel: record.imageModel }),
+    ...(record.imageBaseUrl === undefined || record.imageBaseUrl === ''
+      ? {}
+      : { imageBaseUrl: record.imageBaseUrl }),
   }
 }
 
@@ -336,6 +369,15 @@ export function createFileProviderConfigStore(
         ...(input.maxCorrectionAttempts === undefined
           ? {}
           : { maxCorrectionAttempts: input.maxCorrectionAttempts }),
+        // An empty string is how the admin says "this vendor no longer does
+        // images" — kept distinct from absent, which means the field was
+        // never sent at all.
+        ...(input.imageModel === undefined || input.imageModel.trim() === ''
+          ? {}
+          : { imageModel: input.imageModel.trim() }),
+        ...(input.imageBaseUrl === undefined || input.imageBaseUrl.trim() === ''
+          ? {}
+          : { imageBaseUrl: input.imageBaseUrl.trim() }),
       }
       await writeFile(fileFor(input.provider), JSON.stringify(record, null, 2), 'utf8')
       return toSummary(record)
@@ -387,6 +429,11 @@ export function createFileProviderConfigStore(
         maxOutputTokens: _existingMaxOutputTokens,
         requestTimeoutMs: _existingRequestTimeoutMs,
         maxCorrectionAttempts: _existingMaxCorrectionAttempts,
+        // Stripped for the same reason as the three above: `null` has to be
+        // able to actually delete the key, which it cannot do if the old
+        // value is still spread in underneath.
+        imageModel: _existingImageModel,
+        imageBaseUrl: _existingImageBaseUrl,
         ...existingWithoutTuning
       } = existing
       const nextMaxOutputTokens =
@@ -401,6 +448,10 @@ export function createFileProviderConfigStore(
         patch.maxCorrectionAttempts === undefined
           ? existing.maxCorrectionAttempts
           : (patch.maxCorrectionAttempts ?? undefined)
+      const nextImageModel =
+        patch.imageModel === undefined ? existing.imageModel : (patch.imageModel ?? undefined)
+      const nextImageBaseUrl =
+        patch.imageBaseUrl === undefined ? existing.imageBaseUrl : (patch.imageBaseUrl ?? undefined)
       const updated: EncryptedRecord = {
         ...existingWithoutTuning,
         model: patch.model ?? existing.model,
@@ -411,6 +462,12 @@ export function createFileProviderConfigStore(
         ...(nextMaxCorrectionAttempts === undefined
           ? {}
           : { maxCorrectionAttempts: nextMaxCorrectionAttempts }),
+        ...(nextImageModel === undefined || nextImageModel === ''
+          ? {}
+          : { imageModel: nextImageModel }),
+        ...(nextImageBaseUrl === undefined || nextImageBaseUrl === ''
+          ? {}
+          : { imageBaseUrl: nextImageBaseUrl }),
       }
       await writeFile(fileFor(provider), JSON.stringify(updated, null, 2), 'utf8')
       return toSummary(updated)

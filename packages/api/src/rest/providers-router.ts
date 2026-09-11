@@ -29,6 +29,14 @@ export interface ProviderSummary {
   readonly maxOutputTokens?: number
   readonly requestTimeoutMs?: number
   readonly maxCorrectionAttempts?: number
+  /**
+   * The model this vendor renders images with, when it can. Capability is
+   * derived from its presence rather than stored as a flag: a multimodal
+   * vendor is one entry sharing one key, not two entries.
+   */
+  readonly imageModel?: string
+  /** The complete image endpoint, for a proxy — never the text `baseUrl`, which is a different complete endpoint. */
+  readonly imageBaseUrl?: string
 }
 
 /** Plain data — deliberately not importing `@cogenta/agents`' own `ProviderCatalogEntry` type, so this package's production code never depends on a package it only lists as a devDependency (see `packages/cli/src/commands/agent-runtime.ts`'s `providerCatalogSummary`, which is the one place a real catalog is supplied). */
@@ -54,6 +62,8 @@ export interface ProviderRegistryLike {
     readonly maxOutputTokens?: number
     readonly requestTimeoutMs?: number
     readonly maxCorrectionAttempts?: number
+    readonly imageModel?: string
+    readonly imageBaseUrl?: string
   }): Promise<ProviderSummary>
   setEnabled(provider: string, enabled: boolean): Promise<ProviderSummary>
   /** `null` on a tuning field clears it back to "use the built-in default"; `undefined` (the field simply absent from the patch) leaves it as saved. */
@@ -65,6 +75,9 @@ export interface ProviderRegistryLike {
       readonly maxOutputTokens?: number | null
       readonly requestTimeoutMs?: number | null
       readonly maxCorrectionAttempts?: number | null
+      /** `null` clears it — this vendor stops offering images. */
+      readonly imageModel?: string | null
+      readonly imageBaseUrl?: string | null
     },
   ): Promise<ProviderSummary>
   remove(provider: string): Promise<void>
@@ -152,6 +165,23 @@ function optionalNumber(body: Record<string, unknown>, field: string): number | 
  * empty" is exactly why `'field' in body` is checked before looking at the
  * value.
  */
+/**
+ * The string twin of `tuningField`: absent leaves the saved value alone,
+ * empty or `null` clears it, anything else sets it. Clearing matters here —
+ * it is how an admin says "this vendor no longer generates images".
+ */
+function textField(body: Record<string, unknown>, field: string): string | null | undefined {
+  if (!(field in body)) return undefined
+  const value = body[field]
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value === 'string') return value
+  throw new CogentaError({
+    code: 'PROVIDER_TUNING_INVALID',
+    message: `"${field}" must be a string.`,
+    hint: 'Leave it empty to clear it.',
+  })
+}
+
 function tuningField(body: Record<string, unknown>, field: string): number | null | undefined {
   if (!(field in body)) return undefined
   const value = body[field]
@@ -231,6 +261,8 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
             const maxOutputTokens = optionalNumber(body, 'maxOutputTokens')
             const requestTimeoutMs = optionalNumber(body, 'requestTimeoutMs')
             const maxCorrectionAttempts = optionalNumber(body, 'maxCorrectionAttempts')
+            const imageModel = body['imageModel']
+            const imageBaseUrl = body['imageBaseUrl']
             const saved = await options.providers.upsert({
               provider: name,
               apiKey,
@@ -240,6 +272,8 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
               ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
               ...(requestTimeoutMs === undefined ? {} : { requestTimeoutMs }),
               ...(maxCorrectionAttempts === undefined ? {} : { maxCorrectionAttempts }),
+              ...(typeof imageModel === 'string' ? { imageModel } : {}),
+              ...(typeof imageBaseUrl === 'string' ? { imageBaseUrl } : {}),
             })
             return jsonResponse(201, { data: saved })
           }
@@ -270,6 +304,11 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
           const maxOutputTokens = tuningField(body, 'maxOutputTokens')
           const requestTimeoutMs = tuningField(body, 'requestTimeoutMs')
           const maxCorrectionAttempts = tuningField(body, 'maxCorrectionAttempts')
+          // A string sets it; an explicit `null` clears it — this vendor
+          // stops offering images. Absent leaves it as saved, exactly like
+          // every tuning field above.
+          const imageModel = textField(body, 'imageModel')
+          const imageBaseUrl = textField(body, 'imageBaseUrl')
           let result: ProviderSummary | undefined
           if (typeof enabled === 'boolean') {
             result = await options.providers.setEnabled(provider, enabled)
@@ -279,7 +318,9 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
             (typeof baseUrl === 'string' && baseUrl.length > 0) ||
             maxOutputTokens !== undefined ||
             requestTimeoutMs !== undefined ||
-            maxCorrectionAttempts !== undefined
+            maxCorrectionAttempts !== undefined ||
+            imageModel !== undefined ||
+            imageBaseUrl !== undefined
           ) {
             result = await options.providers.updateSettings(provider, {
               ...(typeof model === 'string' && model.length > 0 ? { model } : {}),
@@ -287,13 +328,15 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
               ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
               ...(requestTimeoutMs === undefined ? {} : { requestTimeoutMs }),
               ...(maxCorrectionAttempts === undefined ? {} : { maxCorrectionAttempts }),
+              ...(imageModel === undefined ? {} : { imageModel }),
+              ...(imageBaseUrl === undefined ? {} : { imageBaseUrl }),
             })
           }
           if (result === undefined) {
             throw new CogentaError({
               code: 'PROVIDER_UNKNOWN',
               message:
-                'Nothing to update — send "enabled", "model", "baseUrl", "maxOutputTokens", "requestTimeoutMs" and/or "maxCorrectionAttempts".',
+                'Nothing to update — send "enabled", "model", "baseUrl", "maxOutputTokens", "requestTimeoutMs", "maxCorrectionAttempts", "imageModel" and/or "imageBaseUrl".',
               hint: 'Send at least one of these fields.',
             })
           }

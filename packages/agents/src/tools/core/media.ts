@@ -45,6 +45,9 @@ const MediaAssetSchema = z.object({
   contentHash: z.string(),
   createdAt: z.string(),
   createdBy: z.string().nullable(),
+  /** Who or what made the file — an agent reading the library has to be able to tell a photograph from something a model produced. */
+  provenance: z.enum(['human', 'assisted', 'generated']),
+  provenanceDetail: z.record(z.string(), z.unknown()).nullable(),
 }) satisfies z.ZodType<MediaToolAsset>
 
 const ReadInputSchema = z.object({ id: z.string() })

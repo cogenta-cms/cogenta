@@ -54,7 +54,26 @@ export interface MediaAsset {
   readonly folderId: string | null
   readonly createdAt: string
   readonly createdBy: string | null
+  /**
+   * Who or what made this file.
+   *
+   * Contract A made the same field non-optional on a content entry because
+   * the European AI framework requires it, and a generated image is no less
+   * published than generated prose. Without it a picture a model invented is
+   * indistinguishable from one the site owner photographed — which is
+   * exactly the claim nobody is allowed to make by accident.
+   *
+   * `human` for everything uploaded by a person, which is every asset that
+   * predates this field: the column is added without a backfill, and a null
+   * reads as `human` rather than as "unknown".
+   */
+  readonly provenance: MediaProvenance
+  /** Which agent, which model, when — present only when something other than a person made it. */
+  readonly provenanceDetail: Readonly<Record<string, unknown>> | null
 }
+
+/** The same vocabulary contract A uses for a content entry — one concept, one set of words. */
+export type MediaProvenance = 'human' | 'assisted' | 'generated'
 
 export interface CreateMediaInput {
   readonly id?: string
@@ -75,6 +94,9 @@ export interface CreateMediaInput {
   /** Absent or `null` means unclassified — the same default every asset uploaded before fiche 46 already has. */
   readonly folderId?: string | null
   readonly createdBy?: string | null
+  /** Defaults to `human`: a caller that says nothing is a person uploading a file, which is what every caller before this field was. */
+  readonly provenance?: MediaProvenance
+  readonly provenanceDetail?: Readonly<Record<string, unknown>> | null
 }
 
 export interface UpdateMediaInput {

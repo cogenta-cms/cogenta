@@ -8,6 +8,7 @@ import type {
   ListMediaOptions,
   MediaAsset,
   MediaPage,
+  MediaProvenance,
   MediaSortField,
   MediaStore,
   ReplaceMediaInput,
@@ -52,6 +53,8 @@ interface MediaRow {
   folder_id: string | null
   created_at: string
   created_by: string | null
+  provenance: string | null
+  provenance_detail: string | null
 }
 
 /** Every caller that predates tagging/replace still gets a stable, non-empty value. */
@@ -97,7 +100,19 @@ function rowToAsset(row: MediaRow): MediaAsset {
     folderId: row.folder_id,
     createdAt: row.created_at,
     createdBy: row.created_by,
+    // A null predates the column, and a file uploaded before anything could
+    // generate one was uploaded by a person. Reading it as `human` is the
+    // true answer, not a guess.
+    provenance: readProvenance(row.provenance),
+    provenanceDetail:
+      row.provenance_detail === null || row.provenance_detail === ''
+        ? null
+        : (JSON.parse(row.provenance_detail) as Record<string, unknown>),
   }
+}
+
+function readProvenance(value: string | null): MediaProvenance {
+  return value === 'generated' || value === 'assisted' ? value : 'human'
 }
 
 function notFound(id: string): CogentaError {
@@ -247,6 +262,21 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
       )
       .catch(() => undefined)
 
+    // Provenance, the same try-not-check pattern as every column above.
+    // Deliberately no backfill: a null already means `human` when read
+    // (`readProvenance`), and writing 'human' across an existing library
+    // would only restate what absence already says.
+    await db
+      .query(
+        sql`alter table ${table} add column ${identifier('provenance', db.dialect)} varchar(16)`,
+      )
+      .catch(() => undefined)
+    await db
+      .query(
+        sql`alter table ${table} add column ${identifier('provenance_detail', db.dialect)} text`,
+      )
+      .catch(() => undefined)
+
     ready = true
   }
 
@@ -297,16 +327,20 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
       const tags = input.tags ?? []
       const contentHash = input.contentHash ?? defaultContentHash(input.storageKey)
       const folderId = input.folderId ?? null
+      const provenance = input.provenance ?? 'human'
+      const provenanceDetail = input.provenanceDetail ?? null
 
       await db.query(sql`
         insert into ${table}
           (id, kind, filename, mime_type, size, width, height, alt, decorative,
-           decorative_justification, focal, storage_key, tags, content_hash, folder_id, created_at, created_by)
+           decorative_justification, focal, storage_key, tags, content_hash, folder_id, created_at, created_by,
+           provenance, provenance_detail)
         values
           (${id}, ${input.kind}, ${input.filename}, ${input.mimeType}, ${input.size},
            ${input.width ?? null}, ${input.height ?? null}, ${alt}, ${decorative},
            ${justification}, ${input.focal === undefined || input.focal === null ? null : JSON.stringify(input.focal)},
-           ${input.storageKey}, ${serializeTags(tags)}, ${contentHash}, ${folderId}, ${createdAt}, ${input.createdBy ?? null})`)
+           ${input.storageKey}, ${serializeTags(tags)}, ${contentHash}, ${folderId}, ${createdAt}, ${input.createdBy ?? null},
+           ${provenance}, ${provenanceDetail === null ? null : JSON.stringify(provenanceDetail)})`)
 
       return {
         id,
@@ -324,6 +358,8 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
         tags,
         contentHash,
         folderId,
+        provenance,
+        provenanceDetail,
         createdAt,
         createdBy: input.createdBy ?? null,
       }

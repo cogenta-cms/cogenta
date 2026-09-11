@@ -568,5 +568,65 @@ export function runMediaContract(
         await dispose?.()
       }
     })
+
+    /**
+     * Contract A made provenance non-optional on a content entry because the
+     * European AI framework requires it. A generated image is no less
+     * published than generated prose, so the same claim has to be recorded —
+     * and a default of `human` has to remain true for every file a person
+     * uploaded, including every one uploaded before this column existed.
+     */
+    it('records a file as human-made unless the caller says otherwise', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        const asset = await store.create({
+          kind: 'image',
+          filename: 'photo.jpg',
+          mimeType: 'image/jpeg',
+          size: 1024,
+          alt: 'A photograph the owner took',
+          storageKey: 'media/photo.jpg',
+        })
+
+        expect(asset.provenance).toBe('human')
+        expect(asset.provenanceDetail).toBeNull()
+        // And it reads back that way, not only at the moment of writing.
+        expect((await store.get(asset.id)).provenance).toBe('human')
+      } finally {
+        await dispose?.()
+      }
+    })
+
+    it('keeps which agent and model made a generated image, and reads it back', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        const asset = await store.create({
+          kind: 'image',
+          filename: 'hero.png',
+          mimeType: 'image/png',
+          size: 2048,
+          alt: 'A generated illustration of a market stall',
+          storageKey: 'media/hero.png',
+          provenance: 'generated',
+          provenanceDetail: {
+            agent: 'image-creator',
+            model: 'test-image-model',
+            at: '2026-09-11T09:00:00.000Z',
+          },
+        })
+
+        const read = await store.get(asset.id)
+        expect(read.provenance).toBe('generated')
+        expect(read.provenanceDetail).toEqual({
+          agent: 'image-creator',
+          model: 'test-image-model',
+          at: '2026-09-11T09:00:00.000Z',
+        })
+      } finally {
+        await dispose?.()
+      }
+    })
   })
 }

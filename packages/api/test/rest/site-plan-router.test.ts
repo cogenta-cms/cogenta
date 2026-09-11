@@ -111,6 +111,8 @@ function applier(
         added: ['dish'],
         skipped: [],
         entriesSeeded: 0,
+        pagesCreated: 0,
+        pagesSkipped: [],
         skinApplied: false,
         followUp: ['Restart `cogenta serve` to pick up the new collections.'],
         ...report,

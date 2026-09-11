@@ -27,6 +27,7 @@ export type {
   MediaFolderStore,
   MediaKind,
   MediaPage,
+  MediaProvenance,
   MediaSortField,
   MediaStore,
   ReplaceMediaInput,

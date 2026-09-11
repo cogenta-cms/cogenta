@@ -15,6 +15,7 @@ import {
   updateAgent,
 } from '../api/agents-client.js'
 import { ApiError } from '../api/client.js'
+import { getImageGenerationStatus, type ImageGenerationStatus } from '../api/media-client.js'
 import {
   getProviderCatalog,
   listProviders,
@@ -113,6 +114,18 @@ export function AgentDetailRoute(): JSX.Element {
   const navigate = useNavigate()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
+
+  /**
+   * Which image model this agent would actually draw with.
+   *
+   * The `model` field above names a *text* provider — the model that reasons
+   * about what to draw. The image model is a different thing entirely, lives
+   * on the provider entry (one multimodal vendor is one entry sharing one
+   * key), and is resolved separately. An admin opening an agent that can
+   * generate images and finding only a text model has no way to know that,
+   * which is the gap this closes.
+   */
+  const [imageStatus, setImageStatus] = useState<ImageGenerationStatus | null>(null)
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const isAdmin = roles.includes('admin')
 
@@ -201,6 +214,21 @@ export function AgentDetailRoute(): JSX.Element {
       })
       .finally(() => setDetailLoading(false))
   }, [token, loading, selectedAgent, t])
+
+  useEffect(() => {
+    if (token === null) return () => undefined
+    let cancelled = false
+    getImageGenerationStatus(token)
+      .then((status) => {
+        if (!cancelled) setImageStatus(status)
+      })
+      .catch(() => {
+        if (!cancelled) setImageStatus({ available: false })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token])
 
   function selectEditKnownModel(modelId: string): void {
     setEditModelChoice(modelId)
@@ -688,6 +716,25 @@ export function AgentDetailRoute(): JSX.Element {
                     )}
                   </Field>
                 </div>
+                {/* Only for an agent that can actually draw: everyone else has
+                    no image model to care about. */}
+                {edit.tools.includes('assist.generate_image') && imageStatus !== null && (
+                  <div className="mt-3">
+                    <Notice tone={imageStatus.available ? 'info' : 'warning'}>
+                      <p>
+                        {imageStatus.available
+                          ? t('agents.imageModelResolved', {
+                              model: imageStatus.model ?? '',
+                              provider: imageStatus.provider ?? '',
+                            })
+                          : t('agents.imageModelMissing')}
+                      </p>
+                      <p>
+                        <Link to="/providers">{t('agents.imageModelLink')}</Link>
+                      </p>
+                    </Notice>
+                  </div>
+                )}
               </CardBody>
             </Card>
 

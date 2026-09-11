@@ -1819,7 +1819,10 @@
     "noTraces": "Aucune trace pour l'instant.",
     "history": "Historique",
     "noHistory": "Aucun historique pour l'instant.",
-    "showAll": "Afficher tout ({{count}})"
+    "showAll": "Afficher tout ({{count}})",
+    "imageModelResolved": "Les images seront dessinées par « {{model}} » via le fournisseur {{provider}}. Le modèle ci-dessus est celui qui raisonne sur ce qu'il faut dessiner, pas celui qui dessine.",
+    "imageModelMissing": "Aucun modèle d'image n'est configuré : cet agent peut raisonner sur une image mais ne peut en produire aucune. Un fournisseur multimodal se déclare une seule fois, avec une seule clé — il suffit de nommer son modèle d'image.",
+    "imageModelLink": "Configurer le modèle d'image dans Fournisseurs"
   },
   "providers": {
     "heading": "Fournisseurs",

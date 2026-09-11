@@ -1819,7 +1819,10 @@
     "noTraces": "No traces yet.",
     "history": "History",
     "noHistory": "No history yet.",
-    "showAll": "Show all ({{count}})"
+    "showAll": "Show all ({{count}})",
+    "imageModelResolved": "Images will be drawn by “{{model}}” through the {{provider}} provider. The model above is the one that reasons about what to draw, not the one that draws it.",
+    "imageModelMissing": "No image model is configured: this agent can reason about an image but cannot produce one. A multimodal vendor is declared once, with one key — it only needs its image model named.",
+    "imageModelLink": "Set the image model in Providers"
   },
   "providers": {
     "heading": "Providers",

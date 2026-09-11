@@ -1,4 +1,10 @@
 import { randomUUID } from 'node:crypto'
+import {
+  createImageProviderRegistry,
+  type ImageProviderClient,
+  type ProviderConfigStore,
+  resolveImageProviderRegistryConfig,
+} from '@cogenta/agents'
 import { CogentaError, type MediaStore, type StorageDriver } from '@cogenta/core'
 
 /**
@@ -123,4 +129,50 @@ export function createImageLibrary(
 
     return { id: asset.id, filename: asset.filename, byteLength: asset.size }
   }
+}
+
+/**
+ * The image client this site can actually use right now.
+ *
+ * Two sources, in this order, and the order is the point: the admin's own
+ * provider store first — where an operator sets an image model from the
+ * Providers screen and expects the next request to honour it — then the
+ * static `imageGeneration` section of `cogenta.config.mjs`, which is what
+ * sites had before the store could carry an image model at all.
+ *
+ * Read fresh on every call, never cached: a key saved from the admin has to
+ * work on the very next request, not after a restart. Returns `undefined`
+ * when nothing is configured, which is R2's "no provider" state — the
+ * feature is simply not offered rather than failing.
+ */
+export async function resolveImageClient(options: {
+  readonly providerStore?: ProviderConfigStore
+  readonly config?: {
+    readonly provider: string
+    readonly model: string
+    // Explicitly `| undefined` rather than optional: this is exactly the shape
+    // `config.imageGeneration` already has, and a site that names a provider
+    // without ever setting its key is the normal half-configured state.
+    readonly apiKey: string | undefined
+    readonly baseUrl: string | undefined
+  }
+}): Promise<ImageProviderClient | undefined> {
+  if (options.providerStore !== undefined) {
+    const fromStore = await resolveImageProviderRegistryConfig(options.providerStore)
+    const registry = createImageProviderRegistry(fromStore)
+    const client = registry.first()
+    if (client !== null) return client
+  }
+
+  const config = options.config
+  if (config === undefined || config.apiKey === undefined || config.apiKey === '') return undefined
+  if (config.provider !== 'openai' && config.provider !== 'stability') return undefined
+  const registry = createImageProviderRegistry({
+    [config.provider]: {
+      apiKey: config.apiKey,
+      model: config.model,
+      ...(config.baseUrl === undefined ? {} : { baseUrl: config.baseUrl }),
+    },
+  })
+  return registry.first() ?? undefined
 }

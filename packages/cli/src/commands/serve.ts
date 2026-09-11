@@ -11,6 +11,7 @@ import {
   createFileProviderConfigStore,
   createProgressJobStore,
   ensureBuiltinPromptTemplates,
+  type ImageProviderClient,
   type PromptTemplateStore,
   type ProviderClient,
   type ThemeCreatorTargetTheme,
@@ -356,7 +357,7 @@ import { DEFAULT_LOGO_CONTENT_TYPE, DEFAULT_LOGO_PATH, defaultLogoBytes } from '
 import { runDoctor } from './doctor.js'
 import { renderFormNotFoundPage, renderFormPage } from './forms-page.js'
 import { applySecurity, type SecurityConfig } from './http-security.js'
-import { createImageLibrary } from './image-library.js'
+import { createImageLibrary, resolveImageClient } from './image-library.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
 import { renderSearchPage } from './search-page.js'
@@ -850,6 +851,14 @@ interface Site {
   /** Not routed through `mediaRouter`: serving a binary body is outside the JSON-only `RestResponse` shape, so the file route is handled directly (same treatment `/api/schema` already gets). */
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
+  /**
+   * The image-generation client this site can use *right now*, resolved
+   * fresh on every call — an admin who saves an image model from the
+   * Providers screen expects the next request to honour it, not the next
+   * restart. `undefined` on a site with none, which is R2's own state: the
+   * "Générer une image" surface is simply not offered.
+   */
+  readonly imageClient?: () => Promise<ImageProviderClient | undefined>
   /** `null` when no image driver loaded — `/_image` then serves originals only. */
   readonly images: MediaImageProcessor | null
   readonly graphqlSchema: GraphQLSchema
@@ -1025,6 +1034,8 @@ function webauthnConfigFor(site: { readonly name: string; readonly url: string }
 
 interface AssembleSiteOptions {
   readonly db: DatabaseHandle
+  /** Passed through to `Site.imageClient` — see that field for why it is a function rather than a client. */
+  readonly imageClient?: () => Promise<ImageProviderClient | undefined>
   readonly collections: readonly CollectionDefinition[]
   /** Declared taxonomies (`schema@2.0`). A site with none passes nothing. */
   readonly taxonomies?: readonly TaxonomyDefinition[]
@@ -2785,6 +2796,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       cancel: cancelImportRun,
     }),
     mediaStore,
+    ...(options.imageClient === undefined ? {} : { imageClient: options.imageClient }),
     storage,
     images: options.images ?? null,
     graphqlSchema: buildContentSchema({ collections }),
@@ -3838,9 +3850,17 @@ function writeRestResponse(res: ServerResponse, response: RestResponse): void {
   )
 }
 
-function jsonError(res: ServerResponse, status: number, code: string, message: string): void {
+function jsonError(
+  res: ServerResponse,
+  status: number,
+  code: string,
+  message: string,
+  // A refusal that says only what failed leaves the operator guessing; the
+  // shape matches `CogentaError`, so a client reads both the same way.
+  hint?: string,
+): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
-  res.end(JSON.stringify({ error: { code, message } }))
+  res.end(JSON.stringify({ error: { code, message, ...(hint === undefined ? {} : { hint }) } }))
 }
 
 /**
@@ -4481,6 +4501,155 @@ export function createRequestListener(
             ? undefined
             : JSON.stringify(response.body),
         )
+        return
+      }
+
+      // Generating an image, and keeping one — two steps on purpose.
+      //
+      // `assist.generate_image` stores nothing by its own contract, because
+      // generating is cheap to undo and storing is not. So the first route
+      // returns candidates and writes nothing at all, and the second keeps
+      // exactly the one a human picked. The human *is* the approval here:
+      // this is the operator clicking in their own library, not an agent
+      // filling it.
+      //
+      // Admin-only, both. Answered before the media router below for the
+      // same structural reason the theme-sandbox family is: neither the
+      // image client nor the storage driver is something `MediaRouter` was
+      // ever given.
+      if (url.pathname === '/api/media/generate' || url.pathname === '/api/media/generate/keep') {
+        const readingAvailability = req.method === 'GET' && url.pathname === '/api/media/generate'
+        if (req.method !== 'POST' && !readingAvailability) {
+          res.writeHead(405, { allow: 'GET, POST' }).end()
+          return
+        }
+        if (!context.actor.roles.includes('admin')) {
+          jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may generate images.')
+          return
+        }
+        const jsonHeaders = {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+        } as const
+
+        const client = site.imageClient === undefined ? undefined : await site.imageClient()
+
+        // "Is this offered at all?" — asked before anything is drawn, so an
+        // admin on a site with no image model sees no half-working panel
+        // rather than a form that only fails once used. Same shape as
+        // `GET /api/assistant`: 200 with `available: false`, never an error,
+        // because not having configured an image model is a normal state.
+        if (readingAvailability) {
+          res.writeHead(200, jsonHeaders)
+          res.end(
+            JSON.stringify({
+              data:
+                client === undefined
+                  ? { available: false }
+                  : { available: true, provider: client.name, model: client.model },
+            }),
+          )
+          return
+        }
+
+        if (client === undefined) {
+          jsonError(
+            res,
+            501,
+            'ASSIST_NO_IMAGE_PROVIDER',
+            'No image provider is configured for this site.',
+            'Add an image model to a provider from Réglages → Fournisseurs. Everything else in the media library works without one.',
+          )
+          return
+        }
+
+        const body = (await readBody(req)) as Record<string, unknown> | undefined
+
+        if (url.pathname === '/api/media/generate') {
+          const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : ''
+          if (prompt === '') {
+            jsonError(
+              res,
+              400,
+              'CONTENT_INVALID',
+              'An image needs a description to generate from.',
+              'Send { "prompt": "a baker sliding baguettes into a wood oven" }.',
+            )
+            return
+          }
+          // Two by default, never one: the identity file says a choice costs
+          // almost nothing next to a regeneration, and the adapters clamp
+          // anything silly on their own side.
+          const count = typeof body?.count === 'number' ? body.count : 2
+          const size =
+            body?.size === 'landscape' || body?.size === 'portrait' || body?.size === 'square'
+              ? body.size
+              : undefined
+          try {
+            const images = await client.generate({
+              prompt,
+              count,
+              ...(size === undefined ? {} : { size }),
+            })
+            res.writeHead(200, jsonHeaders)
+            res.end(
+              JSON.stringify({
+                data: {
+                  provider: client.name,
+                  model: client.model,
+                  // The data URL is assembled here rather than stored: nothing
+                  // has been written, and the browser needs a `src` it can show.
+                  images: images.map((image) => ({
+                    dataUrl: `data:${image.contentType};base64,${image.base64}`,
+                    contentType: image.contentType,
+                    ...(image.revisedPrompt === undefined
+                      ? {}
+                      : { revisedPrompt: image.revisedPrompt }),
+                  })),
+                  // Nothing was written. Said in the payload rather than left
+                  // to the caller to assume.
+                  applied: false,
+                },
+              }),
+            )
+          } catch (error) {
+            writeRestResponse(res, errorResponse(error))
+          }
+          return
+        }
+
+        const dataUrl = typeof body?.dataUrl === 'string' ? body.dataUrl : ''
+        const alt = typeof body?.alt === 'string' ? body.alt.trim() : ''
+        if (dataUrl === '' || alt === '') {
+          jsonError(
+            res,
+            400,
+            'CONTENT_INVALID',
+            'Keeping an image needs the image and its alt text.',
+            'Send { "dataUrl": "data:image/png;base64,…", "alt": "what a screen reader should say" }.',
+          )
+          return
+        }
+        try {
+          const saved = await createImageLibrary({
+            mediaStore: site.mediaStore,
+            storage: site.storage,
+            createdBy: actor?.id ?? null,
+          })({
+            dataUrl,
+            filename: typeof body?.filename === 'string' ? body.filename : 'generated-image',
+            alt,
+            provenanceDetail: {
+              agent: 'media-library',
+              model: client.model,
+              at: new Date().toISOString(),
+            },
+          })
+          res.writeHead(201, jsonHeaders)
+          res.end(JSON.stringify({ data: saved }))
+        } catch (error) {
+          writeRestResponse(res, errorResponse(error))
+        }
         return
       }
 
@@ -6603,6 +6772,17 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // `theme.propose_theme` is then simply not registered (R2).
     ...(themeCreatorTools === undefined ? {} : { themeCreatorTools }),
     themeSandboxTools,
+    // The image model an operator picked on the Providers screen, read fresh
+    // on every request: a key saved from the admin has to work on the next
+    // call, not after a restart. `undefined` is R2's no-provider state — the
+    // routes answer 501 and nothing else in the media library changes.
+    imageClient: () =>
+      resolveImageClient({
+        providerStore: themeWiringOptions.providerStore,
+        ...(loaded.config.imageGeneration === undefined
+          ? {}
+          : { config: loaded.config.imageGeneration }),
+      }),
     images: images?.processor ?? null,
     security: loaded.config.security,
     notFoundLog: loaded.config.notFoundLog,

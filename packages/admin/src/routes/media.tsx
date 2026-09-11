@@ -20,6 +20,7 @@ import {
   updateMediaFolder,
 } from '../api/media-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { GeneratePanel } from '../media/generate-panel.js'
 import { MediaDetail } from '../media/media-detail.js'
 import { MediaFolderTree, setMediaDragData } from '../media/media-folder-tree.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
@@ -479,6 +480,10 @@ export function MediaRoute(): JSX.Element {
               />
             </CardBody>
           </Card>
+
+          {/* Renders nothing at all — card included — on a site with no
+              image model configured (R2). */}
+          <GeneratePanel token={token} onKept={() => void load()} />
 
           <search>
             <form

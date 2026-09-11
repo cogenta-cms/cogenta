@@ -526,3 +526,66 @@ export async function fetchMediaBlobUrl(token: string, id: string): Promise<stri
   }
   return URL.createObjectURL(await response.blob())
 }
+
+/**
+ * Generating an image, and keeping one — two calls, on purpose.
+ *
+ * `POST /api/media/generate` writes nothing: it returns candidates as data
+ * URLs and the library is untouched. `POST /api/media/generate/keep` is the
+ * only one that stores a file, and it takes the alt text with it, because an
+ * image kept without a description is an accessibility defect the admin can
+ * no longer see once the dialog is closed.
+ *
+ * Both are admin-only, and both answer `ASSIST_NO_IMAGE_PROVIDER` (501) on a
+ * site with no image model configured — which is R2's normal state, not an
+ * error to show as a crash.
+ */
+
+export type GeneratedImageSize = 'square' | 'landscape' | 'portrait'
+
+export interface ImageCandidate {
+  readonly dataUrl: string
+  readonly contentType: string
+  /** Some vendors rewrite the prompt before drawing; showing it is the only way an editor can tell. */
+  readonly revisedPrompt?: string
+}
+
+export interface ImageCandidates {
+  readonly provider: string
+  readonly model: string
+  readonly images: readonly ImageCandidate[]
+  /** Always `false` — the server says so rather than leaving the caller to assume it. */
+  readonly applied: boolean
+}
+
+export async function generateImages(
+  token: string,
+  input: { readonly prompt: string; readonly count?: number; readonly size?: GeneratedImageSize },
+): Promise<ImageCandidates> {
+  return request<ImageCandidates>('/api/media/generate', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+export async function keepGeneratedImage(
+  token: string,
+  input: { readonly dataUrl: string; readonly filename: string; readonly alt: string },
+): Promise<{ readonly id: string; readonly filename: string; readonly byteLength: number }> {
+  return request<{ readonly id: string; readonly filename: string; readonly byteLength: number }>(
+    '/api/media/generate/keep',
+    { method: 'POST', headers: authHeader(token), body: JSON.stringify(input) },
+  )
+}
+
+export interface ImageGenerationStatus {
+  readonly available: boolean
+  readonly provider?: string
+  readonly model?: string
+}
+
+/** Asked before anything is drawn, so an unconfigured site shows no panel at all rather than a form that only fails once used. */
+export async function getImageGenerationStatus(token: string): Promise<ImageGenerationStatus> {
+  return request<ImageGenerationStatus>('/api/media/generate', { headers: authHeader(token) })
+}

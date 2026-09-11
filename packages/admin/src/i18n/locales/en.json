@@ -742,7 +742,6 @@
     "focalUpdateError": "Could not update the focal point.",
     "focalHint": "Click the image to set the focal point.",
     "loadMore": "Load more",
-
     "uploadProgress": "file {{current}} of {{total}}",
     "uploadLimits": "Up to {{maxSize}} per file. Accepted types: {{types}}.",
     "uploadQueueHeading": "Uploads",
@@ -755,7 +754,6 @@
     "replaceFileLabel": "Replace file",
     "replacing": "Replacing…",
     "folderError": "Something went wrong.",
-
     "dimensionsLabel": "Dimensions",
     "sizeLabel": "Size",
     "typeLabel": "Type",
@@ -765,20 +763,17 @@
     "publicUrlLabel": "Public URL",
     "copyUrl": "Copy",
     "copied": "Copied!",
-
     "folderLabel": "Folder",
     "tagsLabel": "Tags",
     "noTags": "No tags.",
     "removeTag": "Remove tag \"{{tag}}\"",
     "newTagLabel": "New tag",
     "addTag": "Add",
-
     "usageLabel": "Usage",
     "usageError": "Could not check where this media asset is used.",
     "usageNone": "This media asset is not used in any content.",
     "usageItem": "{{collection}} · {{entryId}} · {{field}}",
     "usageTruncated": "The scan stopped before finishing — more usages may exist.",
-
     "foldersHeading": "Folders",
     "pageDropHint": "Drop files anywhere on this page to upload them.",
     "foldersLoadError": "Could not load the folders.",
@@ -797,7 +792,6 @@
     "folderNameLabel": "Folder name",
     "deleteFolderConfirmTitle": "Delete \"{{name}}\"?",
     "deleteFolderConfirmBody": "The folder must be empty (no subfolders, no media) to be deleted.",
-
     "searchLabel": "Search",
     "searchButton": "Search",
     "kindFilterLabel": "Type",
@@ -819,7 +813,6 @@
     "dateFromLabel": "From",
     "dateToLabel": "To",
     "totalCount": "{{shown}} shown of {{total}}",
-
     "selectedCount": "{{count}} selected",
     "selectAsset": "Select \"{{filename}}\"",
     "bulkDelete": "Delete ({{count}})",
@@ -828,7 +821,33 @@
     "bulkDeleteConfirmTitle": "Delete {{count}} media asset(s)?",
     "bulkDeleteConfirmBody": "This cannot be undone.",
     "bulkDeleteUsageWarning": "{{count}} of the selected files are still referenced by content:",
-    "bulkDeleteConfirmAction": "Delete"
+    "bulkDeleteConfirmAction": "Delete",
+    "generate": {
+      "heading": "Generate an image",
+      "promptLabel": "Describe the image",
+      "promptHint": "Subject, setting, light, framing. Say what should not be there too: no text, no logos, nothing busy where a title will sit.",
+      "sizeLabel": "Shape",
+      "sizeLandscape": "Landscape",
+      "sizeSquare": "Square",
+      "sizePortrait": "Portrait",
+      "countLabel": "Candidates",
+      "generateButton": "Generate",
+      "generating": "Generating…",
+      "error": "The generation failed.",
+      "nothingStored": "Nothing is stored yet: these candidates are lost if you leave this screen.",
+      "chooseLegend": "Choose the image to keep",
+      "candidateLabel": "Candidate {{index}}",
+      "candidateAlt": "Candidate {{index}}",
+      "revised": "Prompt rewritten by the model: {{prompt}}",
+      "altLabel": "Alt text",
+      "altHint": "What the image shows in the context of the page, not a caption.",
+      "altRequired": "An image kept without a description is inaccessible.",
+      "filenameLabel": "File name",
+      "keepButton": "Keep this image",
+      "keeping": "Saving…",
+      "keepError": "That image could not be kept.",
+      "kept": "“{{name}}” added to the library, recorded as generated."
+    }
   },
   "collectionList": {
     "tableLabel": "Content",

@@ -742,7 +742,6 @@
     "focalUpdateError": "Impossible de mettre à jour le point focal.",
     "focalHint": "Cliquer sur l’image pour placer le point focal.",
     "loadMore": "Charger la suite",
-
     "uploadProgress": "fichier {{current}} sur {{total}}",
     "uploadLimits": "Jusqu’à {{maxSize}} par fichier. Types acceptés : {{types}}.",
     "uploadQueueHeading": "Téléversements",
@@ -755,7 +754,6 @@
     "replaceFileLabel": "Remplacer le fichier",
     "replacing": "Remplacement…",
     "folderError": "Une erreur est survenue.",
-
     "dimensionsLabel": "Dimensions",
     "sizeLabel": "Poids",
     "typeLabel": "Type",
@@ -765,20 +763,17 @@
     "publicUrlLabel": "URL publique",
     "copyUrl": "Copier",
     "copied": "Copié !",
-
     "folderLabel": "Dossier",
     "tagsLabel": "Étiquettes",
     "noTags": "Aucune étiquette.",
     "removeTag": "Retirer l’étiquette « {{tag}} »",
     "newTagLabel": "Nouvelle étiquette",
     "addTag": "Ajouter",
-
     "usageLabel": "Utilisation",
     "usageError": "Impossible de vérifier l’utilisation de ce média.",
     "usageNone": "Ce média n’est utilisé dans aucun contenu.",
     "usageItem": "{{collection}} · {{entryId}} · {{field}}",
     "usageTruncated": "L’analyse s’est arrêtée avant d’avoir tout parcouru — d’autres usages existent peut-être.",
-
     "foldersHeading": "Dossiers",
     "pageDropHint": "Déposer des fichiers n'importe où sur cette page pour les téléverser.",
     "foldersLoadError": "Impossible de charger les dossiers.",
@@ -797,7 +792,6 @@
     "folderNameLabel": "Nom du dossier",
     "deleteFolderConfirmTitle": "Supprimer « {{name}} » ?",
     "deleteFolderConfirmBody": "Le dossier doit être vide (aucun sous-dossier, aucun média) pour être supprimé.",
-
     "searchLabel": "Rechercher",
     "searchButton": "Rechercher",
     "kindFilterLabel": "Type",
@@ -819,7 +813,6 @@
     "dateFromLabel": "Depuis le",
     "dateToLabel": "Jusqu’au",
     "totalCount": "{{shown}} affichés sur {{total}}",
-
     "selectedCount": "{{count}} sélectionné(s)",
     "selectAsset": "Sélectionner « {{filename}} »",
     "bulkDelete": "Supprimer ({{count}})",
@@ -828,7 +821,33 @@
     "bulkDeleteConfirmTitle": "Supprimer {{count}} média(s) ?",
     "bulkDeleteConfirmBody": "Cette action est définitive.",
     "bulkDeleteUsageWarning": "{{count}} des fichiers sélectionnés sont encore référencés par du contenu :",
-    "bulkDeleteConfirmAction": "Supprimer"
+    "bulkDeleteConfirmAction": "Supprimer",
+    "generate": {
+      "heading": "Générer une image",
+      "promptLabel": "Décrire l'image",
+      "promptHint": "Sujet, lieu, lumière, cadrage. Dites aussi ce qui ne doit pas y être : pas de texte, pas de logo, rien d'encombré là où passera un titre.",
+      "sizeLabel": "Format",
+      "sizeLandscape": "Paysage",
+      "sizeSquare": "Carré",
+      "sizePortrait": "Portrait",
+      "countLabel": "Propositions",
+      "generateButton": "Générer",
+      "generating": "Génération…",
+      "error": "La génération a échoué.",
+      "nothingStored": "Rien n'est encore enregistré : ces propositions disparaissent si vous quittez cet écran.",
+      "chooseLegend": "Choisir l'image à conserver",
+      "candidateLabel": "Proposition {{index}}",
+      "candidateAlt": "Proposition {{index}}",
+      "revised": "Invite réécrite par le modèle : {{prompt}}",
+      "altLabel": "Texte alternatif",
+      "altHint": "Ce que décrit l'image dans le contexte de la page, pas une légende.",
+      "altRequired": "Une image conservée sans description est inaccessible.",
+      "filenameLabel": "Nom du fichier",
+      "keepButton": "Conserver cette image",
+      "keeping": "Enregistrement…",
+      "keepError": "Impossible de conserver cette image.",
+      "kept": "« {{name}} » ajoutée à la médiathèque, marquée comme générée."
+    }
   },
   "collectionList": {
     "tableLabel": "Contenus",

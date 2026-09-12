@@ -45,13 +45,54 @@ describe('the OpenAI image adapter', () => {
       prompt: 'a cathedral',
       n: 1,
       size: '1024x1024',
-      response_format: 'b64_json',
     })
   })
 
-  it('maps the three named shapes to pixel sizes', () => {
-    expect(buildOpenAiImageRequest('m', { prompt: 'p', size: 'landscape' }).size).toBe('1536x640')
-    expect(buildOpenAiImageRequest('m', { prompt: 'p', size: 'portrait' }).size).toBe('640x1536')
+  it('never sends response_format to gpt-image-1, which refuses the parameter outright', () => {
+    expect(buildOpenAiImageRequest('gpt-image-1', { prompt: 'p' }).response_format).toBeUndefined()
+    // The dall-e models need it, and still get it.
+    expect(buildOpenAiImageRequest('dall-e-3', { prompt: 'p' }).response_format).toBe('b64_json')
+  })
+
+  it('maps the three named shapes to sizes each model family actually accepts', () => {
+    // Not pixels: OpenAI takes a closed list of size strings, and 1536x640 —
+    // an ordinary SDXL shape — is a 400 on every one of these models.
+    expect(buildOpenAiImageRequest('gpt-image-1', { prompt: 'p', size: 'landscape' }).size).toBe(
+      '1536x1024',
+    )
+    expect(buildOpenAiImageRequest('gpt-image-1', { prompt: 'p', size: 'portrait' }).size).toBe(
+      '1024x1536',
+    )
+    expect(buildOpenAiImageRequest('dall-e-3', { prompt: 'p', size: 'landscape' }).size).toBe(
+      '1792x1024',
+    )
+    // dall-e-2 draws squares and nothing else, so a banner degrades to one
+    // rather than being refused.
+    expect(buildOpenAiImageRequest('dall-e-2', { prompt: 'p', size: 'landscape' }).size).toBe(
+      '1024x1024',
+    )
+  })
+
+  it('repeats what OpenAI said was wrong, instead of only its status code', async () => {
+    const client = createOpenAiImageClient({
+      apiKey: 'k',
+      model: 'gpt-image-1',
+      fetchImpl: (async () =>
+        new Response(
+          JSON.stringify({ error: { message: "Unknown parameter: 'response_format'." } }),
+          {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          },
+        )) as unknown as typeof fetch,
+    })
+
+    await expect(client.generate({ prompt: 'p' })).rejects.toMatchObject({
+      code: 'PROVIDER_REQUEST_FAILED',
+      // A bare "status 400" cannot tell an unsupported parameter from a
+      // refused prompt, which is exactly the dead end a real call hit.
+      message: expect.stringContaining("Unknown parameter: 'response_format'."),
+    })
   })
 
   it('clamps a count no vendor would accept instead of passing it on', () => {

@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto'
 import {
   createImageProviderRegistry,
   type ImageProviderClient,
   type ProviderConfigStore,
   resolveImageProviderRegistryConfig,
 } from '@cogenta/agents'
+import { ingestMediaUpload, type MediaImageProcessor } from '@cogenta/api'
 import { CogentaError, type MediaStore, type StorageDriver } from '@cogenta/core'
 
 /**
@@ -38,6 +38,17 @@ export interface ImageLibraryOptions {
   readonly storage: StorageDriver
   /** Recorded as the actor who created the row — an agent run has no signed-in human of its own. */
   readonly createdBy?: string | null
+  /**
+   * The same processor `POST /api/media` uses.
+   *
+   * Without it a kept image has no intrinsic dimensions and no renditions,
+   * which means no `srcset`, no WebP, and `/_image?w=` serving the original
+   * at full size to every visitor — a 2.4MB PNG on a phone. Found by keeping
+   * a real generated image and looking at the row: `width` and `height` were
+   * `null`, because this path wrote the file itself instead of going through
+   * the ingest pipeline that does that work.
+   */
+  readonly images?: MediaImageProcessor
 }
 
 export interface StoreGeneratedImageInput {
@@ -106,26 +117,29 @@ export function createImageLibrary(
   return async (input) => {
     const { contentType, bytes } = decodeImageDataUrl(input.dataUrl)
     const extension = EXTENSION_BY_TYPE[contentType] as string
-    const filename = `${safeStem(input.filename)}.${extension}`
-    // The id is minted here so the storage key and the row agree, and so two
-    // images generated from the same prompt never collide on a key.
-    const id = randomUUID()
-    const storageKey = `media/${id}.${extension}`
 
-    await options.storage.put(storageKey, bytes, { contentType })
-
-    const asset = await options.mediaStore.create({
-      id,
-      kind: 'image',
-      filename,
-      mimeType: contentType,
-      size: bytes.byteLength,
-      alt: input.alt,
-      storageKey,
-      provenance: 'generated',
-      provenanceDetail: input.provenanceDetail,
-      ...(options.createdBy === undefined ? {} : { createdBy: options.createdBy }),
-    })
+    // The same ingest a human upload goes through, not a second one beside
+    // it: the real type is re-sniffed from the bytes, the id and storage key
+    // are minted there, dimensions are probed and renditions written. The
+    // only thing this path adds is the provenance, which is the whole reason
+    // it is a separate entry point at all.
+    const asset = await ingestMediaUpload(
+      {
+        store: options.mediaStore,
+        storage: options.storage,
+        ...(options.images === undefined ? {} : { images: options.images }),
+      },
+      {
+        kind: 'image',
+        filename: `${safeStem(input.filename)}.${extension}`,
+        mimeType: contentType,
+        bytes,
+        actorId: options.createdBy ?? null,
+        alt: input.alt,
+        provenance: 'generated',
+        provenanceDetail: input.provenanceDetail,
+      },
+    )
 
     return { id: asset.id, filename: asset.filename, byteLength: asset.size }
   }

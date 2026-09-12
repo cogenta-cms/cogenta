@@ -108,6 +108,8 @@ async function tokenFor(
 
 interface MediaAssetRow {
   readonly id: string
+  readonly width: number | null
+  readonly height: number | null
   readonly alt: string | null
   readonly provenance: string
   readonly provenanceDetail: Record<string, unknown> | null
@@ -208,7 +210,9 @@ describe('cogenta serve — generating and keeping images', () => {
 
       // The key reached the vendor at the runtime boundary, never the prompt (R7).
       expect(vendor.calls[0]?.authorization).toBe('Bearer test-image-key')
-      expect(vendor.calls[0]?.body['size']).toBe('1536x640')
+      // A size gpt-image-1 actually accepts. 1536x640 is an ordinary SDXL
+      // shape and a flat 400 here — the bug a real call found.
+      expect(vendor.calls[0]?.body['size']).toBe('1536x1024')
 
       // And the whole point of two routes: nothing was stored.
       expect(await mediaAssets(server.base, token)).toEqual([])
@@ -257,6 +261,12 @@ describe('cogenta serve — generating and keeping images', () => {
       // non-optional: a reader is entitled to know this was not a photograph.
       expect(assets[0]?.provenance).toBe('generated')
       expect(assets[0]?.provenanceDetail?.['model']).toBe('gpt-image-1')
+      // It went through the same ingest a human upload does, so it has real
+      // intrinsic dimensions — which is what `srcset` and `/_image?w=` need.
+      // Without this the library keeps the original and serves it full-size
+      // to every visitor.
+      expect(assets[0]?.width).toBe(1)
+      expect(assets[0]?.height).toBe(1)
     } finally {
       await server.stop()
     }

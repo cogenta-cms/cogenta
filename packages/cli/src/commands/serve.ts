@@ -1875,7 +1875,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           // The host side of `media.store_generated_image`: this is the only
           // place both a storage driver and a media store are in scope, and
           // storing a file needs both.
-          storeGeneratedImage: createImageLibrary({ mediaStore, storage }),
+          storeGeneratedImage: createImageLibrary({
+            mediaStore,
+            storage,
+            ...(options.images === null || options.images === undefined
+              ? {}
+              : { images: options.images }),
+          }),
           auditLog: auth.audit,
           logger,
           siteSettings: siteSettingsStore,
@@ -4635,6 +4641,9 @@ export function createRequestListener(
             mediaStore: site.mediaStore,
             storage: site.storage,
             createdBy: actor?.id ?? null,
+            // Same renditions a human upload gets: a kept image with no
+            // `srcset` is a 2.4MB PNG on somebody's phone.
+            ...(site.images === null ? {} : { images: site.images }),
           })({
             dataUrl,
             filename: typeof body?.filename === 'string' ? body.filename : 'generated-image',

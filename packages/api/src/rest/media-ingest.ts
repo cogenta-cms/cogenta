@@ -6,6 +6,7 @@ import {
   hasGpsData,
   type MediaAsset,
   type MediaKind,
+  type MediaProvenance,
   type MediaStore,
   type StorageDriver,
   sniffImageFormat,
@@ -84,6 +85,17 @@ export interface IngestMediaUploadInput {
   readonly folderId?: string | null
   /** Strips EXIF GPS coordinates from a JPEG original. Defaults to `true`, matching the router. */
   readonly stripGps?: boolean
+  /**
+   * How this file came to exist. Omitted means the store's own default,
+   * `human` — which is what every upload through this path has always been.
+   *
+   * A model-drawn picture must say so: it is the one field of contract A the
+   * European AI framework makes non-optional, and a generated image nobody
+   * can tell apart from a photograph the owner took is exactly what it exists
+   * to prevent.
+   */
+  readonly provenance?: MediaProvenance
+  readonly provenanceDetail?: Readonly<Record<string, unknown>>
 }
 
 /**
@@ -230,6 +242,8 @@ export async function ingestMediaUpload(
       tags: input.tags ?? [],
       contentHash: hashBytes(bytes),
       createdBy: input.actorId,
+      ...(input.provenance === undefined ? {} : { provenance: input.provenance }),
+      ...(input.provenanceDetail === undefined ? {} : { provenanceDetail: input.provenanceDetail }),
       ...(input.folderId === undefined ? {} : { folderId: input.folderId }),
     })
   } catch (error) {

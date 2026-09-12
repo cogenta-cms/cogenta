@@ -30,7 +30,7 @@ describe('coupons', () => {
   it('creates a percentage coupon and lists it', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Coupons' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Coupons' }))
     await screen.findByRole('heading', { name: 'Coupons' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Nouveau coupon' }))
@@ -51,7 +51,7 @@ describe('coupons', () => {
   it('deactivates a coupon', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Coupons' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Coupons' }))
     await screen.findByRole('heading', { name: 'Coupons' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Nouveau coupon' }))
@@ -74,7 +74,7 @@ describe('subscriptions', () => {
   it('lists the seeded subscription and cancels it', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Abonnements' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Abonnements' }))
     await screen.findByRole('heading', { name: 'Abonnements' })
 
     expect(within(table()).getByText('customer-1')).toBeDefined()
@@ -110,10 +110,10 @@ describe('subscription detail — a real route with its own URL (fiche 71)', () 
   it('navigates to /commerce/subscriptions/<id> when opening "Détails"', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Abonnements' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Abonnements' }))
     await screen.findByRole('heading', { name: 'Abonnements' })
 
-    fireEvent.click(screen.getByRole('link', { name: 'Détails' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Détails' }))
 
     expect(await screen.findByText('Historique de facturation')).toBeDefined()
     expect(window.location.pathname).toBe('/commerce/subscriptions/subscription-1')

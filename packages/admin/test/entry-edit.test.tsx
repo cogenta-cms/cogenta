@@ -19,7 +19,7 @@ async function goToArticles(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
   await screen.findByRole('heading', { name: 'Contenus' })
-  fireEvent.click(screen.getByRole('link', { name: 'Articles' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Articles' }))
   await screen.findByText('First article')
 }
 
@@ -28,7 +28,7 @@ describe('editing an existing entry', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     const title = screen.getByLabelText('title', { exact: false }) as HTMLInputElement
@@ -45,7 +45,7 @@ describe('editing an existing entry', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Prévisualiser' }))
@@ -66,7 +66,7 @@ describe('editing an existing entry', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Prévisualiser' }))
@@ -101,7 +101,7 @@ describe('status and publication', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'Second article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Second article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     expect(screen.getByText('Brouillon')).toBeDefined()
@@ -115,7 +115,7 @@ describe('status and publication', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     fireEvent.change(screen.getByLabelText('Statut :'), { target: { value: 'draft' } })
@@ -151,7 +151,7 @@ describe('scheduling a future publication', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'Second article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Second article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     const picker = screen.getByLabelText('Publier le :')
@@ -172,7 +172,7 @@ describe('scheduling a future publication', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'Second article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Second article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Programmer' }))
@@ -186,7 +186,7 @@ describe('scheduling a future publication', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'Second article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Second article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     fireEvent.change(screen.getByLabelText('Publier le :'), {
@@ -207,7 +207,7 @@ describe('duplicating an entry', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Dupliquer' }))
@@ -264,7 +264,7 @@ describe('the writing assistant field picker', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     const picker = await screen.findByLabelText('Quel champ ?')
@@ -292,7 +292,7 @@ describe('multilingual editing', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     await screen.findByRole('heading', { name: 'Traductions' })
@@ -317,7 +317,7 @@ describe('the "Assistant" and "Traductions" accordions when their feature is off
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     await screen.findByText(
@@ -352,7 +352,7 @@ describe('the "Assistant" and "Traductions" accordions when their feature is off
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     await screen.findByRole('button', { name: 'Rewrite' })
@@ -376,7 +376,7 @@ describe('creating a new entry', () => {
     render(<App />)
     await goToArticles()
 
-    fireEvent.click(screen.getByRole('link', { name: 'Nouveau' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Nouveau' }))
     await screen.findByRole('heading', { name: 'Nouveau : Article' })
 
     fireEvent.change(screen.getByLabelText('title', { exact: false }), {
@@ -408,7 +408,7 @@ describe('autosaving a draft in progress', () => {
   async function openFirstArticle(): Promise<void> {
     render(<App />)
     await goToArticles()
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
   }
 
@@ -518,7 +518,7 @@ describe('trashing an entry from the editor', () => {
   it('refreshes the sidebar status', async () => {
     render(<App />)
     await goToArticles()
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     const fetchMock = globalThis.fetch as unknown as { mock: { calls: unknown[][] } }

@@ -54,7 +54,7 @@ const SAMPLE_CONFIG_STATUS: ConfigStatus = {
 
 async function goToOpsSettings(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Sécurité & webhooks' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Sécurité & webhooks' }))
   await screen.findByRole('heading', { name: 'Sécurité & webhooks' })
 }
 

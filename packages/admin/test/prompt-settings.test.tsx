@@ -11,7 +11,7 @@ afterEach(() => {
 
 async function goToPromptSettings(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Réglages des prompts' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Réglages des prompts' }))
   await screen.findByRole('heading', { name: 'Réglages des prompts' })
 }
 

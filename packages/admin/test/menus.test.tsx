@@ -20,7 +20,7 @@ afterEach(() => {
 
 async function goToMenus(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Menus' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Menus' }))
   await screen.findByRole('heading', { name: 'Menus' })
 }
 

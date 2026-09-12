@@ -67,7 +67,7 @@ describe('App, signed in', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
-    fireEvent.click(screen.getByRole('link', { name: 'Médiathèque' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Médiathèque' }))
 
     expect(await screen.findByRole('heading', { name: 'Médiathèque' })).toBeDefined()
     expect(screen.queryByRole('heading', { name: 'Tableau de bord' })).toBeNull()
@@ -261,7 +261,7 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
     fireEvent.click(contentTrigger)
     expect(contentTrigger.getAttribute('aria-expanded')).toBe('true')
 
-    fireEvent.click(screen.getByRole('link', { name: 'Médiathèque' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Médiathèque' }))
     await screen.findByRole('heading', { name: 'Médiathèque' })
     expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
   })
@@ -322,7 +322,7 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
-    fireEvent.click(screen.getByRole('link', { name: 'Médiathèque' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Médiathèque' }))
     await screen.findByRole('heading', { name: 'Médiathèque' })
 
     const contentGroup = screen.getByRole('button', { name: 'Contenu' }).closest('li')
@@ -433,10 +433,18 @@ describe('App, sidebar layout overrides (fiche 22 tâche 8, part 3)', () => {
     // shows every item until the settings fetch that carries
     // `navigation.hiddenItems` catches up. `waitFor` here for the same
     // reason `settings.test.tsx`'s own live-toggle test already does.
+    // Both conditions in one wait, on purpose. Waiting only for the absence
+    // proves nothing about readiness: "Médiathèque" is equally missing before
+    // the sidebar has rendered at all, so that wait could be satisfied at the
+    // earliest possible moment and the assertion below would then look for
+    // "Contenus" in an empty shell — which is exactly what a loaded CI runner
+    // produced, as "Unable to find an accessible element with the role link".
+    // Requiring the item that must stay *and* the item that must go is only
+    // true once the settings have really been applied.
     await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Contenus' })).toBeDefined()
       expect(screen.queryByRole('link', { name: 'Médiathèque' })).toBeNull()
     })
-    expect(screen.getByRole('link', { name: 'Contenus' })).toBeDefined()
   })
 
   it('reorders sections the way an admin chose, site-wide', async () => {

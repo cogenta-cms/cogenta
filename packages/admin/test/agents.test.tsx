@@ -11,7 +11,7 @@ afterEach(() => {
 
 async function goToAgents(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Agents' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Agents' }))
   await screen.findByRole('heading', { name: 'Agents' })
 }
 
@@ -73,7 +73,7 @@ describe('agents', () => {
 
     // Fiche 71: the detail panel is now a real route (`agents/:name`), reached
     // through a `<Link>`, not a button that swaps state in place.
-    fireEvent.click(screen.getByRole('link', { name: 'security' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'security' }))
 
     expect(await screen.findByText(/end_turn/)).toBeDefined()
     // `deps.scan` now also appears in the L21 task 4 permission checklist and
@@ -97,7 +97,7 @@ describe('agents', () => {
 
     // Fiche 71: the detail panel is now a real route (`agents/:name`), reached
     // through a `<Link>`, not a button that swaps state in place.
-    fireEvent.click(screen.getByRole('link', { name: 'security' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'security' }))
 
     // The page itself now opens straight on the chat (fiche feedback); the
     // full configuration this test checks lives behind "Réglages".
@@ -254,7 +254,7 @@ describe('agent detail — a real route with its own URL (fiche 71)', () => {
     await goToAgents()
     await screen.findByText('security')
 
-    fireEvent.click(screen.getByRole('link', { name: 'security' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'security' }))
 
     expect(await screen.findByRole('heading', { name: /security/, level: 1 })).toBeDefined()
     expect(window.location.pathname).toBe('/agents/security')
@@ -323,7 +323,7 @@ describe('agent detail — a real route with its own URL (fiche 71)', () => {
 
     render(<App />)
     await goToAgents()
-    fireEvent.click(screen.getByRole('link', { name: 'security' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'security' }))
     fireEvent.click(await screen.findByRole('button', { name: "Réglages de l'agent" }))
     expect(await screen.findByText('10')).toBeDefined()
 

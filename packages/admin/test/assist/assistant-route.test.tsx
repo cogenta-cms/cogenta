@@ -25,7 +25,7 @@ function signedIn(overrides: Parameters<typeof installMockFetch>[0] = {}): void 
 async function goToAssistant(): Promise<void> {
   render(<App />)
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Assistant' }))
 }
 
 describe('the unified assistant screen', () => {

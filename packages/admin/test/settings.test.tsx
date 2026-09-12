@@ -37,7 +37,7 @@ function signedIn(
 
 async function goToSettings(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Paramètres' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Paramètres' }))
   await screen.findByRole('heading', { name: 'Réglages du site' })
 }
 
@@ -310,7 +310,7 @@ describe('the site settings screen — Navigation tab (fiche 22 tâche 8, part 3
 
     // The dashboard's own sidebar reflects the same site-wide setting, not
     // a second, disconnected notion of "hidden" local to this screen.
-    fireEvent.click(screen.getByRole('link', { name: 'Tableau de bord' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Tableau de bord' }))
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     expect(screen.queryByRole('link', { name: 'Produits' })).toBeNull()
   })

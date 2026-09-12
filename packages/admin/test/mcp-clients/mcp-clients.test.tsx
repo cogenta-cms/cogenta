@@ -22,7 +22,7 @@ afterEach(() => {
 
 async function goToMcpClients(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Clients MCP' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Clients MCP' }))
   await screen.findByRole('heading', { name: 'Clients MCP' })
 }
 

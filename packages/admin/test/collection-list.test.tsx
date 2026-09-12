@@ -204,7 +204,7 @@ describe('CollectionListRoute', () => {
     // The editor in these tests cannot read "secret-memo" — direct
     // navigation must not leak its existence any more than the collections
     // list already refuses to.
-    fireEvent.click(screen.getByRole('link', { name: 'Contenus' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
     await screen.findByRole('heading', { name: 'Contenus' })
     expect(screen.queryByText('Secret memos')).toBeNull()
   })

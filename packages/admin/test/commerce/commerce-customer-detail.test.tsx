@@ -30,12 +30,12 @@ afterEach(() => {
  */
 async function goToCustomerDetail(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Clients' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Clients' }))
   await screen.findByRole('heading', { name: 'Clients' })
   // The seeded customer has a name ('Shopper One'), so the list link and the
   // detail heading both show that — the e-mail is a separate line below it
   // on the detail screen, per `customer.name ?? customer.email`.
-  fireEvent.click(screen.getByRole('link', { name: 'Shopper One' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Shopper One' }))
   await screen.findByRole('heading', { name: 'Shopper One' })
 }
 

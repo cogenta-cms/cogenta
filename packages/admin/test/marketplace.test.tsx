@@ -39,7 +39,7 @@ afterEach(() => {
 
 async function goToMarketplace(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Marketplace' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Marketplace' }))
   await screen.findByRole('heading', { name: 'Marketplace' })
 }
 

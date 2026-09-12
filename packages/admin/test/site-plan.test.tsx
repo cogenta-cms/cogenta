@@ -23,7 +23,7 @@ afterEach(() => {
 
 async function goToSitePlan(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Générer le site' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Générer le site' }))
   await screen.findByRole('heading', { name: 'Générer le site', level: 1 })
 }
 

@@ -39,7 +39,7 @@ async function goToAppearance(): Promise<void> {
   // group's identically-named-until-now "Apparence" (fiche 72 revision 2's
   // fix for a real user-reported collision). The page's own <h1> keeps the
   // shorter "Apparence" — a different translation key, untouched.
-  fireEvent.click(screen.getByRole('link', { name: 'Apparence du site' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Apparence du site' }))
   await screen.findByRole('heading', { name: 'Apparence', level: 1 })
 }
 
@@ -103,7 +103,7 @@ describe('the appearance screen', () => {
 
     // No click into "Personnaliser" first — this is the screen an admin
     // lands on, and the door to the workshop must already be there.
-    fireEvent.click(screen.getByRole('link', { name: "Générer un thème avec l'IA" }))
+    fireEvent.click(await screen.findByRole('link', { name: "Générer un thème avec l'IA" }))
 
     expect(
       await screen.findByRole('heading', { name: "Générer un thème avec l'IA", level: 1 }),
@@ -160,7 +160,7 @@ describe('the appearance screen', () => {
 
     // The workshop lives on its own page (`theme-generator.tsx`), never
     // crammed into this card — this screen offers only the door to it.
-    fireEvent.click(screen.getByRole('link', { name: "Générer un thème avec l'IA" }))
+    fireEvent.click(await screen.findByRole('link', { name: "Générer un thème avec l'IA" }))
 
     expect(
       await screen.findByRole('heading', { name: "Générer un thème avec l'IA", level: 1 }),

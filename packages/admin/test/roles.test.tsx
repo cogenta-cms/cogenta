@@ -25,7 +25,7 @@ afterEach(() => {
 
 async function goToRoles(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Rôles et permissions' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Rôles et permissions' }))
   await screen.findByRole('heading', { name: 'Rôles et permissions' })
 }
 
@@ -176,7 +176,7 @@ describe('the role-grants preview in the account dialogs', () => {
   it('shows what a checked role actually grants, computed live from the schema', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Utilisateurs' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Utilisateurs' }))
     await screen.findByRole('heading', { name: 'Utilisateurs' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Nouvel utilisateur' }))
@@ -194,7 +194,7 @@ describe('the role-grants preview in the account dialogs', () => {
   it('warns when a selected role is named by no collection or taxonomy', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Utilisateurs' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Utilisateurs' }))
     await screen.findByRole('heading', { name: 'Utilisateurs' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Nouvel utilisateur' }))

@@ -27,7 +27,7 @@ function signedInAdmin(options: Parameters<typeof installMockFetch>[0] = {}): vo
 
 async function goToUpdates(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Mises à jour' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Mises à jour' }))
   await screen.findByRole('heading', { name: 'Mises à jour' })
 }
 

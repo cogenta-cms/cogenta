@@ -35,7 +35,7 @@ describe('the "ask the site" chat screen', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Assistant' }))
 
     await screen.findByText("Aucun fournisseur IA n'est configuré")
     expect(screen.queryByRole('heading', { name: 'Interroger le site' })).toBeNull()
@@ -63,7 +63,7 @@ describe('the "ask the site" chat screen', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Assistant' }))
     fireEvent.click(await screen.findByRole('tab', { name: 'Interroger le site' }))
 
     await screen.findByRole('heading', { name: 'Interroger le site' })
@@ -93,7 +93,7 @@ describe('the "ask the site" chat screen', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Assistant' }))
     fireEvent.click(await screen.findByRole('tab', { name: 'Interroger le site' }))
     await screen.findByRole('heading', { name: 'Interroger le site' })
 

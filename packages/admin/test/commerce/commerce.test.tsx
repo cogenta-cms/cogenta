@@ -24,13 +24,13 @@ afterEach(() => {
 
 async function goToProducts(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Produits' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Produits' }))
   await screen.findByRole('heading', { name: 'Produits' })
 }
 
 async function goToOrders(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Commandes' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Commandes' }))
   await screen.findByRole('heading', { name: 'Commandes' })
 }
 
@@ -125,7 +125,7 @@ describe('the order list and detail', () => {
     await goToOrders()
 
     expect(within(table()).getByText('ORD-0001')).toBeDefined()
-    fireEvent.click(screen.getByRole('link', { name: 'ORD-0001' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'ORD-0001' }))
 
     await screen.findByText('shopper@example.com', { exact: false })
     expect(screen.getByText('WOOL-JUMPER-M')).toBeDefined()
@@ -135,7 +135,7 @@ describe('the order list and detail', () => {
   it('marks the payment received and moves the order along', async () => {
     render(<App />)
     await goToOrders()
-    fireEvent.click(screen.getByRole('link', { name: 'ORD-0001' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'ORD-0001' }))
     await screen.findByRole('button', { name: 'Marquer reçu' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Marquer reçu' }))
@@ -150,7 +150,7 @@ describe('the order list and detail', () => {
   it('ships an order with tracking, then refunds it partially with a mandatory reason (fiche 52)', async () => {
     render(<App />)
     await goToOrders()
-    fireEvent.click(screen.getByRole('link', { name: 'ORD-0001' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'ORD-0001' }))
     await screen.findByRole('button', { name: 'Marquer reçu' })
     fireEvent.click(screen.getByRole('button', { name: 'Marquer reçu' }))
     await waitFor(() => {
@@ -205,7 +205,7 @@ describe('the order list and detail', () => {
     // Creating navigates straight to the new order's own detail screen.
     await screen.findByText('second-buyer@example.com', { exact: false }, { timeout: 3000 })
 
-    fireEvent.click(screen.getByRole('link', { name: 'Commandes' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Commandes' }))
     await screen.findByRole('heading', { name: 'Commandes' })
     expect(within(table()).getByText('ORD-0001')).toBeDefined()
     expect(within(table()).getByText(/ORD-MANUAL-/)).toBeDefined()

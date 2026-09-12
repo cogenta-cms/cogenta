@@ -11,7 +11,7 @@ afterEach(() => {
 
 async function goToHealth(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Santé' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Santé' }))
   await screen.findByRole('heading', { name: 'Santé' })
 }
 

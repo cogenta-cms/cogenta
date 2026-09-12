@@ -37,7 +37,7 @@ describe('the duplicate-detection screen', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Assistant' }))
 
     // Fiche 30 task 2: with no provider, the whole assistant screen becomes
     // the one explanation page — there are no tabs to click into.
@@ -68,7 +68,7 @@ describe('the duplicate-detection screen', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Assistant' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Assistant' }))
     fireEvent.click(await screen.findByRole('tab', { name: 'Doublons' }))
     await screen.findByRole('heading', { name: 'Détection de doublons' })
 

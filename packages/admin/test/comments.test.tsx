@@ -48,7 +48,7 @@ afterEach(() => {
 
 async function goToComments(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: /Commentaires/u }))
+  fireEvent.click(await screen.findByRole('link', { name: /Commentaires/u }))
   await screen.findByRole('heading', { name: 'Commentaires' })
 }
 

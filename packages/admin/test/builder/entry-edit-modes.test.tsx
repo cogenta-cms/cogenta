@@ -29,9 +29,9 @@ async function openFirstArticle(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
   await screen.findByRole('heading', { name: 'Contenus' })
-  fireEvent.click(screen.getByRole('link', { name: 'Articles' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Articles' }))
   await screen.findByText('First article')
-  fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
   await screen.findByRole('heading', { name: 'Modifier : Article' })
 }
 

@@ -36,7 +36,7 @@ function signedIn(roles: readonly string[]): void {
 
 async function goToRedirects(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'SEO' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'SEO' }))
   await screen.findByRole('heading', { name: 'SEO', level: 1 })
   fireEvent.click(screen.getByRole('tab', { name: 'Redirections' }))
   await screen.findByRole('heading', { name: 'Redirections', level: 2 })

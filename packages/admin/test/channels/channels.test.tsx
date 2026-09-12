@@ -36,7 +36,7 @@ afterEach(() => {
 
 async function goToChannels(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Canaux' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Canaux' }))
   await screen.findByRole('heading', { name: 'Canaux' })
 }
 

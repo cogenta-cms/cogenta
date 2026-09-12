@@ -27,7 +27,7 @@ function signedIn(roles: readonly string[]): void {
 
 async function goToAdminAppearance(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: "Apparence de l'admin" }))
+  fireEvent.click(await screen.findByRole('link', { name: "Apparence de l'admin" }))
   await screen.findByRole('heading', { name: "Apparence de l'admin", level: 1 })
 }
 

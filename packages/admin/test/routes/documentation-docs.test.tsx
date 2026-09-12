@@ -32,7 +32,7 @@ describe('the full documentation browser', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'Aide' }))
     await screen.findByRole('heading', { name: 'Documentation', level: 1 })
 
-    fireEvent.click(screen.getByRole('link', { name: 'Ouvrir la documentation complète' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Ouvrir la documentation complète' }))
 
     await screen.findByRole('heading', { name: 'Documentation complète', level: 1 })
   })

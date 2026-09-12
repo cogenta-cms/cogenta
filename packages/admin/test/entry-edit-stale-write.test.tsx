@@ -19,7 +19,7 @@ async function goToArticles(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
   await screen.findByRole('heading', { name: 'Contenus' })
-  fireEvent.click(screen.getByRole('link', { name: 'Articles' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Articles' }))
   await screen.findByText('First article')
 }
 
@@ -62,7 +62,7 @@ describe('the stale-write conflict notice', () => {
   it('shows Reload / Keep mine and Reload adopts the fresh version', async () => {
     render(<App />)
     await goToArticles()
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     const realFetch = globalThis.fetch
@@ -117,7 +117,7 @@ describe('the stale-write conflict notice', () => {
   it('"Keep mine" retries the save with the fresh version, and it lands', async () => {
     render(<App />)
     await goToArticles()
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     const realFetch = globalThis.fetch

@@ -12,7 +12,7 @@ afterEach(() => {
 
 async function goToProviders(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Fournisseurs' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Fournisseurs' }))
   await screen.findByRole('heading', { name: 'Fournisseurs' })
 }
 

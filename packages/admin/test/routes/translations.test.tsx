@@ -27,7 +27,7 @@ describe('the translation dashboard', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Traductions' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Traductions' }))
 
     await screen.findByText("Ce site n'a qu'une seule langue ; il n'y a rien à comparer.")
   })
@@ -37,7 +37,7 @@ describe('the translation dashboard', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Traductions' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Traductions' }))
     await screen.findByRole('heading', { name: 'Traductions' })
 
     // Two roots from the fixture: "First article" has an `fr` translation,
@@ -60,7 +60,7 @@ describe('the translation dashboard', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Traductions' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Traductions' }))
     await screen.findByRole('heading', { name: 'Traductions' })
     await screen.findByText('First article')
 

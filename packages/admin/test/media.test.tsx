@@ -17,7 +17,7 @@ afterEach(() => {
 
 async function goToMedia(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Médiathèque' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Médiathèque' }))
   await screen.findByRole('heading', { name: 'Médiathèque' })
 }
 

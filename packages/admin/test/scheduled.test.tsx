@@ -11,7 +11,7 @@ afterEach(() => {
 
 async function goToScheduled(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Tâches planifiées' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Tâches planifiées' }))
   await screen.findByRole('heading', { name: 'Tâches planifiées' })
 }
 

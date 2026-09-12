@@ -60,7 +60,7 @@ describe('WCAG 2.2 AA — authenticated views', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
     await screen.findByText('Articles')
-    fireEvent.click(screen.getByRole('link', { name: 'Articles' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Articles' }))
     await screen.findByText('First article')
     await expectNoSeriousA11yViolations(document.body)
   })
@@ -72,9 +72,9 @@ describe('WCAG 2.2 AA — authenticated views', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
     await screen.findByText('Articles')
-    fireEvent.click(screen.getByRole('link', { name: 'Articles' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Articles' }))
     await screen.findByText('First article')
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
     await expectNoSeriousA11yViolations(document.body)
   })
@@ -90,9 +90,9 @@ describe('WCAG 2.2 AA — authenticated views', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     fireEvent.click(await screen.findByRole('link', { name: 'Contenus' }))
     await screen.findByText('Articles')
-    fireEvent.click(screen.getByRole('link', { name: 'Articles' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Articles' }))
     await screen.findByText('First article')
-    fireEvent.click(screen.getByRole('link', { name: 'First article' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Composition visuelle' }))
@@ -107,7 +107,7 @@ describe('WCAG 2.2 AA — authenticated views', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Médiathèque' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Médiathèque' }))
     await screen.findByRole('heading', { name: 'Médiathèque' })
 
     fireEvent.change(screen.getByLabelText('Fichier'), {
@@ -127,7 +127,7 @@ describe('WCAG 2.2 AA — authenticated views', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: "Journal d'audit" }))
+    fireEvent.click(await screen.findByRole('link', { name: "Journal d'audit" }))
     await screen.findByText('Contenu créé')
     await expectNoSeriousA11yViolations(document.body)
   })
@@ -137,7 +137,7 @@ describe('WCAG 2.2 AA — authenticated views', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    fireEvent.click(screen.getByRole('link', { name: 'Paramètres' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Paramètres' }))
     await screen.findByRole('heading', { name: 'Réglages du site' })
     await expectNoSeriousA11yViolations(document.body)
   })

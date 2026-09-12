@@ -11,7 +11,7 @@ afterEach(() => {
 
 async function goToAgentSkills(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Compétences' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Compétences' }))
   await screen.findByRole('heading', { name: 'Compétences' })
 }
 

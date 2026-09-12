@@ -23,7 +23,7 @@ function signIn(roles: readonly string[]): void {
 
 async function goToImport(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(screen.getByRole('link', { name: 'Import' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Import' }))
   await screen.findByRole('heading', { name: 'Importer depuis WordPress' })
 }
 

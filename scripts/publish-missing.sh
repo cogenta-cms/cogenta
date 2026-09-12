@@ -79,8 +79,20 @@ echo
 # to --otp. For those accounts "Authorization only" is not a shortcut, it is
 # the only way to publish from a CLI.
 #
-#   bash scripts/publish-missing.sh            # Authorization only
+#   bash scripts/publish-missing.sh            # no 2FA needed for publishing
 #   bash scripts/publish-missing.sh 123456     # Authorization and writes (TOTP)
+#
+# An organisation can *also* require 2FA for publishing, and that requirement
+# is not overridden by the account's own mode: with it on, a publish is
+# refused with a 403 naming two-factor authentication however the account is
+# configured. The route that stays open — and the one the registry's own error
+# message points at — is a granular access token with "Bypass 2FA" enabled,
+# scoped to write the @cogenta packages. Put it in your own npm config
+# (`npm config set //registry.npmjs.org/:_authToken=…`) rather than passing it
+# through a shell command, so it never lands in a transcript or a history
+# file, and revoke it once the run is done. npm is removing direct publishing
+# with such a token in January 2027, which is exactly why this is a one-off
+# repair and not how releases should work.
 #
 # With a code, one code covers however many publishes fit inside its window.
 # When it expires the run stops immediately rather than burning through the
@@ -131,9 +143,15 @@ for entry in $PACKAGES; do
     # in the noise.
     echo
     echo "  Stopped here. Nothing was published for this package."
-    echo "  EOTP means the account is in \"Authorization and writes\" mode: pass a"
-    echo "  fresh code, or switch the account to \"Authorization only\" on"
-    echo "  npmjs.com — the only route open to a passkey, which produces no code."
+    echo "  EOTP: the account is in \"Authorization and writes\" mode — pass a"
+    echo "    fresh code as the first argument."
+    echo "  E403 naming two-factor authentication: the @cogenta organisation"
+    echo "    requires 2FA to publish, which no account-level setting overrides."
+    echo "    Publish with a granular access token that has \"Bypass 2FA\" on"
+    echo "    (see the header of this script), or lift the requirement in the"
+    echo "    organisation's own settings."
+    echo "  E404: almost always authorisation rather than a missing package —"
+    echo "    the registry masks 403 as 404 on purpose."
     echo "  The $published already published will be skipped on the next run."
     break
   fi

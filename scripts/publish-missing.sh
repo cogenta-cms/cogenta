@@ -66,6 +66,38 @@ fi
 echo "Publishing as: $(npm whoami)"
 echo
 
+# npm asks for a one-time password on every publish while the account's 2FA
+# mode is "auth and writes". The CLI can prompt for it itself, but only from a
+# real terminal — run non-interactively it fails outright with EOTP, which is
+# how all sixteen failed on the first attempt here.
+#
+# So the code is asked for explicitly, once per package, and an empty answer
+# reuses the previous one: a TOTP code stays valid for its whole window, which
+# is usually long enough for two or three publishes in a row. Sixteen codes is
+# the worst case, not the expected one.
+#
+# The alternative, if this is too tedious, is to set the account to
+# "Authorization only" on npmjs.com for the length of the run — that is a
+# security setting on a personal account, so it is deliberately not something
+# this script touches.
+OTP=""
+ask_otp() {
+  if [ ! -t 0 ] && [ ! -r /dev/tty ]; then
+    echo "This script needs a terminal to ask for your one-time password."
+    echo "Run it directly in your own shell, not through a pipe or an agent."
+    exit 1
+  fi
+  printf 'One-time password for %s' "$1" >&2
+  if [ -n "$OTP" ]; then printf ' (empty = reuse %s)' "$OTP" >&2; fi
+  printf ': ' >&2
+  read -r answer < /dev/tty
+  if [ -n "$answer" ]; then OTP="$answer"; fi
+  if [ -z "$OTP" ]; then
+    echo "No code given; stopping rather than guessing." >&2
+    exit 1
+  fi
+}
+
 published=0
 skipped=0
 failed=0
@@ -85,15 +117,18 @@ for entry in $PACKAGES; do
     continue
   fi
 
+  ask_otp "$name@$version"
   echo "+ publishing $name@$version"
   # shellcheck disable=SC2086
-  if (cd "$dir" && pnpm publish $PUBLISH_FLAGS); then
+  if (cd "$dir" && pnpm publish $PUBLISH_FLAGS --otp="$OTP"); then
     published=$((published + 1))
   else
     echo "  FAILED: $name@$version"
-    echo "  A 404 here almost always means authorisation, not a missing package:"
-    echo "  the registry masks 403 as 404 on purpose. Check that this account can"
-    echo "  publish to the @cogenta scope."
+    echo "  EOTP means the code was wrong or had expired — re-run, nothing was"
+    echo "  published for it. A 404 almost always means authorisation rather than"
+    echo "  a missing package: the registry masks 403 as 404 on purpose."
+    # A stale code must not be offered for reuse on the next package.
+    OTP=""
     failed=$((failed + 1))
     failures="$failures $name"
   fi

@@ -490,7 +490,12 @@ describe('POST /api/theme/generate/jobs, GET …/generate/jobs/:jobId', () => {
     }
 
     expect(job?.status, job?.error?.message ?? JSON.stringify(job)).toBe('done')
-    expect(job?.result?.candidates.length).toBeGreaterThanOrEqual(2)
+    // One candidate by default, since "par défaut maintenant on génère un seul
+    // theme" — the product owner's own words. This assertion predates that
+    // change and was left behind by it: asking for several is now an explicit
+    // request, not the default, so demanding two here asserted the old
+    // behaviour.
+    expect(job?.result?.candidates.length).toBeGreaterThanOrEqual(1)
     expect(job?.events.some((e) => e.message.includes('Choosing a base theme'))).toBe(true)
     expect(job?.events.some((e) => e.message.startsWith('Generating "'))).toBe(true)
 

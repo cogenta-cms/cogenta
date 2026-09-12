@@ -592,7 +592,9 @@ export function runMediaContract(
         expect(asset.provenance).toBe('human')
         expect(asset.provenanceDetail).toBeNull()
         // And it reads back that way, not only at the moment of writing.
-        expect((await store.get(asset.id)).provenance).toBe('human')
+        const read = await store.get(asset.id)
+        expect(read).not.toBeNull()
+        expect(read?.provenance).toBe('human')
       } finally {
         await dispose?.()
       }
@@ -618,8 +620,9 @@ export function runMediaContract(
         })
 
         const read = await store.get(asset.id)
-        expect(read.provenance).toBe('generated')
-        expect(read.provenanceDetail).toEqual({
+        expect(read).not.toBeNull()
+        expect(read?.provenance).toBe('generated')
+        expect(read?.provenanceDetail).toEqual({
           agent: 'image-creator',
           model: 'test-image-model',
           at: '2026-09-11T09:00:00.000Z',

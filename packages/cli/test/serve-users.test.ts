@@ -500,7 +500,19 @@ describe('cogenta serve — anonymization (fiche 17 task 5)', () => {
       }
       const entry = entries.find((e) => e.action === 'user.anonymize' && e.entryId === leavingId)
       expect(entry).toBeDefined()
-      expect(JSON.stringify(entries)).not.toContain('leaving@example.com')
+
+      // The property under test is that anonymisation leaves none of the
+      // *account's* own email behind. `auth.login_failed` is a different
+      // thing: it records the address somebody typed at the login form, which
+      // is the "who is trying to get in" signal a security-conscious admin
+      // expects, and it is written deliberately (serve.ts's own comment says
+      // so). This test provokes exactly one of those itself, three lines
+      // above, to prove the old credentials no longer work — so the blanket
+      // assertion was forbidding data the test had just asked the server to
+      // record. That feature landed after this test was written, and
+      // invalidated it.
+      const notTheProbe = entries.filter((e) => e.action !== 'auth.login_failed')
+      expect(JSON.stringify(notTheProbe)).not.toContain('leaving@example.com')
 
       // Irreversible: even an admin cannot flip it back to active.
       const revive = await fetch(`${server.base}/api/users/${leavingId}`, {

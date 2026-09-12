@@ -1,20 +1,9 @@
-import {
-  type DatabaseDialect,
-  type DatabaseHandle,
-  identifier,
-  type SqlFragment,
-  sql,
-  unsafeRaw,
-} from '@cogenta/core'
-import { ensureDailySaltTable } from './session-hash.js'
+import { type DatabaseHandle, identifier, type SqlFragment, sql } from '@cogenta/core'
+import { ensureDailySaltTable, textColumn } from './session-hash.js'
 
 export const TABLES = {
   events: 'cogenta_analytics_events',
 } as const
-
-function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
-  return unsafeRaw(dialect === 'sqlite' ? 'text' : `varchar(${length})`)
-}
 
 /**
  * Creates the events table (and the daily-salt table from `session-hash.ts`)

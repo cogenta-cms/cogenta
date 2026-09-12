@@ -1,5 +1,13 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { CogentaError, type DatabaseHandle, identifier, sql } from '@cogenta/core'
+import {
+  CogentaError,
+  type DatabaseDialect,
+  type DatabaseHandle,
+  identifier,
+  type SqlFragment,
+  sql,
+  unsafeRaw,
+} from '@cogenta/core'
 
 /**
  * The privacy core of this package.
@@ -30,13 +38,31 @@ export function dailySaltTableName(): string {
   return TABLE
 }
 
+/**
+ * `text` on SQLite, `varchar(n)` everywhere else.
+ *
+ * MySQL refuses to index a TEXT column without a key length — "BLOB/TEXT
+ * column used in key specification without a key length" — so a `text`
+ * primary key is not portable. `tables.ts` had this right for the events
+ * table and this one did not, which is why MySQL was the only dialect that
+ * ever complained.
+ *
+ * It lives here, the lower of the two modules, because `tables.ts` already
+ * imports from this file; the other direction would be a cycle.
+ */
+export function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
+  return unsafeRaw(dialect === 'sqlite' ? 'text' : `varchar(${length})`)
+}
+
 export async function ensureDailySaltTable(db: DatabaseHandle): Promise<void> {
-  const table = identifier(TABLE, db.dialect)
+  const d = db.dialect
+  const table = identifier(TABLE, d)
+  // `day` is a `YYYY-MM-DD` key, never longer than ten characters.
   await db.query(sql`
     create table if not exists ${table} (
-      day text not null primary key,
-      salt text not null,
-      created_at text not null
+      day ${textColumn(d, 32)} not null primary key,
+      salt ${textColumn(d, 128)} not null,
+      created_at ${textColumn(d, 64)} not null
     )`)
 }
 

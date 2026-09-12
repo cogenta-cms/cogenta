@@ -23,6 +23,8 @@ describe('recordUpdateHistory / listUpdateHistory', () => {
         packages: [{ name: '@cogenta/core', installed: '0.4.0', latest: '0.4.0', bump: 'none' }],
       },
     })
+    await new Promise((resolve) => setTimeout(resolve, 2))
+
     await recordUpdateHistory(auditLog, {
       actorId: 'user-admin',
       actorRoles: ['admin'],
@@ -32,6 +34,14 @@ describe('recordUpdateHistory / listUpdateHistory', () => {
         restorePoint: '/x/update-1.zip',
       },
     })
+    // Audit entries are ordered by their recorded instant, which has
+    // millisecond resolution. Three writes back to back land inside the same
+    // millisecond on a fast runner, and "most recent first" then has no
+    // defined answer — which is how this asserted `apply_failed` and got
+    // `applied`. A tick between them makes the ordering real rather than
+    // lucky.
+    await new Promise((resolve) => setTimeout(resolve, 2))
+
     await recordUpdateHistory(auditLog, {
       actorId: 'user-admin',
       actorRoles: ['admin'],

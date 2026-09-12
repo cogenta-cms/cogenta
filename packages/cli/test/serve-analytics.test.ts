@@ -92,6 +92,7 @@ async function startServer(
   root: string,
   options: { readonly analyticsPurgeTickMs?: number } = {},
 ): Promise<{ base: string; stop: () => Promise<void> }> {
+  const startupErrors: string[] = []
   const controller = new AbortController()
   activeServers.push(controller)
 
@@ -105,7 +106,13 @@ async function startServer(
     env: { COGENTA_AUTH_SIGNING_KEY: 'test-signing-key-not-a-real-secret' },
     logger: createLogger({ level: 'silent' }),
     out: createOutput(() => undefined, false),
-    stderr: () => undefined,
+    // Kept, not discarded: `runServe` writes the reason it refused to start
+    // here, and throwing only the exit code below turned every startup
+    // failure into "exited with code 1", which names nothing. That cost a
+    // whole CI round trip.
+    stderr: (line: string) => {
+      startupErrors.push(line)
+    },
     port: 0,
     signal: controller.signal,
     onListening: (a) => resolveAddress(a),
@@ -116,7 +123,11 @@ async function startServer(
   const bound = await Promise.race([
     address,
     done.then((code) => {
-      throw new Error(`runServe exited with code ${code} before it started listening`)
+      const why = startupErrors.join('\n').trim()
+      throw new Error(
+        `runServe exited with code ${code} before it started listening` +
+          (why === '' ? ' (it printed nothing to stderr)' : `:\n${why}`),
+      )
     }),
   ])
   return {

@@ -129,7 +129,13 @@ describe('agent skills — the open row has its own URL (fiche 71)', () => {
     render(<App />)
     await screen.findByText('Style guide')
     const editor = (await screen.findByLabelText('Contenu SKILL.md')) as HTMLTextAreaElement
-    expect(editor.value).toContain('Style guide')
+    // `findByLabelText` waits for the textarea to exist, which happens before
+    // its content arrives — the row renders first and the SKILL.md body is
+    // fetched after. Asserting the value on the spot was therefore a race
+    // that only a loaded runner lost, reporting "expected '' to contain
+    // 'Style guide'". Same assertion, given the time the element itself was
+    // already given.
+    await waitFor(() => expect(editor.value).toContain('Style guide'))
   })
 
   it('shows a clear message, not a blank row, for an id that no longer exists', async () => {

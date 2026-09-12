@@ -73,9 +73,24 @@ function parseTags(raw: string | null): readonly string[] {
   return raw.split(TAG_DELIMITER).filter((tag) => tag.length > 0)
 }
 
-/** Escapes `\`, `%` and `_` so a tag containing them cannot widen its own `LIKE` filter. */
+/**
+ * The `LIKE ... ESCAPE` character, and deliberately not a backslash.
+ *
+ * A backslash is itself an escape character inside a MySQL/MariaDB string
+ * literal, so `escape '\'` is an unterminated string and a parse error there,
+ * while SQLite and Postgres accept it happily. Only an integration run against
+ * the real engines ever shows that — and it did: "You have an error in your
+ * SQL syntax ... near ''\'".
+ *
+ * `!` needs no quoting in any of the three, which removes the dialect branch
+ * rather than writing one. It is a query-time pattern only; nothing stored
+ * depends on it.
+ */
+const LIKE_ESCAPE = '!'
+
+/** Escapes `!`, `%` and `_` so a tag containing them cannot widen its own `LIKE` filter. */
 function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/gu, (char) => `\\${char}`)
+  return value.replace(/[!%_]/gu, (char) => `${LIKE_ESCAPE}${char}`)
 }
 
 function rowToAsset(row: MediaRow): MediaAsset {
@@ -292,7 +307,7 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
     const tagFilter =
       listOptions.tag === undefined || listOptions.tag.trim().length === 0
         ? sql``
-        : sql`and tags like ${`%${TAG_DELIMITER}${escapeLikePattern(listOptions.tag.trim())}${TAG_DELIMITER}%`} escape '\\'`
+        : sql`and tags like ${`%${TAG_DELIMITER}${escapeLikePattern(listOptions.tag.trim())}${TAG_DELIMITER}%`} escape '!'`
     const fromFilter =
       listOptions.from === undefined ? sql`` : sql`and created_at >= ${listOptions.from}`
     const toFilter = listOptions.to === undefined ? sql`` : sql`and created_at <= ${listOptions.to}`

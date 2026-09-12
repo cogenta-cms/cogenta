@@ -135,6 +135,31 @@ export function createDatabaseMediaFolderStore(
   const mediaTable = identifier(mediaTableName, dialect)
   let ready = false
 
+  /**
+   * Whether the media table can answer a `folder_id` question at all.
+   *
+   * Asked **outside** any transaction, once, and that placement is the whole
+   * point. This used to be a `select ... .catch(() => 0)` *inside* the delete
+   * transaction, so that a folder-only test suite — one that never ran
+   * `createDatabaseMediaStore`'s own `ensureTable()` — read "no assets"
+   * instead of crashing. That works on SQLite and MySQL and is fatal on
+   * Postgres: a failed statement aborts the surrounding transaction, so the
+   * swallowed error left the very next `delete` answering "current
+   * transaction is aborted, commands ignored until end of transaction block".
+   * The error was hidden; the damage was not.
+   *
+   * Any real server builds both stores together, so this is `true` in
+   * production and the query below runs exactly as before.
+   */
+  let mediaTableUsable: Promise<boolean> | null = null
+  function canCountAssets(): Promise<boolean> {
+    mediaTableUsable ??= db
+      .query(sql`select folder_id from ${mediaTable} where 1 = 0`)
+      .then(() => true)
+      .catch(() => false)
+    return mediaTableUsable
+  }
+
   async function ensureTable(): Promise<void> {
     if (ready) return
     await db.query(sql`
@@ -351,6 +376,10 @@ export function createDatabaseMediaFolderStore(
 
     delete: async (id: string): Promise<boolean> => {
       await ensureTable()
+      // Settled before the transaction opens, never inside it: on Postgres a
+      // statement that fails aborts the whole transaction, so probing in
+      // there and catching the error leaves every later statement refused.
+      const countable = await canCountAssets()
       return db.transaction(
         async (tx) => {
           const row = await rowOf(tx, id)
@@ -368,17 +397,16 @@ export function createDatabaseMediaFolderStore(
             })
           }
 
-          // Whether any media asset still files under this folder. Wrapped
-          // so a media table that has never run `createDatabaseMediaStore`'s
-          // own `ensureTable()` (and so has no `folder_id` column yet) reads
-          // as "no assets" rather than crashing a folder-only test suite —
-          // any real server always constructs both stores together.
-          const assetCount = await tx
-            .query<{ c: number | string }>(
-              sql`select count(*) as c from ${mediaTable} where folder_id = ${id}`,
-            )
-            .then((result) => Number(result.rows[0]?.c ?? 0))
-            .catch(() => 0)
+          // Whether any media asset still files under this folder. The
+          // "can this even be asked?" question was settled before the
+          // transaction opened — see `canCountAssets`.
+          const assetCount = countable
+            ? await tx
+                .query<{ c: number | string }>(
+                  sql`select count(*) as c from ${mediaTable} where folder_id = ${id}`,
+                )
+                .then((result) => Number(result.rows[0]?.c ?? 0))
+            : 0
 
           if (assetCount > 0) {
             throw new CogentaError({

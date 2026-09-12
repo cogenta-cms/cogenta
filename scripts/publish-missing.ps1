@@ -47,6 +47,13 @@ Set-Location (Join-Path $PSScriptRoot '..')
 #
 # `--provenance=false` because the repository's own .npmrc sets
 # `provenance=true`, and provenance needs the OIDC token only CI has.
+#
+# `--access public` is passed and does **not** decide the outcome: these
+# packages all set `publishConfig.access: "public"` too, and every one of them
+# still landed restricted, because the @cogenta organisation's default package
+# visibility is private and that wins at a scoped package's first publish. The
+# flag stays because it is correct; `scripts/make-public.ps1` is what actually
+# fixes it afterwards.
 $publishFlags = @('--provenance=false', '--no-git-checks', '--access', 'public')
 if ($Otp -ne '') { $publishFlags += "--otp=$Otp" }
 

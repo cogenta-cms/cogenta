@@ -2,6 +2,9 @@ import {
   CogentaError,
   type DatabaseHandle,
   identifier,
+  // `limit` is already a local name in this file, so the helper is aliased —
+  // the same way @cogenta/comments does it.
+  limit as limitFragment,
   newId,
   type SqlFragment,
   sql,
@@ -547,7 +550,7 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
       const sqlLimit = hasQuery ? MAX_QUERY_SCAN_ROWS : limit + 1
 
       const result = await db.query<SubmissionRow>(
-        sql`select * from ${submissionsTable} ${where} order by submitted_at desc limit ${sqlLimit}`,
+        sql`select * from ${submissionsTable} ${where} order by submitted_at desc limit ${limitFragment(sqlLimit)}`,
       )
       let rows = result.rows.map(decodeSubmission)
       if (hasQuery) rows = rows.filter((submission) => submissionMatchesQuery(submission, needle))

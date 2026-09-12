@@ -1,4 +1,4 @@
-import { type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
+import { type DatabaseHandle, identifier, limit, newId, sql } from '@cogenta/core'
 import { classifyDevice, type DeviceCategory } from './device.js'
 import { extractReferrerDomain } from './referrer.js'
 import { createDailySaltStore, hashSession, utcDateKey } from './session-hash.js'
@@ -157,14 +157,14 @@ export function createAnalyticsStore(
         where at >= ${sinceIso} and at <= ${untilIso}
         group by path
         order by count(*) desc
-        limit ${rowLimit}`)
+        limit ${limit(rowLimit)}`)
 
       const topReferrersResult = await db.query<{ referrer_domain: string; n: number }>(sql`
         select referrer_domain, count(*) as n from ${events}
         where at >= ${sinceIso} and at <= ${untilIso} and referrer_domain is not null
         group by referrer_domain
         order by count(*) desc
-        limit ${rowLimit}`)
+        limit ${limit(rowLimit)}`)
 
       const deviceResult = await db.query<{ device: string; n: number }>(sql`
         select device, count(*) as n from ${events}

@@ -5,7 +5,7 @@ import {
   type SqlFragment,
   sql,
 } from '@cogenta/core'
-import { booleanColumn, textColumn, timestampColumn } from './columns.js'
+import { booleanColumn, booleanValue, textColumn, timestampColumn } from './columns.js'
 
 /**
  * Maintenance mode (fiche 24 task 5).
@@ -112,7 +112,7 @@ export function createMaintenanceStore(options: MaintenanceStoreOptions): Mainte
         async (tx) => {
           const at = now().toISOString()
           const existing = await rowOf(tx)
-          const enabledValue = input.enabled ? 'true' : 'false'
+          const enabledValue = booleanValue(input.enabled, db.dialect)
           const message = input.message === undefined ? null : input.message
           const updatedBy = input.updatedBy ?? null
 

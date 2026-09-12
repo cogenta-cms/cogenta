@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createNotFoundLogStore } from '../../src/routing/not-found-log.js'
 import { createRedirectPatternStore } from '../../src/routing/redirect-patterns.js'
 import { createRedirectStore } from '../../src/routing/redirects.js'
+import { resetTables } from '../helpers/reset-tables.js'
 
 /**
  * Fiche 12's three routing tables against the real servers.
@@ -69,6 +70,12 @@ function runRoutingContract(dialect: Dialect): void {
       const second = await dialect.connect()
       try {
         const table = `cogenta_not_found_it_${dialect.label}`
+        // Dropped first: this is one shared, persistent server database, so
+        // the two hits an earlier run recorded on the same path are still
+        // there — the assertions below ("exactly one row", "exactly two
+        // hits") are only true of an empty table, and read 4 on the second
+        // run otherwise. SQLite never showed it: a fresh file every time.
+        await resetTables(db, [table])
         const storeA = createNotFoundLogStore({ db, table })
         const storeB = createNotFoundLogStore({ db: second, table })
 

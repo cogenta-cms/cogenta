@@ -108,6 +108,42 @@ function sanitiseReferrer(referrer: string | null | undefined): string | null {
   }
 }
 
+/**
+ * Retries a write that lost a race to another connection.
+ *
+ * Every engine has its own word for "you collided, try again": MariaDB
+ * "Record has changed since last read", MySQL a deadlock or a lock-wait
+ * timeout, Postgres a serialization failure. None of them means the caller
+ * did anything wrong, and none of them should reach a visitor who merely hit
+ * a missing page.
+ *
+ * Bounded, because a caller that keeps losing is stuck and should hear about
+ * it rather than spin; the last failure is rethrown untouched. Deliberately
+ * local rather than shared with `role-permission-store.ts`'s similar retry —
+ * two uses is not yet the three this project asks for before a helper moves.
+ */
+async function retryOnTransientConflict<T>(attempt: () => Promise<T>): Promise<T> {
+  for (let remaining = 3; ; remaining -= 1) {
+    try {
+      return await attempt()
+    } catch (error) {
+      const seen: string[] = []
+      let current: unknown = error
+      for (let depth = 0; depth < 4 && current instanceof Error; depth += 1) {
+        seen.push(current.message)
+        const code = (current as { readonly code?: unknown }).code
+        if (typeof code === 'string') seen.push(code)
+        current = (current as { readonly cause?: unknown }).cause
+      }
+      const transient =
+        /Record has changed since last read|Deadlock found|Lock wait timeout|could not serialize/iu.test(
+          seen.join(' '),
+        )
+      if (remaining <= 1 || !transient) throw error
+    }
+  }
+}
+
 export function createNotFoundLogStore(options: NotFoundLogStoreOptions): NotFoundLogStore {
   const { db } = options
   const now = options.now ?? Date.now
@@ -141,50 +177,63 @@ export function createNotFoundLogStore(options: NotFoundLogStoreOptions): NotFou
       const referrer = sanitiseReferrer(input.referrer)
       const at = now()
 
-      await db.transaction(
-        async (tx) => {
-          const existing = await tx.query<{ path: string }>(sql`
+      // A 404 log must never turn a visitor's 404 into a 500, which is the
+      // whole reason the upsert below exists. The upsert removes the
+      // duplicate-key crash; it does not remove every way two connections can
+      // collide. MariaDB answers a concurrent write on the same row with
+      // "Record has changed since last read ...; try restarting transaction",
+      // which is an instruction, not a failure — so this does exactly that.
+      await retryOnTransientConflict(async () =>
+        db.transaction(
+          async (tx) => {
+            const existing = await tx.query<{ path: string }>(sql`
             select path from ${table} where path = ${path} limit ${limit(1)}`)
 
-          if (existing.rows.length === 0) {
-            // A genuinely new path: enforced against the cap so the table
-            // cannot grow past it, however many unique URLs a scanner tries.
-            // Best-effort — see the upsert below for what makes a race here
-            // safe rather than merely unlikely.
-            const counted = await tx.query<{ total: number }>(sql`
+            if (existing.rows.length === 0) {
+              // A genuinely new path: enforced against the cap so the table
+              // cannot grow past it, however many unique URLs a scanner tries.
+              // Best-effort — see the upsert below for what makes a race here
+              // safe rather than merely unlikely.
+              const counted = await tx.query<{ total: number }>(sql`
               select count(*) as ${identifier('total', db.dialect)} from ${table}`)
-            const total = Number(counted.rows[0]?.total ?? 0)
-            if (total >= maxPaths) return
-          }
+              const total = Number(counted.rows[0]?.total ?? 0)
+              if (total >= maxPaths) return
+            }
 
-          // An upsert, not a plain insert: `{ immediate: true }` only takes a
-          // real write lock on SQLite (`BEGIN IMMEDIATE`) — Postgres and MySQL
-          // both discard the option and run under their default isolation, so
-          // two anonymous requests hitting the same brand-new path at once can
-          // both pass the `existing.rows.length === 0` check above. A plain
-          // `insert` would then have the second one crash on the `path`
-          // primary key — precisely the 500 a 404 log must never cause. `on
-          // conflict do update` / `on duplicate key update` turns that race
-          // into a safe increment instead: whichever request loses the race
-          // still lands as exactly one more hit on one row, never a thrown
-          // duplicate-key error.
-          if (db.dialect === 'mysql') {
-            await tx.query(sql`
+            // An upsert, not a plain insert: `{ immediate: true }` only takes a
+            // real write lock on SQLite (`BEGIN IMMEDIATE`) — Postgres and MySQL
+            // both discard the option and run under their default isolation, so
+            // two anonymous requests hitting the same brand-new path at once can
+            // both pass the `existing.rows.length === 0` check above. A plain
+            // `insert` would then have the second one crash on the `path`
+            // primary key — precisely the 500 a 404 log must never cause. `on
+            // conflict do update` / `on duplicate key update` turns that race
+            // into a safe increment instead: whichever request loses the race
+            // still lands as exactly one more hit on one row, never a thrown
+            // duplicate-key error.
+            if (db.dialect === 'mysql') {
+              await tx.query(sql`
               insert into ${table} (path, hits, first_seen, last_seen, last_referrer)
               values (${path}, 1, ${at}, ${at}, ${referrer})
               on duplicate key update
                 hits = hits + 1, last_seen = ${at}, last_referrer = ${referrer}`)
-          } else {
-            await tx.query(sql`
+            } else {
+              // `hits` is qualified with the table below, because inside a
+              // Postgres DO UPDATE SET a bare column name is ambiguous between
+              // the target row and `excluded`, and Postgres refuses it outright:
+              // 'column reference "hits" is ambiguous'. MySQL's ON DUPLICATE KEY
+              // UPDATE has no such rule, which is why only this branch needs it.
+              await tx.query(sql`
               insert into ${table} (path, hits, first_seen, last_seen, last_referrer)
               values (${path}, 1, ${at}, ${at}, ${referrer})
               on conflict (path) do update set
-                hits = hits + 1,
+                hits = ${table}.hits + 1,
                 last_seen = excluded.last_seen,
                 last_referrer = excluded.last_referrer`)
-          }
-        },
-        { immediate: true },
+            }
+          },
+          { immediate: true },
+        ),
       )
     },
 

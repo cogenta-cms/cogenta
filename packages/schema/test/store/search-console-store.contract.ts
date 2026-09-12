@@ -6,6 +6,7 @@ import {
   ensureSearchConsoleConnectionTable,
   SEARCH_CONSOLE_CONNECTION_TABLE,
 } from '../../src/store/search-console-tables.js'
+import { resetTables } from '../helpers/reset-tables.js'
 
 /**
  * The single contract suite for the Search Console connector's stored
@@ -34,6 +35,10 @@ export function runSearchConsoleStoreContract(
     beforeEach(async () => {
       harness = await create()
       db = harness.db
+      // Emptied first: these tests assert "no connection at all", which is
+      // only true of a fresh table. SQLite gives one per test; the real
+      // servers keep whatever the previous test connected.
+      await resetTables(db, [SEARCH_CONSOLE_CONNECTION_TABLE])
       await ensureSearchConsoleConnectionTable(db)
       store = createSearchConsoleConnectionStore({ db, signingKey: SIGNING_KEY })
     })

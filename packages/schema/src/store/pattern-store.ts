@@ -8,6 +8,7 @@ import {
 } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
 import type { Provenance } from '../types.js'
+import { isMintedId } from './columns.js'
 import { joinFragments } from './fragments.js'
 import type { PatternKind } from './pattern-tables.js'
 import { PATTERN_TABLE } from './pattern-tables.js'
@@ -152,6 +153,12 @@ export function createPatternStore(options: PatternStoreOptions): PatternStore {
   }
 
   async function rowOf(tx: SqlExecutor, id: string): Promise<Row | null> {
+    // Asked before the query, because Postgres treats a malformed uuid as an
+    // error rather than a miss: `update('missing', …)` answered "not found"
+    // on SQLite and MySQL and threw DB_UNREACHABLE — a 500 — on Postgres.
+    // An id that is not shaped like the ones `newId()` mints cannot name a
+    // row on any engine, so "no such row" is the honest answer everywhere.
+    if (!isMintedId(id)) return null
     const found = await tx.query<Row>(sql`select * from ${patterns} where ${idColumn} = ${id}`)
     return found.rows[0] ?? null
   }

@@ -7,6 +7,7 @@ import {
   sql,
 } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
+import { booleanValue } from './columns.js'
 import { joinFragments } from './fragments.js'
 import { MENU_TABLES } from './menu-tables.js'
 import { childPath, depthOf, isBelow, isWithin, rebasedPath } from './taxonomy-path.js'
@@ -584,7 +585,7 @@ export function createMenuStore(options: MenuStoreOptions): MenuStore {
               ${input.targetCollection ?? null}, ${input.targetEntryId ?? null},
               ${input.targetTaxonomy ?? null}, ${input.targetTermId ?? null},
               ${input.url ?? null}, ${input.title ?? null},
-              ${position}, ${path}, ${input.openInNewTab === true ? 'true' : 'false'}, ${at}, ${at}
+              ${position}, ${path}, ${booleanValue(input.openInNewTab === true, dialect)}, ${at}, ${at}
             )`,
           )
 
@@ -667,7 +668,7 @@ export function createMenuStore(options: MenuStoreOptions): MenuStore {
             assignments.push(sql`${identifier('title', dialect)} = ${input.title}`)
           if (input.openInNewTab !== undefined) {
             assignments.push(
-              sql`${identifier('open_in_new_tab', dialect)} = ${input.openInNewTab ? 'true' : 'false'}`,
+              sql`${identifier('open_in_new_tab', dialect)} = ${booleanValue(input.openInNewTab === true, dialect)}`,
             )
           }
 

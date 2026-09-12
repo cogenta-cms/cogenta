@@ -46,6 +46,41 @@ export function booleanColumn(dialect: DatabaseDialect): SqlFragment {
   return unsafeRaw(dialect === 'mysql' ? 'tinyint' : 'integer')
 }
 
+/**
+ * A boolean as the column built by `booleanColumn` will actually accept it.
+ *
+ * That column is `boolean` on Postgres and `tinyint`/`integer` elsewhere, so a
+ * literal `'true'` — which is what several stores here used to bind — is a
+ * string going into an integer column. SQLite is loose enough not to mind and
+ * Postgres parses it, so only MySQL and MariaDB ever refused: "Incorrect
+ * integer value: 'true' for column 'own' at row 1". The feature was simply
+ * broken there, in production as much as in tests, until the integration
+ * suite ran against a real MySQL for the first time.
+ *
+ * Kept next to `booleanColumn` on purpose: the two have to agree, and
+ * splitting them is how they drifted in the first place.
+ */
+/**
+ * Whether a string could be an id this schema ever minted.
+ *
+ * On Postgres an id column is a real `uuid`, and asking it about a value that
+ * is not one is an *error* — `invalid input syntax for type uuid: "missing"` —
+ * not an empty result. MySQL (`char(36)`) and SQLite (`text`) simply match
+ * nothing. So a lookup by an id that came from a URL answers "not found" on
+ * two engines and throws DB_UNREACHABLE, a 500, on the third.
+ *
+ * Every id here is a v4/v7 UUID minted by `newId()`, so a string that is not
+ * shaped like one cannot name an existing row on any engine. Refusing it
+ * before the query is what makes "not found" mean the same thing everywhere.
+ */
+export function isMintedId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(value)
+}
+
+export function booleanValue(value: boolean, dialect: DatabaseDialect): boolean | number {
+  return dialect === 'postgres' ? value : value ? 1 : 0
+}
+
 export function integerColumn(): SqlFragment {
   return unsafeRaw('integer')
 }

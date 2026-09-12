@@ -7,6 +7,8 @@ import {
   createRolePermissionStore,
   type RolePermissionStore,
 } from '../../src/store/role-permission-store.js'
+import { ROLE_PERMISSIONS_TABLE } from '../../src/store/role-permission-tables.js'
+import { resetTables } from '../helpers/reset-tables.js'
 
 /**
  * The single contract suite for role permission overrides (fiche 63,
@@ -51,6 +53,10 @@ export function runRolePermissionStoreContract(
       readonly collectionName: string
     }> {
       harness = await create()
+      // `list()` reads the whole table, so a random collection name isolates
+      // the row but not the listing — on the shared real servers every row an
+      // earlier test wrote is still there, and `toHaveLength(1)` sees seven.
+      await resetTables(harness.db, [ROLE_PERMISSIONS_TABLE])
       const collectionName = `rp_${randomUUID().replace(/-/gu, '_')}`
       const article = defineCollection({
         name: collectionName,

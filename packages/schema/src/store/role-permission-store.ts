@@ -7,6 +7,7 @@ import type {
   ContentAction,
   TaxonomyDefinition,
 } from '../types.js'
+import { booleanValue } from './columns.js'
 import { ensureRolePermissionTable, ROLE_PERMISSIONS_TABLE } from './role-permission-tables.js'
 
 /**
@@ -165,6 +166,42 @@ function validateTaxonomyCandidate(
   defineTaxonomy({ ...target, permissions })
 }
 
+/**
+ * The three engines report a primary-key collision in three different ways,
+ * and none of them is a stable, typed field this project already exposes:
+ * Postgres says "duplicate key value violates unique constraint", MySQL and
+ * MariaDB `ER_DUP_ENTRY`, SQLite "UNIQUE constraint failed". The cause chain
+ * is walked because the driver error arrives wrapped in a `CogentaError`.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  const seen: string[] = []
+  let current: unknown = error
+  for (let depth = 0; depth < 4 && current instanceof Error; depth += 1) {
+    seen.push(current.message)
+    const code = (current as { readonly code?: unknown }).code
+    if (typeof code === 'string') seen.push(code)
+    current = (current as { readonly cause?: unknown }).cause
+  }
+  return /duplicate key|ER_DUP_ENTRY|UNIQUE constraint failed/iu.test(seen.join(' '))
+}
+
+/**
+ * Runs `attempt` again when another connection won the same primary key.
+ *
+ * Bounded, because a caller that keeps losing is a caller stuck in a loop and
+ * should hear about it rather than spin. Three is enough for two racers to
+ * settle; the last failure is rethrown untouched.
+ */
+async function retryOnUniqueViolation<T>(attempt: () => Promise<T>): Promise<T> {
+  for (let remaining = 3; ; remaining -= 1) {
+    try {
+      return await attempt()
+    } catch (error) {
+      if (remaining <= 1 || !isUniqueViolation(error)) throw error
+    }
+  }
+}
+
 export function createRolePermissionStore(
   options: RolePermissionStoreOptions,
 ): RolePermissionStore {
@@ -217,22 +254,32 @@ export function createRolePermissionStore(
       const at = now().toISOString()
       const updatedBy = input.updatedBy ?? null
       const rolesJson = JSON.stringify(input.roles)
-      const ownValue = own ? 'true' : 'false'
+      const ownValue = booleanValue(own, dialect)
 
-      await db.transaction(
-        async (tx) => {
-          // Delete-then-insert rather than an upsert: `ON CONFLICT`, `ON
-          // DUPLICATE KEY` and `INSERT OR REPLACE` are three different
-          // statements across the three dialects — the same reasoning
-          // `redirects.ts`'s `performAdd` already gives for its own writes.
-          await tx.query(
-            sql`delete from ${table}
+      // Delete-then-insert is portable but not atomic against another
+      // connection doing the same thing: both deletes find nothing, both
+      // inserts then race the primary key, and one comes back with a
+      // duplicate-key violation. `set()` means "last writer wins", so a
+      // collision is a reason to run again — the retry's delete removes the
+      // row the winner just wrote — not an error to hand the caller.
+      //
+      // Only a real two-connection test against a real server ever shows
+      // this: SQLite serialises writers, so the race cannot happen there.
+      await retryOnUniqueViolation(async () =>
+        db.transaction(
+          async (tx) => {
+            // Delete-then-insert rather than an upsert: `ON CONFLICT`, `ON
+            // DUPLICATE KEY` and `INSERT OR REPLACE` are three different
+            // statements across the three dialects — the same reasoning
+            // `redirects.ts`'s `performAdd` already gives for its own writes.
+            await tx.query(
+              sql`delete from ${table}
                 where ${identifier('target_type', dialect)} = ${input.targetType}
                   and ${identifier('target_name', dialect)} = ${input.targetName}
                   and ${identifier('action', dialect)} = ${input.action}`,
-          )
-          await tx.query(
-            sql`insert into ${table} (
+            )
+            await tx.query(
+              sql`insert into ${table} (
                   ${identifier('target_type', dialect)}, ${identifier('target_name', dialect)},
                   ${identifier('action', dialect)}, ${identifier('roles', dialect)},
                   ${identifier('own', dialect)}, ${identifier('updated_at', dialect)},
@@ -241,9 +288,10 @@ export function createRolePermissionStore(
                   ${input.targetType}, ${input.targetName}, ${input.action}, ${rolesJson},
                   ${ownValue}, ${at}, ${updatedBy}
                 )`,
-          )
-        },
-        { immediate: true },
+            )
+          },
+          { immediate: true },
+        ),
       )
 
       return {

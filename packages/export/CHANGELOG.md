@@ -1,5 +1,14 @@
 # @cogenta/export
 
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies [[`8f0e946`](https://github.com/cogenta-cms/cogenta/commit/8f0e946573b8d8b31c89c956bb75d9a1eb6061a2), [`d222023`](https://github.com/cogenta-cms/cogenta/commit/d222023000e4933c5c8cefe21bb1c64fafd34b67)]:
+  - @cogenta/core@0.9.0
+  - @cogenta/auth@0.5.3
+  - @cogenta/schema@0.5.2
+
 ## 0.2.3
 
 ### Patch Changes

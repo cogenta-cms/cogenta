@@ -1,5 +1,16 @@
 # @cogenta/fleet
 
+## 0.1.10
+
+### Patch Changes
+
+- Updated dependencies [[`b305d67`](https://github.com/cogenta-cms/cogenta/commit/b305d672ca44858646f3929d08bf37a66bd47a3d), [`8f0e946`](https://github.com/cogenta-cms/cogenta/commit/8f0e946573b8d8b31c89c956bb75d9a1eb6061a2), [`1ab1990`](https://github.com/cogenta-cms/cogenta/commit/1ab199086a561728f3c25165a214d42736efab5d), [`d222023`](https://github.com/cogenta-cms/cogenta/commit/d222023000e4933c5c8cefe21bb1c64fafd34b67)]:
+  - @cogenta/agents-builtin@0.5.0
+  - @cogenta/core@0.9.0
+  - @cogenta/channels@0.3.5
+  - @cogenta/plugins@0.4.1
+  - @cogenta/auth@0.5.3
+
 ## 0.1.9
 
 ### Patch Changes

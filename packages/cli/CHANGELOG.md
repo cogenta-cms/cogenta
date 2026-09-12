@@ -1,5 +1,262 @@
 # @cogenta/cli
 
+## 0.9.0
+
+### Minor Changes
+
+- [`b305d67`](https://github.com/cogenta-cms/cogenta/commit/b305d672ca44858646f3929d08bf37a66bd47a3d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Images get an owner: a "Cogenta Image Creator" agent, and a way to keep what
+  it makes.**
+  
+  `assist.generate_image` could produce candidates and, by its own contract,
+  store nothing — so an image a model made could be looked at and never kept.
+  Nothing bridged generating and keeping.
+  
+  `media.store_generated_image` is that bridge, and deliberately the only one.
+  Every file it writes is recorded as `generated`, naming the agent and the
+  model. `sideEffects: true` with `reversible: false` puts it through
+  `withAutonomy`'s forced-approval path **whatever** the configured level, so
+  `autonomous` cannot fill a library on its own: generating is the agent's,
+  keeping is the operator's. `alt` is required, not optional — a model that can
+  describe an image well enough to generate it can describe it well enough to be
+  read aloud.
+  
+  The host side (`createImageLibrary`, `@cogenta/cli`) decodes the data URL and
+  refuses anything that is not an inline image: a remote URL would be a
+  server-side fetch whose target an agent's prompt chose. It refuses a type this
+  site does not store and an image that decoded to nothing, and mints the id
+  before the storage key so two pictures from the same prompt never collide.
+  
+  The agent itself is disabled by default like every other seed, pinned to
+  `autonomy: propose`, and given a small budget — image generation is the most
+  expensive call in this codebase by an order of magnitude. Its identity says
+  what a good site image is: no text baked in (it cannot be translated or
+  corrected), composed for the slot it has to sit in, room left where a title
+  will go, and never an invented person presented as real.
+  
+  One governance catch, fixed: adding provenance to `MediaAsset` had quietly
+  widened `media.read`'s output. Contract C figures a shipped tool's signature —
+  which is why `folderId` was stripped there rather than added — so provenance
+  is stripped the same way, with a test that keeps it out.
+
+- [`2d099f7`](https://github.com/cogenta-cms/cogenta/commit/2d099f71f3352ff4c7046f773dd017b19b1051c9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Generate images from the media library, and keep only the ones worth keeping.
+  
+  `cogenta serve` gains two admin-only routes in front of the image-creator
+  agent's work. `POST /api/media/generate` returns candidates as data URLs and
+  writes nothing at all — generating is cheap to undo and storing is not, which
+  is why `assist.generate_image` stores nothing by its own contract.
+  `POST /api/media/generate/keep` is the only one that stores a file, and it
+  takes the alt text with it. Everything it writes is recorded as `generated`
+  with the model that drew it: the one field of contract A the European AI
+  framework makes non-optional.
+  
+  `GET /api/media/generate` answers whether the feature is offered at all — 200
+  with `available: false` rather than an error, the same shape as
+  `GET /api/assistant`, so a site with no image model configured shows no panel
+  instead of a form that only fails once used (R2). The image client is resolved
+  fresh on every request from the admin's own provider store first, then
+  `config.imageGeneration`, so a model saved from the Providers screen works on
+  the very next call rather than after a restart.
+
+- [`d8734de`](https://github.com/cogenta-cms/cogenta/commit/d8734deab5621a2582e59c0b00f882d62324e2b7) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Approving a page in a site plan now creates one.**
+  
+  It did not. `proposeSitePlan` proposed standing pages, the review screen asked
+  a human to accept them one by one, and the applier never read
+  `approved.pages` — so every accepted page was dropped, and the operator was
+  shown a success report. That is the worst shape a gap can take: from the
+  outside it is indistinguishable from having worked.
+  
+  Each approved page is now created as a real draft entry, carrying its title,
+  its slug and its purpose, marked `provenance: 'generated'` like every other
+  thing a model wrote. The target collection is read from the site's own
+  schema — one named `page` with a title, or any routed collection with a title
+  and a slug — and only fields that collection actually declares are written,
+  so a page can never fail the whole apply over a shape the plan guessed at.
+  
+  When no collection can hold a page, or one entry is refused by contract A,
+  `AppliedPlanReport` says so page by page (`pagesCreated`, `pagesSkipped`)
+  instead of dropping it quietly, and the review screen prints both.
+
+- [`79d4183`](https://github.com/cogenta-cms/cogenta/commit/79d4183a852d131ec9330e249c56ec8f308ba6a3) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **A site plan now applies under `cogenta serve` — everything in it that is not
+  schema.**
+  
+  ADR-0010 makes the *schema* read-only outside development. The applier read
+  that as "nothing applies outside development": under `cogenta serve` the whole
+  route answered `CONTENT_READ_ONLY`, so pages, demonstration entries and the
+  palette — none of which touch `cogenta.schema.*` — were refused along with the
+  collections. An ordinary operator never runs `cogenta dev`, so applying a plan
+  did nothing for them at all.
+  
+  The split is now where the decision actually draws it. Adding a collection
+  still requires `cogenta dev`, and a plan that proposes one under `serve` says
+  so collection by collection instead of failing as a whole. Pages and entries
+  are rows, and they are created. The palette applies through the same database
+  overlay the appearance screen writes — live on the next page view, reversible
+  from that screen, no restart to ask for — rather than by writing a project
+  file this instance may not touch.
+  
+  Two silent drops go with it: demonstration content aimed at a collection the
+  site already had was discarded (only newly-created collections were seeded),
+  and under `serve`, where nothing can be created, that meant no entry was ever
+  seeded at all.
+
+- [`489ad82`](https://github.com/cogenta-cms/cogenta/commit/489ad82ec4703bb362638b7930d485ffd47316f0) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **A site plan can propose categories.**
+  
+  It could not, and the reason was honest: a proposal had no way to declare a
+  taxonomy, so a `taxonomy` field would always have named something that did not
+  exist. `taxonomy` was withheld from the field kinds offered, and a plan
+  answered "my articles need categories" with a `select` of frozen strings
+  nobody could rename afterwards.
+  
+  `proposeContentModel` now declares them — real contract A taxonomies through
+  `defineTaxonomy`, hierarchical or flat, with the same refusal of public write
+  permissions collections already get, and their labels filed under the site's
+  own locale. `taxonomy` fields come back with them, and the check becomes the
+  one a model can act on: not "this is unsupported" but "this names a taxonomy
+  nothing declares, here are the ones that exist". A taxonomy the site already
+  has is never redeclared, and one that contradicts an explicit constraint is
+  removed and reported like any other proposal — a document ruling out a blog
+  rules out a `blog` category just as squarely.
+  
+  They are their own review section, so accepting a collection never silently
+  accepts the classification it depends on. Applying writes them to the schema
+  file as the **named** export contract A actually reads
+  (`export const taxonomies = [...]`, alongside the default export it already
+  wrote) and creates their tables before the collections whose fields point at
+  them. Like any schema write, that half needs `cogenta dev`; under
+  `cogenta serve` each one is refused by name, and the rest of the plan still
+  applies.
+
+- [`1ab1990`](https://github.com/cogenta-cms/cogenta/commit/1ab199086a561728f3c25165a214d42736efab5d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **A generated theme is told what the site actually stores.**
+  
+  A theme is a container for content, and a writer that does not know the
+  container's shape guesses at it. A guessed collection name renders nothing —
+  and the tempting fix for "nothing renders" is to hardcode articles into the
+  markup, where they cannot be edited from the admin, cannot be translated, and
+  cannot grow past the three the design happened to show.
+  
+  `createThemeWiring` now takes the site's `collections` and describes them for
+  the writer — each collection's real name, its fields, and whether it has a
+  public page worth linking to or should be rendered inline. Both the
+  generation and the refinement paths receive it, and a caller with no schema in
+  hand simply omits it, leaving the prompt as it was.
+
+- [`d222023`](https://github.com/cogenta-cms/cogenta/commit/d222023000e4933c5c8cefe21bb1c64fafd34b67) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Generating a theme becomes a conversation, and starts producing themes that
+  resemble what was asked for.**
+  
+  A live report: attach a screenshot of a design, and what comes back is nowhere
+  near it. Three causes, none of them the model.
+  
+  *The palette was structurally locked.* The brief told the writer to reference
+  `--cogenta-*` and never invent a colour — but those custom properties are
+  generated exclusively from the *site's* skin, so any generated theme was
+  repainted in whatever palette the site already had, however accurate its
+  layout. A theme's own stylesheet is emitted after the skin's, so it can and
+  now does carry its own design palette (namespaced, never overwriting
+  `--cogenta-*`, which would silently disable the operator's own colour
+  controls). No mechanism changed — only the instruction that forbade it.
+  
+  *The run was open-loop.* A write earned "accepted" or a structural rejection;
+  the model never saw the page its code rendered. New `theme.preview_sandbox`
+  exposes the render the admin preview screen was already using, so the writer
+  can look at its own output and correct it. `theme.list_sandbox_files` and
+  `theme.read_sandbox_file` complete the set — without them a second turn is
+  handed a theme it has never seen, and can only guess or rewrite everything.
+  
+  *The system prompt was a sentence and ten bullets*, while everything about
+  what a Cogenta theme actually is sat in a tool `description` — read as API
+  reference for one call, not as standing knowledge. `assembleContext` gains a
+  `specification` level (CONSTITUTION → SITE → AGENT → SPECIFICATION → TASK),
+  unescaped because a specification is mostly markup examples and escaping them
+  teaches the wrong output. The writer is now told to look, plan, write,
+  preview and correct, in that order, instead of opening with "write the files
+  now".
+  
+  **Every turn after the first continues from what exists.** `generateSkin`
+  gains `baseTokens`: the current values are shown to the model with an
+  instruction to change only what was named. Until now `baseline` only reworded
+  the brief and re-derived every value, so each follow-up answered with a
+  different theme rather than the same one, adjusted. `POST
+  /api/theme/refine/jobs` (admin-only, polled through the existing generate-job
+  route) handles both candidate shapes — a custom layout is re-read from its
+  sandbox, a token candidate continues from its own tokens — and refuses a
+  request that names nothing to continue from.
+  
+  **A theme displays the site's content; it never contains it.** The
+  specification now says so with its reasons: content baked into a theme cannot
+  be edited from the admin and has no translations. No invented posts, no
+  `href="#"`, labels through `ctx.t`, an empty list renders as an empty state.
+  A write whose module contains `href="#"` comes back with a warning in its
+  receipt — reported, not refused, since a fragment target is legitimate.
+  
+  Also: one theme is generated by default (the brief's own count is honoured
+  when it asks for several) instead of burying the real answer under recolours;
+  a `summary` accompanies the full `rationale`, capped, after a run answered a
+  card with several thousand words; and progress events carry a `kind` and the
+  tool they concern, so a client no longer classifies them by pattern-matching
+  English prose.
+
+### Patch Changes
+
+- [`8aa73b8`](https://github.com/cogenta-cms/cogenta/commit/8aa73b8f6aea971e23ad72a744ccb5a251d59ac9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Make generated images actually work against the real OpenAI image API.
+  
+  The L18 image adapter had never been run against a live endpoint, only its
+  own fixtures — and its test froze the bug as the expected value. Three
+  defects, all found by generating one real picture:
+  
+  - **Sizes no OpenAI model accepts.** `IMAGE_DIMENSIONS` is a pixel pair,
+    which is right for Stability; OpenAI takes one of a short closed list of
+    size strings that differs by model. `landscape` was sent as `1536x640` — a
+    perfectly ordinary SDXL shape, and a flat 400 here. Each model family now
+    maps the three named shapes to sizes it really accepts, with `dall-e-2`
+    degrading a banner to the square it can draw rather than being refused.
+  - **`response_format` sent to `gpt-image-1`,** which rejects the parameter
+    outright. It now travels only to the `dall-e-*` models that need it.
+  - **A 400 with no reason.** "OpenAI returned status 400" cannot distinguish
+    an unsupported parameter from a refused prompt from a model the account
+    cannot reach. The vendor's own sentence now travels in the message and in
+    `details.providerMessage`.
+  
+  A kept generated image also goes through `ingestMediaUpload` — the same path
+  a human upload takes — instead of writing the file itself. It was landing
+  with `width`/`height` null, so it had no renditions: no `srcset`, no WebP,
+  and `/_image?w=` served the original to every visitor. Measured on a real
+  generation: 2.4MB PNG before, 22KB WebP at `w=640` after.
+  
+  `IngestMediaUploadInput` gains optional `provenance`/`provenanceDetail` so
+  that one ingest path can record a model-drawn picture as such. Additive —
+  omitted means the store's default, `human`, exactly as before.
+- Updated dependencies [[`b305d67`](https://github.com/cogenta-cms/cogenta/commit/b305d672ca44858646f3929d08bf37a66bd47a3d), [`8f0e946`](https://github.com/cogenta-cms/cogenta/commit/8f0e946573b8d8b31c89c956bb75d9a1eb6061a2), [`a07af67`](https://github.com/cogenta-cms/cogenta/commit/a07af679fbf5bede790acf95c430f8e23a66bb81), [`8aa73b8`](https://github.com/cogenta-cms/cogenta/commit/8aa73b8f6aea971e23ad72a744ccb5a251d59ac9), [`d8734de`](https://github.com/cogenta-cms/cogenta/commit/d8734deab5621a2582e59c0b00f882d62324e2b7), [`489ad82`](https://github.com/cogenta-cms/cogenta/commit/489ad82ec4703bb362638b7930d485ffd47316f0), [`1ab1990`](https://github.com/cogenta-cms/cogenta/commit/1ab199086a561728f3c25165a214d42736efab5d), [`d222023`](https://github.com/cogenta-cms/cogenta/commit/d222023000e4933c5c8cefe21bb1c64fafd34b67)]:
+  - @cogenta/agents@0.7.0
+  - @cogenta/agents-builtin@0.5.0
+  - @cogenta/core@0.9.0
+  - @cogenta/api@2.4.0
+  - @cogenta/channels@0.3.5
+  - @cogenta/mcp@0.3.4
+  - @cogenta/plugins@0.4.1
+  - @cogenta/analytics@0.3.4
+  - @cogenta/auth@0.5.3
+  - @cogenta/blocks@1.0.4
+  - @cogenta/comments@0.2.4
+  - @cogenta/commerce@0.4.4
+  - @cogenta/export@0.2.4
+  - @cogenta/forms@0.2.5
+  - @cogenta/import@0.2.4
+  - @cogenta/observability@0.2.4
+  - @cogenta/render@0.2.4
+  - @cogenta/schema@0.5.2
+  - @cogenta/seo@0.3.4
+  - @cogenta/theme-association@0.3.3
+  - @cogenta/theme-blog@0.3.3
+  - @cogenta/theme-canonical@1.1.3
+  - @cogenta/theme-docs@0.3.3
+  - @cogenta/theme-ecommerce@1.1.3
+  - @cogenta/theme-entreprise@1.1.3
+  - @cogenta/theme-kit@0.3.3
+  - @cogenta/theme-magazine@1.1.3
+  - @cogenta/theme-portfolio@1.1.3
+  - @cogenta/theme-restaurant@0.3.3
+  - @cogenta/theme-saas@0.3.3
+
 ## 0.8.0
 
 ### Minor Changes

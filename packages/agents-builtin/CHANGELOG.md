@@ -1,5 +1,118 @@
 # @cogenta/agents-builtin
 
+## 0.5.0
+
+### Minor Changes
+
+- [`b305d67`](https://github.com/cogenta-cms/cogenta/commit/b305d672ca44858646f3929d08bf37a66bd47a3d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Images get an owner: a "Cogenta Image Creator" agent, and a way to keep what
+  it makes.**
+  
+  `assist.generate_image` could produce candidates and, by its own contract,
+  store nothing — so an image a model made could be looked at and never kept.
+  Nothing bridged generating and keeping.
+  
+  `media.store_generated_image` is that bridge, and deliberately the only one.
+  Every file it writes is recorded as `generated`, naming the agent and the
+  model. `sideEffects: true` with `reversible: false` puts it through
+  `withAutonomy`'s forced-approval path **whatever** the configured level, so
+  `autonomous` cannot fill a library on its own: generating is the agent's,
+  keeping is the operator's. `alt` is required, not optional — a model that can
+  describe an image well enough to generate it can describe it well enough to be
+  read aloud.
+  
+  The host side (`createImageLibrary`, `@cogenta/cli`) decodes the data URL and
+  refuses anything that is not an inline image: a remote URL would be a
+  server-side fetch whose target an agent's prompt chose. It refuses a type this
+  site does not store and an image that decoded to nothing, and mints the id
+  before the storage key so two pictures from the same prompt never collide.
+  
+  The agent itself is disabled by default like every other seed, pinned to
+  `autonomy: propose`, and given a small budget — image generation is the most
+  expensive call in this codebase by an order of magnitude. Its identity says
+  what a good site image is: no text baked in (it cannot be translated or
+  corrected), composed for the slot it has to sit in, room left where a title
+  will go, and never an invented person presented as real.
+  
+  One governance catch, fixed: adding provenance to `MediaAsset` had quietly
+  widened `media.read`'s output. Contract C figures a shipped tool's signature —
+  which is why `folderId` was stripped there rather than added — so provenance
+  is stripped the same way, with a test that keeps it out.
+
+- [`1ab1990`](https://github.com/cogenta-cms/cogenta/commit/1ab199086a561728f3c25165a214d42736efab5d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **A generated theme is told what the site actually stores.**
+  
+  A theme is a container for content, and a writer that does not know the
+  container's shape guesses at it. A guessed collection name renders nothing —
+  and the tempting fix for "nothing renders" is to hardcode articles into the
+  markup, where they cannot be edited from the admin, cannot be translated, and
+  cannot grow past the three the design happened to show.
+  
+  `createThemeWiring` now takes the site's `collections` and describes them for
+  the writer — each collection's real name, its fields, and whether it has a
+  public page worth linking to or should be rendered inline. Both the
+  generation and the refinement paths receive it, and a caller with no schema in
+  hand simply omits it, leaving the prompt as it was.
+
+- [`d222023`](https://github.com/cogenta-cms/cogenta/commit/d222023000e4933c5c8cefe21bb1c64fafd34b67) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Generating a theme becomes a conversation, and starts producing themes that
+  resemble what was asked for.**
+  
+  A live report: attach a screenshot of a design, and what comes back is nowhere
+  near it. Three causes, none of them the model.
+  
+  *The palette was structurally locked.* The brief told the writer to reference
+  `--cogenta-*` and never invent a colour — but those custom properties are
+  generated exclusively from the *site's* skin, so any generated theme was
+  repainted in whatever palette the site already had, however accurate its
+  layout. A theme's own stylesheet is emitted after the skin's, so it can and
+  now does carry its own design palette (namespaced, never overwriting
+  `--cogenta-*`, which would silently disable the operator's own colour
+  controls). No mechanism changed — only the instruction that forbade it.
+  
+  *The run was open-loop.* A write earned "accepted" or a structural rejection;
+  the model never saw the page its code rendered. New `theme.preview_sandbox`
+  exposes the render the admin preview screen was already using, so the writer
+  can look at its own output and correct it. `theme.list_sandbox_files` and
+  `theme.read_sandbox_file` complete the set — without them a second turn is
+  handed a theme it has never seen, and can only guess or rewrite everything.
+  
+  *The system prompt was a sentence and ten bullets*, while everything about
+  what a Cogenta theme actually is sat in a tool `description` — read as API
+  reference for one call, not as standing knowledge. `assembleContext` gains a
+  `specification` level (CONSTITUTION → SITE → AGENT → SPECIFICATION → TASK),
+  unescaped because a specification is mostly markup examples and escaping them
+  teaches the wrong output. The writer is now told to look, plan, write,
+  preview and correct, in that order, instead of opening with "write the files
+  now".
+  
+  **Every turn after the first continues from what exists.** `generateSkin`
+  gains `baseTokens`: the current values are shown to the model with an
+  instruction to change only what was named. Until now `baseline` only reworded
+  the brief and re-derived every value, so each follow-up answered with a
+  different theme rather than the same one, adjusted. `POST
+  /api/theme/refine/jobs` (admin-only, polled through the existing generate-job
+  route) handles both candidate shapes — a custom layout is re-read from its
+  sandbox, a token candidate continues from its own tokens — and refuses a
+  request that names nothing to continue from.
+  
+  **A theme displays the site's content; it never contains it.** The
+  specification now says so with its reasons: content baked into a theme cannot
+  be edited from the admin and has no translations. No invented posts, no
+  `href="#"`, labels through `ctx.t`, an empty list renders as an empty state.
+  A write whose module contains `href="#"` comes back with a warning in its
+  receipt — reported, not refused, since a fragment target is legitimate.
+  
+  Also: one theme is generated by default (the brief's own count is honoured
+  when it asks for several) instead of burying the real answer under recolours;
+  a `summary` accompanies the full `rationale`, capped, after a run answered a
+  card with several thousand words; and progress events carry a `kind` and the
+  tool they concern, so a client no longer classifies them by pattern-matching
+  English prose.
+
+### Patch Changes
+
+- Updated dependencies [[`b305d67`](https://github.com/cogenta-cms/cogenta/commit/b305d672ca44858646f3929d08bf37a66bd47a3d), [`8f0e946`](https://github.com/cogenta-cms/cogenta/commit/8f0e946573b8d8b31c89c956bb75d9a1eb6061a2), [`a07af67`](https://github.com/cogenta-cms/cogenta/commit/a07af679fbf5bede790acf95c430f8e23a66bb81), [`8aa73b8`](https://github.com/cogenta-cms/cogenta/commit/8aa73b8f6aea971e23ad72a744ccb5a251d59ac9), [`489ad82`](https://github.com/cogenta-cms/cogenta/commit/489ad82ec4703bb362638b7930d485ffd47316f0), [`d222023`](https://github.com/cogenta-cms/cogenta/commit/d222023000e4933c5c8cefe21bb1c64fafd34b67)]:
+  - @cogenta/agents@0.7.0
+  - @cogenta/core@0.9.0
+
 ## 0.4.0
 
 ### Minor Changes

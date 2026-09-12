@@ -1,5 +1,207 @@
 # @cogenta/agents
 
+## 0.7.0
+
+### Minor Changes
+
+- [`b305d67`](https://github.com/cogenta-cms/cogenta/commit/b305d672ca44858646f3929d08bf37a66bd47a3d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Images get an owner: a "Cogenta Image Creator" agent, and a way to keep what
+  it makes.**
+  
+  `assist.generate_image` could produce candidates and, by its own contract,
+  store nothing — so an image a model made could be looked at and never kept.
+  Nothing bridged generating and keeping.
+  
+  `media.store_generated_image` is that bridge, and deliberately the only one.
+  Every file it writes is recorded as `generated`, naming the agent and the
+  model. `sideEffects: true` with `reversible: false` puts it through
+  `withAutonomy`'s forced-approval path **whatever** the configured level, so
+  `autonomous` cannot fill a library on its own: generating is the agent's,
+  keeping is the operator's. `alt` is required, not optional — a model that can
+  describe an image well enough to generate it can describe it well enough to be
+  read aloud.
+  
+  The host side (`createImageLibrary`, `@cogenta/cli`) decodes the data URL and
+  refuses anything that is not an inline image: a remote URL would be a
+  server-side fetch whose target an agent's prompt chose. It refuses a type this
+  site does not store and an image that decoded to nothing, and mints the id
+  before the storage key so two pictures from the same prompt never collide.
+  
+  The agent itself is disabled by default like every other seed, pinned to
+  `autonomy: propose`, and given a small budget — image generation is the most
+  expensive call in this codebase by an order of magnitude. Its identity says
+  what a good site image is: no text baked in (it cannot be translated or
+  corrected), composed for the slot it has to sit in, room left where a title
+  will go, and never an invented person presented as real.
+  
+  One governance catch, fixed: adding provenance to `MediaAsset` had quietly
+  widened `media.read`'s output. Contract C figures a shipped tool's signature —
+  which is why `folderId` was stripped there rather than added — so provenance
+  is stripped the same way, with a test that keeps it out.
+
+- [`a07af67`](https://github.com/cogenta-cms/cogenta/commit/a07af679fbf5bede790acf95c430f8e23a66bb81) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **A provider can now declare that it also generates images.**
+  
+  Image generation had a registry, two drivers and a tool — and its model could
+  only be set by editing `cogenta.config.mjs` and restarting, while every text
+  model had been editable from the admin's Providers screen for lots. Choosing
+  an image model was the one configuration left in the file.
+  
+  `StoredProviderConfig` gains `imageModel`, and capability is **derived from
+  it** rather than stored as a flag: a multimodal vendor is one entry sharing
+  one API key, not two entries, and a record can never claim an `image`
+  capability it has no model for. An entry without one is text-only, which is
+  what every entry saved before this field was.
+  `resolveImageProviderRegistryConfig` reads the same encrypted store its text
+  twin reads, and `POST`/`PATCH /api/providers` carry the field — `null` clears
+  it, so a vendor can stop offering images.
+  
+  `imageBaseUrl` is separate from `baseUrl` on purpose, and this is the trap it
+  avoids: on both image clients `baseUrl` is the **complete** endpoint
+  (`…/v1/images/generations`), and the text one is a different complete endpoint
+  (chat completions). Sharing a single field would have posted an image payload
+  at a chat URL for anyone behind a proxy.
+  
+  A vendor no image client serves is skipped rather than failing the whole
+  resolution: an image model typed onto a text-only provider leaves a working
+  text provider, not a broken site.
+
+- [`489ad82`](https://github.com/cogenta-cms/cogenta/commit/489ad82ec4703bb362638b7930d485ffd47316f0) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **A site plan can propose categories.**
+  
+  It could not, and the reason was honest: a proposal had no way to declare a
+  taxonomy, so a `taxonomy` field would always have named something that did not
+  exist. `taxonomy` was withheld from the field kinds offered, and a plan
+  answered "my articles need categories" with a `select` of frozen strings
+  nobody could rename afterwards.
+  
+  `proposeContentModel` now declares them — real contract A taxonomies through
+  `defineTaxonomy`, hierarchical or flat, with the same refusal of public write
+  permissions collections already get, and their labels filed under the site's
+  own locale. `taxonomy` fields come back with them, and the check becomes the
+  one a model can act on: not "this is unsupported" but "this names a taxonomy
+  nothing declares, here are the ones that exist". A taxonomy the site already
+  has is never redeclared, and one that contradicts an explicit constraint is
+  removed and reported like any other proposal — a document ruling out a blog
+  rules out a `blog` category just as squarely.
+  
+  They are their own review section, so accepting a collection never silently
+  accepts the classification it depends on. Applying writes them to the schema
+  file as the **named** export contract A actually reads
+  (`export const taxonomies = [...]`, alongside the default export it already
+  wrote) and creates their tables before the collections whose fields point at
+  them. Like any schema write, that half needs `cogenta dev`; under
+  `cogenta serve` each one is refused by name, and the rest of the plan still
+  applies.
+
+- [`d222023`](https://github.com/cogenta-cms/cogenta/commit/d222023000e4933c5c8cefe21bb1c64fafd34b67) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Generating a theme becomes a conversation, and starts producing themes that
+  resemble what was asked for.**
+  
+  A live report: attach a screenshot of a design, and what comes back is nowhere
+  near it. Three causes, none of them the model.
+  
+  *The palette was structurally locked.* The brief told the writer to reference
+  `--cogenta-*` and never invent a colour — but those custom properties are
+  generated exclusively from the *site's* skin, so any generated theme was
+  repainted in whatever palette the site already had, however accurate its
+  layout. A theme's own stylesheet is emitted after the skin's, so it can and
+  now does carry its own design palette (namespaced, never overwriting
+  `--cogenta-*`, which would silently disable the operator's own colour
+  controls). No mechanism changed — only the instruction that forbade it.
+  
+  *The run was open-loop.* A write earned "accepted" or a structural rejection;
+  the model never saw the page its code rendered. New `theme.preview_sandbox`
+  exposes the render the admin preview screen was already using, so the writer
+  can look at its own output and correct it. `theme.list_sandbox_files` and
+  `theme.read_sandbox_file` complete the set — without them a second turn is
+  handed a theme it has never seen, and can only guess or rewrite everything.
+  
+  *The system prompt was a sentence and ten bullets*, while everything about
+  what a Cogenta theme actually is sat in a tool `description` — read as API
+  reference for one call, not as standing knowledge. `assembleContext` gains a
+  `specification` level (CONSTITUTION → SITE → AGENT → SPECIFICATION → TASK),
+  unescaped because a specification is mostly markup examples and escaping them
+  teaches the wrong output. The writer is now told to look, plan, write,
+  preview and correct, in that order, instead of opening with "write the files
+  now".
+  
+  **Every turn after the first continues from what exists.** `generateSkin`
+  gains `baseTokens`: the current values are shown to the model with an
+  instruction to change only what was named. Until now `baseline` only reworded
+  the brief and re-derived every value, so each follow-up answered with a
+  different theme rather than the same one, adjusted. `POST
+  /api/theme/refine/jobs` (admin-only, polled through the existing generate-job
+  route) handles both candidate shapes — a custom layout is re-read from its
+  sandbox, a token candidate continues from its own tokens — and refuses a
+  request that names nothing to continue from.
+  
+  **A theme displays the site's content; it never contains it.** The
+  specification now says so with its reasons: content baked into a theme cannot
+  be edited from the admin and has no translations. No invented posts, no
+  `href="#"`, labels through `ctx.t`, an empty list renders as an empty state.
+  A write whose module contains `href="#"` comes back with a warning in its
+  receipt — reported, not refused, since a fragment target is legitimate.
+  
+  Also: one theme is generated by default (the brief's own count is honoured
+  when it asks for several) instead of burying the real answer under recolours;
+  a `summary` accompanies the full `rationale`, capped, after a run answered a
+  card with several thousand words; and progress events carry a `kind` and the
+  tool they concern, so a client no longer classifies them by pattern-matching
+  English prose.
+
+### Patch Changes
+
+- [`8f0e946`](https://github.com/cogenta-cms/cogenta/commit/8f0e946573b8d8b31c89c956bb75d9a1eb6061a2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **A media file now records who or what made it.**
+  
+  Contract A made `provenance` non-optional on a content entry because the
+  European AI framework requires it — and then the media library, where the
+  pictures live, had no such field at all. A generated illustration was
+  indistinguishable from a photograph the site owner took, which is exactly the
+  claim nobody is allowed to make by accident. It is the prerequisite for
+  letting an agent produce images at all.
+  
+  `MediaAsset` gains `provenance` (`human` | `assisted` | `generated`, the same
+  vocabulary contract A uses) and `provenanceDetail` — which agent, which model,
+  when. `CreateMediaInput` defaults to `human`, so every existing caller keeps
+  its exact meaning.
+  
+  The columns are added in place, with the same try-not-check pattern the tags,
+  content-hash and folder columns already use, and **without a backfill**: a
+  null reads as `human`, which is the true answer for a library uploaded by
+  people, not a guess. `media.read` reports both, so an agent browsing the
+  library can tell a photograph from something a model produced.
+
+- [`8aa73b8`](https://github.com/cogenta-cms/cogenta/commit/8aa73b8f6aea971e23ad72a744ccb5a251d59ac9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Make generated images actually work against the real OpenAI image API.
+  
+  The L18 image adapter had never been run against a live endpoint, only its
+  own fixtures — and its test froze the bug as the expected value. Three
+  defects, all found by generating one real picture:
+  
+  - **Sizes no OpenAI model accepts.** `IMAGE_DIMENSIONS` is a pixel pair,
+    which is right for Stability; OpenAI takes one of a short closed list of
+    size strings that differs by model. `landscape` was sent as `1536x640` — a
+    perfectly ordinary SDXL shape, and a flat 400 here. Each model family now
+    maps the three named shapes to sizes it really accepts, with `dall-e-2`
+    degrading a banner to the square it can draw rather than being refused.
+  - **`response_format` sent to `gpt-image-1`,** which rejects the parameter
+    outright. It now travels only to the `dall-e-*` models that need it.
+  - **A 400 with no reason.** "OpenAI returned status 400" cannot distinguish
+    an unsupported parameter from a refused prompt from a model the account
+    cannot reach. The vendor's own sentence now travels in the message and in
+    `details.providerMessage`.
+  
+  A kept generated image also goes through `ingestMediaUpload` — the same path
+  a human upload takes — instead of writing the file itself. It was landing
+  with `width`/`height` null, so it had no renditions: no `srcset`, no WebP,
+  and `/_image?w=` served the original to every visitor. Measured on a real
+  generation: 2.4MB PNG before, 22KB WebP at `w=640` after.
+  
+  `IngestMediaUploadInput` gains optional `provenance`/`provenanceDetail` so
+  that one ingest path can record a model-drawn picture as such. Additive —
+  omitted means the store's default, `human`, exactly as before.
+- Updated dependencies [[`8f0e946`](https://github.com/cogenta-cms/cogenta/commit/8f0e946573b8d8b31c89c956bb75d9a1eb6061a2), [`d222023`](https://github.com/cogenta-cms/cogenta/commit/d222023000e4933c5c8cefe21bb1c64fafd34b67)]:
+  - @cogenta/core@0.9.0
+  - @cogenta/blocks@1.0.4
+  - @cogenta/render@0.2.4
+  - @cogenta/schema@0.5.2
+
 ## 0.6.0
 
 ### Minor Changes

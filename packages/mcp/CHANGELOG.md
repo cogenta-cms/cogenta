@@ -1,5 +1,13 @@
 # @cogenta/mcp
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [[`b305d67`](https://github.com/cogenta-cms/cogenta/commit/b305d672ca44858646f3929d08bf37a66bd47a3d), [`8f0e946`](https://github.com/cogenta-cms/cogenta/commit/8f0e946573b8d8b31c89c956bb75d9a1eb6061a2), [`a07af67`](https://github.com/cogenta-cms/cogenta/commit/a07af679fbf5bede790acf95c430f8e23a66bb81), [`8aa73b8`](https://github.com/cogenta-cms/cogenta/commit/8aa73b8f6aea971e23ad72a744ccb5a251d59ac9), [`489ad82`](https://github.com/cogenta-cms/cogenta/commit/489ad82ec4703bb362638b7930d485ffd47316f0), [`d222023`](https://github.com/cogenta-cms/cogenta/commit/d222023000e4933c5c8cefe21bb1c64fafd34b67)]:
+  - @cogenta/agents@0.7.0
+  - @cogenta/core@0.9.0
+
 ## 0.3.3
 
 ### Patch Changes

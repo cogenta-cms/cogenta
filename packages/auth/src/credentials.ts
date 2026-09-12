@@ -1,4 +1,11 @@
-import { CogentaError, type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
+import {
+  CogentaError,
+  type DatabaseHandle,
+  identifier,
+  newId,
+  sql,
+  limit as sqlLimit,
+} from '@cogenta/core'
 import { hashPassword, verifyPassword } from './password.js'
 import { verifyRecoveryCode } from './recovery-codes.js'
 import { TABLES } from './tables.js'
@@ -85,7 +92,7 @@ export function createCredentialStore(
 
   async function findOne(userId: string, kind: CredentialKind): Promise<CredentialRow | undefined> {
     const result = await db.query<CredentialRow>(
-      sql`select * from ${table} where user_id = ${userId} and kind = ${kind} limit ${1}`,
+      sql`select * from ${table} where user_id = ${userId} and kind = ${kind} limit ${sqlLimit(1)}`,
     )
     return result.rows[0]
   }

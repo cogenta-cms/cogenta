@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
+import { type DatabaseHandle, identifier, newId, sql, limit as sqlLimit } from '@cogenta/core'
 import { TABLES } from './tables.js'
 
 /**
@@ -169,7 +169,7 @@ export function createPasswordResetStore(
     pending: async (userId) => {
       const result = await db.query<ResetRow>(
         sql`select * from ${table} where user_id = ${userId} and used_at is null
-            order by created_at desc limit ${1}`,
+            order by created_at desc limit ${sqlLimit(1)}`,
       )
       const row = result.rows[0]
       if (row === undefined) return null

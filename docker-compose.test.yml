@@ -10,7 +10,11 @@ name: cogenta-test
 
 services:
   postgres:
-    image: postgres:17-alpine
+    # pgvector's own image rather than plain `postgres:17-alpine`: the vector
+    # store's integration suite needs `create extension vector`, and the
+    # stock image simply does not carry it — "extension \"vector\" is not
+    # available". Same Postgres 17 underneath, so nothing else changes.
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: cogenta
       POSTGRES_PASSWORD: cogenta

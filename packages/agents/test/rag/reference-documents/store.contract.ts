@@ -1,6 +1,10 @@
 import type { DatabaseHandle } from '@cogenta/core'
+import { identifier, sql } from '@cogenta/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createReferenceDocumentStore } from '../../../src/rag/reference-documents/store.js'
+import {
+  createReferenceDocumentStore,
+  REFERENCE_DOCUMENTS_TABLE,
+} from '../../../src/rag/reference-documents/store.js'
 
 /**
  * The single contract suite for `ReferenceDocumentStore` (L22 task 4) — run
@@ -15,6 +19,17 @@ export interface ReferenceDocumentContractHarness {
   dispose?(): Promise<void>
 }
 
+/**
+ * A real id shape, not `'user-1'`.
+ *
+ * `uploaded_by` is an id column — a genuine `uuid` on Postgres — and every
+ * actor id this project ever mints comes from `newId()`. Postgres refuses
+ * anything else outright ("invalid input syntax for type uuid"), while SQLite
+ * and MySQL accept any text, so the old fixture asserted behaviour against an
+ * id the system cannot produce and only ever passed on two engines.
+ */
+const UPLOADER_ID = '01a097c6-1387-7000-8085-47879ba62824'
+
 export function runReferenceDocumentStoreContract(
   name: string,
   create: () => Promise<ReferenceDocumentContractHarness> | ReferenceDocumentContractHarness,
@@ -24,6 +39,12 @@ export function runReferenceDocumentStoreContract(
 
     beforeEach(async () => {
       harness = await create()
+      // Emptied first. "is empty on a fresh site" is only true of a fresh
+      // table, and the real servers keep every document an earlier test
+      // uploaded — SQLite gave this for free by handing back a new database.
+      await harness.db.query(
+        sql`drop table if exists ${identifier(REFERENCE_DOCUMENTS_TABLE, harness.db.dialect)}`,
+      )
     })
 
     afterEach(async () => {
@@ -46,7 +67,7 @@ export function runReferenceDocumentStoreContract(
         format: 'pdf',
         characters: 4200,
         warnings: ['page 3 has no text layer'],
-        uploadedBy: 'user-1',
+        uploadedBy: UPLOADER_ID,
       })
 
       expect(created.status).toBe('pending')

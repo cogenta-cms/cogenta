@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto'
-import { CogentaError, type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
+import {
+  CogentaError,
+  type DatabaseHandle,
+  identifier,
+  newId,
+  sql,
+  limit as sqlLimit,
+} from '@cogenta/core'
 import { TABLES } from './tables.js'
 import type { AuditActorKind, AuditEntry, RecordAuditInput } from './types.js'
 
@@ -230,7 +237,7 @@ export function createAuditLog(db: DatabaseHandle, now: () => number = Date.now)
 
   async function lastHash(): Promise<string | null> {
     const result = await db.query<{ hash: string }>(
-      sql`select hash from ${table} order by at desc, id desc limit ${1}`,
+      sql`select hash from ${table} order by at desc, id desc limit ${sqlLimit(1)}`,
     )
     return result.rows[0]?.hash ?? null
   }
@@ -360,7 +367,7 @@ export function createAuditLog(db: DatabaseHandle, now: () => number = Date.now)
 
       const where = conditions.reduce((left, right) => sql`${left} and ${right}`)
       const result = await db.query<AuditRow>(sql`
-        select * from ${table} where ${where} order by at desc, id desc limit ${filter.limit ?? 200}`)
+        select * from ${table} where ${where} order by at desc, id desc limit ${sqlLimit(filter.limit ?? 200)}`)
       return result.rows.map(fromRow)
     },
 

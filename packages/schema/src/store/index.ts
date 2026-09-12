@@ -37,9 +37,11 @@ export {
 } from './admin-theme-templates.js'
 export {
   booleanColumn,
+  booleanValue,
   columnTypeFor,
   integerColumn,
   isColumnless,
+  isMintedId,
   jsonColumn,
   onDeleteClause,
   textColumn,

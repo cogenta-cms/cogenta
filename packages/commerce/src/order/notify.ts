@@ -3,7 +3,14 @@ import {
   type EmailTransport,
   type ReportChannelMessage,
 } from '@cogenta/channels'
-import { CogentaError, type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
+import {
+  CogentaError,
+  type DatabaseHandle,
+  identifier,
+  newId,
+  sql,
+  limit as sqlLimit,
+} from '@cogenta/core'
 import { formatMoney } from '../money.js'
 import { toInt, toNullableText, toText } from '../rows.js'
 import { TABLES } from '../tables.js'
@@ -207,7 +214,7 @@ export function createOrderEmailQueue(
 
     flushDue: async (limit = 25) => {
       const due = await db.query<EmailRow>(
-        sql`select * from ${table} where status = ${'pending'} order by created_at asc limit ${limit}`,
+        sql`select * from ${table} where status = ${'pending'} order by created_at asc limit ${sqlLimit(limit)}`,
       )
 
       let sent = 0

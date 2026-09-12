@@ -1,4 +1,11 @@
-import { type DatabaseHandle, identifier, newId, type SqlFragment, sql } from '@cogenta/core'
+import {
+  type DatabaseHandle,
+  identifier,
+  newId,
+  type SqlFragment,
+  sql,
+  limit as sqlLimit,
+} from '@cogenta/core'
 import type { TelemetryPayload } from '../agent/types.js'
 import { CONTROL_TABLES } from './tables.js'
 
@@ -76,7 +83,7 @@ export function createSiteStateStore(
       // that falls outside its `retain` most-recent rows.
       const keep = await db.query<{ id: string }>(sql`
         select id from ${snapshots} where site_id = ${siteId}
-        order by collected_at desc limit ${retain}`)
+        order by collected_at desc limit ${sqlLimit(retain)}`)
       const keepIds = keep.rows.map((row) => row.id)
       if (keepIds.length > 0) {
         await db.query(sql`

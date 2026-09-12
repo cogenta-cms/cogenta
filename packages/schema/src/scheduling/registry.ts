@@ -5,6 +5,7 @@ import {
   type Logger,
   limit,
   newId,
+  type SqlFragment,
   sql,
 } from '@cogenta/core'
 
@@ -215,9 +216,37 @@ export function createScheduledTaskRegistry(
   const definitions = new Map<string, ScheduledTaskDefinition>()
   let ready = false
 
+  /**
+   * `create table if not exists` is not atomic on Postgres.
+   *
+   * Two connections running it at the same instant race inside the system
+   * catalogue, and the loser comes back with "duplicate key value violates
+   * unique constraint pg_type_typname_nsp_index" — not a statement anyone
+   * wrote, and not a problem either: the table the caller wanted now exists.
+   * Two replicas starting together is the ordinary case for a scheduler, and
+   * this is exactly what a two-replica test against a real Postgres showed.
+   *
+   * Swallowed only for that catalogue collision; anything else is rethrown.
+   */
+  async function createIfAbsent(statement: SqlFragment): Promise<void> {
+    try {
+      await db.query(statement)
+    } catch (error) {
+      const seen: string[] = []
+      let current: unknown = error
+      for (let depth = 0; depth < 4 && current instanceof Error; depth += 1) {
+        seen.push(current.message)
+        current = (current as { readonly cause?: unknown }).cause
+      }
+      if (!/pg_type_typname_nsp_index|duplicate key value violates/iu.test(seen.join(' '))) {
+        throw error
+      }
+    }
+  }
+
   async function ensureTable(): Promise<void> {
     if (ready) return
-    await db.query(sql`
+    await createIfAbsent(sql`
       create table if not exists ${table} (
         id varchar(64) not null primary key,
         task_name varchar(255) not null,
@@ -240,7 +269,7 @@ export function createScheduledTaskRegistry(
     // The compare-and-set lock table (L22 task 6). `last_claim` starts out
     // `null` — "never claimed" — for a brand-new row, matching the meaning
     // `lastRunFor` gives a task that has never run.
-    await db.query(sql`
+    await createIfAbsent(sql`
       create table if not exists ${claimsTable} (
         task_name varchar(255) not null primary key,
         last_claim bigint

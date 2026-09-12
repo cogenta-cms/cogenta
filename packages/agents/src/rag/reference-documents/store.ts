@@ -8,6 +8,7 @@ import {
   sql,
   unsafeRaw,
 } from '@cogenta/core'
+import { isMintedId } from '@cogenta/schema'
 import type { DocumentFormat } from '../../documents/extract-text.js'
 import type { ReferenceDocumentRecord, ReferenceDocumentStatus } from './types.js'
 
@@ -26,7 +27,13 @@ import type { ReferenceDocumentRecord, ReferenceDocumentStatus } from './types.j
  * per-dialect typing is not worth widening that package's public surface for.
  */
 
-const REFERENCE_DOCUMENTS_TABLE = 'cogenta_reference_documents'
+/**
+ * Exported for the contract suite, which has to empty this table between
+ * tests: SQLite hands out a fresh database each time, the real servers do
+ * not. Exported from this module rather than the package index, so it is
+ * reachable from a test without widening `@cogenta/agents`'s public surface.
+ */
+export const REFERENCE_DOCUMENTS_TABLE = 'cogenta_reference_documents'
 
 function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
   return unsafeRaw(dialect === 'sqlite' ? 'text' : `varchar(${length})`)
@@ -143,6 +150,11 @@ export function createReferenceDocumentStore(
     },
 
     async get(siteId, id) {
+      // Asked before the query: on Postgres an id column is a real `uuid`,
+      // and a value that is not one is an error rather than a miss — a
+      // document id arriving from a URL would answer 500 instead of 404.
+      // Nothing `newId()` never minted can name a row on any engine.
+      if (!isMintedId(id)) return null
       const result = await db.query<Row>(sql`
         select * from ${table} where site_id = ${siteId} and id = ${id}`)
       const row = result.rows[0]

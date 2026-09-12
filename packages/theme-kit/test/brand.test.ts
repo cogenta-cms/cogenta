@@ -1,6 +1,12 @@
-import type { ChromeBrand, ImageSource } from '@cogenta/theme-kit'
+// Its own source, not its own package name: `typecheck` depends on `^build`
+// (the dependencies' builds), never on this package's own, so importing
+// `@cogenta/theme-kit` here only resolves where `dist/` already happens to
+// exist. It does on a developer machine and does not on a clean checkout,
+// which is why this passed locally and failed every CI run.
+
 import { describe, expect, it } from 'vitest'
 import { renderBrandMark } from '../src/chrome.js'
+import type { ChromeBrand, ImageSource } from '../src/index.js'
 
 function source(src: string): ImageSource {
   return {

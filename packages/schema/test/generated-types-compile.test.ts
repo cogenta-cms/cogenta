@@ -55,6 +55,16 @@ afterAll(() => {
   rmSync(workspace, { recursive: true, force: true })
 })
 
+/*
+ * Each of these spawns a real `tsc` over the generated declarations, which is
+ * the only way to assert what a compiler actually accepts. That costs tens of
+ * seconds on an idle machine and considerably more when the other twenty-nine
+ * packages are compiling beside it — the failure this repository has recorded
+ * as an environment flake several times over is this test hitting its own
+ * bound under `pnpm test`, never an assertion of its own. It passes alone
+ * every time. Three minutes is headroom for the contended case; a genuinely
+ * hanging compiler still fails.
+ */
 describe('the generated declarations, as a compiler sees them', () => {
   it('compiles a theme that reads fields the schema declares', () => {
     const result = compile(`import type { Article } from './types.js'
@@ -66,7 +76,7 @@ export function render(article: Article): string {
 
     expect(result.output).toBe('')
     expect(result.code).toBe(0)
-  }, 60_000)
+  }, 180_000)
 
   it('fails to compile a theme reading a field the schema does not declare', () => {
     const result = compile(`import type { Article } from './types.js'
@@ -78,7 +88,7 @@ export function render(article: Article): string {
 
     expect(result.code).not.toBe(0)
     expect(result.output).toContain('subtitle')
-  }, 60_000)
+  }, 180_000)
 
   it('fails to compile a theme that forgets an optional field may be empty', () => {
     const result = compile(`import type { Article } from './types.js'
@@ -90,5 +100,5 @@ export function render(article: Article): number {
 
     expect(result.code).not.toBe(0)
     expect(result.output).toContain('null')
-  }, 60_000)
+  }, 180_000)
 })

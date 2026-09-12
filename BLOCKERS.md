@@ -1373,3 +1373,41 @@ aucun accès à une base de site — ils utilisent
 `staticProviderTuningDefaults()` (le `defaultValue` déclaré dans le registre,
 jamais une constante dupliquée), ce qui est correct et volontaire, pas une
 limite à lever.
+
+## Le CMS publié sur npm est aujourd'hui impossible à installer
+
+Constat vérifié le 2026-09-12, pas déduit : `npm install @cogenta/cli@0.8.0`
+dans un répertoire vierge échoue immédiatement (`ETARGET — No matching version
+found for @cogenta/analytics@0.3.3`), et `npm install create-cogenta@0.5.2`
+échoue sur `404 @cogenta/comments`. `scripts/verify-npm-install.sh` rejoue ce
+constat depuis le registre public, sans aucun accès à l'espace de travail.
+
+**Seize paquets manquent au registre** : quatorze n'ont jamais été publiés
+(`comments`, `export`, `forms`, `observability`, `theme-kit`, et les neuf
+thèmes construits en L23/L25), deux y sont restés à une version antérieure
+(`analytics` en 0.2.0 pour 0.3.3 attendue, `commerce` en 0.2.0 pour 0.4.3).
+`@cogenta/cli@0.8.0` les épingle toutes en version **exacte**.
+
+**Conséquence pour la reprise, à ne pas rater** : il ne faut surtout pas
+bumper ces versions. `cli@0.8.0` demande `@cogenta/analytics@0.3.3`, pas
+`^0.3.3` ; publier 0.3.4 laisserait cette release définitivement
+inutilisable. Les versions à publier sont exactement celles du dépôt
+aujourd'hui — c'est une réparation, pas une release.
+
+**Pourquoi la CI ne peut pas le faire seule.** `release.yml` publie
+uniquement par npm Trusted Publishing (OIDC) et ne porte aucun jeton. Ce
+chemin ne peut pas créer la **première** version d'un paquet : le Trusted
+Publisher se configure dans les réglages d'un paquet, et un paquet sans
+version n'a pas de page de réglages (npm/cli#8544, toujours ouvert ; le
+registre répond un 404 trompeur qui masque en réalité un refus
+d'autorisation). Les premières versions doivent donc partir une fois d'une
+machine authentifiée — `scripts/publish-missing.sh` le fait, dans l'ordre des
+dépendances et de façon idempotente, avec `pnpm publish` (jamais `npm
+publish`, qui ne réécrit pas `workspace:*`) et `--provenance=false` (la
+provenance exige le jeton OIDC que seule la CI détient).
+
+**Ce qui reste strictement humain** : être authentifié sur npm (`npm login`,
+2FA), puis, une fois les seize paquets en ligne, lier chacun au dépôt et à
+`release.yml` sur npmjs.com. Sans ce lien la CI échouera à les republier, avec
+le même 404 menteur. Cette session ne peut ni ouvrir une session npm ni saisir
+un second facteur.

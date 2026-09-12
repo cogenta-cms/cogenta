@@ -421,20 +421,20 @@ img {
 }
 
 @media (prefers-color-scheme: dark) {
-  :where(:root:not([data-theme='light'])) .cg-theme-toggle__icon--sun {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
     display: none;
   }
 
-  :where(:root:not([data-theme='light'])) .cg-theme-toggle__icon--moon {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
     display: block;
   }
 }
 
-:where(:root[data-theme='dark']) .cg-theme-toggle__icon--sun {
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
   display: none;
 }
 
-:where(:root[data-theme='dark']) .cg-theme-toggle__icon--moon {
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
   display: block;
 }
 

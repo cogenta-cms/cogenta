@@ -231,6 +231,13 @@ describe('REST routes', () => {
     )
     const loadedUpdatedAt = String(dataOf(created)['updatedAt'])
 
+    // `updatedAt` has millisecond resolution, and on a fast runner this PATCH
+    // can land inside the same millisecond as the create above — which makes
+    // the two writes indistinguishable to optimistic concurrency and failed
+    // this precondition on CI while passing everywhere else. Waiting past the
+    // tick tests the 409, not the clock.
+    await new Promise((resolve) => setTimeout(resolve, 2))
+
     const concurrent = await harness.router.handle(
       request('PATCH', `/rest_article/${id}`, {
         body: { values: { title: 'Changed by someone else' } },

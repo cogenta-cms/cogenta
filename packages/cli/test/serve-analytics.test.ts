@@ -1,10 +1,28 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { createLogger } from '@cogenta/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runServe } from '../src/commands/serve.js'
 import { createOutput } from '../src/output.js'
+
+/**
+ * Where `@cogenta/schema` really is, as an absolute `file://` URL.
+ *
+ * The schema files these tests write live in a temp directory, which has no
+ * `node_modules` of its own, so a bare `@cogenta/schema` import in one of them
+ * resolves only if Node happens to find the package by walking up from the
+ * temp path. On Windows that walk reaches a stray `node_modules` in the user's
+ * home directory and succeeds; on a Linux runner `/tmp` has no such ancestor
+ * and it fails. That is the whole reason these suites passed here and failed
+ * on every CI run — the tests were never sound, they were lucky.
+ *
+ * Resolving from this file instead is deterministic everywhere: it asks the
+ * package that actually declares the dependency.
+ */
+const SCHEMA_MODULE = pathToFileURL(createRequire(import.meta.url).resolve('@cogenta/schema')).href
 
 /**
  * End to end: a real `cogenta serve` process, a real page visited over real
@@ -39,7 +57,7 @@ async function project(options: { readonly analyticsRetainDays?: number } = {}):
   )
   await writeFile(
     join(root, 'cogenta.schema.mjs'),
-    `import { defineCollection, f } from '@cogenta/schema'
+    `import { defineCollection, f } from '${SCHEMA_MODULE}'
 
 export default [
   defineCollection({

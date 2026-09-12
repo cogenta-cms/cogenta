@@ -464,6 +464,19 @@ export interface LoadedSchema {
 export async function loadSchemaModule(projectRoot: string): Promise<LoadedSchema> {
   for (const candidate of SCHEMA_FILE_CANDIDATES) {
     const path = join(projectRoot, candidate)
+
+    // Whether this candidate exists is a filesystem question, so it is asked
+    // of the filesystem. It used to be inferred from the text of whatever
+    // `import()` threw, and that could not tell two different failures apart:
+    // Node reports a missing file as "Cannot find module <path>" and a
+    // missing *dependency of* that file as "Cannot find package 'x' imported
+    // from <path>". The schema's own path appears in both — as the target in
+    // one, as the importer in the other — so a schema file that existed but
+    // could not resolve its own `@cogenta/schema` import was reported as "No
+    // schema file found", sending everyone looking for a file that was
+    // sitting right there.
+    if (!(await stat(path).catch(() => null))) continue
+
     let module: { default?: unknown; taxonomies?: unknown }
     try {
       module = (await import(pathToFileURL(path).href)) as {
@@ -471,7 +484,6 @@ export async function loadSchemaModule(projectRoot: string): Promise<LoadedSchem
         taxonomies?: unknown
       }
     } catch (error) {
-      if (isModuleNotFound(error, path)) continue
       throw new CogentaError({
         code: 'SCHEMA_INVALID',
         message: `Could not load ${path}: ${error instanceof Error ? error.message : String(error)}`,
@@ -539,23 +551,6 @@ export async function findSchemaFile(projectRoot: string): Promise<string | unde
  * missing import *inside* it, which must surface as a real error rather than
  * silently trying the next candidate filename.
  */
-function isModuleNotFound(error: unknown, path: string): boolean {
-  if (
-    !(
-      error instanceof Error &&
-      'code' in error &&
-      (error as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND'
-    )
-  ) {
-    return false
-  }
-  // Node's own message embeds the missing specifier either as the file://
-  // URL passed to import(), or — observed on Windows — as the raw OS path.
-  // Matching only the URL form left every Windows run unable to fall
-  // through the candidate list: the first missing extension (typically
-  // `.ts`) surfaced as a hard SCHEMA_INVALID instead of trying the next one.
-  return error.message.includes(pathToFileURL(path).href) || error.message.includes(path)
-}
 
 /**
  * What `/api/assistant` answers with when this process built no assistant at

@@ -1,8 +1,9 @@
 import type { DatabaseHandle } from '@cogenta/core'
+import { identifier, sql } from '@cogenta/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { PatternStore } from '../../src/store/pattern-store.js'
 import { createPatternStore } from '../../src/store/pattern-store.js'
-import { ensurePatternTables } from '../../src/store/pattern-tables.js'
+import { ensurePatternTables, PATTERN_TABLE } from '../../src/store/pattern-tables.js'
 
 /**
  * The single contract suite for the page builder's pattern/model library
@@ -38,6 +39,13 @@ export function runPatternStoreContract(
     beforeEach(async () => {
       harness = await create()
       db = harness.db
+      // Emptied, not merely ensured. A SQLite harness hands back a brand-new
+      // database every test, so "create table if not exists" was enough there
+      // and the rows never carried over. The real servers are one shared
+      // database: rows accumulate across tests, and a count that expects one
+      // finds four. Dropping first is what makes this contract mean the same
+      // thing on all four engines.
+      await db.query(sql`drop table if exists ${identifier(PATTERN_TABLE, db.dialect)}`)
       await ensurePatternTables(db)
       store = createPatternStore({ db })
     })

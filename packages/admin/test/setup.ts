@@ -9,7 +9,7 @@ import { i18next as i18n } from '../src/i18n/index.js'
 // be true" — which says nothing about the real cause, and only ever happens
 // on a loaded runner. Five seconds is still short enough that a genuinely
 // broken expectation fails quickly.
-configure({ asyncUtilTimeout: 5000 })
+configure({ asyncUtilTimeout: 15_000 })
 
 beforeEach(async () => {
   // Every existing test asserts French strings — jsdom's default

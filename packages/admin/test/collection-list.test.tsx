@@ -334,12 +334,9 @@ describe('trashing from the collection list refreshes the sidebar status', () =>
     // entry actually leaving `article`'s list (unlike the trash screen's own
     // dedicated store) — the fact this test cares about is the refresh
     // call, not the row's disappearance.
-    await waitFor(
-      () => {
-        expect(shellStatusCallCount()).toBeGreaterThan(before)
-      },
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(shellStatusCallCount()).toBeGreaterThan(before)
+    })
   })
 
   it('refreshes after a bulk trash action', async () => {
@@ -354,11 +351,8 @@ describe('trashing from the collection list refreshes the sidebar status', () =>
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer (1)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Mettre à la corbeille' }))
 
-    await waitFor(
-      () => {
-        expect(shellStatusCallCount()).toBeGreaterThan(before)
-      },
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(shellStatusCallCount()).toBeGreaterThan(before)
+    })
   })
 })

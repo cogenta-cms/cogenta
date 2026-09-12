@@ -529,14 +529,9 @@ describe('trashing an entry from the editor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Mettre à la corbeille' }))
 
-    expect(
-      await screen.findByRole('heading', { name: 'Articles' }, { timeout: 5000 }),
-    ).toBeDefined()
-    await waitFor(
-      () => {
-        expect(shellStatusCalls()).toBeGreaterThan(before)
-      },
-      { timeout: 5000 },
-    )
+    expect(await screen.findByRole('heading', { name: 'Articles' })).toBeDefined()
+    await waitFor(() => {
+      expect(shellStatusCalls()).toBeGreaterThan(before)
+    })
   })
 })

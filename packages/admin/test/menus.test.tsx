@@ -222,14 +222,11 @@ describe('the menu screen', () => {
     fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'primary' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
 
-    await waitFor(
-      () => {
-        expect(
-          screen.getByRole('option', { name: /^Menu principal \(.+, primary\)$/u }),
-        ).toBeDefined()
-      },
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /^Menu principal \(.+, primary\)$/u }),
+      ).toBeDefined()
+    })
     // No free-text field is left showing once a named slot is chosen.
     expect(screen.queryByLabelText("Nom de l'emplacement")).toBeNull()
   })
@@ -246,14 +243,11 @@ describe('the menu screen', () => {
     fireEvent.change(customField, { target: { value: 'sidebar' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
 
-    await waitFor(
-      () => {
-        expect(
-          screen.getByRole('option', { name: /^Menu principal \(.+, sidebar\)$/u }),
-        ).toBeDefined()
-      },
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: /^Menu principal \(.+, sidebar\)$/u }),
+      ).toBeDefined()
+    })
   })
 
   it('unassigns a menu from its slot by choosing "not assigned"', async () => {
@@ -264,24 +258,16 @@ describe('the menu screen', () => {
     await createMenu('main', 'Menu principal')
     fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'footer' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
-    await waitFor(
-      () => {
-        expect(
-          screen.getByRole('option', { name: /^Menu principal \(.+, footer\)$/u }),
-        ).toBeDefined()
-      },
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /^Menu principal \(.+, footer\)$/u })).toBeDefined()
+    })
 
     fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'none' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
 
-    await waitFor(
-      () => {
-        expect(screen.getByRole('option', { name: /^Menu principal \([^,]+\)$/u })).toBeDefined()
-      },
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /^Menu principal \([^,]+\)$/u })).toBeDefined()
+    })
   })
 })
 

@@ -56,7 +56,7 @@ describe('the redirects screen', () => {
     // already uses) before `SeoRoute`'s own admin check ever runs — one
     // extra render pass past the default `findBy*` timeout on a cold mount,
     // exactly as `site-plan.test.tsx` already documents for its own case.
-    expect(await screen.findByRole('alert', undefined, { timeout: 5000 })).toBeDefined()
+    expect(await screen.findByRole('alert', undefined)).toBeDefined()
     expect(screen.queryByLabelText('Depuis')).toBeNull()
   })
 

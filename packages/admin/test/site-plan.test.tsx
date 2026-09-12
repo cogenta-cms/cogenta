@@ -51,7 +51,7 @@ describe('the site plan screen', () => {
     // The old bookmarked path now resolves via a `<Navigate>` redirect
     // (fiche 21, task 1) before this route's own role check ever runs — one
     // extra render pass past the default `findBy*` timeout on a cold mount.
-    expect(await screen.findByRole('alert', undefined, { timeout: 5000 })).toHaveProperty(
+    expect(await screen.findByRole('alert', undefined)).toHaveProperty(
       'textContent',
       expect.stringContaining('admin'),
     )
@@ -63,7 +63,7 @@ describe('the site plan screen', () => {
 
     render(<App />)
 
-    await screen.findByRole('heading', { name: 'Générer le site', level: 1 }, { timeout: 5000 })
+    await screen.findByRole('heading', { name: 'Générer le site', level: 1 })
     expect(window.location.pathname).toBe('/create-site')
   })
 

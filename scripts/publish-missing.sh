@@ -58,12 +58,20 @@ packages/theme-restaurant|@cogenta/theme-restaurant|0.3.2
 packages/theme-saas|@cogenta/theme-saas|0.3.2
 "
 
-if ! npm whoami >/dev/null 2>&1; then
-  echo "Not signed in to npm. Run 'npm login' first — publishing is the one step"
-  echo "that needs a credential this repository does not hold."
+# Swallowing this error once cost a whole round trip: the script said "not
+# signed in" while `npm whoami` from another shell on the same machine
+# answered fine, and the real reason — which npm had printed and this check
+# threw away — was never seen. Show it.
+if ! who="$(npm whoami 2>&1)"; then
+  echo "npm will not say who you are:"
+  echo "$who" | sed 's/^/  /'
+  echo
+  echo "If that is a 401, run 'npm login'. If you have just logged in from a"
+  echo "different shell, check that this one reads the same config:"
+  echo "  npm config get userconfig"
   exit 1
 fi
-echo "Publishing as: $(npm whoami)"
+echo "Publishing as: $who"
 echo
 
 # The one-time password, when the account needs one.

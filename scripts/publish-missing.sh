@@ -66,35 +66,37 @@ fi
 echo "Publishing as: $(npm whoami)"
 echo
 
-# npm asks for a one-time password on every publish while the account's 2FA
-# mode is "auth and writes", and its own prompt only works from a real
-# terminal — run any other way it fails outright with EOTP, which is how all
-# sixteen failed on the first attempt here.
+# The one-time password, when the account needs one.
 #
-# Asking for the code interactively was tried and does not work either: the
-# terminals this gets run from have no /dev/tty. So the code is an argument,
-# and the run is designed around the fact that it expires:
+# npm has two 2FA modes. Under "Authorization and writes" (the default) every
+# publish demands a code; under "Authorization only" a publish needs none, and
+# 2FA still guards login, profile and token changes. Which one is in force is
+# the account's setting, not this script's business — so the code is optional
+# here and simply omitted when it is not given.
 #
-#   bash scripts/publish-missing.sh 123456
+# This matters for more than convenience: a second factor that is a passkey or
+# a hardware key produces no six-digit code at all, so there is nothing to pass
+# to --otp. For those accounts "Authorization only" is not a shortcut, it is
+# the only way to publish from a CLI.
 #
-# One code covers however many publishes fit inside its window — usually
-# several. When it expires the run stops immediately rather than burning
-# through the remaining packages with a code it knows is dead, and you re-run
-# with a fresh one. Nothing is republished, because every package already on
-# the registry is skipped. Repeat until it reports nothing left to do.
+#   bash scripts/publish-missing.sh            # Authorization only
+#   bash scripts/publish-missing.sh 123456     # Authorization and writes (TOTP)
 #
-# The alternative, if this is tedious, is to set the account to "Authorization
-# only" on npmjs.com for the length of the run — that is a security setting on
-# a personal account, so it is deliberately not something this script touches.
+# With a code, one code covers however many publishes fit inside its window.
+# When it expires the run stops immediately rather than burning through the
+# remaining packages with a code it knows is dead, and you re-run with a fresh
+# one. Nothing is republished, because every package already on the registry is
+# skipped.
 OTP="${1:-${NPM_OTP:-}}"
-if [ -z "$OTP" ]; then
-  echo "Usage: bash scripts/publish-missing.sh <one-time-password>"
-  echo
-  echo "npm needs a 2FA code for each publish. Pass the current one; the run"
-  echo "stops when it expires and you start it again with the next. Packages"
-  echo "already published are skipped, so re-running is safe and cheap."
-  exit 1
+if [ -n "$OTP" ]; then
+  OTP_FLAG="--otp=$OTP"
+  echo "Using the one-time password given on the command line."
+else
+  OTP_FLAG=""
+  echo "No one-time password given — assuming the account is in"
+  echo "\"Authorization only\" mode, where a publish needs none."
 fi
+echo
 
 published=0
 skipped=0
@@ -117,7 +119,7 @@ for entry in $PACKAGES; do
 
   echo "+ publishing $name@$version"
   # shellcheck disable=SC2086
-  if (cd "$dir" && pnpm publish $PUBLISH_FLAGS --otp="$OTP"); then
+  if (cd "$dir" && pnpm publish $PUBLISH_FLAGS $OTP_FLAG); then
     published=$((published + 1))
   else
     echo "  FAILED: $name@$version"
@@ -129,8 +131,10 @@ for entry in $PACKAGES; do
     # in the noise.
     echo
     echo "  Stopped here. Nothing was published for this package."
-    echo "  If that was EOTP, re-run with a fresh code; the $published already"
-    echo "  published will be skipped."
+    echo "  EOTP means the account is in \"Authorization and writes\" mode: pass a"
+    echo "  fresh code, or switch the account to \"Authorization only\" on"
+    echo "  npmjs.com — the only route open to a passkey, which produces no code."
+    echo "  The $published already published will be skipped on the next run."
     break
   fi
   echo

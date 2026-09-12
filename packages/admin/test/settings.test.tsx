@@ -248,16 +248,25 @@ describe('the site settings screen — time zone select and live examples (fiche
       expect(text).toMatch(/ — /)
     }
 
+    // `formatDate` is called without a locale, so `Intl` falls back to Node's
+    // default: `fr-FR` on a French developer machine, `en-US` on a runner —
+    // `12/09/2026` against `9/12/26`. Hardcoding the French shape asserted
+    // which machine ran the test, not what the screen does, and that is the
+    // whole reason this failed on CI and nowhere else.
+    //
+    // The behaviour worth asserting is that the example switches to the short
+    // form, so the expectation is built the same way the screen builds it.
+    const expectedShort = new Intl.DateTimeFormat(undefined, { dateStyle: 'short' }).format(
+      new Date(),
+    )
+
     fireEvent.change(field, { target: { value: 'short' } })
     await waitFor(() => {
-      // The date field's own example switches to the short (DD/MM/YYYY)
-      // shape — asserted by format rather than by scoping the query to one
-      // field's DOM subtree, since the time field right below renders its
-      // own "Exemple : " text at the very same moment.
+      // Matched on content rather than by scoping to one field's subtree,
+      // since the time field right below renders its own "Exemple : " at the
+      // very same moment.
       const examples = screen.getAllByText(/Exemple : /)
-      expect(
-        examples.some((node) => /Exemple : \d{2}\/\d{2}\/\d{4}/.test(node.textContent ?? '')),
-      ).toBe(true)
+      expect(examples.some((node) => (node.textContent ?? '').includes(expectedShort))).toBe(true)
     })
   })
 })

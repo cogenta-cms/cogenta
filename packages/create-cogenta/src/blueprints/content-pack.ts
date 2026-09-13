@@ -59,6 +59,8 @@ export interface SeedContext {
   readonly adminId: string | null
   /** `{ [DemoMediaSpec.name]: mediaId }` — see `./demo-media.js`. Empty for a blueprint that seeds no media. */
   readonly media: Readonly<Record<string, string>>
+  /** The name the person gave their site, so demo copy names their business rather than the blueprint's fictional one. Absent outside a real scaffold. */
+  readonly siteName?: string
 }
 
 export type SeedDemoContent = (ctx: SeedContext) => Promise<void>

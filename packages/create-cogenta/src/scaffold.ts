@@ -533,6 +533,7 @@ export async function scaffoldSite(
           defaultLocale: answers.defaultLocale,
           adminId,
           media,
+          siteName: answers.siteName,
         })
       }
 

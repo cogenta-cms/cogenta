@@ -1,5 +1,142 @@
 # @cogenta/core
 
+## 0.9.0
+
+### Minor Changes
+
+- [`8f0e946`](https://github.com/cogenta-cms/cogenta/commit/8f0e946573b8d8b31c89c956bb75d9a1eb6061a2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **A media file now records who or what made it.**
+  
+  Contract A made `provenance` non-optional on a content entry because the
+  European AI framework requires it — and then the media library, where the
+  pictures live, had no such field at all. A generated illustration was
+  indistinguishable from a photograph the site owner took, which is exactly the
+  claim nobody is allowed to make by accident. It is the prerequisite for
+  letting an agent produce images at all.
+  
+  `MediaAsset` gains `provenance` (`human` | `assisted` | `generated`, the same
+  vocabulary contract A uses) and `provenanceDetail` — which agent, which model,
+  when. `CreateMediaInput` defaults to `human`, so every existing caller keeps
+  its exact meaning.
+  
+  The columns are added in place, with the same try-not-check pattern the tags,
+  content-hash and folder columns already use, and **without a backfill**: a
+  null reads as `human`, which is the true answer for a library uploaded by
+  people, not a guess. `media.read` reports both, so an agent browsing the
+  library can tell a photograph from something a model produced.
+
+### Patch Changes
+
+- [`0e346da`](https://github.com/cogenta-cms/cogenta/commit/0e346da6204f91c0efa47066667e127c76c4ecde) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fixes for defects that only a real MySQL, MariaDB or Postgres — or two
+  requests at once — ever exposed. The integration suites had not run against
+  those engines for a long time; with them back, each of these surfaced as a
+  production bug rather than a test problem.
+  
+  **MySQL and MariaDB**
+  
+  - `@cogenta/schema`: booleans were bound as the string `'true'` into columns
+    `booleanColumn` builds as `tinyint`, which MySQL refuses. Maintenance mode
+    and role permission overrides could not be saved there. A new
+    `booleanValue(value, dialect)` sits beside `booleanColumn`.
+  - `@cogenta/auth`, `@cogenta/analytics`, `@cogenta/forms`, `@cogenta/commerce`,
+    `@cogenta/fleet`: `LIMIT` was bound as a statement parameter, which MySQL
+    rejects ("Incorrect arguments to mysqld_stmt_execute"). Password resets,
+    credential lookups, the audit log, analytics summaries, form submissions,
+    order e-mails and fleet telemetry were affected. All now use `limit()`.
+  - `@cogenta/core`: the media library's tag filter used `escape '\'`, an
+    unterminated string on MySQL. The escape character is now `!`; nothing
+    stored depends on it.
+  - `@cogenta/analytics`: the daily-salt table declared a `text` primary key,
+    which MySQL cannot index. It is `varchar` there now.
+  
+  **Postgres**
+  
+  - `@cogenta/schema`, `@cogenta/agents`: looking up a pattern or a reference
+    document by an id that is not a uuid raised a database error (a 500) instead
+    of answering "not found". A new `isMintedId` guards those lookups.
+  - `@cogenta/schema`: the 404 log's upsert used an ambiguous `hits` column
+    reference that Postgres refuses.
+  - `@cogenta/schema`: `create table if not exists` is not atomic on Postgres, so
+    two replicas starting the scheduler at once could crash on a catalogue
+    collision. Tolerated for that collision only.
+  - `@cogenta/core`: deleting a media folder swallowed an error inside its
+    transaction, which Postgres treats as aborting the whole transaction.
+  
+  **Two requests at once**
+  
+  - `@cogenta/commerce` (**minor**): overlapping flushes of the order e-mail queue
+    sent the same confirmation twice. Each message is now claimed before it is
+    sent, through a new `'sending'` value of `OrderEmailStatus`. Code that
+    switches exhaustively over that union must handle it. A process that dies
+    mid-send leaves the row `sending`; it is not retried automatically.
+  - `@cogenta/schema`: two writers racing the same role override, or the same
+    brand-new 404 path, could throw. Both retry a lost race now, bounded.
+  - `@cogenta/core`: two queue workers ticking together could deadlock on MySQL
+    while reclaiming expired leases, and the error escaped the tick.
+  - `@cogenta/agents`: agent records were written in place, so a concurrent read
+    could parse half a file (a 500), and two changes to the same agent could
+    silently undo each other — an agent just enabled came back disabled. Writes
+    are now atomic and serialised per agent.
+  - `@cogenta/cli`: the automatic update task could start a second install of the
+    same versions while the first was still running.
+  - `@cogenta/cli`: a schema file that existed but could not resolve one of its
+    own imports was reported as "No schema file found". It now says what failed
+    to load.
+
+- [`d222023`](https://github.com/cogenta-cms/cogenta/commit/d222023000e4933c5c8cefe21bb1c64fafd34b67) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Generating a theme becomes a conversation, and starts producing themes that
+  resemble what was asked for.**
+  
+  A live report: attach a screenshot of a design, and what comes back is nowhere
+  near it. Three causes, none of them the model.
+  
+  *The palette was structurally locked.* The brief told the writer to reference
+  `--cogenta-*` and never invent a colour — but those custom properties are
+  generated exclusively from the *site's* skin, so any generated theme was
+  repainted in whatever palette the site already had, however accurate its
+  layout. A theme's own stylesheet is emitted after the skin's, so it can and
+  now does carry its own design palette (namespaced, never overwriting
+  `--cogenta-*`, which would silently disable the operator's own colour
+  controls). No mechanism changed — only the instruction that forbade it.
+  
+  *The run was open-loop.* A write earned "accepted" or a structural rejection;
+  the model never saw the page its code rendered. New `theme.preview_sandbox`
+  exposes the render the admin preview screen was already using, so the writer
+  can look at its own output and correct it. `theme.list_sandbox_files` and
+  `theme.read_sandbox_file` complete the set — without them a second turn is
+  handed a theme it has never seen, and can only guess or rewrite everything.
+  
+  *The system prompt was a sentence and ten bullets*, while everything about
+  what a Cogenta theme actually is sat in a tool `description` — read as API
+  reference for one call, not as standing knowledge. `assembleContext` gains a
+  `specification` level (CONSTITUTION → SITE → AGENT → SPECIFICATION → TASK),
+  unescaped because a specification is mostly markup examples and escaping them
+  teaches the wrong output. The writer is now told to look, plan, write,
+  preview and correct, in that order, instead of opening with "write the files
+  now".
+  
+  **Every turn after the first continues from what exists.** `generateSkin`
+  gains `baseTokens`: the current values are shown to the model with an
+  instruction to change only what was named. Until now `baseline` only reworded
+  the brief and re-derived every value, so each follow-up answered with a
+  different theme rather than the same one, adjusted. `POST
+  /api/theme/refine/jobs` (admin-only, polled through the existing generate-job
+  route) handles both candidate shapes — a custom layout is re-read from its
+  sandbox, a token candidate continues from its own tokens — and refuses a
+  request that names nothing to continue from.
+  
+  **A theme displays the site's content; it never contains it.** The
+  specification now says so with its reasons: content baked into a theme cannot
+  be edited from the admin and has no translations. No invented posts, no
+  `href="#"`, labels through `ctx.t`, an empty list renders as an empty state.
+  A write whose module contains `href="#"` comes back with a warning in its
+  receipt — reported, not refused, since a fragment target is legitimate.
+  
+  Also: one theme is generated by default (the brief's own count is honoured
+  when it asks for several) instead of burying the real answer under recolours;
+  a `summary` accompanies the full `rationale`, capped, after a run answered a
+  card with several thousand words; and progress events carry a `kind` and the
+  tool they concern, so a client no longer classifies them by pattern-matching
+  English prose.
+
 ## 0.8.0
 
 ### Minor Changes

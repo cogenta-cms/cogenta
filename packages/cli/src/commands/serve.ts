@@ -6639,6 +6639,9 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // the same already-applied version on every subsequent tick — see that
   // task's own comment for why this process cannot otherwise tell.
   let lastAutoAppliedSignature: string | null = null
+  // The signature an install is currently running for, so an overlapping tick
+  // does not start the same install a second time.
+  let autoApplyInFlight: string | null = null
   const updatesBackupDir = join(projectRoot, '.cogenta', 'backups')
   const updatePackages = (): readonly { readonly name: string; readonly installed: string }[] => [
     { name: '@cogenta/core', installed: getCoreVersion() },
@@ -7229,7 +7232,17 @@ export async function runServe(options: ServeOptions): Promise<number> {
       if (signature === lastAutoAppliedSignature) {
         return { summary: 'already auto-updated to this version — waiting for a restart' }
       }
+      if (signature === autoApplyInFlight) {
+        return { summary: 'this update is already being applied by an earlier tick' }
+      }
 
+      // Claimed *before* the install starts, not after it succeeds. An install
+      // routinely outlasts one tick interval, and with the guard only set on
+      // success the next tick found nothing recorded yet and started a second
+      // `npm install` of the same versions on top of the first — two restore
+      // points, two installs racing over the same node_modules. A slow CI
+      // runner showed it as "expected 1 install, got 2".
+      autoApplyInFlight = signature
       const result = await applyUpdate({
         cwd: projectRoot,
         env,
@@ -7241,6 +7254,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
         ...(options.updatesRunInstall === undefined
           ? {}
           : { runInstall: options.updatesRunInstall }),
+      }).finally(() => {
+        // Released whatever happened — a throw must not leave this update
+        // unreachable until the process restarts.
+        autoApplyInFlight = null
       })
       if (result.kind === 'applied') {
         await recordUpdateOutcome(result, null)

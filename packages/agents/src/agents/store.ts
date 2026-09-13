@@ -1,4 +1,5 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CogentaError } from '@cogenta/core'
 import type { AutonomyConfig } from '../autonomy/types.js'
@@ -10,6 +11,28 @@ import type {
   AgentModelPreference,
   AgentTrigger,
 } from './types.js'
+
+/**
+ * Writes a file so that a reader never sees half of it.
+ *
+ * `writeFile` truncates the target and then fills it, so a concurrent
+ * `readFile` can land in between and get "Unterminated string in JSON" — which
+ * is exactly what `cogenta serve` did when an admin changed an agent while the
+ * runtime was reading the same record: the PATCH answered 500 about one run in
+ * three on CI. Writing beside it and renaming over it is atomic on every
+ * filesystem this project targets, so a reader sees the old record or the new
+ * one and never a torn one.
+ */
+async function writeFileAtomic(path: string, data: string): Promise<void> {
+  const temporary = `${path}.${randomUUID()}.tmp`
+  await writeFile(temporary, data, 'utf8')
+  try {
+    await rename(temporary, path)
+  } catch (error) {
+    await rm(temporary, { force: true })
+    throw error
+  }
+}
 
 /**
  * L22 task 1's real gap, per the lot: `AgentRegistry` only ever wraps a
@@ -156,7 +179,7 @@ export function createFileAgentDeclarationStore(
     identity: StoredAgentIdentity,
   ): Promise<string> {
     const path = identityFile(slug)
-    await writeFile(path, renderIdentityMarkdown(name, identity), 'utf8')
+    await writeFileAtomic(path, renderIdentityMarkdown(name, identity))
     return path
   }
 
@@ -206,7 +229,7 @@ export function createFileAgentDeclarationStore(
         createdAt: at,
         updatedAt: at,
       }
-      await writeFile(recordFile(slug), JSON.stringify(record, null, 2), 'utf8')
+      await writeFileAtomic(recordFile(slug), JSON.stringify(record, null, 2))
       return record
     },
 
@@ -259,7 +282,7 @@ export function createFileAgentDeclarationStore(
         enabled: patch.enabled ?? existing.enabled,
         updatedAt: now().toISOString(),
       }
-      await writeFile(recordFile(slug), JSON.stringify(updated, null, 2), 'utf8')
+      await writeFileAtomic(recordFile(slug), JSON.stringify(updated, null, 2))
       return updated
     },
 
@@ -269,7 +292,7 @@ export function createFileAgentDeclarationStore(
       const existing = await findBySlug(slug)
       if (existing === undefined) throw agentUnknown(name)
       const updated: StoredAgent = { ...existing, enabled, updatedAt: now().toISOString() }
-      await writeFile(recordFile(slug), JSON.stringify(updated, null, 2), 'utf8')
+      await writeFileAtomic(recordFile(slug), JSON.stringify(updated, null, 2))
       return updated
     },
 

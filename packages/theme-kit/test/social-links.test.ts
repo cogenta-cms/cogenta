@@ -22,22 +22,22 @@ describe('renderSocialLinks', () => {
       ['https://www.linkedin.com/company/cogenta', 'M10.5 20V10h3'],
       ['https://youtube.com/@cogenta', 'M10 9l6 3-6 3z'],
       ['https://youtu.be/xyz', 'M10 9l6 3-6 3z'],
-      ['https://github.com/cogenta', 'M8.3 20v-2.1'],
-      ['https://bsky.app/profile/cogenta', 'M12 9c-1.6-3'],
-      ['https://tiktok.com/@cogenta', 'M11.8 4c.3 3.2'],
-      ['https://pinterest.com/cogenta', 'M10 10A2.6'],
+      ['https://github.com/cogenta', 'M12 .297c-6.63'],
+      ['https://bsky.app/profile/cogenta', 'M5.202 2.857'],
+      ['https://tiktok.com/@cogenta', 'M12.525.02'],
+      ['https://pinterest.com/cogenta', 'M12.017 0C5.396'],
     ]
     for (const [href, needle] of cases) {
       const out = html([{ label: 'x', href }])
       expect(out, href).toContain(needle)
     }
     expect(html([{ label: 'x', href: 'https://instagram.com/cogenta' }])).toContain('M8 3H16A5')
-    expect(html([{ label: 'x', href: 'https://threads.net/@cogenta' }])).toContain('M4 12A8 8')
+    expect(html([{ label: 'x', href: 'https://threads.net/@cogenta' }])).toContain('M18.263 11.097')
   })
 
   it('detects a Mastodon instance by its @-prefixed path, not by a fixed domain', () => {
     const out = html([{ label: 'Mastodon', href: 'https://mastodon.social/@cogenta' }])
-    expect(out).toContain('M4 8a4 4 0 0 1 4-4h8')
+    expect(out).toContain('M23.268 5.313')
   })
 
   it('falls back to the generic link icon for an unrecognised host', () => {
@@ -75,6 +75,12 @@ describe('renderSocialLinks', () => {
     expect(item && item.kind === 'element' ? item.attrs.class : undefined).toBe(
       'cg-footer__social-item',
     )
+  })
+
+  it('draws an official brand silhouette with the nonzero rule its path was designed for', () => {
+    const out = html([{ label: 'GitHub', href: 'https://github.com/cogenta' }])
+    expect(out).not.toContain('fill-rule')
+    expect(out.match(/<path/g)?.length).toBe(1)
   })
 
   it('renders one icon per link, aria-hidden and unlabelled by itself', () => {

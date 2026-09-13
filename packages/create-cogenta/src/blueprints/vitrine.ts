@@ -1,11 +1,15 @@
-import type { VocabularyBlock } from '@cogenta/blocks'
+import type { RichTextDocument, VocabularyBlock } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
 import {
   type CollectionDefinition,
   createContentStore,
+  createTaxonomyStore,
   defineCollection,
+  defineTaxonomy,
   f,
+  type TaxonomyDefinition,
   validateCollectionSet,
+  validateTaxonomySet,
 } from '@cogenta/schema'
 import { avatarArt, coverArt, heroArt, logoArt, type Palette } from '../demo-art/compositions.js'
 import {
@@ -22,38 +26,75 @@ import type { BlueprintMenus } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
 
 /**
- * The `vitrine` blueprint's content model (L9 task 8, batch A; raised to a
- * pro template by L25): the classic one-pager showcase site for a small
- * business or consultancy — a list of services and a few testimonials,
- * both real, editable collections rather than data baked into the page
- * itself.
+ * The `vitrine` blueprint: the website of a management consultancy (L9 task
+ * 8; raised to a pro template by L25; rewritten to studio level by L27).
  *
- * `icon` (a symbol name `@cogenta/theme-kit`'s `renderIcon` recognises) and
- * `coverImage` (contract D `theme@1.4`'s `entryImage`) are what let
- * `theme-entreprise`'s `featureGrid` and `collectionList` show a service
- * the same way `theme-saas`'s own `feature` collection already does.
+ * Three real, editable collections behind the pages: the firm's practices
+ * (`service`), its published case studies (`case_study`, filed by `sector`)
+ * and the client testimonials the pages quote. Demo copy names the firm the
+ * person scaffolding the site actually named (`SeedContext.siteName`), and
+ * falls back to a fictional firm only outside a real scaffold.
  */
+
+export const DEFAULT_FIRM_NAME = 'Northfield Partners'
+
+export const sector: TaxonomyDefinition = defineTaxonomy({
+  name: 'sector',
+  labels: {
+    singular: { en: 'Sector', fr: 'Secteur' },
+    plural: { en: 'Sectors', fr: 'Secteurs' },
+  },
+  hierarchical: false,
+  permissions: {
+    read: ['public'],
+    create: ['editor', 'admin'],
+    update: ['editor', 'admin'],
+    delete: ['admin'],
+  },
+})
 
 export const service = defineCollection({
   name: 'service',
-  labels: { singular: 'Service', plural: 'Services' },
-  // Routed, not just listed: `collectionList` (used on the home page below)
-  // always builds a link for every entry it renders (`entryHref`,
-  // `@cogenta/theme-kit`), so a collection it targets must have a route or
-  // that render call throws.
+  labels: { singular: 'Practice', plural: 'Practices' },
+  // Routed: `featureGrid` links each practice to its own page, and a
+  // `collectionList` of this collection builds a link for every entry.
   routing: { pattern: '/services/:slug' },
   fields: {
     name: f.text({ required: true, max: 120 }),
     slug: f.slug({ from: 'name', unique: true }),
     description: f.text({ max: 400, multiline: true }),
+    body: f.richText(),
     icon: f.text({
       max: 64,
       admin: {
         label: 'Icon',
-        help: 'One of the symbol names @cogenta/theme-kit recognises (e.g. "chart", "shield", "briefcase", "code", "trending-up", "tag"). Left blank, the service renders with no icon chip.',
+        help: 'One of the symbol names @cogenta/theme-kit recognises (e.g. "chart", "shield", "briefcase"). Themes that set practices as a numbered list may not draw it.',
       },
     }),
     coverImage: f.media({ accept: ['image'] }),
+    ...SEO_FIELDS,
+  },
+  indexes: [['slug']],
+  permissions: {
+    read: ['public'],
+    create: ['editor', 'admin'],
+    update: ['editor', 'admin'],
+    delete: ['admin'],
+  },
+})
+
+export const caseStudy = defineCollection({
+  name: 'case_study',
+  labels: { singular: 'Case study', plural: 'Case studies' },
+  routing: { pattern: '/case-studies/:slug' },
+  fields: {
+    title: f.text({ required: true, max: 200 }),
+    slug: f.slug({ from: 'title', unique: true }),
+    client: f.text({ max: 120 }),
+    summary: f.text({ max: 400, multiline: true }),
+    body: f.richText(),
+    coverImage: f.media({ accept: ['image'] }),
+    sector: f.taxonomy({ of: 'sector', many: false }),
     ...SEO_FIELDS,
   },
   indexes: [['slug']],
@@ -84,73 +125,335 @@ export const testimonial = defineCollection({
 
 export const page = definePageCollection('/:slug')
 
-export const VITRINE_COLLECTIONS: readonly CollectionDefinition[] = [service, testimonial, page]
+export const VITRINE_COLLECTIONS: readonly CollectionDefinition[] = [
+  service,
+  caseStudy,
+  testimonial,
+  page,
+]
+
+export const VITRINE_TAXONOMIES: readonly TaxonomyDefinition[] = [sector]
 
 validateCollectionSet(VITRINE_COLLECTIONS)
+validateTaxonomySet(VITRINE_TAXONOMIES, VITRINE_COLLECTIONS)
+
+// ---------------------------------------------------------------------------
+// Rich text, written as data
+// ---------------------------------------------------------------------------
+
+/** A paragraph, a second-level heading or a bulleted list, in the order they read. */
+type RichPart =
+  | { readonly p: string }
+  | { readonly h2: string }
+  | { readonly bullets: readonly string[] }
+
+function span(key: string, text: string) {
+  return { _key: `${key}-s`, _type: 'span' as const, text, marks: [] }
+}
+
+/** Builds a contract-A rich-text document from plain parts (never HTML, R3). */
+function richText(key: string, parts: readonly RichPart[]): RichTextDocument {
+  return parts.flatMap((part, index): RichTextDocument => {
+    const partKey = `${key}-${index}`
+    if ('p' in part) {
+      return [
+        {
+          _key: partKey,
+          _type: 'block',
+          style: 'normal',
+          children: [span(partKey, part.p)],
+          markDefs: [],
+        },
+      ]
+    }
+    if ('h2' in part) {
+      return [
+        {
+          _key: partKey,
+          _type: 'block',
+          style: 'h2',
+          children: [span(partKey, part.h2)],
+          markDefs: [],
+        },
+      ]
+    }
+    return part.bullets.map((text, bulletIndex) => ({
+      _key: `${partKey}-${bulletIndex}`,
+      _type: 'block' as const,
+      style: 'normal' as const,
+      listItem: 'bullet' as const,
+      level: 1,
+      children: [span(`${partKey}-${bulletIndex}`, text)],
+      markDefs: [],
+    }))
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Practices
+// ---------------------------------------------------------------------------
 
 export interface VitrineDemoService {
   readonly name: string
   readonly slug: string
   readonly description: string
   readonly icon: string
+  readonly body: (firm: string) => readonly RichPart[]
 }
+
+export const VITRINE_DEMO_SERVICES: readonly VitrineDemoService[] = [
+  {
+    name: 'Strategy',
+    slug: 'strategy',
+    icon: 'globe',
+    description:
+      'Where to compete, what to stop doing and what the plan is worth. We build the three-year plan with the executive team and test every assumption against the figures the board will see.',
+    body: (firm) => [
+      {
+        p: `Strategy work at ${firm} starts from the operating results. Before anyone discusses ambition, we rebuild the last three years of profit by customer, product and channel, so the executive team and the board argue from one set of facts.`,
+      },
+      { h2: 'Questions clients bring' },
+      {
+        bullets: [
+          'Which of our markets can we lead within five years, and which should we leave?',
+          'Should we grow by acquisition, and what can we afford to pay?',
+          'What does the business need to look like before a sale in three years?',
+        ],
+      },
+      { h2: 'What the work produces' },
+      {
+        p: 'A three-year plan with targets by business unit, the investment case behind each major decision, and a quarterly scorecard the board can run without us. Strategy engagements usually take ten to fourteen weeks.',
+      },
+    ],
+  },
+  {
+    name: 'Operations',
+    slug: 'operations',
+    icon: 'settings',
+    description:
+      'Cost, service and working capital across plants, supply chains and shared services. Our programmes typically release 2 to 4% of revenue within eighteen months.',
+    body: (firm) => [
+      {
+        p: `${firm} consultants start on the floor: in the depot, the warehouse, the contact centre. The diagnostic takes six weeks and ends with a costed list of changes ranked by cash released and by risk to service.`,
+      },
+      { h2: 'Where the value usually is' },
+      {
+        bullets: [
+          'Inventory held against forecasts nobody uses',
+          'Maintenance and rostering plans built for last year’s demand',
+          'Procurement spread across too many suppliers on short contracts',
+        ],
+      },
+      { h2: 'How results are measured' },
+      {
+        p: 'Every target is agreed with your finance director before implementation starts and tracked in your own management accounts. On most operations programmes part of our fee depends on those numbers.',
+      },
+    ],
+  },
+  {
+    name: 'Finance and transactions',
+    slug: 'finance-transactions',
+    icon: 'chart',
+    description:
+      'Commercial due diligence, value-creation plans and post-merger integration for owners, lenders and management teams, from the first model to the hundredth day.',
+    body: () => [
+      {
+        p: 'We work for buyers, sellers and the management teams in between. A diligence report tells an investment committee what it needs to know in forty pages; the value-creation plan that follows is written to be executed by the company, with owners for every line.',
+      },
+      { h2: 'Typical mandates' },
+      {
+        bullets: [
+          'Buy-side commercial diligence in four to six weeks',
+          'Vendor preparation twelve months before a sale process',
+          'Integration planning and the first hundred days after completion',
+        ],
+      },
+      { h2: 'Independence' },
+      {
+        p: 'We do not take success fees on transactions, and we will not advise both sides of the same deal.',
+      },
+    ],
+  },
+  {
+    name: 'Organisation',
+    slug: 'organisation',
+    icon: 'users',
+    description:
+      'Operating models, spans and layers, and succession for the top hundred roles. We design structures a company can run without its advisers in the room.',
+    body: () => [
+      {
+        p: 'Most reorganisations fail in the second year, once the new chart meets the old habits. We design the structure together with the decision rights, the committee calendar and the performance measures, and we test it on real decisions before it is announced.',
+      },
+      { h2: 'What we look at' },
+      {
+        bullets: [
+          'How many layers sit between the chief executive and the customer',
+          'Which decisions need three signatures, and why',
+          'Who is ready to take the twenty most critical roles in the next two years',
+        ],
+      },
+    ],
+  },
+  {
+    name: 'Technology and data',
+    slug: 'technology-data',
+    icon: 'layers',
+    description:
+      'Architecture reviews, vendor selection and delivery assurance for ERP, pricing and planning systems, judged against the business case they were bought for.',
+    body: () => [
+      {
+        p: 'We are independent of software vendors and integrators, and we are paid by the client alone. That lets us tell a board whether a stalled programme should be rescued, reduced or stopped.',
+      },
+      { h2: 'Typical work' },
+      {
+        bullets: [
+          'Independent reviews of programmes that are late or over budget',
+          'Selection of ERP, pricing and planning software',
+          'Quarterly assurance reports for audit committees',
+        ],
+      },
+    ],
+  },
+  {
+    name: 'Risk and resilience',
+    slug: 'risk-resilience',
+    icon: 'shield',
+    description:
+      'Operational resilience, regulatory remediation and continuity planning, written to the standard a supervisor or an insurer will actually test.',
+    body: () => [
+      {
+        p: 'Resilience plans are usually written for the audit and discovered to be unworkable on the day they are needed. We run the scenarios with the people who would have to act on them, at night and without the usual systems.',
+      },
+      { h2: 'Typical work' },
+      {
+        bullets: [
+          'Important business services and impact tolerances for regulated firms',
+          'Remediation programmes after a supervisory review',
+          'Crisis exercises for executive teams and boards',
+        ],
+      },
+    ],
+  },
+]
+
+// ---------------------------------------------------------------------------
+// Case studies
+// ---------------------------------------------------------------------------
+
+export interface VitrineDemoCaseStudy {
+  readonly title: string
+  readonly slug: string
+  readonly client: string
+  readonly sectorSlug: string
+  readonly summary: string
+  readonly body: (firm: string) => readonly RichPart[]
+}
+
+export const VITRINE_DEMO_SECTORS: readonly { readonly slug: string; readonly name: string }[] = [
+  { slug: 'transport', name: 'Transport' },
+  { slug: 'hospitality', name: 'Hospitality' },
+  { slug: 'public-sector', name: 'Public sector' },
+]
+
+export const VITRINE_DEMO_CASE_STUDIES: readonly VitrineDemoCaseStudy[] = [
+  {
+    title: 'Meridian Rail raises punctuality from 88% to 94% in fourteen months',
+    slug: 'meridian-rail-punctuality',
+    client: 'Meridian Rail',
+    sectorSlug: 'transport',
+    summary:
+      'A commuter operator carrying 190,000 passengers a day rebuilt its crew rosters and depot maintenance plan. Cancellations caused by missing crew fell by two thirds.',
+    body: (firm) => [
+      { h2: 'The situation' },
+      {
+        p: 'Meridian Rail runs 1,140 services a day on four lines into the city. Punctuality had fallen for three consecutive years, and the regulator had opened a formal review. Internal analysis blamed ageing trains; the operator’s own data showed that most delays began before a train left the depot.',
+      },
+      { h2: 'What we did' },
+      {
+        p: `A team of five from ${firm} spent the first three weeks on night shifts in the two main depots and in the control room. Rosters were being built for a timetable that had changed twice since they were drawn up, and heavy maintenance was scheduled in the hours when spare trains were most needed.`,
+      },
+      {
+        bullets: [
+          'Rebuilt crew rosters around the current timetable, with a reserve pool at each depot',
+          'Moved heavy maintenance to a rolling overnight plan agreed with the unions',
+          'Set up a daily performance meeting using one shared delay log',
+        ],
+      },
+      { h2: 'Results' },
+      {
+        p: 'Trains arriving within five minutes of schedule rose from 88% to 94% over fourteen months. Cancellations caused by missing crew fell by 67%, and the regulator closed its review without penalty. The operator’s planning team now maintains the rosters itself.',
+      },
+    ],
+  },
+  {
+    title: 'Castell & Vane Hotels adds £11.2 million of revenue with one pricing desk',
+    slug: 'castell-vane-pricing',
+    client: 'Castell & Vane Hotels',
+    sectorSlug: 'hospitality',
+    summary:
+      'Room rates at fourteen properties had been set by each general manager from a spreadsheet. A central pricing desk and a weekly forecast changed that within a season.',
+    body: (firm) => [
+      { h2: 'The situation' },
+      {
+        p: 'Castell & Vane owns fourteen hotels in six cities, most of them historic buildings with restaurants that account for a third of revenue. Each general manager set room rates independently, and weekend prices were often lower than weekday prices in the same city.',
+      },
+      { h2: 'What we did' },
+      {
+        p: `${firm} built a demand forecast from four years of bookings, local events and competitor rates, then designed a central pricing desk of three analysts who publish rates every Monday. General managers kept the right to override a price, with a reason recorded against it.`,
+      },
+      {
+        bullets: [
+          'Weekly forecast by property, room type and channel',
+          'Rate rules for group bookings, long stays and restaurant packages',
+          'Training for fourteen general managers and their revenue leads',
+        ],
+      },
+      { h2: 'Results' },
+      {
+        p: 'Revenue per available room rose by 9% in the first full year, worth £11.2 million, with occupancy unchanged. The pricing desk paid for the engagement within eleven weeks.',
+      },
+    ],
+  },
+  {
+    title: 'Kellmoor City Council closes a £38 million budget gap and keeps every library open',
+    slug: 'kellmoor-council-budget',
+    client: 'Kellmoor City Council',
+    sectorSlug: 'public-sector',
+    summary:
+      'Facing a statutory deficit, the council merged six back-office functions into one shared service and renegotiated 41 contracts. Front-line spending was protected in full.',
+    body: (firm) => [
+      { h2: 'The situation' },
+      {
+        p: 'Kellmoor City Council serves 310,000 residents. Rising care costs had opened a £38 million gap in a £420 million budget, and the council had eighteen months to close it before the government could intervene.',
+      },
+      { h2: 'What we did' },
+      {
+        p: `${firm} began with the council’s statutory duties, then its cost base. Each proposed saving was checked against those duties by the council’s own legal team before it went to elected members.`,
+      },
+      {
+        bullets: [
+          'Merged finance, payroll, procurement, IT, legal and property support into one shared service',
+          'Renegotiated 41 contracts worth £96 million a year',
+          'Sold or let eleven under-used buildings',
+        ],
+      },
+      { h2: 'Results' },
+      {
+        p: 'The gap was closed four months ahead of the deadline. Libraries, children’s centres and road maintenance kept their budgets in full, and none of the savings has had to be reversed.',
+      },
+    ],
+  },
+]
+
+// ---------------------------------------------------------------------------
+// Testimonials
+// ---------------------------------------------------------------------------
 
 export interface VitrineDemoTestimonial {
   readonly authorName: string
   readonly authorRole: string
-  readonly quote: string
+  readonly quote: (firm: string) => string
 }
-
-/**
- * Six real B2B capabilities, each with the icon `featureGrid` (home page)
- * and this same entry's own `icon` field both point at — a `collectionList`
- * of `service` and the home page's `featureGrid` read as one system rather
- * than two unrelated sections.
- */
-export const VITRINE_DEMO_SERVICES: readonly VitrineDemoService[] = [
-  {
-    name: 'Brand strategy',
-    slug: 'brand-strategy',
-    description:
-      'We start every engagement here, because a redesign built on the wrong positioning just ships the confusion faster. Three weeks of interviews with your best customers and closest competitors end in a positioning document, a messaging framework, and a visual identity your team can defend in a board meeting without us in the room.',
-    icon: 'tag',
-  },
-  {
-    name: 'Web design & build',
-    slug: 'web-design-build',
-    description:
-      'Most of the sites we replace took longer to explain than to load. We design and build on Cogenta itself, so your team edits copy and swaps testimonials without filing a ticket — and the finished site still says what you do in the first five seconds, on every screen size.',
-    icon: 'code',
-  },
-  {
-    name: 'Growth marketing',
-    slug: 'growth-marketing',
-    description:
-      'We run paid, lifecycle and content programmes against one dashboard tied to closed revenue, not clicks. A channel that stops paying for itself gets cut inside a reporting cycle, not a fiscal quarter — most engagements end with a smaller media budget and a larger pipeline than they started with.',
-    icon: 'trending-up',
-  },
-  {
-    name: 'Operations consulting',
-    slug: 'operations-consulting',
-    description:
-      'Most operations problems are three broken handoffs, not thirty. We map how work actually moves through your organisation, not how the org chart says it should, and fix the handful of handoffs that are really costing you cycle time — against a metric your leadership already tracks.',
-    icon: 'briefcase',
-  },
-  {
-    name: 'Financial advisory',
-    slug: 'financial-advisory',
-    description:
-      'We build the model your finance team will still be using eighteen months from now, not a one-off deck. Every forecast ties back to the same general-ledger export your controller already trusts, so the numbers survive contact with a real board, and a real audit.',
-    icon: 'chart',
-  },
-  {
-    name: 'Security & compliance',
-    slug: 'security-compliance',
-    description:
-      'We inherited more than one compliance programme that was a binder nobody had opened since the last audit. Ours ships with a named owner and a real audit trail for every control, mapped to SOC 2 or ISO 27001 depending on what your customers actually ask for.',
-    icon: 'shield',
-  },
-]
 
 export const VITRINE_DEMO_TESTIMONIALS: readonly [
   VitrineDemoTestimonial,
@@ -158,49 +461,37 @@ export const VITRINE_DEMO_TESTIMONIALS: readonly [
   VitrineDemoTestimonial,
 ] = [
   {
-    authorName: 'Amina Diallo',
-    authorRole: 'Founder, Atelier Diallo',
-    quote:
-      'Northfield rebuilt our positioning before they touched a single page of the site, and it showed — the new site paid for itself in the first month, because for the first time people understood what we do before they ever called. We still edit it ourselves, weekly, without asking anyone for help.',
+    authorName: 'Helen Achterberg',
+    authorRole: 'Chief Operating Officer, Meridian Rail',
+    quote: () =>
+      'They spent three weeks in our depots and on night shifts before they showed us a single slide. The rosters we run today are theirs, and so are the eleven people on my team who now maintain them.',
   },
   {
-    authorName: 'Marco Bellini',
-    authorRole: 'Owner, Bellini Consulting',
-    quote:
-      'Fast, clear, no surprises, and a fixed quote that held from the first call to the last invoice — exactly what a small business needs from a consulting engagement and almost never gets. Northfield delivered the brand and the site in five weeks and has been one email away ever since.',
+    authorName: 'Tomás Aguirre',
+    authorRole: 'Group Finance Director, Castell & Vane Hotels',
+    quote: () =>
+      'The pricing desk paid for the whole engagement in its first eleven weeks. What I value more is that my general managers now argue about the forecast using the same numbers.',
   },
   {
-    authorName: 'Priya Chandra',
-    authorRole: 'COO, Chandra & Partners',
-    quote:
-      "Northfield's operations review took three weeks and changed how four teams hand off work to each other. We are still finding the recommendations landing a full quarter later, in meetings Northfield was never in the room for — that is the real test of whether a consultant fixed something.",
+    authorName: 'Daniel Whitcombe',
+    authorRole: 'Chief Executive, Kellmoor City Council',
+    quote: (firm) =>
+      `${firm} was the only adviser that asked to see our statutory duties before our cost base. Every saving in the plan was checked against them, and none has had to be reversed.`,
   },
 ]
 
+// ---------------------------------------------------------------------------
+// Pages
+// ---------------------------------------------------------------------------
+
 const BLOCK_VERSION = '1.0.0'
 
-function proseParagraph(key: string, text: string): VocabularyBlock {
+function prose(key: string, parts: readonly RichPart[]): VocabularyBlock {
   return {
     _key: key,
     _type: 'prose',
     _version: BLOCK_VERSION,
-    body: richTextParagraph(`${key}-body`, text),
-  } as VocabularyBlock
-}
-
-/** A multi-paragraph `prose` block — same shape convention as `restaurant.ts`'s own `proseBlock`, for the About page's real founding story rather than one thin paragraph. */
-function proseBlock(key: string, paragraphs: readonly string[]): VocabularyBlock {
-  return {
-    _key: key,
-    _type: 'prose',
-    _version: BLOCK_VERSION,
-    body: paragraphs.map((text, index) => ({
-      _key: `${key}-p${index}`,
-      _type: 'block',
-      style: 'normal',
-      children: [{ _key: `${key}-p${index}-s`, _type: 'span', text, marks: [] }],
-      markDefs: [],
-    })),
+    body: richText(`${key}-body`, parts),
   } as VocabularyBlock
 }
 
@@ -210,28 +501,39 @@ export interface VitrineDemoPage {
   readonly blocks: readonly VocabularyBlock[]
 }
 
+const LOGO_KEYS = [
+  'logo-meridian-rail',
+  'logo-castell-vane',
+  'logo-aldermoor',
+  'logo-brightwater',
+  'logo-nordvik',
+  'logo-oakfield-health',
+] as const
+
+const LOGO_NAMES: Readonly<Record<(typeof LOGO_KEYS)[number], string>> = {
+  'logo-meridian-rail': 'Meridian Rail',
+  'logo-castell-vane': 'Castell & Vane Hotels',
+  'logo-aldermoor': 'Aldermoor Bank',
+  'logo-brightwater': 'Brightwater Foods',
+  'logo-nordvik': 'Nordvik Industries',
+  'logo-oakfield-health': 'Oakfield Health',
+}
+
 /**
- * `home` (eleven blocks, the "confident B2B one-pager" composition the L25
- * brief asks for: hero → trust strip → services → numbers → a wide product
- * shot → the full services grid with covers → client outcome → a second
- * voice → questions → call to action → a short about teaser), `about` (the
- * full story plus every real testimonial, mirrored as `quote` blocks so an
- * edit to the collection is visible without touching a page), and
- * `contact` (how to reach the business).
+ * `home` (ten blocks: hero, selected clients, practices, the firm in figures,
+ * selected work, a client's words, research and its exhibit, questions, and
+ * the call to action), `practices`, `case-studies`, `about` and `contact`.
  *
- * A function of `media` (`SeedContext.media`) and the real ids
- * `seedVitrineDemoContent` assigns its own services (`serviceIdBySlug`),
- * not a static const: the hero's `media`, the trust strip's logos, the
- * services grid's covers and the featureGrid's links all need ids only the
- * scaffold knows at seed time. Both parameters default to empty so
- * `buildVitrineDemoPages({})` (the blueprint test's own call, and every
- * other blueprint's equivalent) still renders a complete, valid page —
- * `logoStrip`/`mediaFigure`/the hero's own media are simply omitted rather
- * than emitted with an empty required list.
+ * A function of `media` (`SeedContext.media`), of the real practice ids
+ * `seedVitrineDemoContent` assigns (`serviceIdBySlug`) and of the firm's name.
+ * All three default, so `buildVitrineDemoPages({})` still returns complete,
+ * contract-valid pages: a block whose required media is absent is omitted
+ * rather than emitted invalid.
  */
 export function buildVitrineDemoPages(
   media: Readonly<Record<string, string>> = {},
   serviceIdBySlug: ReadonlyMap<string, string> = new Map(),
+  firm: string = DEFAULT_FIRM_NAME,
 ): readonly VitrineDemoPage[] {
   const serviceLink = (
     slug: string,
@@ -240,205 +542,363 @@ export function buildVitrineDemoPages(
     return id === undefined ? undefined : { collection: 'service', id }
   }
 
-  // `logoStrip` (blocks@2.0) requires at least one logo — a media map with
-  // no `logo-*` entries (a scaffold with no demo-art seeded, or this
-  // function called directly, as the blueprint test does) must therefore
-  // omit the whole block rather than emit an empty, contract-invalid one.
-  const logoItems = [0, 1, 2, 3, 4]
-    .map((index) => media[`logo-${index}`])
-    .filter((id): id is string => id !== undefined)
-    .map((id, index) => ({ _key: `demo-logo-${index}`, media: id }))
+  const practices = (key: string, title: string): VocabularyBlock =>
+    ({
+      _key: key,
+      _type: 'featureGrid',
+      _version: BLOCK_VERSION,
+      title,
+      items: VITRINE_DEMO_SERVICES.map((demo, index) => {
+        const link = serviceLink(demo.slug)
+        return {
+          _key: `${key}-${index}`,
+          icon: demo.icon,
+          title: demo.name,
+          text: demo.description,
+          ...(link === undefined ? {} : { link }),
+        }
+      }),
+    }) as VocabularyBlock
 
-  const [testimonial1, testimonial2, testimonial3] = VITRINE_DEMO_TESTIMONIALS
+  const logoIds = LOGO_KEYS.map((key) => ({ key, id: media[key] })).filter(
+    (entry): entry is { key: (typeof LOGO_KEYS)[number]; id: string } => entry.id !== undefined,
+  )
 
-  return [
-    {
-      title: 'Home',
-      slug: 'home',
-      blocks: [
-        {
-          _key: 'demo-home-hero',
-          _type: 'hero',
-          _version: BLOCK_VERSION,
-          eyebrow: 'Northfield Consulting · Est. 2011',
-          title: 'The consultancy growing companies call before their systems fall over',
-          subtitle:
-            'We handle the six functions that break first when headcount outpaces process — brand, web, growth, operations, finance and security — each led by a partner who has run it, not just advised on it.',
-          ...(media.hero === undefined ? {} : { media: media.hero }),
-          actions: [
-            { label: 'See our services', target: { href: '#services' }, emphasis: 'primary' },
-            { label: 'Get a quote', target: { href: '/contact' } },
-          ],
-        } as VocabularyBlock,
-        ...(logoItems.length === 0
-          ? []
-          : [
-              {
-                _key: 'demo-home-logos',
-                _type: 'logoStrip',
-                _version: BLOCK_VERSION,
-                logos: logoItems,
-                caption: 'Trusted by teams at',
-              } as VocabularyBlock,
-            ]),
-        {
-          _key: 'demo-home-services',
-          _type: 'featureGrid',
-          _version: BLOCK_VERSION,
-          title: 'What we do',
-          items: VITRINE_DEMO_SERVICES.map((demo, index) => {
-            const link = serviceLink(demo.slug)
-            return {
-              _key: `demo-service-${index}`,
-              icon: demo.icon,
-              title: demo.name,
-              text: demo.description,
-              ...(link === undefined ? {} : { link }),
-            }
-          }),
-        } as VocabularyBlock,
-        {
-          _key: 'demo-home-numbers',
-          _type: 'stats',
-          _version: BLOCK_VERSION,
-          items: [
-            { _key: 'demo-home-stat-1', value: '3', unit: 'weeks', label: 'typical project' },
-            { _key: 'demo-home-stat-2', value: '120', unit: '+', label: 'engagements delivered' },
-            { _key: 'demo-home-stat-3', value: '100', unit: '%', label: 'content you can edit' },
-            { _key: 'demo-home-stat-4', value: '0', label: 'lines of JavaScript shipped' },
-          ],
-        } as VocabularyBlock,
-        // `mediaFigure.media` (blocks@2.0) is required — with no `shot`
-        // media seeded, the block is omitted rather than emitted invalid
-        // (same reasoning as `logoStrip` above).
-        ...(media.shot === undefined
-          ? []
-          : [
-              {
-                _key: 'demo-home-shot',
-                _type: 'mediaFigure',
-                _version: BLOCK_VERSION,
-                media: media.shot,
-                caption:
-                  'The engagement dashboard every Northfield team works from — the same tracker the client sees.',
-                ratio: '16:9',
-                align: 'wide',
-              } as VocabularyBlock,
-            ]),
-        {
-          _key: 'demo-home-services-grid',
-          _type: 'collectionList',
-          _version: BLOCK_VERSION,
-          title: 'Every service, in detail',
-          collection: 'service',
-          sort: { field: 'createdAt', direction: 'asc' },
-          limit: 10,
-          layout: 'grid',
-        } as VocabularyBlock,
-        {
-          _key: 'demo-home-testimonial',
-          _type: 'testimonial',
-          _version: BLOCK_VERSION,
-          quote: richTextParagraph('demo-home-testimonial-quote', testimonial1.quote),
-          attribution: {
-            name: testimonial1.authorName,
-            role: testimonial1.authorRole,
-            ...(media['avatar-0'] === undefined ? {} : { avatar: media['avatar-0'] }),
-          },
-        } as VocabularyBlock,
-        {
-          _key: 'demo-home-quote',
-          _type: 'quote',
-          _version: BLOCK_VERSION,
-          text: testimonial2.quote,
-          author: testimonial2.authorName,
-          role: testimonial2.authorRole,
-        } as VocabularyBlock,
-        homeFaq(),
-        {
-          _key: 'demo-home-cta',
-          _type: 'cta',
-          _version: BLOCK_VERSION,
-          title: 'Ready to get started?',
-          text: 'Book a thirty-minute call and leave with a scoped, fixed-price plan — not a follow-up email promising one.',
-          actions: [{ label: 'Get a quote', target: { href: '/contact' }, emphasis: 'primary' }],
-        } as VocabularyBlock,
-        proseParagraph(
-          'demo-home-about-teaser',
-          `${testimonial3.authorName}'s operations review is one of well over a hundred engagements like it since Northfield opened in 2011. Read the founding story, and the rest of our client list, on the About page.`,
-        ),
-      ],
-    },
-    {
-      title: 'About',
-      slug: 'about',
-      blocks: [
-        proseBlock('demo-about-prose', [
-          'Northfield Consulting opened in 2011 with a simple complaint: growing companies were buying six different kinds of help from six different vendors, none of whom talked to each other, and paying for the seams as much as the work.',
-          'We built one practice instead — brand, web, growth, operations, finance and security — staffed by partners who have actually run each function inside a company, not just advised one from the outside. A single point of contact means the web team knows what the brand team decided, and the finance model reflects what operations actually changed.',
-          'Fifteen years and well over a hundred engagements later, the test we hold ourselves to has not changed: does the client still need us in the room a quarter after we leave? Most of the answers on this page came from clients who told us no, and meant it as a compliment.',
-        ]),
-        // Every testimonial from the real, editable collection, mirrored
-        // here as `quote` blocks — unlike `service` (routed above, so a
-        // link can point at it), a testimonial has no page of its own
-        // worth linking to, and `quote` — text/author/role, contract B's
-        // vocabulary block for exactly this — is the honest fit.
-        ...VITRINE_DEMO_TESTIMONIALS.map(
-          (demo, index): VocabularyBlock => ({
-            _key: `demo-about-quote-${index + 1}`,
-            _type: 'quote',
-            _version: BLOCK_VERSION,
-            text: demo.quote,
-            author: demo.authorName,
-            role: demo.authorRole,
-          }),
-        ),
-      ],
-    },
-    {
-      title: 'Contact',
-      slug: 'contact',
-      blocks: [
-        proseParagraph(
-          'demo-contact-prose',
-          'Tell us what you are trying to get done and which of the six practices it touches — brand, web, growth, operations, finance, or security. We will tell you honestly whether we can help on the first call, no discovery deck required.',
-        ),
-        {
-          _key: 'demo-contact-cta',
-          _type: 'cta',
-          _version: BLOCK_VERSION,
-          title: 'Get a quote',
-          text: 'Thirty minutes, no obligation. We reply the same business day.',
-          actions: [
+  const callToAction = (key: string): VocabularyBlock =>
+    ({
+      _key: key,
+      _type: 'cta',
+      _version: BLOCK_VERSION,
+      title: 'Tell us about the decision in front of you',
+      text: 'A partner will reply within two working days to arrange a first conversation. There is no charge for it and no obligation.',
+      actions: [{ label: 'Contact an office', target: { href: '/contact' }, emphasis: 'primary' }],
+    }) as VocabularyBlock
+
+  const [rail, hotels, council] = VITRINE_DEMO_TESTIMONIALS
+  const avatar = (index: number): { readonly avatar?: string } => {
+    const id = media[`avatar-${index}`]
+    return id === undefined ? {} : { avatar: id }
+  }
+
+  const home: VitrineDemoPage = {
+    title: 'Home',
+    slug: 'home',
+    blocks: [
+      {
+        _key: 'demo-home-hero',
+        _type: 'hero',
+        _version: BLOCK_VERSION,
+        eyebrow: 'Management consultancy · London, New York, Singapore',
+        title: 'Decisions that still hold a year later',
+        subtitle:
+          'We advise the boards and executive teams of companies with £50 million to £2 billion in revenue on strategy, operations and transactions, and we stay until the results show in the accounts.',
+        ...(media.hero === undefined ? {} : { media: media.hero }),
+        actions: [
+          { label: 'Discuss a mandate', target: { href: '/contact' }, emphasis: 'primary' },
+          { label: 'Selected work', target: { href: '/case-studies' } },
+        ],
+      } as VocabularyBlock,
+      ...(logoIds.length === 0
+        ? []
+        : [
             {
-              label: 'Email us',
-              target: { href: 'mailto:hello@example.com' },
-              emphasis: 'primary',
-            },
+              _key: 'demo-home-clients',
+              _type: 'logoStrip',
+              _version: BLOCK_VERSION,
+              logos: logoIds.map((logo, index) => ({
+                _key: `demo-home-client-${index}`,
+                media: logo.id,
+              })),
+              caption: 'Selected clients',
+            } as VocabularyBlock,
+          ]),
+      practices('demo-home-practices', 'Practices'),
+      {
+        _key: 'demo-home-figures',
+        _type: 'stats',
+        _version: BLOCK_VERSION,
+        title: 'The firm in figures',
+        items: [
+          { _key: 'demo-home-figure-1', value: '340', label: 'engagements completed since 2011' },
+          {
+            _key: 'demo-home-figure-2',
+            value: '72',
+            unit: '%',
+            label: 'of fees from clients who have worked with us before',
+          },
+          {
+            _key: 'demo-home-figure-3',
+            value: '58',
+            label: 'consultants, a third of them former operating executives',
+          },
+          {
+            _key: 'demo-home-figure-4',
+            value: '3',
+            label: 'offices, in London, New York and Singapore',
+          },
+        ],
+      } as VocabularyBlock,
+      {
+        _key: 'demo-home-work',
+        _type: 'collectionList',
+        _version: BLOCK_VERSION,
+        title: 'Selected work',
+        collection: 'case_study',
+        sort: { field: 'createdAt', direction: 'asc' },
+        limit: 3,
+        layout: 'list',
+      } as VocabularyBlock,
+      {
+        _key: 'demo-home-testimonial',
+        _type: 'testimonial',
+        _version: BLOCK_VERSION,
+        quote: richTextParagraph('demo-home-testimonial-quote', rail.quote(firm)),
+        attribution: { name: rail.authorName, role: rail.authorRole, ...avatar(0) },
+      } as VocabularyBlock,
+      prose('demo-home-research', [
+        { h2: 'Research' },
+        {
+          p: 'Each year we survey the finance and operations leaders of mid-sized companies. The 2026 edition covers 412 companies in four countries, and its central finding is simple: the number of separate planning cycles a company runs predicts how much cash is tied up in the business better than its sector or its size.',
+        },
+        {
+          p: 'Companies that had merged three or more of those cycles released a median 3.8% of revenue in working capital within a year. The full report, with the method and the questionnaire, is available from any of our offices.',
+        },
+      ]),
+      ...(media.exhibit === undefined
+        ? []
+        : [
+            {
+              _key: 'demo-home-exhibit',
+              _type: 'mediaFigure',
+              _version: BLOCK_VERSION,
+              media: media.exhibit,
+              caption:
+                'Exhibit 3, 2026 Mid-Market Operations Survey. Companies grouped by how many of their budget, sales and operations, workforce and capital planning cycles they had merged.',
+              credit: `Source: ${firm} analysis`,
+              ratio: 'original',
+              align: 'wide',
+            } as VocabularyBlock,
+          ]),
+      homeFaq(),
+      callToAction('demo-home-cta'),
+    ],
+  }
+
+  const practicesPage: VitrineDemoPage = {
+    title: 'Practices',
+    slug: 'practices',
+    blocks: [
+      prose('demo-practices-intro', [
+        {
+          p: `${firm} is organised in six practices. Each is led by partners who have held operating roles in the field they advise on, and most engagements draw on two or three of them.`,
+        },
+      ]),
+      practices('demo-practices-list', 'Six practices'),
+      {
+        _key: 'demo-practices-method',
+        _type: 'accordion',
+        _version: BLOCK_VERSION,
+        title: 'How an engagement runs',
+        items: [
+          [
+            'Diagnostic',
+            'Six to ten weeks. We rebuild the facts from your own systems, interview the people who run the work and agree the size of the opportunity with your finance team.',
           ],
-        } as VocabularyBlock,
-      ],
-    },
-  ]
+          [
+            'Design',
+            'Four to eight weeks. Each change is costed, given an owner and ranked by value and risk. The executive team decides what goes ahead.',
+          ],
+          [
+            'Implementation',
+            'Six to eighteen months. Our consultants work inside your teams, and the steering group meets every fortnight with a partner present.',
+          ],
+          [
+            'Review',
+            'Twelve months after we leave, we return for a day at our own cost to check the results against the plan with you.',
+          ],
+        ].map(([question, answer], index) => ({
+          _key: `demo-practices-method-${index}`,
+          question: question as string,
+          answer: richTextParagraph(`demo-practices-method-${index}-a`, answer as string),
+        })),
+      } as VocabularyBlock,
+      callToAction('demo-practices-cta'),
+    ],
+  }
+
+  const caseStudiesPage: VitrineDemoPage = {
+    title: 'Case studies',
+    slug: 'case-studies',
+    blocks: [
+      prose('demo-work-intro', [
+        {
+          p: 'A selection of engagements our clients have agreed to describe in public. Figures are taken from their published accounts or regulatory filings, and each account was reviewed by the client before publication.',
+        },
+      ]),
+      {
+        _key: 'demo-work-all',
+        _type: 'collectionList',
+        _version: BLOCK_VERSION,
+        collection: 'case_study',
+        sort: { field: 'createdAt', direction: 'asc' },
+        limit: 12,
+        layout: 'grid',
+      } as VocabularyBlock,
+      ...(logoIds.length === 0
+        ? []
+        : [
+            {
+              _key: 'demo-work-clients',
+              _type: 'logos',
+              _version: BLOCK_VERSION,
+              title: 'Clients we have advised',
+              items: logoIds.map((logo, index) => ({
+                _key: `demo-work-client-${index}`,
+                media: logo.id,
+                name: LOGO_NAMES[logo.key],
+              })),
+            } as VocabularyBlock,
+          ]),
+      callToAction('demo-work-cta'),
+    ],
+  }
+
+  const about: VitrineDemoPage = {
+    title: 'About',
+    slug: 'about',
+    blocks: [
+      prose('demo-about-story', [
+        {
+          p: `${firm} was founded in London in 2011 by four partners who had spent their careers running operations inside mid-sized companies before advising them.`,
+        },
+        { h2: 'Why we started' },
+        {
+          p: 'Large consultancies were built for the largest companies, and their methods assume a head office with hundreds of analysts. Companies with a few thousand employees need the same quality of thinking from a team that fits in their building and understands a business where the chief executive signs the larger purchase orders.',
+        },
+        { h2: 'How we work' },
+        {
+          p: 'A partner leads every engagement from the first meeting to the final review. Teams are small and stay with a client from diagnosis to implementation, and we publish our research so clients can judge our thinking before they hire us.',
+        },
+        {
+          p: 'We opened in New York in 2016 and in Singapore in 2021, each time to follow clients who were expanding there.',
+        },
+        { h2: 'Ownership' },
+        {
+          p: 'The firm is a limited liability partnership owned by its 14 partners. We have no outside shareholders and no commercial relationships with software vendors.',
+        },
+      ]),
+      {
+        _key: 'demo-about-figures',
+        _type: 'statCounter',
+        _version: BLOCK_VERSION,
+        title: 'Since 2011',
+        stats: [
+          { _key: 'demo-about-figure-1', value: '340', label: 'engagements completed' },
+          {
+            _key: 'demo-about-figure-2',
+            value: '14',
+            label: 'partners, each with operating experience',
+          },
+          {
+            _key: 'demo-about-figure-3',
+            value: '21',
+            label: 'countries where clients have operations',
+          },
+          {
+            _key: 'demo-about-figure-4',
+            value: '£1.9bn',
+            label: 'of cash and profit our clients have reported',
+          },
+        ],
+      } as VocabularyBlock,
+      {
+        _key: 'demo-about-quote-hotels',
+        _type: 'quote',
+        _version: BLOCK_VERSION,
+        text: hotels.quote(firm),
+        author: hotels.authorName,
+        role: hotels.authorRole,
+        ...avatar(1),
+      } as VocabularyBlock,
+      {
+        _key: 'demo-about-quote-council',
+        _type: 'quote',
+        _version: BLOCK_VERSION,
+        text: council.quote(firm),
+        author: council.authorName,
+        role: council.authorRole,
+        ...avatar(2),
+      } as VocabularyBlock,
+      callToAction('demo-about-cta'),
+    ],
+  }
+
+  const contact: VitrineDemoPage = {
+    title: 'Contact',
+    slug: 'contact',
+    blocks: [
+      prose('demo-contact-offices', [
+        {
+          p: 'Write to the office nearest to you, or to any partner you already know. We reply within two working days.',
+        },
+        { h2: 'London' },
+        {
+          p: '12 Hanover Square, London W1S 1JB, United Kingdom. Telephone +44 20 7946 0321. london@example.com',
+        },
+        { h2: 'New York' },
+        {
+          p: '230 Park Avenue, Floor 10, New York, NY 10169, United States. Telephone +1 212 555 0148. newyork@example.com',
+        },
+        { h2: 'Singapore' },
+        {
+          p: '8 Marina View, #32-01, Singapore 018960. Telephone +65 6555 0172. singapore@example.com',
+        },
+        { h2: 'Careers' },
+        {
+          p: 'We recruit experienced hires throughout the year and graduates each autumn. Send a CV and a short note on the kind of work you want to do to careers@example.com.',
+        },
+      ]),
+      {
+        _key: 'demo-contact-cta',
+        _type: 'cta',
+        _version: BLOCK_VERSION,
+        title: 'Discuss a mandate',
+        text: 'Describe the decision, its timing and who is involved. A partner will reply within two working days.',
+        actions: [
+          {
+            label: 'Write to us',
+            target: { href: 'mailto:hello@example.com' },
+            emphasis: 'primary',
+          },
+        ],
+      } as VocabularyBlock,
+    ],
+  }
+
+  return [home, practicesPage, caseStudiesPage, about, contact]
 }
 
 function homeFaq(): VocabularyBlock {
   const items = [
     [
-      'How long does a typical engagement take?',
-      'Most engagements run three to six weeks end to end. We scope and price the whole thing on a single call before a single hour is billed, so there is no discovery-phase invoice waiting at the end.',
+      'What size of company do you work with?',
+      'Most of our clients have annual revenue between £50 million and £2 billion and are owned by founders, families or private equity. We also advise public bodies and a small number of listed companies.',
     ],
     [
-      'Do we own everything once the project ships?',
-      'Yes — the site, the brand files, the models and the source are yours outright. Northfield keeps no retainer requirement and no lock-in: change a phone number, swap a testimonial, or walk away entirely, all without calling us first.',
+      'How is an engagement priced?',
+      'We agree a fixed fee for a defined scope before work starts. On operations programmes, up to a third of the fee can depend on results measured by your own finance team.',
     ],
     [
-      'Can we start with just one service?',
-      'Most clients do. Brand strategy and web design & build are the two most common starting points, and roughly half of our clients come back for a second service once the first one has paid for itself.',
+      'Who will we work with day to day?',
+      'A partner leads every engagement and attends each steering meeting. Teams are small, usually three to six consultants, and the people who scope the work are the people who do it.',
     ],
     [
-      'How do you price a project?',
-      'A fixed quote after a short discovery call, scoped to the outcome you actually need — never an open-ended hourly rate with no ceiling and no way to budget against it.',
+      'How long does a typical engagement last?',
+      'Diagnostic work takes six to ten weeks. Implementation runs from six to eighteen months, with a formal review at each stage, so you can stop or change course.',
+    ],
+    [
+      'Do you work alongside other advisers?',
+      'Often. We work with auditors, lawyers and systems integrators under a shared plan, and we will say early if another firm is better placed for part of the work.',
     ],
   ] as const
 
@@ -446,7 +906,7 @@ function homeFaq(): VocabularyBlock {
     _key: 'demo-home-faq',
     _type: 'faq',
     _version: BLOCK_VERSION,
-    title: 'Questions we hear often',
+    title: 'Working with us',
     items: items.map(([question, answer], index) => ({
       _key: `demo-home-faq-${index}`,
       question,
@@ -455,69 +915,65 @@ function homeFaq(): VocabularyBlock {
   } as VocabularyBlock
 }
 
-/** `VITRINE_DEMO_PAGES` — the fixed-shape alias every existing caller (and `blueprint-demo-blocks.test.ts`) used before L25's media-driven rewrite. Equivalent to `buildVitrineDemoPages({})`. */
+/** `VITRINE_DEMO_PAGES`: the fixed-shape alias older callers use. Equivalent to `buildVitrineDemoPages({})`. */
 export const VITRINE_DEMO_PAGES: readonly VitrineDemoPage[] = buildVitrineDemoPages({})
 
 export const VITRINE_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
   {
     name: 'seoAgent',
     package: '@cogenta/agents-builtin',
-    reason: 'Audits the one-pager for on-page SEO issues before it goes live.',
+    reason: 'Audits practice and case-study pages for on-page SEO issues before they go live.',
   },
   {
     name: 'performanceAgent',
     package: '@cogenta/agents-builtin',
-    reason:
-      'Catches oversized hero media and third-party scripts that would slow the landing page down.',
+    reason: 'Catches oversized images and third-party scripts that would slow the site down.',
   },
 ]
 
 /**
- * `vitrine`'s own starting skin (`starting-skins.js`) — asserted present
- * with a real check, not a `!`, since `STARTING_SKINS` is keyed by
- * blueprint id and TypeScript cannot see that this particular key is
- * always populated.
+ * `vitrine`'s own starting skin, asserted present with a real check rather
+ * than a `!`: `STARTING_SKINS` is keyed by blueprint id and TypeScript cannot
+ * see that this key is always populated.
  */
 function vitrinePalette(): Palette {
   const skin = STARTING_SKINS.vitrine
   if (skin === undefined) {
-    // Same code `resolveBlueprint` (`registry.ts`) uses for its own
-    // "this cannot happen unless the registry itself is broken" guard —
-    // this is a bug in starting-skins.ts, never a user-facing condition.
     throw new CogentaError({
       code: 'BLUEPRINT_REGISTRY_CORRUPT',
       message: 'STARTING_SKINS.vitrine is missing.',
-      hint: 'The "vitrine" entry must stay declared in starting-skins.ts for this blueprint to render its demo art.',
+      hint: 'The "vitrine" entry must stay declared in starting-skins.ts for this blueprint to render its demo media.',
     })
   }
   return skin.color
 }
 
 /**
- * Procedural visuals this blueprint seeds (L25): a flat geometric hero
- * backdrop, five neutral client logos for the trust strip, one wide cover
- * for the engagement-dashboard figure, one avatar per testimonial, and one
- * cover photo per demo service — all from the same starting-skin palette
- * (`starting-skins.js`) this blueprint already ships.
+ * The media this blueprint seeds. Every slot names a bundled file under
+ * `assets/photos/vitrine/`: a cropped photograph for the hero, the three case
+ * studies and the three portraits, a rendered research exhibit, and six client
+ * wordmarks drawn once with OFL typefaces. The procedural `spec` is only the
+ * fallback `seedDemoMedia` uses if a file is ever missing.
  */
 export const VITRINE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'hero',
     spec: heroArt(vitrinePalette(), 'sun', 61),
-    alt: 'A consulting team at work',
-    photo: 'vitrine/hero.jpg',
+    alt: 'Two consultants reviewing a report at a meeting table',
+    photo: 'vitrine/hero-review.jpg',
   },
   {
-    name: 'shot',
+    name: 'exhibit',
     spec: coverArt(vitrinePalette(), 62),
-    alt: 'The engagement dashboard',
-    photo: 'vitrine/dashboard.jpg',
+    alt: 'Bar chart: companies that merged three or more planning cycles released a median 3.8% of revenue in working capital, against 0.4% for companies that merged none.',
+    photo: 'vitrine/exhibit-working-capital.png',
   },
-  ...[0, 1, 2, 3, 4].map(
-    (index): DemoMediaSpec => ({
-      name: `logo-${index}`,
+  ...LOGO_KEYS.map(
+    (key, index): DemoMediaSpec => ({
+      name: key,
       spec: logoArt(70 + index),
-      alt: `Client logo ${index + 1}`,
+      alt: LOGO_NAMES[key],
+      photo: `vitrine/${key}.png`,
     }),
   ),
   ...VITRINE_DEMO_TESTIMONIALS.map(
@@ -528,56 +984,84 @@ export const VITRINE_MEDIA_SPECS: readonly DemoMediaSpec[] = [
       photo: `vitrine/avatar-${index + 1}.jpg`,
     }),
   ),
-  ...VITRINE_DEMO_SERVICES.map(
-    (demo, index): DemoMediaSpec => ({
-      name: `service-${demo.slug}`,
-      spec: coverArt(vitrinePalette(), 90 + index),
-      alt: `${demo.name} cover art`,
-    }),
-  ),
+  {
+    name: 'case-meridian-rail-punctuality',
+    spec: coverArt(vitrinePalette(), 90),
+    alt: 'Passengers walking along a platform beside a commuter train',
+    photo: 'vitrine/case-rail.jpg',
+  },
+  {
+    name: 'case-castell-vane-pricing',
+    spec: coverArt(vitrinePalette(), 91),
+    alt: 'The dining room of a hotel at dusk, tables laid under a skylight',
+    photo: 'vitrine/case-hotels.jpg',
+  },
+  {
+    name: 'case-kellmoor-council-budget',
+    spec: coverArt(vitrinePalette(), 92),
+    alt: 'The colonnaded front of a city hall in afternoon sun',
+    photo: 'vitrine/case-council.jpg',
+  },
 ]
 
-/** Header/footer navigation and the header call-to-action button (L25, D4). */
+/** Header/footer navigation and the header call to action (L25, D4). */
 export const VITRINE_MENUS: BlueprintMenus = {
   header: [
-    { label: 'Services', url: '/services/brand-strategy' },
+    { label: 'Practices', url: '/practices' },
+    { label: 'Case studies', url: '/case-studies' },
     { label: 'About', url: '/about' },
-    { label: 'Case studies', url: '#' },
     { label: 'Contact', url: '/contact' },
   ],
   footer: [
-    { label: 'Services', url: '/services/brand-strategy' },
-    { label: 'Company', url: '/about' },
-    { label: 'Legal', url: '#' },
+    { label: 'Practices', url: '/practices' },
+    { label: 'Case studies', url: '/case-studies' },
+    { label: 'About', url: '/about' },
+    { label: 'Contact', url: '/contact' },
   ],
-  headerAction: { label: 'Get a quote', url: '/contact' },
+  headerAction: { label: 'Discuss a mandate', url: '/contact' },
 }
 
 export const VITRINE_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
-  'general.tagline': 'A consultancy that runs like software.',
+  'general.tagline':
+    'Management consultancy for mid-sized companies, their owners and their boards.',
   'general.socialLinks': [
     { label: 'LinkedIn', url: 'https://linkedin.com/company/example' },
     { label: 'X', url: 'https://x.com/example' },
     { label: 'YouTube', url: 'https://youtube.com/@example' },
   ],
-  'general.footerNote': '1 Market Street, Suite 400, San Francisco, CA 94105',
+  'general.footerNote': [
+    'London\n12 Hanover Square\nLondon W1S 1JB',
+    'New York\n230 Park Avenue, Floor 10\nNew York, NY 10169',
+    'Singapore\n8 Marina View, #32-01\nSingapore 018960',
+  ].join('\n\n'),
 }
 
 /**
- * Inserts the `vitrine` blueprint's demo content through the real
- * `ContentStore` — never mocked (house rule). Services are created first so
- * their real ids exist for the home page's `featureGrid` links and, via
- * `media`, for their own `coverImage`.
+ * Inserts the demo content through the real `ContentStore` and taxonomy store
+ * (never mocked, house rule). Sectors first, then practices and case studies,
+ * whose ids the home page's links and lists need; everything is published,
+ * since a theme lists only published entries.
  */
 async function seedVitrineDemoContent(ctx: SeedContext): Promise<void> {
   const { db, defaultLocale, adminId, media } = ctx
+  const firm = ctx.siteName?.trim() || DEFAULT_FIRM_NAME
+  const sectorStore = createTaxonomyStore({ db, taxonomy: sector })
   const serviceStore = createContentStore({ db, collection: service, defaultLocale })
+  const caseStudyStore = createContentStore({ db, collection: caseStudy, defaultLocale })
   const testimonialStore = createContentStore({ db, collection: testimonial, defaultLocale })
   const pageStore = createContentStore({ db, collection: page, defaultLocale })
 
+  const sectorIdBySlug = new Map<string, string>()
+  for (const demo of VITRINE_DEMO_SECTORS) {
+    const term = await sectorStore.create({
+      slug: demo.slug,
+      labels: { [defaultLocale]: demo.name },
+    })
+    sectorIdBySlug.set(demo.slug, term.id)
+  }
+
   const serviceIdBySlug = new Map<string, string>()
   for (const demo of VITRINE_DEMO_SERVICES) {
-    const cover = media[`service-${demo.slug}`]
     const created = await serviceStore.create({
       status: 'published',
       createdBy: adminId,
@@ -585,28 +1069,45 @@ async function seedVitrineDemoContent(ctx: SeedContext): Promise<void> {
         name: demo.name,
         slug: demo.slug,
         description: demo.description,
+        body: richText(`service-${demo.slug}`, demo.body(firm)),
         icon: demo.icon,
-        ...(cover === undefined ? {} : { coverImage: cover }),
       },
     })
     serviceIdBySlug.set(demo.slug, created.id)
   }
 
+  for (const demo of VITRINE_DEMO_CASE_STUDIES) {
+    const cover = media[`case-${demo.slug}`]
+    await caseStudyStore.create({
+      status: 'published',
+      createdBy: adminId,
+      values: {
+        title: demo.title,
+        slug: demo.slug,
+        client: demo.client,
+        summary: demo.summary,
+        body: richText(`case-${demo.slug}`, demo.body(firm)),
+        sector: sectorIdBySlug.get(demo.sectorSlug) ?? null,
+        ...(cover === undefined ? {} : { coverImage: cover }),
+      },
+    })
+  }
+
   for (const [index, demo] of VITRINE_DEMO_TESTIMONIALS.entries()) {
-    const avatar = media[`avatar-${index}`]
+    const portrait = media[`avatar-${index}`]
     await testimonialStore.create({
       status: 'published',
       createdBy: adminId,
       values: {
         authorName: demo.authorName,
         authorRole: demo.authorRole,
-        quote: demo.quote,
-        ...(avatar === undefined ? {} : { avatar }),
+        quote: demo.quote(firm),
+        ...(portrait === undefined ? {} : { avatar: portrait }),
       },
     })
   }
 
-  for (const demo of buildVitrineDemoPages(media, serviceIdBySlug)) {
+  for (const demo of buildVitrineDemoPages(media, serviceIdBySlug, firm)) {
     await pageStore.create({
       status: 'published',
       createdBy: adminId,
@@ -618,6 +1119,7 @@ async function seedVitrineDemoContent(ctx: SeedContext): Promise<void> {
 
 export const vitrineContentPack: BlueprintContentPack = {
   collections: VITRINE_COLLECTIONS,
+  taxonomies: VITRINE_TAXONOMIES,
   recommendedAgents: VITRINE_RECOMMENDED_AGENTS,
   seedDemoContent: seedVitrineDemoContent,
   defaultTheme: '@cogenta/theme-entreprise',

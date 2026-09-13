@@ -243,37 +243,36 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
     shadow: { sm: '0 1px 3px rgba(35, 27, 22, 0.14)', md: '0 16px 40px rgba(35, 27, 22, 0.22)' },
   },
   /**
-   * A B2B showcase site (L25, `@cogenta/theme-entreprise`'s pro pass): a
-   * confident, premium consultancy register — `packages/theme-entreprise/
-   * tokens.json`, copied here rather than referenced (the same independent-
-   * copy discipline `restaurant`'s own entry below already follows), so a
-   * freshly scaffolded `vitrine` site's applied skin and its active theme's
-   * own design system agree from the first render. A deep forest-green
-   * accent rather than the more expected "corporate blue", near-square
-   * radii and a comfortable density matching the theme's own
-   * "structured and edged" elevation language.
+   * A management consultancy (`@cogenta/theme-entreprise`, L27 studio pass):
+   * a cool ivory paper, a blue-black ink and one deep green accent spent
+   * rarely; Newsreader for display and headings, Hanken Grotesk for text.
+   * Copied from `packages/theme-entreprise/tokens.json` rather than
+   * referenced (the same independent-copy discipline `restaurant` follows),
+   * so a scaffolded `vitrine` site's skin names the theme's own typefaces
+   * and palette from the first render: the theme reads both from the skin,
+   * and a skin that named other fonts would silently replace them.
    */
   vitrine: {
     color: {
-      bg: '#fbfaf7',
-      fg: '#14201a',
-      accent: '#1f5f45',
+      bg: '#f5f5f0',
+      fg: '#0f1a24',
+      accent: '#174a3a',
       accentFg: '#ffffff',
-      muted: '#eef1ec',
-      mutedFg: '#42493f',
-      border: '#d7ddd2',
+      muted: '#e9e9e2',
+      mutedFg: '#4a535b',
+      border: '#d6d6ce',
     },
     font: {
-      sans: "'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-      serif: "'Source Serif 4', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      sans: "'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+      serif: "'Newsreader', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
       mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
-      scale: 1.2,
-      baseSize: '1rem',
+      scale: 1.25,
+      baseSize: '1.0625rem',
     },
     space: { unit: '0.25rem', density: 'comfortable' },
-    radius: { sm: '0.125rem', md: '0.25rem', lg: '0.5rem' },
-    motion: { duration: '160ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
-    shadow: { sm: '0 1px 2px rgba(20, 32, 26, 0.06)', md: '0 12px 32px rgba(20, 32, 26, 0.14)' },
+    radius: { sm: '0.0625rem', md: '0.125rem', lg: '0.1875rem' },
+    motion: { duration: '140ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+    shadow: { sm: '0 1px 0 rgba(15, 26, 36, 0.06)', md: '0 8px 24px rgba(15, 26, 36, 0.12)' },
   },
   /**
    * A nonprofit/community site (L25, `@cogenta/theme-association`): warm,

@@ -27,6 +27,10 @@ async function goToRoles(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Rôles et permissions' }))
   await screen.findByRole('heading', { name: 'Rôles et permissions' })
+  // The heading renders before the schema arrives; the matrix only after it,
+  // and a slow CI runner loses that race to any synchronous query.
+  const matrix = await screen.findByRole('tabpanel', { name: 'Par collection' })
+  await within(matrix).findByText('Articles')
 }
 
 /**

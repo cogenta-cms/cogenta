@@ -306,7 +306,14 @@ img {
   color: var(--cg-action-hover-fg);
 }
 
+/* A text link with an arrow after it. Not a flex container: in one, the
+   words and the arrow are two flex items and each gets its own underline.
+   As a block of inline content the words carry one continuous underline,
+   and the arrow, an atomic inline box, inherits none (CSS Text Decoration
+   §2: decorations are not propagated to inline-blocks). */
 .cg-action[data-emphasis="secondary"] {
+  display: inline-block;
+  padding-block: var(--cg-s3);
   padding-inline: 0;
   color: var(--cg-ink);
   text-decoration-line: underline;
@@ -315,10 +322,10 @@ img {
   text-underline-offset: 0.35em;
 }
 
-/* An inline-block, so the link's underline stops at the words. */
 .cg-action[data-emphasis="secondary"]::after {
   content: "\2192" / "";
   display: inline-block;
+  margin-inline-start: 0.45em;
   font-family: var(--cg-font-text);
 }
 
@@ -506,21 +513,31 @@ img {
     margin-inline-end: calc(var(--cg-s3) * -1);
   }
 
+  /* The open panel covers the rest of the viewport, under the header's own
+     hairline, so the page never shows through beneath the menu (where its
+     own call to action would read as a second copy of the menu's). */
   .cg-site-header__nav {
     display: none;
     position: absolute;
     inset-inline: 0;
-    inset-block-start: 100%;
+    inset-block-start: calc(100% + var(--cg-rule));
+    block-size: calc(100dvh - var(--cg-header-height) - var(--cg-rule));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     flex-direction: column;
     align-items: stretch;
     gap: var(--cg-s8);
-    padding: var(--cg-s6) var(--cg-gutter) var(--cg-s10);
+    padding: var(--cg-s4) var(--cg-gutter) var(--cg-s10);
     background: var(--cg-canvas);
-    border-block-end: var(--cg-rule) solid var(--cg-line);
   }
 
   .cg-nav-toggle-input:checked ~ .cg-site-header__nav {
     display: flex;
+  }
+
+  /* While the menu is open the page behind it does not scroll. CSS only. */
+  :root:has(.cg-nav-toggle-input:checked) {
+    overflow: hidden;
   }
 
   .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(1) {

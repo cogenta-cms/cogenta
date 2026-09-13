@@ -93,6 +93,14 @@ describe('collectionList', () => {
     expect((html.match(/<a class="cg-entry__link"/g) ?? []).length).toBe(1)
   })
 
+  it('makes the title the link, with the arrow inline after it, never a lone arrow', () => {
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
+    expect(html).toMatch(
+      /<a class="cg-entry__link" href="[^"]+"><span class="cg-entry__link-text">What a structured engagement actually looks like<\/span><span class="cg-entry__arrow" aria-hidden="true"><svg/,
+    )
+    expect(html).not.toContain('cg-entry__more')
+  })
+
   it('carries the layout as data, for the stylesheet to key off', () => {
     const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
     expect(html).toContain('data-layout="list"')

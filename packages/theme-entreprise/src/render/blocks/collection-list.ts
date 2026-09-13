@@ -86,13 +86,20 @@ function renderEntry(
           ? null
           : h('time', { class: 'cg-entry__date', datetime: iso }, date),
       ),
+      // The title is the link, and the arrow sits inline after its last word
+      // inside the same link: a bare arrow on a line of its own reads as a
+      // placeholder, not as a way into the case study.
       heading(
         tag,
         { class: 'cg-entry__title' },
-        h('a', { class: 'cg-entry__link', href: url }, entryTitle(entry, ctx)),
+        h(
+          'a',
+          { class: 'cg-entry__link', href: url },
+          h('span', { class: 'cg-entry__link-text' }, entryTitle(entry, ctx)),
+          h('span', { class: 'cg-entry__arrow', 'aria-hidden': 'true' }, arrow()),
+        ),
       ),
       excerpt === undefined ? null : h('p', { class: 'cg-entry__excerpt' }, excerpt),
-      h('span', { class: 'cg-entry__more', 'aria-hidden': 'true' }, arrow()),
     ),
   )
 }

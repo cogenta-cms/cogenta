@@ -2,7 +2,7 @@ import { ingestMediaUpload, type MediaImageProcessor } from '@cogenta/api'
 import { createDatabaseMediaStore, type DatabaseHandle, type StorageDriver } from '@cogenta/core'
 import type { ArtSpec } from '../demo-art/render.js'
 import { renderArt } from '../demo-art/render.js'
-import { loadPhotoAsset } from './photo-assets.js'
+import { bundledImageType, loadPhotoAsset } from './photo-assets.js'
 
 /**
  * Seeds a blueprint's demo visuals through the real media pipeline (L25
@@ -53,6 +53,7 @@ export async function seedDemoMedia(
   for (const item of specs) {
     const photo = item.photo === undefined ? undefined : loadPhotoAsset(item.photo)
     const bytes = photo ?? renderArt(item.spec)
+    const type = bundledImageType(bytes)
     const asset = await ingestMediaUpload(
       {
         store,
@@ -61,8 +62,8 @@ export async function seedDemoMedia(
       },
       {
         kind: 'image',
-        filename: photo === undefined ? `${item.name}.png` : `${item.name}.jpg`,
-        mimeType: photo === undefined ? 'image/png' : 'image/jpeg',
+        filename: `${item.name}.${type.extension}`,
+        mimeType: type.mimeType,
         bytes,
         actorId: deps.adminId,
         alt: item.alt,

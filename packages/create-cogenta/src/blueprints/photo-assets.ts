@@ -31,3 +31,16 @@ export function loadPhotoAsset(relativePath: string): Uint8Array | undefined {
   if (!existsSync(path)) return undefined
   return readFileSync(path)
 }
+
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const
+
+/** A bundled asset is a JPEG photograph or a PNG (a wordmark, an interface mock), told apart by its bytes. */
+export function bundledImageType(bytes: Uint8Array): {
+  readonly extension: 'png' | 'jpg'
+  readonly mimeType: 'image/png' | 'image/jpeg'
+} {
+  const png = PNG_SIGNATURE.every((byte, index) => bytes[index] === byte)
+  return png
+    ? { extension: 'png', mimeType: 'image/png' }
+    : { extension: 'jpg', mimeType: 'image/jpeg' }
+}

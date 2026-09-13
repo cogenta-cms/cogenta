@@ -1,34 +1,26 @@
 /*
- * `@cogenta/theme-entreprise`'s stylesheet — the entry point, and nothing
+ * `@cogenta/theme-entreprise`'s stylesheet: the entry point, and nothing
  * else.
  *
- * Three layers, in the only order that works:
+ *   tokens.css   the design system, derived from the skin's `--cogenta-*`
+ *                custom properties (contract D)
+ *   base.css     document, accessibility floor, grid, chrome, actions
+ *   blocks.css   the seventeen vocabulary blocks and the entry header
+ *   archive.css  the taxonomy-term archive
  *
- *   tokens.css  the design system, derived entirely from the skin's
- *               `--cogenta-*` custom properties (contract D)
- *   base.css    document, accessibility floor, page frame, chrome, actions
- *   blocks.css  the seventeen vocabulary blocks
+ * Not one colour is written literally in any of them: every value comes from
+ * a skin token or from a `--cg-*` property composed from those.
  *
- * Not one colour, font, radius, duration or shadow is written literally in
- * any of the three: every value comes from a `--cogenta-<group>-<name>`
- * property produced from the skin's tokens, or from a `--cg-*` property
- * composed from those. A single hard-coded hex would be a colour no skin
- * can change.
- *
- * `@import` is resolved at build time by Astro, and by `@cogenta/cli`'s own
- * inliner when `cogenta serve` renders without a build. Both flatten these
- * three into one sheet, so no visitor ever pays for three round trips.
- *
- * The one thing this file adds on its own: the Google Fonts request for the
- * two type families `tokens.json` names (Archivo for the sans, Source Serif
- * 4 for the serif accents in `quote`, `prose`'s blockquotes and the
- * numbered indices in `featureGrid`/`faq`) — loaded here, once, rather than
- * per skin, since a skin only ever *names* a font family; it does not fetch
- * one. Both fall back to a real system stack (`tokens.json`'s `font.sans`/
- * `font.serif`) if Google Fonts is unreachable.
+ * The one thing this file adds on its own is the Google Fonts request for the
+ * two families `tokens.json` names: Newsreader (display and headings, with
+ * its optical-size axis, so a 13 px caption and an 80 px title each get the
+ * cut drawn for them) and Hanken Grotesk (text and interface). A skin only
+ * names a family; it never fetches one. Both fall back to real system stacks
+ * if Google Fonts is unreachable, and `display=swap` keeps text visible while
+ * they load. `cogenta serve` hoists this `@import` above the skin's rules.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;1,8..60,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,300..700;1,400&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&display=swap");
 
 @import "./tokens.css";
 @import "./base.css";

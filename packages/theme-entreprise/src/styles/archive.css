@@ -1,60 +1,123 @@
 /*
- * The taxonomy-term archive (contract D `theme@1.3`).
- *
- * Only the three things an archive adds beyond what `collectionList` already
- * styles — a breadcrumb, a sub-term row, a prev/next pager. The entry list
- * itself reuses the `cg-entry`/`cg-collection__items` rules, on purpose: an
- * archive of articles must look like this theme's list of articles, and a
- * second set of card rules is exactly how those two drift apart.
+ * The taxonomy-term archive (contract D `theme@1.3`): a typographic index.
+ * `TermArchiveEntry` carries no picture, so every row is title, summary and
+ * (when there is one) a date, between hairlines.
  */
 
-.cg-archive {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  padding: var(--cg-s10) var(--cg-gutter);
+.cg-archive__inner {
+  padding-block: calc(var(--cg-section) * 0.4) calc(var(--cg-section) / 2);
 }
 
-.cg-archive__breadcrumb ol,
-.cg-archive__children {
+.cg-archive__breadcrumb ol {
   display: flex;
   flex-wrap: wrap;
   gap: var(--cg-s3);
-  margin: 0 0 var(--cg-s4);
+  margin: 0 0 var(--cg-s6);
   padding: 0;
   list-style: none;
-  font-size: var(--cg-text-sm);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-label);
+  text-transform: uppercase;
+}
+
+.cg-archive__breadcrumb li + li::before {
+  content: "/";
+  margin-inline-end: var(--cg-s3);
+  color: var(--cg-ink-subtle);
+}
+
+.cg-archive__breadcrumb a {
+  color: var(--cg-ink-muted);
+  text-decoration: none;
+}
+
+.cg-archive__breadcrumb a:hover {
+  color: var(--cg-ink);
+}
+
+.cg-archive__title {
+  max-inline-size: 18ch;
+  margin-block-end: var(--cg-s12);
+  font-size: var(--cg-size-display);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
 }
 
 .cg-archive__children {
-  margin-block: var(--cg-s4) var(--cg-s8);
-}
-
-/* `TermArchiveEntry` carries no image (`@cogenta/theme-kit`'s `archive.ts`),
-   so an archive row can never be the cover card `collectionList` renders
-   for a real content entry — this is the honest, text-only equivalent: the
-   same hairline-divided rows, the same typography and colour, so an archive
-   still reads as part of this theme rather than as a second, unstyled
-   list. */
-.cg-archive .cg-list__items {
-  display: grid;
-  gap: 0;
-}
-
-.cg-archive .cg-list__row {
   display: flex;
-  align-items: baseline;
-  gap: var(--cg-s6);
-  padding-block: var(--cg-s6);
-  border-block-start: 1px solid var(--cg-line-soft);
+  flex-wrap: wrap;
+  gap: var(--cg-s2) var(--cg-s6);
+  margin: calc(var(--cg-s6) * -1) 0 var(--cg-s12);
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-text-ui);
 }
 
-.cg-archive .cg-list__row:last-child {
-  border-block-end: 1px solid var(--cg-line-soft);
+.cg-archive__children a {
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-line-strong);
 }
 
-.cg-archive .cg-list__date {
-  flex: none;
-  inline-size: 5.5rem;
+.cg-index {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block-start: var(--cg-rule) solid var(--cg-ink);
+}
+
+.cg-index__row {
+  position: relative;
+  display: grid;
+  gap: var(--cg-s3);
+  padding-block: var(--cg-s6) var(--cg-s8);
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-index__title {
+  font-size: var(--cg-size-subheading);
+  line-height: 1.15;
+}
+
+.cg-index__link {
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.18em;
+}
+
+.cg-index__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.cg-index__row:hover .cg-index__link {
+  text-decoration-color: currentColor;
+}
+
+.cg-index__summary {
+  margin: 0;
+  max-inline-size: 52ch;
+  color: var(--cg-ink-muted);
+}
+
+.cg-index__date {
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-label);
+  text-transform: uppercase;
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--cg-ink-subtle);
+}
+
+.cg-archive__empty {
+  margin: 0;
+  padding-block: var(--cg-s10);
+  border-block: var(--cg-rule) solid var(--cg-line);
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-text-xl);
+  color: var(--cg-ink-muted);
 }
 
 .cg-archive__pager {
@@ -62,7 +125,41 @@
   justify-content: space-between;
   gap: var(--cg-s4);
   margin-block-start: var(--cg-s10);
-  padding-block-start: var(--cg-s5);
-  border-block-start: 1px solid var(--cg-line-soft);
-  font-weight: var(--cg-weight-semibold);
+  font-size: var(--cg-text-ui);
+}
+
+.cg-archive__pager a {
+  color: var(--cg-ink);
+}
+
+.cg-archive__pager a[rel="next"] {
+  margin-inline-start: auto;
+}
+
+@media (min-width: 64rem) {
+  .cg-archive__title {
+    grid-column: 1 / span 10;
+  }
+
+  .cg-index__row {
+    grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+    column-gap: var(--cg-col-gap);
+    align-items: baseline;
+  }
+
+  .cg-index__title {
+    grid-column: 1 / span 5;
+    grid-row: 1;
+  }
+
+  .cg-index__summary {
+    grid-column: 7 / span 5;
+    grid-row: 1;
+  }
+
+  .cg-index__date {
+    grid-column: 12;
+    grid-row: 1;
+    justify-self: end;
+  }
 }

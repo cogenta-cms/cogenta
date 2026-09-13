@@ -16,62 +16,83 @@ import {
   type RenderContext,
   renderImageSource,
 } from '@cogenta/theme-kit'
+import { arrow, monthYear, ordinal, section } from '../layout.js'
 
 /**
- * The only block of the seventeen that reads data at render time — contract B
- * marks it `runtime: 'server'` for that reason. The read is *not* done
- * here: `query` builds the request from the block's own fields
- * (`@cogenta/theme-kit`'s `buildCollectionListQuery`, shared across every
- * theme), the caller awaits `ctx.content.list(...)` before rendering
- * starts, and this function stays a pure function of the entries handed to
- * it.
+ * The only block of the seventeen that reads data at render time (contract B
+ * marks it `runtime: 'server'`). The read is not done here: `query` builds
+ * the request from the block's own fields, the caller awaits
+ * `ctx.content.list(...)` before rendering starts, and this function stays a
+ * pure function of the entries handed to it.
  */
 export { buildCollectionListQuery as query }
 
 /**
- * A card in every layout: a 16:9 cover on top (`entryImage`, the same
- * `coverImage`/`cover`/… convention every entry-carrying block on this site
- * reads), then title and excerpt below it — the "services/insights card"
- * register a B2B site's listing pages use, replacing the previous ledger
- * row (a date rail beside plain text, no visual at all). An entry with no
- * image still renders a complete card; the cover slot is simply absent
- * rather than a placeholder box standing in for one.
+ * Three designed layouts, one markup per entry:
+ *
+ * - `list` is the case-study register: alternating rows, the picture on
+ *   seven columns and the text on four, swapping sides from one row to the
+ *   next. An entry with no picture becomes a typographic row (title left,
+ *   summary right) under the same hairline, never a row with a hole in it.
+ * - `grid` is an editorial index in three columns: a 3:2 picture, a hairline,
+ *   the title in the display serif and its summary. No card border, no lift
+ *   on hover.
+ * - `carousel` is the grid's item in a scroll-snapping, focusable row.
+ *
+ * The picture link is hidden from assistive technology and from the tab
+ * order: it goes where the title link goes, and one link per entry is what
+ * a keyboard or screen reader user should meet.
  */
-function renderCover(entry: ContentEntry, ctx: RenderContext): HtmlElement | null {
-  const cover = entryImage(entry, ctx)
-  if (cover === undefined) return null
+function renderPicture(entry: ContentEntry, ctx: RenderContext, url: string): HtmlElement | null {
+  const picture = entryImage(entry, ctx)
+  if (picture === undefined) return null
   return h(
-    'span',
-    { class: 'cg-list__cover' },
-    renderImageSource(cover, { className: 'cg-list__cover-image', loading: 'lazy' }),
+    'a',
+    { class: 'cg-entry__media', href: url, tabindex: '-1', 'aria-hidden': 'true' },
+    renderImageSource(picture, {
+      className: 'cg-entry__image',
+      loading: 'lazy',
+      sizes: '(min-width: 64rem) 55vw, 100vw',
+    }),
   )
 }
 
-function renderEntry(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const date = entryDate(entry)
+function renderEntry(
+  entry: ContentEntry,
+  index: number,
+  ctx: RenderContext,
+  tag: HeadingTag,
+): HtmlElement {
+  const url = entryHref(entry, ctx)
   const excerpt = entryExcerpt(entry)
+  // Only a declared publication date is shown: `entryDate` falls back to
+  // `createdAt`, and the day a record was typed in is not a date a reader of
+  // a case study or a practice page is owed.
+  const iso = typeof entry.publishedAt === 'string' ? entryDate(entry) : undefined
+  const date = iso === undefined ? null : monthYear(iso, ctx.locale)
+  const picture = renderPicture(entry, ctx, url)
   return h(
     'li',
-    { class: 'cg-list__row' },
-    renderCover(entry, ctx),
+    { class: 'cg-entry', 'data-media': picture === null ? 'none' : 'present' },
+    picture,
     h(
       'div',
-      { class: 'cg-list__body' },
+      { class: 'cg-entry__body' },
+      h(
+        'p',
+        { class: 'cg-entry__meta' },
+        h('span', { class: 'cg-entry__index', 'aria-hidden': 'true' }, ordinal(index)),
+        iso === undefined || date === null
+          ? null
+          : h('time', { class: 'cg-entry__date', datetime: iso }, date),
+      ),
       heading(
         tag,
-        { class: 'cg-list__title' },
-        h('a', { class: 'cg-list__link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
+        { class: 'cg-entry__title' },
+        h('a', { class: 'cg-entry__link', href: url }, entryTitle(entry, ctx)),
       ),
-      excerpt === undefined ? null : h('p', { class: 'cg-list__excerpt' }, excerpt),
-      date === undefined
-        ? null
-        : h(
-            'time',
-            { class: 'cg-list__date', datetime: date },
-            new Intl.DateTimeFormat(ctx.locale, { month: 'short', day: '2-digit' }).format(
-              new Date(date),
-            ),
-          ),
+      excerpt === undefined ? null : h('p', { class: 'cg-entry__excerpt' }, excerpt),
+      h('span', { class: 'cg-entry__more', 'aria-hidden': 'true' }, arrow()),
     ),
   )
 }
@@ -85,32 +106,35 @@ export function renderCollectionList(
   const entryTag = nestedHeadingTag('collectionList', hasTitle)
   const items =
     entries.length === 0
-      ? h('p', { class: 'cg-list__empty' }, ctx.t('collection.empty'))
+      ? h('p', { class: 'cg-collection__empty' }, ctx.t('collection.empty'))
       : h(
-          'ul',
-          { class: 'cg-list__items' },
-          entries.map((entry) => renderEntry(entry, ctx, entryTag)),
+          block.layout === 'list' ? 'ol' : 'ul',
+          { class: 'cg-collection__items', 'data-count': String(Math.min(entries.length, 4)) },
+          entries.map((entry, index) => renderEntry(entry, index, ctx, entryTag)),
         )
 
-  return h(
+  return section(
     'section',
-    {
-      class: 'cg-list',
-      'data-block': 'collectionList',
-      'data-layout': block.layout,
-    },
+    'collectionList',
+    'cg-collection',
+    { 'data-layout': block.layout },
+    'div',
     hasTitle
-      ? heading(
-          blockHeadingTag('collectionList') ?? 'h2',
-          { class: 'cg-list__title-heading', 'data-field': 'title' },
-          block.title ?? '',
+      ? h(
+          'div',
+          { class: 'cg-head' },
+          heading(
+            blockHeadingTag('collectionList') ?? 'h2',
+            { class: 'cg-head__title', 'data-field': 'title' },
+            block.title ?? '',
+          ),
         )
       : null,
-    block.layout === 'carousel'
+    block.layout === 'carousel' && entries.length > 0
       ? h(
           'div',
           {
-            class: 'cg-list__viewport',
+            class: 'cg-collection__viewport',
             role: 'region',
             'aria-label': block.title ?? ctx.t('collection.carousel'),
             tabindex: '0',

@@ -8,52 +8,64 @@ import {
   image,
   type RenderContext,
 } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * The hero carries the page's `h1` (contract B: `headingLevel: 'h1'`), so
- * `renderPage` relies on it to avoid emitting a second one.
+ * A typographic hero on the twelve-column grid.
  *
- * Structurally distinct from a centred/split "marketing" hero: the eyebrow,
- * title, subtitle and actions sit in a single left-aligned column with a
- * vertical accent rule (`cg-hero__mark`) standing beside the copy — the
- * "confident report cover" read the aesthetic direction asks for — while the
- * media sits in its own bordered frame with corner marks, never behind a
- * decorative gradient wash.
+ * The title leads, set large in the display serif across ten columns. Below
+ * it the page splits: the subtitle and the actions hold a narrow column on
+ * the left, and the photograph takes the right-hand seven columns, cropped
+ * frankly, with no frame, no shadow and no shape behind it. The eyebrow is
+ * a line of small capitals after a short rule, never a pill.
+ *
+ * With no media the subtitle moves to the right half of the grid instead, so
+ * a hero without a picture is still an asymmetric composition rather than a
+ * column of centred text.
+ *
+ * The hero carries the page's `h1` (contract B: `headingLevel: 'h1'`), which
+ * is why `renderPage` never adds a second one.
  */
 export function renderHero(block: HeroBlock, ctx: RenderContext): HtmlElement {
   const tag = blockHeadingTag('hero') ?? 'h1'
-  return h(
+  const actions = actionList(ctx, block.actions, ctx.t('hero.actions'))
+  const hasAside = block.subtitle !== undefined || actions !== null
+  return section(
     'section',
-    { class: 'cg-hero', 'data-block': 'hero' },
+    'hero',
+    'cg-hero',
+    { 'data-media': block.media === undefined ? 'none' : 'present' },
+    'div',
     h(
       'div',
       { class: 'cg-hero__intro' },
-      h('span', { class: 'cg-hero__mark', 'aria-hidden': 'true' }),
-      h(
-        'div',
-        { class: 'cg-hero__copy' },
-        block.eyebrow === undefined
-          ? null
-          : h('p', { class: 'cg-hero__eyebrow', 'data-field': 'eyebrow' }, block.eyebrow),
-        heading(tag, { class: 'cg-hero__title', 'data-field': 'title' }, block.title),
-        block.subtitle === undefined
-          ? null
-          : h('p', { class: 'cg-hero__subtitle', 'data-field': 'subtitle' }, block.subtitle),
-        actionList(ctx, block.actions, ctx.t('hero.actions')),
-      ),
+      block.eyebrow === undefined
+        ? null
+        : h('p', { class: 'cg-hero__eyebrow', 'data-field': 'eyebrow' }, block.eyebrow),
+      heading(tag, { class: 'cg-hero__title', 'data-field': 'title' }, block.title),
     ),
+    hasAside
+      ? h(
+          'div',
+          { class: 'cg-hero__aside' },
+          block.subtitle === undefined
+            ? null
+            : h('p', { class: 'cg-hero__subtitle', 'data-field': 'subtitle' }, block.subtitle),
+          actions,
+        )
+      : null,
     block.media === undefined
       ? null
       : h(
           'div',
-          { class: 'cg-hero__frame' },
+          { class: 'cg-hero__media' },
           // The only image above the fold by construction, so the only one
-          // that must not be lazy — a lazy-loaded LCP element is a measured
-          // Lighthouse regression, not a theoretical one.
+          // that must not be lazy: a lazy-loaded LCP element is a measured
+          // Lighthouse regression.
           image(ctx, block.media, {
-            className: 'cg-hero__media',
+            className: 'cg-hero__image',
             loading: 'eager',
-            sizes: '(min-width: 64rem) 46vw, 100vw',
+            sizes: '(min-width: 64rem) 56vw, 100vw',
           }),
         ),
   )

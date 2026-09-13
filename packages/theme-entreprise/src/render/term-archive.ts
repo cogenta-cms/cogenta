@@ -1,67 +1,71 @@
 import { type HtmlElement, h, type TermArchiveInput } from '@cogenta/theme-kit'
+import { monthYear } from './layout.js'
 
 /**
- * The taxonomy-term archive (contract D `theme@1.3`) — a resource index.
+ * The taxonomy-term archive (contract D `theme@1.3`): an index, set the way a
+ * firm lists its work by sector.
  *
- * Built from the same `cg-list__row` rows `collectionList` already renders
- * here: a date rail on the left, the title and its summary on the right,
- * which is the shape a B2B insights or resources index takes. Reusing the
- * block's own classes is what keeps an archive looking like the rest of the
- * site without a second stylesheet to maintain.
+ * A breadcrumb in small capitals, the term as the page title in the display
+ * serif, its sub-terms as a ruled line of links, then one hairline row per
+ * entry: the title on the left half of the grid, the summary on the right,
+ * the date (when there is one) in the margin. `TermArchiveEntry` carries no
+ * picture, so this is a typographic index by design rather than a grid of
+ * cards with empty image slots.
  */
 export function renderTermArchive(input: TermArchiveInput): HtmlElement {
-  const rows = input.entries.map((entry) =>
-    h(
+  const rows = input.entries.map((entry) => {
+    const date = entry.publishedAt === null ? null : monthYear(entry.publishedAt, input.locale)
+    return h(
       'li',
-      { class: 'cg-list__row' },
-      entry.publishedAt === null
-        ? null
-        : h(
-            'time',
-            { class: 'cg-list__date', datetime: entry.publishedAt },
-            entry.publishedAt.slice(0, 10),
-          ),
+      { class: 'cg-index__row' },
       h(
-        'div',
-        { class: 'cg-list__body' },
-        h(
-          'h2',
-          { class: 'cg-list__title' },
-          entry.href === null
-            ? entry.title
-            : h('a', { class: 'cg-list__link', href: entry.href }, entry.title),
-        ),
-        entry.summary === null ? null : h('p', { class: 'cg-list__excerpt' }, entry.summary),
+        'h2',
+        { class: 'cg-index__title' },
+        entry.href === null
+          ? entry.title
+          : h('a', { class: 'cg-index__link', href: entry.href }, entry.title),
       ),
-    ),
-  )
+      entry.summary === null ? null : h('p', { class: 'cg-index__summary' }, entry.summary),
+      entry.publishedAt === null || date === null
+        ? null
+        : h('time', { class: 'cg-index__date', datetime: entry.publishedAt }, date),
+    )
+  })
 
   return h(
     'main',
     { class: 'cg-main cg-archive', id: 'cg-main' },
-    input.ancestors.length === 0
-      ? null
-      : h(
-          'nav',
-          { class: 'cg-archive__breadcrumb', 'aria-label': input.labels.breadcrumb },
-          h(
-            'ol',
-            {},
-            ...input.ancestors.map((l) => h('li', {}, h('a', { href: l.href }, l.label))),
+    h(
+      'div',
+      { class: 'cg-container cg-archive__inner' },
+      input.ancestors.length === 0
+        ? null
+        : h(
+            'nav',
+            { class: 'cg-archive__breadcrumb', 'aria-label': input.labels.breadcrumb },
+            h(
+              'ol',
+              {},
+              ...input.ancestors.map((link) =>
+                h('li', {}, h('a', { href: link.href }, link.label)),
+              ),
+            ),
           ),
-        ),
-    h('h1', { class: 'cg-list__title-heading' }, input.term.label),
-    input.children.length === 0
-      ? null
-      : h(
-          'ul',
-          { class: 'cg-archive__children', 'aria-label': input.labels.subterms },
-          ...input.children.map((c) => h('li', {}, h('a', { href: c.href }, c.label))),
-        ),
-    rows.length === 0
-      ? h('p', { class: 'cg-list__empty' }, input.labels.empty)
-      : h('ul', { class: 'cg-list__items' }, ...rows),
-    pager(input),
+      h('h1', { class: 'cg-archive__title' }, input.term.label),
+      input.children.length === 0
+        ? null
+        : h(
+            'ul',
+            { class: 'cg-archive__children', 'aria-label': input.labels.subterms },
+            ...input.children.map((child) =>
+              h('li', {}, h('a', { href: child.href }, child.label)),
+            ),
+          ),
+      rows.length === 0
+        ? h('p', { class: 'cg-archive__empty' }, input.labels.empty)
+        : h('ol', { class: 'cg-index' }, ...rows),
+      pager(input),
+    ),
   )
 }
 

@@ -6,45 +6,55 @@ import {
   heading,
   type RenderContext,
 } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * The "by the numbers" strip. A description list, exactly as the canonical
- * theme uses — each figure is the description of its label, which is what
- * `<dt>`/`<dd>` mean, and it survives being read linearly — but laid out as
- * one continuous row of big, confident figures separated by vertical rules
- * (`border-inline-start` on every item but the first) rather than as
- * separate shadowed tiles: the "real KPI strip" read the aesthetic
- * direction asks for.
+ * Key figures as one typographic row between vertical rules: the figure in
+ * the display serif with lining, tabular numerals, its unit set smaller in
+ * the same face, and the label in small text beneath. No coloured band and
+ * no tiles.
  *
- * The label sits above the figure in the markup and the skin is free to
- * repaint the order visually; reading order and visual order stay
- * independent either way (WCAG 1.3.2).
+ * A description list, because each figure is the description of its label.
+ * The label comes first in the markup, so a screen reader announces what a
+ * number means before the number (WCAG 1.3.2); the stylesheet paints the
+ * figure above it.
  */
 function renderItem(item: StatItem): HtmlElement {
   return h(
     'div',
-    { class: 'cg-metric' },
-    h('dt', { class: 'cg-metric__label' }, item.label),
+    { class: 'cg-stat' },
+    h('dt', { class: 'cg-stat__label' }, item.label),
     h(
       'dd',
-      { class: 'cg-metric__value' },
+      { class: 'cg-stat__value' },
       item.value,
-      item.unit === undefined ? null : h('span', { class: 'cg-metric__unit' }, item.unit),
+      item.unit === undefined ? null : h('span', { class: 'cg-stat__unit' }, item.unit),
     ),
   )
 }
 
 export function renderStats(block: StatsBlock, _ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-metrics', 'data-block': 'stats' },
+    'stats',
+    'cg-stats',
+    {},
+    'div',
     block.title === undefined
       ? null
-      : heading(
-          blockHeadingTag('stats') ?? 'h2',
-          { class: 'cg-metrics__title', 'data-field': 'title' },
-          block.title,
+      : h(
+          'div',
+          { class: 'cg-head' },
+          heading(
+            blockHeadingTag('stats') ?? 'h2',
+            { class: 'cg-head__title', 'data-field': 'title' },
+            block.title,
+          ),
         ),
-    h('dl', { class: 'cg-metrics__items' }, block.items.map(renderItem)),
+    h(
+      'dl',
+      { class: 'cg-stats__items', 'data-count': String(Math.min(block.items.length, 5)) },
+      block.items.map(renderItem),
+    ),
   )
 }

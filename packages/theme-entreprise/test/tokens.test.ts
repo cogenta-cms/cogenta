@@ -62,17 +62,35 @@ describe('the default skin', () => {
     expect(contrast(tokens.color.mutedFg, tokens.color.muted)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('picks a deliberate accent distinct from the generic "corporate blue"', () => {
-    // A confident forest green rather than a blue — recorded as a real
-    // assertion so a future edit that quietly reverts to blue is caught.
-    expect(tokens.color.accent.toLowerCase()).not.toMatch(/^#[0-4][0-9a-f][0-4][0-9a-f]/)
+  it('picks one deep green accent, never the indigo or violet of a generated template', () => {
+    const hex = tokens.color.accent.replace('#', '')
+    const [r, g, b] = [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16))
+    expect(g as number).toBeGreaterThan(r as number)
+    expect(g as number).toBeGreaterThan(b as number)
   })
 
-  it('names Google Fonts families this theme actually loads, with a real system fallback', () => {
-    expect(tokens.font.sans).toContain('Archivo')
+  it('lets neutrals carry the page: a cool ivory paper and a blue-black ink', () => {
+    const channels = (value: string): number[] =>
+      [0, 2, 4].map((offset) =>
+        Number.parseInt(value.replace('#', '').slice(offset, offset + 2), 16),
+      )
+    const [bgR, bgG, bgB] = channels(tokens.color.bg)
+    const [fgR, , fgB] = channels(tokens.color.fg)
+    expect(
+      Math.max(bgR as number, bgG as number, bgB as number) -
+        Math.min(bgR as number, bgG as number, bgB as number),
+    ).toBeLessThan(8)
+    expect(fgB as number).toBeGreaterThan(fgR as number)
+  })
+
+  it('names the Google Fonts families this theme loads, with a real system fallback', () => {
+    expect(tokens.font.serif.startsWith("'Newsreader'")).toBe(true)
+    expect(tokens.font.serif).toMatch(/serif$/)
+    expect(tokens.font.sans.startsWith("'Hanken Grotesk'")).toBe(true)
     expect(tokens.font.sans).toMatch(/system-ui/)
-    expect(tokens.font.serif).toContain('Source Serif 4')
-    expect(tokens.font.serif).toMatch(/serif/)
+    const theme = readFileSync(new URL('../src/styles/theme.css', import.meta.url), 'utf8')
+    expect(theme).toContain('family=Newsreader:ital,opsz,wght@')
+    expect(theme).toContain('family=Hanken+Grotesk:')
   })
 
   it('avoids the most overused default sans faces as its primary choice', () => {
@@ -80,10 +98,22 @@ describe('the default skin', () => {
     // includes Roboto/system-ui for Android/Linux) — what matters is which
     // family is named *first*, since that is the one actually requested.
     const primary = tokens.font.sans.split(',')[0]?.replace(/['"]/g, '').trim()
-    for (const overused of ['Inter', 'Roboto', 'Space Grotesk']) {
+    for (const overused of [
+      'Inter',
+      'Roboto',
+      'Poppins',
+      'Plus Jakarta Sans',
+      'Space Grotesk',
+      'DM Sans',
+      'Manrope',
+      'Outfit',
+      'Sora',
+      'Nunito',
+    ]) {
       expect(primary).not.toBe(overused)
+      expect(tokens.font.serif.split(',')[0]).not.toContain(overused)
     }
-    expect(primary).toBe('Archivo')
+    expect(primary).toBe('Hanken Grotesk')
   })
 
   it('uses a typographic scale that increases monotonically', () => {
@@ -98,8 +128,8 @@ describe('the default skin', () => {
     expect(['compact', 'comfortable', 'spacious']).toContain(tokens.space.density)
   })
 
-  it('keeps radii deliberately sharp — a structured, edged read rather than a soft one', () => {
+  it('keeps corners square: the largest radius stays under a quarter of a rem', () => {
     const asRem = (value: string): number => Number.parseFloat(value)
-    expect(asRem(tokens.radius.lg)).toBeLessThan(1)
+    expect(asRem(tokens.radius.lg)).toBeLessThan(0.25)
   })
 })

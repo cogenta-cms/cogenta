@@ -6,9 +6,9 @@ import { BLOCKS, makeContext } from '../fixtures.js'
 const ctx = makeContext()
 
 describe('quote', () => {
-  it('renders as figure > blockquote > p, with the author outside the quotation', () => {
+  it('renders as figure > blockquote > figcaption, with the author outside the quotation', () => {
     const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toMatch(/^<figure/)
+    expect(html).toContain('<figure class="cg-container cg-quote__inner"><blockquote')
     const blockquoteEnd = html.indexOf('</blockquote>')
     const authorIndex = html.indexOf('A. Client')
     expect(blockquoteEnd).toBeGreaterThan(-1)
@@ -33,15 +33,20 @@ describe('quote', () => {
     expect(html).not.toContain('<figcaption')
   })
 
-  it('keeps an empty alt on the decorative avatar rather than inventing one', () => {
+  it('keeps an empty alt on the decorative portrait rather than inventing one', () => {
     const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toMatch(/<img[^>]*class="cg-quote__avatar"[^>]*alt=""/)
+    expect(html).toMatch(/<img[^>]*class="cg-quote__portrait"[^>]*alt=""/)
   })
 
-  it('renders no avatar element when the block carries none', () => {
+  it('renders no portrait element when the block carries none', () => {
     const { avatar: _avatar, ...withoutAvatar } = BLOCKS.quote
     const html = serialize(renderQuote(withoutAvatar, ctx))
-    expect(html).not.toContain('cg-quote__avatar')
+    expect(html).not.toContain('cg-quote__portrait')
+  })
+
+  it('writes no quotation marks into the text: the stylesheet sets them from the locale', () => {
+    const html = serialize(renderQuote(BLOCKS.quote, ctx))
+    expect(html).not.toMatch(/[“”"]They shipped/)
   })
 
   it('is marked with data-block="quote"', () => {

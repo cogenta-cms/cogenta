@@ -32,13 +32,31 @@ describe('logos → clients', () => {
 
   it('renders the title at the block heading level when present', () => {
     const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    expect(html).toContain('<h2 class="cg-clients__title" data-field="title">Trusted by</h2>')
+    expect(html).toContain('<h2 class="cg-head__title" data-field="title">Trusted by</h2>')
   })
 
   it('omits the title heading entirely when the block has none', () => {
     const { title: _title, ...untitled } = BLOCKS.logos
     const html = serialize(renderLogos(untitled, ctx))
-    expect(html).not.toContain('cg-clients__title')
+    expect(html).not.toContain('cg-head')
+  })
+
+  it('picks a column count that fills whole ruled rows where one exists', () => {
+    const item = BLOCKS.logos.items[1]
+    if (item === undefined) throw new Error('fixture needs two logos')
+    const withCount = (count: number): string =>
+      serialize(
+        renderLogos(
+          {
+            ...BLOCKS.logos,
+            items: Array.from({ length: count }, (_, index) => ({ ...item, _key: `l${index}` })),
+          },
+          ctx,
+        ),
+      )
+    expect(withCount(2)).toContain('data-columns="2"')
+    expect(withCount(6)).toContain('data-columns="3"')
+    expect(withCount(8)).toContain('data-columns="4"')
   })
 
   it('is marked with data-block="logos"', () => {

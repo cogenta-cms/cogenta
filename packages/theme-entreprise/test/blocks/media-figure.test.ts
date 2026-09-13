@@ -6,15 +6,16 @@ import { BLOCKS, makeContext } from '../fixtures.js'
 const ctx = makeContext()
 
 describe('mediaFigure', () => {
-  it('renders a real <figure>/<figcaption> pair, not a div and a paragraph', () => {
+  it('renders a real <figure>/<figcaption> pair, the figure being the grid container', () => {
     const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toMatch(/^<figure/)
-    expect(html).toContain('<figcaption')
+    expect(html).toContain('<figure class="cg-container cg-figure__inner">')
+    expect(html).toContain('<figcaption class="cg-figure__caption">')
   })
 
-  it('wraps the image in its own bordered frame element', () => {
+  it('places the image in its own grid cell with no frame around it', () => {
     const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('class="cg-figure__frame"')
+    expect(html).toContain('<div class="cg-figure__media"><img class="cg-figure__image"')
+    expect(html).not.toContain('frame')
   })
 
   it('carries the align value as data, never as a class', () => {
@@ -39,11 +40,14 @@ describe('mediaFigure', () => {
     expect(html).not.toContain('--cg-ratio')
   })
 
-  it('renders the caption and credit together when both are present', () => {
+  it('renders the caption and credit as two labelled fields', () => {
     const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('The delivery pipeline, end to end')
-    expect(html).toContain('data-field="credit"')
-    expect(html).toContain('Cogenta Advisory')
+    expect(html).toContain(
+      '<span class="cg-figure__text" data-field="caption">The delivery pipeline, end to end</span>',
+    )
+    expect(html).toContain(
+      '<span class="cg-figure__credit" data-field="credit">Cogenta Advisory</span>',
+    )
   })
 
   it('omits the figcaption entirely when there is neither caption nor credit', () => {
@@ -55,5 +59,12 @@ describe('mediaFigure', () => {
   it('always writes an alt attribute', () => {
     const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
     expect(html).toMatch(/<img[^>]*\salt="/)
+  })
+
+  it('asks for a full-viewport rendition only when the figure runs the full width', () => {
+    const wide = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
+    const full = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, align: 'full' }, ctx))
+    expect(wide).toContain('sizes="(min-width: 64rem) 75vw, 100vw"')
+    expect(full).toContain('sizes="100vw"')
   })
 })

@@ -1,35 +1,39 @@
 import type { QuoteBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * A testimonial card, not a centred pull-quote: a bordered panel with a
- * vertical accent rule beside the quotation and the attribution set below a
- * thin divider — the shape a case-study or client-testimonial section takes
- * on a serious B2B site.
+ * An editorial quotation inside the reading column: the display serif in
+ * italic, under a hairline, with the attribution set small beneath it.
  *
- * `<figure><blockquote>…</blockquote><figcaption>` is the attribution
- * pattern the HTML spec prescribes: putting the author inside the
- * `<blockquote>` would claim the author's name was part of what was said.
+ * Quieter than `testimonial`, which is this theme's large pull quote: a
+ * `quote` belongs to the flow of a page, aligned with the prose column
+ * rather than spread across the grid, and never in a shaded box.
  *
- * The avatar is decorative here — the name sits right beside it in text —
- * so its media entity's alt text is expected to be empty; `image` still
- * writes the attribute either way (WCAG 1.1.1).
+ * `<figure><blockquote>…</blockquote><figcaption>` is the attribution pattern
+ * the HTML spec prescribes: putting the name inside the `<blockquote>` would
+ * claim it was part of what was said. The portrait is decorative (the name
+ * is right beside it), so its media entity's alt text is expected to be
+ * empty; `image` writes the attribute either way (WCAG 1.1.1).
  */
 export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement {
   const hasAttribution =
     block.author !== undefined || block.role !== undefined || block.avatar !== undefined
-  return h(
+  return section(
+    'div',
+    'quote',
+    'cg-quote',
+    {},
     'figure',
-    { class: 'cg-quote', 'data-block': 'quote' },
     h('blockquote', { class: 'cg-quote__text' }, h('p', { 'data-field': 'text' }, block.text)),
     hasAttribution
       ? h(
           'figcaption',
-          { class: 'cg-quote__attribution' },
+          { class: 'cg-quote__cite' },
           block.avatar === undefined
             ? null
             : image(ctx, block.avatar, {
-                className: 'cg-quote__avatar',
+                className: 'cg-quote__portrait',
                 variant: { width: 96, height: 96, fit: 'cover' },
               }),
           h(

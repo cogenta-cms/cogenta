@@ -110,10 +110,15 @@ const TEXT_PAIRS: readonly (readonly [string, string])[] = [
   ['--cg-ink-subtle', '--cg-canvas'],
   ['--cg-ink-subtle', '--cg-surface-sunken'],
   ['--cg-accent-fg', '--cg-accent'],
-  ['--cg-accent-fg', '--cg-accent-hover'],
-  ['--cg-accent-soft-fg', '--cg-accent-soft'],
   ['--cg-accent', '--cg-canvas'],
   ['--cg-accent', '--cg-surface-sunken'],
+  ['--cg-accent-hover', '--cg-canvas'],
+  ['--cg-action-fg', '--cg-action'],
+  ['--cg-action-hover-fg', '--cg-action-hover'],
+  ['--cg-band-ink', '--cg-band'],
+  ['--cg-band-muted', '--cg-band'],
+  ['--cg-band', '--cg-band-ink'],
+  ['--cg-band', '--cg-band-muted'],
 ]
 
 for (const scheme of ['light', 'dark'] as const) {
@@ -164,9 +169,14 @@ describe('the dark palette is designed, not inverted', () => {
     expect(lightness('--cg-surface', 'light')).toBeCloseTo(lightness('--cg-canvas', 'light'), 3)
   })
 
-  it('inverts nothing in light mode, where elevation is a shadow instead', () => {
+  it('keeps the light page flat: raised surfaces are the paper itself, depth is a hairline', () => {
     expect(lightness('--cg-canvas', 'light')).toBeCloseTo(lightness('--cg-surface-raised', 'light'))
-    expect(CG.get('--cg-elevation-2')).toContain('--cg')
+    expect(ALL_CSS).not.toMatch(/--cogenta-shadow-/)
+  })
+
+  it('keeps the ink band the one dark plane of a light page, and a raised plane on a dark one', () => {
+    expect(lightness('--cg-band', 'light')).toBeLessThan(lightness('--cg-canvas', 'light') - 0.5)
+    expect(lightness('--cg-band', 'dark')).toBeGreaterThan(lightness('--cg-canvas', 'dark'))
   })
 
   it('draws a border as a step up in lightness in dark, and a step down in light', () => {
@@ -186,6 +196,50 @@ describe('the dark palette is designed, not inverted', () => {
     // A mechanical brightening keeps chroma constant or grows it toward
     // clipping; this palette pulls chroma back once lightness goes up.
     expect(chroma('--cg-accent', 'dark')).toBeLessThan(chroma('--cg-accent', 'light'))
+  })
+})
+
+/**
+ * The studio charter (`docs/L27`): motion is a colour or an underline
+ * changing, nothing lifts, nothing fades in, and a photograph never casts a
+ * shadow. Checked on the real stylesheets, comments stripped.
+ */
+describe('the motion and depth rules', () => {
+  const code = ALL_CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+
+  it('caps every transition at 150 ms through the one duration token', () => {
+    expect(CG.get('--cg-duration')).toMatch(/min\(var\(--cogenta-motion-duration\), 150ms\)/)
+    // Any literal duration (the reduced-motion override's `1ms` is one) must
+    // stay under the cap too.
+    const literal = [...code.matchAll(/transition[^;]*?(\d+(?:\.\d+)?)(ms|s)\b/g)].map((match) =>
+      match[2] === 's' ? Number(match[1]) * 1000 : Number(match[1]),
+    )
+    expect(literal.every((ms) => ms <= 150)).toBe(true)
+  })
+
+  it('removes every transition under prefers-reduced-motion, through the same token', () => {
+    expect(code).toMatch(
+      /prefers-reduced-motion: reduce\)\s*\{\s*:root\s*\{\s*--cg-duration:\s*0ms;/,
+    )
+    const transitions = [...code.matchAll(/transition\s*:([^;]*);/g)].map((m) => m[1] as string)
+    expect(transitions.length).toBeGreaterThan(3)
+    for (const value of transitions) expect(value).toContain('var(--cg-duration)')
+  })
+
+  it('never moves an element on hover', () => {
+    const hoverRules = [...code.matchAll(/:hover[^{]*\{([^}]*)\}/g)].map(
+      (match) => match[1] as string,
+    )
+    expect(hoverRules.length).toBeGreaterThan(5)
+    for (const body of hoverRules) expect(body).not.toMatch(/transform|translate|box-shadow/)
+  })
+
+  it('declares no keyframes and no entrance animation', () => {
+    expect(code).not.toMatch(/@keyframes|animation\s*:/)
+  })
+
+  it('casts no shadow at all', () => {
+    expect(code.replace(/box-shadow:\s*inset[^;]*;/g, '')).not.toMatch(/box-shadow/)
   })
 })
 

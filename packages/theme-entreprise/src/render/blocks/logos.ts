@@ -7,25 +7,24 @@ import {
   image,
   type RenderContext,
 } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * A "trusted by" client strip. Contract B says the organisation's name **is**
- * the accessible name of the link, so the logo image carries it as `alt`
- * text when the media entity has none, and no visually hidden duplicate is
- * added: a link whose only content is an image with `alt` text is already
- * named.
+ * A client register: wordmarks in greyscale, each in its own cell of a ruled
+ * table, so a dozen marks of different shapes and weights still line up.
  *
- * The restrained, grayscale-leaning treatment (`filter: grayscale()` in the
- * stylesheet) is the "held back until hovered" client-logo language the
- * aesthetic direction calls for — a `filter`, never `grayscale` baked into
- * the media itself, since the underlying asset still arrives as a real
- * `<img>` from `image()`.
+ * Contract B says the organisation's name is the accessible name of the
+ * link, so the image carries it as `alt` when the media entity has none, and
+ * no visually hidden duplicate is added. Greyscale is a `filter` in the
+ * stylesheet, never baked into the media: the same asset still renders in
+ * colour wherever a site owner uses it elsewhere.
  */
 function renderItem(item: LogoItem, ctx: RenderContext): HtmlElement {
   const logo = image(ctx, item.media, {
     className: 'cg-clients__logo',
     altFrom: item.name,
     variant: { fit: 'contain' },
+    sizes: '12rem',
   })
   return h(
     'li',
@@ -41,20 +40,37 @@ function renderItem(item: LogoItem, ctx: RenderContext): HtmlElement {
 }
 
 export function renderLogos(block: LogosBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-clients', 'data-block': 'logos' },
+    'logos',
+    'cg-clients',
+    {},
+    'div',
     block.title === undefined
       ? null
-      : heading(
-          blockHeadingTag('logos') ?? 'h2',
-          { class: 'cg-clients__title', 'data-field': 'title' },
-          block.title,
+      : h(
+          'div',
+          { class: 'cg-head' },
+          heading(
+            blockHeadingTag('logos') ?? 'h2',
+            { class: 'cg-head__title', 'data-field': 'title' },
+            block.title,
+          ),
         ),
     h(
       'ul',
-      { class: 'cg-clients__items' },
+      { class: 'cg-clients__items', 'data-columns': String(columnsFor(block.items.length)) },
       block.items.map((item) => renderItem(item, ctx)),
     ),
   )
+}
+
+/**
+ * How many columns the register uses on a wide screen: four when the marks
+ * fill whole rows of four, otherwise three, so a register never ends on a
+ * row of empty ruled cells when a whole-row layout exists.
+ */
+function columnsFor(count: number): number {
+  if (count <= 3) return Math.max(count, 1)
+  return count % 4 === 0 ? 4 : 3
 }

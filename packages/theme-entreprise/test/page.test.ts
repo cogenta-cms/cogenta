@@ -20,6 +20,24 @@ function headingLevels(html: string): number[] {
 const FULL_PAGE = page(ALL_BLOCKS)
 
 describe('renderPage', () => {
+  it('shows a reading time only for a long read, and never leaves an empty meta line', () => {
+    const entryPage = (readingMinutes: number): string =>
+      serialize(
+        renderPage(
+          {
+            title: 'A case study',
+            blocks: [],
+            entry: { collection: 'case_study', readingMinutes },
+          },
+          ctx,
+        ),
+      )
+    expect(entryPage(1)).not.toContain('cg-entry-header__meta')
+    expect(entryPage(6)).toContain(
+      '<span class="cg-entry-header__reading-time">entry.readingTime</span>',
+    )
+  })
+
   it('wraps content in <main id="cg-main"> — the mandatory skip-link target', () => {
     expect(FULL_PAGE).toMatch(/^<main class="cg-main" id="cg-main">/)
   })
@@ -76,6 +94,6 @@ describe('renderPage', () => {
 
   it('renders nothing observably different when no entries were fetched for a key', () => {
     const html = serialize(renderPage({ title: 't', blocks: [BLOCKS.collectionList] }, ctx, {}))
-    expect(html).toContain('cg-list__empty')
+    expect(html).toContain('cg-collection__empty')
   })
 })

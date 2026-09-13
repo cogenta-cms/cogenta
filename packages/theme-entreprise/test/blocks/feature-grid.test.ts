@@ -5,48 +5,48 @@ import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
 
-describe('featureGrid → services', () => {
-  it('renders as an unordered list of capability cards', () => {
+describe('featureGrid → numbered practices', () => {
+  it('renders as an ordered list, the numbering being part of the design', () => {
     const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<ul class="cg-services__items">')
+    expect(html).toContain('<ol class="cg-practices__items">')
+  })
+
+  it('writes a two-digit ordinal ahead of every item, hidden from assistive technology', () => {
+    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
+    expect(html).toContain('<span class="cg-practice__index" aria-hidden="true">01</span>')
+    expect(html).toContain('<span class="cg-practice__index" aria-hidden="true">02</span>')
   })
 
   it("makes the item's title the accessible name of its link, not a generic label", () => {
     const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('>A named engagement lead</a>')
+    expect(html).toMatch(/<a class="cg-practice__link" href="[^"]+">A named engagement lead<svg/)
     expect(html).not.toContain('>Learn more<')
   })
 
-  it('renders an item with no link as plain heading text, not an anchor', () => {
+  it('marks a linked row so the whole row can be the target, and leaves an unlinked one plain', () => {
     const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
+    expect(html).toContain('<li class="cg-practice" data-linked="true">')
     expect(html).toContain('>Fixed-scope milestones</h3>')
   })
 
-  it('renders the icon as a real inline glyph inside an aria-hidden chip, never a bare data attribute', () => {
+  it('draws no icon tile: a numbered list needs no pictogram to mark its rows', () => {
     const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('data-icon="shield"')
-    expect(html).toMatch(
-      /<span class="cg-service__icon" data-icon="shield" aria-hidden="true"><svg/,
-    )
-  })
-
-  it('omits the icon chip entirely for an item that names none', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    const secondItemStart = html.indexOf('Fixed-scope milestones')
-    expect(html.slice(0, secondItemStart).split('cg-service__icon').length).toBe(2)
+    expect(html).not.toContain('data-icon')
+    expect(html).not.toContain('icon')
   })
 
   it('starts items at h3 when the block renders its own h2 title', () => {
     const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toMatch(/<h2 class="cg-services__title"/)
-    expect(html).toContain('<h3 class="cg-service__title"')
+    expect(html).toContain('<h2 class="cg-head__title" data-field="title">What you get</h2>')
+    expect(html).toContain('<h3 class="cg-practice__title"')
   })
 
   it('starts items at h2 when the block has no title of its own', () => {
     const { title: _title, ...untitled } = BLOCKS.featureGrid
     const html = serialize(renderFeatureGrid(untitled, ctx))
-    expect(html).not.toContain('cg-services__title')
-    expect(html).toContain('<h2 class="cg-service__title"')
+    expect(html).not.toContain('cg-head')
+    expect(html).toContain('<h2 class="cg-practice__title"')
+    expect(html).toContain('data-titled="false"')
   })
 
   it('is marked with data-block="featureGrid"', () => {

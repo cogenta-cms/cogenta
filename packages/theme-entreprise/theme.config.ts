@@ -15,9 +15,9 @@ import { defineTheme } from '@cogenta/render'
  */
 export default defineTheme({
   name: 'entreprise',
-  version: '1.1.0',
+  version: '1.2.0',
   description:
-    'A confident, premium B2B theme: structured typography, real KPI/impact sections, a genuine dark mode.',
+    'A management consultancy theme: Newsreader and Hanken Grotesk on a twelve-column grid, hairlines instead of boxes, one green accent and a designed dark mode.',
   author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',

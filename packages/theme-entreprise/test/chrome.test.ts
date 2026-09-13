@@ -77,19 +77,52 @@ describe('renderChrome', () => {
     expect(footer).toContain('<a href="https://cogenta.dev">Made with Cogenta</a>')
   })
 
-  it('renders the footer as a real four-column grid: brand, nav, social, meta', () => {
+  it('renders the footer as a colophon: a top grid of brand, nav, note and social, then a legal row', () => {
     const { footer } = renderChrome({
       ...BASE,
       tagline: 'Structured advice for growing companies.',
       social: [{ label: 'LinkedIn', href: 'https://linkedin.com/company/example' }],
       footerNote: '1 Market Street, Suite 400, San Francisco, CA',
     })
-    expect(footer).toContain('class="cg-site-footer__grid"')
+    expect(footer).toContain('class="cg-site-footer__top"')
     expect(footer).toContain('class="cg-site-footer__brand"')
     expect(footer).toContain('class="cg-site-footer__nav"')
+    expect(footer).toContain('class="cg-site-footer__note"')
     expect(footer).toContain('class="cg-site-footer__social-col"')
-    expect(footer).toContain('class="cg-site-footer__meta"')
+    expect(footer).toContain('class="cg-site-footer__bottom"')
     expect(footer).toContain('class="cg-site-footer__branding"')
+    expect(footer.indexOf('cg-site-footer__top')).toBeLessThan(
+      footer.indexOf('cg-site-footer__bottom'),
+    )
+  })
+
+  it('writes a legal line with the copyright year and the site name', () => {
+    const { footer } = renderChrome(BASE)
+    expect(footer).toContain(
+      `<p class="cg-site-footer__legal">© ${new Date().getFullYear()} Cogenta Advisory</p>`,
+    )
+  })
+
+  it('sets a multi-paragraph footer note as blocks, each first line a label', () => {
+    const { footer } = renderChrome({
+      ...BASE,
+      footerNote: 'London\n12 Hanover Square\nLondon W1S 1JB\n\nNew York\n230 Park Avenue',
+    })
+    expect(footer).toContain('data-paragraphs="2"')
+    expect(footer).toContain(
+      '<p class="cg-site-footer__note-text"><span class="cg-site-footer__note-label">London</span>12 Hanover Square<br>London W1S 1JB</p>',
+    )
+    expect(footer).toContain(
+      '<p class="cg-site-footer__note-text"><span class="cg-site-footer__note-label">New York</span>230 Park Avenue</p>',
+    )
+  })
+
+  it('keeps a one-line footer note as a single plain paragraph, escaped', () => {
+    const { footer } = renderChrome({ ...BASE, footerNote: 'Registered in England & Wales <OC1>' })
+    expect(footer).toContain(
+      '<p class="cg-site-footer__note-text">Registered in England &amp; Wales &lt;OC1&gt;</p>',
+    )
+    expect(footer).not.toContain('cg-site-footer__note-label')
   })
 
   it('renders the tagline under the brand name when set, and omits it when absent', () => {
@@ -142,12 +175,11 @@ describe('renderChrome', () => {
     const themeToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
     const expectedHeader =
       `<header class="cg-site-header"><div class="cg-site-header__inner">` +
-      `<a class="cg-site-header__home" href="/">Cogenta Advisory</a>` +
+      `<a class="cg-site-header__home" href="/"><span class="cg-site-header__name">Cogenta Advisory</span></a>` +
       `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
       `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">` +
-      `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
+      `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
       `</label>` +
-      `${themeToggle}` +
       `<nav class="cg-site-header__nav" id="cg-nav" aria-label="Primary">` +
       `<ul class="cg-nav__items">` +
       `<li><a href="/services">Services</a></li>` +
@@ -155,6 +187,7 @@ describe('renderChrome', () => {
       `<li><a href="/contact">Contact</a></li>` +
       `</ul>` +
       `</nav>` +
+      `${themeToggle}` +
       `</div></header>`
     expect(header).toBe(expectedHeader)
   })
@@ -162,11 +195,11 @@ describe('renderChrome', () => {
   it('places the theme toggle outside the collapsible nav, so it stays visible on a collapsed mobile menu', () => {
     const { header } = renderChrome(BASE)
     const labelIndex = header.indexOf('cg-nav-toggle-label')
+    const navClose = header.indexOf('</nav>')
     const toggleIndex = header.indexOf('data-cg-theme-toggle')
-    const navIndex = header.indexOf('id="cg-nav"')
     expect(labelIndex).toBeGreaterThan(-1)
-    expect(toggleIndex).toBeGreaterThan(labelIndex)
-    expect(toggleIndex).toBeLessThan(navIndex)
+    expect(labelIndex).toBeLessThan(header.indexOf('id="cg-nav"'))
+    expect(toggleIndex).toBeGreaterThan(navClose)
   })
 
   it('escapes a site name that contains markup-significant characters', () => {

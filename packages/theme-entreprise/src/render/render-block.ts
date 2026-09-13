@@ -106,6 +106,23 @@ function renderKnownBlock(
   }
 }
 
+/** Below this, a reading time says nothing a reader can use. */
+const MIN_READING_MINUTES_SHOWN = 3
+
+/**
+ * A practice page or a short case study announcing "1 min read" reads like a
+ * blog, not like a firm: this theme shows a reading time only for a long
+ * read. The rest of the entry furniture is passed through untouched.
+ */
+function withoutShortReadingTime(page: PageContent): PageContent {
+  const entry = page.entry
+  if (entry?.readingMinutes === undefined || entry.readingMinutes >= MIN_READING_MINUTES_SHOWN) {
+    return page
+  }
+  const { readingMinutes: _short, ...rest } = entry
+  return { ...page, entry: rest }
+}
+
 /**
  * `<main id="cg-main">` is mandatory: it is the skip-link's target, written
  * once by `@cogenta/cli`'s `theme-render.ts` outside any theme's control.
@@ -129,7 +146,7 @@ export function renderPage(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement {
-  const entryHeader = renderEntryHeader(page, ctx)
+  const entryHeader = renderEntryHeader(withoutShortReadingTime(page), ctx)
   return h(
     'main',
     { class: 'cg-main', id: 'cg-main' },

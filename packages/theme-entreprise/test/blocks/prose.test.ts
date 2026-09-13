@@ -7,8 +7,10 @@ const ctx = makeContext()
 const html = serialize(renderProse(BLOCKS.prose, ctx))
 
 describe('prose', () => {
-  it('wraps rich text in the prose container, marked data-block="prose"', () => {
-    expect(html).toContain('class="cg-prose" data-block="prose"')
+  it('wraps rich text in the prose column, inside a section marked data-block="prose"', () => {
+    expect(html).toMatch(
+      /^<div class="cg-section cg-text" data-block="prose"><div class="cg-container cg-text__inner"><div class="cg-prose">/,
+    )
   })
 
   it('starts rich text headings at h2, never at h1 — the vocabulary starts there', () => {

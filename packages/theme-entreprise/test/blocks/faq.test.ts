@@ -12,16 +12,9 @@ describe('faq', () => {
     expect(html).toContain('<summary')
   })
 
-  it('writes a real, server-computed index number ahead of each question', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('<span class="cg-faq__index" aria-hidden="true">01</span>')
-  })
-
   it('keeps the question as plain text inside <summary>, never a heading', () => {
     const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    const summaryOpen = html.indexOf('<summary')
-    const summaryClose = html.indexOf('</summary>')
-    const summaryInner = html.slice(summaryOpen, summaryClose)
+    const summaryInner = html.slice(html.indexOf('<summary'), html.indexOf('</summary>'))
     expect(summaryInner).not.toMatch(/<h[1-6]/)
     expect(summaryInner).toContain('Do you report weekly?')
   })
@@ -32,18 +25,22 @@ describe('faq', () => {
     expect(html).toContain('Yes, from the first week.')
   })
 
-  it('renders the title at the block heading level when present', () => {
+  it('puts the title in a sticky head beside the questions, at the block heading level', () => {
     const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('<h2 class="cg-faq__title" data-field="title">Questions</h2>')
+    expect(html).toContain(
+      '<div class="cg-head cg-head--aside cg-head--sticky"><h2 class="cg-head__title" data-field="title">Questions</h2></div>',
+    )
+    expect(html).toContain('data-titled="true"')
   })
 
-  it('omits the title heading entirely when the block has none', () => {
+  it('omits the head entirely, and says so for the stylesheet, when the block has no title', () => {
     const { title: _title, ...untitled } = BLOCKS.faq
     const html = serialize(renderFaq(untitled, ctx))
-    expect(html).not.toContain('cg-faq__title')
+    expect(html).not.toContain('cg-head')
+    expect(html).toContain('data-titled="false"')
   })
 
-  it('numbers every item in order across multiple questions', () => {
+  it('renders every question as its own row, none dropped', () => {
     const twoItems = {
       ...BLOCKS.faq,
       items: [
@@ -52,8 +49,12 @@ describe('faq', () => {
       ],
     }
     const html = serialize(renderFaq(twoItems, ctx))
-    expect(html).toContain('>01</span>')
-    expect(html).toContain('>02</span>')
+    expect((html.match(/class="cg-faq__item"/g) ?? []).length).toBe(2)
+  })
+
+  it('draws the plus/minus mark as a decorative element, hidden from assistive technology', () => {
+    const html = serialize(renderFaq(BLOCKS.faq, ctx))
+    expect(html).toContain('<span class="cg-toggle-mark" aria-hidden="true"></span>')
   })
 
   it('is marked with data-block="faq"', () => {

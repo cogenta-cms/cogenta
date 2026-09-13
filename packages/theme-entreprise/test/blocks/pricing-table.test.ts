@@ -68,13 +68,20 @@ describe('pricingTable', () => {
 
   it('renders the title at the block heading level when present', () => {
     const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('<h2 class="cg-pricing__title" data-field="title">Engagement tiers</h2>')
+    expect(html).toContain('<h2 class="cg-head__title" data-field="title">Engagement tiers</h2>')
   })
 
   it('omits the title heading entirely when the block has none', () => {
     const { title: _title, ...untitled } = BLOCKS.pricingTable
     const html = serialize(renderPricingTable(untitled, ctx))
-    expect(html).not.toContain('cg-pricing__title')
+    expect(html).not.toContain('cg-head')
+  })
+
+  it('tells the stylesheet how many tiers share the table, and leads a highlighted tier with a primary action', () => {
+    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
+    expect(html).toContain('data-count="2"')
+    expect(html).toMatch(/data-emphasis="secondary"[^>]*>Start advisory/)
+    expect(html).toMatch(/data-emphasis="primary"[^>]*>Book a call/)
   })
 
   it('is marked with data-block="pricingTable"', () => {

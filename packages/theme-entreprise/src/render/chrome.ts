@@ -4,6 +4,8 @@ import {
   type ChromeResult,
   escapeAttribute,
   escapeText,
+  type HtmlElement,
+  h,
   renderBrandMark,
   renderSocialLinks,
   renderThemeToggle,
@@ -11,35 +13,29 @@ import {
 } from '@cogenta/theme-kit'
 
 /**
- * This theme's own header and footer (`theme@1.4`) — a structurally
- * different chrome from the canonical theme's, not a recolour of it.
+ * This theme's own header and footer (`theme@1.4`), drawn the way a firm's
+ * website is: a quiet bar and a proper colophon.
  *
- * Header: a sticky bar with the corporate wordmark/logo on the left, a real
- * desktop `<nav>`, `headerAction` (`theme@1.4`) rendered as a filled button
- * — the one place this hairline-first chrome spends a solid accent surface
- * — and, below the breakpoint the stylesheet sets, a CSS-only mobile menu:
- * a checkbox (`#cg-nav-toggle`, visually hidden but still focusable and
- * Space-operable) paired with a `<label>` styled as a three-bar button. No
- * `<script>` anywhere: the sibling combinator in `base.css` is what shows
- * the nav panel when the box is checked. This replaces the previous
- * "the last header link doubles as the call to action" convention — with a
- * real `headerAction` field, inventing a role for a plain nav link is no
- * longer the honest reading of the data.
+ * Header: the firm's name set as a wordmark in the display serif (or its
+ * uploaded logo), the primary navigation in small interface text, the
+ * `headerAction` as the one filled control, and the light/dark control last.
+ * Below the breakpoint the navigation collapses into a panel opened by a
+ * CSS-only toggle: a visually hidden checkbox paired with a `<label>`, no
+ * `<script>`. The label must precede the `<nav>` for the sibling combinator
+ * in `base.css` to reach it; the theme toggle follows the `<nav>`, outside
+ * the panel it does not control, so a visitor can switch appearance without
+ * opening the menu first.
  *
- * Footer: a real four-column layout — a brand column (site name + `tagline`,
- * `theme@1.4`), the site's own footer navigation, `social` (`theme@1.4`, via
- * `renderSocialLinks`), and a fourth column carrying `footerNote`
- * (`theme@1.4`) above Cogenta's own credit (or its white-label replacement).
- * `brandingHtml` is placed exactly once, inside the footer, exactly as
- * received: never altered, never dropped.
+ * Footer: a twelve-column colophon. The name and `tagline` on the left, the
+ * footer navigation, the `footerNote` and the social profiles (real icons,
+ * via `renderSocialLinks`), then a legal line under a hairline with the
+ * copyright year and the site's name beside Cogenta's credit
+ * (`brandingHtml`, placed exactly once, exactly as received).
  *
- * The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
- * theme-kit`, L26) sits beside the mobile menu button, outside the `<nav>`
- * it controls the collapse of — the `<nav>` panel is hidden under the
- * breakpoint until the checkbox is checked, but a visitor must be able to
- * flip appearance without opening that panel first, on desktop or mobile.
- * This module ships no CSS of its own for it (`base.css` owns
- * `.cg-theme-toggle`, in this theme's own visual register, not canonical's).
+ * `footerNote` is plain text. When an editor separates it into paragraphs
+ * with blank lines, each paragraph becomes its own block, and a paragraph of
+ * several lines gets its first line set as a label: an office city above its
+ * address, a heading above a legal mention. One line stays one paragraph.
  */
 
 function navItems(links: readonly ChromeNavLink[]): string {
@@ -61,7 +57,7 @@ function renderNavList(links: readonly ChromeNavLink[]): string {
   return items === '' ? '' : `<ul class="cg-nav__items">${items}</ul>`
 }
 
-/** The header's own call-to-action link (`theme@1.4`) — a filled button, distinct from the ordinary nav list. */
+/** The header's own call to action (`theme@1.4`): the one filled control in the bar. */
 function renderHeaderAction(action: ChromeInput['headerAction']): string {
   if (action === undefined) return ''
   return (
@@ -70,13 +66,43 @@ function renderHeaderAction(action: ChromeInput['headerAction']): string {
   )
 }
 
+/** `footerNote` as paragraphs: blank lines separate them, and a multi-line paragraph's first line is its label. */
+export function renderFooterNote(note: string): HtmlElement | null {
+  const paragraphs = note
+    .replace(/\r\n?/g, '\n')
+    .split(/\n\s*\n/)
+    .map((paragraph) =>
+      paragraph
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== ''),
+    )
+    .filter((lines) => lines.length > 0)
+  if (paragraphs.length === 0) return null
+  return h(
+    'div',
+    { class: 'cg-site-footer__note', 'data-paragraphs': String(Math.min(paragraphs.length, 4)) },
+    paragraphs.map((lines) => {
+      const [first, ...rest] = lines as [string, ...string[]]
+      if (rest.length === 0) return h('p', { class: 'cg-site-footer__note-text' }, first)
+      return h(
+        'p',
+        { class: 'cg-site-footer__note-text' },
+        h('span', { class: 'cg-site-footer__note-label' }, first),
+        rest.flatMap((line, index) => (index === 0 ? [line] : [h('br'), line])),
+      )
+    }),
+  )
+}
+
 export function renderChrome(input: ChromeInput): ChromeResult {
   const siteNameText = escapeText(input.site.name)
   const headerNavList = renderNavList(input.headerNav)
   const headerAction = renderHeaderAction(input.headerAction)
   const footerNavList = renderNavList(input.footerNav)
-  // A B2B header is a corporate identity slot before it is a wordmark slot.
-  const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteNameText
+  const mark =
+    renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ??
+    `<span class="cg-site-header__name">${siteNameText}</span>`
   const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
 
   const header =
@@ -84,45 +110,46 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
     `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
     `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">` +
-    `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
+    `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
     `</label>` +
-    `${themeToggle}` +
     `<nav class="cg-site-header__nav" id="cg-nav" aria-label="Primary">` +
     `${headerNavList}${headerAction}` +
     `</nav>` +
+    `${themeToggle}` +
     `</div></header>`
 
   const tagline =
     input.tagline === undefined
       ? ''
       : `<p class="cg-site-footer__tagline" data-field="tagline">${escapeText(input.tagline)}</p>`
-  const social =
-    input.social === undefined
-      ? ''
-      : serialize(
-          renderSocialLinks(input.social, {
-            className: 'cg-site-footer__social',
-            itemClassName: 'cg-site-footer__social-item',
-          }) ?? { kind: 'text', value: '' },
-        )
-  const footerNote =
-    input.footerNote === undefined
-      ? ''
-      : `<p class="cg-site-footer__note">${escapeText(input.footerNote)}</p>`
+  const socialList = renderSocialLinks(input.social, {
+    className: 'cg-site-footer__social',
+    itemClassName: 'cg-site-footer__social-item',
+  })
+  const note = input.footerNote === undefined ? null : renderFooterNote(input.footerNote)
+  // The copyright year is the year the page is rendered, which is what a
+  // legal line on a live site means.
+  const year = new Date().getFullYear()
 
   const footer =
-    `<footer class="cg-site-footer"><div class="cg-site-footer__grid">` +
+    `<footer class="cg-site-footer"><div class="cg-site-footer__inner">` +
+    `<div class="cg-site-footer__top">` +
     `<div class="cg-site-footer__brand">` +
-    `<a href="${escapeAttribute(input.homeHref)}">${siteNameText}</a>${tagline}` +
+    `<a class="cg-site-footer__name" href="${escapeAttribute(input.homeHref)}">${siteNameText}</a>${tagline}` +
     `</div>` +
     `${
       footerNavList === ''
         ? ''
         : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNavList}</nav>`
     }` +
-    `${social === '' ? '' : `<div class="cg-site-footer__social-col">${social}</div>`}` +
-    `<div class="cg-site-footer__meta">${footerNote}<div class="cg-site-footer__branding">${input.brandingHtml}</div></div>` +
-    `</div><div class="cg-site-footer__bottom"><span>${siteNameText}</span></div></footer>`
+    `${note === null ? '' : serialize(note)}` +
+    `${socialList === null ? '' : `<div class="cg-site-footer__social-col">${serialize(socialList)}</div>`}` +
+    `</div>` +
+    `<div class="cg-site-footer__bottom">` +
+    `<p class="cg-site-footer__legal">© ${year} ${siteNameText}</p>` +
+    `<div class="cg-site-footer__branding">${input.brandingHtml}</div>` +
+    `</div>` +
+    `</div></footer>`
 
   return { header, footer }
 }

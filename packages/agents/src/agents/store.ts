@@ -188,6 +188,28 @@ export function createFileAgentDeclarationStore(
     return record ?? undefined
   }
 
+  // Read-modify-write, serialised per agent.
+  //
+  // Every mutation reads the record, changes a field and writes the whole
+  // record back. Two of them on the same agent at once — an admin's PATCH and
+  // the runtime touching the same built-in — each read the old record, and the
+  // second write silently undoes the first. With a plain `writeFile` that
+  // surfaced as a torn read and a 500; once writes were atomic it became a
+  // lost update instead: the agent an admin had just switched on came back
+  // disabled and its run answered AGENT_DISABLED (409). A safer write cannot
+  // fix that — only not letting the two interleave can.
+  const pending = new Map<string, Promise<unknown>>()
+  function serialised<T>(slug: string, work: () => Promise<T>): Promise<T> {
+    const previous = pending.get(slug) ?? Promise.resolve()
+    const next = previous.catch(() => undefined).then(work)
+    const settled = next.catch(() => undefined)
+    pending.set(slug, settled)
+    void settled.then(() => {
+      if (pending.get(slug) === settled) pending.delete(slug)
+    })
+    return next
+  }
+
   return {
     async list() {
       await ready
@@ -202,114 +224,122 @@ export function createFileAgentDeclarationStore(
     async create(input, builtin = false) {
       await ready
       const slug = slugOf(input.name)
-      const existing = await findBySlug(slug)
-      if (existing !== undefined) {
-        throw new CogentaError({
-          code: 'AGENT_DUPLICATE',
-          message: `An agent named "${input.name}" already exists.`,
-          hint: 'Choose a different name, or edit the existing agent instead.',
-        })
-      }
-      const identityPath = await writeIdentity(slug, input.name, input.identity)
-      const at = now().toISOString()
-      const record: StoredAgent = {
-        id: slug,
-        name: input.name,
-        identity: identityPath,
-        model: input.model,
-        tools: input.tools,
-        ...(input.skills === undefined ? {} : { skills: input.skills }),
-        ...(input.subagents === undefined ? {} : { subagents: input.subagents }),
-        ...(input.autonomy === undefined ? {} : { autonomy: input.autonomy }),
-        ...(input.budget === undefined ? {} : { budget: input.budget }),
-        ...(input.memory === undefined ? {} : { memory: input.memory }),
-        ...(input.triggers === undefined ? {} : { triggers: input.triggers }),
-        enabled: input.enabled ?? true,
-        builtin,
-        createdAt: at,
-        updatedAt: at,
-      }
-      await writeFileAtomic(recordFile(slug), JSON.stringify(record, null, 2))
-      return record
+      return serialised(slug, async () => {
+        const existing = await findBySlug(slug)
+        if (existing !== undefined) {
+          throw new CogentaError({
+            code: 'AGENT_DUPLICATE',
+            message: `An agent named "${input.name}" already exists.`,
+            hint: 'Choose a different name, or edit the existing agent instead.',
+          })
+        }
+        const identityPath = await writeIdentity(slug, input.name, input.identity)
+        const at = now().toISOString()
+        const record: StoredAgent = {
+          id: slug,
+          name: input.name,
+          identity: identityPath,
+          model: input.model,
+          tools: input.tools,
+          ...(input.skills === undefined ? {} : { skills: input.skills }),
+          ...(input.subagents === undefined ? {} : { subagents: input.subagents }),
+          ...(input.autonomy === undefined ? {} : { autonomy: input.autonomy }),
+          ...(input.budget === undefined ? {} : { budget: input.budget }),
+          ...(input.memory === undefined ? {} : { memory: input.memory }),
+          ...(input.triggers === undefined ? {} : { triggers: input.triggers }),
+          enabled: input.enabled ?? true,
+          builtin,
+          createdAt: at,
+          updatedAt: at,
+        }
+        await writeFileAtomic(recordFile(slug), JSON.stringify(record, null, 2))
+        return record
+      })
     },
 
     async update(name, patch) {
       await ready
       const slug = slugOf(name)
-      const existing = await findBySlug(slug)
-      if (existing === undefined) throw agentUnknown(name)
+      return serialised(slug, async () => {
+        const existing = await findBySlug(slug)
+        if (existing === undefined) throw agentUnknown(name)
 
-      const identityPath =
-        patch.identity === undefined
-          ? existing.identity
-          : await writeIdentity(slug, existing.name, patch.identity)
+        const identityPath =
+          patch.identity === undefined
+            ? existing.identity
+            : await writeIdentity(slug, existing.name, patch.identity)
 
-      const updated: StoredAgent = {
-        ...existing,
-        identity: identityPath,
-        model: patch.model ?? existing.model,
-        tools: patch.tools ?? existing.tools,
-        ...(patch.skills !== undefined
-          ? { skills: patch.skills }
-          : existing.skills === undefined
-            ? {}
-            : { skills: existing.skills }),
-        ...(patch.subagents !== undefined
-          ? { subagents: patch.subagents }
-          : existing.subagents === undefined
-            ? {}
-            : { subagents: existing.subagents }),
-        ...(patch.autonomy !== undefined
-          ? { autonomy: patch.autonomy }
-          : existing.autonomy === undefined
-            ? {}
-            : { autonomy: existing.autonomy }),
-        ...(patch.budget !== undefined
-          ? { budget: patch.budget }
-          : existing.budget === undefined
-            ? {}
-            : { budget: existing.budget }),
-        ...(patch.memory !== undefined
-          ? { memory: patch.memory }
-          : existing.memory === undefined
-            ? {}
-            : { memory: existing.memory }),
-        ...(patch.triggers !== undefined
-          ? { triggers: patch.triggers }
-          : existing.triggers === undefined
-            ? {}
-            : { triggers: existing.triggers }),
-        enabled: patch.enabled ?? existing.enabled,
-        updatedAt: now().toISOString(),
-      }
-      await writeFileAtomic(recordFile(slug), JSON.stringify(updated, null, 2))
-      return updated
+        const updated: StoredAgent = {
+          ...existing,
+          identity: identityPath,
+          model: patch.model ?? existing.model,
+          tools: patch.tools ?? existing.tools,
+          ...(patch.skills !== undefined
+            ? { skills: patch.skills }
+            : existing.skills === undefined
+              ? {}
+              : { skills: existing.skills }),
+          ...(patch.subagents !== undefined
+            ? { subagents: patch.subagents }
+            : existing.subagents === undefined
+              ? {}
+              : { subagents: existing.subagents }),
+          ...(patch.autonomy !== undefined
+            ? { autonomy: patch.autonomy }
+            : existing.autonomy === undefined
+              ? {}
+              : { autonomy: existing.autonomy }),
+          ...(patch.budget !== undefined
+            ? { budget: patch.budget }
+            : existing.budget === undefined
+              ? {}
+              : { budget: existing.budget }),
+          ...(patch.memory !== undefined
+            ? { memory: patch.memory }
+            : existing.memory === undefined
+              ? {}
+              : { memory: existing.memory }),
+          ...(patch.triggers !== undefined
+            ? { triggers: patch.triggers }
+            : existing.triggers === undefined
+              ? {}
+              : { triggers: existing.triggers }),
+          enabled: patch.enabled ?? existing.enabled,
+          updatedAt: now().toISOString(),
+        }
+        await writeFileAtomic(recordFile(slug), JSON.stringify(updated, null, 2))
+        return updated
+      })
     },
 
     async setEnabled(name, enabled) {
       await ready
       const slug = slugOf(name)
-      const existing = await findBySlug(slug)
-      if (existing === undefined) throw agentUnknown(name)
-      const updated: StoredAgent = { ...existing, enabled, updatedAt: now().toISOString() }
-      await writeFileAtomic(recordFile(slug), JSON.stringify(updated, null, 2))
-      return updated
+      return serialised(slug, async () => {
+        const existing = await findBySlug(slug)
+        if (existing === undefined) throw agentUnknown(name)
+        const updated: StoredAgent = { ...existing, enabled, updatedAt: now().toISOString() }
+        await writeFileAtomic(recordFile(slug), JSON.stringify(updated, null, 2))
+        return updated
+      })
     },
 
     async remove(name) {
       await ready
       const slug = slugOf(name)
-      const existing = await findBySlug(slug)
-      if (existing === undefined) throw agentUnknown(name)
-      if (existing.builtin) {
-        throw new CogentaError({
-          code: 'AGENT_BUILTIN_UNDELETABLE',
-          message: `"${name}" is a built-in agent and cannot be removed.`,
-          hint: 'Disable it instead — a built-in stays editable but can be turned off.',
-        })
-      }
-      await rm(recordFile(slug), { force: true })
-      await rm(identityFile(slug), { force: true })
+      return serialised(slug, async () => {
+        const existing = await findBySlug(slug)
+        if (existing === undefined) throw agentUnknown(name)
+        if (existing.builtin) {
+          throw new CogentaError({
+            code: 'AGENT_BUILTIN_UNDELETABLE',
+            message: `"${name}" is a built-in agent and cannot be removed.`,
+            hint: 'Disable it instead — a built-in stays editable but can be turned off.',
+          })
+        }
+        await rm(recordFile(slug), { force: true })
+        await rm(identityFile(slug), { force: true })
+      })
     },
 
     async readIdentity(name) {

@@ -139,15 +139,28 @@ export function createDatabaseQueue(options: DatabaseQueueOptions): QueueDriver 
     ready = true
   }
 
-  async function claim(names: readonly string[]): Promise<Job[]> {
+  /**
+   * Retries a statement that lost a lock race to another worker.
+   *
+   * The claim always had this. `reclaimExpired` did not, and it runs at the
+   * start of every `tick()`: two workers ticking at the same instant update
+   * the same expired rows and InnoDB kills one of them with a deadlock — which
+   * then escaped `tick()` entirely, on exactly the two-worker path this queue
+   * exists to make safe. Same remedy the databases document, same bound.
+   */
+  async function withConflictRetry<T>(label: string, work: () => Promise<T>): Promise<T> {
     for (let attempt = 1; ; attempt += 1) {
       try {
-        return await claimOnce(names)
+        return await work()
       } catch (error) {
         if (attempt >= CLAIM_ATTEMPTS || !isRetryableConflict(error)) throw error
-        logger.debug('claim lost a race, retrying', { attempt })
+        logger.debug(`${label} lost a race, retrying`, { attempt })
       }
     }
+  }
+
+  async function claim(names: readonly string[]): Promise<Job[]> {
+    return withConflictRetry('claim', () => claimOnce(names))
   }
 
   async function claimOnce(names: readonly string[]): Promise<Job[]> {
@@ -201,10 +214,12 @@ export function createDatabaseQueue(options: DatabaseQueueOptions): QueueDriver 
 
   /** Returns an expired lease to the pool: the worker holding it is gone. */
   async function reclaimExpired(): Promise<void> {
-    await db.query(sql`
-      update ${table}
-      set status = ${'pending'}, locked_by = ${null}, locked_until = ${null}
-      where status = ${'running'} and locked_until is not null and locked_until <= ${now()}`)
+    await withConflictRetry('reclaim', () =>
+      db.query(sql`
+        update ${table}
+        set status = ${'pending'}, locked_by = ${null}, locked_until = ${null}
+        where status = ${'running'} and locked_until is not null and locked_until <= ${now()}`),
+    )
   }
 
   async function succeed(job: Job): Promise<void> {

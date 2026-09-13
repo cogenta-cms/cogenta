@@ -1,0 +1,9 @@
+103648050083|Unit — macos-latest / Node 24
+103648050089|Degraded drivers — no Redis, no Docker, no S3
+103648050103|Unit — windows-latest / Node 22
+103648050105|Integration — Node 22
+103648050112|Unit — ubuntu-latest / Node 24
+103648050151|Unit — ubuntu-24.04-arm / Node 24
+103648050156|Unit — ubuntu-latest / Node 22
+103648050158|Unit — windows-latest / Node 24
+103648050163|Unit — ubuntu-24.04-arm / Node 22

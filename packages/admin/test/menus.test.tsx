@@ -238,7 +238,18 @@ describe('the menu screen', () => {
 
     await createMenu('main', 'Menu principal')
 
-    fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'custom' } })
+    // The location panel belongs to the menu just created, and it re-renders
+    // once that menu is loaded as the selected one. Grabbing the select with
+    // `getByLabelText` straight after creation could take the instance about
+    // to be replaced: the `change` landed on a detached node, the free-text
+    // field never appeared, and a loaded runner reported "Unable to find a
+    // label". Waiting for the select — and for its value to be the menu's
+    // real starting slot — changes the one that stays.
+    const slotSelect = (await screen.findByLabelText('Emplacement')) as HTMLSelectElement
+    await waitFor(() => {
+      expect(slotSelect.isConnected).toBe(true)
+    })
+    fireEvent.change(slotSelect, { target: { value: 'custom' } })
     const customField = await screen.findByLabelText("Nom de l'emplacement")
     fireEvent.change(customField, { target: { value: 'sidebar' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))

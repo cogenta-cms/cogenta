@@ -233,10 +233,22 @@ export function createOrderEmailQueue(
           continue
         }
 
+        // Claimed before sending, by compare-and-set on the attempt count this
+        // pass read. Two flushes overlapping — the scheduled tick and the flush
+        // a shipment triggers, or a tick that outlasts its interval — used to
+        // select the same pending row and both send it, so a customer got the
+        // same e-mail twice. Only the pass whose update lands sends; the other
+        // finds nothing to claim and moves on. A crash after claiming leaves
+        // the row pending with one more attempt, so it is retried, not lost.
+        const claim = await db.query(sql`
+          update ${table} set attempts = attempts + 1
+          where id = ${row.id} and status = ${'pending'} and attempts = ${row.attempts}`)
+        if (claim.rowsAffected !== 1) continue
+
         try {
           await adapter.send({ id: row.toEmail }, buildMessage(order, row.kind))
           await db.query(sql`
-            update ${table} set status = ${'sent'}, attempts = attempts + 1, sent_at = ${stamp()}, last_error = ${null}
+            update ${table} set status = ${'sent'}, sent_at = ${stamp()}, last_error = ${null}
             where id = ${row.id}`)
           await dependencies.orders.record(order.id, 'note', {
             note: `${row.kind === 'confirmation' ? 'Confirmation' : 'Shipment notification'} e-mail sent to ${row.toEmail}.`,
@@ -247,7 +259,7 @@ export function createOrderEmailQueue(
           const attempts = row.attempts + 1
           const givenUp = attempts >= MAX_ATTEMPTS
           await db.query(sql`
-            update ${table} set status = ${givenUp ? 'failed' : 'pending'}, attempts = ${attempts}, last_error = ${message}
+            update ${table} set status = ${givenUp ? 'failed' : 'pending'}, last_error = ${message}
             where id = ${row.id}`)
           if (givenUp) {
             await dependencies.orders.record(order.id, 'note', {

@@ -1,1 +1,0 @@
-[Degraded drivers — no Redis, no Docker, no S3] Failed:    @cogenta/cli#test

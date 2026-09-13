@@ -70,6 +70,36 @@ describe('order e-mail queue (task 2)', () => {
     expect(history.some((event) => event.note?.includes('Confirmation') ?? false)).toBe(true)
   })
 
+  it('never sends the same e-mail twice when two flushes overlap', async () => {
+    // Two passes selecting the same pending row is the ordinary case, not an
+    // exotic one: the scheduled tick and the flush a shipment triggers, or a
+    // tick that outlasts its interval. The transport is slow on purpose so
+    // both passes have read the row before either has sent it — which is
+    // exactly how a customer used to receive one confirmation twice.
+    const sent: string[] = []
+    const queue = createOrderEmailQueue(db, {
+      orders: shop.orders,
+      transport: {
+        send: async (email) => {
+          await new Promise((resolve) => setTimeout(resolve, 20))
+          sent.push(email.subject)
+          return { messageId: `msg-${String(sent.length)}` }
+        },
+      },
+    })
+
+    const orderId = await seedOrder()
+    await queue.enqueue(orderId, 'confirmation')
+
+    const [first, second] = await Promise.all([queue.flushDue(), queue.flushDue()])
+
+    expect(sent).toHaveLength(1)
+    expect(first.sent + second.sent).toBe(1)
+    const records = await queue.listForOrder(orderId)
+    expect(records[0]?.status).toBe('sent')
+    expect(records[0]?.attempts).toBe(1)
+  })
+
   it('retries a transient failure, and gives up after the retry cap', async () => {
     let attempts = 0
     const queue = createOrderEmailQueue(db, {

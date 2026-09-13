@@ -1764,14 +1764,30 @@ export async function loadSkinCss(
  * still gets the theme's layout, and a theme package that cannot be resolved
  * still gets the skin's properties — and a page with neither is served
  * unstyled rather than refused.
+ *
+ * The theme's remote `@import`s (its Google Fonts URL) are hoisted to the top
+ * of the joined sheet: CSS ignores an `@import` that follows any other rule,
+ * and the skin's `:root{…}` always comes first, so without this no theme's
+ * typeface ever loaded — every theme silently rendered in the system font.
  */
 export function joinStyles(skinCss: string | null, themeCss: string | null): string | null {
   const sheets = [
     skinCss === null ? null : minifyCss(skinCss),
     themeCss === null ? null : minifyCss(themeCss),
   ].filter((sheet): sheet is string => sheet !== null)
-  return sheets.length === 0 ? null : sheets.join('\n')
+  if (sheets.length === 0) return null
+  const imports: string[] = []
+  const body = sheets
+    .join('\n')
+    .replace(IMPORT_STATEMENT, (statement) => {
+      if (!imports.includes(statement)) imports.push(statement)
+      return ''
+    })
+    .trim()
+  return imports.length === 0 ? body : `${imports.join('\n')}\n${body}`
 }
+
+const IMPORT_STATEMENT = /@import\s+(?:url\(\s*(["'])[^"']*\1\s*\)|(["'])[^"']*\2)[^;{}]*;/g
 
 /**
  * The appearance screen's theme gallery preview (fiche L24 task 5) — one

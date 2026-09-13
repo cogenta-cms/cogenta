@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { inlineImports, loadThemeCss, minifyCss } from '../src/commands/theme-css.js'
+import { joinStyles } from '../src/commands/theme-render.js'
 
 /**
  * `cogenta serve` has no bundler, so this file is the whole of its CSS
@@ -103,5 +104,36 @@ describe('the theme stylesheet cogenta serve actually sends', () => {
     )) as string
     expect(css).toContain('light-dark(')
     expect(css).toContain('color-scheme:')
+  })
+
+  it("keeps a theme's web font import first, where a browser still honours it", async () => {
+    const theme = (await loadThemeCss(
+      { read: (url) => readFile(url, 'utf8') },
+      '@cogenta/theme-saas',
+    )) as string
+    expect(theme).toContain('@import url("https://fonts.googleapis.com/')
+    const joined = joinStyles(':root{--cogenta-color-bg: #fff}', theme) as string
+    // CSS drops any @import that follows another rule, so the font never loads.
+    expect(joined.startsWith('@import url("https://fonts.googleapis.com/')).toBe(true)
+    const firstRule = joined.indexOf('{')
+    expect(joined.lastIndexOf('@import', firstRule)).toBe(joined.lastIndexOf('@import'))
+    expect(joined).toContain(':root{--cogenta-color-bg: #fff}')
+  })
+})
+
+describe('joinStyles', () => {
+  it('hoists every remote import above the first rule, once each', () => {
+    const joined = joinStyles(
+      ':root{--a: 1}',
+      '@import url("https://example.test/a.css");.b{color: red}@import "https://example.test/c.css" screen;@import url("https://example.test/a.css");',
+    )
+    expect(joined).toBe(
+      '@import url("https://example.test/a.css");\n@import "https://example.test/c.css" screen;\n:root{--a: 1}\n.b{color: red}',
+    )
+  })
+
+  it('leaves a sheet without imports untouched', () => {
+    expect(joinStyles(':root{--a: 1}', '.b{color: red}')).toBe(':root{--a: 1}\n.b{color: red}')
+    expect(joinStyles(null, null)).toBeNull()
   })
 })

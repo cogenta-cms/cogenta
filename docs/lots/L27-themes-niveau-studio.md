@@ -184,8 +184,9 @@ aucun autre thème** et le signale.
 |---|---|---|
 | Diagnostic sur neuf sites réels | fait | 2026-09-13, captures de référence |
 | Polices jamais chargées | fait | `2b5a543`, test `theme-css.test.ts` |
-| `SeedContext.siteName`, banc de captures, charte | fait | ce commit |
-| `entreprise` (vitrine) | à faire | |
+| `SeedContext.siteName`, banc de captures, charte | fait | `f7726ee`, assets PNG `3594666` |
+| Icônes sociales méconnaissables (6 plateformes, tous thèmes) | fait | `cbfcc6d`, tracés Simple Icons CC0 |
+| `entreprise` (vitrine) | fait | `9102637`..`005cdb8` — Newsreader + Hanken Grotesk, grille 12 col, services en liste numérotée à filets, études de cas (nouvelle collection `case_study` + taxonomie `sector`), wordmarks clients rendus en OFL, graphique « exhibit » à la place de la photo à texte inventé, menu mobile plein écran ; 298 tests. Revu en captures par la session principale, une passe de finitions (soulignements, flèches orphelines, menu) |
 | `blog` | à faire | |
 | `magazine` | à faire | |
 | `portfolio` | à faire | |

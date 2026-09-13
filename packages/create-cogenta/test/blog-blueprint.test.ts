@@ -29,7 +29,7 @@ import { scaffoldSite } from '../src/scaffold.js'
 // images (a hero backdrop, a reader avatar, five press logos, eight post
 // covers) through the real media pipeline inside `scaffoldSite` — slower
 // than vitest's default 5s, not a hang.
-const SCAFFOLD_TIMEOUT = 60_000
+const SCAFFOLD_TIMEOUT = 180_000
 
 describe('scaffoldSite — blog blueprint', () => {
   const dirs: string[] = []

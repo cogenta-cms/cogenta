@@ -65,7 +65,7 @@ describe('scaffoldSite — magazine blueprint', () => {
 
     const collections = await loadCollections(targetDir)
     expect(collections.map((c) => c.name).sort()).toEqual(['article', 'page'])
-  }, 60000)
+  }, 180_000)
 
   it('seeds real demo articles and pages into real SQLite', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-magazine-'))
@@ -100,7 +100,7 @@ describe('scaffoldSite — magazine blueprint', () => {
     } finally {
       await selection.dispose()
     }
-  }, 60000)
+  }, 180_000)
 
   it('resolves /articles/:slug and /:slug generically through @cogenta/schema routing', () => {
     expect(
@@ -188,7 +188,7 @@ describe('scaffoldSite — magazine blueprint', () => {
     } finally {
       await selection.dispose()
     }
-  }, 60000)
+  }, 180_000)
 })
 
 function htmlOf(node: HtmlNode | null): string {

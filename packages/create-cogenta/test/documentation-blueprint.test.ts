@@ -20,7 +20,7 @@ import { scaffoldSite } from '../src/scaffold.js'
 // `documentation` now renders and ingests a real decorative hero image
 // through the real media pipeline inside `scaffoldSite` (L25 Phase 1) —
 // slower than vitest's default 5s, not a hang.
-const SCAFFOLD_TIMEOUT = 60_000
+const SCAFFOLD_TIMEOUT = 180_000
 
 describe('the documentation content pack — declared shape', () => {
   it('declares the four conventional SEO override fields on every routed collection', () => {

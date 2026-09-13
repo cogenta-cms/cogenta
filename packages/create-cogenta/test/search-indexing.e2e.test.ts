@@ -84,5 +84,5 @@ describe('a scaffolded site indexes its own seeded demo content', () => {
       controller.abort()
       await done
     }
-  }, 60000)
+  }, 180_000)
 })

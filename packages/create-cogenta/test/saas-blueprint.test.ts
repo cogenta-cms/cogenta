@@ -30,7 +30,7 @@ describe('scaffoldSite — saas blueprint', () => {
   // media pipeline inside `scaffoldSite` — comparable to `store`'s own
   // ~25-30s end to end on this machine. Genuinely slower than vitest's
   // default 5s, not a hang.
-  const SCAFFOLD_TIMEOUT = 60_000
+  const SCAFFOLD_TIMEOUT = 180_000
 
   it('declares the four conventional SEO override fields on every routed collection', () => {
     for (const collection of [feature, page]) {

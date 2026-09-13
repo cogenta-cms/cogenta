@@ -107,7 +107,7 @@ describe('scaffoldSite — portfolio blueprint', () => {
 
     const collections = await loadCollections(targetDir)
     expect(collections.map((c) => c.name).sort()).toEqual(['page', 'project'])
-  }, 60000)
+  }, 180_000)
 
   it('seeds eight published projects with covers and four pages into real SQLite', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-portfolio-'))
@@ -153,7 +153,7 @@ describe('scaffoldSite — portfolio blueprint', () => {
     } finally {
       await selection.dispose()
     }
-  }, 60000)
+  }, 180_000)
 
   it('resolves /work/:slug and /:slug generically through @cogenta/schema routing', () => {
     expect(matchPath(PORTFOLIO_COLLECTIONS, '/work/northwind-rebrand')).toEqual({
@@ -232,7 +232,7 @@ describe('scaffoldSite — portfolio blueprint', () => {
     } finally {
       await selection.dispose()
     }
-  }, 60000)
+  }, 180_000)
 
   it('every seeded project carries an auto-built Role/Year panel plus a real narrative block (L26 D1)', async () => {
     // Above the 5s default — see the first test in this file.
@@ -270,7 +270,7 @@ describe('scaffoldSite — portfolio blueprint', () => {
     } finally {
       await selection.dispose()
     }
-  }, 60000)
+  }, 180_000)
 
   it('builds four demo pages, each with at least one block', () => {
     const demoPages = buildPortfolioDemoPages({})

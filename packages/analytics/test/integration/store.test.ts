@@ -37,7 +37,7 @@ const targets: readonly {
 ]
 
 for (const target of targets) {
-  if (target.url === undefined) {
+  if (target.url === undefined || target.url === '') {
     describe.skip(`@cogenta/analytics store — ${target.label}`, () => {
       it(`skipped: ${target.variable} is not set — run \`pnpm services:up\``, () => undefined)
     })

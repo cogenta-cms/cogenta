@@ -45,6 +45,27 @@ function itemLabelField(): HTMLElement {
   return field
 }
 
+/**
+ * The location select of the menu currently shown, once it is the one that
+ * stays.
+ *
+ * Creating a menu, or saving its location, re-renders the location panel for
+ * that menu. A select taken with `getByLabelText` in that instant can be the
+ * instance about to be replaced: the change lands on a detached node, nothing
+ * is saved, and on a loaded runner the next assertion times out on an option
+ * that never changes. Waiting for a connected select removes the race from
+ * every test that picks a slot.
+ */
+async function slotSelect(): Promise<HTMLSelectElement> {
+  let found: HTMLSelectElement | undefined
+  await waitFor(() => {
+    const select = screen.getByLabelText('Emplacement') as HTMLSelectElement
+    expect(select.isConnected).toBe(true)
+    found = select
+  })
+  return found as HTMLSelectElement
+}
+
 async function createMenu(name: string, label: string): Promise<void> {
   fireEvent.change(screen.getByLabelText('Nom'), { target: { value: name } })
   fireEvent.change(menuLabelField(), { target: { value: label } })
@@ -219,7 +240,7 @@ describe('the menu screen', () => {
 
     await createMenu('main', 'Menu principal')
 
-    fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'primary' } })
+    fireEvent.change(await slotSelect(), { target: { value: 'primary' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
 
     await waitFor(() => {
@@ -238,18 +259,7 @@ describe('the menu screen', () => {
 
     await createMenu('main', 'Menu principal')
 
-    // The location panel belongs to the menu just created, and it re-renders
-    // once that menu is loaded as the selected one. Grabbing the select with
-    // `getByLabelText` straight after creation could take the instance about
-    // to be replaced: the `change` landed on a detached node, the free-text
-    // field never appeared, and a loaded runner reported "Unable to find a
-    // label". Waiting for the select — and for its value to be the menu's
-    // real starting slot — changes the one that stays.
-    const slotSelect = (await screen.findByLabelText('Emplacement')) as HTMLSelectElement
-    await waitFor(() => {
-      expect(slotSelect.isConnected).toBe(true)
-    })
-    fireEvent.change(slotSelect, { target: { value: 'custom' } })
+    fireEvent.change(await slotSelect(), { target: { value: 'custom' } })
     const customField = await screen.findByLabelText("Nom de l'emplacement")
     fireEvent.change(customField, { target: { value: 'sidebar' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
@@ -267,13 +277,13 @@ describe('the menu screen', () => {
     await goToMenus()
 
     await createMenu('main', 'Menu principal')
-    fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'footer' } })
+    fireEvent.change(await slotSelect(), { target: { value: 'footer' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
     await waitFor(() => {
       expect(screen.getByRole('option', { name: /^Menu principal \(.+, footer\)$/u })).toBeDefined()
     })
 
-    fireEvent.change(screen.getByLabelText('Emplacement'), { target: { value: 'none' } })
+    fireEvent.change(await slotSelect(), { target: { value: 'none' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
 
     await waitFor(() => {

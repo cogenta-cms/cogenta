@@ -60,7 +60,8 @@ describe('the comment moderation queue', () => {
     expect(screen.getByRole('tab', { name: /En attente/u }).getAttribute('aria-selected')).toBe(
       'true',
     )
-    expect(screen.getByText(/A perfectly ordinary comment/u)).toBeDefined()
+    // The queue is fetched after the screen renders; wait for the row itself.
+    expect(await screen.findByText(/A perfectly ordinary comment/u)).toBeDefined()
     expect(screen.queryByText(/Already approved earlier/u)).toBeNull()
   })
 
@@ -76,7 +77,9 @@ describe('the comment moderation queue', () => {
     render(<App />)
     await goToComments()
 
-    const row = screen.getByText(/A perfectly ordinary comment/u).closest('tr') as HTMLElement
+    const row = (await screen.findByText(/A perfectly ordinary comment/u)).closest(
+      'tr',
+    ) as HTMLElement
     fireEvent.click(within(row).getByRole('button', { name: 'Approuver' }))
 
     await waitFor(() => {

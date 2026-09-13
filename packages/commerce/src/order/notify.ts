@@ -39,7 +39,13 @@ import type { Order } from './types.js'
 export const ORDER_EMAIL_KINDS = ['confirmation', 'shipment'] as const
 export type OrderEmailKind = (typeof ORDER_EMAIL_KINDS)[number]
 
-export type OrderEmailStatus = 'pending' | 'sent' | 'failed'
+/**
+ * `sending` is a claim, held only while one flush has the message in hand.
+ * Without it a row stayed `pending` for the whole of a send, and the next
+ * tick — a file write or an SMTP round trip easily outlasts one — selected
+ * the same row and sent it again: one order, two confirmations.
+ */
+export type OrderEmailStatus = 'pending' | 'sending' | 'sent' | 'failed'
 
 export interface OrderEmailRecord {
   readonly id: string
@@ -233,15 +239,20 @@ export function createOrderEmailQueue(
           continue
         }
 
-        // Claimed before sending, by compare-and-set on the attempt count this
-        // pass read. Two flushes overlapping — the scheduled tick and the flush
-        // a shipment triggers, or a tick that outlasts its interval — used to
-        // select the same pending row and both send it, so a customer got the
-        // same e-mail twice. Only the pass whose update lands sends; the other
-        // finds nothing to claim and moves on. A crash after claiming leaves
-        // the row pending with one more attempt, so it is retried, not lost.
+        // Claimed before sending, by compare-and-set: out of `pending` and into
+        // `sending`, one more attempt, only if nobody changed it since this pass
+        // read it. Two flushes overlapping — the scheduled tick and the flush a
+        // shipment triggers, or a tick that outlasts its interval — used to
+        // select the same pending row and both send it. The first version of
+        // this claim bumped the attempt count but left the row `pending`, and a
+        // real server showed why that is not enough: the next tick read the
+        // new count, claimed it again and sent the same confirmation twice.
+        //
+        // Accepted cost: a process that dies mid-send leaves the row `sending`,
+        // where no flush picks it up again. A duplicate e-mail to a customer is
+        // the worse failure of the two, and the row stays visible on the order.
         const claim = await db.query(sql`
-          update ${table} set attempts = attempts + 1
+          update ${table} set status = ${'sending'}, attempts = attempts + 1
           where id = ${row.id} and status = ${'pending'} and attempts = ${row.attempts}`)
         if (claim.rowsAffected !== 1) continue
 

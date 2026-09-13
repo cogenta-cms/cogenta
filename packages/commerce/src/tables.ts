@@ -265,7 +265,8 @@ export async function ensureCommerceTables(db: DatabaseHandle): Promise<void> {
       -- package makes for every other status/kind column.
       kind ${t64} not null,
       to_email ${t255} not null,
-      -- 'pending' | 'sent' | 'failed' — 'failed' is retried by flushDue()
+      -- 'pending' | 'sending' | 'sent' | 'failed' — 'sending' is a flush's claim
+      -- while it holds the message; 'failed' is retried by flushDue()
       -- until MAX_ATTEMPTS, never resurrected after.
       status ${t64} not null,
       attempts ${int} not null,

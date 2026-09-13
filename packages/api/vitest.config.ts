@@ -16,5 +16,9 @@ export default defineConfig({
     // each to flake in turn. Set once, here, as admin (20s), cli (15s),
     // export (30s) and auth (20s) already do.
     testTimeout: 20_000,
+    // Hooks keep their own 10s budget, which `testTimeout` does not cover, and
+    // these suites build their real database and routers in `beforeEach`. On
+    // a loaded runner that setup alone crossed 10s in several files at once.
+    hookTimeout: 20_000,
   },
 })

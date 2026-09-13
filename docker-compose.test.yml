@@ -1,3 +1,9 @@
+# Host ports sit below 32768 on purpose. Linux hands out outgoing connection
+# ports from 32768-60999, and the previous 5xxxx ports lived inside that
+# range: while a fresh runner pulled these images, one of its own outgoing
+# connections could take 53306 a moment before MySQL tried to bind it —
+# "address already in use" on a machine with nothing else running, one job in
+# two. Outside the ephemeral range nothing but these containers can own them.
 # Ephemeral services for integration tests. Never a runtime dependency of Cogenta
 # itself (rule R1) — every one of these has a degraded driver that needs nothing.
 #
@@ -20,7 +26,7 @@ services:
       POSTGRES_PASSWORD: cogenta
       POSTGRES_DB: cogenta_test
     ports:
-      - '55432:5432'
+      - '15432:5432'
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
@@ -37,7 +43,7 @@ services:
       MYSQL_USER: cogenta
       MYSQL_PASSWORD: cogenta
     ports:
-      - '53306:3306'
+      - '13306:3306'
     tmpfs:
       - /var/lib/mysql
     healthcheck:
@@ -56,7 +62,7 @@ services:
       MARIADB_USER: cogenta
       MARIADB_PASSWORD: cogenta
     ports:
-      - '53307:3306'
+      - '13307:3306'
     tmpfs:
       - /var/lib/mysql
     healthcheck:
@@ -69,7 +75,7 @@ services:
     image: redis:7-alpine
     command: ['redis-server', '--save', '', '--appendonly', 'no']
     ports:
-      - '56379:6379'
+      - '16379:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 2s
@@ -86,7 +92,7 @@ services:
       MINIO_ROOT_USER: cogenta
       MINIO_ROOT_PASSWORD: cogenta-secret
     ports:
-      - '59000:9000'
+      - '19000:9000'
     tmpfs:
       - /data
     healthcheck:

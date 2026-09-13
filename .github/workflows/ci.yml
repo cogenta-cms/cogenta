@@ -76,11 +76,11 @@ jobs:
 
       - run: pnpm test:integration
         env:
-          COGENTA_TEST_POSTGRES_URL: postgres://cogenta:cogenta@127.0.0.1:55432/cogenta_test
-          COGENTA_TEST_MYSQL_URL: mysql://cogenta:cogenta@127.0.0.1:53306/cogenta_test
-          COGENTA_TEST_MARIADB_URL: mysql://cogenta:cogenta@127.0.0.1:53307/cogenta_test
-          COGENTA_TEST_REDIS_URL: redis://127.0.0.1:56379
-          COGENTA_TEST_S3_ENDPOINT: http://127.0.0.1:59000
+          COGENTA_TEST_POSTGRES_URL: postgres://cogenta:cogenta@127.0.0.1:15432/cogenta_test
+          COGENTA_TEST_MYSQL_URL: mysql://cogenta:cogenta@127.0.0.1:13306/cogenta_test
+          COGENTA_TEST_MARIADB_URL: mysql://cogenta:cogenta@127.0.0.1:13307/cogenta_test
+          COGENTA_TEST_REDIS_URL: redis://127.0.0.1:16379
+          COGENTA_TEST_S3_ENDPOINT: http://127.0.0.1:19000
           COGENTA_TEST_S3_ACCESS_KEY: cogenta
           COGENTA_TEST_S3_SECRET_KEY: cogenta-secret
 

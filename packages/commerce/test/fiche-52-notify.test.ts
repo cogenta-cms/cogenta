@@ -100,6 +100,42 @@ describe('order e-mail queue (task 2)', () => {
     expect(records[0]?.attempts).toBe(1)
   })
 
+  it('does not resend a message a flush has already claimed but not finished sending', async () => {
+    // The case the first fix missed, found on a real server: the second pass
+    // starts *after* the first has claimed the row, while the send is still in
+    // flight. A claim that only bumped the attempt count left the row pending,
+    // so this second pass read the new count, claimed it again, and sent it.
+    const sent: string[] = []
+    let releaseSend: () => void = () => undefined
+    const sendHeld = new Promise<void>((resolve) => {
+      releaseSend = resolve
+    })
+    const queue = createOrderEmailQueue(db, {
+      orders: shop.orders,
+      transport: {
+        send: async (email) => {
+          await sendHeld
+          sent.push(email.subject)
+          return { messageId: `msg-${String(sent.length)}` }
+        },
+      },
+    })
+
+    const orderId = await seedOrder()
+    await queue.enqueue(orderId, 'confirmation')
+
+    const firstPass = queue.flushDue()
+    // Let the first pass claim the row and park inside the transport.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const secondPass = await queue.flushDue()
+    releaseSend()
+    const first = await firstPass
+
+    expect(secondPass.sent).toBe(0)
+    expect(first.sent).toBe(1)
+    expect(sent).toHaveLength(1)
+  })
+
   it('retries a transient failure, and gives up after the retry cap', async () => {
     let attempts = 0
     const queue = createOrderEmailQueue(db, {

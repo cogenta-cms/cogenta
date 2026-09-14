@@ -423,6 +423,9 @@ export const themeRefineRequests: Record<string, unknown>[] = []
  * mock AGENTS.md forbids: the actual request/response wiring is exercised
  * end-to-end against a real server in `packages/cli/test/serve.test.ts`.
  */
+/** Every `POST /api/theme/sample-data/apply` the mock received, in order (L28). */
+export const sampleDataApplications: { theme: string; mode: string; confirmation?: string }[] = []
+
 /** Every `POST /api/theme/activate` the mock received, in order (L27). */
 export const themeActivations: { theme: string; applySkin: boolean }[] = []
 
@@ -751,6 +754,8 @@ export function installMockFetch(
        * old `theme-router.js` it loaded at startup.
        */
       readonly omitAvailableThemesField?: boolean
+      /** L28 — which themes ship sample data, and whether applying it is allowed (`cogenta dev`). Absent: none. */
+      readonly sampleData?: { readonly themes: readonly string[]; readonly writable: boolean }
       /** Fiche 73 — sandbox ids `GET /api/theme/sandbox` starts with. */
       readonly sandboxIds?: readonly string[]
       /** Fiche 73 — archived version timestamps per theme name, for `GET /api/theme/:name/versions`. */
@@ -8938,6 +8943,106 @@ export function installMockFetch(
           return json(200, { data: options.theme?.skins ?? [] })
         }
 
+        const sampleDataMatch = /\/api\/theme\/sample-data\/(preview|apply)$/.exec(url)
+        if (sampleDataMatch !== null && method === 'POST') {
+          const input = body as { theme?: string; mode?: 'keep' | 'reset'; confirmation?: string }
+          const sample = options.theme?.sampleData
+          if (sample === undefined || !sample.themes.includes(input.theme ?? '')) {
+            return json(404, {
+              error: { code: 'THEME_SAMPLE_DATA_UNAVAILABLE', message: 'No sample data.' },
+            })
+          }
+          const reset = input.mode === 'reset'
+          const preview = {
+            theme: input.theme,
+            starter: 'restaurant',
+            mode: input.mode,
+            siteName: 'Maison Test',
+            writable: sample.writable,
+            collections: [
+              {
+                name: 'menu_item',
+                outcome: reset ? 'replace' : 'add',
+                entries: 24,
+                conflictingSlugs: [],
+                mismatches: [],
+              },
+              {
+                name: 'page',
+                outcome: reset ? 'replace' : 'import',
+                entries: 7,
+                conflictingSlugs: reset ? [] : ['home'],
+                mismatches: [],
+              },
+            ],
+            taxonomies: [],
+            menus: [{ location: 'primary', outcome: reset ? 'replace' : 'keep', items: 5 }],
+            settings: [],
+            media: 18,
+            removals: reset
+              ? {
+                  entries: 12,
+                  terms: 3,
+                  media: 4,
+                  menus: 2,
+                  redirects: 0,
+                  collections: ['page', 'post'],
+                }
+              : null,
+            warnings: reset
+              ? [
+                  {
+                    code: 'reset-deletes',
+                    params: { entries: 12, terms: 3, media: 4, menus: 2, redirects: 0 },
+                  },
+                  { code: 'reset-backup', params: {} },
+                ]
+              : [
+                  {
+                    code: 'slug-conflict',
+                    params: { collection: 'page', count: 1, slugs: 'home' },
+                  },
+                ],
+          }
+          if (sampleDataMatch[1] === 'preview') return json(200, { data: preview })
+          if (!sample.writable) {
+            return json(403, { error: { code: 'CONTENT_READ_ONLY', message: 'Run cogenta dev.' } })
+          }
+          if (reset && input.confirmation !== 'Maison Test') {
+            return json(422, {
+              error: {
+                code: 'THEME_SAMPLE_DATA_CONFIRMATION_INVALID',
+                message: 'Type the site name.',
+              },
+            })
+          }
+          sampleDataApplications.push({
+            theme: input.theme as string,
+            mode: input.mode as string,
+            ...(input.confirmation === undefined ? {} : { confirmation: input.confirmation }),
+          })
+          themeOverrides = {
+            ...themeOverrides,
+            activeTheme: input.theme as string,
+            updatedAt: '2026-01-02T00:00:00.000Z',
+            updatedBy: user.id,
+          }
+          return json(200, {
+            data: {
+              ...preview,
+              imported: { entries: reset ? 31 : 30, terms: 0, media: 18 },
+              backup: reset
+                ? {
+                    path: '/site/.cogenta/backups/theme-reset-2026.zip',
+                    restoreCommand:
+                      'cogenta restore apply /site/.cogenta/backups/theme-reset-2026.zip',
+                  }
+                : null,
+              restarting: false,
+            },
+          })
+        }
+
         if (url.includes('/api/theme/activate') && method === 'POST') {
           const input = body as { theme?: string; applySkin?: boolean }
           if (!availableThemes.some((theme) => theme.name === input.theme)) {
@@ -9199,6 +9304,9 @@ export function installMockFetch(
               aiAvailable: options.theme?.aiAvailable ?? false,
               exportAvailable: options.theme?.exportAvailable ?? false,
               ...(options.theme?.omitAvailableThemesField === true ? {} : { availableThemes }),
+              ...(options.theme?.sampleData === undefined
+                ? {}
+                : { sampleData: options.theme.sampleData }),
             },
           })
         }

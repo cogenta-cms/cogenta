@@ -48,6 +48,61 @@ export interface ThemeState {
   readonly aiAvailable: boolean
   readonly exportAvailable: boolean
   readonly availableThemes: readonly AvailableTheme[]
+  /** L28 — which themes ship sample data, and whether this instance may import it (`cogenta dev` only). Absent from a server that predates it. */
+  readonly sampleData?: { readonly themes: readonly string[]; readonly writable: boolean }
+}
+
+export type SampleDataMode = 'keep' | 'reset'
+
+export interface SampleDataWarning {
+  readonly code: string
+  readonly params: Readonly<Record<string, string | number>>
+}
+
+/** Mirrors `@cogenta/api`'s `SampleDataPreview`: what importing would do, computed by the server. */
+export interface SampleDataPreview {
+  readonly theme: string
+  readonly starter: string
+  readonly mode: SampleDataMode
+  readonly siteName: string
+  readonly writable: boolean
+  readonly collections: readonly {
+    readonly name: string
+    readonly outcome: 'add' | 'import' | 'skip' | 'replace'
+    readonly entries: number
+    readonly conflictingSlugs: readonly string[]
+    readonly mismatches: readonly string[]
+  }[]
+  readonly taxonomies: readonly {
+    readonly name: string
+    readonly outcome: 'add' | 'merge' | 'replace'
+    readonly terms: number
+  }[]
+  readonly menus: readonly {
+    readonly location: string
+    readonly outcome: 'fill' | 'keep' | 'replace'
+    readonly items: number
+  }[]
+  readonly settings: readonly {
+    readonly key: string
+    readonly outcome: 'fill' | 'keep' | 'replace'
+  }[]
+  readonly media: number
+  readonly removals: {
+    readonly entries: number
+    readonly terms: number
+    readonly media: number
+    readonly menus: number
+    readonly redirects: number
+    readonly collections: readonly string[]
+  } | null
+  readonly warnings: readonly SampleDataWarning[]
+}
+
+export interface SampleDataReport extends SampleDataPreview {
+  readonly imported: { readonly entries: number; readonly terms: number; readonly media: number }
+  readonly backup: { readonly path: string; readonly restoreCommand: string } | null
+  readonly restarting: boolean
 }
 
 export interface SkinCandidate {
@@ -161,6 +216,31 @@ export function activateTheme(
     method: 'POST',
     headers: { ...authHeader(token), 'content-type': 'application/json' },
     body: JSON.stringify({ theme: name, applySkin }),
+  })
+}
+
+export function previewSampleData(
+  token: string,
+  theme: string,
+  mode: SampleDataMode,
+): Promise<SampleDataPreview> {
+  return request<SampleDataPreview>('/api/theme/sample-data/preview', {
+    method: 'POST',
+    headers: { ...authHeader(token), 'content-type': 'application/json' },
+    body: JSON.stringify({ theme, mode }),
+  })
+}
+
+export function applySampleData(
+  token: string,
+  theme: string,
+  mode: SampleDataMode,
+  confirmation?: string,
+): Promise<SampleDataReport> {
+  return request<SampleDataReport>('/api/theme/sample-data/apply', {
+    method: 'POST',
+    headers: { ...authHeader(token), 'content-type': 'application/json' },
+    body: JSON.stringify({ theme, mode, ...(confirmation === undefined ? {} : { confirmation }) }),
   })
 }
 

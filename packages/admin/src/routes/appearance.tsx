@@ -51,6 +51,7 @@ import {
   Select,
   useSavedIndicator,
 } from '../ui/index.js'
+import { ThemeApplyDialog } from './theme-apply-dialog.js'
 import { ThemeGalleryPreview } from './theme-gallery-preview.js'
 
 /**
@@ -1131,48 +1132,27 @@ export function AppearanceRoute(): JSX.Element {
         </>
       )}
 
-      <Modal
-        open={selectingTheme !== null}
-        onOpenChange={(open) => {
-          if (!open) {
+      {token !== null && (
+        <ThemeApplyDialog
+          token={token}
+          theme={selectingTheme}
+          hasSampleData={
+            selectingTheme !== null &&
+            (theme?.sampleData?.themes.includes(selectingTheme.name) ?? false)
+          }
+          sampleDataWritable={theme?.sampleData?.writable ?? false}
+          switching={switchingTheme !== null}
+          switchError={switchThemeError}
+          onApplyThemeOnly={(applySkin) =>
+            selectingTheme !== null && void switchTheme(selectingTheme.name, applySkin)
+          }
+          onClose={() => {
             setSelectingTheme(null)
             setSwitchThemeError(null)
-          }
-        }}
-        title={t('appearance.themeSelectConfirmTitle', { name: selectingTheme?.label ?? '' })}
-        closeLabel={t('appearance.close')}
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() =>
-                selectingTheme !== null && void switchTheme(selectingTheme.name, false)
-              }
-              disabled={switchingTheme !== null}
-            >
-              {t('appearance.themeSelectKeepSkin')}
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              onClick={() => selectingTheme !== null && void switchTheme(selectingTheme.name, true)}
-              disabled={switchingTheme !== null}
-            >
-              {switchingTheme !== null
-                ? t('appearance.themeSwitching')
-                : t('appearance.themeSelectApplySkin')}
-            </Button>
-          </>
-        }
-      >
-        <p className="text-sm text-foreground">{t('appearance.themeSelectExplanation')}</p>
-        {switchThemeError !== null && (
-          <Notice tone="danger" live="polite">
-            <p>{switchThemeError}</p>
-          </Notice>
-        )}
-      </Modal>
+          }}
+          onSampleDataApplied={load}
+        />
+      )}
       <Modal
         open={deletingTheme !== null}
         onOpenChange={(open) => {

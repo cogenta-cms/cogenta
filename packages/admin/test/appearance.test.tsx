@@ -1,7 +1,12 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
-import { installMockFetch, themeActivations, VALID_TOKEN } from './helpers/mock-fetch.js'
+import {
+  installMockFetch,
+  sampleDataApplications,
+  themeActivations,
+  VALID_TOKEN,
+} from './helpers/mock-fetch.js'
 
 /**
  * "Apparence" (fiche 14, gallery/personalize split fiche 48): the screen the
@@ -435,6 +440,122 @@ describe('the appearance screen — theme picker (fiche L23)', () => {
     })
     expect(themeActivations).toEqual([{ theme: '@cogenta/theme-restaurant', applySkin: true }])
     expect(screen.queryByRole('dialog', { name: 'Utiliser « Restaurant »' })).toBeNull()
+  })
+})
+
+describe('the appearance screen — a theme with its sample data (L28)', () => {
+  const THEMES = [
+    { name: '@cogenta/theme-canonical', label: 'Canonical', description: 'The reference theme.' },
+    { name: '@cogenta/theme-restaurant', label: 'Restaurant', description: 'A bistro.' },
+  ]
+
+  async function openRestaurant(): Promise<HTMLElement> {
+    render(<App />)
+    await goToAppearance()
+    const card = (await screen.findByText('Restaurant')).closest('li') as HTMLElement
+    fireEvent.click(within(card).getByRole('button', { name: 'Sélectionner' }))
+    return screen.findByRole('dialog', { name: 'Utiliser « Restaurant »' })
+  }
+
+  it('says so when a theme ships no sample data, and offers only the theme itself', async () => {
+    signedIn(['admin'], { availableThemes: THEMES, sampleData: { themes: [], writable: true } })
+    const dialog = await openRestaurant()
+    expect(
+      within(dialog).getByText(
+        "Ce thème ne fournit pas de données d'exemple. Seule la mise en page change.",
+      ),
+    ).toBeDefined()
+    expect(within(dialog).queryByRole('button', { name: /Conserver mon contenu/ })).toBeNull()
+    expect(within(dialog).getByRole('button', { name: 'Utiliser le thème complet' })).toBeDefined()
+  })
+
+  it('previews an additive import with its warnings, then imports it', async () => {
+    signedIn(['admin'], {
+      availableThemes: THEMES,
+      sampleData: { themes: ['@cogenta/theme-restaurant'], writable: true },
+    })
+    sampleDataApplications.length = 0
+    const dialog = await openRestaurant()
+    fireEvent.click(within(dialog).getByRole('button', { name: /Conserver mon contenu/ }))
+
+    const preview = await screen.findByRole('dialog', {
+      name: "Appliquer « Restaurant » avec ses données d'exemple",
+    })
+    expect(
+      await within(preview).findByText(
+        "1 entrée(s) de « page » portent une adresse déjà utilisée (home) : votre contenu est conservé et ces entrées d'exemple sont ignorées.",
+      ),
+    ).toBeDefined()
+    expect(within(preview).getByText('24 entrées')).toBeDefined()
+    expect(within(preview).getByText('6 entrées')).toBeDefined()
+    expect(sampleDataApplications).toEqual([])
+
+    fireEvent.click(within(preview).getByRole('button', { name: "Importer les données d'exemple" }))
+    const done = await screen.findByRole('dialog', { name: "Données d'exemple importées" })
+    expect(within(done).getByText(/30 entrées et 18 images importées/)).toBeDefined()
+    expect(sampleDataApplications).toEqual([{ theme: '@cogenta/theme-restaurant', mode: 'keep' }])
+    await waitFor(() => {
+      const refreshed = screen.getByText('Restaurant').closest('li') as HTMLElement
+      expect(within(refreshed).queryByText('Actif')).not.toBeNull()
+    })
+  })
+
+  it('resets only once the site name is typed, and names the backup and how to restore it', async () => {
+    signedIn(['admin'], {
+      availableThemes: THEMES,
+      sampleData: { themes: ['@cogenta/theme-restaurant'], writable: true },
+    })
+    sampleDataApplications.length = 0
+    const dialog = await openRestaurant()
+    fireEvent.click(within(dialog).getByRole('button', { name: /Réinitialiser le site/ }))
+
+    const preview = await screen.findByRole('dialog', {
+      name: "Appliquer « Restaurant » avec ses données d'exemple",
+    })
+    expect(
+      await within(preview).findByText(
+        'Seront supprimés : 12 entrées, 3 termes, 4 médias, 2 menus et 0 redirections.',
+      ),
+    ).toBeDefined()
+    const confirm = within(preview).getByRole('button', {
+      name: 'Sauvegarder, réinitialiser et importer',
+    }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+
+    const input = within(preview).getByLabelText('Saisissez « Maison Test » pour confirmer')
+    fireEvent.change(input, { target: { value: 'Maison' } })
+    expect(confirm.disabled).toBe(true)
+    fireEvent.change(input, { target: { value: 'Maison Test' } })
+    expect(confirm.disabled).toBe(false)
+    fireEvent.click(confirm)
+
+    const done = await screen.findByRole('dialog', { name: "Données d'exemple importées" })
+    expect(
+      within(done).getByText('cogenta restore apply /site/.cogenta/backups/theme-reset-2026.zip'),
+    ).toBeDefined()
+    expect(sampleDataApplications).toEqual([
+      { theme: '@cogenta/theme-restaurant', mode: 'reset', confirmation: 'Maison Test' },
+    ])
+  })
+
+  it('under cogenta serve, shows the sample data choices with how to enable them, and never applies', async () => {
+    signedIn(['admin'], {
+      availableThemes: THEMES,
+      sampleData: { themes: ['@cogenta/theme-restaurant'], writable: false },
+    })
+    sampleDataApplications.length = 0
+    const dialog = await openRestaurant()
+    expect(within(dialog).getByText(/n'est possible que sous « cogenta dev »/)).toBeDefined()
+    fireEvent.click(within(dialog).getByRole('button', { name: /Conserver mon contenu/ }))
+    const preview = await screen.findByRole('dialog', {
+      name: "Appliquer « Restaurant » avec ses données d'exemple",
+    })
+    await within(preview).findByText(/portent une adresse déjà utilisée/)
+    const apply = within(preview).getByRole('button', {
+      name: "Importer les données d'exemple",
+    }) as HTMLButtonElement
+    expect(apply.disabled).toBe(true)
+    expect(sampleDataApplications).toEqual([])
   })
 })
 

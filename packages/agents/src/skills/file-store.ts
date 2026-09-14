@@ -1,6 +1,7 @@
-import { cp, mkdir, readdir, readFile } from 'node:fs/promises'
+import { cp, readdir, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { CogentaError } from '@cogenta/core'
+import { lazyDirectories } from '../fs/lazy-directories.js'
 import { parseSkillFile } from './frontmatter.js'
 import type { Skill, SkillMetadata, SkillStore } from './types.js'
 
@@ -15,7 +16,7 @@ const SKILL_FILE = 'SKILL.md'
  * body and resource file names are read only by `load()`, on demand.
  */
 export function createFileSkillStore(options: { readonly dir: string }): SkillStore {
-  const ready = mkdir(options.dir, { recursive: true })
+  const ready = lazyDirectories(options.dir)
 
   async function readSkillFile(name: string): Promise<{
     readonly metadata: SkillMetadata
@@ -40,7 +41,7 @@ export function createFileSkillStore(options: { readonly dir: string }): SkillSt
 
   return {
     async list() {
-      await ready
+      await ready()
       const entries = await readdir(options.dir, { withFileTypes: true }).catch(() => [])
       const skills: SkillMetadata[] = []
       for (const entry of entries) {
@@ -56,7 +57,7 @@ export function createFileSkillStore(options: { readonly dir: string }): SkillSt
     },
 
     async load(name) {
-      await ready
+      await ready()
       const { metadata, instructions } = await readSkillFile(name)
       const skillDir = join(options.dir, name)
       const allFiles = await readdir(skillDir, { withFileTypes: true, recursive: true })
@@ -70,7 +71,7 @@ export function createFileSkillStore(options: { readonly dir: string }): SkillSt
     },
 
     async install(sourceDir) {
-      await ready
+      await ready()
       const raw = await readFile(join(sourceDir, SKILL_FILE), 'utf8')
       const { metadata } = parseSkillFile(join(sourceDir, SKILL_FILE), raw)
       await cp(sourceDir, join(options.dir, metadata.name), { recursive: true })

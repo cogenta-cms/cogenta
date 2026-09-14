@@ -1,6 +1,7 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CogentaError } from '@cogenta/core'
+import { lazyDirectories } from '../fs/lazy-directories.js'
 import type {
   MemoryConsolidateQuery,
   MemoryPruneQuery,
@@ -24,7 +25,7 @@ function matches(record: MemoryRecord, query: MemoryQuery): boolean {
 
 /** Durable without any external service (R1) — one JSON file per record under `options.dir`, the same "real but local" tier the trace/skills file stores already use. */
 export function createFileMemoryStore(options: { readonly dir: string }): MemoryStore {
-  const ready = mkdir(options.dir, { recursive: true })
+  const ready = lazyDirectories(options.dir)
 
   async function readRecord(path: string): Promise<MemoryRecord | null> {
     try {
@@ -54,22 +55,22 @@ export function createFileMemoryStore(options: { readonly dir: string }): Memory
 
   return {
     async save(record) {
-      await ready
+      await ready()
       await writeFile(fileFor(options.dir, record.id), JSON.stringify(record), 'utf8')
     },
     async query(query: MemoryQuery) {
-      await ready
+      await ready()
       const all = (await readAll())
         .filter((record) => matches(record, query))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       return all.slice(0, query.limit ?? DEFAULT_QUERY_LIMIT)
     },
     async forget(id) {
-      await ready
+      await ready()
       await rm(fileFor(options.dir, id), { force: true })
     },
     async prune(query: MemoryPruneQuery, now = Date.now) {
-      await ready
+      await ready()
       const cutoff = now() - query.olderThanMs
       let removed = 0
       for (const record of await readAll()) {
@@ -83,7 +84,7 @@ export function createFileMemoryStore(options: { readonly dir: string }): Memory
       return removed
     },
     async consolidate(query: MemoryConsolidateQuery) {
-      await ready
+      await ready()
       const inScope = (await readAll())
         .filter(
           (record) =>

@@ -1,7 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CogentaError } from '@cogenta/core'
+import { lazyDirectories } from '../fs/lazy-directories.js'
 import { findProviderCatalogEntry } from './catalog.js'
 import type { ProviderName } from './registry.js'
 
@@ -264,7 +265,7 @@ export function createFileProviderConfigStore(
 ): ProviderConfigStore {
   const now = options.now ?? ((): Date => new Date())
   const key = deriveKey(options.signingKey)
-  const ready = mkdir(options.dir, { recursive: true })
+  const ready = lazyDirectories(options.dir)
 
   /**
    * The one place every method that touches disk builds a path from
@@ -327,7 +328,7 @@ export function createFileProviderConfigStore(
 
   return {
     async list() {
-      await ready
+      await ready()
       const filenames = await readdir(options.dir).catch(() => [])
       const records: StoredProviderConfig[] = []
       for (const filename of filenames) {
@@ -341,13 +342,13 @@ export function createFileProviderConfigStore(
     },
 
     async get(provider) {
-      await ready
+      await ready()
       const record = await readRecord(provider)
       return record === null ? undefined : toSummary(record)
     },
 
     async upsert(input) {
-      await ready
+      await ready()
       assertValidProviderId(input.provider)
       assertResolvable(input.provider, input.baseUrl)
       assertValidTuning(input)
@@ -384,7 +385,7 @@ export function createFileProviderConfigStore(
     },
 
     async setEnabled(provider, enabled) {
-      await ready
+      await ready()
       const existing = await readRecord(provider)
       if (existing === null) throw providerNotConfigured(provider)
       const updated: EncryptedRecord = { ...existing, enabled, updatedAt: now().toISOString() }
@@ -393,12 +394,12 @@ export function createFileProviderConfigStore(
     },
 
     async remove(provider) {
-      await ready
+      await ready()
       await rm(fileFor(provider), { force: true })
     },
 
     async updateSettings(provider, patch) {
-      await ready
+      await ready()
       const existing = await readRecord(provider)
       if (existing === null) throw providerNotConfigured(provider)
       const nextBaseUrl =
@@ -474,7 +475,7 @@ export function createFileProviderConfigStore(
     },
 
     async decryptKey(provider) {
-      await ready
+      await ready()
       const record = await readRecord(provider)
       if (record === null) throw providerNotConfigured(provider)
       return decrypt(record)

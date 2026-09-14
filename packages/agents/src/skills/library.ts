@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, relative } from 'node:path'
 import { CogentaError } from '@cogenta/core'
+import { lazyDirectories } from '../fs/lazy-directories.js'
 import { parseSkillFile, renderSkillFile } from './frontmatter.js'
 import type { SkillMetadata } from './types.js'
 
@@ -212,7 +213,7 @@ export interface FileAgentSkillStoreOptions {
 
 export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): AgentSkillStore {
   const now = options.now ?? ((): Date => new Date())
-  const ready = mkdir(options.dir, { recursive: true })
+  const ready = lazyDirectories(options.dir)
 
   function dirFor(id: string): string {
     return join(options.dir, id)
@@ -303,7 +304,7 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
 
   return {
     async list() {
-      await ready
+      await ready()
       const entries = await readdir(options.dir, { withFileTypes: true }).catch(() => [])
       const skills: AgentSkill[] = []
       for (const entry of entries) {
@@ -322,13 +323,13 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
     },
 
     async get(id) {
-      await ready
+      await ready()
       const record = await readRecord(id)
       return record ?? undefined
     },
 
     async create(input, builtin = false) {
-      await ready
+      await ready()
       const id = slugify(input.name)
       const existing = await readRecord(id)
       if (existing !== null) {
@@ -362,7 +363,7 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
     },
 
     async update(id, patch) {
-      await ready
+      await ready()
       const existing = await readRecord(id)
       if (existing === null) throw skillUnknown(id)
       return writeRecord(
@@ -382,7 +383,7 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
     },
 
     async remove(id) {
-      await ready
+      await ready()
       const existing = await readRecord(id)
       if (existing === null) throw skillUnknown(id)
       if (existing.builtin) {
@@ -396,7 +397,7 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
     },
 
     async listResources(id) {
-      await ready
+      await ready()
       const existing = await readRecord(id)
       if (existing === null) throw skillUnknown(id)
       const skillDir = dirFor(id)
@@ -416,7 +417,7 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
     },
 
     async addResource(id, relativePath, content) {
-      await ready
+      await ready()
       const existing = await readRecord(id)
       if (existing === null) throw skillUnknown(id)
       const segments = resourceSegments(relativePath)
@@ -432,7 +433,7 @@ export function createFileAgentSkillStore(options: FileAgentSkillStoreOptions): 
     },
 
     async removeResource(id, relativePath) {
-      await ready
+      await ready()
       const existing = await readRecord(id)
       if (existing === null) throw skillUnknown(id)
       const segments = resourceSegments(relativePath)

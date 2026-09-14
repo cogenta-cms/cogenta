@@ -1,6 +1,7 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CogentaError } from '@cogenta/core'
+import { lazyDirectories } from '../fs/lazy-directories.js'
 import type { Trace, TraceQuery, TraceStore } from './types.js'
 
 const DEFAULT_LIST_LIMIT = 100
@@ -17,7 +18,7 @@ function fileFor(dir: string, id: string): string {
  * not a database.
  */
 export function createFileTraceStore(options: { readonly dir: string }): TraceStore {
-  const ready = mkdir(options.dir, { recursive: true })
+  const ready = lazyDirectories(options.dir)
 
   async function readTrace(path: string): Promise<Trace | null> {
     try {
@@ -36,15 +37,15 @@ export function createFileTraceStore(options: { readonly dir: string }): TraceSt
 
   return {
     async save(trace) {
-      await ready
+      await ready()
       await writeFile(fileFor(options.dir, trace.id), JSON.stringify(trace), 'utf8')
     },
     async get(id) {
-      await ready
+      await ready()
       return readTrace(fileFor(options.dir, id))
     },
     async list(query: TraceQuery = {}) {
-      await ready
+      await ready()
       const filenames = await readdir(options.dir).catch(() => [])
       const traces: Trace[] = []
       for (const filename of filenames) {
@@ -58,7 +59,7 @@ export function createFileTraceStore(options: { readonly dir: string }): TraceSt
       return traces.slice(0, query.limit ?? DEFAULT_LIST_LIMIT)
     },
     async prune(olderThanMs, now = Date.now) {
-      await ready
+      await ready()
       const cutoff = now() - olderThanMs
       const filenames = await readdir(options.dir).catch(() => [])
       let removed = 0

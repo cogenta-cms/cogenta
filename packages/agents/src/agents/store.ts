@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CogentaError } from '@cogenta/core'
 import type { AutonomyConfig } from '../autonomy/types.js'
 import type { BudgetLimits } from '../budget/types.js'
+import { lazyDirectories } from '../fs/lazy-directories.js'
 import { parseIdentityMarkdown, renderIdentityMarkdown } from '../identity/markdown.js'
 import type {
   AgentDeclaration,
@@ -132,10 +133,7 @@ export function createFileAgentDeclarationStore(
 ): AgentDeclarationStore {
   const now = options.now ?? ((): Date => new Date())
   const identitiesDir = join(options.dir, 'identities')
-  const ready = Promise.all([
-    mkdir(options.dir, { recursive: true }),
-    mkdir(identitiesDir, { recursive: true }),
-  ])
+  const ready = lazyDirectories(options.dir, identitiesDir)
 
   function recordFile(slug: string): string {
     return join(options.dir, `${slug}.json`)
@@ -212,17 +210,17 @@ export function createFileAgentDeclarationStore(
 
   return {
     async list() {
-      await ready
+      await ready()
       return readAll()
     },
 
     async get(name) {
-      await ready
+      await ready()
       return findBySlug(slugOf(name))
     },
 
     async create(input, builtin = false) {
-      await ready
+      await ready()
       const slug = slugOf(input.name)
       return serialised(slug, async () => {
         const existing = await findBySlug(slug)
@@ -258,7 +256,7 @@ export function createFileAgentDeclarationStore(
     },
 
     async update(name, patch) {
-      await ready
+      await ready()
       const slug = slugOf(name)
       return serialised(slug, async () => {
         const existing = await findBySlug(slug)
@@ -313,7 +311,7 @@ export function createFileAgentDeclarationStore(
     },
 
     async setEnabled(name, enabled) {
-      await ready
+      await ready()
       const slug = slugOf(name)
       return serialised(slug, async () => {
         const existing = await findBySlug(slug)
@@ -325,7 +323,7 @@ export function createFileAgentDeclarationStore(
     },
 
     async remove(name) {
-      await ready
+      await ready()
       const slug = slugOf(name)
       return serialised(slug, async () => {
         const existing = await findBySlug(slug)
@@ -343,7 +341,7 @@ export function createFileAgentDeclarationStore(
     },
 
     async readIdentity(name) {
-      await ready
+      await ready()
       const slug = slugOf(name)
       const existing = await findBySlug(slug)
       if (existing === undefined) throw agentUnknown(name)

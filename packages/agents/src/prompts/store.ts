@@ -1,6 +1,7 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { CogentaError } from '@cogenta/core'
+import { lazyDirectories } from '../fs/lazy-directories.js'
 import type {
   PromptTemplate,
   PromptTemplateInput,
@@ -61,7 +62,7 @@ export function createFilePromptTemplateStore(
   options: FilePromptTemplateStoreOptions,
 ): PromptTemplateStore {
   const now = options.now ?? ((): Date => new Date())
-  const ready = mkdir(options.dir, { recursive: true })
+  const ready = lazyDirectories(options.dir)
 
   function fileFor(id: string): string {
     return join(options.dir, `${id}${FILE_SUFFIX}`)
@@ -101,7 +102,7 @@ export function createFilePromptTemplateStore(
 
   return {
     async list() {
-      await ready
+      await ready()
       const entries = await readdir(options.dir, { withFileTypes: true }).catch(() => [])
       const templates: PromptTemplate[] = []
       for (const entry of entries) {
@@ -120,13 +121,13 @@ export function createFilePromptTemplateStore(
     },
 
     async get(id) {
-      await ready
+      await ready()
       const record = await readRecord(id)
       return record ?? undefined
     },
 
     async create(input, builtin = false) {
-      await ready
+      await ready()
       const id = slugify(input.name)
       const existing = await readRecord(id)
       if (existing !== null) {
@@ -150,7 +151,7 @@ export function createFilePromptTemplateStore(
     },
 
     async update(id, patch: PromptTemplatePatch) {
-      await ready
+      await ready()
       const existing = await readRecord(id)
       if (existing === null) throw templateUnknown(id)
       return writeRecord({
@@ -166,7 +167,7 @@ export function createFilePromptTemplateStore(
     },
 
     async remove(id) {
-      await ready
+      await ready()
       const existing = await readRecord(id)
       if (existing === null) throw templateUnknown(id)
       if (existing.builtin) {

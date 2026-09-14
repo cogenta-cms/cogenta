@@ -105,11 +105,16 @@ describe('the appearance screen theme gallery renders a real preview per theme (
       const preview = await galleryPreview(server.base, token, '@cogenta/theme-canonical')
 
       expect(preview.status).toBe(200)
-      // The fixed demo content — hero, collectionList, featureGrid — not a
-      // placeholder and not real site content, since none was ever seeded.
-      expect(preview.html).toContain('A site that looks like yours')
-      expect(preview.html).toContain('Latest posts')
-      expect(preview.html).toContain('Welcome to your new site')
+      // The fixed demo content (one fictional practice, every block a real
+      // site uses) not a placeholder and not real site content, since none
+      // was ever seeded.
+      expect(preview.html).toContain('Buildings that stay useful for a hundred years')
+      expect(preview.html).toContain('Latest news')
+      expect(preview.html).toContain('Calder Vale Primary opens its new wing')
+      expect(preview.html).toContain('Aldwych &amp; Rowe')
+      // No copy about the CMS itself on a page meant to show a theme (the
+      // footer credit is the site's own branding setting, not demo copy).
+      expect(preview.html).not.toMatch(/demo content|client JavaScript|Blocks, not HTML/u)
       // Real CSS is inlined (srcDoc consumption, same reasoning as
       // `/api/theme/preview`), never a bare, unstyled document.
       expect(preview.html).toContain('<style>')

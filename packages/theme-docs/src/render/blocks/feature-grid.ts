@@ -1,67 +1,59 @@
 import type { FeatureGridBlock, FeatureItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
-  type HeadingTag,
   type HtmlElement,
   h,
-  heading,
   href,
   nestedHeadingTag,
   type RenderContext,
   renderIcon,
 } from '@cogenta/theme-kit'
+import { optionalText, section, sectionHead } from '../layout.js'
 
 /**
- * The item's title is the link, so the link's accessible name is the
- * feature's own name (WCAG 2.4.4) — the block carries no separate label
- * field to write a "learn more" with anyway.
+ * Short entries in three columns: "Start here", "Get help". No card, no tile,
+ * no background: each entry hangs from a hairline, its title is the link (an
+ * underlined arrow link when there is one), and one or two lines under it say
+ * what the reader will find. An icon, when the item names one this theme
+ * knows, is a small stroke drawing inline before the title in the secondary
+ * ink, the size of the text it sits beside.
  *
- * `icon` names a symbol, never markup: when the name is one `renderIcon`
- * recognises it becomes a real inline glyph, `aria-hidden` since the title
- * already names the card. An unrecognised name keeps the bare, empty
- * `data-icon` span for a skin/plugin to key off.
+ * Three columns on a desk, two on a tablet, one on a phone; four items make
+ * a row of four on a wide screen, so no row is left with an empty cell.
  */
-function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const title =
-    item.link === undefined
-      ? heading(tag, { class: 'cg-feature__title' }, item.title)
-      : heading(
-          tag,
-          { class: 'cg-feature__title' },
-          h('a', { class: 'cg-feature__link', href: href(ctx, item.link) }, item.title),
-        )
-  return h(
-    'li',
-    { class: 'cg-feature' },
+function entry(item: FeatureItem, ctx: RenderContext, tag: string): HtmlElement {
+  const icon =
     item.icon === undefined
       ? null
-      : h(
-          'span',
-          { class: 'cg-feature__icon', 'data-icon': item.icon, 'aria-hidden': 'true' },
-          renderIcon(item.icon),
-        ),
-    title,
-    item.text === undefined ? null : h('p', { class: 'cg-feature__text' }, item.text),
+      : renderIcon(item.icon, { className: 'cd-features__icon', size: 18 })
+  return h(
+    'li',
+    { class: 'cd-features__item' },
+    h(
+      tag,
+      { class: 'cd-features__title' },
+      icon,
+      item.link === undefined
+        ? h('span', {}, item.title)
+        : h('a', { class: 'cd-arrow-link', href: href(ctx, item.link) }, item.title),
+    ),
+    optionalText('p', 'cd-features__text', item.text),
   )
 }
 
 export function renderFeatureGrid(block: FeatureGridBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const itemTag = nestedHeadingTag('featureGrid', hasTitle)
-  return h(
+  const tag = nestedHeadingTag('featureGrid', block.title !== undefined)
+  const count = block.items.length
+  return section(
     'section',
-    { class: 'cg-block cg-features', 'data-block': 'featureGrid' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('featureGrid') ?? 'h2',
-          { class: 'cg-features__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'featureGrid',
+    'cd-features',
+    { 'data-count': String(count % 4 === 0 ? 4 : Math.min(count, 3)) },
+    'div',
+    sectionHead('featureGrid', block.title),
     h(
       'ul',
-      { class: 'cg-features__items' },
-      block.items.map((item) => renderItem(item, ctx, itemTag)),
+      { class: 'cd-features__items' },
+      block.items.map((item) => entry(item, ctx, tag)),
     ),
   )
 }

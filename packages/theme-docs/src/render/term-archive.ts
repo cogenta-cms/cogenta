@@ -1,65 +1,71 @@
 import { type HtmlElement, h, type TermArchiveInput } from '@cogenta/theme-kit'
+import { longDate } from './layout.js'
 
 /**
- * The taxonomy-term archive (contract D `theme@1.3`) — a simple titled list,
- * deliberately: a documentation site's own information architecture is the
- * sidebar (`section`/`order`, plain fields), not a taxonomy, so this page is
- * the plain fallback for a term an editor still chooses to classify content
- * under, not a second navigation surface competing with the sidebar.
+ * The taxonomy-term archive (contract D `theme@1.3`): a titled index of
+ * ruled rows on the reading width. A documentation site's own information
+ * architecture is the sidebar (`section` and `order`), not a taxonomy, so
+ * this page is the plain, well-set fallback for a term an editor still
+ * classifies pages under, not a second navigation competing with it.
  */
 export function renderTermArchive(input: TermArchiveInput): HtmlElement {
   const rows = input.entries.map((entry) =>
     h(
       'li',
-      { class: 'cg-list__row' },
+      { class: 'cd-index__item' },
       h(
         'div',
-        { class: 'cg-list__body' },
+        { class: 'cd-index__words' },
         h(
           'h2',
-          { class: 'cg-list__title' },
+          { class: 'cd-index__title' },
           entry.href === null
             ? entry.title
-            : h('a', { class: 'cg-list__link', href: entry.href }, entry.title),
+            : h('a', { class: 'cd-index__link', href: entry.href }, entry.title),
         ),
-        entry.summary === null ? null : h('p', { class: 'cg-list__excerpt' }, entry.summary),
+        entry.summary === null ? null : h('p', { class: 'cd-index__text' }, entry.summary),
       ),
       entry.publishedAt === null
         ? null
         : h(
             'time',
-            { class: 'cg-list__date', datetime: entry.publishedAt },
-            entry.publishedAt.slice(0, 10),
+            { class: 'cd-index__date', datetime: entry.publishedAt },
+            longDate(entry.publishedAt, input.locale),
           ),
     ),
   )
 
   return h(
     'main',
-    { class: 'cg-main cg-archive', id: 'cg-main' },
-    input.ancestors.length === 0
-      ? null
-      : h(
-          'nav',
-          { class: 'cg-archive__breadcrumb', 'aria-label': input.labels.breadcrumb },
-          h(
-            'ol',
-            {},
-            ...input.ancestors.map((l) => h('li', {}, h('a', { href: l.href }, l.label))),
+    { class: 'cg-main cd-archive', id: 'cg-main' },
+    h(
+      'div',
+      { class: 'cd-archive__inner' },
+      input.ancestors.length === 0
+        ? null
+        : h(
+            'nav',
+            { class: 'cd-breadcrumb', 'aria-label': input.labels.breadcrumb },
+            h(
+              'ol',
+              { class: 'cd-breadcrumb__items' },
+              input.ancestors.map((link) => h('li', {}, h('a', { href: link.href }, link.label))),
+              h('li', { 'aria-current': 'page' }, input.term.label),
+            ),
           ),
-        ),
-    h('h1', { class: 'cg-page__title' }, input.term.label),
-    input.children.length === 0
-      ? null
-      : h(
-          'ul',
-          { class: 'cg-archive__children', 'aria-label': input.labels.subterms },
-          ...input.children.map((c) => h('li', {}, h('a', { href: c.href }, c.label))),
-        ),
-    rows.length === 0
-      ? h('p', { class: 'cg-list__empty' }, input.labels.empty)
-      : h('ul', { class: 'cg-list__items' }, ...rows),
-    pager(input),
+      h('h1', { class: 'cd-archive__title' }, input.term.label),
+      input.children.length === 0
+        ? null
+        : h(
+            'ul',
+            { class: 'cd-archive__children', 'aria-label': input.labels.subterms },
+            input.children.map((child) => h('li', {}, h('a', { href: child.href }, child.label))),
+          ),
+      rows.length === 0
+        ? h('p', { class: 'cd-empty' }, input.labels.empty)
+        : h('ul', { class: 'cd-index' }, rows),
+      pager(input),
+    ),
   )
 }
 
@@ -67,12 +73,30 @@ function pager(input: TermArchiveInput): HtmlElement | null {
   if (input.page.previousHref === null && input.page.nextHref === null) return null
   return h(
     'nav',
-    { class: 'cg-archive__pager', 'aria-label': input.labels.pagination },
+    { class: 'cd-pager', 'aria-label': input.labels.pagination },
     input.page.previousHref === null
       ? null
-      : h('a', { rel: 'prev', href: input.page.previousHref }, input.labels.previous),
+      : h(
+          'a',
+          {
+            class: 'cd-pager__link',
+            'data-direction': 'previous',
+            rel: 'prev',
+            href: input.page.previousHref,
+          },
+          h('span', { class: 'cd-pager__title' }, input.labels.previous),
+        ),
     input.page.nextHref === null
       ? null
-      : h('a', { rel: 'next', href: input.page.nextHref }, input.labels.next),
+      : h(
+          'a',
+          {
+            class: 'cd-pager__link',
+            'data-direction': 'next',
+            rel: 'next',
+            href: input.page.nextHref,
+          },
+          h('span', { class: 'cd-pager__title' }, input.labels.next),
+        ),
   )
 }

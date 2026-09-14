@@ -1,166 +1,176 @@
-import type { ChromeInput } from '@cogenta/theme-kit'
+import type { ChromeInput, ChromeNavLink } from '@cogenta/theme-kit'
 import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
-import { renderChrome } from '../src/render/chrome.js'
+import { footerGroups, renderChrome } from '../src/render/chrome.js'
+import { splitSiteName } from '../src/render/strings.js'
 
-/**
- * `theme@1.4` (L25 D2) — `tagline`/`social`/`footerNote`/`headerAction`, all
- * optional and additive. This theme's own header also carries a CSS-only
- * mobile menu (a `<details>` disclosure, a second copy of the nav links
- * hidden by default and shown only at a narrow viewport — see `chrome.ts`'s
- * own comment for why two static copies, not a repositioned one).
- *
- * The manual light/dark toggle added afterwards is deliberately *not* part
- * of the "byte-identical" guarantee below — it is unconditional, on every
- * render, so the expectation is built from `renderThemeToggle` itself rather
- * than a hand-copied literal that would silently drift from the real markup
- * the first time either changes (same fix as `theme-canonical`'s own
- * `chrome.test.ts`).
- */
+const link = (label: string, href: string | null, kind = 'url'): ChromeNavLink => ({
+  label,
+  href,
+  openInNewTab: false,
+  kind,
+  title: null,
+})
 
 const MINIMAL: ChromeInput = {
-  site: { name: 'Reference Site' },
+  site: { name: 'Relay Docs' },
   locale: 'en',
   homeHref: '/',
   headerNav: [],
   footerNav: [],
-  brandingHtml: '<div class="cg-site-footer__branding">credit</div>',
+  brandingHtml: '<a href="https://example.org">credit</a>',
 }
 
 const BASE: ChromeInput = {
   ...MINIMAL,
-  headerNav: [{ label: 'Blog', href: '/blog', openInNewTab: false, kind: 'url', title: null }],
+  headerNav: [
+    link('Guides', '/docs/verifying-signatures'),
+    link('Reference', '/docs/cli-reference'),
+  ],
   footerNav: [
-    { label: 'Privacy', href: '/privacy', openInNewTab: false, kind: 'url', title: null },
+    link('Get started', null, 'submenu-placeholder'),
+    link('Quickstart', '/docs/quickstart'),
+    link('Help', null, 'submenu-placeholder'),
+    link('Troubleshooting', '/docs/troubleshooting'),
   ],
 }
 
-describe('renderChrome — no navigation, no 1.4 fields', () => {
-  it('renders byte-identical header and footer with nothing to show', () => {
-    const { header, footer } = renderChrome(MINIMAL)
-    const themeToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
-    expect(header).toBe(
-      '<header class="cg-site-header"><div class="cg-site-header__inner">' +
-        '<a class="cg-site-header__home" href="/">Reference Site</a>' +
-        `${themeToggle}` +
-        '</div></header>',
-    )
-    expect(footer).toBe(
-      '<footer class="cg-site-footer"><div class="cg-site-footer__grid">' +
-        '<div class="cg-site-footer__brand"><a href="/">Reference Site</a></div>' +
-        '<div class="cg-site-footer__nav-col"></div>' +
-        '<div class="cg-site-footer__about-col">' +
-        '<div class="cg-site-footer__branding"><div class="cg-site-footer__branding">credit</div></div>' +
-        '</div></div>' +
-        '<div class="cg-site-footer__bottom"><span>Reference Site</span></div></footer>',
+describe('the header', () => {
+  const { header } = renderChrome(BASE)
+
+  it('sets the product in ink and the kind of site in grey', () => {
+    expect(header).toContain(
+      '<a class="cd-header__brand" href="/"><span class="cd-wordmark"><span class="cd-wordmark__product">Relay</span> <span class="cd-wordmark__kind">Docs</span></span></a>',
     )
   })
 
-  it('emits no mobile-menu markup at all when there is no navigation to show', () => {
-    const { header } = renderChrome(MINIMAL)
-    expect(header).not.toContain('cg-nav-toggle')
-  })
-})
-
-describe('renderChrome — desktop nav and the mobile menu', () => {
-  it('renders the desktop nav as its own <nav aria-label="Primary">', () => {
-    const { header } = renderChrome(BASE)
-    expect(header).toContain('<nav class="cg-site-header__nav" aria-label="Primary">')
-    expect(header).toContain('<a href="/blog">Blog</a>')
-  })
-
-  it('duplicates the same links inside a <details> mobile disclosure, never a script', () => {
-    const { header } = renderChrome(BASE)
-    expect(header).toContain('<details class="cg-nav-toggle">')
-    expect(header).toContain('<summary class="cg-nav-toggle__button"')
-    expect(header).toContain('cg-nav-toggle__panel')
-    expect(header).not.toMatch(/<script/i)
-    // Both copies carry the real link — one is hidden by CSS, not by
-    // being empty.
-    expect(header.match(/href="\/blog"/g)?.length).toBe(2)
-  })
-
-  it('renders the footer nav as its own labelled <nav>', () => {
-    const { footer } = renderChrome(BASE)
-    expect(footer).toContain('<nav class="cg-site-footer__nav" aria-label="Footer">')
-    expect(footer).toContain('<a href="/privacy">Privacy</a>')
-  })
-})
-
-describe('renderChrome — theme@1.4 fields', () => {
-  it('shows the tagline in the footer brand column, once set', () => {
-    const { footer } = renderChrome({ ...MINIMAL, tagline: 'A docs site that stays current.' })
-    expect(footer).toContain(
-      '<a href="/">Reference Site</a><p class="cg-site-footer__tagline">A docs site that stays current.</p>',
+  it('keeps any other site name whole', () => {
+    expect(renderChrome({ ...MINIMAL, site: { name: 'Tallyhall' } }).header).toContain(
+      '<span class="cd-wordmark"><span class="cd-wordmark__product">Tallyhall</span></span>',
     )
-  })
-
-  it('escapes a hostile tagline', () => {
-    const { footer } = renderChrome({ ...MINIMAL, tagline: '<script>alert(1)</script>' })
-    expect(footer).not.toContain('<script>alert')
-    expect(footer).toContain('&lt;script&gt;')
-  })
-
-  it('renders the social links as an icon list in the footer', () => {
-    const { footer } = renderChrome({
-      ...MINIMAL,
-      social: [
-        { label: 'GitHub', href: 'https://github.com/cogenta' },
-        { label: 'X', href: 'https://x.com/cogenta' },
-      ],
+    expect(splitSiteName('Northwind Developer Docs')).toEqual({
+      product: 'Northwind',
+      suffix: 'Developer Docs',
     })
-    expect(footer).toContain('cg-site-footer__social')
-    expect(footer).toContain('cg-visually-hidden')
-    expect(footer.match(/<svg/g)?.length).toBe(2)
   })
 
-  it('omits the social markup entirely when social is absent', () => {
-    const { footer } = renderChrome(MINIMAL)
-    expect(footer).not.toContain('cg-site-footer__social')
+  it('carries a real search form that asks /search, with a labelled input', () => {
+    expect(header).toContain('<form class="cd-search" action="/search" method="get" role="search">')
+    expect(header).toContain(
+      '<label class="cg-visually-hidden" for="cd-search-header">Search the documentation</label>',
+    )
+    expect(header).toContain('id="cd-search-header"')
   })
 
-  it('renders the footer note as its own "about" paragraph, escaped', () => {
-    const { footer } = renderChrome({ ...MINIMAL, footerNote: 'A <b>real</b> docs site.' })
-    expect(footer).toContain('cg-site-footer__note')
-    expect(footer).not.toContain('<b>real</b>')
-    expect(footer).toContain('&lt;b&gt;real&lt;/b&gt;')
+  it('lists the top sections in a labelled nav', () => {
+    expect(header).toContain('<nav class="cd-header__nav" aria-label="Primary">')
+    expect(header).toContain('<a href="/docs/cli-reference">Reference</a>')
   })
 
-  it('renders the header action as a primary-styled button, in the desktop nav and again in the mobile panel', () => {
-    const { header } = renderChrome({
+  it('places the shared light/dark control', () => {
+    expect(header).toContain(serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' })))
+  })
+
+  it('opens a menu on a phone with a disclosure, never a script', () => {
+    expect(header).toContain(
+      '<details class="cd-menu"><summary class="cd-menu__button" aria-label="Menu">',
+    )
+    expect(header).toContain('id="cd-search-menu"')
+    expect(header.match(/href="\/docs\/cli-reference"/g)).toHaveLength(2)
+    expect(header).not.toMatch(/<script|\son[a-z]+="/i)
+  })
+
+  it('keeps a search link in the bar for a phone, named for assistive technology', () => {
+    expect(header).toContain(
+      '<a class="cd-header__search-link" href="/search" aria-label="Search">',
+    )
+  })
+
+  it('renders the header action as an outlined control, in the bar and in the menu', () => {
+    const withAction = renderChrome({
       ...BASE,
-      headerAction: { label: 'Book a demo', href: '/demo' },
-    })
-    expect(header).toContain('data-emphasis="primary"')
-    expect(header.match(/href="\/demo"/g)?.length).toBe(2)
-    expect(header.match(/Book a demo/g)?.length).toBe(2)
-    // After the primary nav, not before it — the nav still reads first.
-    expect(header.indexOf('cg-site-header__nav')).toBeLessThan(
-      header.indexOf('cg-site-header__action'),
+      headerAction: { label: 'GitHub', href: 'https://github.com/example' },
+    }).header
+    expect(withAction.match(/data-emphasis="outline"/g)).toHaveLength(2)
+    expect(withAction.indexOf('cd-header__nav')).toBeLessThan(
+      withAction.indexOf('cd-header__action'),
     )
   })
 
-  it('escapes a hostile header action label and href', () => {
-    const { header } = renderChrome({
+  it('draws no navigation at all when the site has none', () => {
+    const { header: bare } = renderChrome(MINIMAL)
+    expect(bare).not.toContain('cd-header__nav')
+    expect(bare).not.toContain('cd-menu__nav')
+  })
+
+  it('escapes a hostile header action', () => {
+    const { header: hostile } = renderChrome({
       ...MINIMAL,
       headerAction: { label: '<script>x</script>', href: '"onmouseover=x' },
     })
-    expect(header).not.toContain('<script>x')
-    expect(header).not.toContain('"onmouseover=x')
+    expect(hostile).not.toContain('<script>x')
+    expect(hostile).not.toContain('"onmouseover=x')
+  })
+})
+
+describe('the footer', () => {
+  const full = renderChrome({
+    ...BASE,
+    tagline: 'Signed webhook delivery.',
+    footerNote: 'Released under the Apache License 2.0.\nDocumentation text under CC BY 4.0.',
+    social: [
+      { label: 'GitHub', href: 'https://github.com/example' },
+      { label: 'X', href: 'https://x.com/example' },
+    ],
+  }).footer
+
+  it('names the site, its tagline and its licence', () => {
+    expect(full).toContain('<a class="cd-footer__name" href="/">Relay Docs</a>')
+    expect(full).toContain(
+      '<p class="cd-footer__tagline" data-field="tagline">Signed webhook delivery.</p>',
+    )
+    expect(full).toContain(
+      '<p>Released under the Apache License 2.0.<br>Documentation text under CC BY 4.0.</p>',
+    )
   })
 
-  it('renders all four fields together without interfering with one another', () => {
-    const { header, footer } = renderChrome({
-      ...BASE,
-      tagline: 'A docs site that stays current.',
-      social: [{ label: 'GitHub', href: 'https://github.com/cogenta' }],
-      footerNote: 'Founded in 2020.',
-      headerAction: { label: 'Get started', href: '/start' },
+  it('splits the footer menu into headed columns', () => {
+    expect(full).toContain('data-columns="2"')
+    expect(full).toContain('<p class="cd-footer__heading">Get started</p>')
+    expect(footerGroups(BASE.footerNav).map((group) => group.heading)).toEqual([
+      'Get started',
+      'Help',
+    ])
+  })
+
+  it('draws the social profiles as real icons with hidden text labels', () => {
+    expect(full.match(/<svg/g)).toHaveLength(2)
+    expect(full).toContain('<span class="cg-visually-hidden">GitHub</span>')
+  })
+
+  it('prints the copyright year and the product, and the host credit once, as received', () => {
+    expect(full).toContain(
+      `<p class="cd-footer__copyright">© ${new Date().getFullYear()} Relay</p>`,
+    )
+    expect(full.match(/credit<\/a>/g)).toHaveLength(1)
+  })
+
+  it('prints no caps line and no stray repetition of the name', () => {
+    expect(full.match(/Relay Docs/g)).toHaveLength(1)
+  })
+
+  it('omits every optional part when nothing is set', () => {
+    const { footer } = renderChrome({ ...MINIMAL, brandingHtml: '' })
+    expect(footer).not.toMatch(/cd-footer__(tagline|note|social|nav|branding)/)
+  })
+
+  it('escapes a hostile tagline and note', () => {
+    const { footer } = renderChrome({
+      ...MINIMAL,
+      tagline: '<script>alert(1)</script>',
+      footerNote: 'A <b>real</b> note',
     })
-    expect(header).toContain('cg-site-header__action')
-    expect(header).toContain('cg-nav-toggle__action')
-    expect(footer).toContain('cg-site-footer__tagline')
-    expect(footer).toContain('cg-site-footer__social')
-    expect(footer).toContain('cg-site-footer__note')
+    expect(footer).not.toContain('<script>alert')
+    expect(footer).toContain('&lt;b&gt;real&lt;/b&gt;')
   })
 })

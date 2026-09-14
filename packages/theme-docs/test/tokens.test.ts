@@ -59,16 +59,22 @@ describe('the default skin', () => {
     expect(contrast(tokens.color.mutedFg, tokens.color.muted)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('picks a genuine blue accent — the Docusaurus/GitBook register the brief asks for', () => {
-    // Recorded as a real assertion (not a comment) so a future edit that
-    // quietly drifts away from the identity is caught: blue means the red
-    // and green channels sit well below the blue one.
+  it('picks a deep teal accent, never an indigo or a violet', () => {
+    // Teal sits between green and blue: blue and green both well above red,
+    // and blue never far above green (which is where indigo and violet start).
     const hex = tokens.color.accent.replace('#', '')
     const r = Number.parseInt(hex.slice(0, 2), 16)
     const g = Number.parseInt(hex.slice(2, 4), 16)
     const b = Number.parseInt(hex.slice(4, 6), 16)
-    expect(b).toBeGreaterThan(r)
-    expect(b).toBeGreaterThan(g)
+    expect(g).toBeGreaterThan(r + 40)
+    expect(b).toBeGreaterThan(r + 40)
+    expect(b - g).toBeLessThan(40)
+  })
+
+  it('keeps links in the accent readable on white and on the grey of a band', () => {
+    expect(contrast(tokens.color.accent, tokens.color.bg)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(tokens.color.accent, tokens.color.muted)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(tokens.color.mutedFg, tokens.color.bg)).toBeGreaterThanOrEqual(4.5)
   })
 
   it('names Google Fonts families this theme actually loads, with a real system fallback', () => {
@@ -95,12 +101,17 @@ describe('the default skin', () => {
     expect(['compact', 'comfortable', 'spacious']).toContain(tokens.space.density)
   })
 
-  it('picks a compact density — a reference site reads a line at a time, not a marketing page', () => {
-    expect(tokens.space.density).toBe('compact')
+  it('picks a comfortable density: the theme sets its own tighter rhythm inside an article', () => {
+    expect(tokens.space.density).toBe('comfortable')
   })
 
-  it('keeps radii restrained — a tool reads as structured, not soft', () => {
+  it('keeps radii to a hair: a reference reads as structured, not soft', () => {
     const asRem = (value: string): number => Number.parseFloat(value)
-    expect(asRem(tokens.radius.lg)).toBeLessThan(1)
+    expect(asRem(tokens.radius.lg)).toBeLessThanOrEqual(0.375)
+    expect(asRem(tokens.radius.sm)).toBeLessThanOrEqual(asRem(tokens.radius.md))
+  })
+
+  it('names IBM Plex Mono first for code', () => {
+    expect(tokens.font.mono.split(',')[0]?.replace(/['"]/g, '').trim()).toBe('IBM Plex Mono')
   })
 })

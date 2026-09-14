@@ -6,86 +6,88 @@ import { BLOCKS, DOC_PAGES, ENTRIES, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
 
-describe('collectionList — general rows', () => {
-  it('renders every entry as a row with a title link and an excerpt', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
+describe('collectionList, any collection', () => {
+  const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
+
+  it('lists entries as ruled index rows with a title link, an excerpt and a date', () => {
+    expect(html).toContain('<ul class="cd-index">')
     expect(html).toContain('What a structured release process actually looks like')
-    expect(html).toContain('cg-list__excerpt')
+    expect(html).toContain('cd-index__text')
+    expect(html).toContain(
+      '<time class="cd-index__date" datetime="2026-02-11T09:00:00.000Z">February 11, 2026</time>',
+    )
   })
 
-  it('falls back to a translated placeholder title for an entry that has none, never "undefined"', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
+  it('falls back to a translated title, never "undefined"', () => {
     expect(html).not.toContain('>undefined<')
     expect(html).toContain('entry.untitled')
   })
 
-  it('shows a cover image via entryImage when the entry carries one (theme@1.4)', () => {
+  it('shows a framed picture in a grid when the entry has one, out of the tab order', () => {
     const withCover: ContentEntry = { ...(ENTRIES[0] as ContentEntry), coverImage: 'media-figure' }
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, [withCover]))
-    expect(html).toContain('cg-list__thumb')
-    expect(html).toContain('loading="lazy"')
+    const grid = serialize(
+      renderCollectionList({ ...BLOCKS.collectionList, layout: 'grid' }, ctx, [withCover]),
+    )
+    expect(grid).toContain('cd-cards__media cd-frame')
+    expect(grid).toContain('tabindex="-1"')
+    expect(grid).toContain('aria-hidden="true"')
   })
 
-  it('omits the thumbnail entirely when the entry has no image field', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).not.toContain('cg-list__thumb')
+  it('draws no picture slot for an entry without one', () => {
+    const grid = serialize(
+      renderCollectionList({ ...BLOCKS.collectionList, layout: 'grid' }, ctx, ENTRIES),
+    )
+    expect(grid).not.toContain('cd-cards__media')
   })
 
-  it('shows the empty state, translated, when there is nothing to list', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, []))
-    expect(html).toContain('cg-list__empty')
+  it('shows a designed empty state when there is nothing to list', () => {
+    const empty = serialize(renderCollectionList(BLOCKS.collectionList, ctx, []))
+    expect(empty).toContain('<p class="cd-empty">collection.empty</p>')
+    expect(empty).toContain('data-shape="empty"')
   })
 
-  it('wraps a carousel layout in a labelled scroll region', () => {
-    const html = serialize(
+  it('wraps a carousel in a named, focusable scroll region', () => {
+    const carousel = serialize(
       renderCollectionList({ ...BLOCKS.collectionList, layout: 'carousel' }, ctx, ENTRIES),
     )
-    expect(html).toContain('role="region"')
+    expect(carousel).toContain('role="region"')
+    expect(carousel).toContain('data-carousel="true"')
+    expect(carousel).toContain('tabindex="0"')
   })
 
   it('is marked with data-block="collectionList"', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
     expect(html).toContain('data-block="collectionList"')
   })
 })
 
-describe('collectionList — the doc_page "All guides" grouped index', () => {
+describe('collectionList, doc pages: the documentation by section', () => {
   const docBlock = { ...BLOCKS.collectionList, collection: 'doc_page' }
+  const html = serialize(renderCollectionList(docBlock, ctx, DOC_PAGES))
 
-  it('groups entries by their own section field', () => {
-    const html = serialize(renderCollectionList(docBlock, ctx, DOC_PAGES))
-    expect(html).toContain('cg-guides')
-    expect(html).toContain('Getting started')
-    expect(html).toContain('Guides')
-    expect(html).toContain('Reference')
+  it('groups pages into one column per section', () => {
+    expect(html).toContain('<div class="cd-browse" data-count="3">')
+    expect(html.match(/class="cd-browse__group"/g)).toHaveLength(3)
   })
 
-  it('orders sections alphabetically for a deterministic page', () => {
-    const html = serialize(renderCollectionList(docBlock, ctx, DOC_PAGES))
-    const gettingStarted = html.indexOf('Getting started')
-    const guides = html.indexOf('Guides')
-    const reference = html.indexOf('Reference')
-    expect(gettingStarted).toBeLessThan(guides)
-    expect(guides).toBeLessThan(reference)
+  it('orders sections by the documentation’s own order, not alphabetically or by fetch', () => {
+    const at = (text: string): number => html.indexOf(`>${text}</h3>`)
+    expect(at('Getting started')).toBeLessThan(at('Guides'))
+    expect(at('Guides')).toBeLessThan(at('Reference'))
   })
 
-  it("orders entries within a section by the entry's own order field", () => {
-    const html = serialize(renderCollectionList(docBlock, ctx, DOC_PAGES))
-    const installation = html.indexOf('Installation')
-    const configuration = html.indexOf('Configuration')
-    expect(installation).toBeGreaterThan(-1)
-    expect(installation).toBeLessThan(configuration)
+  it('orders pages within a section by their own order field', () => {
+    expect(html.indexOf('Installation')).toBeLessThan(html.indexOf('Configuration'))
   })
 
-  it('never wraps the grouped index in a carousel scroll region, even if the block layout says carousel', () => {
-    const html = serialize(
+  it('titles each section one level below the block title', () => {
+    expect(html).toContain('<h3 class="cd-browse__heading">Getting started</h3>')
+  })
+
+  it('never turns the documentation into a carousel', () => {
+    const carousel = serialize(
       renderCollectionList({ ...docBlock, layout: 'carousel' }, ctx, DOC_PAGES),
     )
-    expect(html).not.toContain('role="region"')
-  })
-
-  it('renders as a plain compact list, not general rows with dates and excerpts', () => {
-    const html = serialize(renderCollectionList(docBlock, ctx, DOC_PAGES))
-    expect(html).not.toContain('cg-list__row')
+    expect(carousel).not.toContain('role="region"')
+    expect(carousel).toContain('data-shape="docs"')
   })
 })

@@ -1,0 +1,337 @@
+/*
+ * Running text: paragraphs, lists, headings that link to themselves, inline
+ * code, code blocks with a file name, notes, reference tables, keys, figures.
+ * Everything under `.cd-rich`, the class every rich text body carries.
+ */
+
+.cd-rich {
+  color: var(--cd-ink);
+  font-size: var(--cd-text-md);
+  line-height: var(--cd-leading-text);
+}
+
+.cd-rich > * {
+  margin-block: 0;
+}
+
+/* Running text keeps to the reading measure; code, notes, reference tables
+   and figures take the whole column. */
+.cd-rich > :is(p, ul, ol, h2, h3, h4, blockquote) {
+  max-inline-size: var(--cd-measure);
+}
+
+.cd-rich > * + * {
+  margin-block-start: var(--cd-s5);
+}
+
+.cd-rich > h2 {
+  margin-block-start: var(--cd-s12);
+  font-size: var(--cd-size-h2);
+  letter-spacing: var(--cd-tracking-heading);
+}
+
+.cd-rich > h3 {
+  margin-block-start: var(--cd-s10);
+  font-size: var(--cd-size-h3);
+}
+
+.cd-rich > h4 {
+  margin-block-start: var(--cd-s8);
+  font-size: var(--cd-text-md);
+}
+
+.cd-rich > :is(h2, h3, h4) + * {
+  margin-block-start: var(--cd-s3);
+}
+
+.cd-rich > :first-child {
+  margin-block-start: 0;
+}
+
+/* A heading links to itself; the mark appears beside it on hover and focus. */
+.cd-anchor {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cd-anchor::after {
+  content: "#" / "";
+  margin-inline-start: 0.4em;
+  color: transparent;
+  font-weight: var(--cd-weight-regular);
+  transition: color var(--cd-duration) var(--cd-ease);
+}
+
+.cd-anchor:hover::after,
+.cd-anchor:focus-visible::after {
+  color: var(--cd-ink-muted);
+}
+
+.cd-rich a:not(.cd-anchor) {
+  color: var(--cd-link);
+  text-decoration-thickness: var(--cd-rule);
+}
+
+.cd-rich a:not(.cd-anchor):hover {
+  color: var(--cd-accent-hover);
+}
+
+.cd-rich :where(ul, ol) {
+  padding-inline-start: 1.35em;
+}
+
+.cd-rich li + li,
+.cd-rich li > :where(ul, ol) {
+  margin-block-start: var(--cd-s2);
+}
+
+.cd-rich li::marker {
+  color: var(--cd-ink-muted);
+}
+
+.cd-rich ol > li::marker {
+  font-variant-numeric: tabular-nums;
+}
+
+.cd-rich strong {
+  font-weight: var(--cd-weight-semibold);
+}
+
+.cd-rich > blockquote {
+  padding-inline-start: var(--cd-s5);
+  border-inline-start: var(--cd-rule-strong) solid var(--cd-line-strong);
+  color: var(--cd-ink-soft);
+}
+
+.cd-rich blockquote p {
+  margin: 0;
+}
+
+.cd-rich > hr {
+  margin-block: var(--cd-s10);
+}
+
+.cd-rich > figure {
+  margin-inline: 0;
+}
+
+/* Outside an article, a prose block's own h2 names a section of the page, at
+   the same size as every other block's title. */
+.cd-main .cd-prose .cd-rich > h2 {
+  font-size: var(--cd-size-section);
+  letter-spacing: var(--cd-tracking-display);
+}
+
+.cd-main .cd-prose .cd-rich > h2 + * {
+  margin-block-start: var(--cd-s4);
+}
+
+/* --- inline code ------------------------------------------------------------ */
+
+.cd-rich :where(:not(pre)) > code,
+.cd-doc__lede code {
+  padding: 0.1em 0.34em;
+  border: var(--cd-rule) solid var(--cd-line);
+  border-radius: var(--cd-radius-inline);
+  background: var(--cd-code-ground);
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+.cd-rich :is(h2, h3, h4) code {
+  font-size: 0.9em;
+}
+
+/* --- code blocks ------------------------------------------------------------ */
+
+.cd-code {
+  margin-inline: 0;
+  overflow: hidden;
+  border: var(--cd-rule) solid var(--cd-line);
+  border-radius: var(--cd-radius-frame);
+  background: var(--cd-code-ground);
+}
+
+.cd-code__label {
+  display: flex;
+  align-items: center;
+  min-block-size: 2.25rem;
+  padding: var(--cd-s1) var(--cd-s4);
+  border-block-end: var(--cd-rule) solid var(--cd-line);
+  color: var(--cd-ink-muted);
+  font-family: var(--cd-font-mono);
+  font-size: var(--cd-text-label);
+  line-height: 1.3;
+}
+
+.cd-code__pre {
+  margin: 0;
+  padding: var(--cd-s4) var(--cd-s5);
+  overflow-x: auto;
+  color: var(--cd-ink);
+  font-size: var(--cd-text-code);
+  line-height: var(--cd-leading-code);
+  white-space: pre;
+  tab-size: 2;
+}
+
+.cd-code__pre code {
+  font-size: inherit;
+}
+
+.cd-code__comment {
+  color: var(--cd-ink-muted);
+  font-style: italic;
+}
+
+.cd-code__prompt {
+  color: var(--cd-ink-muted);
+  user-select: none;
+}
+
+.cd-code__output {
+  color: var(--cd-ink-muted);
+}
+
+/* --- notes -------------------------------------------------------------------
+   A rule on the left and the grey of a band behind: teal for a note or a
+   tip, ink for a warning. The label says which, so colour is never the only
+   signal. */
+
+.cd-callout {
+  display: grid;
+  gap: var(--cd-s1);
+  padding: var(--cd-s4) var(--cd-s5);
+  border-inline-start: var(--cd-rule-strong) solid var(--cd-line-ink);
+  background: var(--cd-surface);
+}
+
+.cd-callout[data-kind="note"] {
+  border-inline-start-color: var(--cd-accent);
+}
+
+.cd-callout__label {
+  margin: 0;
+  color: var(--cd-ink);
+  font-size: var(--cd-text-ui);
+  font-weight: var(--cd-weight-semibold);
+}
+
+.cd-callout__text {
+  margin: 0;
+  color: var(--cd-ink);
+  font-size: var(--cd-text-ui);
+  line-height: var(--cd-leading-lead);
+}
+
+/* --- reference tables ----------------------------------------------------------
+   A definition list laid out as columns between hairlines. Every row shares
+   the list's own column tracks (subgrid), so the descriptions start on one
+   line from the first row to the last, however long a term is. */
+
+.cd-ref {
+  border-block-start: var(--cd-rule) solid var(--cd-line);
+}
+
+.cd-ref__row {
+  display: grid;
+  gap: var(--cd-s1);
+  padding-block: var(--cd-s3);
+  border-block-end: var(--cd-rule) solid var(--cd-line);
+}
+
+.cd-ref__term {
+  color: var(--cd-ink);
+  font-family: var(--cd-font-mono);
+  font-size: var(--cd-text-code);
+  font-weight: var(--cd-weight-medium);
+  line-height: var(--cd-leading-ui);
+  overflow-wrap: anywhere;
+}
+
+.cd-ref :is(.cd-ref__term, .cd-ref__meta) code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.cd-ref__meta {
+  margin: 0;
+  color: var(--cd-ink-muted);
+  font-family: var(--cd-font-mono);
+  font-size: var(--cd-text-label);
+  line-height: var(--cd-leading-ui);
+}
+
+.cd-ref__desc {
+  margin: 0;
+  color: var(--cd-ink-soft);
+  font-size: var(--cd-text-ui);
+  line-height: var(--cd-leading-lead);
+}
+
+@media (min-width: 40rem) {
+  .cd-ref {
+    display: grid;
+    column-gap: var(--cd-s6);
+  }
+
+  /* Fixed shares of the column, so two tables on one page line up. */
+  .cd-ref[data-columns="2"] {
+    grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+  }
+
+  .cd-ref[data-columns="3"] {
+    grid-template-columns: minmax(0, 34%) minmax(0, 24%) minmax(0, 1fr);
+  }
+
+  .cd-ref__row {
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    gap: var(--cd-s1) var(--cd-s6);
+    align-items: baseline;
+  }
+
+  .cd-ref__desc {
+    grid-column: -2 / -1;
+  }
+}
+
+/* --- keys ---------------------------------------------------------------------- */
+
+.cd-kbd {
+  white-space: nowrap;
+  color: var(--cd-ink-muted);
+  font-size: 0.875em;
+}
+
+.cd-kbd > kbd {
+  display: inline-block;
+  min-inline-size: 1.7em;
+  padding: 0.05em 0.4em;
+  border: var(--cd-rule) solid var(--cd-line-strong);
+  border-block-end-width: var(--cd-rule-strong);
+  border-radius: var(--cd-radius-inline);
+  background: var(--cd-canvas);
+  color: var(--cd-ink);
+  font-size: 0.9em;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* --- figures in running text -------------------------------------------------- */
+
+.cd-rich > .cg-prose__figure img {
+  inline-size: 100%;
+  border: var(--cd-rule) solid var(--cd-line);
+  border-radius: var(--cd-radius-frame);
+  background: var(--cd-raised);
+}
+
+.cd-rich > .cg-prose__figure figcaption {
+  margin-block-start: var(--cd-s3);
+  color: var(--cd-ink-muted);
+  font-size: var(--cd-text-label);
+  line-height: var(--cd-leading-ui);
+}

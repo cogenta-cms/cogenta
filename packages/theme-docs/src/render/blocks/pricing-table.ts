@@ -1,72 +1,65 @@
 import type { PricingTableBlock, PricingTier } from '@cogenta/blocks'
 import {
   actionLink,
-  blockHeadingTag,
-  type HeadingTag,
   type HtmlElement,
   h,
-  heading,
   nestedHeadingTag,
   type RenderContext,
 } from '@cogenta/theme-kit'
+import { optionalText, section, sectionHead } from '../layout.js'
+import { word } from '../strings.js'
 
 /**
- * `blocks@2.0` (RFC 0001). Bordered plates, one lifted (border + a small
- * "recommended" rule) when `highlighted` is set — an editorial signal,
- * never a colour: it becomes `data-highlighted` for the stylesheet, and
- * `aria-current` so the emphasis is announced, not only shown.
+ * Plans, the way a documentation site shows them (support plans, usage
+ * limits): columns side by side between hairlines, never cards. Each plan
+ * names itself, prints its price in tabular numerals with the interval after
+ * it, lists what it includes as ruled lines, and ends on its action. The
+ * recommended plan is marked by a rule in ink above it and a word, never by a
+ * tinted background.
  */
-function renderTier(tier: PricingTier, ctx: RenderContext, tag: HeadingTag): HtmlElement {
+function tier(item: PricingTier, ctx: RenderContext, tag: string): HtmlElement {
+  const highlighted = item.highlighted === true
   return h(
     'li',
-    {
-      class: 'cg-pricing__tier',
-      'data-highlighted': tier.highlighted === true ? 'true' : undefined,
-      'aria-current': tier.highlighted === true ? 'true' : undefined,
-    },
-    heading(tag, { class: 'cg-pricing__name' }, tier.name),
+    { class: 'cd-plans__item', 'data-highlighted': highlighted ? 'true' : 'false' },
+    h(
+      'div',
+      { class: 'cd-plans__head' },
+      h(tag, { class: 'cd-plans__name' }, item.name),
+      highlighted ? h('p', { class: 'cd-plans__flag' }, word(ctx.locale, 'recommended')) : null,
+    ),
     h(
       'p',
-      { class: 'cg-pricing__price' },
-      h('span', { class: 'cg-pricing__amount' }, tier.price),
-      tier.interval === undefined
-        ? null
-        : h('span', { class: 'cg-pricing__interval' }, tier.interval),
+      { class: 'cd-plans__price' },
+      h('span', { class: 'cd-plans__amount' }, item.price),
+      optionalText('span', 'cd-plans__interval', item.interval),
     ),
-    tier.features.length === 0
+    item.features.length === 0
       ? null
       : h(
           'ul',
-          { class: 'cg-pricing__features' },
-          tier.features.map((feature) => h('li', { class: 'cg-pricing__feature' }, feature)),
+          { class: 'cd-plans__features' },
+          item.features.map((feature) => h('li', { class: 'cd-plans__feature' }, feature)),
         ),
-    tier.action === undefined
+    item.action === undefined
       ? null
-      : h(
-          'div',
-          { class: 'cg-pricing__action' },
-          actionLink(ctx, { ...tier.action, emphasis: tier.action.emphasis ?? 'primary' }),
-        ),
+      : h('div', { class: 'cd-plans__action' }, actionLink(ctx, item.action)),
   )
 }
 
 export function renderPricingTable(block: PricingTableBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const tierTag = nestedHeadingTag('pricingTable', hasTitle)
-  return h(
+  const tag = nestedHeadingTag('pricingTable', block.title !== undefined)
+  return section(
     'section',
-    { class: 'cg-block cg-pricing', 'data-block': 'pricingTable' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('pricingTable') ?? 'h2',
-          { class: 'cg-pricing__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'pricingTable',
+    'cd-plans',
+    { 'data-count': String(Math.min(block.tiers.length, 4)) },
+    'div',
+    sectionHead('pricingTable', block.title),
     h(
       'ul',
-      { class: 'cg-pricing__tiers' },
-      block.tiers.map((tier) => renderTier(tier, ctx, tierTag)),
+      { class: 'cd-plans__items' },
+      block.tiers.map((item) => tier(item, ctx, tag)),
     ),
   )
 }

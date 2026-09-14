@@ -5,7 +5,7 @@ import { renderChrome } from '../src/render/chrome.js'
 /** The site identity reaching this theme's own chrome (audit 2026-09-01 §7 T01). */
 
 const BASE: ChromeInput = {
-  site: { name: 'Reference Site' },
+  site: { name: 'Relay Docs' },
   locale: 'en',
   homeHref: '/',
   headerNav: [],
@@ -18,23 +18,25 @@ function source(src: string): ImageSource {
 }
 
 const BRAND: ChromeBrand = {
-  name: 'Reference Site',
+  name: 'Relay Docs',
   logo: source('/_image?id=light&w=400'),
   logoDark: source('/_image?id=dark&w=400'),
   faviconUrl: null,
 }
 
-describe('renderChrome — site logo', () => {
-  it('renders the site name as text when no logo is set, exactly as before', () => {
+describe('renderChrome, site logo', () => {
+  it('sets the site name as a wordmark when no logo is set', () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('<a class="cg-site-header__home" href="/">Reference Site</a>')
+    expect(header).toContain('cd-wordmark__product">Relay</span>')
+    expect(header).not.toContain('<img')
   })
 
   it('shows the uploaded logo instead of the wordmark, still named and still linked home', () => {
     const { header } = renderChrome({ ...BASE, brand: BRAND })
-    expect(header).toContain('class="cg-site-header__logo"')
-    expect(header).toContain('alt="Reference Site"')
-    expect(header).toContain('<a class="cg-site-header__home" href="/">')
+    expect(header).toContain('class="cd-header__logo"')
+    expect(header).toContain('alt="Relay Docs"')
+    expect(header).toContain('<a class="cd-header__brand" href="/">')
+    expect(header).not.toContain('cd-wordmark')
   })
 
   it('offers the dark logo through prefers-color-scheme rather than picking one server-side', () => {
@@ -44,13 +46,13 @@ describe('renderChrome — site logo', () => {
     expect(header).toContain('id=light')
   })
 
-  it('keeps the site name in text in the footer brand column, so a page whose logo fails still names the site', () => {
+  it('keeps the site name in text in the footer, so a page whose logo fails still names the site', () => {
     const { footer } = renderChrome({ ...BASE, brand: BRAND })
-    expect(footer).toContain('<a href="/">Reference Site</a>')
+    expect(footer).toContain('<a class="cd-footer__name" href="/">Relay Docs</a>')
   })
 
-  it('keeps the site name in the footer legal row too', () => {
+  it('keeps the product name in the copyright line too', () => {
     const { footer } = renderChrome({ ...BASE, brand: BRAND })
-    expect(footer).toContain('<span>Reference Site</span>')
+    expect(footer).toContain('Relay</p>')
   })
 })

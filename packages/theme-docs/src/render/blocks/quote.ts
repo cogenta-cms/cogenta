@@ -1,34 +1,40 @@
 import type { QuoteBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { optionalText, section } from '../layout.js'
 
 /**
- * `<figure><blockquote>…</blockquote><figcaption>` is the attribution
- * pattern the HTML spec prescribes: putting the author inside the
- * `<blockquote>` would claim the author's name is part of what was said.
+ * A quotation: in documentation, a line from an RFC, a maintainer or a team
+ * that runs the product. Set at the quote size on the reading measure, in
+ * real curly quotation marks drawn by the stylesheet, hanging from a rule in
+ * ink on its left; the attribution under it, with a small round portrait when
+ * there is one.
  */
 export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement {
-  const hasAttribution =
-    block.author !== undefined || block.role !== undefined || block.avatar !== undefined
-  return h(
+  const hasAttribution = block.author !== undefined || block.role !== undefined
+  return section(
+    'div',
+    'quote',
+    'cd-quote',
+    {},
     'figure',
-    { class: 'cg-block cg-quote', 'data-block': 'quote' },
-    h('blockquote', { class: 'cg-quote__text' }, h('p', { 'data-field': 'text' }, block.text)),
+    h(
+      'blockquote',
+      { class: 'cd-quote__body' },
+      h('p', { class: 'cd-quote__text', 'data-field': 'text' }, block.text),
+    ),
     hasAttribution
       ? h(
           'figcaption',
-          { class: 'cg-quote__attribution' },
+          { class: 'cd-person' },
           block.avatar === undefined
             ? null
-            : image(ctx, block.avatar, {
-                className: 'cg-quote__avatar',
-                variant: { width: 96, height: 96, fit: 'cover' },
-              }),
-          block.author === undefined
-            ? null
-            : h('span', { class: 'cg-quote__author', 'data-field': 'author' }, block.author),
-          block.role === undefined
-            ? null
-            : h('span', { class: 'cg-quote__role', 'data-field': 'role' }, block.role),
+            : image(ctx, block.avatar, { className: 'cd-person__avatar', sizes: '2.5rem' }),
+          h(
+            'span',
+            { class: 'cd-person__words' },
+            optionalText('span', 'cd-person__name', block.author, { 'data-field': 'author' }),
+            optionalText('span', 'cd-person__role', block.role, { 'data-field': 'role' }),
+          ),
         )
       : null,
   )

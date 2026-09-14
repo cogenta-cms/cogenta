@@ -1,31 +1,31 @@
-import type { LogoStripBlock, LogoStripItem } from '@cogenta/blocks'
+import type { LogoStripBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { optionalText, section } from '../layout.js'
 
 /**
- * `blocks@2.0` (RFC 0001). The lighter-weight "as seen in" row next to
- * `logos`: no per-logo name or link, so no accessible-name field to
- * require — each image's own alt text (set once, in the media library)
- * names it.
+ * A strip of wordmarks ("Runs in production at"): the caption on its own
+ * line above, then one row of marks at one height in grey, wrapping to three
+ * and then two to a row on smaller screens. A hairline above separates the
+ * strip from what precedes it.
  */
-function renderItem(item: LogoStripItem, _ctx: RenderContext): HtmlElement {
-  return h(
-    'li',
-    { class: 'cg-logo-band__item' },
-    image(_ctx, item.media, { className: 'cg-logo-band__image', variant: { fit: 'contain' } }),
-  )
-}
-
 export function renderLogoStrip(block: LogoStripBlock, ctx: RenderContext): HtmlElement {
-  return h(
-    'figure',
-    { class: 'cg-block cg-logo-band', 'data-block': 'logoStrip' },
+  return section(
+    'div',
+    'logoStrip',
+    'cd-strip',
+    { 'data-count': String(Math.min(block.logos.length, 6)) },
+    'div',
+    optionalText('p', 'cd-strip__caption', block.caption, { 'data-field': 'caption' }),
     h(
       'ul',
-      { class: 'cg-logo-band__items' },
-      block.logos.map((item) => renderItem(item, ctx)),
+      { class: 'cd-strip__items' },
+      block.logos.map((logo) =>
+        h(
+          'li',
+          { class: 'cd-strip__item' },
+          image(ctx, logo.media, { className: 'cd-strip__image cd-mark', sizes: '9rem' }),
+        ),
+      ),
     ),
-    block.caption === undefined
-      ? null
-      : h('figcaption', { class: 'cg-logo-band__caption', 'data-field': 'caption' }, block.caption),
   )
 }

@@ -1,46 +1,35 @@
-import type { FaqBlock, FaqItem } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-  renderRichText,
-} from '@cogenta/theme-kit'
+import type { FaqBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, nestedHeadingTag, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
+import { renderDocsRichText } from '../rich-text.js'
 
 /**
- * `<details>`/`<summary>` rather than a scripted accordion: expanding,
- * keyboard operation, and the expanded state announced to assistive
- * technology all come from the browser, at zero bytes of JavaScript.
+ * Questions a reader asks before reading further ("Which databases are
+ * supported"), answered in the open: no disclosure to click. The title on
+ * the first four columns, the questions and answers on the last eight in two
+ * columns of ruled items on a wide screen, each question a real heading so a
+ * screen reader's heading list reaches it.
  */
-function renderItem(item: FaqItem, ctx: RenderContext): HtmlElement {
-  return h(
-    'li',
-    { class: 'cg-faq__item' },
-    h(
-      'details',
-      { class: 'cg-faq__details' },
-      h('summary', { class: 'cg-faq__question' }, item.question),
-      h('div', { class: 'cg-faq__answer' }, renderRichText(ctx, item.answer)),
-    ),
-  )
-}
-
 export function renderFaq(block: FaqBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  const tag = nestedHeadingTag('faq', block.title !== undefined)
+  return section(
     'section',
-    { class: 'cg-block cg-faq', 'data-block': 'faq' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('faq') ?? 'h2',
-          { class: 'cg-faq__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'faq',
+    'cd-faq',
+    { 'data-titled': block.title === undefined ? 'false' : 'true' },
+    'div',
+    sectionHead('faq', block.title),
     h(
-      'ul',
-      { class: 'cg-faq__items' },
-      block.items.map((item) => renderItem(item, ctx)),
+      'div',
+      { class: 'cd-faq__items' },
+      block.items.map((item) =>
+        h(
+          'div',
+          { class: 'cd-faq__item' },
+          h(tag, { class: 'cd-faq__question' }, item.question),
+          h('div', { class: 'cd-faq__answer cd-rich' }, renderDocsRichText(ctx, item.answer)),
+        ),
+      ),
     ),
   )
 }

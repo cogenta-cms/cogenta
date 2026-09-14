@@ -1,35 +1,34 @@
 import type { TestimonialBlock } from '@cogenta/blocks'
-import { type HtmlElement, h, image, type RenderContext, renderRichText } from '@cogenta/theme-kit'
+import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { optionalText, section } from '../layout.js'
+import { renderDocsRichText } from '../rich-text.js'
 
 /**
- * `blocks@2.0` (RFC 0001). The same `<figure><blockquote>…</blockquote>
- * <figcaption>` pattern `quote` uses, kept consistent so the two read as
- * siblings — the quote itself is rich text here, and the attribution is
- * the block's single grouped `attribution` field rather than three loose
- * ones.
+ * One person's account of using the product: the same register as `quote`
+ * (a rule in ink on the left, real quotation marks), with rich text, so a
+ * testimonial can hold a second paragraph or a command in `code`. The first
+ * paragraph is set at the quote size, the rest at the reading size.
  */
 export function renderTestimonial(block: TestimonialBlock, ctx: RenderContext): HtmlElement {
   const { attribution } = block
-  return h(
+  return section(
+    'div',
+    'testimonial',
+    'cd-testimonial',
+    {},
     'figure',
-    { class: 'cg-block cg-testimonial', 'data-block': 'testimonial' },
-    h('blockquote', { class: 'cg-testimonial__quote' }, renderRichText(ctx, block.quote)),
+    h('blockquote', { class: 'cd-testimonial__quote' }, renderDocsRichText(ctx, block.quote)),
     h(
       'figcaption',
-      { class: 'cg-testimonial__attribution' },
+      { class: 'cd-person' },
       attribution.avatar === undefined
         ? null
-        : image(ctx, attribution.avatar, {
-            className: 'cg-testimonial__avatar',
-            variant: { width: 96, height: 96, fit: 'cover' },
-          }),
+        : image(ctx, attribution.avatar, { className: 'cd-person__avatar', sizes: '2.5rem' }),
       h(
         'span',
-        { class: 'cg-testimonial__who' },
-        h('span', { class: 'cg-testimonial__name' }, attribution.name),
-        attribution.role === undefined
-          ? null
-          : h('span', { class: 'cg-testimonial__role' }, attribution.role),
+        { class: 'cd-person__words' },
+        h('span', { class: 'cd-person__name' }, attribution.name),
+        optionalText('span', 'cd-person__role', attribution.role),
       ),
     ),
   )

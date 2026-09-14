@@ -4,32 +4,41 @@ import { renderFeatureGrid } from '../../src/render/blocks/feature-grid.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
 
 describe('featureGrid', () => {
-  it('renders a real inline icon for a recognised name', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('data-icon="rocket"')
-    expect(html).toContain('<svg')
+  it('renders the block title at the declared level', () => {
+    expect(html).toContain('<h2 class="cd-head__title" data-field="title">Start here</h2>')
   })
 
-  it('renders the bare icon chip, empty, for an item with no icon', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    // "Configure" has no icon in the fixture.
-    expect(html).toContain('Configure')
+  it('makes a linked item’s title an arrow link, so the name is the accessible name', () => {
+    expect(html).toMatch(/<a class="cd-arrow-link" href="[^"]+">Install<\/a>/)
   })
 
-  it("makes the item's own title the link, so the accessible name is the feature's name", () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toMatch(/<a class="cg-feature__link"[^>]*>Install<\/a>/)
+  it('draws a known icon inline beside the title, never in a tile', () => {
+    expect(html).toContain('<svg class="cd-features__icon"')
+    expect(html).not.toMatch(/tile|chip/)
   })
 
-  it('renders the title heading at the block level when present', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<h2 class="cg-features__title" data-field="title">Start here</h2>')
+  it('keeps an unlinked item’s title as text', () => {
+    expect(html).toContain('<span>Configure</span>')
+  })
+
+  it('counts columns so that no row is left with an empty cell', () => {
+    expect(html).toContain('data-count="2"')
+    const four = serialize(
+      renderFeatureGrid(
+        {
+          ...BLOCKS.featureGrid,
+          items: [1, 2, 3, 4].map((n) => ({ _key: `i${n}`, title: `Item ${n}` })),
+        },
+        ctx,
+      ),
+    )
+    expect(four).toContain('data-count="4"')
   })
 
   it('is marked with data-block="featureGrid"', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
     expect(html).toContain('data-block="featureGrid"')
   })
 })

@@ -5,29 +5,37 @@ import { renderProse } from '../../src/render/blocks/prose.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderProse(BLOCKS.prose, ctx))
 
 describe('prose', () => {
-  it('renders the rich text document', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<h2')
+  it('renders the rich text document on the reading measure', () => {
+    expect(html).toContain('class="cd-prose__body cd-rich"')
     expect(html).toContain('What gets installed')
     expect(html).toContain('<strong>one command</strong>')
   })
 
-  it('contributes no heading of its own', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).not.toMatch(/^<div[^>]*><h1/)
+  it('contributes no heading of its own and never an h1', () => {
+    expect(html).not.toContain('<h1')
   })
 
-  it('promotes a paragraph whose only span is code-marked to a real <pre><code> block', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<pre class="cg-prose__code"><code>')
-    expect(html).toContain('npm create cogenta my-docs')
-    // The paragraph the code came from is gone — it is a <pre> now, not a <p>.
-    expect(html).not.toContain('<p><code>npm create cogenta')
+  it('gives each heading an id and a link to itself', () => {
+    expect(html).toContain(
+      '<h2 id="what-gets-installed" class="cd-rich__heading"><a class="cd-anchor" href="#what-gets-installed">What gets installed</a></h2>',
+    )
   })
 
-  it('keeps an ordinary inline `code` mark as <code> inside its paragraph, unpromoted', () => {
+  it('promotes a code-marked paragraph to a labelled code block', () => {
+    expect(html).toContain('<figcaption class="cd-code__label">Terminal</figcaption>')
+    expect(html).toContain('<pre class="cd-code__pre" tabindex="0"><code>')
+  })
+
+  it('keeps an ordinary nested list as a list', () => {
+    expect(html).toMatch(
+      /<ul><li>The CLI binary<ul><li>and its shell completions<\/li><\/ul><\/li>/,
+    )
+  })
+
+  it('keeps an inline code mark inside its paragraph', () => {
     const body: RichTextDocument = [
       {
         _key: 'p1',
@@ -35,19 +43,18 @@ describe('prose', () => {
         style: 'normal',
         children: [
           { _key: 's1', _type: 'span', text: 'Run ', marks: [] },
-          { _key: 's2', _type: 'span', text: 'cogenta serve', marks: ['code'] },
+          { _key: 's2', _type: 'span', text: 'relay start', marks: ['code'] },
           { _key: 's3', _type: 'span', text: ' next.', marks: [] },
         ],
         markDefs: [],
       },
     ]
-    const html = serialize(renderProse({ ...BLOCKS.prose, body }, ctx))
-    expect(html).toContain('<p>Run <code>cogenta serve</code> next.</p>')
-    expect(html).not.toContain('<pre')
+    const inline = serialize(renderProse({ ...BLOCKS.prose, body }, ctx))
+    expect(inline).toContain('<p>Run <code>relay start</code> next.</p>')
+    expect(inline).not.toContain('<pre')
   })
 
   it('is marked with data-block="prose"', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
     expect(html).toContain('data-block="prose"')
   })
 })

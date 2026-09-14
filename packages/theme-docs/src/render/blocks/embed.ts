@@ -2,11 +2,13 @@ import type { EmbedBlock } from '@cogenta/blocks'
 import { aspectRatio, type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
 
 /**
- * Nothing here contacts a third party before the visitor has consented.
+ * A recorded walkthrough, a talk, a post: embedded in the hairline frame.
  *
- * When `consentRequired` is true the block renders a self-contained card and
- * an outbound link — no `<iframe>`, no `<script>`, no preconnect, no poster
- * image fetched from the provider.
+ * Nothing here contacts a third party before the visitor has consented. When
+ * `consentRequired` is true (and for a provider this theme cannot embed) the
+ * frame holds a short notice and a link to the original instead: no
+ * `<iframe>`, no `<script>`, no preconnect, no poster fetched from the
+ * provider.
  */
 
 function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string | null {
@@ -42,16 +44,15 @@ function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string |
   }
 }
 
-function consentCard(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElement {
+function notice(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElement {
   return h(
     'div',
-    { class: 'cg-embed__placeholder' },
-    h('p', { class: 'cg-embed__provider', 'aria-hidden': 'true' }, block.provider),
-    h('p', { class: 'cg-embed__notice' }, reason),
+    { class: 'cd-embed__notice' },
+    h('p', { class: 'cd-embed__reason' }, reason),
     h(
       'a',
       {
-        class: 'cg-embed__link',
+        class: 'cd-arrow-link cd-embed__link',
         href: ctx.link(block.url),
         rel: 'noopener noreferrer nofollow',
       },
@@ -67,28 +68,36 @@ export function renderEmbed(block: EmbedBlock, ctx: RenderContext): HtmlElement 
   return h(
     'div',
     {
-      class: 'cg-block cg-embed',
+      class: 'cd-section cd-embed',
       'data-block': 'embed',
       'data-provider': block.provider,
       'data-consent': block.consentRequired ? 'required' : 'not-required',
-      style: `--cg-ratio:${ratio}`,
     },
-    source === null
-      ? consentCard(
-          block,
-          ctx,
-          block.consentRequired
-            ? ctx.t('embed.consentRequired', { provider: block.provider })
-            : ctx.t('embed.unsupported', { provider: block.provider }),
-        )
-      : h('iframe', {
-          class: 'cg-embed__frame',
-          src: source,
-          title: ctx.t('embed.title', { provider: block.provider }),
-          loading: 'lazy',
-          referrerpolicy: 'strict-origin-when-cross-origin',
-          allow: 'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',
-          allowfullscreen: true,
-        }),
+    h(
+      'div',
+      { class: 'cd-container cd-embed__inner' },
+      h(
+        'div',
+        { class: 'cd-embed__frame cd-frame', style: `aspect-ratio:${ratio}` },
+        source === null
+          ? notice(
+              block,
+              ctx,
+              block.consentRequired
+                ? ctx.t('embed.consentRequired', { provider: block.provider })
+                : ctx.t('embed.unsupported', { provider: block.provider }),
+            )
+          : h('iframe', {
+              class: 'cd-embed__iframe',
+              src: source,
+              title: ctx.t('embed.title', { provider: block.provider }),
+              loading: 'lazy',
+              referrerpolicy: 'strict-origin-when-cross-origin',
+              allow:
+                'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',
+              allowfullscreen: true,
+            }),
+      ),
+    ),
   )
 }

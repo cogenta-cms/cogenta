@@ -118,56 +118,41 @@ export const ENTRIES: readonly ContentEntry[] = [
   },
 ]
 
-/** Doc pages, shaped exactly as the `documentation` blueprint seeds them — three sections, a real `order` within each. */
+/**
+ * Doc pages, shaped as the `documentation` blueprint seeds them: a section and
+ * an `order` across the whole documentation. Deliberately out of order here
+ * (Reference before Guides, Configuration before Installation), so a test
+ * proves the theme orders them rather than trusting the fetch.
+ */
+function docEntry(suffix: string, title: string, section: string, order: number): ContentEntry {
+  return {
+    id: `0192f0c2-0000-7000-8000-0000000000${suffix}`,
+    collection: 'doc_page',
+    locale: 'en',
+    status: 'published',
+    title,
+    section,
+    order,
+  }
+}
+
 export const DOC_PAGES: readonly ContentEntry[] = [
-  {
-    id: '0192f0c2-0000-7000-8000-000000000010',
-    collection: 'doc_page',
-    locale: 'en',
-    status: 'published',
-    title: 'Installation',
-    section: 'Getting started',
-    order: 1,
-  },
-  {
-    id: '0192f0c2-0000-7000-8000-000000000011',
-    collection: 'doc_page',
-    locale: 'en',
-    status: 'published',
-    title: 'Configuration',
-    section: 'Getting started',
-    order: 2,
-  },
-  {
-    id: '0192f0c2-0000-7000-8000-000000000012',
-    collection: 'doc_page',
-    locale: 'en',
-    status: 'published',
-    title: 'Deploying to production',
-    section: 'Guides',
-    order: 1,
-  },
-  {
-    id: '0192f0c2-0000-7000-8000-000000000013',
-    collection: 'doc_page',
-    locale: 'en',
-    status: 'published',
-    title: 'CLI reference',
-    section: 'Reference',
-    order: 1,
-  },
+  docEntry('11', 'Configuration', 'Getting started', 20),
+  docEntry('13', 'CLI reference', 'Reference', 40),
+  docEntry('10', 'Installation', 'Getting started', 10),
+  docEntry('12', 'Deploying to production', 'Guides', 30),
 ]
 
 export function makeContext(overrides: Partial<RenderContext> = {}): RenderContext {
   const base: RenderContext = {
     site: {
-      name: 'Cogenta Docs',
-      url: 'https://docs.cogenta.dev',
+      name: 'Relay Docs',
+      url: 'https://docs.relay.dev',
       locales: ['en', 'fr'],
       defaultLocale: 'en',
     },
     locale: 'en',
-    url: new URL('https://docs.cogenta.dev/en/docs/installation'),
+    url: new URL('https://docs.relay.dev/en/docs/installation'),
     t: (key) => key,
     image: (media: MediaReference) => MEDIA[media] ?? MISSING,
     link: (target) => {
@@ -242,19 +227,73 @@ const PROSE_BODY: RichTextDocument = [
     markDefs: [],
   },
   { _key: 'm3', _type: 'media', id: 'media-inline', caption: 'The CLI, on a first run' },
-  // The one shape this theme's own `prose.ts` promotes to a real `<pre><code>` block —
-  // a paragraph whose only content is a single `code`-marked span.
+  // A code block with a file name: every span `code`, the first also `strong`.
   {
     _key: 'c1',
     _type: 'block',
     style: 'normal',
     children: [
+      { _key: 'cs0', _type: 'span', text: 'Terminal', marks: ['code', 'strong'] },
       {
         _key: 'cs1',
         _type: 'span',
-        text: 'npm create cogenta my-docs\ncd my-docs',
+        text: '$ npm install --global relay\n# prints the version\n$ relay --version\nrelay 2.4.1',
         marks: ['code'],
       },
+    ],
+    markDefs: [],
+  },
+  {
+    _key: 'n1',
+    _type: 'block',
+    style: 'blockquote',
+    children: [
+      { _key: 'ns1', _type: 'span', text: 'Warning', marks: ['strong'] },
+      { _key: 'ns2', _type: 'span', text: ' Verify the raw body, never a parsed copy.', marks: [] },
+    ],
+    markDefs: [],
+  },
+  {
+    _key: 'h3',
+    _type: 'block',
+    style: 'h3',
+    children: [{ _key: 's11', _type: 'span', text: 'Options', marks: [] }],
+    markDefs: [],
+  },
+  {
+    _key: 'r1',
+    _type: 'block',
+    style: 'normal',
+    listItem: 'bullet',
+    level: 1,
+    children: [
+      { _key: 'rs1', _type: 'span', text: 'server.port', marks: ['code'] },
+      { _key: 'rs2', _type: 'span', text: ' integer, default 8787.', marks: ['em'] },
+      { _key: 'rs3', _type: 'span', text: ' Port the HTTP API listens on.', marks: [] },
+    ],
+    markDefs: [],
+  },
+  {
+    _key: 'r2',
+    _type: 'block',
+    style: 'normal',
+    listItem: 'bullet',
+    level: 1,
+    children: [
+      { _key: 'rs4', _type: 'span', text: 'server.host', marks: ['code'] },
+      { _key: 'rs5', _type: 'span', text: ' string.', marks: ['em'] },
+      { _key: 'rs6', _type: 'span', text: ' Network interface to bind.', marks: [] },
+    ],
+    markDefs: [],
+  },
+  {
+    _key: 'k1',
+    _type: 'block',
+    style: 'normal',
+    children: [
+      { _key: 'ks1', _type: 'span', text: 'Stop the server with ', marks: [] },
+      { _key: 'ks2', _type: 'span', text: 'Ctrl+C', marks: ['code'] },
+      { _key: 'ks3', _type: 'span', text: '.', marks: [] },
     ],
     markDefs: [],
   },
@@ -313,7 +352,7 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _type: 'hero',
     _version: VERSION,
     eyebrow: 'Documentation',
-    title: 'Everything you need to ship with Cogenta',
+    title: 'Relay documentation',
     subtitle: 'Guides, reference and real examples, kept in sync with every release.',
     media: 'media-hero',
     actions: [
@@ -328,7 +367,7 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _version: VERSION,
     media: 'media-figure',
     caption: 'The request pipeline, end to end',
-    credit: 'Cogenta Docs',
+    credit: 'Relay 2.4',
     ratio: '16:9',
     align: 'wide',
   },

@@ -1,25 +1,30 @@
 import type { CtaBlock } from '@cogenta/blocks'
-import {
-  actionList,
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import { actionList, type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { optionalText, section } from '../layout.js'
 
+/**
+ * A closing line: "Stuck on something", "Upgrading from an older version".
+ * Between two hairlines held to the width of the content (never a coloured
+ * band, never a rule across the gutters): the title and a sentence on the
+ * first seven columns, the actions after them on a wide screen.
+ */
 export function renderCta(block: CtaBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-block cg-cta', 'data-block': 'cta' },
-    heading(
-      blockHeadingTag('cta') ?? 'h2',
-      { class: 'cg-cta__title', 'data-field': 'title' },
-      block.title,
+    'cta',
+    'cd-cta',
+    {},
+    'div',
+    h(
+      'div',
+      { class: 'cd-cta__panel' },
+      h(
+        'div',
+        { class: 'cd-cta__words' },
+        h('h2', { class: 'cd-cta__title', 'data-field': 'title' }, block.title),
+        optionalText('p', 'cd-cta__text', block.text, { 'data-field': 'text' }),
+      ),
+      h('div', { class: 'cd-cta__actions' }, actionList(ctx, block.actions, block.title)),
     ),
-    block.text === undefined
-      ? null
-      : h('p', { class: 'cg-cta__text', 'data-field': 'text' }, block.text),
-    actionList(ctx, block.actions, block.title),
   )
 }

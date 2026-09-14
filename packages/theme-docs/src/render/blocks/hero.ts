@@ -1,61 +1,57 @@
 import type { HeroBlock } from '@cogenta/blocks'
-import {
-  actionList,
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  image,
-  type RenderContext,
-  renderIcon,
-} from '@cogenta/theme-kit'
+import { actionList, type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { optionalText } from '../layout.js'
+import { renderSearchForm } from '../search.js'
 
 /**
- * The hero carries the page's `h1` (contract B: `headingLevel: 'h1'`), so
- * `renderPage` relies on it to avoid emitting a second one.
+ * The opening of a documentation site: a clear statement and the search.
  *
- * A reference-docs hero: copy on the left, a decorative search-looking
- * prompt right under the actions (purely presentational — `aria-hidden`,
- * no `<input>`, no `<form>` — this theme ships zero client JavaScript and a
- * fake control that looked operable would be a worse failure than no
- * control at all), and an optional small illustration on the right rather
- * than a full-bleed image wash, matching the information-dense register the
- * aesthetic direction asks for.
+ * Left-aligned on the grid, never centred. An eyebrow, when there is one, is
+ * a quiet line above the title (a product and its version), never a badge.
+ * The title is short and set large on the first eight columns, the subtitle
+ * says in two sentences what the documentation covers, and under it the
+ * search field at its large size: a real `GET /search` form, the first thing
+ * a reader of documentation reaches for. The actions follow, the primary one
+ * as the small teal control and the rest as underlined arrow links.
+ *
+ * Media, when an editor adds one, is a diagram or a screenshot on the last
+ * five columns in the hairline frame, loaded eagerly: it is above the fold by
+ * construction. Nothing decorative stands in for it when there is none.
  */
 export function renderHero(block: HeroBlock, ctx: RenderContext): HtmlElement {
-  const tag = blockHeadingTag('hero') ?? 'h1'
+  const actions = actionList(ctx, block.actions, ctx.t('hero.actions'))
+  const media = block.media !== undefined
+
   return h(
     'section',
-    { class: 'cg-block cg-hero', 'data-block': 'hero' },
+    { class: 'cd-section cd-hero', 'data-block': 'hero', 'data-media': media ? 'true' : 'false' },
     h(
       'div',
-      { class: 'cg-hero__copy' },
-      block.eyebrow === undefined
-        ? null
-        : h('p', { class: 'cg-hero__eyebrow', 'data-field': 'eyebrow' }, block.eyebrow),
-      heading(tag, { class: 'cg-hero__title', 'data-field': 'title' }, block.title),
-      block.subtitle === undefined
-        ? null
-        : h('p', { class: 'cg-hero__subtitle', 'data-field': 'subtitle' }, block.subtitle),
-      actionList(ctx, block.actions, ctx.t('hero.actions')),
+      { class: 'cd-container cd-hero__inner' },
       h(
         'div',
-        { class: 'cg-hero__search', 'aria-hidden': 'true' },
-        renderIcon('search', { className: 'cg-hero__search-icon' }),
-        h('span', { class: 'cg-hero__search-text' }, 'Search the docs…'),
-        h('kbd', { class: 'cg-hero__search-key' }, '/'),
-      ),
-    ),
-    block.media === undefined
-      ? null
-      : h(
+        { class: 'cd-hero__copy' },
+        optionalText('p', 'cd-hero__eyebrow', block.eyebrow, { 'data-field': 'eyebrow' }),
+        h('h1', { class: 'cd-hero__title', 'data-field': 'title' }, block.title),
+        optionalText('p', 'cd-hero__subtitle', block.subtitle, { 'data-field': 'subtitle' }),
+        h(
           'div',
-          { class: 'cg-hero__panel' },
-          image(ctx, block.media, {
-            className: 'cg-hero__media',
-            loading: 'eager',
-            sizes: '(min-width: 64rem) 32vw, 100vw',
-          }),
+          { class: 'cd-hero__search' },
+          renderSearchForm(ctx.locale, 'cd-search-hero', 'large'),
         ),
+        actions === null ? null : h('div', { class: 'cd-hero__actions' }, actions),
+      ),
+      block.media === undefined
+        ? null
+        : h(
+            'figure',
+            { class: 'cd-hero__media cd-frame' },
+            image(ctx, block.media, {
+              className: 'cd-hero__image cd-frame__image',
+              loading: 'eager',
+              sizes: '(min-width: 64rem) 30rem, 100vw',
+            }),
+          ),
+    ),
   )
 }

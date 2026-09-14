@@ -1,15 +1,11 @@
 import { type BlockRegistry, VOCABULARY_NAMES, type VocabularyBlock } from '@cogenta/blocks'
 import {
-  type ContentEntry,
-  entryHref,
-  entryTitle,
   type FetchedEntries,
   type HtmlElement,
   h,
   type PageContent,
   pageHasOwnHeading,
   type RenderContext,
-  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
@@ -31,8 +27,30 @@ import { renderQuote } from './blocks/quote.js'
 import { renderStatCounter } from './blocks/stat-counter.js'
 import { renderStats } from './blocks/stats.js'
 import { renderTestimonial } from './blocks/testimonial.js'
+import { isDocIndexBlock } from './doc-index.js'
+import { renderDocPage } from './doc-page.js'
+import { longDate } from './layout.js'
+import { type HeadingAnchors, headingAnchors } from './rich-text.js'
 
 export type { FetchedEntries, PageContent }
+
+function renderResolved(
+  block: VocabularyBlock,
+  ctx: RenderContext,
+  entries: FetchedEntries,
+  registry: BlockRegistry | undefined,
+  anchors: HeadingAnchors,
+): HtmlElement | null {
+  // A stored block is not always literally one of the shared vocabulary:
+  // resolving here turns an unimplemented theme-private block into its
+  // declared fallback instead of a silently blank slot.
+  const resolved = resolveBlockForRender(block, VOCABULARY_NAMES, registry)
+  if (resolved === null) return null
+  const known = resolved as unknown as VocabularyBlock
+  // `variant` is envelope data every block carries identically, applied once
+  // here rather than by each of the seventeen renderers.
+  return withBlockVariant(renderKnownBlock(known, ctx, entries, anchors), known.variant)
+}
 
 export function renderBlock(
   block: VocabularyBlock,
@@ -40,22 +58,20 @@ export function renderBlock(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement | null {
-  const resolved = resolveBlockForRender(block, VOCABULARY_NAMES, registry)
-  if (resolved === null) return null
-  const known = resolved as unknown as VocabularyBlock
-  return withBlockVariant(renderKnownBlock(known, ctx, entries), known.variant)
+  return renderResolved(block, ctx, entries, registry, headingAnchors([block]))
 }
 
 function renderKnownBlock(
   known: VocabularyBlock,
   ctx: RenderContext,
   entries: FetchedEntries,
+  anchors: HeadingAnchors,
 ): HtmlElement | null {
   switch (known._type) {
     case 'hero':
       return renderHero(known, ctx)
     case 'prose':
-      return renderProse(known, ctx)
+      return renderProse(known, ctx, anchors)
     case 'mediaFigure':
       return renderMediaFigure(known, ctx)
     case 'featureGrid':
@@ -87,6 +103,9 @@ function renderKnownBlock(
     case 'logoStrip':
       return renderLogoStrip(known, ctx)
     default: {
+      // Exhaustive over contract B: `known` is `never` here, so a block this
+      // package does not implement stops it compiling until it is. `null`
+      // rather than a throw: choosing a fallback is the render layer's job.
       const unreachable: never = known
       void unreachable
       return null
@@ -95,193 +114,43 @@ function renderKnownBlock(
 }
 
 /**
- * The name every doc page's own blueprint-seeded sidebar `collectionList`
- * targets — checked structurally (first block, this collection) rather than
- * by any flag on the block, because contract B carries no "this is chrome,
- * not content" bit and inventing one would be a contract change for a
- * single theme's layout choice.
+ * The opening of a page outside the documentation that has no hero: its
+ * title, its summary, and the date it was published when it has one.
  */
-const DOC_PAGE_COLLECTION = 'doc_page'
-
-function isDocSidebarBlock(block: VocabularyBlock): boolean {
-  return block._type === 'collectionList' && block.collection === DOC_PAGE_COLLECTION
-}
-
-/** The sidebar entry whose own link resolves to the page being rendered — the "current page" the brief asks the sidebar to highlight and the breadcrumb to name. */
-function findCurrentEntry(
-  entries: readonly ContentEntry[],
-  ctx: RenderContext,
-): ContentEntry | undefined {
-  return entries.find((entry) => entryHref(entry, ctx) === ctx.url.pathname)
-}
-
-/**
- * The doc-page sidebar — grouped by each entry's own `section` field, in the
- * order the entries were fetched (the blueprint seeds them in `order`
- * within a section already; `collectionList.sort` cannot name `section`/
- * `order`, so an editor who reorders sections relies on the fetch order,
- * exactly like the "All guides" index on the home page does).
- */
-function renderSidebarPanel(
-  entries: readonly ContentEntry[],
-  ctx: RenderContext,
-  currentHref: string,
-): HtmlElement {
-  const groups = new Map<string, ContentEntry[]>()
-  for (const entry of entries) {
-    const section =
-      typeof entry.section === 'string' && entry.section !== ''
-        ? entry.section
-        : ctx.t('entry.untitled')
-    const list = groups.get(section) ?? []
-    list.push(entry)
-    groups.set(section, list)
-  }
-
+function renderPageHead(page: PageContent, ctx: RenderContext): HtmlElement {
+  const published = page.entry?.publishedAt
   return h(
-    'nav',
-    { class: 'cg-docs__nav-panel', 'aria-label': 'Documentation' },
-    [...groups.entries()].map(([section, sectionEntries]) =>
-      h(
-        'div',
-        { class: 'cg-docs__nav-group' },
-        h('p', { class: 'cg-docs__nav-heading' }, section),
-        h(
-          'ul',
-          { class: 'cg-docs__nav-items' },
-          sectionEntries.map((entry) => {
-            const href = entryHref(entry, ctx)
-            const isCurrent = href === currentHref
-            return h(
-              'li',
-              {},
-              h(
-                'a',
-                {
-                  class: 'cg-docs__nav-link',
-                  href,
-                  'aria-current': isCurrent ? 'page' : undefined,
-                },
-                entryTitle(entry, ctx),
-              ),
-            )
-          }),
-        ),
-      ),
-    ),
-  )
-}
-
-/**
- * The sidebar, in two copies — the same zero-JS technique `chrome.ts` already
- * uses for the header's own mobile menu, and for the same reason: Chrome (and
- * every other engine implementing the current HTML rendering rules) hides a
- * closed `<details>`'s non-summary content through its own internal
- * `::details-content` box, not through the plain CSS `display: none` the spec
- * text describes — so a stylesheet rule that sets `display: block` on that
- * content, however specific, does not reliably bring it back while the
- * element itself stays closed. Verified live: a build with a single
- * `<details>` forced open only above the two-column breakpoint rendered an
- * empty sidebar column at 1280px in a real Chrome tab, despite every
- * computed style reporting `display: block`.
- *
- * The fix is the same one already proven for the header: a plain, always-
- * live `<nav>` for the desktop column (nothing to collapse, so nothing for
- * the browser to hide), and a **separate** `<details>` disclosure — a full
- * second copy of the same panel — for narrow viewports. Exactly one of the
- * two is ever `display: block` at a given viewport width (`base.css`), so a
- * screen reader is never offered two "Documentation" navigations at once,
- * matching the header's own accessibility guarantee.
- */
-function renderSidebar(
-  entries: readonly ContentEntry[],
-  ctx: RenderContext,
-  currentHref: string,
-): HtmlElement {
-  return h('div', { class: 'cg-docs__nav-desktop' }, renderSidebarPanel(entries, ctx, currentHref))
-}
-
-function renderSidebarMobile(
-  entries: readonly ContentEntry[],
-  ctx: RenderContext,
-  currentHref: string,
-): HtmlElement {
-  return h(
-    'details',
-    { class: 'cg-docs__nav-mobile' },
-    h('summary', { class: 'cg-docs__nav-toggle' }, 'On this site'),
-    renderSidebarPanel(entries, ctx, currentHref),
-  )
-}
-
-function renderBreadcrumb(section: string | undefined, title: string): HtmlElement {
-  return h(
-    'nav',
-    { class: 'cg-docs__breadcrumb', 'aria-label': 'Breadcrumb' },
-    h(
-      'ol',
-      {},
-      section === undefined ? null : h('li', {}, section),
-      h('li', { 'aria-current': 'page' }, title),
-    ),
-  )
-}
-
-/**
- * A doc page: two columns, CSS-only. The sidebar comes from the page's own
- * *first* block — a `collectionList` on `doc_page` the blueprint seeds on
- * every doc page for exactly this purpose — rendered as navigation rather
- * than as a card list, and dropped from the ordinary block stream so it
- * never also appears as content. The remaining blocks render in the content
- * column, unchanged.
- */
-function renderDocPage(
-  page: PageContent,
-  ctx: RenderContext,
-  sidebarBlock: VocabularyBlock,
-  entries: FetchedEntries,
-  registry: BlockRegistry | undefined,
-): HtmlElement {
-  const sidebarEntries = entries[sidebarBlock._key] ?? []
-  const currentHref = ctx.url.pathname
-  const current = findCurrentEntry(sidebarEntries, ctx)
-  const section = typeof current?.section === 'string' ? current.section : undefined
-  const contentBlocks = page.blocks.slice(1)
-  const hasOwnHeading = pageHasOwnHeading(contentBlocks)
-  const entryHeader = renderEntryHeader(page, ctx)
-
-  return h(
-    'main',
-    { class: 'cg-main cg-docs', id: 'cg-main' },
-    withBlockKey(
-      h(
-        'div',
-        { class: 'cg-docs__nav' },
-        renderSidebar(sidebarEntries, ctx, currentHref),
-        renderSidebarMobile(sidebarEntries, ctx, currentHref),
-      ),
-      sidebarBlock._key,
-    ),
+    'header',
+    { class: 'cd-page-head' },
     h(
       'div',
-      { class: 'cg-docs__content' },
-      renderBreadcrumb(section, page.title),
-      entryHeader ?? (hasOwnHeading ? null : h('h1', { class: 'cg-docs__title' }, page.title)),
-      contentBlocks.map((block) =>
-        withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
-      ),
+      { class: 'cd-container cd-page-head__inner' },
+      h('h1', { class: 'cd-page-head__title' }, page.title),
+      page.entry?.excerpt === undefined
+        ? null
+        : h('p', { class: 'cd-page-head__lead' }, page.entry.excerpt),
+      published === undefined
+        ? null
+        : h(
+            'p',
+            { class: 'cd-page-head__meta' },
+            h('time', { datetime: published }, longDate(published, ctx.locale)),
+          ),
     ),
   )
 }
 
 /**
- * `<main id="cg-main">` is mandatory: it is the skip-link's target, written
- * once by `@cogenta/cli`'s own render path.
+ * `<main id="cg-main">` is mandatory: it is the skip link's target, written
+ * by the host outside any theme's control.
  *
- * `withBlockKey` stamps every rendered block with its contract-B `_key`, on
- * every page including a doc page's content column — the visual page
- * builder maps a clicked element back to the block that produced it, for
- * this theme exactly as for every other one.
+ * A page whose first block is the documentation's own index on `doc_page` is
+ * a documentation page (`doc-page.ts`); every other page is laid out on the
+ * twelve-column grid. Exactly one `h1` on every page: a hero carries it when
+ * there is one, the page head otherwise.
+ *
+ * `withBlockKey` stamps every rendered block with its contract-B `_key`, so
+ * the visual page builder (L16) can map a clicked element back to its block.
  */
 export function renderPage(
   page: PageContent,
@@ -290,16 +159,17 @@ export function renderPage(
   registry?: BlockRegistry,
 ): HtmlElement {
   const first = page.blocks[0]
-  if (first !== undefined && isDocSidebarBlock(first)) {
-    return renderDocPage(page, ctx, first, entries, registry)
+  if (first !== undefined && isDocIndexBlock(first)) {
+    return renderDocPage(page, ctx, first, entries, registry, renderResolved)
   }
 
+  const anchors = headingAnchors(page.blocks)
   return h(
     'main',
-    { class: 'cg-main', id: 'cg-main' },
-    pageHasOwnHeading(page.blocks) ? null : h('h1', { class: 'cg-page__title' }, page.title),
+    { class: 'cg-main cd-main', id: 'cg-main' },
+    pageHasOwnHeading(page.blocks) ? null : renderPageHead(page, ctx),
     page.blocks.map((block) =>
-      withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
+      withBlockKey(renderResolved(block, ctx, entries, registry, anchors), block._key),
     ),
   )
 }

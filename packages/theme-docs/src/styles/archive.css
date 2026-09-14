@@ -1,39 +1,33 @@
 /*
- * The taxonomy-term archive (contract D `theme@1.3`) — a simple titled list.
- *
- * Only the three things an archive adds beyond what `collectionList` already
- * styles — a breadcrumb, a sub-term row, a prev/next pager. The entry list
- * itself reuses `cg-list__items`/`cg-list__row`, on purpose: an archive of
- * entries must look like this theme's own list of entries.
+ * The taxonomy-term archive: a titled index on the reading width, with its
+ * breadcrumb, its sub-terms and its pager in the documentation's own
+ * furniture (`docs.css` draws the breadcrumb and the pager).
  */
 
-.cg-archive {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  padding: var(--cg-s10) var(--cg-gutter);
+.cd-archive__inner {
+  --cd-edge: max(var(--cd-gutter), calc((100% - var(--cd-page)) / 2));
+  inline-size: 100%;
+  padding-block: calc(var(--cd-section) * 0.5) var(--cd-section);
+  padding-inline: var(--cd-edge) max(var(--cd-gutter), calc(100% - var(--cd-edge) - 52rem));
 }
 
-.cg-archive__breadcrumb ol,
-.cg-archive__children {
+.cd-archive__title {
+  margin-block: var(--cd-s3) var(--cd-s8);
+  font-size: var(--cd-size-title);
+  line-height: var(--cd-leading-display);
+  letter-spacing: var(--cd-tracking-display);
+}
+
+.cd-archive__children {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--cg-s3);
-  margin: 0 0 var(--cg-s4);
+  gap: var(--cd-s2) var(--cd-s5);
+  margin: 0 0 var(--cd-s8);
   padding: 0;
   list-style: none;
-  font-size: var(--cg-text-sm);
+  font-size: var(--cd-text-ui);
 }
 
-.cg-archive__children {
-  margin-block: var(--cg-s4) var(--cg-s8);
-}
-
-.cg-archive__pager {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--cg-s4);
-  margin-block-start: var(--cg-s10);
-  padding-block-start: var(--cg-s5);
-  border-block-start: 1px solid var(--cg-line-soft);
-  font-weight: var(--cg-weight-semibold);
+.cd-archive .cd-pager {
+  margin-block-start: var(--cd-s10);
 }

@@ -87,6 +87,9 @@ describe('theme isolation', () => {
       'styles/archive.css',
       'styles/base.css',
       'styles/blocks.css',
+      'styles/chrome.css',
+      'styles/docs.css',
+      'styles/rich.css',
       'styles/theme.css',
       'styles/tokens.css',
     ])

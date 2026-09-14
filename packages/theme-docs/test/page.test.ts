@@ -15,9 +15,7 @@ const ctx = makeContext()
 const entries = { 'b-collection': ENTRIES }
 
 function page(blocks: readonly VocabularyBlock[]): string {
-  return serialize(
-    renderPage({ title: 'Everything you need to ship with Cogenta', blocks }, ctx, entries),
-  )
+  return serialize(renderPage({ title: 'Relay documentation', blocks }, ctx, entries))
 }
 
 function headingLevels(html: string): number[] {
@@ -26,164 +24,212 @@ function headingLevels(html: string): number[] {
 
 const FULL_PAGE = page(ALL_BLOCKS)
 
-describe('renderPage', () => {
-  it('wraps content in <main id="cg-main"> — the mandatory skip-link target', () => {
-    expect(FULL_PAGE).toMatch(/^<main class="cg-main" id="cg-main">/)
+describe('renderPage, any page', () => {
+  it('wraps content in <main id="cg-main">, the skip link’s target', () => {
+    expect(FULL_PAGE).toMatch(/^<main class="cg-main cd-main" id="cg-main">/)
   })
 
-  it('renders exactly one h1 when a hero carries the page title', () => {
+  it('renders exactly one h1 when a hero carries the title', () => {
     expect(headingLevels(FULL_PAGE).filter((level) => level === 1)).toHaveLength(1)
   })
 
-  it('renders the page title as the h1 when the page has no hero', () => {
-    const withoutHero = page(ALL_BLOCKS.filter((candidate) => candidate._type !== 'hero'))
-    expect(headingLevels(withoutHero).filter((level) => level === 1)).toHaveLength(1)
-    expect(withoutHero).toContain(
-      '<h1 class="cg-page__title">Everything you need to ship with Cogenta</h1>',
+  it('opens a page without a hero on its title, summary and date', () => {
+    const html = serialize(
+      renderPage(
+        {
+          title: 'Security',
+          blocks: [BLOCKS.prose],
+          entry: {
+            collection: 'page',
+            excerpt: 'How keys are stored.',
+            publishedAt: '2026-09-02T09:00:00.000Z',
+          },
+        },
+        ctx,
+      ),
     )
+    expect(html).toContain('<h1 class="cd-page-head__title">Security</h1>')
+    expect(html).toContain('<p class="cd-page-head__lead">How keys are stored.</p>')
+    expect(html).toContain('September 2, 2026')
+    expect(headingLevels(html).filter((level) => level === 1)).toHaveLength(1)
   })
 
   it('never skips a heading level across the whole page', () => {
     const levels = headingLevels(FULL_PAGE)
-    expect(levels.length).toBeGreaterThan(1)
+    expect(levels.length).toBeGreaterThan(5)
     for (let index = 1; index < levels.length; index += 1) {
-      const previous = levels[index - 1] as number
-      const current = levels[index] as number
-      expect(current, `h${previous} is followed by h${current}`).toBeLessThanOrEqual(previous + 1)
+      expect(levels[index] as number).toBeLessThanOrEqual((levels[index - 1] as number) + 1)
     }
   })
 
   it('stamps every rendered block with its own data-block-key', () => {
-    for (const block of ALL_BLOCKS) {
-      expect(FULL_PAGE).toContain(`data-block-key="${block._key}"`)
-    }
+    for (const block of ALL_BLOCKS) expect(FULL_PAGE).toContain(`data-block-key="${block._key}"`)
   })
 
-  it('emits no script tag, no inline handler and no javascript: URL', () => {
+  it('emits no script, no inline handler and no javascript: URL', () => {
     expect(FULL_PAGE).not.toMatch(/<script/i)
     expect(FULL_PAGE).not.toMatch(/\son[a-z]+="/i)
     expect(FULL_PAGE).not.toMatch(/javascript:/i)
   })
 
-  it('renders at least one image, and never without an alt attribute', () => {
+  it('never renders an image without an alt attribute', () => {
     const images = [...FULL_PAGE.matchAll(/<img\b[^>]*>/g)].map((match) => match[0])
-    expect(images.length).toBeGreaterThan(0)
+    expect(images.length).toBeGreaterThan(5)
     for (const tag of images) expect(tag).toMatch(/\salt="/)
   })
 
-  it('renders all seventeen blocks in the vocabulary without any returning null', () => {
-    for (const block of ALL_BLOCKS) {
-      expect(renderBlock(block, ctx, entries), `${block._type} must render`).not.toBeNull()
-    }
+  it('renders all seventeen blocks without any returning null', () => {
+    expect(ALL_BLOCKS).toHaveLength(17)
+    for (const block of ALL_BLOCKS)
+      expect(renderBlock(block, ctx, entries), block._type).not.toBeNull()
   })
 
-  it('passes the fetched entries through to the collectionList block by key', () => {
+  it('gives every id on the page exactly one owner', () => {
+    const ids = [...FULL_PAGE.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1])
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('passes the fetched entries to the collectionList block by key', () => {
     expect(FULL_PAGE).toContain('What a structured release process actually looks like')
-  })
-
-  it('renders nothing observably different when no entries were fetched for a key', () => {
-    const html = serialize(renderPage({ title: 't', blocks: [BLOCKS.collectionList] }, ctx, {}))
-    expect(html).toContain('cg-list__empty')
   })
 })
 
-describe('renderPage — the doc-page two-column layout', () => {
+describe('renderPage, a documentation page', () => {
   const docEntries = { [DOC_SIDEBAR_BLOCK._key]: DOC_PAGES }
-  // `makeContext`'s own `link()` resolves an entry target to
-  // `/en/<collection>/<id>` (it has no routing table to consult) — the
-  // fixture's URL has to match exactly what `entryHref` will compute for
-  // the "Installation" doc page for the "current page" comparison to have
-  // anything to match against.
-  const installationCtx = makeContext({
-    url: new URL(`https://docs.cogenta.dev/en/doc_page/${DOC_PAGES[0]?.id}`),
+  // The fixture context links an entry to `/en/<collection>/<id>`: the page
+  // being rendered is Configuration, second in reading order.
+  const configuration = DOC_PAGES[0]
+  const docCtx = makeContext({
+    url: new URL(`https://docs.relay.dev/en/doc_page/${configuration?.id}`),
   })
 
-  function docPage(blocks: readonly VocabularyBlock[] = [DOC_SIDEBAR_BLOCK]): string {
-    return serialize(renderPage({ title: 'Installation', blocks }, installationCtx, docEntries))
+  function docPage(
+    blocks: readonly VocabularyBlock[] = [DOC_SIDEBAR_BLOCK, BLOCKS.prose],
+    updatedAt?: string,
+  ): string {
+    return serialize(
+      renderPage(
+        {
+          title: 'Configuration',
+          blocks,
+          entry: {
+            collection: 'doc_page',
+            excerpt: 'Where the server reads its settings.',
+            ...(updatedAt === undefined ? {} : { updatedAt }),
+          },
+        },
+        docCtx,
+        docEntries,
+      ),
+    )
   }
 
-  it("is detected from the page's own first block, a collectionList on doc_page", () => {
-    const html = docPage()
-    expect(html).toContain('class="cg-main cg-docs"')
+  const html = docPage([DOC_SIDEBAR_BLOCK, BLOCKS.prose], '2026-09-02T10:00:00.000Z')
+
+  it('is recognised from its first block, a collectionList on doc_page', () => {
+    expect(html).toMatch(/^<main class="cg-main cd-doc" id="cg-main" data-toc="true">/)
   })
 
-  it('renders the sidebar in two copies — a live nav for desktop, a <details> "On this site" disclosure for mobile — grouped by section', () => {
-    const html = docPage()
-    // The outer wrapper carries `data-block-key` like every other block on
-    // the page (`withBlockKey`, applied uniformly so the visual page builder
-    // can map any rendered element back to its block) — matched on the class
-    // alone rather than the full opening tag.
-    expect(html).toContain('<div class="cg-docs__nav" data-block-key=')
-    // Two copies of the panel, not one shared between breakpoints: a closed
-    // `<details>` hides its content through Chrome's own internal
-    // `::details-content` box, which a `display: block` override on the
-    // content does not reliably defeat while the element stays closed
-    // (verified live at 1280px against a real Chrome tab) — so the desktop
-    // column is a plain `<div>`, nothing for the browser to collapse, and
-    // only the narrow-viewport copy is a real `<details>`.
-    expect(html).toContain('<div class="cg-docs__nav-desktop">')
-    expect(html).toContain('<details class="cg-docs__nav-mobile">')
-    expect(html).toContain('On this site')
-    expect((html.match(/aria-label="Documentation"/g) ?? []).length).toBe(2)
-    for (const text of ['Getting started', 'Guides', 'Reference']) {
-      const heading = `<p class="cg-docs__nav-heading">${text}</p>`
-      expect(
-        (html.match(new RegExp(heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) ?? []).length,
-      ).toBe(2)
-    }
+  it('renders the navigation twice: a plain nav for wide screens, a disclosure for narrow ones', () => {
+    expect(html).toContain('<nav class="cd-sidenav cd-sidenav--wide" aria-label="Documentation">')
+    expect(html).toContain('<details class="cd-sidenav-disclosure">')
+    expect(html).toContain('<nav class="cd-sidenav cd-sidenav--narrow" aria-label="Documentation">')
   })
 
-  it('highlights the current page in the sidebar with aria-current="page", in both copies', () => {
-    const html = docPage()
-    expect((html.match(/aria-current="page">Installation<\/a>/g) ?? []).length).toBe(2)
-  })
-
-  it('does not highlight any other sidebar entry — exactly one link per copy carries aria-current', () => {
-    const html = docPage()
-    expect(html.match(/<a class="cg-docs__nav-link"[^>]*aria-current="page"/g)?.length).toBe(2)
-  })
-
-  it('renders a breadcrumb naming the current section and title', () => {
-    const html = docPage()
-    expect(html).toContain('aria-label="Breadcrumb"')
-    expect(html).toContain('<li>Getting started</li>')
-    expect(html).toContain('<li aria-current="page">Installation</li>')
-  })
-
-  it('drops the sidebar collectionList from the ordinary content stream', () => {
-    const html = docPage([DOC_SIDEBAR_BLOCK, BLOCKS.prose])
-    // The sidebar block's own key is stamped once, on the <details>, never a
-    // second time as though it were also a content block.
-    expect(html.match(new RegExp(`data-block-key="${DOC_SIDEBAR_BLOCK._key}"`, 'g'))?.length).toBe(
-      1,
+  it('names where the reader is in the disclosure’s summary', () => {
+    expect(html).toContain(
+      '<span class="cd-sidenav-disclosure__where">Getting started / Configuration</span>',
     )
   })
 
-  it('renders the remaining blocks in the content column, unchanged', () => {
-    const html = docPage([DOC_SIDEBAR_BLOCK, BLOCKS.prose])
-    expect(html).toContain(`data-block-key="${BLOCKS.prose._key}"`)
-    expect(html).toContain('cg-docs__content')
+  it('groups the navigation by section, in the documentation’s order', () => {
+    const at = (text: string): number => html.indexOf(`<p class="cd-sidenav__heading">${text}</p>`)
+    expect(at('Getting started')).toBeGreaterThan(-1)
+    expect(at('Getting started')).toBeLessThan(at('Guides'))
+    expect(at('Guides')).toBeLessThan(at('Reference'))
+    expect(html.indexOf('>Installation</a>')).toBeLessThan(html.indexOf('>Configuration</a>'))
   })
 
-  it('never renders a duplicate h1 on a doc page', () => {
-    const html = docPage([DOC_SIDEBAR_BLOCK, BLOCKS.prose])
+  it('marks the current page, once in each copy and nowhere else', () => {
+    expect(html.match(/aria-current="page">Configuration<\/a>/g)).toHaveLength(2)
+    expect(html.match(/<a class="cd-sidenav__link"[^>]*aria-current="page"/g)).toHaveLength(2)
+  })
+
+  it('stamps the navigation with its block key once, and never renders it as content', () => {
+    expect(html.match(new RegExp(`data-block-key="${DOC_SIDEBAR_BLOCK._key}"`, 'g'))).toHaveLength(
+      1,
+    )
+    expect(html).not.toContain('cd-browse')
+  })
+
+  it('opens the article on a breadcrumb, the title and the summary', () => {
+    expect(html).toContain(
+      '<nav class="cd-breadcrumb" aria-label="Breadcrumb"><ol class="cd-breadcrumb__items"><li><a href="/en/">Docs</a></li><li>Getting started</li><li aria-current="page">Configuration</li></ol></nav>',
+    )
+    expect(html).toContain('<h1 class="cd-doc__title">Configuration</h1>')
+    expect(html).toContain('<p class="cd-doc__lede">Where the server reads its settings.</p>')
     expect(headingLevels(html).filter((level) => level === 1)).toHaveLength(1)
   })
 
-  it('does not trigger the doc layout for a collectionList on a different collection', () => {
-    const html = serialize(
-      renderPage({ title: 'Home', blocks: [BLOCKS.collectionList] }, ctx, entries),
+  it('lists the article’s own headings under "On this page", every link resolving to an id', () => {
+    expect(html).toContain('<nav class="cd-toc" aria-labelledby="cd-toc-label">')
+    const links = [...html.matchAll(/class="cd-toc__link" href="#([^"]+)"/g)].map(
+      (match) => match[1],
     )
-    expect(html).not.toContain('cg-docs')
+    expect(links).toEqual(['what-gets-installed', 'options'])
+    for (const id of links) expect(html).toContain(`id="${id}"`)
   })
 
-  it('does not trigger the doc layout when the sidebar collectionList is not first', () => {
-    const html = serialize(
-      renderPage({ title: 'Home', blocks: [BLOCKS.prose, DOC_SIDEBAR_BLOCK] }, ctx, {
-        ...entries,
-        [DOC_SIDEBAR_BLOCK._key]: DOC_PAGES,
-      }),
+  it('nests an h3 under the h2 before it', () => {
+    expect(html).toMatch(
+      /data-level="2"><a class="cd-toc__link" href="#what-gets-installed">What gets installed<\/a><ol class="cd-toc__items"><li class="cd-toc__item" data-level="3">/,
     )
-    expect(html).not.toContain('cg-docs__nav')
+  })
+
+  it('leaves out "On this page" when the article has fewer than two headings', () => {
+    const short = docPage([DOC_SIDEBAR_BLOCK, BLOCKS.cta])
+    expect(short).not.toContain('cd-toc')
+    expect(short).toContain('data-toc="false"')
+  })
+
+  it('links the previous and next pages in reading order', () => {
+    expect(html).toMatch(
+      /<a class="cd-pager__link" data-direction="previous" href="\/en\/doc_page\/[^"]+10" rel="prev"><span class="cd-pager__label">Previous<\/span><span class="cd-pager__title">Installation<\/span><\/a>/,
+    )
+    expect(html).toMatch(
+      /data-direction="next"[^>]*rel="next"><span class="cd-pager__label">Next<\/span><span class="cd-pager__title">Deploying to production<\/span>/,
+    )
+  })
+
+  it('offers no previous link on the first page and no next link on the last', () => {
+    const lastCtx = makeContext({
+      url: new URL(`https://docs.relay.dev/en/doc_page/${DOC_PAGES[1]?.id}`),
+    })
+    const last = serialize(
+      renderPage({ title: 'CLI reference', blocks: [DOC_SIDEBAR_BLOCK] }, lastCtx, docEntries),
+    )
+    expect(last).toContain('data-direction="previous"')
+    expect(last).not.toContain('data-direction="next"')
+  })
+
+  it('says when the page last changed, in a readable date', () => {
+    expect(html).toContain(
+      '<p class="cd-doc__updated">Last updated <time datetime="2026-09-02T10:00:00.000Z">September 2, 2026</time></p>',
+    )
+  })
+
+  it('offers no comment form and no feedback widget', () => {
+    expect(html).not.toMatch(/<form|helpful|cg-comment/i)
+  })
+
+  it('does not become a documentation page for a list of another collection, or when the index is not first', () => {
+    expect(
+      serialize(renderPage({ title: 'Home', blocks: [BLOCKS.collectionList] }, ctx, entries)),
+    ).not.toContain('cd-doc')
+    const later = serialize(
+      renderPage({ title: 'Home', blocks: [BLOCKS.prose, DOC_SIDEBAR_BLOCK] }, ctx, docEntries),
+    )
+    expect(later).not.toContain('cd-sidenav')
+    expect(later).toContain('cd-browse')
   })
 })

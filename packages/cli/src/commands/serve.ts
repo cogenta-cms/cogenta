@@ -374,7 +374,12 @@ import { createSitePlanning } from './site-plan.js'
 import { renderTermArchivePage, type TermArchiveResolution } from './term-archive-page.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
 import { exportThemeZip, importThemeZip } from './theme-export.js'
-import { availableThemes, configureThemeRegistry, DEFAULT_THEME_NAME } from './theme-registry.js'
+import {
+  availableThemes,
+  configureThemeRegistry,
+  DEFAULT_THEME_NAME,
+  loadThemeDefaultTokens,
+} from './theme-registry.js'
 import {
   type BrandingSettings,
   type ChromeExtras,
@@ -2839,13 +2844,28 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       ? {}
       : {
           themeGalleryStyles: async (themeName: string, tokens?: Record<string, unknown>) => {
+            const wiring = options.theme as ThemeRouterOptions
             const themeCss =
               options.themeCssFor === undefined
                 ? (options.themeCss ?? null)
                 : await options.themeCssFor(themeName)
-            return tokens === undefined
-              ? computeEffectiveStyles(options.theme as ThemeRouterOptions, themeCss)
-              : computeCandidateGalleryStyles(options.theme as ThemeRouterOptions, themeCss, tokens)
+            if (tokens !== undefined) {
+              return computeCandidateGalleryStyles(wiring, themeCss, tokens)
+            }
+            // The active theme is shown as the site really looks, skin and
+            // all. Every other card shows its theme's own default skin, or ten
+            // cards would share one palette and one typeface.
+            const active = (await wiring.store.get()).activeTheme ?? DEFAULT_THEME_NAME
+            const own = themeName === active ? undefined : await loadThemeDefaultTokens(themeName)
+            if (own !== undefined) {
+              try {
+                return computeCandidateGalleryStyles(wiring, themeCss, own)
+              } catch {
+                // A theme's tokens.json that no longer validates previews
+                // with the site's skin rather than failing the whole card.
+              }
+            }
+            return computeEffectiveStyles(wiring, themeCss)
           },
         }),
     ...(options.theme === undefined

@@ -144,6 +144,30 @@ describe('the appearance screen theme gallery renders a real preview per theme (
     }
   }, 30_000)
 
+  it("previews a theme the site is not running with that theme's own skin, not the site's", async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+
+      const restaurant = await galleryPreview(server.base, token, '@cogenta/theme-restaurant')
+      const saas = await galleryPreview(server.base, token, '@cogenta/theme-saas')
+
+      // Each card carries the typeface its theme was designed with. Before,
+      // every card rendered in the site's own skin, so all ten looked alike.
+      expect(restaurant.html).toContain("'Cormorant Garamond'")
+      expect(saas.html).toContain("'Geist'")
+      expect(restaurant.html).not.toContain("'Geist'")
+    } finally {
+      await server.stop()
+    }
+  }, 30_000)
+
   it('refuses a non-admin actor', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

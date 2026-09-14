@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { BlockRegistry } from '@cogenta/blocks'
@@ -359,6 +359,37 @@ async function filesystemThemeNames(): Promise<readonly string[]> {
     return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
   } catch {
     return [] // no `themes/` directory at all is the ordinary case, not a problem to report
+  }
+}
+
+/**
+ * A theme's own default skin: `<package>/tokens.json` for a built-in, or
+ * `themes/<name>/tokens.json` for a local theme. `undefined` when the theme
+ * ships none or it is not valid JSON — a caller then falls back to the site's
+ * skin. What the appearance gallery previews a theme with, so each card shows
+ * the typography and colours that theme was designed with.
+ */
+export async function loadThemeDefaultTokens(
+  themeName: string,
+): Promise<Record<string, unknown> | undefined> {
+  let path: string
+  if (BY_NAME.has(themeName)) {
+    try {
+      path = new URL(import.meta.resolve(`${themeName}/tokens.json`)).pathname
+    } catch {
+      return undefined
+    }
+  } else {
+    if (configuredProjectRoot === undefined) return undefined
+    path = join(configuredProjectRoot, THEMES_DIRECTORY, themeName, 'tokens.json')
+  }
+  try {
+    const parsed = JSON.parse(await readFile(decodeURIComponent(path), 'utf8')) as unknown
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : undefined
+  } catch {
+    return undefined
   }
 }
 

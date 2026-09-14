@@ -457,6 +457,22 @@ describe('the appearance screen — a theme with its sample data (L28)', () => {
     return screen.findByRole('dialog', { name: 'Utiliser « Restaurant »' })
   }
 
+  it('marks every theme that ships a demo site on its own card, active or not', async () => {
+    signedIn(['admin'], {
+      availableThemes: THEMES,
+      sampleData: { themes: ['@cogenta/theme-restaurant'], writable: true },
+    })
+    render(<App />)
+    await goToAppearance()
+    const restaurant = (await screen.findByText('Restaurant')).closest('li') as HTMLElement
+    expect(within(restaurant).getByText('Site de démonstration inclus')).toBeDefined()
+    fireEvent.click(within(restaurant).getByRole('button', { name: "Données d'exemple" }))
+    const dialog = await screen.findByRole('dialog', { name: 'Utiliser « Restaurant »' })
+    expect(within(dialog).getByRole('button', { name: /Conserver mon contenu/ })).toBeDefined()
+    const canonical = screen.getByText('Canonical').closest('li') as HTMLElement
+    expect(within(canonical).queryByText('Site de démonstration inclus')).toBeNull()
+  })
+
   it('says so when a theme ships no sample data, and offers only the theme itself', async () => {
     signedIn(['admin'], { availableThemes: THEMES, sampleData: { themes: [], writable: true } })
     const dialog = await openRestaurant()

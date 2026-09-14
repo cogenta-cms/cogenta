@@ -726,6 +726,11 @@ export function AppearanceRoute(): JSX.Element {
                         <span className="text-xs text-muted-foreground">
                           {candidate.description}
                         </span>
+                        {theme.sampleData?.themes.includes(candidate.name) === true && (
+                          <span className="text-xs font-medium text-foreground">
+                            {t('appearance.sampleData.cardBadge')}
+                          </span>
+                        )}
                         {(version !== null || author !== null) && (
                           <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                             {version !== null && (
@@ -761,9 +766,10 @@ export function AppearanceRoute(): JSX.Element {
                               {t('appearance.themePersonalizeAction')}
                             </Button>
                           )}
-                          {active && theme.sampleData?.themes.includes(candidate.name) === true && (
-                            // The active theme cannot be "selected" again, but
-                            // its sample data can still be imported (L28).
+                          {theme.sampleData?.themes.includes(candidate.name) === true && (
+                            // Every theme that ships a demo site says so on its
+                            // own card (L28) — including the active one, which
+                            // cannot be "selected" again but can still import it.
                             <Button
                               type="button"
                               variant="secondary"

@@ -2227,7 +2227,8 @@
         "fill": "rempli",
         "keep": "conservé",
         "replace": "remplacé"
-      }
+      },
+      "cardBadge": "Site de démonstration inclus"
     }
   },
   "themeSandbox": {

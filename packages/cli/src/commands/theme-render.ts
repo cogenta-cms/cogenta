@@ -1865,7 +1865,7 @@ const IMPORT_STATEMENT = /@import\s+(?:url\(\s*(["'])[^"']*\1\s*\)|(["'])[^"']*\
  *
  * The three blocks below (hero, collectionList, featureGrid) are the same
  * shape `create-cogenta`'s "blog" blueprint seeds a real home page with
- * (`packages/create-cogenta/src/blueprints/blog.ts`) — realistic content a
+ * (`packages/starters/src/blueprints/blog.ts`) — realistic content a
  * theme actually has to lay out, not lorem ipsum — but the `collectionList`
  * entries are fabricated in-process rather than queried, and nothing here
  * ever touches `ContentGateway`/the database: a card in this gallery cannot

@@ -289,11 +289,13 @@ describe('applying a theme with its sample data (L28)', () => {
       })
       expect(applied.status).toBe(200)
       const report = applied.json.data as unknown as {
-        backup: { path: string; restoreCommand: string }
+        backup: { path: string; previousSchema: string; restoreCommand: string }
         restarting: boolean
       }
       expect(report.restarting).toBe(true)
       expect(report.backup.restoreCommand).toContain('cogenta restore apply')
+      // The schema the backup's rows belong to is kept beside the archive.
+      expect(await readFile(report.backup.previousSchema, 'utf8')).toContain('"note"')
       const manifest = await verifyBackup(report.backup.path)
       expect(
         manifest.tables.find((t) => t.name === 'cogenta_note_entries')?.rows ?? 1,

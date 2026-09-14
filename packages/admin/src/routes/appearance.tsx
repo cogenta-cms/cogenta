@@ -761,6 +761,18 @@ export function AppearanceRoute(): JSX.Element {
                               {t('appearance.themePersonalizeAction')}
                             </Button>
                           )}
+                          {active && theme.sampleData?.themes.includes(candidate.name) === true && (
+                            // The active theme cannot be "selected" again, but
+                            // its sample data can still be imported (L28).
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setSelectingTheme(candidate)}
+                            >
+                              {t('appearance.sampleData.activeAction')}
+                            </Button>
+                          )}
                           {active && theme.aiAvailable && (
                             // The "customize the current theme" entry into
                             // the AI workshop (as opposed to the plain
@@ -1141,6 +1153,7 @@ export function AppearanceRoute(): JSX.Element {
             (theme?.sampleData?.themes.includes(selectingTheme.name) ?? false)
           }
           sampleDataWritable={theme?.sampleData?.writable ?? false}
+          active={selectingTheme !== null && theme?.overrides.activeTheme === selectingTheme.name}
           switching={switchingTheme !== null}
           switchError={switchThemeError}
           onApplyThemeOnly={(applySkin) =>

@@ -34,6 +34,33 @@ thèmes : **Accroche**, **Liens sociaux** (une ligne `Libellé | https://…` pa
 choisie automatiquement) et **Note de pied de page** (`/settings`, section Général). Un menu
 assigné à l'emplacement `header-action` devient le bouton d'appel à l'action de l'en-tête.
 
+### Appliquer un thème avec ses données d'exemple
+
+Un thème ne dessine que ce que le site contient : appliquer « Restaurant » à un blog change
+la mise en page, pas le contenu. **Sélectionner** propose donc trois choix, comme l'import
+de démo d'un thème WordPress :
+
+1. **Le thème seul** — avec ses propres couleurs et polices, ou en gardant celles du site.
+2. **Le thème et ses données d'exemple, en conservant le contenu** — strictement additif :
+   les collections manquantes sont ajoutées, une collection existante de structure
+   différente est ignorée, une entrée dont l'adresse existe déjà (dont la page d'accueil)
+   est ignorée, un menu déjà rempli ou un réglage déjà renseigné est conservé.
+3. **Le thème et ses données d'exemple, en réinitialisant le site** — une sauvegarde
+   complète est créée et vérifiée, puis le contenu, les termes, les menus, les médias et les
+   redirections sont remplacés par la démo. Il faut saisir le nom du site pour confirmer.
+   Comptes, clés d'API, journal d'audit, fournisseurs et agents sont conservés.
+
+Les deux derniers choix passent d'abord par un aperçu qui chiffre tout (entrées importées
+ou ignorées, suppressions) et affiche chaque avertissement. Ils réécrivent le schéma, donc
+ne s'appliquent que sous `cogenta dev` (qui redémarre seul pour charger le nouveau
+schéma) ; sous `cogenta serve`, l'aperçu reste consultable. Pour le thème déjà actif, le
+bouton **Données d'exemple** de sa carte ouvre les mêmes choix.
+
+Après une réinitialisation, l'écran indique comment revenir en arrière : arrêter le
+serveur, remettre le schéma d'origine (copié à côté de l'archive), repartir d'une base
+vide, puis `cogenta restore apply <archive>`. L'accroche, les liens sociaux et le thème
+actif ne font pas partie de la sauvegarde.
+
 Les visuels de démonstration semés à l'installation sont générés par Cogenta lui-même
 (compositions abstraites, en PNG), jamais des photos tierces : ils se remplacent en un
 clic depuis la médiathèque.

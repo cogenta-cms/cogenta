@@ -101,7 +101,12 @@ export interface SampleDataPreview {
 
 export interface SampleDataReport extends SampleDataPreview {
   readonly imported: { readonly entries: number; readonly terms: number; readonly media: number }
-  readonly backup: { readonly path: string; readonly restoreCommand: string } | null
+  readonly backup: {
+    readonly path: string
+    /** The schema file as it was before the reset, kept beside the archive: restoring needs it back in place first. */
+    readonly previousSchema: string | null
+    readonly restoreCommand: string
+  } | null
   readonly restarting: boolean
 }
 

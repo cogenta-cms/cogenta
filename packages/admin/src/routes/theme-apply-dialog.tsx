@@ -9,6 +9,7 @@ import {
   type SampleDataMode,
   type SampleDataPreview,
   type SampleDataReport,
+  type SampleDataWarning,
 } from '../api/theme-client.js'
 import { Button, Field, Input, Modal, Notice } from '../ui/index.js'
 
@@ -30,6 +31,8 @@ export interface ThemeApplyDialogProps {
   readonly hasSampleData: boolean
   /** False under `cogenta serve`: sample data can be previewed, never applied. */
   readonly sampleDataWritable: boolean
+  /** The theme is already the active one: only its sample data is on offer. */
+  readonly active?: boolean
   readonly switching: boolean
   readonly switchError: string | null
   onApplyThemeOnly(applySkin: boolean): void
@@ -58,6 +61,7 @@ export function ThemeApplyDialog({
   theme,
   hasSampleData,
   sampleDataWritable,
+  active = false,
   switching,
   switchError,
   onApplyThemeOnly,
@@ -147,7 +151,7 @@ export function ThemeApplyDialog({
   }
 
   const title =
-    step.kind === 'choose'
+    step.kind === 'choose' && !active
       ? t('appearance.themeSelectConfirmTitle', { name: theme?.label ?? '' })
       : step.kind === 'done'
         ? t('appearance.sampleData.doneTitle')
@@ -222,34 +226,40 @@ export function ThemeApplyDialog({
     if (step.kind === 'choose') {
       return (
         <div className="flex flex-col gap-5">
-          <section className="flex flex-col gap-3" aria-labelledby="theme-apply-only">
-            <h3 id="theme-apply-only" className="m-0 text-sm font-semibold">
-              {t('appearance.sampleData.themeOnlyTitle')}
-            </h3>
-            <p className="m-0 text-sm text-muted-foreground">
-              {t('appearance.themeSelectExplanation')}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => onApplyThemeOnly(false)}
-                disabled={switching}
-              >
-                {t('appearance.themeSelectKeepSkin')}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                onClick={() => onApplyThemeOnly(true)}
-                disabled={switching}
-              >
-                {switching ? t('appearance.themeSwitching') : t('appearance.themeSelectApplySkin')}
-              </Button>
-            </div>
-          </section>
+          {!active && (
+            <section className="flex flex-col gap-3" aria-labelledby="theme-apply-only">
+              <h3 id="theme-apply-only" className="m-0 text-sm font-semibold">
+                {t('appearance.sampleData.themeOnlyTitle')}
+              </h3>
+              <p className="m-0 text-sm text-muted-foreground">
+                {t('appearance.themeSelectExplanation')}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => onApplyThemeOnly(false)}
+                  disabled={switching}
+                >
+                  {t('appearance.themeSelectKeepSkin')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => onApplyThemeOnly(true)}
+                  disabled={switching}
+                >
+                  {switching
+                    ? t('appearance.themeSwitching')
+                    : t('appearance.themeSelectApplySkin')}
+                </Button>
+              </div>
+            </section>
+          )}
           <section
-            className="flex flex-col gap-3 border-t border-border pt-4"
+            className={
+              active ? 'flex flex-col gap-3' : 'flex flex-col gap-3 border-t border-border pt-4'
+            }
             aria-labelledby="theme-apply-sample"
           >
             <h3 id="theme-apply-sample" className="m-0 text-sm font-semibold">
@@ -365,15 +375,29 @@ export function ThemeApplyDialog({
           </Notice>
         )}
         {report.backup !== null && (
-          <div className="flex flex-col gap-1 text-sm">
+          <div className="flex flex-col gap-2 text-sm">
             <p className="m-0">{t('appearance.sampleData.backupTaken')}</p>
             <code className="block overflow-x-auto rounded-md bg-muted px-2 py-1 text-xs">
               {report.backup.path}
             </code>
-            <p className="m-0 text-muted-foreground">{t('appearance.sampleData.restoreWith')}</p>
-            <code className="block overflow-x-auto rounded-md bg-muted px-2 py-1 text-xs">
-              {report.backup.restoreCommand}
-            </code>
+            <p className="m-0 font-medium">{t('appearance.sampleData.restoreTitle')}</p>
+            <ol className="m-0 flex list-decimal flex-col gap-1 pl-5 text-muted-foreground">
+              <li>{t('appearance.sampleData.restoreStop')}</li>
+              {report.backup.previousSchema !== null && (
+                <li>
+                  {t('appearance.sampleData.restoreSchema')}{' '}
+                  <code className="break-all text-xs">{report.backup.previousSchema}</code>
+                </li>
+              )}
+              <li>{t('appearance.sampleData.restoreDatabase')}</li>
+              <li>
+                {t('appearance.sampleData.restoreRun')}{' '}
+                <code className="break-all text-xs">{report.backup.restoreCommand}</code>
+              </li>
+            </ol>
+            <p className="m-0 text-xs text-muted-foreground">
+              {t('appearance.sampleData.restoreNotIncluded')}
+            </p>
           </div>
         )}
       </div>
@@ -412,12 +436,58 @@ function ChoiceButton({
   )
 }
 
+/** A menu location as the Menus screen names it, rather than its storage key. */
+function useLocationLabel(): (location: string) => string {
+  const { t } = useTranslation()
+  return (location) =>
+    location === 'primary'
+      ? t('menus.locationPrimary')
+      : location === 'footer'
+        ? t('menus.locationFooter')
+        : location === 'header-action'
+          ? t('appearance.sampleData.locationHeaderAction')
+          : location
+}
+
+/**
+ * The server sends one warning per kept menu and per kept setting; a person
+ * reads them as one fact each ("these were kept"), so they are grouped, and
+ * every key is shown with the label the rest of the admin uses for it.
+ */
+function useReadableWarnings(preview: SampleDataPreview): readonly SampleDataWarning[] {
+  const { t } = useTranslation()
+  const locationLabel = useLocationLabel()
+  const settingLabel = (key: string): string =>
+    t(`settings.field.${key}.label`, { defaultValue: key })
+  const out: SampleDataWarning[] = []
+  const menus: string[] = []
+  const settings: string[] = []
+  for (const warning of preview.warnings) {
+    if (warning.code === 'menu-kept') menus.push(locationLabel(String(warning.params['location'])))
+    else if (warning.code === 'setting-kept')
+      settings.push(settingLabel(String(warning.params['key'])))
+    else if (warning.code === 'settings-replaced') {
+      out.push({
+        code: warning.code,
+        params: {
+          keys: String(warning.params['keys']).split(', ').map(settingLabel).join(', '),
+        },
+      })
+    } else out.push(warning)
+  }
+  if (menus.length > 0) out.push({ code: 'menu-kept', params: { names: menus.join(', ') } })
+  if (settings.length > 0)
+    out.push({ code: 'setting-kept', params: { names: settings.join(', ') } })
+  return out
+}
+
 function Warnings({ preview }: { readonly preview: SampleDataPreview }): JSX.Element | null {
   const { t } = useTranslation()
-  if (preview.warnings.length === 0) return null
+  const warnings = useReadableWarnings(preview)
+  if (warnings.length === 0) return null
   return (
     <div className="flex flex-col gap-2">
-      {preview.warnings.map((warning, index) => (
+      {warnings.map((warning, index) => (
         <Notice
           // biome-ignore lint/suspicious/noArrayIndexKey: a warning list is rebuilt whole, never reordered
           key={`${warning.code}-${index}`}
@@ -437,6 +507,7 @@ function Warnings({ preview }: { readonly preview: SampleDataPreview }): JSX.Ele
 
 function Summary({ preview }: { readonly preview: SampleDataPreview }): JSX.Element {
   const { t } = useTranslation()
+  const locationLabel = useLocationLabel()
   return (
     <div className="flex flex-col gap-2 text-sm">
       <h4 className="m-0 text-sm font-semibold">{t('appearance.sampleData.summaryTitle')}</h4>
@@ -478,9 +549,9 @@ function Summary({ preview }: { readonly preview: SampleDataPreview }): JSX.Elem
         {preview.menus.map((menu) => (
           <li key={`menu-${menu.location}`} className="flex justify-between gap-3">
             <span>
-              {t('appearance.sampleData.menuLabel', { location: menu.location })}{' '}
+              {t('appearance.sampleData.menuLabel', { location: locationLabel(menu.location) })}{' '}
               <span className="text-muted-foreground">
-                {t(`appearance.sampleData.outcome.${menu.outcome}`)}
+                {t(`appearance.sampleData.menuOutcome.${menu.outcome}`)}
               </span>
             </span>
           </li>

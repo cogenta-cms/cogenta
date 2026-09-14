@@ -9034,6 +9034,7 @@ export function installMockFetch(
               backup: reset
                 ? {
                     path: '/site/.cogenta/backups/theme-reset-2026.zip',
+                    previousSchema: '/site/.cogenta/backups/theme-reset-2026.cogenta.schema.mjs',
                     restoreCommand:
                       'cogenta restore apply /site/.cogenta/backups/theme-reset-2026.zip',
                   }

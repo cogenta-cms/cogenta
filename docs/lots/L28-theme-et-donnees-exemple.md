@@ -107,8 +107,34 @@ modèle), nommant le site (`siteName`). Les photos passent par le pipeline médi
 | Étape | État | Notes |
 |---|---|---|
 | Diagnostic et décisions | fait | 2026-09-14 |
-| D1 `@cogenta/starters` | à faire | |
-| D7 superviseur `cogenta dev` | à faire | |
-| Moteur d'import et routes | à faire | |
-| Écran Apparence | à faire | |
-| Vérification réelle | à faire | |
+| D1 `@cogenta/starters` | fait | Paquet créé, packs/`demo-art`/photos déplacés, `create-cogenta` réexporte ; premier `npm publish` : Trusted Publisher OIDC à configurer par l'humain |
+| D7 superviseur `cogenta dev` | fait | `dev-supervisor.ts` : sondage de `cogenta.schema.*`, arrêt par le chemin normal, relance sur le même port ; schéma invalide = attente de la sauvegarde suivante ; URL d'import porteuse du `mtime` (cache ESM) |
+| Moteur d'import et routes | fait | `sample-data.ts` (base SQLite de transit, copie en gardant les identifiants), `POST /api/theme/sample-data/{preview,apply}`, 4 tests d'intégration SQLite réels (conserver, réinitialiser, refus hors dev, refus éditeur/thème sans données) |
+| Écran Apparence | fait | `theme-apply-dialog.tsx` : trois choix, aperçu et avertissements, saisie du nom du site, attente du redémarrage, étapes de restauration ; bouton « Données d'exemple » sur la carte du thème actif |
+| Vérification réelle | fait | Site `blog` scaffoldé → `restaurant` en « conserver » puis « réinitialiser » dans Chrome réel, puis restauration effective de la sauvegarde dans une base neuve (voir ci-dessous) |
+
+## Écarts assumés par rapport aux décisions
+
+- **D5, médias** : seules les lignes sont supprimées ; les fichiers restent sur disque, parce que
+  la sauvegarde contient les lignes et pas les fichiers — les supprimer rendrait la
+  restauration incomplète.
+- **D5, réglages d'identité et thème** : ils ne font pas partie de `cogenta backup create`
+  (qui ne sauvegarde ni `cogenta_site_settings` ni `cogenta_theme`). Ils sont remplacés, pas
+  supprimés, et l'aperçu le dit explicitement.
+- **D5, restauration** : `cogenta restore apply` insère dans une base **vide** et crée les tables
+  d'après le schéma courant. La commande seule ne suffit donc pas : le schéma d'avant la
+  réinitialisation est copié à côté de l'archive (`theme-reset-….cogenta.schema.mjs`) et
+  l'écran liste les quatre étapes (arrêter, remettre le schéma, repartir d'une base vide,
+  restaurer). Vérifié pour de vrai sur SQLite.
+- **D4, compatibilité** : un champ déclaré par le pack mais qu'aucune entrée d'exemple ne
+  renseigne (au-delà de sa valeur par défaut) n'est pas exigé du site ; sinon la moindre
+  différence de champs SEO rendait toutes les pages incompatibles.
+- **Conserver** garde la page d'accueil du site (conflit de slug `home`) : le résultat n'a donc
+  pas l'accueil de la démo. C'est la règle D4 ; « réinitialiser » donne la démo complète.
+
+## Reste ouvert
+
+- Postgres/MySQL non exécutés (même blocage Docker que les lots précédents) ; le code passe par
+  les stores et `sql`/`identifier`, sans SQL propre à un dialecte, sauf `delete from`/`count(*)`.
+- Tables propres à d'autres paquets qui référenceraient des entrées (commentaires) : les
+  commentaires d'une collection supprimée restent orphelins après une réinitialisation.

@@ -1,6 +1,6 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type {
   MediaImageProcessor,
   SampleDataCollectionOutcome,
@@ -621,8 +621,18 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
             details: { path: created.path },
           })
         }
+        // The backup holds rows, not the schema file that gives them tables,
+        // and a reset is about to rewrite that file: keep the current one
+        // beside the archive, or restoring would have nowhere to put the rows.
+        const currentSchema = await findSchemaFile(options.projectRoot)
+        let previousSchema: string | null = null
+        if (currentSchema !== undefined) {
+          previousSchema = created.path.replace(/\.zip$/u, `.${basename(currentSchema)}`)
+          await copyFile(currentSchema, previousSchema)
+        }
         backup = {
           path: created.path,
+          previousSchema,
           restoreCommand: `cogenta restore apply ${created.path}`,
         }
         await clearSite(site)

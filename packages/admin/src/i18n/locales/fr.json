@@ -2201,12 +2201,11 @@
       "doneTitle": "Données d'exemple importées",
       "doneSummary": "{{entries}} entrées et {{media}} images importées. Le thème et son identité visuelle sont appliqués.",
       "backupTaken": "Une sauvegarde complète a été créée avant la réinitialisation :",
-      "restoreWith": "Pour revenir à l'état précédent, lancez dans le dossier du site :",
       "warnings": {
         "collection-incompatible": "La collection « {{collection}} » existe déjà avec une autre structure ({{fields}}) : ses {{entries}} entrées d'exemple ne seront pas importées.",
         "slug-conflict": "{{count}} entrée(s) de « {{collection}} » portent une adresse déjà utilisée ({{slugs}}) : votre contenu est conservé et ces entrées d'exemple sont ignorées.",
-        "menu-kept": "Le menu « {{location}} » contient déjà des liens : il est conservé tel quel.",
-        "setting-kept": "Le réglage « {{key}} » est déjà renseigné : votre valeur est conservée.",
+        "menu-kept": "Menus déjà remplis, conservés tels quels : {{names}}.",
+        "setting-kept": "Réglages déjà renseignés, vos valeurs sont conservées : {{names}}.",
         "schema-rewrite": "Le fichier de schéma du site sera réécrit (pensez à le commiter) et le serveur de développement redémarrera.",
         "reset-deletes": "Seront supprimés : {{entries}} entrées, {{terms}} termes, {{media}} médias, {{menus}} menus et {{redirects}} redirections.",
         "reset-backup": "Une sauvegarde complète est créée et vérifiée avant toute suppression ; sans elle, rien n'est supprimé.",
@@ -2215,6 +2214,19 @@
         "media-files-kept": "Les fichiers des médias restent sur le disque, afin que la restauration de la sauvegarde rende la médiathèque intacte.",
         "schema-not-serialisable": "Le schéma actuel contient des fonctions qui seraient perdues en le réécrivant ({{fields}}). Choisissez la réinitialisation ou ajoutez les collections à la main.",
         "entries-failed": "{{count}} entrée(s) n'ont pas pu être importées."
+      },
+      "locationHeaderAction": "Bouton d'en-tête",
+      "activeAction": "Données d'exemple",
+      "restoreTitle": "Pour revenir à l'état précédent, dans le dossier du site :",
+      "restoreStop": "arrêtez le serveur ;",
+      "restoreSchema": "remettez le schéma d'origine à la place de cogenta.schema.* :",
+      "restoreDatabase": "repartez d'une base vide (SQLite : déplacez .cogenta/site.db ; Postgres ou MySQL : créez une base neuve) ;",
+      "restoreRun": "lancez :",
+      "restoreNotIncluded": "Les réglages d'identité et le thème actif ne font pas partie de la sauvegarde : ils se reprennent depuis Réglages et Apparence.",
+      "menuOutcome": {
+        "fill": "rempli",
+        "keep": "conservé",
+        "replace": "remplacé"
       }
     }
   },

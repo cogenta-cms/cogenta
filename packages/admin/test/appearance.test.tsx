@@ -538,6 +538,23 @@ describe('the appearance screen — a theme with its sample data (L28)', () => {
     ])
   })
 
+  it("offers the active theme's sample data from its own card, without re-selecting the theme", async () => {
+    signedIn(['admin'], {
+      availableThemes: THEMES,
+      activeTheme: '@cogenta/theme-restaurant',
+      sampleData: { themes: ['@cogenta/theme-restaurant'], writable: true },
+    })
+    render(<App />)
+    await goToAppearance()
+    const card = (await screen.findByText('Restaurant')).closest('li') as HTMLElement
+    fireEvent.click(await within(card).findByRole('button', { name: "Données d'exemple" }))
+    const dialog = await screen.findByRole('dialog', {
+      name: "Appliquer « Restaurant » avec ses données d'exemple",
+    })
+    expect(within(dialog).queryByRole('button', { name: 'Utiliser le thème complet' })).toBeNull()
+    expect(within(dialog).getByRole('button', { name: /Réinitialiser le site/ })).toBeDefined()
+  })
+
   it('under cogenta serve, shows the sample data choices with how to enable them, and never applies', async () => {
     signedIn(['admin'], {
       availableThemes: THEMES,

@@ -2201,12 +2201,11 @@
       "doneTitle": "Sample data imported",
       "doneSummary": "{{entries}} entries and {{media}} images imported. The theme and its visual identity are applied.",
       "backupTaken": "A full backup was created before the reset:",
-      "restoreWith": "To go back to the previous state, run this in the site's folder:",
       "warnings": {
         "collection-incompatible": "The “{{collection}}” collection already exists with a different structure ({{fields}}): its {{entries}} sample entries will not be imported.",
         "slug-conflict": "{{count}} “{{collection}}” entries use an address the site already has ({{slugs}}): your content is kept and those sample entries are skipped.",
-        "menu-kept": "The “{{location}}” menu already has links: it is kept as it is.",
-        "setting-kept": "The “{{key}}” setting is already filled in: your value is kept.",
+        "menu-kept": "Menus that already have links, kept as they are: {{names}}.",
+        "setting-kept": "Settings already filled in, your values are kept: {{names}}.",
         "schema-rewrite": "The site's schema file will be rewritten (remember to commit it) and the development server will restart.",
         "reset-deletes": "To be deleted: {{entries}} entries, {{terms}} terms, {{media}} media, {{menus}} menus and {{redirects}} redirects.",
         "reset-backup": "A full backup is created and verified before anything is deleted; without it, nothing is deleted.",
@@ -2215,6 +2214,19 @@
         "media-files-kept": "Media files stay on disk, so restoring the backup gives the media library back intact.",
         "schema-not-serialisable": "The current schema holds functions that rewriting it would lose ({{fields}}). Choose reset, or add the collections by hand.",
         "entries-failed": "{{count}} entries could not be imported."
+      },
+      "locationHeaderAction": "Header button",
+      "activeAction": "Sample data",
+      "restoreTitle": "To go back to the previous state, in the site's folder:",
+      "restoreStop": "stop the server;",
+      "restoreSchema": "put the original schema back in place of cogenta.schema.*:",
+      "restoreDatabase": "start from an empty database (SQLite: move .cogenta/site.db aside; Postgres or MySQL: create a new database);",
+      "restoreRun": "run:",
+      "restoreNotIncluded": "Identity settings and the active theme are not part of the backup: set them again from Settings and Appearance.",
+      "menuOutcome": {
+        "fill": "filled",
+        "keep": "kept",
+        "replace": "replaced"
       }
     }
   },

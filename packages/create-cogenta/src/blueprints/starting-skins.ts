@@ -208,37 +208,38 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
     shadow: { sm: '0 1px 2px rgba(21, 19, 31, 0.06)', md: '0 16px 40px rgba(21, 19, 31, 0.16)' },
   },
   /**
-   * A restaurant (L25 D4): warm cream and charcoal ink, with a deep
-   * copper/wine accent — `@cogenta/theme-restaurant`'s own default palette
-   * (`packages/theme-restaurant/tokens.json`), copied here rather than
-   * referenced, since a blueprint's starting skin and a theme's own default
-   * skin are two independent pieces of data the contract keeps separate
-   * (a site can change either one without the other, `theme.renderChrome`
-   * neither reads nor writes `tokens.json`). Close to square radii and a
-   * spacious density match the theme's own "hairlines, not rounded
-   * corners" elegance.
+   * A contemporary bistro (`@cogenta/theme-restaurant`, L27 studio pass): a
+   * warm cream paper, a deep charcoal ink and one brass kept for a few
+   * details; Cormorant Garamond for the house's voice (the name, titles, dish
+   * names) and Karla for everything a guest reads to find their way. Copied
+   * from `packages/theme-restaurant/tokens.json` rather than referenced (a
+   * blueprint's starting skin and a theme's own default skin are two
+   * independent pieces of data the contract keeps separate), so a scaffolded
+   * `restaurant` site's skin names the theme's own typefaces and palette from
+   * the first render: the theme reads both from the skin, and a skin that
+   * named other fonts would silently replace them.
    */
   restaurant: {
     color: {
-      bg: '#f5ecdc',
-      fg: '#231b16',
-      accent: '#7a2a2c',
+      bg: '#f4efe6',
+      fg: '#1f1c18',
+      accent: '#7b5b1f',
       accentFg: '#ffffff',
-      muted: '#ece0cb',
-      mutedFg: '#4a3d33',
-      border: '#ddccae',
+      muted: '#e9e2d5',
+      mutedFg: '#595247',
+      border: '#d9cfbf',
     },
     font: {
-      sans: "'Jost', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
+      sans: "'Karla', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
       serif: "'Cormorant Garamond', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
-      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
       scale: 1.25,
       baseSize: '1rem',
     },
-    space: { unit: '0.25rem', density: 'spacious' },
-    radius: { sm: '0.0625rem', md: '0.125rem', lg: '0.25rem' },
-    motion: { duration: '220ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
-    shadow: { sm: '0 1px 3px rgba(35, 27, 22, 0.14)', md: '0 16px 40px rgba(35, 27, 22, 0.22)' },
+    space: { unit: '0.25rem', density: 'comfortable' },
+    radius: { sm: '0rem', md: '0rem', lg: '0.125rem' },
+    motion: { duration: '140ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+    shadow: { sm: '0 1px 0 rgba(31, 28, 24, 0.06)', md: '0 8px 24px rgba(31, 28, 24, 0.1)' },
   },
   /**
    * A management consultancy (`@cogenta/theme-entreprise`, L27 studio pass):

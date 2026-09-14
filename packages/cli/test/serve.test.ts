@@ -1157,6 +1157,57 @@ describe('a public entry byline (privacy)', () => {
   })
 })
 
+describe('a public entry reading time', () => {
+  it('counts the words of prose blocks when the entry has no rich text field of its own', async () => {
+    const root = await themedProject()
+    const { createSqliteHandle } = await import('@cogenta/core')
+    const { createContentStore, createSchemaTables, defineCollection, f } = await import(
+      '@cogenta/schema'
+    )
+    const page = defineCollection({
+      name: 'page',
+      labels: { singular: 'Page', plural: 'Pages' },
+      routing: { pattern: '/:slug' },
+      fields: {
+        title: f.text({ required: true, max: 200 }),
+        slug: f.slug({ from: 'title', unique: true }),
+        blocks: f.blocks({ required: true }),
+      },
+      indexes: [['slug']],
+      permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+    })
+    const paragraph = (key: string) => ({
+      _key: key,
+      _type: 'block',
+      style: 'normal',
+      markDefs: [],
+      children: [{ _key: `${key}s`, _type: 'span', marks: [], text: 'word '.repeat(250).trim() }],
+    })
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    await createSchemaTables(db, [page])
+    await createContentStore({ db, collection: page, defaultLocale: 'en' }).create({
+      status: 'published',
+      values: { title: 'A long read', slug: 'a-long-read' },
+      blocks: {
+        blocks: [
+          { key: 'b1', type: 'prose', data: { body: [paragraph('p1')] } },
+          { key: 'b2', type: 'prose', data: { body: [paragraph('p2'), paragraph('p3')] } },
+        ],
+      },
+    })
+    await db.close()
+
+    const server = await startServer(root)
+    try {
+      const html = await (await fetch(`${server.base}/a-long-read`)).text()
+      // 750 words across two prose blocks, at ~200 words a minute, rounded up.
+      expect(html).toContain('4 min read')
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
 /**
  * A `slug` field is not `required` (contract A): a routed collection can hold
  * a published entry with no slug at all — a draft published without one, for

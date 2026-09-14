@@ -1254,6 +1254,16 @@ function richTextWordCount(document: RichTextDocument): number {
   return words
 }
 
+function proseWordCount(blocks: readonly { readonly _type: string }[]): number {
+  let words = 0
+  for (const block of blocks) {
+    if (block._type !== 'prose') continue
+    const body = (block as { readonly body?: unknown }).body
+    if (Array.isArray(body)) words += richTextWordCount(body as RichTextDocument)
+  }
+  return words
+}
+
 /**
  * Every taxonomy term this entry is classified under, resolved to a label
  * and a route through `options.resolveTerm` — one taxonomy field per
@@ -1300,6 +1310,7 @@ async function buildEntryMeta(
   themeEntry: ThemeContentEntry,
   themeContext: RenderContext,
   options: ThemeRenderOptions,
+  blocks: readonly { readonly _type: string }[],
 ): Promise<PageEntryMeta> {
   const author =
     options.authorFor === undefined || entry.createdBy === null
@@ -1310,9 +1321,11 @@ async function buildEntryMeta(
     ([, field]) => field.kind === 'richText',
   )?.[0]
   const richTextValue = richTextField === undefined ? undefined : entry.values[richTextField]
+  // An article whose body is a sequence of blocks has no rich text field of
+  // its own: its reading time is the words in its prose blocks.
   const words = Array.isArray(richTextValue)
     ? richTextWordCount(richTextValue as RichTextDocument)
-    : 0
+    : proseWordCount(blocks)
 
   const image = entryImage(themeEntry, themeContext)
   const excerpt = entryExcerpt(themeEntry)
@@ -1504,7 +1517,14 @@ async function renderEntryPage(
   }
 
   const themeEntry = toThemeEntry(entry, collection.name)
-  const entryMeta = await buildEntryMeta(entry, collection, themeEntry, themeContext, options)
+  const entryMeta = await buildEntryMeta(
+    entry,
+    collection,
+    themeEntry,
+    themeContext,
+    options,
+    blocks,
+  )
   const pageContent: PageContent = { title: entryTitle(entry), blocks, entry: entryMeta }
   const theme = await themeFor(options.activeTheme)
   const node = theme.renderPage(

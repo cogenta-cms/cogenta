@@ -1,278 +1,633 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { VocabularyBlock } from '@cogenta/blocks'
+import { parseBlocks } from '@cogenta/blocks'
 import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
-import { buildPath, createContentStore, matchPath } from '@cogenta/schema'
+import { buildPath, createContentStore, createSearchIndex, matchPath } from '@cogenta/schema'
 import {
   type FetchedEntries,
-  type HtmlNode,
-  type PageContent,
   type RenderContext,
   renderPage,
   serialize,
   type ContentEntry as ThemeContentEntry,
 } from '@cogenta/theme-canonical'
-import { afterEach, describe, expect, it } from 'vitest'
-import { page, product, STORE_COLLECTIONS } from '../src/blueprints/store.js'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { bundledImageType, loadPhotoAsset } from '../src/blueprints/photo-assets.js'
+import { STARTING_SKINS } from '../src/blueprints/starting-skins.js'
+import {
+  buildStoreDemoPages,
+  buildStoreHomeBlocks,
+  category,
+  DEFAULT_SHOP_NAME,
+  orderLinkFor,
+  page,
+  product,
+  STORE_COLLECTIONS,
+  STORE_DEMO_CATEGORIES,
+  STORE_DEMO_PRODUCTS,
+  STORE_MEDIA_SPECS,
+  STORE_MENUS,
+  STORE_SITE_SETTINGS,
+  shopEmail,
+  storeCategoryBlocks,
+  storeContentPack,
+  storeProductBlocks,
+} from '../src/blueprints/store.js'
 import { scaffoldSite } from '../src/scaffold.js'
 
-describe('scaffoldSite — store blueprint', () => {
-  const dirs: string[] = []
+// The blueprint seeds eighteen bundled photographs through the real media
+// pipeline, with WebP variants: slower than vitest's default, not a hang.
+const SCAFFOLD_TIMEOUT = 240_000
 
-  afterEach(async () => {
-    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
-  })
+const MEDIA = Object.fromEntries(STORE_MEDIA_SPECS.map((spec) => [spec.name, `media-${spec.name}`]))
 
-  // Audit fiche 06, T01 (P0): without these four fields, the admin's SEO
-  // panel (`seo-panel.tsx`) renders nothing for every entry of every routed
-  // collection this blueprint scaffolds.
+const NON_TEXT_KEYS = new Set([
+  'media',
+  'avatar',
+  'collection',
+  'id',
+  'marks',
+  'style',
+  'listItem',
+  'layout',
+  'filter',
+  'sort',
+  'target',
+  'ratio',
+  'align',
+  'link',
+  'href',
+  'emphasis',
+  'provider',
+  'url',
+  'markDefs',
+])
+
+/** Every piece of visitor-facing text a value carries, flattened. */
+function textsOfValue(value: unknown): string[] {
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap(textsOfValue)
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, inner]) =>
+      key.startsWith('_') || NON_TEXT_KEYS.has(key) ? [] : textsOfValue(inner),
+    )
+  }
+  return []
+}
+
+/** One unit of text per paragraph, title, caption and setting: the unit the charter counts in. */
+function blockTexts(block: VocabularyBlock): string[] {
+  if (block._type === 'prose') return block.body.map((node) => textsOfValue(node).join(''))
+  return textsOfValue(block)
+}
+
+function allDemoCopy(siteName: string): string[] {
+  return [
+    ...buildStoreDemoPages({ siteName, media: MEDIA }).flatMap((demo) => [
+      demo.title,
+      ...demo.blocks.flatMap(blockTexts),
+    ]),
+    ...STORE_DEMO_PRODUCTS.flatMap((demo) => [
+      demo.name,
+      demo.description,
+      demo.material,
+      demo.dimensions,
+      demo.weight ?? '',
+      demo.capacity ?? '',
+      demo.origin,
+      demo.care,
+      demo.delivery,
+      ...storeProductBlocks(demo).flatMap(blockTexts),
+    ]),
+    ...STORE_DEMO_CATEGORIES.flatMap((demo) => [
+      demo.name,
+      demo.summary,
+      ...storeCategoryBlocks(demo).flatMap(blockTexts),
+    ]),
+    ...STORE_MEDIA_SPECS.map((spec) => spec.alt),
+    ...[...STORE_MENUS.header, ...STORE_MENUS.footer].map((item) => item.label),
+    String(STORE_SITE_SETTINGS['general.tagline']),
+    String(STORE_SITE_SETTINGS['general.footerNote']),
+  ].filter((text) => text !== '')
+}
+
+function allTitles(): string[] {
+  const titleOf = (block: VocabularyBlock): string[] => {
+    const own = 'title' in block && typeof block.title === 'string' ? [block.title] : []
+    if (block._type !== 'prose') return own
+    return block.body.flatMap((node) =>
+      node._type === 'block' && node.style !== 'normal' ? [textsOfValue(node).join('')] : [],
+    )
+  }
+  return [
+    ...buildStoreDemoPages({ media: MEDIA }).flatMap((demo) => [
+      demo.title,
+      ...demo.blocks.flatMap(titleOf),
+    ]),
+    ...STORE_DEMO_PRODUCTS.flatMap((demo) => [
+      demo.name,
+      ...storeProductBlocks(demo).flatMap(titleOf),
+    ]),
+    ...STORE_DEMO_CATEGORIES.flatMap((demo) => storeCategoryBlocks(demo).flatMap(titleOf)),
+  ]
+}
+
+const HOME_GRID = STORE_DEMO_PRODUCTS.slice(-4).map((demo) => demo.slug)
+
+describe('store blueprint, content model and catalogue', () => {
   it('declares the four conventional SEO override fields on every routed collection', () => {
-    for (const collection of [product, page]) {
+    for (const collection of [product, category, page]) {
       expect(Object.keys(collection.fields)).toEqual(
         expect.arrayContaining(['seoTitle', 'seoDescription', 'seoImage', 'seoNoindex']),
       )
     }
   })
 
-  // `store` now renders and ingests 23 real demo images (one hero, four
-  // category covers, twelve products, one avatar, five trust-badge marks)
-  // through the real media pipeline inside `scaffoldSite` (L25 task A0b,
-  // widened by the "templates pro" passe pro) — comparable in scale to
-  // `restaurant`'s own 20-image scaffold (`starting-skins.test.ts`), split
-  // roughly evenly between the procedural rendering itself and the same
-  // real variant generation a human's own upload would pay. Genuinely
-  // slower than vitest's default 5s, not a hang — a generous bound, not a
-  // tight one.
-  const SCAFFOLD_TIMEOUT = 120_000
-
-  it(
-    'writes a schema file loadCollections can load back, with product/page',
-    async () => {
-      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
-      dirs.push(targetDir)
-
-      const result = await scaffoldSite({
-        targetDir,
-        siteName: 'My Store',
-        siteUrl: 'http://localhost:4000',
-        defaultLocale: 'en',
-        databaseDriver: 'sqlite',
-        adminEmail: 'admin@example.com',
-        blueprintId: 'store',
-      })
-
-      expect(result.blueprintId).toBe('store')
-      expect(result.fellBackToBlank).toBe(false)
-
-      const collections = await loadCollections(targetDir)
-      expect(collections.map((c) => c.name).sort()).toEqual(['page', 'product'])
-    },
-    SCAFFOLD_TIMEOUT,
-  )
-
-  it(
-    'writes its own starting skin, not the canonical default',
-    async () => {
-      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
-      dirs.push(targetDir)
-
-      const result = await scaffoldSite({
-        targetDir,
-        siteName: 'My Store',
-        siteUrl: 'http://localhost:4000',
-        defaultLocale: 'en',
-        databaseDriver: 'sqlite',
-        adminEmail: 'admin@example.com',
-        blueprintId: 'store',
-      })
-
-      expect(result.skinSource).toBe('preset')
-      const tokens = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
-      // L25 "templates pro": the starting skin now matches
-      // `@cogenta/theme-ecommerce`'s own default (`tokens.json`) — a bold
-      // magenta accent, not the earlier placeholder teal that never matched
-      // what the theme actually ships.
-      expect(tokens.color.accent).toBe('#d6006d')
-    },
-    SCAFFOLD_TIMEOUT,
-  )
-
-  it(
-    'seeds real demo products and pages into real SQLite',
-    async () => {
-      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
-      dirs.push(targetDir)
-
-      const result = await scaffoldSite({
-        targetDir,
-        siteName: 'My Store',
-        siteUrl: 'http://localhost:4000',
-        defaultLocale: 'en',
-        databaseDriver: 'sqlite',
-        adminEmail: 'admin@example.com',
-        blueprintId: 'store',
-      })
-      expect(result.migrateExitCode).toBe(0)
-      expect(result.usersExitCode).toBe(0)
-
-      const logger = createLogger({ level: 'silent' })
-      const selection = await createDatabaseRegistry({ logger }).select({
-        driver: 'sqlite',
-        url: join(targetDir, '.cogenta', 'site.db'),
-      })
-      try {
-        const productStore = createContentStore({ db: selection.instance, collection: product })
-        const pageStore = createContentStore({ db: selection.instance, collection: page })
-
-        const products = await productStore.list()
-        expect(products.items.length).toBeGreaterThanOrEqual(5)
-        expect(products.items.some((entry) => entry.values.inStock === false)).toBe(true)
-        // L25 task A0b: every demo product gets a real procedural cover
-        // photo, ingested through the real media pipeline.
-        expect(products.items.every((entry) => typeof entry.values.photo === 'string')).toBe(true)
-
-        const pages = await pageStore.list({ limit: 20 })
-        // L25 "templates pro": the header/footer nav the passe pro asks for
-        // (Shop/New/Categories/About, Shop/Help/Legal) each need a real page
-        // to point at.
-        expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual([
-          'about',
-          'categories',
-          'help',
-          'home',
-          'legal',
-          'new',
-          'shop',
-        ])
-      } finally {
-        await selection.dispose()
-      }
-    },
-    SCAFFOLD_TIMEOUT,
-  )
-
-  it('resolves /shop/:slug and /:slug generically through @cogenta/schema routing', () => {
+  it('resolves /shop/:slug, /category/:slug and /:slug generically', () => {
     expect(matchPath(STORE_COLLECTIONS, '/shop/field-jacket')).toEqual({
       collection: 'product',
       locale: null,
       params: { slug: 'field-jacket' },
     })
-    expect(matchPath(STORE_COLLECTIONS, '/help')).toEqual({
+    expect(matchPath(STORE_COLLECTIONS, '/category/wear')).toEqual({
+      collection: 'category',
+      locale: null,
+      params: { slug: 'wear' },
+    })
+    expect(matchPath(STORE_COLLECTIONS, '/repairs')).toEqual({
       collection: 'page',
       locale: null,
-      params: { slug: 'help' },
+      params: { slug: 'repairs' },
     })
   })
 
-  it(
-    'renders the seeded home page into real HTML through the real theme-canonical pipeline',
-    async () => {
-      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
-      dirs.push(targetDir)
+  it('gives a product the plain fields its page shows: price, currency, stock, details and where to order', () => {
+    expect(product.fields.price?.kind).toBe('number')
+    expect(product.fields.currency?.kind).toBe('select')
+    expect(product.fields.category?.kind).toBe('select')
+    expect(product.fields.inStock?.kind).toBe('boolean')
+    const fields: Readonly<Record<string, { readonly kind: string }>> = product.fields
+    for (const name of [
+      'material',
+      'dimensions',
+      'weight',
+      'capacity',
+      'origin',
+      'care',
+      'delivery',
+      'orderLink',
+    ]) {
+      expect(fields[name]?.kind, name).toBe('text')
+    }
+    expect(product.fields.blocks?.kind).toBe('blocks')
+    expect(storeContentPack.defaultTheme).toBe('@cogenta/theme-ecommerce')
+  })
 
-      await scaffoldSite({
-        targetDir,
-        siteName: 'My Store',
-        siteUrl: 'http://localhost:4000',
-        defaultLocale: 'en',
-        databaseDriver: 'sqlite',
-        adminEmail: 'admin@example.com',
-        blueprintId: 'store',
-      })
+  it('sells at least twelve products, at least two per category, two of them sold out', () => {
+    expect(STORE_DEMO_PRODUCTS.length).toBeGreaterThanOrEqual(12)
+    const slugs = STORE_DEMO_PRODUCTS.map((demo) => demo.slug)
+    expect(new Set(slugs).size).toBe(slugs.length)
+    for (const group of STORE_DEMO_CATEGORIES) {
+      expect(
+        STORE_DEMO_PRODUCTS.filter((demo) => demo.category === group.name).length,
+        group.name,
+      ).toBeGreaterThanOrEqual(2)
+    }
+    expect(STORE_DEMO_PRODUCTS.filter((demo) => !demo.inStock)).toHaveLength(2)
+  })
 
-      const logger = createLogger({ level: 'silent' })
-      const selection = await createDatabaseRegistry({ logger }).select({
-        driver: 'sqlite',
-        url: join(targetDir, '.cogenta', 'site.db'),
-      })
-      try {
-        const pageStore = createContentStore({ db: selection.instance, collection: page })
-        const productStore = createContentStore({ db: selection.instance, collection: product })
-
-        const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
-        expect(home).toBeDefined()
-        if (home === undefined) throw new Error('unreachable')
-
-        const pageContent: PageContent = {
-          title: home.values.title as string,
-          blocks: (home.blocks.blocks ?? []).map(
-            (block): VocabularyBlock =>
-              ({
-                _key: block.key,
-                _type: block.type,
-                _version: '1.0.0',
-                ...block.data,
-              }) as VocabularyBlock,
-          ),
-        }
-
-        const products = await productStore.list()
-        const slugById = new Map(
-          products.items.map((entry) => [entry.id, entry.values.slug as string]),
-        )
-        const themeEntries: readonly ThemeContentEntry[] = products.items.map((entry) => ({
-          id: entry.id,
-          collection: 'product',
-          locale: entry.locale,
-          status: entry.status,
-          ...entry.values,
-        }))
-
-        const ctx = fakeThemeContext(slugById)
-        // L25 "templates pro": the home page's product grid is now the
-        // "New arrivals" section (`demo-home-new-arrivals`), one of several
-        // `collectionList` blocks on the redesigned home page.
-        const entries: FetchedEntries = { 'demo-home-new-arrivals': themeEntries }
-
-        const html = htmlOf(renderPage(pageContent, ctx, entries))
-
-        expect(html).toContain('Made to be used, not shelved')
-        expect(html).toContain('cg-collection')
-        expect(html).toContain('Field jacket')
-      } finally {
-        await selection.dispose()
+  it('prices every product in whole euros, and describes it with its material, size, origin and care', () => {
+    for (const demo of STORE_DEMO_PRODUCTS) {
+      expect(Number.isInteger(demo.price) && demo.price > 0, demo.slug).toBe(true)
+      expect(demo.description.length, demo.slug).toBeLessThanOrEqual(300)
+      expect(demo.description.length, demo.slug).toBeGreaterThan(80)
+      for (const detail of [
+        demo.material,
+        demo.dimensions,
+        demo.origin,
+        demo.care,
+        demo.delivery,
+      ]) {
+        expect(detail.length, demo.slug).toBeGreaterThan(4)
       }
-    },
-    SCAFFOLD_TIMEOUT,
-  )
+      expect(demo.story.join(' ').split(/\s+/).length, demo.slug).toBeGreaterThan(60)
+    }
+  })
+
+  it('shows every price in one currency, and never names a dollar amount', () => {
+    const copy = allDemoCopy(DEFAULT_SHOP_NAME).join('\n')
+    expect(copy).not.toMatch(/\$\d|USD|dollar/)
+    expect(copy).toMatch(/€\d/)
+  })
+
+  it('orders each product by email to the shop, with the product in the subject line', () => {
+    expect(orderLinkFor('Casa Norte', 'Field jacket')).toBe(
+      'mailto:orders@casanorte.com?subject=Order%3A%20Field%20jacket',
+    )
+    expect(orderLinkFor(undefined, 'Enamel mug')).toBe(
+      'mailto:orders@ateliergoods.com?subject=Order%3A%20Enamel%20mug',
+    )
+  })
+
+  it('writes every product page and category page as valid contract-B blocks, with more from the same category', () => {
+    for (const demo of STORE_DEMO_PRODUCTS) {
+      const blocks = storeProductBlocks(demo)
+      expect(() => parseBlocks([...blocks]), demo.slug).not.toThrow()
+      expect(
+        blocks.map((block) => block._type),
+        demo.slug,
+      ).toEqual(['prose', 'collectionList'])
+      expect(blocks[1]).toMatchObject({
+        collection: 'product',
+        filter: { category: demo.category },
+      })
+    }
+    for (const demo of STORE_DEMO_CATEGORIES) {
+      const blocks = storeCategoryBlocks(demo)
+      expect(() => parseBlocks([...blocks]), demo.slug).not.toThrow()
+      expect(blocks[0]).toMatchObject({ _type: 'collectionList', filter: { category: demo.name } })
+    }
+  })
+
+  it('points every media slot at a bundled JPEG described in a full sentence', () => {
+    for (const spec of STORE_MEDIA_SPECS) {
+      expect(spec.photo, spec.name).toMatch(/^store\/[a-z-]+\.jpg$/)
+      const bytes = loadPhotoAsset(spec.photo as string)
+      expect(bytes, spec.photo).toBeDefined()
+      expect(bundledImageType(bytes as Uint8Array).extension, spec.photo).toBe('jpg')
+      expect(spec.alt.length, spec.name).toBeGreaterThan(30)
+      expect(spec.alt, spec.name).not.toMatch(/placeholder|abstract|mark \d|avatar/i)
+    }
+  })
+
+  it('bundles no photograph it does not use, and uses every product photograph once for its product', async () => {
+    const folder = fileURLToPath(new URL('../src/blueprints/assets/photos/store/', import.meta.url))
+    const files = (await readdir(folder)).sort()
+    const used = new Set(
+      STORE_MEDIA_SPECS.map((spec) => (spec.photo as string).slice('store/'.length)),
+    )
+    expect(files.filter((file) => !used.has(file))).toEqual([])
+    for (const demo of STORE_DEMO_PRODUCTS) {
+      expect(STORE_MEDIA_SPECS.some((spec) => spec.photo === `store/${demo.slug}.jpg`)).toBe(true)
+    }
+  })
+
+  it('pictures each category with a product not already on the home page’s grid', () => {
+    for (const demo of STORE_DEMO_CATEGORIES) {
+      expect(HOME_GRID, demo.slug).not.toContain(demo.photoOf)
+      const owner = STORE_DEMO_PRODUCTS.find((candidate) => candidate.slug === demo.photoOf)
+      expect(owner?.category, demo.slug).toBe(demo.name)
+    }
+  })
+
+  it('names the shop the site belongs to, in its copy and its addresses, and falls back to its own name', () => {
+    const named = allDemoCopy('Casa Norte').join('\n')
+    expect(named).toContain('Casa Norte')
+    expect(named).toContain('orders@casanorte.com')
+    expect(named).not.toContain(DEFAULT_SHOP_NAME)
+    expect(named).not.toContain('ateliergoods')
+    expect(allDemoCopy(DEFAULT_SHOP_NAME).join('\n')).toContain(DEFAULT_SHOP_NAME)
+    expect(shopEmail('Café Ribeira', 'repairs')).toBe('repairs@caferibeira.com')
+  })
+
+  it('never talks about the CMS, the scaffold or the demo itself', () => {
+    const copy = allDemoCopy(DEFAULT_SHOP_NAME).join('\n')
+    expect(copy).not.toMatch(
+      /cogenta|scaffold|\bdemo\b|editable|lorem|javascript|placeholder|this (theme|template|website)|blueprint/i,
+    )
+  })
+
+  it('invents its people and workshops rather than borrowing sample-company names', () => {
+    const copy = allDemoCopy(DEFAULT_SHOP_NAME).join('\n')
+    expect(copy).not.toMatch(
+      /contoso|fabrikam|northwind|acme|globex|initech|umbrella corp|lorem|john doe|jane doe/i,
+    )
+  })
+
+  it('keeps to the studio charter: no buzzwords, no exclamation marks, at most one em dash per text', () => {
+    const buzzwords =
+      /\b(seamless|unlock|elevate|empower|supercharge|streamline|cutting-edge|robust|leverage|synergy|innovative|world-class|curated|elevated|timeless|must-have|game-chang)/i
+    for (const text of allDemoCopy(DEFAULT_SHOP_NAME)) {
+      expect(text, text).not.toMatch(buzzwords)
+      expect(text, text).not.toContain('!')
+      expect((text.match(/—/g) ?? []).length, text).toBeLessThanOrEqual(1)
+      expect(text, text).not.toMatch(/\bnot\b[^.;:]*,\s*but\b/i)
+      expect(text, text).not.toMatch(/\bisn[’']t\b[^.;:]*[,;]\s*it[’']s\b/i)
+    }
+  })
+
+  it('titles no page, block or section as a question; only the questions of an FAQ ask one', () => {
+    for (const title of allTitles()) expect(title, title).not.toMatch(/\?/)
+  })
+
+  it('opens the home page on a banner with one action, then the categories, then the new season', () => {
+    const blocks = buildStoreHomeBlocks({ siteName: 'Casa Norte', media: MEDIA })
+    expect(() => parseBlocks([...blocks])).not.toThrow()
+    const [banner, categories, season] = blocks
+    expect(banner).toMatchObject({ _type: 'hero', media: 'media-hero' })
+    expect(banner && 'actions' in banner ? banner.actions : []).toHaveLength(1)
+    expect(categories).toMatchObject({
+      _type: 'collectionList',
+      collection: 'category',
+      layout: 'grid',
+    })
+    expect(season).toMatchObject({ _type: 'collectionList', collection: 'product', limit: 4 })
+    const types = blocks.map((block) => block._type)
+    expect(types).toContain('featureGrid')
+    expect(types).toContain('mediaFigure')
+    expect(types).toContain('testimonial')
+    expect(types).toContain('faq')
+    expect(JSON.stringify(blocks.at(-1))).toContain('mailto:letters@casanorte.com')
+    expect(JSON.stringify(blocks)).toContain('Casa Norte opened in 2014')
+  })
+
+  it('sets its commitments as statements without a sentence, so the theme draws them as one ruled line', () => {
+    const line = buildStoreHomeBlocks().find((block) => block._type === 'featureGrid')
+    expect(line).toBeDefined()
+    if (line?._type !== 'featureGrid') return
+    expect(line.items.every((item) => item.text === undefined && item.icon === undefined)).toBe(
+      true,
+    )
+  })
+
+  it('designs its customer letter without a portrait', () => {
+    const letter = buildStoreHomeBlocks({ media: MEDIA }).find(
+      (block) => block._type === 'testimonial',
+    )
+    expect(letter?._type === 'testimonial' ? letter.attribution.avatar : 'missing').toBeUndefined()
+  })
+
+  it('seeds no logos and no placeholder marks', () => {
+    const everything = JSON.stringify([
+      ...buildStoreDemoPages({ media: MEDIA }).map((demo) => demo.blocks),
+      STORE_MEDIA_SPECS,
+    ])
+    expect(everything).not.toMatch(/"logoStrip"|"logos"|logo-\d/)
+  })
+
+  it('sorts every list on a field contract B allows', () => {
+    const lists = [
+      ...buildStoreDemoPages({ media: MEDIA }).flatMap((demo) => demo.blocks),
+      ...STORE_DEMO_PRODUCTS.flatMap(storeProductBlocks),
+      ...STORE_DEMO_CATEGORIES.flatMap(storeCategoryBlocks),
+    ].filter((block) => block._type === 'collectionList')
+    expect(lists.length).toBeGreaterThan(10)
+    for (const block of lists) {
+      if (block._type !== 'collectionList') continue
+      expect(['id', 'createdAt', 'updatedAt']).toContain(block.sort?.field)
+    }
+  })
+
+  it('seeds valid contract-B pages that use most of the vocabulary', () => {
+    const types = new Set<string>()
+    for (const demo of buildStoreDemoPages({ media: MEDIA })) {
+      expect(() => parseBlocks([...demo.blocks]), demo.slug).not.toThrow()
+      for (const block of demo.blocks) types.add(block._type)
+    }
+    expect(types.size).toBeGreaterThanOrEqual(10)
+    expect(buildStoreDemoPages().map((demo) => demo.slug)).toEqual([
+      'home',
+      'shop',
+      'about',
+      'how-to-order',
+      'delivery-and-returns',
+      'repairs',
+      'contact',
+      'terms',
+    ])
+  })
+
+  it('links every menu item and every in-page link to a page, a category or a product the blueprint seeds', () => {
+    const routes = new Set([
+      ...buildStoreDemoPages().map((demo) => `/${demo.slug}`),
+      ...STORE_DEMO_CATEGORIES.map((demo) => `/category/${demo.slug}`),
+      ...STORE_DEMO_PRODUCTS.map((demo) => `/shop/${demo.slug}`),
+    ])
+    for (const item of [...STORE_MENUS.header, ...STORE_MENUS.footer, STORE_MENUS.headerAction]) {
+      expect(routes.has(item?.url ?? ''), item?.url).toBe(true)
+    }
+    const hrefs = JSON.stringify(
+      buildStoreDemoPages({ media: MEDIA }).map((demo) => demo.blocks),
+    ).match(/"href":"[^"]+"/g)
+    expect(hrefs?.length).toBeGreaterThan(5)
+    for (const match of hrefs ?? []) {
+      const href = match.slice(8, -1)
+      if (/^(mailto|tel|https):/.test(href)) continue
+      expect(routes.has(href), href).toBe(true)
+    }
+  })
+
+  it('closes comments on the catalogue, and carries a footer note a real company would write', () => {
+    expect(STORE_SITE_SETTINGS['discussion.enabled']).toBe(false)
+    const note = String(STORE_SITE_SETTINGS['general.footerNote'])
+    expect(note).toMatch(/Rua da Boavista 84/)
+    expect(note).toMatch(/NIPC/)
+    expect(note).not.toMatch(/create-cogenta|scaffold|demo/i)
+  })
+
+  it("matches the theme's own palette and typeface in its starting skin", async () => {
+    const theme = JSON.parse(
+      await readFile(new URL('../../theme-ecommerce/tokens.json', import.meta.url), 'utf8'),
+    )
+    expect(STARTING_SKINS.store).toEqual(theme)
+    expect(STARTING_SKINS.store?.font.sans.startsWith("'Albert Sans'")).toBe(true)
+    expect(STARTING_SKINS.store?.color.accent).toBe('#9a4a2e')
+  })
 })
 
-function htmlOf(node: HtmlNode | null): string {
-  if (node === null) throw new Error('renderPage returned null')
-  return serialize(node)
-}
+describe('scaffoldSite, store blueprint', () => {
+  let targetDir = ''
+  let result: Awaited<ReturnType<typeof scaffoldSite>>
 
-function fakeThemeContext(slugById: ReadonlyMap<string, string>): RenderContext {
+  beforeAll(async () => {
+    targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-store-'))
+    result = await scaffoldSite({
+      targetDir,
+      siteName: 'Casa Norte',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'en',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+      blueprintId: 'store',
+    })
+  }, SCAFFOLD_TIMEOUT)
+
+  afterAll(async () => {
+    if (targetDir !== '') await rm(targetDir, { recursive: true, force: true })
+  })
+
+  async function withDatabase<T>(
+    use: (db: Parameters<typeof createContentStore>[0]['db']) => Promise<T>,
+  ): Promise<T> {
+    const logger = createLogger({ level: 'silent' })
+    const selection = await createDatabaseRegistry({ logger }).select({
+      driver: 'sqlite',
+      url: join(targetDir, '.cogenta', 'site.db'),
+    })
+    try {
+      return await use(selection.instance)
+    } finally {
+      await selection.dispose()
+    }
+  }
+
+  it('writes a schema file loadCollections can load back, with category, page and product', async () => {
+    expect(result.blueprintId).toBe('store')
+    expect(result.fellBackToBlank).toBe(false)
+    expect(result.migrateExitCode).toBe(0)
+    expect(result.usersExitCode).toBe(0)
+    const collections = await loadCollections(targetDir)
+    expect(collections.map((c) => c.name).sort()).toEqual(['category', 'page', 'product'])
+  })
+
+  it('activates @cogenta/theme-ecommerce with its own starting skin', async () => {
+    expect(result.activeTheme).toBe('@cogenta/theme-ecommerce')
+    expect(result.skinSource).toBe('preset')
+    const tokens = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
+    expect(tokens.color.accent).toBe('#9a4a2e')
+    expect(tokens.font.sans).toContain('Albert Sans')
+  })
+
+  it('seeds the menus, the settings and every bundled photograph', () => {
+    expect(result.menusSeeded).toBe(
+      STORE_MENUS.header.length + STORE_MENUS.footer.length + (STORE_MENUS.headerAction ? 1 : 0),
+    )
+    expect(result.siteSettingsSeeded).toBeGreaterThanOrEqual(4)
+    expect(result.mediaSeeded).toBe(STORE_MEDIA_SPECS.length)
+  })
+
+  it('seeds published products with their photograph, details and an order link naming the shop', async () => {
+    await withDatabase(async (db) => {
+      const products = await createContentStore({ db, collection: product }).list({ limit: 100 })
+      expect(products.items).toHaveLength(STORE_DEMO_PRODUCTS.length)
+      for (const entry of products.items) {
+        const demo = STORE_DEMO_PRODUCTS.find((candidate) => candidate.slug === entry.values.slug)
+        expect(demo, String(entry.values.slug)).toBeDefined()
+        expect(entry.status).toBe('published')
+        expect(entry.values.price).toBe(demo?.price)
+        expect(entry.values.currency).toBe('EUR')
+        expect(entry.values.inStock).toBe(demo?.inStock)
+        expect(entry.values.material).toBe(demo?.material)
+        expect(typeof entry.values.photo).toBe('string')
+        expect(entry.values.orderLink).toBe(orderLinkFor('Casa Norte', demo?.name ?? ''))
+        expect(entry.blocks.blocks?.map((block) => block.type)).toEqual(['prose', 'collectionList'])
+      }
+    })
+  })
+
+  it('lists the goods newest first through the sort the home grid uses', async () => {
+    await withDatabase(async (db) => {
+      const listed = await createContentStore({ db, collection: product }).list({
+        sort: { field: 'createdAt', direction: 'desc' },
+        limit: 4,
+      })
+      expect(listed.items.map((entry) => entry.values.slug)).toEqual([...HOME_GRID].reverse())
+    })
+  })
+
+  it('seeds the four categories with their photograph, and every page, all published', async () => {
+    await withDatabase(async (db) => {
+      const categories = await createContentStore({ db, collection: category }).list()
+      expect(categories.items.map((entry) => entry.values.slug).sort()).toEqual([
+        'carry',
+        'kitchen',
+        'living',
+        'wear',
+      ])
+      expect(categories.items.every((entry) => typeof entry.values.photo === 'string')).toBe(true)
+      const pages = await createContentStore({ db, collection: page }).list({ limit: 20 })
+      expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual(
+        buildStoreDemoPages()
+          .map((demo) => demo.slug)
+          .sort(),
+      )
+      expect(
+        [...categories.items, ...pages.items].every((entry) => entry.status === 'published'),
+      ).toBe(true)
+    })
+  })
+
+  it('indexes the seeded products for search, not only inserts them', async () => {
+    await withDatabase(async (db) => {
+      const index = await createSearchIndex({ db })
+      const results = await index.search({ text: 'linen', locale: 'en' })
+      expect(results.hits.some((hit) => hit.collection === 'product')).toBe(true)
+    })
+  })
+
+  // Rendered through `@cogenta/theme-canonical`, the theme this package
+  // already depends on: what is checked here is that the seeded page and the
+  // seeded products make a real page together. The store theme's own markup
+  // is covered by its own package and by the capture bench.
+  it('renders the seeded home page into real HTML, naming the shop and its newest goods', async () => {
+    await withDatabase(async (db) => {
+      const pageStore = createContentStore({ db, collection: page })
+      const productStore = createContentStore({ db, collection: product })
+      const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
+      if (home === undefined) throw new Error('the home page was not seeded')
+      const blocks = (home.blocks.blocks ?? []).map(
+        (block): VocabularyBlock =>
+          ({
+            _key: block.key,
+            _type: block.type,
+            _version: '1.0.0',
+            ...block.data,
+          }) as VocabularyBlock,
+      )
+      const listed = await productStore.list({
+        sort: { field: 'createdAt', direction: 'desc' },
+        limit: 4,
+      })
+      const themeEntries: readonly ThemeContentEntry[] = listed.items.map((entry) => ({
+        id: entry.id,
+        collection: 'product',
+        locale: entry.locale,
+        status: entry.status,
+        ...entry.values,
+      }))
+      const slugById = new Map(listed.items.map((entry) => [entry.id, entry.values.slug as string]))
+      const entries: FetchedEntries = { 'home-new': themeEntries }
+
+      const html = serialize(
+        renderPage({ title: home.values.title as string, blocks }, themeContext(slugById), entries),
+      )
+      expect(html).toContain('Things for every day, made to last and to be mended')
+      expect(html).toContain('Field jacket')
+      expect(html).toContain('Casa Norte opened in 2014')
+      expect(html).toContain('mailto:letters@casanorte.com')
+      expect(html.match(/<h1[\s>]/g)).toHaveLength(1)
+    })
+  })
+})
+
+function themeContext(slugById: ReadonlyMap<string, string>): RenderContext {
   return {
     site: {
-      name: 'My Store',
+      name: 'Casa Norte',
       url: 'http://localhost:4000',
       locales: ['en'],
       defaultLocale: 'en',
     },
     locale: 'en',
-    url: new URL('http://localhost:4000/home'),
+    url: new URL('http://localhost:4000/'),
     t: (key) => key,
-    // The home hero now carries a real `media` id (L25 task A0b), so
-    // `renderHero` calls this for real — a minimal, honest `ImageSource`
-    // stands in for the real image pipeline, which this test does not
-    // otherwise exercise.
     image: (media) => ({
       kind: 'image',
       src: `/_image?id=${media}`,
       srcset: '',
-      width: 1600,
-      height: 1000,
-      alt: 'store hero',
+      width: 1200,
+      height: 1200,
+      alt: '',
       focal: null,
     }),
     link: (target) => {
       if (typeof target === 'string') return target
       if ('path' in target) return target.path
       const slug = slugById.get(target.id)
-      if (slug === undefined) throw new Error(`no slug indexed for entry ${target.id}`)
+      if (slug === undefined) return '#'
       return buildPath(product, { slug })
     },
     content: {

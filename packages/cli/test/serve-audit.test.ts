@@ -346,7 +346,12 @@ describe('cogenta serve — scheduled audit integrity check (fiche 21 task 3)', 
       expect(found).toBeDefined()
       expect(found?.severity).toBe('danger')
 
-      // And the outbound channel — one alert, signed, naming the break.
+      // And the outbound channel — one alert, signed, naming the break. The
+      // notice is stored before the webhook's HTTP delivery lands, so wait for
+      // the delivery rather than reading the receiver the instant it appears.
+      for (let attempt = 0; attempt < 40 && receiver.received.length === 0; attempt += 1) {
+        await sleep(150)
+      }
       expect(receiver.received.length).toBeGreaterThan(0)
       const call = receiver.received[0]
       expect(call).toBeDefined()

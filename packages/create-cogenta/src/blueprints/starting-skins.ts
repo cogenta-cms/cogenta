@@ -83,32 +83,37 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
   },
 
   /**
-   * A documentation site: cool blue-grey neutrals and one confident blue
-   * accent — the Docusaurus/GitBook register — with a compact density and
-   * restrained radii, since a reference site reads a line at a time rather
-   * than as a marketing page.
+   * The documentation of a developer tool (`@cogenta/theme-docs`, L27 studio
+   * pass): white and a cool grey scale, a near-black ink, and one deep petrol
+   * teal kept for links, the current page and focus; IBM Plex Sans for
+   * everything a reader reads and IBM Plex Mono for code. Copied from
+   * `packages/theme-docs/tokens.json` rather than referenced (a blueprint's
+   * starting skin and a theme's own default skin are two independent pieces
+   * of data the contract keeps separate), so a scaffolded `documentation`
+   * site's skin names the theme's own typefaces and palette from the first
+   * render.
    */
   documentation: {
     color: {
       bg: '#ffffff',
-      fg: '#0f172a',
-      accent: '#1d4ed8',
+      fg: '#15191f',
+      accent: '#006877',
       accentFg: '#ffffff',
-      muted: '#f1f5f9',
-      mutedFg: '#475569',
-      border: '#e2e8f0',
+      muted: '#f3f5f7',
+      mutedFg: '#535c68',
+      border: '#dde2e8',
     },
     font: {
-      sans: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+      sans: "'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
       serif: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
-      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
-      scale: 1.15,
+      mono: "'IBM Plex Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+      scale: 1.2,
       baseSize: '1rem',
     },
-    space: { unit: '0.25rem', density: 'compact' },
-    radius: { sm: '0.25rem', md: '0.375rem', lg: '0.625rem' },
-    motion: { duration: '150ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
-    shadow: { sm: '0 1px 2px rgba(15, 23, 42, 0.06)', md: '0 10px 28px rgba(15, 23, 42, 0.12)' },
+    space: { unit: '0.25rem', density: 'comfortable' },
+    radius: { sm: '0.1875rem', md: '0.3125rem', lg: '0.375rem' },
+    motion: { duration: '120ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+    shadow: { sm: '0 1px 0 rgba(21, 25, 31, 0.05)', md: '0 8px 24px rgba(21, 25, 31, 0.08)' },
   },
 
   /**

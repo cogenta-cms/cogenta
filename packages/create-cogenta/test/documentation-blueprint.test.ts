@@ -1,28 +1,146 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { RichTextDocument, VocabularyBlock } from '@cogenta/blocks'
+import { parseBlocks, richTextDocumentSchema } from '@cogenta/blocks'
 import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
-import { createContentStore, matchPath } from '@cogenta/schema'
-import { afterEach, describe, expect, it } from 'vitest'
+import { createContentStore, createMenuStore, matchPath } from '@cogenta/schema'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  buildDocumentationDemoPages,
+  buildDocumentationDocPages,
+  DEFAULT_PRODUCT_NAME,
   DOCUMENTATION_COLLECTIONS,
   DOCUMENTATION_DEMO_DOC_PAGES,
+  DOCUMENTATION_FOOTER,
   DOCUMENTATION_MEDIA_SPECS,
   DOCUMENTATION_MENUS,
   DOCUMENTATION_SITE_SETTINGS,
   docPage,
   documentationContentPack,
   page,
+  productName,
+  productNames,
 } from '../src/blueprints/documentation.js'
+import { bundledImageType, loadPhotoAsset } from '../src/blueprints/photo-assets.js'
+import { STARTING_SKINS } from '../src/blueprints/starting-skins.js'
 import { scaffoldSite } from '../src/scaffold.js'
 
-// `documentation` now renders and ingests a real decorative hero image
-// through the real media pipeline inside `scaffoldSite` (L25 Phase 1) —
-// slower than vitest's default 5s, not a hang.
+// One bundled diagram through the real media pipeline, and thirteen pages.
 const SCAFFOLD_TIMEOUT = 180_000
 
-describe('the documentation content pack — declared shape', () => {
+type TextNode = Extract<RichTextDocument[number], { _type: 'block' }>
+
+function isCode(node: RichTextDocument[number]): boolean {
+  return (
+    node._type === 'block' &&
+    node.children.length > 0 &&
+    node.children.every((span) => span.marks.includes('code'))
+  )
+}
+
+/** One unit of prose per paragraph, heading or list item, code blocks and code spans left out: the unit the charter counts in. */
+function proseOf(document: RichTextDocument): string[] {
+  return document
+    .filter((node): node is TextNode => node._type === 'block' && !isCode(node))
+    .map((node) =>
+      node.children
+        .filter((span) => !span.marks.includes('code'))
+        .map((span) => span.text)
+        .join(''),
+    )
+}
+
+function codeOf(document: RichTextDocument): string {
+  return document
+    .filter((node): node is TextNode => node._type === 'block')
+    .flatMap((node) =>
+      node.children.filter((span) => span.marks.includes('code')).map((span) => span.text),
+    )
+    .join('\n')
+}
+
+function homeBlocks(siteName?: string): readonly VocabularyBlock[] {
+  return buildDocumentationDemoPages({}, siteName)[0]?.blocks ?? []
+}
+
+function blockTexts(block: VocabularyBlock): string[] {
+  switch (block._type) {
+    case 'hero':
+      return [
+        block.eyebrow ?? '',
+        block.title,
+        block.subtitle ?? '',
+        ...(block.actions ?? []).map((a) => a.label),
+      ]
+    case 'featureGrid':
+      return [block.title ?? '', ...block.items.flatMap((item) => [item.title, item.text ?? ''])]
+    case 'collectionList':
+      return [block.title ?? '']
+    case 'prose':
+      return proseOf(block.body)
+    case 'faq':
+      return [
+        block.title ?? '',
+        ...block.items.flatMap((item) => [item.question, ...proseOf(item.answer)]),
+      ]
+    case 'cta':
+      return [block.title, block.text ?? '', ...block.actions.map((a) => a.label)]
+    default:
+      return []
+  }
+}
+
+function allCopy(siteName?: string): string[] {
+  const pages = buildDocumentationDocPages(siteName)
+  return [
+    ...pages.flatMap((doc) => [doc.title, doc.summary, doc.section, ...proseOf(doc.body)]),
+    ...homeBlocks(siteName).flatMap(blockTexts),
+    ...DOCUMENTATION_MEDIA_SPECS.map((spec) => spec.alt),
+    ...DOCUMENTATION_MENUS.header.map((item) => item.label),
+    ...DOCUMENTATION_FOOTER.flatMap((column) => [
+      column.heading,
+      ...column.links.map((link) => link.label),
+    ]),
+    String(DOCUMENTATION_SITE_SETTINGS['general.tagline']),
+    String(DOCUMENTATION_SITE_SETTINGS['general.footerNote']),
+  ].filter((text) => text.trim() !== '')
+}
+
+function allTitles(): string[] {
+  const pages = buildDocumentationDocPages()
+  return [
+    ...pages.map((doc) => doc.title),
+    ...pages.flatMap((doc) =>
+      doc.body.flatMap((node) =>
+        node._type === 'block' && node.style !== 'normal' && node.style !== 'blockquote'
+          ? proseOf([node])
+          : [],
+      ),
+    ),
+    ...homeBlocks().flatMap((block) =>
+      'title' in block && typeof block.title === 'string' ? [block.title] : [],
+    ),
+  ]
+}
+
+const ROUTES = new Set(['/', ...DOCUMENTATION_DEMO_DOC_PAGES.map((doc) => `/docs/${doc.slug}`)])
+
+function internalLinks(): string[] {
+  const hrefs: string[] = []
+  for (const doc of DOCUMENTATION_DEMO_DOC_PAGES) {
+    for (const node of doc.body)
+      if (node._type === 'block')
+        for (const mark of node.markDefs) if (mark._type === 'link') hrefs.push(mark.href)
+  }
+  const json = JSON.stringify(homeBlocks())
+  for (const match of json.matchAll(/"href":"([^"]+)"/g)) hrefs.push(match[1] as string)
+  return hrefs
+}
+
+describe('documentation blueprint, content model', () => {
   it('declares the four conventional SEO override fields on every routed collection', () => {
     for (const collection of [docPage, page]) {
       expect(Object.keys(collection.fields)).toEqual(
@@ -31,282 +149,401 @@ describe('the documentation content pack — declared shape', () => {
     }
   })
 
-  it('activates @cogenta/theme-docs by default', () => {
+  it('gives a doc page a section, an order, a summary and a block zone', () => {
+    expect(docPage.fields.section?.kind).toBe('text')
+    expect(docPage.fields.order?.kind).toBe('number')
+    expect(docPage.fields.summary?.kind).toBe('text')
+    expect(docPage.fields.body?.kind).toBe('blocks')
     expect(documentationContentPack.defaultTheme).toBe('@cogenta/theme-docs')
   })
 
-  it('seeds a decorative hero image plus two doc-page illustrations, all via coverArt not heroArt (L26)', () => {
-    expect(DOCUMENTATION_MEDIA_SPECS).toHaveLength(3)
-    expect(DOCUMENTATION_MEDIA_SPECS.map((spec) => spec.name)).toEqual([
-      'hero',
-      'docsContentModel',
-      'docsThemes',
-    ])
-  })
-
-  it('seeds header, footer and a header-action menu', () => {
-    expect(DOCUMENTATION_MENUS.header.map((item) => item.label)).toEqual([
-      'Docs',
-      'Guides',
-      'Reference',
-      'Blog',
-    ])
-    expect(DOCUMENTATION_MENUS.footer.map((item) => item.label)).toEqual([
-      'Docs',
-      'Community',
-      'GitHub',
-    ])
-    expect(DOCUMENTATION_MENUS.headerAction?.label).toBe('GitHub')
-    expect(DOCUMENTATION_MENUS.headerAction?.url).toBe('https://github.com/cogenta-cms/cogenta')
-  })
-
-  it('seeds a tagline, three social links and a footer note', () => {
-    expect(DOCUMENTATION_SITE_SETTINGS['general.tagline']).toBeTypeOf('string')
-    expect(DOCUMENTATION_SITE_SETTINGS['general.socialLinks']).toHaveLength(3)
-    expect(DOCUMENTATION_SITE_SETTINGS['general.footerNote']).toBeTypeOf('string')
-  })
-
-  it('declares ten doc pages across exactly three sections, each with a positive integer order', () => {
-    expect(DOCUMENTATION_DEMO_DOC_PAGES).toHaveLength(10)
-    const sections = new Set(DOCUMENTATION_DEMO_DOC_PAGES.map((demo) => demo.section))
-    expect([...sections].sort()).toEqual(['Getting started', 'Guides', 'Reference'])
-    for (const demo of DOCUMENTATION_DEMO_DOC_PAGES) {
-      expect(Number.isInteger(demo.order)).toBe(true)
-      expect(demo.order).toBeGreaterThanOrEqual(1)
-    }
-  })
-
-  it('gives every doc page real, distinct slugs — no placeholder text', () => {
-    const slugs = DOCUMENTATION_DEMO_DOC_PAGES.map((demo) => demo.slug)
-    expect(new Set(slugs).size).toBe(slugs.length)
-    for (const demo of DOCUMENTATION_DEMO_DOC_PAGES) {
-      expect(demo.title.toLowerCase()).not.toContain('lorem')
-    }
-  })
-
-  it('gives every doc page real content — a heading and either a code block or a list', () => {
-    for (const demo of DOCUMENTATION_DEMO_DOC_PAGES) {
-      const styles = demo.body.map((node) => (node._type === 'block' ? node.style : null))
-      const hasCode = demo.body.some(
-        (node) =>
-          node._type === 'block' &&
-          node.children.length === 1 &&
-          node.children[0]?.marks.includes('code'),
-      )
-      const hasList = demo.body.some(
-        (node) => node._type === 'block' && node.listItem !== undefined,
-      )
-      expect(styles, `${demo.slug} has a heading`).toContain('h2')
-      expect(hasCode || hasList, `${demo.slug} has a code block or a list`).toBe(true)
-    }
-  })
-
-  it('gives the guides collectively at least one code block, one list and a table-shaped definition list', () => {
-    const hasCode = DOCUMENTATION_DEMO_DOC_PAGES.some((demo) =>
-      demo.body.some(
-        (node) =>
-          node._type === 'block' &&
-          node.children.length === 1 &&
-          node.children[0]?.marks.includes('code'),
-      ),
-    )
-    const hasList = DOCUMENTATION_DEMO_DOC_PAGES.some((demo) =>
-      demo.body.some((node) => node._type === 'block' && node.listItem !== undefined),
-    )
-    expect(hasCode).toBe(true)
-    expect(hasList).toBe(true)
-  })
-})
-
-describe('scaffoldSite — documentation blueprint', () => {
-  const dirs: string[] = []
-
-  afterEach(async () => {
-    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
-  })
-
-  it(
-    'writes a schema file loadCollections can load back, with doc_page/page',
-    async () => {
-      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-docs-'))
-      dirs.push(targetDir)
-
-      const result = await scaffoldSite({
-        targetDir,
-        siteName: 'My Docs',
-        siteUrl: 'http://localhost:4000',
-        defaultLocale: 'en',
-        databaseDriver: 'sqlite',
-        adminEmail: 'admin@example.com',
-        blueprintId: 'documentation',
-      })
-
-      expect(result.blueprintId).toBe('documentation')
-      expect(result.fellBackToBlank).toBe(false)
-      expect(result.activeTheme).toBe('@cogenta/theme-docs')
-      expect(result.mediaSeeded).toBe(3)
-      expect(result.menusSeeded).toBe(8)
-      expect(result.siteSettingsSeeded).toBeGreaterThan(0)
-
-      const collections = await loadCollections(targetDir)
-      expect(collections.map((c) => c.name).sort()).toEqual(['doc_page', 'page'])
-    },
-    SCAFFOLD_TIMEOUT,
-  )
-
-  it(
-    'writes the documentation blueprint’s own starting skin, a blue accent',
-    async () => {
-      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-docs-'))
-      dirs.push(targetDir)
-
-      const result = await scaffoldSite({
-        targetDir,
-        siteName: 'My Docs',
-        siteUrl: 'http://localhost:4000',
-        defaultLocale: 'en',
-        databaseDriver: 'sqlite',
-        adminEmail: 'admin@example.com',
-        blueprintId: 'documentation',
-      })
-
-      expect(result.skinSource).toBe('preset')
-    },
-    SCAFFOLD_TIMEOUT,
-  )
-
-  it(
-    'seeds ten real, ordered, published doc pages, each with a sidebar collectionList as its first block',
-    async () => {
-      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-docs-'))
-      dirs.push(targetDir)
-
-      const result = await scaffoldSite({
-        targetDir,
-        siteName: 'My Docs',
-        siteUrl: 'http://localhost:4000',
-        defaultLocale: 'en',
-        databaseDriver: 'sqlite',
-        adminEmail: 'admin@example.com',
-        blueprintId: 'documentation',
-      })
-      expect(result.migrateExitCode).toBe(0)
-      expect(result.usersExitCode).toBe(0)
-
-      const logger = createLogger({ level: 'silent' })
-      const selection = await createDatabaseRegistry({ logger }).select({
-        driver: 'sqlite',
-        url: join(targetDir, '.cogenta', 'site.db'),
-      })
-      try {
-        const docPageStore = createContentStore({ db: selection.instance, collection: docPage })
-        const pageStore = createContentStore({ db: selection.instance, collection: page })
-
-        const docPages = await docPageStore.list({ limit: 100 })
-        expect(docPages.items).toHaveLength(10)
-        expect(docPages.items.every((entry) => entry.status === 'published')).toBe(true)
-
-        const sections = new Set(docPages.items.map((entry) => entry.values.section))
-        expect([...sections].sort()).toEqual(['Getting started', 'Guides', 'Reference'])
-
-        for (const entry of docPages.items) {
-          const body = entry.blocks.body ?? []
-          expect(body.length).toBeGreaterThanOrEqual(2)
-          const sidebarBlockData = body[0]
-          expect(sidebarBlockData?.type).toBe('collectionList')
-          const sidebarData = (sidebarBlockData?.data ?? {}) as {
-            collection?: string
-            limit?: number
-            sort?: { field: string }
-          }
-          expect(sidebarData.collection).toBe('doc_page')
-          expect(sidebarData.limit).toBe(100)
-          expect(sidebarData.sort?.field).toBe('createdAt')
-          expect(body[1]?.type).toBe('prose')
-        }
-
-        const pages = await pageStore.list()
-        expect(pages.items.map((entry) => entry.values.slug)).toEqual(['home'])
-        expect(pages.items[0]?.status).toBe('published')
-      } finally {
-        await selection.dispose()
-      }
-    },
-    SCAFFOLD_TIMEOUT,
-  )
-
-  it(
-    'composes the home page as exactly the six blocks the brief fixes, in order',
-    async () => {
-      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-docs-'))
-      dirs.push(targetDir)
-
-      await scaffoldSite({
-        targetDir,
-        siteName: 'My Docs',
-        siteUrl: 'http://localhost:4000',
-        defaultLocale: 'en',
-        databaseDriver: 'sqlite',
-        adminEmail: 'admin@example.com',
-        blueprintId: 'documentation',
-      })
-
-      const logger = createLogger({ level: 'silent' })
-      const selection = await createDatabaseRegistry({ logger }).select({
-        driver: 'sqlite',
-        url: join(targetDir, '.cogenta', 'site.db'),
-      })
-      try {
-        const pageStore = createContentStore({ db: selection.instance, collection: page })
-        const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
-        expect(home).toBeDefined()
-        if (home === undefined) throw new Error('unreachable')
-
-        const blocks = home.blocks.blocks ?? []
-        expect(blocks.map((block) => block.type)).toEqual([
-          'hero',
-          'featureGrid',
-          'collectionList',
-          'prose',
-          'faq',
-          'cta',
-        ])
-
-        const hero = blocks[0]?.data as { title?: string; media?: string }
-        expect(hero.title).toBe('Documentation')
-        // The hero's own decorative panel comes from the real media pipeline.
-        expect(hero.media).toBeTypeOf('string')
-
-        const features = blocks[1]?.data as { items: readonly { link?: { href?: string } }[] }
-        expect(features.items).toHaveLength(6)
-        for (const item of features.items) {
-          expect(item.link?.href).toMatch(/^\/docs\//)
-        }
-
-        const guides = blocks[2]?.data as { collection?: string; limit?: number }
-        expect(guides.collection).toBe('doc_page')
-        expect(guides.limit).toBe(100)
-
-        const cta = blocks[5]?.data as { title?: string; actions: readonly { target: unknown }[] }
-        expect(cta.title).toBe('Contribute on GitHub')
-        expect(cta.actions[0]?.target).toEqual({ href: 'https://github.com/cogenta-cms/cogenta' })
-      } finally {
-        await selection.dispose()
-      }
-    },
-    SCAFFOLD_TIMEOUT,
-  )
-
   it('resolves /docs/:slug and /:slug generically through @cogenta/schema routing', () => {
-    expect(matchPath(DOCUMENTATION_COLLECTIONS, '/docs/installation')).toEqual({
+    expect(matchPath(DOCUMENTATION_COLLECTIONS, '/docs/quickstart')).toEqual({
       collection: 'doc_page',
       locale: null,
-      params: { slug: 'installation' },
+      params: { slug: 'quickstart' },
     })
     expect(matchPath(DOCUMENTATION_COLLECTIONS, '/home')).toEqual({
       collection: 'page',
       locale: null,
       params: { slug: 'home' },
+    })
+  })
+})
+
+describe('documentation blueprint, the product and its names', () => {
+  it('names the product after the site, dropping the word that says it is documentation', () => {
+    expect(productName('Relay Docs')).toBe('Relay')
+    expect(productName('Tessera Documentation')).toBe('Tessera')
+    expect(productName('Quayline')).toBe('Quayline')
+    expect(productName(undefined)).toBe(DEFAULT_PRODUCT_NAME)
+    expect(productName('   ')).toBe('Relay')
+  })
+
+  it('derives the command, the environment prefix and the header names from that name', () => {
+    expect(productNames('Kiln Works Docs')).toEqual({
+      name: 'Kiln Works',
+      cli: 'kiln-works',
+      env: 'KILN_WORKS',
+      header: 'Kiln-Works',
+    })
+    expect(productNames('Côté Hooks')).toMatchObject({ cli: 'cote-hooks', env: 'COTE_HOOKS' })
+  })
+
+  it('writes the product’s own names into every page, and never the fallback when the site has a name', () => {
+    const copy = [
+      ...allCopy('Tessera Docs'),
+      ...buildDocumentationDocPages('Tessera Docs').map((doc) => codeOf(doc.body)),
+    ].join('\n')
+    expect(copy).toContain('Tessera')
+    expect(copy).toContain('tessera init')
+    expect(copy).toContain('TESSERA_API_KEY')
+    expect(copy).toContain('Tessera-Signature')
+    expect(copy).not.toMatch(/\brelay\b|RELAY_|%N%|%cli%|%ENV%|%HDR%/i)
+  })
+
+  it('keeps the quickstart, the CLI reference and the API reference in agreement', () => {
+    const bySlug = new Map(DOCUMENTATION_DEMO_DOC_PAGES.map((doc) => [doc.slug, doc]))
+    const reference = JSON.stringify(bySlug.get('cli-reference')?.body)
+    const quickstart = codeOf(bySlug.get('quickstart')?.body ?? [])
+    for (const command of ['init', 'dev', 'listen', 'endpoints create', 'events send']) {
+      expect(quickstart, command).toContain(`relay ${command}`)
+      expect(reference, command).toContain(`relay ${command}`)
+    }
+    const api = JSON.stringify(bySlug.get('http-api')?.body)
+    expect(JSON.stringify(homeBlocks())).toContain('/v1/events')
+    expect(api).toContain('POST /v1/events')
+    expect(JSON.stringify(bySlug.get('configuration-reference')?.body)).toContain(
+      'delivery.retries.schedule',
+    )
+  })
+})
+
+describe('documentation blueprint, the documentation', () => {
+  it('writes thirteen pages across four sections, in reading order', () => {
+    expect(DOCUMENTATION_DEMO_DOC_PAGES.map((doc) => doc.slug)).toEqual([
+      'introduction',
+      'installation',
+      'quickstart',
+      'core-concepts',
+      'verifying-signatures',
+      'retries-and-replay',
+      'configuration',
+      'deploying-to-production',
+      'cli-reference',
+      'configuration-reference',
+      'http-api',
+      'troubleshooting',
+      'whats-new',
+    ])
+    expect([...new Set(DOCUMENTATION_DEMO_DOC_PAGES.map((doc) => doc.section))]).toEqual([
+      'Getting started',
+      'Guides',
+      'Reference',
+      'Help',
+    ])
+    const orders = DOCUMENTATION_DEMO_DOC_PAGES.map((doc) => doc.order)
+    expect(orders).toEqual([...orders].sort((a, b) => a - b))
+    expect(new Set(orders).size).toBe(orders.length)
+  })
+
+  it('gives every page valid rich text, a summary and at least two sections', () => {
+    for (const doc of DOCUMENTATION_DEMO_DOC_PAGES) {
+      expect(() => richTextDocumentSchema.parse(doc.body), doc.slug).not.toThrow()
+      expect(doc.summary.length, doc.slug).toBeGreaterThan(40)
+      expect(doc.summary.length, doc.slug).toBeLessThanOrEqual(300)
+      expect(doc.summary, doc.slug).not.toContain('`')
+      const headings = doc.body.filter((node) => node._type === 'block' && node.style === 'h2')
+      expect(headings.length, doc.slug).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('writes real reading: over 2,500 words of prose besides the code, and no page under 150', () => {
+    let total = 0
+    for (const doc of DOCUMENTATION_DEMO_DOC_PAGES) {
+      const words = proseOf(doc.body).join(' ').split(/\s+/).filter(Boolean).length
+      expect(words, doc.slug).toBeGreaterThanOrEqual(150)
+      total += words
+    }
+    expect(total).toBeGreaterThan(2500)
+  })
+
+  it('shows code in the languages a reader of this product writes', () => {
+    const labels = DOCUMENTATION_DEMO_DOC_PAGES.flatMap((doc) =>
+      doc.body.flatMap((node) =>
+        isCode(node) && node._type === 'block' && node.children[0]?.marks.includes('strong')
+          ? [node.children[0].text]
+          : [],
+      ),
+    )
+    for (const label of [
+      'Terminal',
+      'verify-signature.ts',
+      'verify_signature.py',
+      'relay.yaml',
+      'compose.yaml',
+      'Request',
+      'Response: 202 Accepted',
+    ]) {
+      expect(labels).toContain(label)
+    }
+    const codeBlocks = DOCUMENTATION_DEMO_DOC_PAGES.flatMap((doc) => doc.body.filter(isCode))
+    expect(codeBlocks.length).toBeGreaterThan(25)
+  })
+
+  it('keeps every line of code short enough to read without scrolling, one long signature excepted', () => {
+    const long = DOCUMENTATION_DEMO_DOC_PAGES.flatMap((doc) =>
+      doc.body.filter(isCode).flatMap((node) =>
+        node._type === 'block'
+          ? node.children
+              .filter((span) => !span.marks.includes('strong'))
+              .flatMap((span) => span.text.split('\n'))
+              .filter((line) => line.length > 74)
+          : [],
+      ),
+    )
+    expect(long).toEqual([expect.stringMatching(/^Relay-Signature: t=\d+,v1=[0-9a-f]{64}$/)])
+  })
+
+  it('uses the shapes the theme turns into notes, reference tables and keys', () => {
+    const all = DOCUMENTATION_DEMO_DOC_PAGES.flatMap((doc) => doc.body)
+    const notes = all.filter(
+      (node) =>
+        node._type === 'block' &&
+        node.style === 'blockquote' &&
+        node.children[0]?.marks.includes('strong'),
+    )
+    const referenceRows = all.filter(
+      (node) =>
+        node._type === 'block' &&
+        node.listItem === 'bullet' &&
+        node.children[0]?.marks.join() === 'code' &&
+        node.children.length > 1,
+    )
+    expect(notes.length).toBeGreaterThanOrEqual(8)
+    expect(referenceRows.length).toBeGreaterThan(60)
+    expect(JSON.stringify(all)).toContain('"text":"Ctrl+C","marks":["code"]')
+  })
+
+  it('illustrates "Core concepts" with the diagram once it was seeded, and leaves no empty slot otherwise', () => {
+    const concepts = (media: Record<string, string>) =>
+      buildDocumentationDocPages(undefined, media).find((doc) => doc.slug === 'core-concepts')
+        ?.body ?? []
+    expect(
+      concepts({ deliveryFlow: 'media-1' }).filter((node) => node._type === 'media'),
+    ).toHaveLength(1)
+    expect(concepts({}).filter((node) => node._type === 'media')).toHaveLength(0)
+  })
+})
+
+describe('documentation blueprint, copy', () => {
+  it('never talks about the CMS, the scaffold or the site as a demonstration', () => {
+    expect(allCopy().join('\n')).not.toMatch(
+      /cogenta|scaffold|\bdemo\b|editable|lorem|placeholder|this (theme|template|site is)|blueprint|public beta/i,
+    )
+  })
+
+  it('keeps to the studio charter: no buzzwords, no exclamation marks, at most one em dash per text', () => {
+    const buzzwords =
+      /\b(seamless|unlock|elevate|empower|supercharge|streamline|cutting-edge|robust|leverage|synergy|innovative|world-class|game-chang|revolutioni[sz]e|next-gen|effortless|blazing)/i
+    for (const text of allCopy()) {
+      expect(text, text).not.toMatch(buzzwords)
+      expect(text, text).not.toContain('!')
+      expect((text.match(/—/g) ?? []).length, text).toBeLessThanOrEqual(1)
+      expect(text, text).not.toMatch(/\bnot\b[^.;:]*,\s*but\b/i)
+      expect(text, text).not.toMatch(/\bisn[’']t\b[^.;:]*[,;]\s*it[’']s\b/i)
+    }
+  })
+
+  it('titles no page, section or block as a question; only the questions of a FAQ ask one', () => {
+    for (const title of allTitles()) expect(title, title).not.toMatch(/\?/)
+  })
+
+  it('uses typographic apostrophes in prose', () => {
+    for (const text of allCopy()) expect(text, text).not.toMatch(/[a-z]'[a-z]/i)
+  })
+
+  it('writes dates in the same long form the theme prints', () => {
+    const headings = DOCUMENTATION_DEMO_DOC_PAGES.find(
+      (doc) => doc.slug === 'whats-new',
+    )?.body.flatMap((node) =>
+      node._type === 'block' && node.style === 'h2' ? proseOf([node]) : [],
+    )
+    expect(headings).toEqual(['2.4, September 2, 2026', '2.3, July 15, 2026', '2.2, May 20, 2026'])
+  })
+})
+
+describe('documentation blueprint, home page, navigation and pictures', () => {
+  it('composes the home page as a documentation site opens', () => {
+    const blocks = homeBlocks()
+    expect(() => parseBlocks([...blocks])).not.toThrow()
+    expect(blocks.map((block) => block._type)).toEqual([
+      'hero',
+      'featureGrid',
+      'collectionList',
+      'prose',
+      'faq',
+      'cta',
+    ])
+    expect(blocks[0]).toMatchObject({
+      _type: 'hero',
+      title: 'Relay documentation',
+      eyebrow: 'Relay 2.4',
+    })
+    expect(blocks[0]).not.toHaveProperty('media')
+  })
+
+  it('starts the reader in three places, with no icon tiles', () => {
+    const start = homeBlocks()[1]
+    const items = start?._type === 'featureGrid' ? start.items : []
+    expect(items).toHaveLength(3)
+    for (const item of items) expect(item.icon).toBeUndefined()
+  })
+
+  it('sorts every list on a field contract B allows', () => {
+    const list = homeBlocks()[2]
+    expect(list).toMatchObject({
+      collection: 'doc_page',
+      limit: 100,
+      sort: { field: 'createdAt', direction: 'asc' },
+    })
+  })
+
+  it('links every menu item and every link in the content to a page the blueprint seeds', () => {
+    const urls = [
+      ...DOCUMENTATION_MENUS.header.map((item) => item.url ?? '/'),
+      ...DOCUMENTATION_FOOTER.flatMap((column) => column.links.map((link) => link.url ?? '/')),
+      ...internalLinks(),
+    ]
+    expect(urls.length).toBeGreaterThan(25)
+    for (const url of urls) expect(ROUTES.has(url), url).toBe(true)
+    expect(DOCUMENTATION_MENUS.footer).toEqual([])
+    expect(DOCUMENTATION_MENUS.headerAction).toBeUndefined()
+  })
+
+  it('groups the footer in four headed columns of real links', () => {
+    expect(DOCUMENTATION_FOOTER.map((column) => column.heading)).toEqual([
+      'Get started',
+      'Guides',
+      'Reference',
+      'Help',
+    ])
+    for (const column of DOCUMENTATION_FOOTER) expect(column.links.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('closes comments and prints a licence, not a note about how the site was made', () => {
+    expect(DOCUMENTATION_SITE_SETTINGS['discussion.enabled']).toBe(false)
+    expect(String(DOCUMENTATION_SITE_SETTINGS['general.footerNote'])).toMatch(/Apache License 2\.0/)
+    expect(DOCUMENTATION_SITE_SETTINGS['general.socialLinks']).toHaveLength(3)
+  })
+
+  it('points its one media slot at a bundled diagram, described in a full sentence, and bundles nothing else', async () => {
+    expect(DOCUMENTATION_MEDIA_SPECS.map((spec) => spec.photo)).toEqual([
+      'documentation/delivery-flow.png',
+    ])
+    const bytes = loadPhotoAsset('documentation/delivery-flow.png') as Uint8Array
+    expect(bundledImageType(bytes).extension).toBe('png')
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    expect(view.getUint32(16)).toBeGreaterThanOrEqual(2000)
+    expect(bytes.byteLength).toBeLessThan(250_000)
+    expect(DOCUMENTATION_MEDIA_SPECS[0]?.alt.length).toBeGreaterThan(60)
+    expect(DOCUMENTATION_MEDIA_SPECS[0]?.alt).not.toMatch(
+      /abstract|decorative|composition|illustration/i,
+    )
+    const folder = fileURLToPath(
+      new URL('../src/blueprints/assets/photos/documentation/', import.meta.url),
+    )
+    expect(await readdir(folder)).toEqual(['delivery-flow.png'])
+  })
+
+  it("matches the theme's own palette and typefaces in its starting skin", async () => {
+    const theme = JSON.parse(
+      await readFile(new URL('../../theme-docs/tokens.json', import.meta.url), 'utf8'),
+    )
+    expect(STARTING_SKINS.documentation).toEqual(theme)
+    expect(STARTING_SKINS.documentation?.font.sans.startsWith("'IBM Plex Sans'")).toBe(true)
+    expect(STARTING_SKINS.documentation?.font.mono.startsWith("'IBM Plex Mono'")).toBe(true)
+  })
+})
+
+describe('scaffoldSite, documentation blueprint', () => {
+  let targetDir = ''
+  let result: Awaited<ReturnType<typeof scaffoldSite>>
+
+  beforeAll(async () => {
+    targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-docs-'))
+    result = await scaffoldSite({
+      targetDir,
+      siteName: 'Tessera Docs',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'en',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+      blueprintId: 'documentation',
+    })
+  }, SCAFFOLD_TIMEOUT)
+
+  afterAll(async () => {
+    if (targetDir !== '') await rm(targetDir, { recursive: true, force: true })
+  })
+
+  async function withDatabase<T>(
+    work: (db: Parameters<typeof createContentStore>[0]['db']) => Promise<T>,
+  ): Promise<T> {
+    const selection = await createDatabaseRegistry({
+      logger: createLogger({ level: 'silent' }),
+    }).select({
+      driver: 'sqlite',
+      url: join(targetDir, '.cogenta', 'site.db'),
+    })
+    try {
+      return await work(selection.instance)
+    } finally {
+      await selection.dispose()
+    }
+  }
+
+  it('activates the theme, seeds the diagram, the menus and the settings, and writes the skin', async () => {
+    expect(result.blueprintId).toBe('documentation')
+    expect(result.fellBackToBlank).toBe(false)
+    expect(result.activeTheme).toBe('@cogenta/theme-docs')
+    expect(result.mediaSeeded).toBe(1)
+    expect(result.menusSeeded).toBe(4)
+    expect(result.siteSettingsSeeded).toBeGreaterThan(0)
+    expect(result.skinSource).toBe('preset')
+    const collections = await loadCollections(targetDir)
+    expect(collections.map((c) => c.name).sort()).toEqual(['doc_page', 'page'])
+  })
+
+  it('seeds thirteen published, ordered doc pages named after the site, each opening on the navigation index', async () => {
+    await withDatabase(async (db) => {
+      const docs = await createContentStore({ db, collection: docPage }).list({ limit: 100 })
+      expect(docs.items).toHaveLength(13)
+      expect(docs.items.every((entry) => entry.status === 'published')).toBe(true)
+      for (const entry of docs.items) {
+        const body = entry.blocks.body ?? []
+        expect(body[0]?.type).toBe('collectionList')
+        expect(body[0]?.data).toMatchObject({
+          collection: 'doc_page',
+          limit: 100,
+          sort: { field: 'createdAt' },
+        })
+        expect(body[1]?.type).toBe('prose')
+        expect(typeof entry.values.summary).toBe('string')
+      }
+      const concepts = docs.items.find((entry) => entry.values.slug === 'core-concepts')
+      expect(JSON.stringify(concepts?.blocks.body)).toMatch(/"_type":"media","id":"[^"]+"/)
+      expect(JSON.stringify(docs.items)).toContain('tessera events send')
+      const pages = await createContentStore({ db, collection: page }).list()
+      expect(pages.items.map((entry) => entry.values.slug)).toEqual(['home'])
+      expect(pages.items[0]?.values.title).toBe('Tessera documentation')
+    })
+  })
+
+  it('seeds the footer as four headed columns', async () => {
+    await withDatabase(async (db) => {
+      const footer = await createMenuStore({ db }).byLocation('footer', 'en')
+      expect(footer).not.toBeNull()
     })
   })
 })

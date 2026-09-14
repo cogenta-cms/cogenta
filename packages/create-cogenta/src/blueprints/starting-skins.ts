@@ -278,31 +278,34 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
     shadow: { sm: '0 1px 0 rgba(15, 26, 36, 0.06)', md: '0 8px 24px rgba(15, 26, 36, 0.12)' },
   },
   /**
-   * A nonprofit/community site (L25, `@cogenta/theme-association`): warm,
-   * human, trustworthy — a deep-green accent on a light warm off-white
-   * (rather than the canonical blue's corporate read), generously rounded
-   * corners for big, friendly buttons and event cards.
+   * A neighbourhood charity (L27, `@cogenta/theme-association`): warm paper,
+   * a green-black ink and one deep green, the organisation's own colour; the
+   * theme derives the donation yellow from the paper's hue. Bricolage
+   * Grotesque in the display slot (`serif`, which the theme reads as its
+   * display face) and Source Sans 3 for text. Identical to the theme's own
+   * `tokens.json`, checked by test.
    */
   association: {
     color: {
-      bg: '#fdfbf6',
-      fg: '#1f2a20',
-      accent: '#1f6b4a',
-      accentFg: '#ffffff',
-      muted: '#f3ede0',
-      mutedFg: '#4a4137',
-      border: '#e6dcc8',
+      bg: '#f7f3ea',
+      fg: '#17201a',
+      accent: '#1d5b3e',
+      accentFg: '#f7f3ea',
+      muted: '#ede6d6',
+      mutedFg: '#4b4f47',
+      border: '#d8cfbc',
     },
     font: {
-      sans: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-      serif: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
-      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      sans: "'Source Sans 3', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+      serif:
+        "'Bricolage Grotesque', 'Source Sans 3', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif",
+      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
       scale: 1.25,
-      baseSize: '1rem',
+      baseSize: '1.0625rem',
     },
     space: { unit: '0.25rem', density: 'comfortable' },
-    radius: { sm: '0.5rem', md: '1rem', lg: '1.5rem' },
-    motion: { duration: '200ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
-    shadow: { sm: '0 1px 3px rgba(31, 42, 32, 0.08)', md: '0 10px 28px rgba(31, 42, 32, 0.12)' },
+    radius: { sm: '0.1875rem', md: '0.25rem', lg: '0.375rem' },
+    motion: { duration: '140ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+    shadow: { sm: '0 1px 0 rgba(23, 32, 26, 0.06)', md: '0 6px 18px rgba(23, 32, 26, 0.08)' },
   },
 }

@@ -1,60 +1,42 @@
-import type { LogoItem, LogosBlock } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  image,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import type { LogosBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * A "trusted by" client strip. Contract B says the organisation's name **is**
- * the accessible name of the link, so the logo image carries it as `alt`
- * text when the media entity has none, and no visually hidden duplicate is
- * added: a link whose only content is an image with `alt` text is already
- * named.
+ * Named organisations (customers, auditors, partners) as a ruled grid:
+ * hairlines between cells, each wordmark set in the secondary ink at one
+ * height, and linked when the block gives an address. The organisation's
+ * name is the image's accessible name when the media library has no alt text.
  *
- * The restrained, grayscale-leaning treatment (`filter: grayscale()` in the
- * stylesheet) is the "held back until hovered" client-logo language the
- * aesthetic direction calls for — a `filter`, never `grayscale` baked into
- * the media itself, since the underlying asset still arrives as a real
- * `<img>` from `image()`.
+ * Wordmarks are shown in grey in the light scheme and inverted in the dark
+ * one, so a logo drawn in dark ink for paper stays legible on the dark
+ * ground.
  */
-function renderItem(item: LogoItem, ctx: RenderContext): HtmlElement {
-  const logo = image(ctx, item.media, {
-    className: 'cg-clients__logo',
-    altFrom: item.name,
-    variant: { fit: 'contain' },
-  })
-  return h(
-    'li',
-    { class: 'cg-clients__item' },
-    item.url === undefined
-      ? logo
-      : h(
-          'a',
-          { class: 'cg-clients__link', href: ctx.link(item.url), rel: 'noopener noreferrer' },
-          logo,
-        ),
-  )
-}
-
 export function renderLogos(block: LogosBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-clients', 'data-block': 'logos' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('logos') ?? 'h2',
-          { class: 'cg-clients__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'logos',
+    'cs-logos',
+    { 'data-count': String(Math.min(block.items.length, 8)) },
+    'div',
+    sectionHead('logos', block.title),
     h(
       'ul',
-      { class: 'cg-clients__items' },
-      block.items.map((item) => renderItem(item, ctx)),
+      { class: 'cs-logos__items' },
+      block.items.map((item) => {
+        const mark = image(ctx, item.media, {
+          className: 'cs-logos__image cs-mark',
+          altFrom: item.name,
+          sizes: '12rem',
+        })
+        return h(
+          'li',
+          { class: 'cs-logos__item' },
+          item.url === undefined
+            ? mark
+            : h('a', { class: 'cs-logos__link', href: ctx.link(item.url), rel: 'noopener' }, mark),
+        )
+      }),
     ),
   )
 }

@@ -3,46 +3,39 @@ import { describe, expect, it } from 'vitest'
 import { renderProse } from '../../src/render/blocks/prose.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
-const ctx = makeContext()
-const html = serialize(renderProse(BLOCKS.prose, ctx))
+const html = serialize(renderProse(BLOCKS.prose, makeContext()))
 
 describe('prose', () => {
-  it('wraps rich text in the prose container, marked data-block="prose"', () => {
-    expect(html).toContain('class="cg-prose" data-block="prose"')
+  it('renders to stable markup', () => {
+    expect(html).toMatchSnapshot()
   })
 
-  it('starts rich text headings at h2, never at h1 — the vocabulary starts there', () => {
-    expect(html).toContain('<h2>')
-    expect(html).not.toContain('<h1')
+  it('sets the text in one reading column inside the section rhythm', () => {
+    expect(html).toMatch(
+      /^<div class="cs-section cs-prose" data-block="prose"><div class="cs-container cs-prose__inner"><div class="cs-prose__body">/,
+    )
   })
 
-  it('renders strong text as a real <strong>, never an inline style', () => {
-    expect(html).toContain('<strong>a written plan</strong>')
+  it('escapes text that looks like markup', () => {
+    expect(html).toContain('&amp; checked &lt;by hand&gt;.')
+    expect(html).not.toContain('<by hand>')
   })
 
-  it('renders a nested bullet list as two real <ul> elements', () => {
-    const firstUl = html.indexOf('<ul>')
-    const secondUl = html.indexOf('<ul>', firstUl + 1)
-    expect(firstUl).toBeGreaterThan(-1)
-    expect(secondUl).toBeGreaterThan(firstUl)
+  it('keeps headings, nested lists, quotations and links from the rich text', () => {
+    expect(html).toContain('<h2>Encryption</h2>')
+    expect(html).toMatch(
+      /<ul><li>TLS 1\.3 in transit<ul><li>HSTS preloaded<\/li><\/ul><\/li><\/ul>/,
+    )
+    expect(html).toContain('<blockquote><p>Keys are rotated every 90 days.</p></blockquote>')
+    expect(html).toContain(
+      '<a href="https://example.org/backups" rel="external">every backup is restored</a>',
+    )
   })
 
-  it('renders an external link with its own href, not a bare label', () => {
-    expect(html).toContain('href="https://example.org/methodology"')
-  })
-
-  it('renders an internal media reference as a figure with a caption', () => {
-    expect(html).toContain('class="cg-prose__figure"')
-    expect(html).toContain('The quarterly report, in review')
-  })
-
-  it('never emits raw HTML from the document — every mark goes through the h()/text() tree', () => {
-    expect(html).toContain('&lt;delivery&gt;')
-    expect(html).not.toContain('<delivery>')
-  })
-
-  it('renders a blockquote from the "blockquote" style', () => {
-    expect(html).toContain('<blockquote>')
-    expect(html).toContain('A plan the client can hold us to.')
+  it('renders an inline picture as a figure with its caption and alt text', () => {
+    expect(html).toMatch(
+      /<figure class="cg-prose__figure"><img src="\/img\/inline-1600\.png"[^>]*alt="The request form"/,
+    )
+    expect(html).toContain('<figcaption>The request form</figcaption>')
   })
 })

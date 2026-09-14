@@ -4,41 +4,36 @@ import { renderCta } from '../../src/render/blocks/cta.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderCta(BLOCKS.cta, ctx))
 
-describe('cta → banner', () => {
-  it('splits the content and the actions into two distinct regions', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
-    expect(html).toContain('class="cg-banner__content"')
-    expect(html).toContain('class="cg-banner__actions"')
+describe('cta', () => {
+  it('renders to stable markup', () => {
+    expect(html).toMatchSnapshot()
   })
 
-  it('renders the title as a labelled field, at the block heading level', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
+  it('titles the call to action at h2', () => {
     expect(html).toContain(
-      '<h2 class="cg-banner__title" data-field="title">Talk to an advisor this week</h2>',
+      '<h2 class="cs-cta__title" data-field="title">See it with your own approval policy</h2>',
     )
   })
 
-  it('renders the supporting text as its own labelled field', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
-    expect(html).toContain('data-field="text"')
-    expect(html).toContain('Thirty minutes, no deck, no obligation.')
+  it('sets its sentence under the title, and nothing when there is none', () => {
+    expect(html).toContain(
+      '<p class="cs-cta__text" data-field="text">A 30-minute call with a solutions engineer.</p>',
+    )
+    const { text: _t, ...bare } = BLOCKS.cta
+    expect(serialize(renderCta(bare, ctx))).not.toContain('cs-cta__text')
   })
 
-  it('omits the text paragraph entirely when the block has none', () => {
-    const { text: _text, ...withoutText } = BLOCKS.cta
-    const html = serialize(renderCta(withoutText, ctx))
-    expect(html).not.toContain('cg-banner__text')
+  it('lists its actions as a named group, keeping the author’s emphasis', () => {
+    expect(html).toContain('<ul class="cg-actions" aria-label="hero.actions">')
+    expect(html).toContain('data-emphasis="primary" href="/en/demo">Book a demo</a>')
+    expect(html).toContain(
+      'data-emphasis="secondary" href="/en/security">Read the security overview</a>',
+    )
   })
 
-  it('always renders the required, non-empty actions list', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
-    expect(html).toContain('cg-actions')
-    expect(html).toContain('Book a call')
-  })
-
-  it('is marked with data-block="cta"', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
-    expect(html).toContain('data-block="cta"')
+  it('draws no box, band or picture of its own', () => {
+    expect(html).not.toMatch(/<img|style="|data-variant/)
   })
 })

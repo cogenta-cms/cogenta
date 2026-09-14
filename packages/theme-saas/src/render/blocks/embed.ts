@@ -1,25 +1,19 @@
 import type { EmbedBlock } from '@cogenta/blocks'
 import { aspectRatio, type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * Nothing here contacts a third party before the visitor has consented.
+ * A product walkthrough, a recorded webinar, a post: eight columns wide from
+ * the first, in the hairline frame of the theme.
  *
- * When `consentRequired` is true the block renders a self-contained card and
- * an outbound link — no `<iframe>`, no `<script>`, no preconnect, no poster
- * image fetched from the provider. An embed that "only" loads a thumbnail
- * has already handed the visitor's IP address and a cookie to the provider,
- * which is the exact transfer consent was supposed to gate.
- *
- * The theme ships no consent *button*, because it ships no JavaScript:
- * granting consent is a site-wide decision that belongs to the consent
- * layer, not to a block. Until that layer exists, the card is the honest
- * rendering — it says what would be loaded and lets the visitor go there
- * deliberately. The card is framed the same way `mediaFigure` and `gallery`
- * are (a thin bordered plate with a small provider tag), so the three read
- * as one family of "media placeholder" treatments.
+ * Nothing here contacts a third party before the visitor consents. When
+ * `consentRequired` is set, or the provider has no cookie-free frame (a post,
+ * a map), a notice takes the frame's place: a ruled note with a small mono
+ * label, one sentence and one arrow link to the original, rather than an empty
+ * rectangle kept at a video's ratio (without a script there is nothing to
+ * load into it later). No preconnect, no poster fetched from the provider, no
+ * consent button: this theme ships no script.
  */
-
-/** `null` means "this provider has no embeddable frame we trust". */
 function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string | null {
   const url = URL.parse(rawUrl)
   if (url === null) return null
@@ -27,8 +21,6 @@ function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string |
 
   switch (provider) {
     case 'youtube': {
-      // `youtube-nocookie.com` is the privacy-preserving host, and the only
-      // one this theme will point an iframe at.
       const id = url.hostname.endsWith('youtu.be')
         ? segments[0]
         : (url.searchParams.get('v') ?? segments[1])
@@ -51,65 +43,70 @@ function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string |
     case 'soundcloud':
       return `https://w.soundcloud.com/player/?url=${encodeURIComponent(rawUrl)}`
     default:
-      // bluesky, mastodon, other: a post embed is a script tag, which this
-      // theme does not load. The link card is the rendering.
+      // bluesky, mastodon, other: a post embed is a script tag and a map is a
+      // third-party page, neither of which this theme loads.
       return null
   }
 }
 
-function consentCard(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElement {
+function notice(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElement {
   return h(
     'div',
-    { class: 'cg-embed__placeholder' },
-    h('p', { class: 'cg-embed__provider', 'aria-hidden': 'true' }, block.provider),
-    h('p', { class: 'cg-embed__notice' }, reason),
+    { class: 'cs-embed__notice' },
+    h('p', { class: 'cs-embed__label' }, ctx.t('embed.label')),
+    h('p', { class: 'cs-embed__reason' }, reason),
     h(
       'a',
       {
-        class: 'cg-embed__link',
+        class: 'cs-arrow-link cs-embed__link',
         href: ctx.link(block.url),
         rel: 'noopener noreferrer nofollow',
       },
-      ctx.t('embed.open', { provider: block.provider }),
+      block.provider === 'other'
+        ? ctx.t('embed.openOther')
+        : ctx.t('embed.open', { provider: block.provider }),
     ),
   )
 }
 
 export function renderEmbed(block: EmbedBlock, ctx: RenderContext): HtmlElement {
   const source = block.consentRequired ? null : frameSource(block.provider, block.url)
-  // Video providers are 16:9 unless the editor framed them otherwise;
-  // without a ratio the frame would collapse and shift the layout as it
-  // loads.
+  // Without a ratio the frame would collapse and shift the layout as it loads.
   const ratio = aspectRatio(block.ratio) ?? '16 / 9'
 
-  return h(
+  return section(
     'div',
+    'embed',
+    'cs-embed',
     {
-      class: 'cg-embed',
-      'data-block': 'embed',
       'data-provider': block.provider,
       'data-consent': block.consentRequired ? 'required' : 'not-required',
-      style: `--cg-ratio:${ratio}`,
+      'data-frame': source === null ? 'notice' : 'player',
     },
+    'div',
     source === null
-      ? consentCard(
+      ? notice(
           block,
           ctx,
           block.consentRequired
             ? ctx.t('embed.consentRequired', { provider: block.provider })
             : ctx.t('embed.unsupported', { provider: block.provider }),
         )
-      : h('iframe', {
-          class: 'cg-embed__frame',
-          src: source,
-          // An iframe with no accessible name is announced as "frame" and
-          // nothing else. WCAG 4.1.2, and the single most common embed
-          // defect.
-          title: ctx.t('embed.title', { provider: block.provider }),
-          loading: 'lazy',
-          referrerpolicy: 'strict-origin-when-cross-origin',
-          allow: 'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',
-          allowfullscreen: true,
-        }),
+      : h(
+          'div',
+          { class: 'cs-embed__frame cs-frame', style: `aspect-ratio:${ratio}` },
+          h('iframe', {
+            class: 'cs-embed__player',
+            src: source,
+            // A frame with no accessible name is announced as "frame" and
+            // nothing else (WCAG 4.1.2).
+            title: ctx.t('embed.title', { provider: block.provider }),
+            loading: 'lazy',
+            referrerpolicy: 'strict-origin-when-cross-origin',
+            allow:
+              'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',
+            allowfullscreen: true,
+          }),
+        ),
   )
 }

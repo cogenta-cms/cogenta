@@ -1,100 +1,107 @@
-import { serialize } from '@cogenta/theme-kit'
+import type { CollectionListBlock } from '@cogenta/blocks'
+import { type ContentEntry, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
-import { renderCollectionList } from '../../src/render/blocks/collection-list.js'
-import { BLOCKS, ENTRIES, makeContext } from '../fixtures.js'
+import { query, renderCollectionList } from '../../src/render/blocks/collection-list.js'
+import { BLOCKS, ENTRIES, FEATURES, makeContext, UPDATES } from '../fixtures.js'
 
 const ctx = makeContext()
 
-describe('collectionList', () => {
-  it('renders every fetched entry as its own row', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect((html.match(/class="cg-list__row"/g) ?? []).length).toBe(2)
+function html(entries: readonly ContentEntry[], block: Partial<CollectionListBlock> = {}): string {
+  return serialize(renderCollectionList({ ...BLOCKS.collectionList, ...block }, ctx, entries))
+}
+
+describe('collectionList, as a product tour', () => {
+  const tour = html(FEATURES)
+
+  it('renders to stable markup', () => {
+    expect(tour).toMatchSnapshot()
   })
 
-  it('falls back to a translated placeholder title for an entry with none', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('entry.untitled')
+  it('reads entries with screenshots in a list as a tour of alternating rows', () => {
+    expect(tour).toContain('data-shape="tour"')
+    expect(tour).toContain('<li class="cs-tour__item" data-side="start">')
+    expect(tour).toContain('<li class="cs-tour__item" data-side="end">')
   })
 
-  it('renders a real, machine-readable <time> for each dated entry', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('datetime="2026-02-11T09:00:00.000Z"')
-  })
-
-  it('renders the empty state, translated, when there are no entries', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, []))
-    expect(html).toContain('class="cg-list__empty"')
-    expect(html).toContain('collection.empty')
-    expect(html).not.toContain('cg-list__row')
-  })
-
-  it('wraps a carousel layout in a focusable, labelled scroll region', () => {
-    const html = serialize(
-      renderCollectionList({ ...BLOCKS.collectionList, layout: 'carousel' }, ctx, ENTRIES),
+  it('frames each screenshot and hides its repeated link from the tab order and assistive technology', () => {
+    expect(tour).toMatch(
+      /<a class="cs-tour__media cs-frame" href="\/en\/feature\/f-routing" tabindex="-1" aria-hidden="true"><img/,
     )
-    expect(html).toContain('role="region"')
-    expect(html).toContain('tabindex="0"')
   })
 
-  it('starts each entry title at h3 when the block renders its own h2 title', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('<h2 class="cg-list__title-heading"')
-    expect(html).toContain('<h3 class="cg-list__title">')
+  it('titles each entry as a link and names each "read more" link after its entry', () => {
+    expect(tour).toContain(
+      '<h3 class="cs-tour__title"><a class="cs-tour__link" href="/en/feature/f-routing">Approval routing</a></h3>',
+    )
+    expect(tour).toContain(
+      '<a class="cs-arrow-link" href="/en/feature/f-audit">Read more<span class="cg-visually-hidden"> about Audit log</span></a>',
+    )
+  })
+})
+
+describe('collectionList, as an index', () => {
+  const index = html(UPDATES)
+
+  it('reads entries without pictures in a list as ruled rows', () => {
+    expect(index).toContain('data-shape="index"')
+    expect(index).toContain('<ul class="cs-index">')
   })
 
-  it('starts entry titles at h2 when the block has no title of its own', () => {
-    const { title: _title, ...untitled } = BLOCKS.collectionList
-    const html = serialize(renderCollectionList(untitled, ctx, ENTRIES))
-    expect(html).not.toContain('cg-list__title-heading')
-    expect(html).toContain('<h2 class="cg-list__title">')
+  it('prints the date of a dated entry first, as a changelog does', () => {
+    expect(index).toContain(
+      '<li class="cs-index__item" data-dated="true"><time class="cs-index__date" datetime="2026-08-27T09:00:00.000Z">Aug 27, 2026</time>',
+    )
   })
 
-  it('carries the layout as data, for the stylesheet to key off', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('data-layout="list"')
+  it('reads a summary from whichever field the collection uses, and prints none when there is none', () => {
+    expect(index).toContain(
+      '<p class="cs-index__text">Two approvers can now decide the same step at once.</p>',
+    )
+    expect(html(ENTRIES)).toContain(
+      '<a class="cs-index__link" href="/en/article/0192f0c2-0000-7000-8000-000000000002">entry.untitled</a>',
+    )
   })
 
-  it('is marked with data-block="collectionList"', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('data-block="collectionList"')
+  it('never lists the entry whose page it is on', () => {
+    const onEntry = serialize(
+      renderCollectionList(
+        BLOCKS.collectionList,
+        makeContext({ url: new URL('https://ledgerline.example/en/changelog/u-parallel') }),
+        UPDATES,
+      ),
+    )
+    expect(onEntry).not.toContain('Parallel approval steps')
+    expect(onEntry).toContain('Signed audit exports')
+  })
+})
+
+describe('collectionList, as a grid and a carousel', () => {
+  it('sets a grid as three columns without cards: picture, date, title, summary', () => {
+    const grid = html(FEATURES, { layout: 'grid' })
+    expect(grid).toContain('data-shape="grid"')
+    expect(grid).toContain('<ul class="cs-cards" data-carousel="false">')
+    expect(grid).toMatch(/<li class="cs-cards__item"><a class="cs-cards__media cs-frame"/)
   })
 
-  it('shows an entry image when the entry has one, in an aspect-ratio-boxed, lazy-loaded picture', () => {
-    const withImage = [{ ...ENTRIES[0], coverImage: 'media-figure' }] as typeof ENTRIES
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, withImage))
-    expect(html).toContain('cg-list__cover-image')
-    expect(html).toMatch(/<img[^>]*loading="lazy"/)
+  it('makes a carousel a named, focusable list that scrolls without a script', () => {
+    const carousel = html(UPDATES, { layout: 'carousel' })
+    expect(carousel).toContain(
+      '<ul class="cs-cards" data-carousel="true" aria-label="A closer look" tabindex="0">',
+    )
+    expect(carousel).not.toMatch(/<button|<script/)
   })
 
-  it('renders nothing in the media slot for an entry with neither an icon nor an image', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).not.toContain('cg-list__cover')
-    expect(html).not.toContain('cg-list__icon')
+  it('renders the empty state inside the section when nothing is listed', () => {
+    const empty = html([])
+    expect(empty).toContain('data-shape="empty"')
+    expect(empty).toContain('<p class="cs-empty">collection.empty</p>')
   })
 
-  it("prefers the entry's own icon field over its image when both are present", () => {
-    const withBoth = [{ ...ENTRIES[0], icon: 'bolt', coverImage: 'media-figure' }] as typeof ENTRIES
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, withBoth))
-    expect(html).toContain('cg-list__icon')
-    expect(html).toContain('data-icon="bolt"')
-    expect(html).not.toContain('cg-list__cover')
-  })
-
-  it('ignores an icon field naming a symbol renderIcon does not know, and falls back to the image', () => {
-    const withUnknownIcon = [
-      { ...ENTRIES[0], icon: 'not-a-real-icon', coverImage: 'media-figure' },
-    ] as typeof ENTRIES
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, withUnknownIcon))
-    expect(html).not.toContain('cg-list__icon')
-    expect(html).toContain('cg-list__cover')
-  })
-
-  it('exports the shared query builder unmodified, for the caller to fetch with', async () => {
-    const { query } = await import('../../src/render/blocks/collection-list.js')
+  it('asks the host for exactly the query the block describes', () => {
     expect(query(BLOCKS.collectionList)).toEqual({
-      collection: 'article',
-      sort: { field: 'publishedAt', direction: 'desc' },
-      limit: 5,
+      collection: 'feature',
+      sort: { field: 'id', direction: 'asc' },
+      limit: 6,
     })
   })
 })

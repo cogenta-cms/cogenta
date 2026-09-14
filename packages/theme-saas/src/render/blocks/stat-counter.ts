@@ -1,45 +1,33 @@
-import type { StatCounterBlock, StatCounterItem } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import type { StatCounterBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * `blocks@2.0` (RFC 0001). Narrower than `stats` (no `unit`), and treated
- * that way here: `stats` reads as a quiet KPI strip on the page's own
- * surface, while `statCounter` is this theme's confident "impact numbers"
- * band — an accent-tinted panel of big, tabular figures, the instinct the
- * aesthetic direction already asks for on `stats` pushed one step further
- * for the narrower, single-figure shape this block offers.
- *
- * A `<dl>`, exactly like `stats`: each figure is the description of its
- * label, which is what `<dt>`/`<dd>` mean. The label sits before the figure
- * in markup, the same reading-order guarantee `stats` gives (WCAG 1.3.2);
- * the stylesheet is free to paint the big figure first.
+ * Headline counts (customers, countries, people on the team) as one band
+ * between two hairlines, divided into equal cells by vertical hairlines: the
+ * count large in Geist with tabular numerals, its label under it. The same
+ * system as `stats`, drawn as a single ruled strip rather than separate
+ * columns, since a counter carries no unit to align on.
  */
-function renderItem(item: StatCounterItem): HtmlElement {
-  return h(
-    'div',
-    { class: 'cg-kpi' },
-    h('dt', { class: 'cg-kpi__label' }, item.label),
-    h('dd', { class: 'cg-kpi__value' }, item.value),
-  )
-}
-
 export function renderStatCounter(block: StatCounterBlock, _ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-kpis', 'data-block': 'statCounter' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('statCounter') ?? 'h2',
-          { class: 'cg-kpis__title', 'data-field': 'title' },
-          block.title,
+    'statCounter',
+    'cs-counters',
+    { 'data-count': String(Math.min(block.stats.length, 4)) },
+    'div',
+    sectionHead('statCounter', block.title),
+    h(
+      'dl',
+      { class: 'cs-counters__items' },
+      block.stats.map((item) =>
+        h(
+          'div',
+          { class: 'cs-counters__item' },
+          h('dt', { class: 'cs-counters__label' }, item.label),
+          h('dd', { class: 'cs-counters__value' }, item.value),
         ),
-    h('dl', { class: 'cg-kpis__items' }, block.stats.map(renderItem)),
+      ),
+    ),
   )
 }

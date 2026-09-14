@@ -4,40 +4,37 @@ import { renderGallery } from '../../src/render/blocks/gallery.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderGallery(BLOCKS.gallery, ctx))
 
 describe('gallery', () => {
-  it('wraps a carousel layout in a focusable, labelled scroll region', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    expect(html).toContain('role="region"')
-    expect(html).toContain('aria-label="gallery.carousel"')
-    expect(html).toContain('tabindex="0"')
+  it('renders to stable markup', () => {
+    expect(html).toMatchSnapshot()
   })
 
-  it('renders a grid layout without the scroll-region wrapper', () => {
-    const html = serialize(renderGallery({ ...BLOCKS.gallery, layout: 'grid' }, ctx))
-    expect(html).not.toContain('role="region"')
+  it('frames every picture with the hairline frame', () => {
+    expect(html.match(/<li class="cs-gallery__item cs-frame">/g)).toHaveLength(3)
+  })
+
+  it('names its layout and its count for the stylesheet', () => {
     expect(html).toContain('data-layout="grid"')
+    expect(html).toContain('data-count="3"')
   })
 
-  it('renders every item as a list item, so the count is announced', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    expect((html.match(/class="cg-gallery__item"/g) ?? []).length).toBe(2)
+  it('writes the alt text the media library holds', () => {
+    expect(html).toContain('alt="The approval policy editor"')
   })
 
-  it('never renders an image without an alt attribute', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    const images = [...html.matchAll(/<img\b[^>]*>/g)].map((match) => match[0])
-    expect(images.length).toBe(2)
-    for (const tag of images) expect(tag).toMatch(/\salt="/)
+  it('turns a carousel into a named, focusable list that scrolls without a script', () => {
+    const carousel = serialize(renderGallery({ ...BLOCKS.gallery, layout: 'carousel' }, ctx))
+    expect(carousel).toContain(
+      '<ul class="cs-gallery__items" aria-label="gallery.carousel" tabindex="0">',
+    )
+    expect(carousel).not.toMatch(/<button|<script/)
   })
 
-  it('carries the masonry layout as data, for the stylesheet to key off', () => {
-    const html = serialize(renderGallery({ ...BLOCKS.gallery, layout: 'masonry' }, ctx))
-    expect(html).toContain('data-layout="masonry"')
-  })
-
-  it('is marked with data-block="gallery"', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    expect(html).toContain('data-block="gallery"')
+  it('keeps a masonry gallery as the same list, laid out by the stylesheet', () => {
+    const masonry = serialize(renderGallery({ ...BLOCKS.gallery, layout: 'masonry' }, ctx))
+    expect(masonry).toContain('data-layout="masonry"')
+    expect(masonry).not.toContain('tabindex')
   })
 })

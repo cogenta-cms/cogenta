@@ -1,60 +1,58 @@
 import type { AccordionBlock, AccordionItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
   type HtmlElement,
   h,
-  heading,
+  nestedHeadingTag,
   type RenderContext,
   renderRichText,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * `blocks@2.0` (RFC 0001). Reuses `faq`'s zero-JS `<details>`/`<summary>`
- * mechanics — expanding, keyboard operation and the expanded state
- * announced to assistive technology all come from the browser — but with a
- * markup vocabulary and class names of its own (`cg-panels`, not
- * `cg-faq`) so the two blocks can diverge visually later without one
- * depending on the other: "accordion" and "frequently asked question" are
- * different editorial intents even where the underlying question/answer
- * shape coincides.
+ * Collapsible detail (a list of subprocessors, what an auditor role can see,
+ * the limits of a plan) as ruled rows on the first eight columns.
  *
- * Where `faq` numbers its rows, this one reads as a stack of bordered
- * panels with a rotating chevron mark, closer to a features/specification
- * accordion than a support page.
+ * Every row is a `<details>`: it opens without a script and the browser's own
+ * search still finds a closed answer. The question sits in a real heading
+ * inside the summary, so a screen reader's heading list reaches every one of
+ * them. The plus that becomes a minus is two hairlines drawn by the
+ * stylesheet, not a glyph.
  */
-function renderItem(item: AccordionItem, ctx: RenderContext): HtmlElement {
+function row(item: AccordionItem, ctx: RenderContext, titled: boolean): HtmlElement {
   return h(
     'li',
-    { class: 'cg-panels__item' },
+    { class: 'cs-accordion__item' },
     h(
       'details',
-      { class: 'cg-panels__details' },
+      { class: 'cs-accordion__details' },
       h(
         'summary',
-        { class: 'cg-panels__question' },
-        h('span', { class: 'cg-panels__question-text' }, item.question),
-        h('span', { class: 'cg-panels__chevron', 'aria-hidden': 'true' }),
+        { class: 'cs-accordion__summary' },
+        h(
+          nestedHeadingTag('accordion', titled),
+          { class: 'cs-accordion__question' },
+          item.question,
+        ),
+        h('span', { class: 'cs-accordion__mark', 'aria-hidden': 'true' }),
       ),
-      h('div', { class: 'cg-panels__answer' }, renderRichText(ctx, item.answer)),
+      h('div', { class: 'cs-accordion__answer' }, renderRichText(ctx, item.answer)),
     ),
   )
 }
 
 export function renderAccordion(block: AccordionBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  const titled = block.title !== undefined
+  return section(
     'section',
-    { class: 'cg-panels', 'data-block': 'accordion' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('accordion') ?? 'h2',
-          { class: 'cg-panels__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'accordion',
+    'cs-accordion',
+    { 'data-titled': String(titled) },
+    'div',
+    sectionHead('accordion', block.title),
     h(
       'ul',
-      { class: 'cg-panels__items' },
-      block.items.map((item) => renderItem(item, ctx)),
+      { class: 'cs-accordion__items' },
+      block.items.map((item) => row(item, ctx, titled)),
     ),
   )
 }

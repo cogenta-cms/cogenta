@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`faq > renders to stable markup 1`] = `"<section class="cs-section cs-faq" data-block="faq" data-titled="true"><div class="cs-container cs-faq__inner"><div class="cs-head"><h2 class="cs-head__title" data-field="title">Questions from finance teams</h2></div><div class="cs-faq__items"><div class="cs-faq__item"><h3 class="cs-faq__question">Do requesters need a paid seat?</h3><div class="cs-faq__answer"><p>No. You pay for approvers.</p></div></div><div class="cs-faq__item"><h3 class="cs-faq__question">Can an auditor get access?</h3><div class="cs-faq__answer"><p>Yes, read only, limited to a date range.</p></div></div></div></div></section>"`;

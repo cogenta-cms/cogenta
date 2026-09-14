@@ -1,50 +1,41 @@
-import type { StatItem, StatsBlock } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import type { StatsBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { optionalText, section, sectionHead } from '../layout.js'
 
 /**
- * The "by the numbers" strip. A description list, exactly as the canonical
- * theme uses — each figure is the description of its label, which is what
- * `<dt>`/`<dd>` mean, and it survives being read linearly — but laid out as
- * one continuous row of big, confident figures separated by vertical rules
- * (`border-inline-start` on every item but the first) rather than as
- * separate shadowed tiles: the "real KPI strip" read the aesthetic
- * direction asks for.
+ * Figures the way a report prints them: a ruled row of up to four columns,
+ * each figure in Geist Mono with tabular numerals, its unit set smaller after
+ * it on the same baseline, and a one-line label under it. The rule above each
+ * figure is the only structure; there is no coloured box behind the row.
  *
- * The label sits above the figure in the markup and the skin is free to
- * repaint the order visually; reading order and visual order stay
- * independent either way (WCAG 1.3.2).
+ * A `<dl>`, since each figure is the value of its label; the label comes
+ * first in the markup (so it is announced first) and is drawn under the
+ * figure.
  */
-function renderItem(item: StatItem): HtmlElement {
-  return h(
-    'div',
-    { class: 'cg-metric' },
-    h('dt', { class: 'cg-metric__label' }, item.label),
-    h(
-      'dd',
-      { class: 'cg-metric__value' },
-      item.value,
-      item.unit === undefined ? null : h('span', { class: 'cg-metric__unit' }, item.unit),
-    ),
-  )
-}
-
 export function renderStats(block: StatsBlock, _ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-metrics', 'data-block': 'stats' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('stats') ?? 'h2',
-          { class: 'cg-metrics__title', 'data-field': 'title' },
-          block.title,
+    'stats',
+    'cs-figures',
+    { 'data-count': String(Math.min(block.items.length, 4)) },
+    'div',
+    sectionHead('stats', block.title),
+    h(
+      'dl',
+      { class: 'cs-figures__items' },
+      block.items.map((item) =>
+        h(
+          'div',
+          { class: 'cs-figures__item' },
+          h('dt', { class: 'cs-figures__label' }, item.label),
+          h(
+            'dd',
+            { class: 'cs-figures__value' },
+            h('span', { class: 'cs-figures__number' }, item.value),
+            optionalText('span', 'cs-figures__unit', item.unit),
+          ),
         ),
-    h('dl', { class: 'cg-metrics__items' }, block.items.map(renderItem)),
+      ),
+    ),
   )
 }

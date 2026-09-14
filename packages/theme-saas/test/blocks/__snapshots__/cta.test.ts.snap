@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`cta > renders to stable markup 1`] = `"<section class="cs-section cs-cta" data-block="cta"><div class="cs-container cs-cta__inner"><div class="cs-cta__words"><h2 class="cs-cta__title" data-field="title">See it with your own approval policy</h2><p class="cs-cta__text" data-field="text">A 30-minute call with a solutions engineer.</p></div><div class="cs-cta__actions"><ul class="cg-actions" aria-label="hero.actions"><li><a class="cg-action" data-emphasis="primary" href="/en/demo">Book a demo</a></li><li><a class="cg-action" data-emphasis="secondary" href="/en/security">Read the security overview</a></li></ul></div></div></section>"`;

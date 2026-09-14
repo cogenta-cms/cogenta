@@ -41,10 +41,6 @@ const FILES = sourceFiles(SRC).map((path) => ({
   source: readFileSync(path, 'utf8'),
 }))
 
-const STYLESHEET_SOURCES = FILES.filter(({ path }) => path.endsWith('.css')).map(
-  ({ path, source }) => ({ path: path.replaceAll('\\', '/'), source }),
-)
-
 describe('theme isolation', () => {
   it('scans the sources it claims to scan', () => {
     expect(FILES.length).toBeGreaterThan(15)
@@ -71,14 +67,24 @@ describe('theme isolation', () => {
     expect(offenders.map(({ path }) => path)).toEqual([])
   })
 
+  // Zero-JS is asserted where it actually matters — on rendered page output,
+  // in `test/page.test.ts` — rather than by scanning source text here, which
+  // would false-positive on this very module's own doc comments describing
+  // the rule.
+
   /**
-   * A literal colour in a stylesheet is a colour no skin can override.
+   * A literal colour in a stylesheet is a colour no skin can override, which
+   * is what would break hot skin switching. The rule is on *every* sheet,
+   * not just the entry.
+   *
    * Relative colour syntax is the one exception, and only in its derived
    * form: `oklch(from var(--cogenta-…) …)` reads its hue and chroma from a
-   * skin token, so the skin still owns the colour.
+   * skin token, so the skin still owns the colour. The check below strips
+   * the derived form first and then refuses anything that is left.
    */
   const STYLESHEETS = FILES.filter(({ path }) => path.endsWith('.css')).map(({ path, source }) => ({
     path: path.replaceAll('\\', '/'),
+    // A comment naming a forbidden function is documentation, not a colour.
     source: source.replace(/\/\*[\s\S]*?\*\//g, ''),
   }))
 
@@ -87,6 +93,8 @@ describe('theme isolation', () => {
       'styles/archive.css',
       'styles/base.css',
       'styles/blocks.css',
+      'styles/chrome.css',
+      'styles/pricing.css',
       'styles/theme.css',
       'styles/tokens.css',
     ])
@@ -95,16 +103,34 @@ describe('theme isolation', () => {
   for (const { path, source } of STYLESHEETS) {
     it(`writes no style value the skin cannot change, in ${path}`, () => {
       const derived = /\boklch\(\s*from\s+(?:var\(--cogenta-[a-z-]+\)|currentColor)[^)]*\)/g
-      const remainder = source.replace(derived, '')
+      // `@import url("https://fonts.googleapis.com/...")` in theme.css is a
+      // network address, not a colour — stripped before the colour scan so
+      // it cannot be misread as one.
+      const withoutFontImport = source.replace(
+        /@import\s+url\("https:\/\/fonts\.googleapis\.com[^"]*"\);?/g,
+        '',
+      )
+      const remainder = withoutFontImport.replace(derived, '')
       expect(remainder).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
       expect(remainder).not.toMatch(/\b(?:rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/)
     })
   }
 
+  it('imports fonts, if any, only from Google Fonts over https, never a third-party host', () => {
+    for (const { source } of STYLESHEETS) {
+      const imports = [...source.matchAll(/@import\s+url\(["']([^"')]+)["']\)/g)].map(
+        (match) => match[1] as string,
+      )
+      for (const url of imports) {
+        expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
+      }
+    }
+  })
+
   /**
    * D5 (`docs/lots/L25-templates-pro.md`): a gradient reads as the generic
    * "AI-generated" look. This theme is built entirely from flat colour
-   * fields, hairlines and shadows instead — locked in here so a later
+   * fields and hairlines instead — locked in here so a later
    * change cannot quietly reintroduce one, in a stylesheet or in an inline
    * style string built by the renderer.
    */
@@ -142,16 +168,6 @@ describe('theme isolation', () => {
     )
     expect(offenders).toEqual([])
   })
-
-  it('requests its Google Fonts import from the trusted host only', () => {
-    const theme = STYLESHEET_SOURCES.find(({ path }) => path === 'styles/theme.css')
-    expect(theme).toBeDefined()
-    const urls = [...(theme?.source.matchAll(/@import\s+url\(["']?([^"')]+)["']?\)/g) ?? [])].map(
-      (match) => match[1] as string,
-    )
-    expect(urls.length).toBeGreaterThan(0)
-    for (const url of urls) expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
-  })
 })
 
 describe('the manifest', () => {
@@ -171,5 +187,9 @@ describe('the manifest', () => {
     expect(manifest.tokens).toBe('./tokens.json')
     const raw = readFileSync(new URL('../tokens.json', import.meta.url), 'utf8')
     expect(() => JSON.parse(raw)).not.toThrow()
+  })
+
+  it('names this theme distinctly from the canonical reference theme', () => {
+    expect(manifest.name).toBe('saas')
   })
 })

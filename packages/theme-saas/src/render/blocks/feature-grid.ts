@@ -1,68 +1,97 @@
 import type { FeatureGridBlock, FeatureItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
-  type HeadingTag,
   type HtmlElement,
   h,
-  heading,
   href,
   nestedHeadingTag,
   type RenderContext,
   renderIcon,
 } from '@cogenta/theme-kit'
+import { optionalText, section, sectionHead } from '../layout.js'
 
 /**
- * This theme's feature grid: a 2-/3-column card grid, each card an icon
- * chip (a real inline glyph via `renderIcon`, `aria-hidden` since the
- * title already names the feature) above the title and text — the product
- * "why teams pick us" section every SaaS marketing site leads with,
- * distinct from `theme-entreprise`'s numbered ledger rows.
+ * Two readings of the same block, chosen from its data, never from a class
+ * an editor would have to know about.
  *
- * As in every other theme, the item's title carries the link so the link's
- * accessible name is the feature's own name (WCAG 2.4.4) — the block has no
- * separate label field to write a "learn more" with anyway.
+ * - **Features** (at least one item names an icon): a
+ *   grid of three columns without tiles or cards. A small stroke icon sits
+ *   inline before the title, the text is two lines under it, and a linked
+ *   item links its title. No box, no background, no hover lift.
+ * - **Steps** (no item names an icon): a numbered sequence in up to four
+ *   columns. Each step hangs from a hairline, its number printed in Geist
+ *   Mono, then its title and text. This is how "how it works" reads.
+ *
+ * An icon name this theme does not know draws nothing: the title keeps its
+ * place, and the item still counts as a feature.
  */
-function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const title =
+function titleOf(item: FeatureItem, ctx: RenderContext, tag: string): HtmlElement {
+  return h(
+    tag,
+    { class: 'cs-features__title' },
     item.link === undefined
-      ? heading(tag, { class: 'cg-feature__title' }, item.title)
-      : heading(
-          tag,
-          { class: 'cg-feature__title' },
-          h('a', { class: 'cg-feature__link', href: href(ctx, item.link) }, item.title),
-        )
+      ? item.title
+      : h('a', { class: 'cs-features__link', href: href(ctx, item.link) }, item.title),
+  )
+}
+
+function featureItem(item: FeatureItem, ctx: RenderContext, tag: string): HtmlElement {
+  const icon =
+    item.icon === undefined ? null : renderIcon(item.icon, { className: 'cs-features__icon' })
   return h(
     'li',
-    { class: 'cg-feature' },
-    item.icon === undefined
-      ? null
-      : h(
-          'span',
-          { class: 'cg-feature__icon', 'data-icon': item.icon, 'aria-hidden': 'true' },
-          renderIcon(item.icon),
-        ),
-    title,
-    item.text === undefined ? null : h('p', { class: 'cg-feature__text' }, item.text),
+    { class: 'cs-features__item', 'data-icon': icon === null ? 'false' : 'true' },
+    h('div', { class: 'cs-features__heading' }, icon, titleOf(item, ctx, tag)),
+    optionalText('p', 'cs-features__text', item.text),
+  )
+}
+
+function stepItem(item: FeatureItem, ctx: RenderContext, tag: string, index: number): HtmlElement {
+  return h(
+    'li',
+    { class: 'cs-steps__item' },
+    h(
+      'span',
+      { class: 'cs-steps__number', 'aria-hidden': 'true' },
+      String(index + 1).padStart(2, '0'),
+    ),
+    h(
+      tag,
+      { class: 'cs-steps__title' },
+      item.link === undefined
+        ? item.title
+        : h('a', { class: 'cs-features__link', href: href(ctx, item.link) }, item.title),
+    ),
+    optionalText('p', 'cs-steps__text', item.text),
   )
 }
 
 export function renderFeatureGrid(block: FeatureGridBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const itemTag = nestedHeadingTag('featureGrid', hasTitle)
-  return h(
+  const titled = block.title !== undefined
+  const tag = nestedHeadingTag('featureGrid', titled)
+  const hasKnownIcon = block.items.some(
+    (item) => item.icon !== undefined && item.icon.trim() !== '',
+  )
+
+  return section(
     'section',
-    { class: 'cg-features', 'data-block': 'featureGrid' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('featureGrid') ?? 'h2',
-          { class: 'cg-features__title', 'data-field': 'title' },
-          block.title ?? '',
+    'featureGrid',
+    hasKnownIcon ? 'cs-features' : 'cs-steps',
+    {
+      'data-shape': hasKnownIcon ? 'features' : 'steps',
+      'data-count': String(Math.min(block.items.length, 4)),
+    },
+    'div',
+    sectionHead('featureGrid', block.title),
+    hasKnownIcon
+      ? h(
+          'ul',
+          { class: 'cs-features__items' },
+          block.items.map((item) => featureItem(item, ctx, tag)),
         )
-      : null,
-    h(
-      'ul',
-      { class: 'cg-features__items' },
-      block.items.map((item) => renderItem(item, ctx, itemTag)),
-    ),
+      : h(
+          'ol',
+          { class: 'cs-steps__items' },
+          block.items.map((item, index) => stepItem(item, ctx, tag, index)),
+        ),
   )
 }

@@ -1,41 +1,45 @@
 import type { TestimonialBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext, renderRichText } from '@cogenta/theme-kit'
+import { optionalText, section } from '../layout.js'
 
 /**
- * `blocks@2.0` (RFC 0001). This theme's "client success" panel — the same
- * `<figure><blockquote>…</blockquote><figcaption>` pattern `quote` uses, kept
- * consistent so the two read as siblings, but the quote itself is rich text
- * (a testimonial may carry a link or emphasis the shorter, plain-text `quote`
- * block cannot) and the attribution is the block's single grouped
- * `attribution` field rather than three loose ones.
+ * One customer's words, done properly.
  *
- * The avatar is decorative, exactly like `quote`'s own: the name sits right
- * beside it in text, so its media entity's alt text is expected to be empty;
- * `image` still writes the attribute either way (WCAG 1.1.1).
+ * The quotation takes the first eight columns, its first paragraph set at the
+ * quote size and any further paragraph at the reading size under it; the
+ * attribution follows with the name and the role. When the customer has a
+ * portrait, it is shown as a photograph (square, in the hairline frame of the
+ * theme) on the last three columns rather than shrunk to a dot, and repeated
+ * nowhere else. On a phone the portrait becomes a small square beside the
+ * name.
  */
 export function renderTestimonial(block: TestimonialBlock, ctx: RenderContext): HtmlElement {
   const { attribution } = block
-  return h(
+  const portrait =
+    attribution.avatar === undefined
+      ? null
+      : h(
+          'div',
+          { class: 'cs-testimonial__portrait cs-frame' },
+          image(ctx, attribution.avatar, {
+            className: 'cs-testimonial__image cs-frame__image',
+            sizes: '(min-width: 64rem) 18rem, 4rem',
+          }),
+        )
+
+  return section(
+    'div',
+    'testimonial',
+    'cs-testimonial',
+    { 'data-portrait': portrait === null ? 'false' : 'true' },
     'figure',
-    { class: 'cg-testimonial', 'data-block': 'testimonial' },
-    h('blockquote', { class: 'cg-testimonial__quote' }, renderRichText(ctx, block.quote)),
+    h('blockquote', { class: 'cs-testimonial__quote' }, renderRichText(ctx, block.quote)),
     h(
       'figcaption',
-      { class: 'cg-testimonial__attribution' },
-      attribution.avatar === undefined
-        ? null
-        : image(ctx, attribution.avatar, {
-            className: 'cg-testimonial__avatar',
-            variant: { width: 96, height: 96, fit: 'cover' },
-          }),
-      h(
-        'span',
-        { class: 'cg-testimonial__who' },
-        h('span', { class: 'cg-testimonial__name' }, attribution.name),
-        attribution.role === undefined
-          ? null
-          : h('span', { class: 'cg-testimonial__role' }, attribution.role),
-      ),
+      { class: 'cs-testimonial__attribution' },
+      h('span', { class: 'cs-testimonial__name' }, attribution.name),
+      optionalText('span', 'cs-testimonial__role', attribution.role),
     ),
+    portrait,
   )
 }

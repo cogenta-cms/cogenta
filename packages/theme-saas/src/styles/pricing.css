@@ -1,0 +1,327 @@
+/*
+ * pricingTable: plans compared in a ruled table.
+ *
+ * On a wide screen the plans across the top and the comparison table under
+ * them share one set of columns: a label column (which holds the section
+ * title above the table) and one equal column per plan. Neither grid has a
+ * column gap; cells are padded instead, so a price sits exactly over its
+ * column of values.
+ */
+
+.cs-pricing {
+  --cs-label-column: 28%;
+}
+
+.cs-pricing[data-count="2"] {
+  --cs-label-column: 34%;
+}
+
+.cs-pricing[data-count="4"] {
+  --cs-label-column: 24%;
+}
+
+.cs-pricing__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--cs-s10);
+}
+
+.cs-pricing__lead .cs-head {
+  margin-block-end: 0;
+}
+
+.cs-pricing__plans {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* --- one plan ---------------------------------------------------------------- */
+
+.cs-plan {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: start;
+  column-gap: var(--cs-s4);
+  padding-block: var(--cs-s5) var(--cs-s6);
+  border-block-start: var(--cs-rule) solid var(--cs-line);
+}
+
+.cs-plan[data-highlighted="true"] {
+  border-block-start: var(--cs-rule-strong) solid var(--cs-line-ink);
+  padding-block-start: calc(var(--cs-s5) - 1px);
+}
+
+.cs-plan > * {
+  grid-column: 1;
+}
+
+.cs-plan__flag {
+  display: block;
+  min-block-size: 1.4em;
+  color: var(--cs-ink-muted);
+  font-family: var(--cs-font-mono);
+  font-size: var(--cs-text-label);
+  line-height: 1.4;
+}
+
+.cs-plan[data-highlighted="true"] .cs-plan__flag {
+  color: var(--cs-ink);
+}
+
+.cs-plan__name {
+  margin-block-start: var(--cs-s1);
+  font-size: var(--cs-text-lg);
+  font-weight: var(--cs-weight-semibold);
+  letter-spacing: var(--cs-tracking-heading);
+}
+
+.cs-plan__price {
+  display: grid;
+  gap: var(--cs-s2);
+  margin: var(--cs-s4) 0 0;
+}
+
+.cs-plan__amount {
+  font-size: var(--cs-size-price);
+  font-weight: var(--cs-weight-semibold);
+  line-height: 1;
+  letter-spacing: var(--cs-tracking-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-plan__interval {
+  max-inline-size: 24ch;
+  color: var(--cs-ink-muted);
+  font-size: var(--cs-text-label);
+  line-height: var(--cs-leading-ui);
+}
+
+.cs-plan__action {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: end;
+}
+
+.cs-plan__action .cg-action[data-emphasis="secondary"] {
+  padding-block: var(--cs-s2);
+}
+
+.cs-plan__features {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--cs-s2);
+  margin: var(--cs-s6) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--cs-ink-soft);
+  font-size: var(--cs-text-ui);
+  line-height: var(--cs-leading-ui);
+}
+
+.cs-plan__feature {
+  padding-block-start: var(--cs-s2);
+  border-block-start: var(--cs-rule) solid var(--cs-line);
+}
+
+/* --- the comparison table ---------------------------------------------------- */
+
+/* Below the wide breakpoint the table keeps its columns and scrolls sideways
+   inside its own region, with the row labels held at the left edge: squeezing
+   four columns into a phone breaks every value onto four lines. The region is
+   positioned, so the visually hidden words in its cells ("Included") are
+   clipped with it instead of widening the page. */
+.cs-compare {
+  position: relative;
+  margin-block-start: var(--cs-s8);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.cs-compare .cs-compare__label,
+.cs-compare .cs-compare__corner {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--cs-canvas);
+}
+
+.cs-compare__table {
+  inline-size: 100%;
+  min-inline-size: 38rem;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--cs-text-label);
+  line-height: var(--cs-leading-ui);
+}
+
+.cs-compare .cs-compare__corner,
+.cs-compare .cs-compare__label {
+  inline-size: 11rem;
+  text-align: start;
+}
+
+.cs-compare .cs-compare__corner {
+  color: var(--cs-ink-muted);
+  font-weight: var(--cs-weight-regular);
+}
+
+.cs-compare th,
+.cs-compare td {
+  padding: var(--cs-s3) var(--cs-s2);
+  border-block-end: var(--cs-rule) solid var(--cs-line);
+  vertical-align: top;
+}
+
+.cs-compare thead th {
+  border-block-end-color: var(--cs-line-ink);
+  font-size: var(--cs-text-label);
+}
+
+.cs-compare .cs-compare__tier {
+  font-weight: var(--cs-weight-semibold);
+  text-align: start;
+}
+
+.cs-compare .cs-compare__label {
+  color: var(--cs-ink);
+  font-weight: var(--cs-weight-regular);
+}
+
+.cs-compare .cs-compare__cell {
+  color: var(--cs-ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-compare__check {
+  display: inline-block;
+  inline-size: 0.8em;
+  block-size: 0.45em;
+  margin-block-start: 0.35em;
+  border-block-end: var(--cs-rule-strong) solid var(--cs-ink);
+  border-inline-start: var(--cs-rule-strong) solid var(--cs-ink);
+  transform: rotate(-45deg);
+}
+
+.cs-compare__none {
+  display: inline-block;
+  inline-size: 0.7em;
+  block-size: var(--cs-rule);
+  vertical-align: middle;
+  background: var(--cs-line-strong);
+}
+
+/* --- wide screens: one set of columns for the plans and the table ------------ */
+
+@media (min-width: 48rem) {
+  .cs-pricing[data-shape="columns"] .cs-pricing__plans {
+    grid-template-columns: repeat(var(--cs-plan-columns, 3), minmax(0, 1fr));
+    column-gap: var(--cs-col-gap);
+  }
+
+  .cs-pricing[data-count="2"] {
+    --cs-plan-columns: 2;
+  }
+
+  .cs-pricing[data-count="4"] {
+    --cs-plan-columns: 4;
+  }
+
+  .cs-pricing[data-shape="columns"] .cs-plan {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cs-pricing[data-shape="columns"] .cs-plan__action {
+    grid-column: 1;
+    grid-row: auto;
+    margin-block-start: var(--cs-s6);
+    align-self: start;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cs-pricing[data-shape="compare"] .cs-pricing__top {
+    grid-template-columns: var(--cs-label-column) minmax(0, 1fr);
+    row-gap: 0;
+  }
+
+  .cs-pricing[data-shape="compare"] .cs-pricing__lead {
+    grid-column: 1;
+    padding-inline-end: var(--cs-s8);
+  }
+
+  .cs-pricing[data-shape="compare"] .cs-pricing__lead .cs-head__title {
+    font-size: var(--cs-text-2xl);
+  }
+
+  .cs-pricing[data-shape="compare"] .cs-pricing__plans {
+    grid-column: 2;
+    grid-template-columns: repeat(var(--cs-plan-columns, 3), minmax(0, 1fr));
+  }
+
+  .cs-pricing[data-shape="compare"] .cs-plan {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: var(--cs-s5);
+    border-inline-start: var(--cs-rule) solid var(--cs-line);
+  }
+
+  .cs-pricing[data-shape="compare"] .cs-plan__action {
+    grid-column: 1;
+    grid-row: auto;
+    margin-block-start: var(--cs-s8);
+    align-self: start;
+  }
+
+  .cs-compare {
+    margin-block-start: 0;
+    overflow-x: visible;
+  }
+
+  .cs-compare__table {
+    min-inline-size: 0;
+  }
+
+  .cs-compare .cs-compare__label,
+  .cs-compare .cs-compare__corner {
+    position: static;
+  }
+
+  .cs-compare__table {
+    font-size: var(--cs-text-ui);
+  }
+
+  /* The plans above already name every column: the header row stays for
+     assistive technology and leaves the layout. */
+  .cs-compare thead {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .cs-compare .cs-compare__corner,
+  .cs-compare .cs-compare__label {
+    inline-size: var(--cs-label-column);
+  }
+
+  .cs-compare th,
+  .cs-compare td {
+    padding: var(--cs-s4) var(--cs-s5);
+  }
+
+  .cs-compare .cs-compare__label {
+    padding-inline-start: 0;
+  }
+
+  .cs-compare td {
+    border-inline-start: var(--cs-rule) solid var(--cs-line);
+  }
+
+  .cs-compare tbody tr:first-child :is(th, td) {
+    border-block-start: var(--cs-rule) solid var(--cs-line);
+  }
+}

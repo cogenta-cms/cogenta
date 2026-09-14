@@ -1,7 +1,7 @@
 {
   "name": "@cogenta/theme-saas",
   "version": "0.3.3",
-  "description": "A Linear/Stripe/Vercel-inspired SaaS theme for Cogenta: violet-blue accent, mesh-gradient hero, a genuine dark mode with glows, and zero client JavaScript.",
+  "description": "A B2B software theme for Cogenta: Geist and Geist Mono, white and a structured grey scale with one signal blue, framed product screenshots, a ruled plan comparison, a designed dark mode and zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",
   "sideEffects": false,

@@ -1,0 +1,467 @@
+/*
+ * The header, the mobile menu and the footer.
+ */
+
+/* --------------------------------------------------------------------------
+   Header: one quiet bar held at the top of the window, on the page's own
+   ground, under a hairline. No blur, no translucency.
+   -------------------------------------------------------------------------- */
+
+.cs-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 50;
+  border-block-end: var(--cs-rule) solid var(--cs-line);
+  background: var(--cs-canvas);
+}
+
+.cs-header__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--cs-s2) var(--cs-s8);
+  min-block-size: var(--cs-header-height);
+  max-inline-size: calc(var(--cs-page) + var(--cs-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--cs-gutter);
+}
+
+.cs-header__brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-block-size: 44px;
+  min-inline-size: 0;
+  color: var(--cs-ink);
+  text-decoration: none;
+}
+
+.cs-header__wordmark {
+  overflow: hidden;
+  font-size: var(--cs-text-lg);
+  font-weight: var(--cs-weight-semibold);
+  line-height: 1;
+  letter-spacing: var(--cs-tracking-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-header__logo {
+  display: block;
+  block-size: 1.75rem;
+  inline-size: auto;
+  max-inline-size: min(12rem, 40vw);
+  object-fit: contain;
+  filter: none;
+}
+
+.cs-header__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--cs-s6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cs-header__item a,
+.cs-header__item span {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  color: var(--cs-ink-muted);
+  font-size: var(--cs-text-ui);
+  font-weight: var(--cs-weight-medium);
+  letter-spacing: var(--cs-tracking-ui);
+  text-decoration: none;
+  transition: color var(--cs-duration) var(--cs-ease);
+}
+
+.cs-header__item a:hover {
+  color: var(--cs-ink);
+}
+
+.cs-header__end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--cs-s2);
+  margin-inline-start: auto;
+}
+
+.cs-header__action.cg-action[data-emphasis="primary"] {
+  min-block-size: 2.25rem;
+  padding: var(--cs-s2) var(--cs-s4);
+}
+
+.cg-theme-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.75rem;
+  margin-inline-end: calc(var(--cs-s3) * -1);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cs-ink-muted);
+  cursor: pointer;
+  transition: color var(--cs-duration) var(--cs-ease);
+}
+
+.cg-theme-toggle:hover {
+  color: var(--cs-ink);
+}
+
+.cg-theme-toggle__icon {
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
+  display: block;
+}
+
+.cs-nav-toggle-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cs-nav-toggle-label {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4rem;
+  order: 4;
+  inline-size: 2.75rem;
+  margin-inline-end: calc(var(--cs-s3) * -1);
+  padding: 0.7rem 0.65rem;
+  cursor: pointer;
+}
+
+.cs-nav-toggle-input:focus-visible ~ .cs-nav-toggle-label {
+  outline: var(--cs-rule-strong) solid var(--cs-accent);
+  outline-offset: 2px;
+}
+
+.cs-nav-toggle-bar {
+  display: block;
+  inline-size: 100%;
+  block-size: 1.5px;
+  background: var(--cs-ink);
+}
+
+/* Open: the two bars cross. A state, drawn at once; nothing is animated. */
+.cs-nav-toggle-input:checked ~ .cs-nav-toggle-label {
+  gap: 0;
+}
+
+.cs-nav-toggle-input:checked ~ .cs-nav-toggle-label .cs-nav-toggle-bar:first-child {
+  transform: translateY(0.75px) rotate(45deg);
+}
+
+.cs-nav-toggle-input:checked ~ .cs-nav-toggle-label .cs-nav-toggle-bar:last-child {
+  transform: translateY(-0.75px) rotate(-45deg);
+}
+
+/* Below the wide breakpoint the pages are a panel under the bar, down to the
+   bottom of the screen; the action and the light/dark control stay in the
+   bar. */
+@media (max-width: 55.99rem) {
+  .cs-header__inner {
+    gap: var(--cs-s2) var(--cs-s3);
+  }
+
+  .cs-header__brand {
+    flex: 1 1 auto;
+  }
+
+  .cs-header__end {
+    order: 3;
+    margin-inline-start: 0;
+  }
+
+  .cg-theme-toggle {
+    margin-inline-end: 0;
+  }
+
+  .cs-header__nav {
+    display: none;
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 100%;
+    z-index: 49;
+    block-size: calc(100svh - var(--cs-header-height));
+    overflow-y: auto;
+    padding: var(--cs-s2) var(--cs-gutter) var(--cs-s12);
+    border-block-start: var(--cs-rule) solid var(--cs-line);
+    background: var(--cs-canvas);
+  }
+
+  .cs-nav-toggle-input:checked ~ .cs-header__nav {
+    display: block;
+  }
+
+  .cs-header__links {
+    display: block;
+  }
+
+  .cs-header__item {
+    border-block-end: var(--cs-rule) solid var(--cs-line);
+  }
+
+  .cs-header__item a,
+  .cs-header__item span {
+    display: flex;
+    min-block-size: 0;
+    padding-block: var(--cs-s4);
+    color: var(--cs-ink);
+    font-size: var(--cs-size-nav);
+    font-weight: var(--cs-weight-medium);
+    line-height: var(--cs-leading-heading);
+    letter-spacing: var(--cs-tracking-heading);
+  }
+}
+
+@media (max-width: 24rem) {
+  .cs-header__action.cg-action[data-emphasis="primary"] {
+    padding-inline: var(--cs-s3);
+    font-size: var(--cs-text-label);
+  }
+}
+
+@media (min-width: 56rem) {
+  .cs-nav-toggle-label {
+    display: none;
+  }
+
+  .cs-header__nav {
+    order: 1;
+  }
+
+  .cs-header__end {
+    order: 2;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Footer: a light grey band (below the ground in the dark), the company on
+   the first four columns, the pages in columns, then the legal line.
+   -------------------------------------------------------------------------- */
+
+.cs-footer {
+  padding-block: var(--cs-s20) var(--cs-s8);
+  border-block-start: var(--cs-rule) solid var(--cs-line);
+  background: var(--cs-footer);
+  color: var(--cs-ink);
+  font-size: var(--cs-text-ui);
+  line-height: var(--cs-leading-ui);
+}
+
+.cs-footer__inner {
+  display: grid;
+  grid-template-columns: repeat(var(--cs-columns), minmax(0, 1fr));
+  column-gap: var(--cs-col-gap);
+  row-gap: var(--cs-s12);
+  max-inline-size: calc(var(--cs-page) + var(--cs-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--cs-gutter);
+}
+
+.cs-footer__inner > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+.cs-footer__name {
+  display: inline-block;
+  color: var(--cs-ink);
+  font-size: var(--cs-text-lg);
+  font-weight: var(--cs-weight-semibold);
+  letter-spacing: var(--cs-tracking-heading);
+  text-decoration: none;
+}
+
+.cs-footer__tagline {
+  margin: var(--cs-s3) 0 0;
+  max-inline-size: 32ch;
+  color: var(--cs-ink-muted);
+}
+
+.cs-footer__note {
+  margin-block-start: var(--cs-s6);
+}
+
+.cs-footer__note p {
+  margin: 0;
+  max-inline-size: 34ch;
+  color: var(--cs-ink-muted);
+  font-size: var(--cs-text-label);
+  line-height: 1.6;
+}
+
+.cs-footer__note p + p {
+  margin-block-start: var(--cs-s3);
+}
+
+.cs-footer__social {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cs-s1);
+  margin: var(--cs-s6) 0 0 calc(var(--cs-s3) * -1);
+  padding: 0;
+  list-style: none;
+}
+
+.cs-footer__social-item a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  color: var(--cs-ink-muted);
+  transition: color var(--cs-duration) var(--cs-ease);
+}
+
+.cs-footer__social-item a:hover {
+  color: var(--cs-ink);
+}
+
+.cg-social__icon {
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  flex: none;
+}
+
+.cs-footer__nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cs-s10) var(--cs-col-gap);
+}
+
+.cs-footer__heading {
+  margin: 0 0 var(--cs-s4);
+  color: var(--cs-ink);
+  font-size: var(--cs-text-label);
+  font-weight: var(--cs-weight-semibold);
+}
+
+.cs-footer__links {
+  display: grid;
+  gap: var(--cs-s1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cs-footer__item a,
+.cs-footer__item span {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2rem;
+  color: var(--cs-ink-muted);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.25em;
+}
+
+.cs-footer__item a:hover {
+  color: var(--cs-ink);
+  text-decoration-color: currentColor;
+}
+
+.cs-footer__legal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cs-s3) var(--cs-s8);
+  margin-block-start: var(--cs-s4);
+  padding-block-start: var(--cs-s6);
+  border-block-start: var(--cs-rule) solid var(--cs-line);
+  color: var(--cs-ink-muted);
+  font-size: var(--cs-text-label);
+}
+
+.cs-footer__copyright {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-footer__branding a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  color: var(--cs-ink-muted);
+  text-decoration: none;
+}
+
+.cs-footer__branding a:hover {
+  color: var(--cs-ink);
+}
+
+.cg-site-footer__brand-logo {
+  display: block;
+  block-size: 18px;
+  inline-size: auto;
+}
+
+.cg-site-footer__version {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 40rem) {
+  .cs-footer__nav[data-columns="3"],
+  .cs-footer__nav[data-columns="4"] {
+    grid-template-columns: repeat(var(--cs-footer-columns, 4), minmax(0, 1fr));
+  }
+
+  .cs-footer__nav[data-columns="3"] {
+    --cs-footer-columns: 3;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cs-footer__about {
+    grid-column: 1 / span 4;
+  }
+
+  .cs-footer__nav {
+    grid-column: 6 / -1;
+    grid-template-columns: repeat(var(--cs-footer-columns, 4), minmax(0, 1fr));
+  }
+
+  .cs-footer__nav[data-columns="1"] {
+    --cs-footer-columns: 1;
+  }
+
+  .cs-footer__nav[data-columns="2"] {
+    --cs-footer-columns: 2;
+  }
+
+  .cs-footer__nav[data-columns="3"] {
+    --cs-footer-columns: 3;
+  }
+}

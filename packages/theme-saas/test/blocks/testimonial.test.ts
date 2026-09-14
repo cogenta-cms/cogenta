@@ -4,53 +4,46 @@ import { renderTestimonial } from '../../src/render/blocks/testimonial.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderTestimonial(BLOCKS.testimonial, ctx))
 
 describe('testimonial', () => {
-  it('renders as figure > blockquote > figcaption, with the attribution outside the quotation', () => {
-    const html = serialize(renderTestimonial(BLOCKS.testimonial, ctx))
-    expect(html).toMatch(/^<figure/)
-    const blockquoteEnd = html.indexOf('</blockquote>')
-    const nameIndex = html.indexOf('A. Client')
-    expect(blockquoteEnd).toBeGreaterThan(-1)
-    expect(nameIndex).toBeGreaterThan(blockquoteEnd)
+  it('renders to stable markup', () => {
+    expect(html).toMatchSnapshot()
   })
 
-  it('renders the quote as rich text, not a single paragraph of plain text', () => {
-    const html = serialize(renderTestimonial(BLOCKS.testimonial, ctx))
-    expect(html).toContain('<strong>plan we could hold them to</strong>')
+  it('is one figure: the quotation, then the name and role as its caption', () => {
+    expect(html).toMatch(
+      /<figure class="cs-container cs-testimonial__inner"><blockquote class="cs-testimonial__quote">/,
+    )
+    expect(html).toContain(
+      '<figcaption class="cs-testimonial__attribution"><span class="cs-testimonial__name">Adrian Tan</span><span class="cs-testimonial__role">Financial Controller, Halvorsen Freight</span></figcaption>',
+    )
   })
 
-  it('renders the name and role from the grouped attribution field', () => {
-    const html = serialize(renderTestimonial(BLOCKS.testimonial, ctx))
-    expect(html).toContain('<span class="cg-testimonial__name">A. Client</span>')
-    expect(html).toContain('<span class="cg-testimonial__role">VP Engineering, Globex</span>')
+  it('keeps every paragraph of the quotation', () => {
+    expect(html).toContain(
+      '<p>Invoice approvals went from nine days to under two.</p><p>The month-end close lost a day of chasing.</p>',
+    )
   })
 
-  it('omits the role span entirely when the attribution has none', () => {
-    const withoutRole = {
-      ...BLOCKS.testimonial,
-      attribution: { name: 'A. Client' },
-    }
-    const html = serialize(renderTestimonial(withoutRole, ctx))
-    expect(html).not.toContain('cg-testimonial__role')
+  it('shows the customer’s portrait once, as a framed photograph with its alt text', () => {
+    expect(html.match(/<img/g)).toHaveLength(1)
+    expect(html).toMatch(
+      /<div class="cs-testimonial__portrait cs-frame"><img class="cs-testimonial__image cs-frame__image"[^>]*alt="Portrait of Adrian Tan"/,
+    )
+    expect(html).toContain('data-portrait="true"')
   })
 
-  it('keeps an empty alt on the decorative avatar rather than inventing one', () => {
-    const html = serialize(renderTestimonial(BLOCKS.testimonial, ctx))
-    expect(html).toMatch(/<img[^>]*class="cg-testimonial__avatar"[^>]*alt=""/)
+  it('renders without a portrait or a role, with no empty frame and no empty role', () => {
+    const bare = serialize(
+      renderTestimonial({ ...BLOCKS.testimonial, attribution: { name: 'Dana Osei' } }, ctx),
+    )
+    expect(bare).toContain('data-portrait="false"')
+    expect(bare).not.toContain('<img')
+    expect(bare).not.toContain('cs-testimonial__role')
   })
 
-  it('renders no avatar element when the attribution carries none', () => {
-    const withoutAvatar = {
-      ...BLOCKS.testimonial,
-      attribution: { name: 'A. Client', role: 'VP Engineering, Globex' },
-    }
-    const html = serialize(renderTestimonial(withoutAvatar, ctx))
-    expect(html).not.toContain('cg-testimonial__avatar')
-  })
-
-  it('is marked with data-block="testimonial"', () => {
-    const html = serialize(renderTestimonial(BLOCKS.testimonial, ctx))
-    expect(html).toContain('data-block="testimonial"')
+  it('renders no star rating and no company logo of its own', () => {
+    expect(html).not.toMatch(/★|rating|stars?\b/i)
   })
 })

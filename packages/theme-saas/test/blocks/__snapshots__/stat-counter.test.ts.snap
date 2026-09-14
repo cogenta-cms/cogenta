@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`statCounter > renders to stable markup 1`] = `"<section class="cs-section cs-counters" data-block="statCounter" data-count="2"><div class="cs-container cs-counters__inner"><div class="cs-head"><h2 class="cs-head__title" data-field="title">The company</h2></div><dl class="cs-counters__items"><div class="cs-counters__item"><dt class="cs-counters__label">customers</dt><dd class="cs-counters__value">1,400</dd></div><div class="cs-counters__item"><dt class="cs-counters__label">people</dt><dd class="cs-counters__value">58</dd></div></dl></div></section>"`;

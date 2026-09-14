@@ -5,7 +5,7 @@ import { renderChrome } from '../src/render/chrome.js'
 /** The site identity reaching this theme's own chrome (contract D `theme@1.3`). */
 
 const BASE: ChromeInput = {
-  site: { name: 'Cogenta Cloud' },
+  site: { name: 'Ledgerline' },
   locale: 'en',
   homeHref: '/',
   headerNav: [],
@@ -18,25 +18,26 @@ function source(src: string): ImageSource {
 }
 
 const BRAND: ChromeBrand = {
-  name: 'Cogenta Cloud',
+  name: 'Ledgerline',
   logo: source('/_image?id=light&w=440'),
   logoDark: source('/_image?id=dark&w=440'),
   faviconUrl: null,
 }
 
-describe('renderChrome — corporate logo', () => {
+describe('renderChrome, corporate logo', () => {
   it('renders the site name as the home link when no logo is set', () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('class="cg-site-header__home" href="/"')
-    expect(header).toContain('Cogenta Cloud')
-    expect(header).not.toContain('cg-site-header__logo')
+    expect(header).toContain('class="cs-header__brand" href="/"')
+    expect(header).toContain('<span class="cs-header__wordmark">Ledgerline</span>')
+    expect(header).not.toContain('cs-header__logo')
   })
 
-  it('puts the uploaded logo in the header, still named and still linked home', () => {
+  it('puts the uploaded logo in the header instead of the name, still named and linked home', () => {
     const { header } = renderChrome({ ...BASE, brand: BRAND })
-    expect(header).toContain('class="cg-site-header__logo"')
-    expect(header).toContain('alt="Cogenta Cloud"')
-    expect(header).toContain('class="cg-site-header__home" href="/"')
+    expect(header).toContain('class="cs-header__logo"')
+    expect(header).toContain('alt="Ledgerline"')
+    expect(header).not.toContain('cs-header__wordmark')
+    expect(header).toContain('class="cs-header__brand" href="/"')
   })
 
   it('offers the dark variant rather than choosing one server-side', () => {
@@ -44,9 +45,9 @@ describe('renderChrome — corporate logo', () => {
     expect(header).toContain('media="(prefers-color-scheme: dark)"')
   })
 
-  it('keeps the site name in the footer brand column and the legal row', () => {
+  it('keeps the site name in the footer and on the legal line', () => {
     const { footer } = renderChrome({ ...BASE, brand: BRAND })
-    expect(footer).toContain('cg-site-footer__brand')
-    expect(footer).toContain('Cogenta Cloud')
+    expect(footer).toContain('<a class="cs-footer__name" href="/">Ledgerline</a>')
+    expect(footer).toMatch(/© \d{4} Ledgerline/)
   })
 })

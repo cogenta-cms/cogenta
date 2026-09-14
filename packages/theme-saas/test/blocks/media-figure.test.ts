@@ -4,56 +4,50 @@ import { renderMediaFigure } from '../../src/render/blocks/media-figure.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
 
 describe('mediaFigure', () => {
-  it('renders a real <figure>/<figcaption> pair, not a div and a paragraph', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toMatch(/^<figure/)
-    expect(html).toContain('<figcaption')
+  it('renders to stable markup', () => {
+    expect(html).toMatchSnapshot()
   })
 
-  it('wraps the image in its own bordered frame element', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('class="cg-figure__frame"')
+  it('frames the picture with the hairline frame and crops it to the chosen ratio', () => {
+    expect(html).toContain(
+      '<div class="cs-figure__media cs-frame" style="aspect-ratio:16 / 9" data-ratio="fixed">',
+    )
   })
 
-  it('carries the align value as data, never as a class', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('data-align="wide"')
-    expect(html).not.toMatch(/class="[^"]*wide/)
+  it('makes the figure the container, so its caption is a direct child', () => {
+    expect(html).toMatch(
+      /<figure class="cs-container cs-figure__inner">.*<figcaption class="cs-figure__caption">/,
+    )
   })
 
-  it('defaults align to "center" when the block leaves it unset', () => {
-    const { align: _align, ...withoutAlign } = BLOCKS.mediaFigure
-    const html = serialize(renderMediaFigure(withoutAlign, ctx))
-    expect(html).toContain('data-align="center"')
+  it('prints the caption and the credit, and no caption at all when there is neither', () => {
+    expect(html).toContain(
+      '<span class="cs-figure__text" data-field="caption">The audit log, filtered to one purchase request.</span>',
+    )
+    expect(html).toContain(
+      '<span class="cs-figure__credit" data-field="credit">Ledgerline 4.12</span>',
+    )
+    const { caption: _c, credit: _r, ...bare } = BLOCKS.mediaFigure
+    expect(serialize(renderMediaFigure(bare, ctx))).not.toContain('figcaption')
   })
 
-  it('writes the ratio as a CSS custom property, never a hardcoded aspect-ratio rule', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toMatch(/style="--cg-ratio:16 \/ 9"/)
+  it('places the figure on the grid by its alignment, and drops the frame for a full-bleed picture', () => {
+    for (const align of ['start', 'center', 'end', 'wide'] as const) {
+      expect(serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, align }, ctx))).toContain(
+        `data-align="${align}"`,
+      )
+    }
+    const full = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, align: 'full' }, ctx))
+    expect(full).toContain('<div class="cs-figure__media" style=')
   })
 
-  it('omits the ratio style entirely for "original"', () => {
-    const html = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, ratio: 'original' }, ctx))
-    expect(html).not.toContain('--cg-ratio')
-  })
-
-  it('renders the caption and credit together when both are present', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('The delivery pipeline, end to end')
-    expect(html).toContain('data-field="credit"')
-    expect(html).toContain('Cogenta Advisory')
-  })
-
-  it('omits the figcaption entirely when there is neither caption nor credit', () => {
-    const { caption: _caption, credit: _credit, ...bare } = BLOCKS.mediaFigure
-    const html = serialize(renderMediaFigure(bare, ctx))
-    expect(html).not.toContain('<figcaption')
-  })
-
-  it('always writes an alt attribute', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toMatch(/<img[^>]*\salt="/)
+  it('keeps the picture’s own proportions when the ratio is original, and loads it lazily', () => {
+    const original = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, ratio: 'original' }, ctx))
+    expect(original).toContain('data-ratio="original"')
+    expect(original).not.toContain('aspect-ratio')
+    expect(original).toContain('loading="lazy"')
   })
 })

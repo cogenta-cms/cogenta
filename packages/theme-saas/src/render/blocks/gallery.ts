@@ -1,48 +1,42 @@
 import type { GalleryBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * Ships **no JavaScript**. A scroll-snapping list gives touch swiping,
- * trackpad scrolling and — because the list is focusable and labelled —
- * arrow-key scrolling, with none of the failure modes of a scripted
- * carousel: no auto-advance to fight (WCAG 2.2.2), no focus stolen from an
- * off-screen slide, and it still works before any styling loads.
+ * A set of pictures, each in the hairline frame every screenshot of this
+ * theme wears.
  *
- * Each tile is a thin-bordered plate rather than a shadowed, fully-rounded
- * card — consistent with the framed treatment `mediaFigure` and `embed`
- * use, so a page mixing all three reads as one system.
+ * - `grid`: two or three columns, every frame cropped to the same 16:10 so
+ *   the rows stay level.
+ * - `masonry`: three columns that keep each picture's own proportions.
+ * - `carousel`: one row that scrolls sideways inside the container, with
+ *   scroll snapping and no script; the list is named so a screen reader
+ *   announces it as a scrollable group.
  */
 export function renderGallery(block: GalleryBlock, ctx: RenderContext): HtmlElement {
-  const items = h(
-    'ul',
-    { class: 'cg-gallery__items' },
-    block.items.map((item) =>
-      h(
-        'li',
-        { class: 'cg-gallery__item' },
-        image(ctx, item.media, { sizes: '(min-width: 48rem) 22rem, 60vw' }),
+  const carousel = block.layout === 'carousel'
+  return section(
+    'div',
+    'gallery',
+    'cs-gallery',
+    { 'data-layout': block.layout, 'data-count': String(Math.min(block.items.length, 6)) },
+    'div',
+    h(
+      'ul',
+      {
+        class: 'cs-gallery__items',
+        ...(carousel ? { 'aria-label': ctx.t('gallery.carousel'), tabindex: 0 } : {}),
+      },
+      block.items.map((item) =>
+        h(
+          'li',
+          { class: 'cs-gallery__item cs-frame' },
+          image(ctx, item.media, {
+            className: 'cs-gallery__image cs-frame__image',
+            sizes: '(min-width: 64rem) 25rem, (min-width: 40rem) 50vw, 100vw',
+          }),
+        ),
       ),
     ),
-  )
-
-  return h(
-    'section',
-    {
-      class: 'cg-gallery',
-      'data-block': 'gallery',
-      'data-layout': block.layout,
-    },
-    block.layout === 'carousel'
-      ? h(
-          'div',
-          {
-            class: 'cg-gallery__viewport',
-            role: 'region',
-            'aria-label': ctx.t('gallery.carousel'),
-            tabindex: '0',
-          },
-          items,
-        )
-      : items,
   )
 }

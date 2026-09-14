@@ -4,50 +4,41 @@ import { renderStats } from '../../src/render/blocks/stats.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderStats(BLOCKS.stats, ctx))
 
-describe('stats → metrics', () => {
-  it('renders as a real description list — dt/dd pairs, not divs', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('<dl class="cg-metrics__items">')
-    expect(html).toContain('<dt class="cg-metric__label">')
-    expect(html).toContain('<dd class="cg-metric__value">')
+describe('stats', () => {
+  it('renders to stable markup', () => {
+    expect(html).toMatchSnapshot()
   })
 
-  it('puts the label before the figure in markup, whatever the stylesheet paints', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    const labelIndex = html.indexOf('Engagements on schedule')
-    const valueIndex = html.indexOf('>96<')
-    expect(labelIndex).toBeGreaterThan(-1)
-    expect(labelIndex).toBeLessThan(valueIndex)
-  })
-
-  it('renders the unit as its own span, separate from the value', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('<span class="cg-metric__unit">%</span>')
-  })
-
-  it('omits the unit span entirely when an item has none', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    const values = [...html.matchAll(/<dd class="cg-metric__value">([\s\S]*?)<\/dd>/g)].map(
-      (match) => match[1],
+  it('is a description list: each label names its figure, and is read first', () => {
+    expect(html).toContain('<dl class="cs-figures__items">')
+    expect(html).toMatch(
+      /<dt class="cs-figures__label">median time to approve<\/dt><dd class="cs-figures__value">/,
     )
-    expect(values).toHaveLength(2)
-    expect(values[0]).toContain('cg-metric__unit')
-    expect(values[1]).not.toContain('cg-metric__unit')
   })
 
-  it('renders the title at the block heading level when present', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('<h2 class="cg-metrics__title" data-field="title">By the numbers</h2>')
+  it('keeps the figure exactly as written and sets its unit beside it', () => {
+    expect(html).toContain(
+      '<span class="cs-figures__number">99.99</span><span class="cs-figures__unit">%</span>',
+    )
   })
 
-  it('renders every configured item, none dropped', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect((html.match(/class="cg-metric"/g) ?? []).length).toBe(2)
+  it('renders a figure without a unit without an empty unit', () => {
+    const bare = serialize(
+      renderStats(
+        { ...BLOCKS.stats, items: [{ _key: 'x', value: '1,400', label: 'customers' }] },
+        ctx,
+      ),
+    )
+    expect(bare).not.toContain('cs-figures__unit')
+    expect(bare).toContain('data-count="1"')
   })
 
-  it('is marked with data-block="stats"', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('data-block="stats"')
+  it('titles the row at h2 and counts its figures for the stylesheet', () => {
+    expect(html).toContain(
+      '<h2 class="cs-head__title" data-field="title">Across every workspace, last quarter</h2>',
+    )
+    expect(html).toContain('data-count="2"')
   })
 })

@@ -8,132 +8,114 @@ import type {
 } from '@cogenta/theme-kit'
 
 /**
- * A `RenderContext` that behaves like the real one and returns fixed
- * values, so a snapshot changes only when the markup changes.
- *
- * It exposes exactly what contract D lists — nothing here can stand in for
- * a database or a secret, because the interface has no room for one.
+ * A `RenderContext` that behaves like the real one and returns fixed values,
+ * so a snapshot changes only when the markup changes. It exposes exactly what
+ * contract D lists: nothing here can stand in for a database or a secret,
+ * because the interface has no room for one.
  */
 
-const MEDIA: Readonly<Record<string, ImageSource>> = {
-  'media-hero': {
-    kind: 'image',
-    src: '/img/hero-1200.avif',
-    srcset: '/img/hero-600.avif 600w, /img/hero-1200.avif 1200w',
-    width: 1200,
-    height: 630,
-    alt: 'An advisory team reviewing a roadmap',
-    focal: { x: 0.5, y: 0.33 },
-  },
-  'media-figure': {
-    kind: 'image',
-    src: '/img/figure-800.avif',
-    srcset: '/img/figure-800.avif 800w',
-    width: 800,
-    height: 600,
-    alt: 'A diagram of the delivery pipeline',
-    focal: null,
-  },
-  'media-gallery-1': {
-    kind: 'image',
-    src: '/img/g1-400.avif',
-    srcset: '',
-    width: 400,
-    height: 400,
-    alt: 'A meeting room, mid-workshop',
-    focal: null,
-  },
-  'media-gallery-2': {
-    kind: 'image',
-    src: '/img/g2-400.avif',
-    srcset: '',
-    width: 400,
-    height: 400,
-    alt: 'A whiteboard covered in sticky notes',
-    focal: null,
-  },
-  // Decorative: the author's name is right beside it in text.
-  'media-avatar': {
-    kind: 'image',
-    src: '/img/avatar-96.avif',
-    srcset: '',
-    width: 96,
-    height: 96,
-    alt: '',
-    focal: null,
-  },
-  // Deliberately has no alt text: proves the `logos` block's `altFrom` path
-  // writes the organisation's name rather than leaving the image unnamed.
-  'logo-acme': {
-    kind: 'image',
-    src: '/img/acme.svg',
-    srcset: '',
-    width: 160,
-    height: 40,
-    alt: '',
-    focal: null,
-  },
-  'logo-globex': {
-    kind: 'image',
-    src: '/img/globex.svg',
-    srcset: '',
-    width: 160,
-    height: 40,
-    alt: '',
-    focal: null,
-  },
-  'media-inline': {
-    kind: 'image',
-    src: '/img/inline-800.avif',
-    srcset: '',
-    width: 800,
-    height: 450,
-    alt: 'A screenshot of the quarterly report',
-    focal: null,
-  },
+function source(src: string, width: number, height: number, alt: string): ImageSource {
+  return { kind: 'image', src, srcset: `${src} ${width}w`, width, height, alt, focal: null }
 }
 
-const MISSING: ImageSource = {
-  kind: 'image',
-  src: '/img/missing.svg',
-  srcset: '',
-  width: 1,
-  height: 1,
-  alt: '',
-  focal: null,
+export const MEDIA: Readonly<Record<string, ImageSource>> = {
+  'media-app': source(
+    '/img/approvals-2400.png',
+    2400,
+    1520,
+    'The approvals queue, with one request open',
+  ),
+  'media-policy': source('/img/policy-1600.png', 1600, 1000, 'The approval policy editor'),
+  'media-audit': source('/img/audit-1600.png', 1600, 1000, 'The audit log filtered to one request'),
+  'media-reporting': source(
+    '/img/reporting-1600.png',
+    1600,
+    1000,
+    'Median time to approve, by week',
+  ),
+  // Decorative in a quote: the name is right beside it in text.
+  'media-avatar': source('/img/avatar-96.jpg', 96, 96, ''),
+  'media-portrait': source('/img/portrait-1024.jpg', 1024, 1024, 'Portrait of Adrian Tan'),
+  // No alt text: proves `logos` writes the organisation's name instead.
+  'logo-halvorsen': source('/img/halvorsen.png', 480, 120, ''),
+  'logo-brightwell': source('/img/brightwell.png', 480, 120, ''),
+  'logo-castlemere': source('/img/castlemere.png', 480, 120, ''),
+  'media-inline': source('/img/inline-1600.png', 1600, 1000, 'The request form'),
 }
 
+const MISSING: ImageSource = source('/img/missing.png', 1, 1, '')
+
+/** Features with a screenshot each: the product tour. */
+export const FEATURES: readonly ContentEntry[] = [
+  {
+    id: 'f-routing',
+    collection: 'feature',
+    locale: 'en',
+    status: 'published',
+    name: 'Approval routing',
+    description: 'Route each request by amount, cost centre and vendor.',
+    coverImage: 'media-policy',
+  },
+  {
+    id: 'f-audit',
+    collection: 'feature',
+    locale: 'en',
+    status: 'published',
+    name: 'Audit log',
+    description: 'Every decision written once and never rewritten.',
+    coverImage: 'media-audit',
+  },
+]
+
+/** Changelog entries: dated, no pictures. */
+export const UPDATES: readonly ContentEntry[] = [
+  {
+    id: 'u-parallel',
+    collection: 'changelog',
+    locale: 'en',
+    status: 'published',
+    title: 'Parallel approval steps',
+    summary: 'Two approvers can now decide the same step at once.',
+    publishedAt: '2026-08-27T09:00:00.000Z',
+  },
+  {
+    id: 'u-exports',
+    collection: 'changelog',
+    locale: 'en',
+    status: 'published',
+    title: 'Signed audit exports',
+    publishedAt: '2026-08-06T09:00:00.000Z',
+  },
+]
+
+/** Two plain entries: one with a title and an excerpt, one with neither. */
 export const ENTRIES: readonly ContentEntry[] = [
   {
     id: '0192f0c2-0000-7000-8000-000000000001',
     collection: 'article',
     locale: 'en',
     status: 'published',
-    title: 'What a structured engagement actually looks like',
-    excerpt: 'Why a delivery plan earns its confidence one milestone at a time.',
-    publishedAt: '2026-02-11T09:00:00.000Z',
+    title: 'How we test backups',
+    excerpt: 'Restoring them every month, not only taking them.',
   },
   {
     id: '0192f0c2-0000-7000-8000-000000000002',
     collection: 'article',
     locale: 'en',
     status: 'published',
-    // No title field on purpose: `entryTitle` must fall back rather than
-    // render `undefined` into the page.
-    publishedAt: '2026-01-05T09:00:00.000Z',
   },
 ]
 
 export function makeContext(overrides: Partial<RenderContext> = {}): RenderContext {
   const base: RenderContext = {
     site: {
-      name: 'Cogenta Advisory',
-      url: 'https://advisory.cogenta.dev',
+      name: 'Ledgerline',
+      url: 'https://ledgerline.example',
       locales: ['en', 'fr'],
       defaultLocale: 'en',
     },
     locale: 'en',
-    url: new URL('https://advisory.cogenta.dev/en/insights/structured-engagement'),
+    url: new URL('https://ledgerline.example/en/product'),
     t: (key) => key,
     image: (media: MediaReference) => MEDIA[media] ?? MISSING,
     link: (target) => {
@@ -152,27 +134,35 @@ export function makeContext(overrides: Partial<RenderContext> = {}): RenderConte
   return { ...base, ...overrides }
 }
 
+export function paragraph(key: string, text: string): RichTextDocument[number] {
+  return {
+    _key: key,
+    _type: 'block',
+    style: 'normal',
+    children: [{ _key: `${key}-s`, _type: 'span', text, marks: [] }],
+    markDefs: [],
+  }
+}
+
 const PROSE_BODY: RichTextDocument = [
   {
     _key: 'p1',
     _type: 'block',
     style: 'normal',
     children: [
-      { _key: 's1', _type: 'span', text: 'Every engagement starts with ', marks: [] },
-      { _key: 's2', _type: 'span', text: 'a written plan', marks: ['strong'] },
-      { _key: 's3', _type: 'span', text: ' — see ', marks: [] },
-      { _key: 's4', _type: 'span', text: 'our methodology', marks: ['m1'] },
-      { _key: 's5', _type: 'span', text: ' & the <delivery> note.', marks: [] },
+      { _key: 's1', _type: 'span', text: 'Workspaces are hosted in ', marks: [] },
+      { _key: 's2', _type: 'span', text: 'Frankfurt', marks: ['strong'] },
+      { _key: 's3', _type: 'span', text: ' or Virginia, and ', marks: [] },
+      { _key: 's4', _type: 'span', text: 'every backup is restored', marks: ['m1'] },
+      { _key: 's5', _type: 'span', text: ' once a month & checked <by hand>.', marks: [] },
     ],
-    markDefs: [
-      { _key: 'm1', _type: 'link', href: 'https://example.org/methodology', rel: 'external' },
-    ],
+    markDefs: [{ _key: 'm1', _type: 'link', href: 'https://example.org/backups', rel: 'external' }],
   },
   {
     _key: 'h1',
     _type: 'block',
     style: 'h2',
-    children: [{ _key: 's6', _type: 'span', text: 'What a client sees', marks: [] }],
+    children: [{ _key: 's6', _type: 'span', text: 'Encryption', marks: [] }],
     markDefs: [],
   },
   {
@@ -181,7 +171,7 @@ const PROSE_BODY: RichTextDocument = [
     style: 'normal',
     listItem: 'bullet',
     level: 1,
-    children: [{ _key: 's7', _type: 'span', text: 'A named engagement lead', marks: [] }],
+    children: [{ _key: 's7', _type: 'span', text: 'TLS 1.3 in transit', marks: [] }],
     markDefs: [],
   },
   {
@@ -190,103 +180,39 @@ const PROSE_BODY: RichTextDocument = [
     style: 'normal',
     listItem: 'bullet',
     level: 2,
-    children: [{ _key: 's8', _type: 'span', text: 'and a weekly written update', marks: [] }],
+    children: [{ _key: 's8', _type: 'span', text: 'HSTS preloaded', marks: [] }],
     markDefs: [],
-  },
-  {
-    _key: 'l3',
-    _type: 'block',
-    style: 'normal',
-    listItem: 'bullet',
-    level: 1,
-    children: [{ _key: 's9', _type: 'span', text: 'A milestone plan', marks: ['m2'] }],
-    markDefs: [{ _key: 'm2', _type: 'internalLink', collection: 'page', id: 'methodology' }],
   },
   {
     _key: 'q1',
     _type: 'block',
     style: 'blockquote',
-    children: [
-      { _key: 's10', _type: 'span', text: 'A plan the client can hold us to.', marks: [] },
-    ],
+    children: [{ _key: 's9', _type: 'span', text: 'Keys are rotated every 90 days.', marks: [] }],
     markDefs: [],
   },
-  { _key: 'm3', _type: 'media', id: 'media-inline', caption: 'The quarterly report, in review' },
-]
-
-const FAQ_ANSWER: RichTextDocument = [
-  {
-    _key: 'a1',
-    _type: 'block',
-    style: 'normal',
-    children: [{ _key: 'as1', _type: 'span', text: 'Yes, from the first week.', marks: [] }],
-    markDefs: [],
-  },
-]
-
-const TESTIMONIAL_QUOTE: RichTextDocument = [
-  {
-    _key: 't1',
-    _type: 'block',
-    style: 'normal',
-    children: [
-      { _key: 'ts1', _type: 'span', text: 'They gave us a ', marks: [] },
-      { _key: 'ts2', _type: 'span', text: 'plan we could hold them to', marks: ['strong'] },
-      {
-        _key: 'ts3',
-        _type: 'span',
-        text: ', and every milestone since has landed on the date they gave us.',
-        marks: [],
-      },
-    ],
-    markDefs: [],
-  },
-]
-
-const ACCORDION_ANSWER: RichTextDocument = [
-  {
-    _key: 'p1',
-    _type: 'block',
-    style: 'normal',
-    children: [
-      {
-        _key: 'ps1',
-        _type: 'span',
-        text: 'Every environment is provisioned from the same manifest, reviewed the same way.',
-        marks: [],
-      },
-    ],
-    markDefs: [],
-  },
+  { _key: 'm2', _type: 'media', id: 'media-inline', caption: 'The request form' },
 ]
 
 const VERSION = '1.0.0'
 
-/**
- * One valid, representative block per vocabulary entry.
- *
- * Mapped over `_type` rather than typed as `Record<string, VocabularyBlock>`:
- * `BLOCKS.embed` must arrive at `renderEmbed` as an `EmbedBlock`, not as the
- * whole union, or the tests stop checking the types the renderers claim.
- */
 type BlockOfType<T extends VocabularyBlock['_type']> = Extract<VocabularyBlock, { _type: T }>
 
+/**
+ * One valid, representative block per vocabulary entry, mapped over `_type`
+ * so `BLOCKS.embed` arrives at `renderEmbed` as an `EmbedBlock`.
+ */
 export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> } = {
   hero: {
     _key: 'b-hero',
     _type: 'hero',
     _version: VERSION,
-    eyebrow: 'Advisory',
-    title: 'A consultancy that runs like software',
-    subtitle: 'Structured engagements, weekly reporting, no surprises at the end.',
-    media: 'media-hero',
+    eyebrow: 'For finance and operations teams',
+    title: 'Spend approvals with the audit trail built in',
+    subtitle: 'Route every request to the right approver and keep a record your auditors can read.',
+    media: 'media-app',
     actions: [
-      {
-        label: 'Book a call',
-        target: { collection: 'page', id: 'contact' },
-        emphasis: 'primary',
-      },
-      { label: 'Our methodology', target: { href: 'https://example.org/methodology' } },
+      { label: 'Book a demo', target: { href: '/demo' }, emphasis: 'primary' },
+      { label: 'See pricing', target: { collection: 'page', id: 'pricing' } },
     ],
   },
   prose: { _key: 'b-prose', _type: 'prose', _version: VERSION, body: PROSE_BODY },
@@ -294,9 +220,9 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-figure',
     _type: 'mediaFigure',
     _version: VERSION,
-    media: 'media-figure',
-    caption: 'The delivery pipeline, end to end',
-    credit: 'Cogenta Advisory',
+    media: 'media-audit',
+    caption: 'The audit log, filtered to one purchase request.',
+    credit: 'Ledgerline 4.12',
     ratio: '16:9',
     align: 'wide',
   },
@@ -304,80 +230,101 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-features',
     _type: 'featureGrid',
     _version: VERSION,
-    title: 'What you get',
+    title: 'One place for every approval',
     items: [
+      { _key: 'f1', icon: 'layers', title: 'Approval routing', text: 'By amount and cost centre.' },
       {
-        _key: 'f1',
+        _key: 'f2',
         icon: 'shield',
-        title: 'A named engagement lead',
-        text: 'One accountable point of contact, every week.',
-        link: { collection: 'page', id: 'team' },
+        title: 'Audit log',
+        text: 'Written once, never rewritten.',
+        link: { collection: 'feature', id: 'f-audit' },
       },
-      { _key: 'f2', title: 'Fixed-scope milestones', text: 'Priced and dated before we start.' },
+      { _key: 'f3', icon: 'not-a-known-icon', title: 'API and webhooks' },
     ],
   },
   cta: {
     _key: 'b-cta',
     _type: 'cta',
     _version: VERSION,
-    title: 'Talk to an advisor this week',
-    text: 'Thirty minutes, no deck, no obligation.',
-    actions: [{ label: 'Book a call', target: { href: '/contact' }, emphasis: 'primary' }],
+    title: 'See it with your own approval policy',
+    text: 'A 30-minute call with a solutions engineer.',
+    actions: [
+      { label: 'Book a demo', target: { href: '/demo' }, emphasis: 'primary' },
+      { label: 'Read the security overview', target: { href: '/security' } },
+    ],
   },
   gallery: {
     _key: 'b-gallery',
     _type: 'gallery',
     _version: VERSION,
-    layout: 'carousel',
+    layout: 'grid',
     items: [
-      { _key: 'g1', media: 'media-gallery-1' },
-      { _key: 'g2', media: 'media-gallery-2' },
+      { _key: 'g1', media: 'media-policy' },
+      { _key: 'g2', media: 'media-audit' },
+      { _key: 'g3', media: 'media-reporting' },
     ],
   },
   quote: {
     _key: 'b-quote',
     _type: 'quote',
     _version: VERSION,
-    text: 'They shipped the roadmap on the date they gave us, in writing, in week one.',
-    author: 'A. Client',
-    role: 'VP Engineering',
+    text: 'The auditors filtered the log themselves and stopped asking us for screenshots.',
+    author: 'Adrian Tan',
+    role: 'Financial Controller, Halvorsen Freight',
     avatar: 'media-avatar',
   },
   faq: {
     _key: 'b-faq',
     _type: 'faq',
     _version: VERSION,
-    title: 'Questions',
-    items: [{ _key: 'q1', question: 'Do you report weekly?', answer: FAQ_ANSWER }],
+    title: 'Questions from finance teams',
+    items: [
+      {
+        _key: 'q1',
+        question: 'Do requesters need a paid seat?',
+        answer: [paragraph('a1', 'No. You pay for approvers.')],
+      },
+      {
+        _key: 'q2',
+        question: 'Can an auditor get access?',
+        answer: [paragraph('a2', 'Yes, read only, limited to a date range.')],
+      },
+    ],
   },
   stats: {
     _key: 'b-stats',
     _type: 'stats',
     _version: VERSION,
-    title: 'By the numbers',
+    title: 'Across every workspace, last quarter',
     items: [
-      { _key: 's1', value: '96', unit: '%', label: 'Engagements on schedule' },
-      { _key: 's2', value: '0', label: 'Missed weekly reports' },
+      { _key: 's1', value: '3.6', unit: 'h', label: 'median time to approve' },
+      { _key: 's2', value: '99.99', unit: '%', label: 'uptime' },
     ],
   },
   logos: {
     _key: 'b-logos',
     _type: 'logos',
     _version: VERSION,
-    title: 'Trusted by',
+    title: 'Customers',
     items: [
-      { _key: 'l1', media: 'logo-acme', name: 'Acme', url: 'https://acme.example' },
-      { _key: 'l2', media: 'logo-globex', name: 'Globex' },
+      {
+        _key: 'l1',
+        media: 'logo-halvorsen',
+        name: 'Halvorsen Freight',
+        url: 'https://halvorsen.example',
+      },
+      { _key: 'l2', media: 'logo-brightwell', name: 'Brightwell Clinics' },
     ],
   },
   collectionList: {
     _key: 'b-collection',
     _type: 'collectionList',
     _version: VERSION,
-    title: 'Latest insights',
-    collection: 'article',
-    sort: { field: 'publishedAt', direction: 'desc' },
-    limit: 5,
+    title: 'A closer look',
+    collection: 'feature',
+    sort: { field: 'id', direction: 'asc' },
+    limit: 6,
     layout: 'list',
   },
   embed: {
@@ -385,7 +332,7 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _type: 'embed',
     _version: VERSION,
     provider: 'youtube',
-    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    url: 'https://www.youtube.com/watch?v=abc123',
     ratio: '16:9',
     consentRequired: true,
   },
@@ -393,44 +340,46 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-testimonial',
     _type: 'testimonial',
     _version: VERSION,
-    quote: TESTIMONIAL_QUOTE,
+    quote: [
+      paragraph('t1', 'Invoice approvals went from nine days to under two.'),
+      paragraph('t2', 'The month-end close lost a day of chasing.'),
+    ],
     attribution: {
-      name: 'A. Client',
-      role: 'VP Engineering, Globex',
-      avatar: 'media-avatar',
+      name: 'Adrian Tan',
+      role: 'Financial Controller, Halvorsen Freight',
+      avatar: 'media-portrait',
     },
   },
   pricingTable: {
     _key: 'b-pricing',
     _type: 'pricingTable',
     _version: VERSION,
-    title: 'Engagement tiers',
+    title: 'Plans',
     tiers: [
       {
-        _key: 'p1',
-        name: 'Advisory',
-        price: '$4,500',
-        interval: '/month',
-        features: ['One weekly session', 'Written recommendations', 'Email support'],
-        action: { label: 'Start advisory', target: { href: '/contact' } },
+        _key: 'tier-team',
+        name: 'Team',
+        price: '$12',
+        interval: 'per approver, per month',
+        features: ['Approvers: Up to 25', 'Audit history: 1 year'],
+        action: { label: 'Start a trial', target: { href: '/demo' } },
       },
       {
-        _key: 'p2',
-        name: 'Embedded',
-        price: '$12,000',
-        interval: '/month',
-        features: [
-          'A named engagement lead',
-          'Weekly written status report',
-          'Fixed-scope milestones',
-          'Priority support',
-        ],
-        action: {
-          label: 'Book a call',
-          target: { href: '/contact' },
-          emphasis: 'primary',
-        },
+        _key: 'tier-business',
+        name: 'Business',
+        price: '$24',
+        interval: 'per approver, per month',
+        features: ['Approvers: Up to 250', 'Audit history: 7 years', 'Signed audit exports'],
+        action: { label: 'Start a trial', target: { href: '/demo' }, emphasis: 'primary' },
         highlighted: true,
+      },
+      {
+        _key: 'tier-enterprise',
+        name: 'Enterprise',
+        price: 'Custom',
+        interval: 'annual contract',
+        features: ['Approvers: Unlimited', 'Audit history: 10 years', 'Signed audit exports'],
+        action: { label: 'Talk to sales', target: { href: '/demo' } },
       },
     ],
   },
@@ -438,34 +387,39 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-accordion',
     _type: 'accordion',
     _version: VERSION,
-    title: 'How delivery works',
+    title: 'Subprocessors',
     items: [
-      { _key: 'ac1', question: 'Is every environment reproducible?', answer: ACCORDION_ANSWER },
+      {
+        _key: 'acc1',
+        question: 'Hosting',
+        answer: [paragraph('ac1', 'Amazon Web Services, Frankfurt and Virginia.')],
+      },
     ],
   },
   statCounter: {
     _key: 'b-counters',
     _type: 'statCounter',
     _version: VERSION,
-    title: 'Since 2019',
+    title: 'The company',
     stats: [
-      { _key: 'c1', value: '140+', label: 'Engagements delivered' },
-      { _key: 'c2', value: '11', label: 'Countries served' },
+      { _key: 'sc1', value: '1,400', label: 'customers' },
+      { _key: 'sc2', value: '58', label: 'people' },
     ],
   },
   logoStrip: {
-    _key: 'b-logo-strip',
+    _key: 'b-logostrip',
     _type: 'logoStrip',
     _version: VERSION,
+    caption: 'Finance teams at 1,400 companies approve spend here',
     logos: [
-      { _key: 'ls1', media: 'logo-acme' },
-      { _key: 'ls2', media: 'logo-globex' },
+      { _key: 'ls1', media: 'logo-halvorsen' },
+      { _key: 'ls2', media: 'logo-brightwell' },
+      { _key: 'ls3', media: 'logo-castlemere' },
     ],
-    caption: 'As seen in the portfolios of',
   },
 }
 
-/** The seventeen, in contract B's order (`blocks@2.0`, RFC 0001). */
+/** The seventeen of `blocks@2.0`, in contract B's order. */
 export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.hero,
   BLOCKS.prose,

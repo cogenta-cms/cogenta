@@ -360,6 +360,7 @@ import { applySecurity, type SecurityConfig } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
+import { createSampleDataEngine } from './sample-data.js'
 import { renderSearchPage } from './search-page.js'
 import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
 import {
@@ -6800,7 +6801,22 @@ export async function runServe(options: ServeOptions): Promise<number> {
     styles,
     themeCss,
     themeCssFor,
-    theme: await createThemeWiring(themeWiringOptions),
+    theme: {
+      ...(await createThemeWiring(themeWiringOptions)),
+      // L28: a theme applied with its starter's sample data. Previewing works
+      // everywhere; applying writes the schema, so only `cogenta dev` may.
+      sampleData: createSampleDataEngine({
+        projectRoot,
+        db: selection.instance,
+        storage: storageSelection.instance,
+        ...(images === null ? {} : { images: images.processor }),
+        siteName: loaded.config.site.name,
+        defaultLocale: loaded.config.site.defaultLocale,
+        writable: (options.development ?? false) && !(options.readOnly ?? false),
+        env,
+        logger,
+      }),
+    },
     // L26 task 5 — "Cogenta Theme Creator"'s tool, resolved from the exact
     // same `config.llm`/`availableThemes()` `theme` above already used for
     // its own `generator`. Absent (no LLM provider) means `undefined`, and

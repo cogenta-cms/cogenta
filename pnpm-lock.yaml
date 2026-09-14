@@ -553,6 +553,9 @@ importers:
       '@cogenta/seo':
         specifier: workspace:*
         version: link:../seo
+      '@cogenta/starters':
+        specifier: workspace:*
+        version: link:../starters
       '@cogenta/theme-association':
         specifier: workspace:*
         version: link:../theme-association

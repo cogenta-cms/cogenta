@@ -1,6 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import type { Actor } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
+import type { SampleDataEngineLike, SampleDataMode } from './theme-sample-data.js'
 
 /**
  * `/api/theme` — fiche 14: the "Apparence" screen's server side.
@@ -298,6 +299,12 @@ export interface ThemeRouterOptions {
    * skin.
    */
   readonly themeDefaultTokens?: (themeName: string) => Promise<Record<string, unknown> | undefined>
+  /**
+   * L28 — a theme applied together with its starter's sample data. Backs
+   * `GET` (which themes ship some), `POST /api/theme/sample-data/preview` and
+   * `POST /api/theme/sample-data/apply`. Absent: no theme offers sample data.
+   */
+  readonly sampleData?: SampleDataEngineLike
   /** Fiche feedback — backs `POST/GET …/generate/jobs`. Omitted means those two routes answer `THEME_NO_PROVIDER`-shaped unavailability like `generate` itself does when there's no generator; the synchronous `POST …/generate` route is unaffected either way. */
   readonly progressJobs?: ThemeGenerateJobStoreLike
   readonly basePath?: string
@@ -632,6 +639,34 @@ function unknownTheme(name: string, available: readonly AvailableThemeLike[]): C
 export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
 
+  /**
+   * Switches the active theme, optionally taking on that theme's own skin in
+   * the same write (L27). Shared by `POST /api/theme/activate` and the sample
+   * data import, which always brings the complete look.
+   */
+  async function activateTheme(themeName: string, applySkin: boolean, actorId: string | null) {
+    const own =
+      applySkin && options.themeDefaultTokens !== undefined
+        ? await options.themeDefaultTokens(themeName)
+        : undefined
+    if (own === undefined) {
+      const written = await options.store.set({ activeTheme: themeName, updatedBy: actorId })
+      return { written, skinApplied: false }
+    }
+    // Same wholesale replacement as applying a gallery skin: a theme's skin is
+    // internally consistent, so it replaces every group rather than patching
+    // a few, and is validated before anything is written.
+    const validated = options.validateTokens(own)
+    const file = await options.loadFileTokens()
+    const overlay = file === null ? validated : diffTokens(file, validated)
+    const written = await options.store.set({
+      activeTheme: themeName,
+      tokenOverrides: overlay,
+      updatedBy: actorId,
+    })
+    return { written, skinApplied: true }
+  }
+
   return {
     handle: async (request, actor) => {
       try {
@@ -670,6 +705,10 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
                 options.generator === undefined ? false : await options.generator.isAvailable(),
               exportAvailable: options.fileExporter !== undefined,
               availableThemes: await options.availableThemes(),
+              sampleData: {
+                themes: options.sampleData?.themes() ?? [],
+                writable: options.sampleData?.writable ?? false,
+              },
             },
           })
         }
@@ -685,26 +724,67 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
           if (!available.some((theme) => theme.name === themeName)) {
             throw unknownTheme(themeName, available)
           }
-          const own =
-            body.applySkin === true && options.themeDefaultTokens !== undefined
-              ? await options.themeDefaultTokens(themeName)
-              : undefined
-          if (own === undefined) {
-            const written = await options.store.set({ activeTheme: themeName, updatedBy: actor.id })
-            return jsonResponse(200, { data: { ...overridesPayload(written), skinApplied: false } })
+          const { written, skinApplied } = await activateTheme(
+            themeName,
+            body.applySkin === true,
+            actor.id,
+          )
+          return jsonResponse(200, { data: { ...overridesPayload(written), skinApplied } })
+        }
+
+        // POST /api/theme/sample-data/{preview,apply} (L28). A theme and the
+        // demo content its starter ships, kept alongside the site's own or
+        // replacing it. The preview is recomputed on apply, never trusted
+        // from the client.
+        if (
+          first === 'sample-data' &&
+          (second === 'preview' || second === 'apply') &&
+          third === undefined
+        ) {
+          if (method !== 'POST') return methodNotAllowed(['POST'])
+          const engine = options.sampleData
+          const body = (request.body ?? {}) as {
+            theme?: unknown
+            mode?: unknown
+            confirmation?: unknown
           }
-          // Same wholesale replacement as applying a gallery skin: a theme's
-          // skin is internally consistent, so it replaces every group rather
-          // than patching a few, and is validated before anything is written.
-          const validated = options.validateTokens(own)
-          const file = await options.loadFileTokens()
-          const overlay = file === null ? validated : diffTokens(file, validated)
-          const written = await options.store.set({
-            activeTheme: themeName,
-            tokenOverrides: overlay,
-            updatedBy: actor.id,
+          const themeName = typeof body.theme === 'string' ? body.theme : ''
+          if (engine === undefined || !engine.themes().includes(themeName)) {
+            throw new CogentaError({
+              code: 'THEME_SAMPLE_DATA_UNAVAILABLE',
+              message: `The theme "${themeName}" ships no sample data.`,
+              hint: 'Apply the theme on its own; only themes that come with a starter site offer sample data.',
+              details: { theme: themeName },
+            })
+          }
+          if (body.mode !== 'keep' && body.mode !== 'reset') {
+            throw new CogentaError({
+              code: 'THEME_OVERRIDE_INVALID',
+              message: 'The sample data mode must be "keep" or "reset".',
+              hint: 'Send mode: "keep" to add the sample data beside the site\'s content, or "reset" to replace it.',
+            })
+          }
+          const mode: SampleDataMode = body.mode
+          if (second === 'preview') {
+            return jsonResponse(200, { data: await engine.preview({ theme: themeName, mode }) })
+          }
+          if (!engine.writable) {
+            throw new CogentaError({
+              code: 'CONTENT_READ_ONLY',
+              message: 'Sample data can only be imported while the site runs under `cogenta dev`.',
+              hint: 'Importing sample data rewrites the schema, which ADR-0010 keeps read-only in production. Stop the server, run `cogenta dev`, and apply again — or apply the theme on its own.',
+            })
+          }
+          const report = await engine.apply({
+            theme: themeName,
+            mode,
+            ...(typeof body.confirmation === 'string' ? { confirmation: body.confirmation } : {}),
+            actorId: actor.id,
+            activateTheme: async () => {
+              await activateTheme(themeName, true, actor.id)
+            },
           })
-          return jsonResponse(200, { data: { ...overridesPayload(written), skinApplied: true } })
+          return jsonResponse(200, { data: report })
         }
 
         // PUT /api/theme/overrides — the token editor, identity pickers and additional CSS.

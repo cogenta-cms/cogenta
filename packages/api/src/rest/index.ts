@@ -250,6 +250,14 @@ export type {
 } from './theme-router.js'
 export { createThemeRouter } from './theme-router.js'
 export type {
+  SampleDataCollectionOutcome,
+  SampleDataEngineLike,
+  SampleDataMode,
+  SampleDataPreview,
+  SampleDataReport,
+  SampleDataWarning,
+} from './theme-sample-data.js'
+export type {
   ToolDefinitionLike,
   ToolRunLike,
   ToolRunStatus,

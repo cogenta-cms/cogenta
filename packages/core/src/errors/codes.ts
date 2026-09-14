@@ -523,6 +523,11 @@ export const ERROR_CODES = [
   // live from the "Générer un thème" screen.
   'THEME_GENERATE_JOB_UNKNOWN',
 
+  // L28 — applying a theme with its sample data: a theme that ships none, and
+  // a reset whose typed confirmation does not name the site.
+  'THEME_SAMPLE_DATA_UNAVAILABLE',
+  'THEME_SAMPLE_DATA_CONFIRMATION_INVALID',
+
   // Comments — contract F, visitor comments (fiche 15, ADR-0025)
   'COMMENT_NOT_FOUND',
   'COMMENT_BODY_INVALID',

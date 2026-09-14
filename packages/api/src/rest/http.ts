@@ -422,6 +422,10 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // already swept a few minutes after finishing. Same shape as
   // `SCHEDULER_QUEUE_JOB_NOT_FOUND`.
   THEME_GENERATE_JOB_UNKNOWN: 404,
+  // L28: a theme with no sample data is a missing resource; a reset whose
+  // typed site name does not match is a well-formed request refused on its content.
+  THEME_SAMPLE_DATA_UNAVAILABLE: 404,
+  THEME_SAMPLE_DATA_CONFIRMATION_INVALID: 422,
 
   // Import (fiche 25): preview/apply/undo, CSV, RSS/Atom.
   IMPORT_RUN_NOT_FOUND: 404,

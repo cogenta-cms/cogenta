@@ -55,8 +55,9 @@
     "@cogenta/render": "workspace:*",
     "@cogenta/schema": "workspace:*",
     "@cogenta/seo": "workspace:*",
-    "@cogenta/theme-blog": "workspace:*",
+    "@cogenta/starters": "workspace:*",
     "@cogenta/theme-association": "workspace:*",
+    "@cogenta/theme-blog": "workspace:*",
     "@cogenta/theme-canonical": "workspace:*",
     "@cogenta/theme-docs": "workspace:*",
     "@cogenta/theme-ecommerce": "workspace:*",
@@ -64,8 +65,8 @@
     "@cogenta/theme-kit": "workspace:*",
     "@cogenta/theme-magazine": "workspace:*",
     "@cogenta/theme-portfolio": "workspace:*",
-    "@cogenta/theme-saas": "workspace:*",
     "@cogenta/theme-restaurant": "workspace:*",
+    "@cogenta/theme-saas": "workspace:*",
     "graphql": "catalog:"
   },
   "devDependencies": {

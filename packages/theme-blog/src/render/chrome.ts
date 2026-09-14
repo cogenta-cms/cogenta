@@ -11,34 +11,30 @@ import {
 } from '@cogenta/theme-kit'
 
 /**
- * This theme's own header and footer — a masthead, not a corporate bar.
+ * This theme's own header and footer (`theme@1.4`), drawn the way a personal
+ * publication draws them: a quiet line at the top and a short colophon at
+ * the bottom.
  *
- * Header: the site's wordmark set in the display serif, a single
- * `<details>` disclosure carrying both the nav list and the `headerAction`
- * button — collapsed to a hamburger `<summary>` under `min-width: 56rem`,
- * always open (CSS overrides the browser's own "hide unless [open]" rule at
- * that breakpoint) above it. Zero JavaScript: `<details>`/`<summary>` is
- * natively focusable, keyboard-operable (Enter/Space toggles it) and its
- * open state is announced to assistive technology by the browser itself.
+ * Header: the publication's name set in the text face (or its uploaded
+ * logo), a few navigation links in small interface type, the `headerAction`
+ * as an outlined control with square corners, and the light/dark control
+ * last. The header does not follow the reader down the page: nothing stays
+ * on screen over the text. Below the breakpoint the links collapse into a
+ * panel opened by a CSS-only toggle, a visually hidden checkbox paired with
+ * a `<label>`, no `<script>`. The label precedes the `<nav>` so the sibling
+ * combinator in `base.css` reaches it; the theme toggle follows the `<nav>`,
+ * outside the panel, so appearance can be switched without opening it.
  *
- * Footer: three columns — brand + tagline, a footer nav column, and a
- * social-links + credit column — each a real `<div>` in a CSS grid, not a
- * single stacked list. `brandingHtml` is placed exactly once, unaltered.
- *
- * `theme@1.4`'s four optional fields are each rendered only when present: a
- * site or a render that predates them gets exactly the `1.3` masthead/footer
- * shape, byte for byte (see `test/chrome.test.ts`'s "without the new
- * fields" case).
- *
- * The manual light/dark toggle (`renderThemeToggle`, `@cogenta/theme-kit`) is
- * unconditional, on every render — placed after both nav renderings
- * (desktop `<nav>` and the mobile `<details>` disclosure), outside either's
- * `display: none` breakpoint switch, so it is the one header control always
- * visible regardless of viewport width.
+ * Footer: the name and `tagline`, the `footerNote` beneath them, the footer
+ * navigation, the social profiles with real icons (`renderSocialLinks`),
+ * then a legal line under a hairline: the copyright year and the site's
+ * name, beside Cogenta's credit (`brandingHtml`, placed exactly once, as
+ * received). Every `theme@1.4` field renders only when present, so a host
+ * that predates them gets the name and the navigation, nothing broken.
  */
 
-function renderNavItems(links: readonly ChromeNavLink[]): string {
-  const items = links
+function navItems(links: readonly ChromeNavLink[]): string {
+  return links
     .filter((link) => link.href !== null || link.kind === 'submenu-placeholder')
     .map((link) => {
       const label = escapeText(link.label)
@@ -49,60 +45,59 @@ function renderNavItems(links: readonly ChromeNavLink[]): string {
       return `<li><a href="${href}"${target}${titleAttr}>${label}</a></li>`
     })
     .join('')
+}
+
+function renderNavList(links: readonly ChromeNavLink[]): string {
+  const items = navItems(links)
   return items === '' ? '' : `<ul class="cg-nav__items">${items}</ul>`
 }
 
-/** The header's own call-to-action link (`theme@1.4`) — a filled button, the one place this masthead spends solid colour. */
+/** The header's own call to action (`theme@1.4`): the one outlined control in the line. */
 function renderHeaderAction(action: ChromeInput['headerAction']): string {
   if (action === undefined) return ''
   return (
-    `<a class="cg-action cg-menu__action" data-emphasis="primary" ` +
+    `<a class="cg-action cg-site-header__action" data-emphasis="outline" ` +
     `href="${escapeAttribute(action.href)}">${escapeText(action.label)}</a>`
   )
 }
 
-/** A hamburger mark drawn from three stacked bars — no icon font, no glyph a font might not ship. */
-function menuGlyph(): string {
-  return '<span class="cg-menu__bars" aria-hidden="true"></span>'
+/** `footerNote` as paragraphs: a blank line starts a new one. */
+function renderFooterNote(note: string): string {
+  const paragraphs = note
+    .replace(/\r\n?/g, '\n')
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s*\n\s*/g, ' ').trim())
+    .filter((paragraph) => paragraph !== '')
+  if (paragraphs.length === 0) return ''
+  return `<div class="cg-site-footer__note">${paragraphs
+    .map((paragraph) => `<p>${escapeText(paragraph)}</p>`)
+    .join('')}</div>`
 }
 
 export function renderChrome(input: ChromeInput): ChromeResult {
-  const siteName = escapeAttribute(input.site.name)
   const siteNameText = escapeText(input.site.name)
-  const navItems = renderNavItems(input.headerNav)
+  const headerNavList = renderNavList(input.headerNav)
   const headerAction = renderHeaderAction(input.headerAction)
-  const footerNav = renderNavItems(input.footerNav)
-  const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteNameText
-
-  const hasMenu = navItems !== '' || headerAction !== ''
-  // Two renderings of the same nav, never both visible at once (CSS,
-  // `min-width: 56rem`) — not one panel forced open past its native state.
-  // A closed `<details>`'s non-summary content is unrenderable in current
-  // Chrome regardless of an author `display` override on that content (the
-  // browser skips generating boxes for it, not merely painting them, so no
-  // author specificity or origin wins it back) — verified against a real
-  // browser: `getComputedStyle` reports `display: flex` on `.cg-menu__panel`
-  // while its own and its `<details>` ancestor's layout box is a literal
-  // zero-width flex item. `<details open>` written into the markup would
-  // dodge that, but then a mobile visitor gets the panel open on load. So
-  // the desktop nav is a second, always-native `<nav>`, not this `<details>`
-  // pushed into a state it was never opened into.
-  const mobileMenu = !hasMenu
-    ? ''
-    : `<details class="cg-menu">` +
-      `<summary class="cg-menu__toggle" aria-label="Menu">${menuGlyph()}</summary>` +
-      `<nav class="cg-menu__panel" aria-label="Primary">${navItems}${headerAction}</nav>` +
-      `</details>`
-  const desktopNav = !hasMenu
-    ? ''
-    : `<nav class="cg-site-nav" aria-label="Primary">${navItems}${headerAction}</nav>`
+  const hasMenu = headerNavList !== '' || headerAction !== ''
+  const mark =
+    renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ??
+    `<span class="cg-site-header__name">${siteNameText}</span>`
   const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
+
+  const menu = hasMenu
+    ? `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
+      `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">` +
+      `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
+      `</label>` +
+      `<nav class="cg-site-header__nav" id="cg-nav" aria-label="Primary">` +
+      `${headerNavList}${headerAction}` +
+      `</nav>`
+    : ''
 
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
     `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
-    `${desktopNav}` +
-    `${mobileMenu}` +
+    `${menu}` +
     `${themeToggle}` +
     `</div></header>`
 
@@ -110,32 +105,35 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     input.tagline === undefined
       ? ''
       : `<p class="cg-site-footer__tagline" data-field="tagline">${escapeText(input.tagline)}</p>`
-  const social =
-    input.social === undefined
-      ? ''
-      : serialize(
-          renderSocialLinks(input.social, {
-            className: 'cg-site-footer__social',
-            itemClassName: 'cg-site-footer__social-item',
-          }) ?? { kind: 'text', value: '' },
-        )
-  const footerNote =
-    input.footerNote === undefined
-      ? ''
-      : `<p class="cg-site-footer__note">${escapeText(input.footerNote)}</p>`
+  const note = input.footerNote === undefined ? '' : renderFooterNote(input.footerNote)
+  const footerNavList = renderNavList(input.footerNav)
+  const social = renderSocialLinks(input.social, {
+    className: 'cg-site-footer__social',
+    itemClassName: 'cg-site-footer__social-item',
+  })
+  // The copyright year is the year the page is rendered, which is what a
+  // legal line on a live site means.
+  const year = new Date().getFullYear()
 
   const footer =
-    `<footer class="cg-site-footer"><div class="cg-site-footer__grid">` +
+    `<footer class="cg-site-footer"><div class="cg-site-footer__inner">` +
+    `<div class="cg-site-footer__top">` +
     `<div class="cg-site-footer__brand">` +
-    `<a class="cg-site-footer__brand-link" href="${escapeAttribute(input.homeHref)}">${siteNameText}</a>` +
-    `${tagline}</div>` +
+    `<a class="cg-site-footer__name" href="${escapeAttribute(input.homeHref)}">${siteNameText}</a>` +
+    `${tagline}${note}` +
+    `</div>` +
     `${
-      footerNav === ''
+      footerNavList === ''
         ? ''
-        : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNav}</nav>`
+        : `<nav class="cg-site-footer__nav" aria-label="Footer">${footerNavList}</nav>`
     }` +
-    `<div class="cg-site-footer__meta">${social}${footerNote}<div class="cg-site-footer__branding">${input.brandingHtml}</div></div>` +
-    `</div><div class="cg-site-footer__bottom"><span>${siteName}</span></div></footer>`
+    `${social === null ? '' : `<div class="cg-site-footer__social-col">${serialize(social)}</div>`}` +
+    `</div>` +
+    `<div class="cg-site-footer__bottom">` +
+    `<p class="cg-site-footer__legal">© ${year} ${siteNameText}</p>` +
+    `<div class="cg-site-footer__branding">${input.brandingHtml}</div>` +
+    `</div>` +
+    `</div></footer>`
 
   return { header, footer }
 }

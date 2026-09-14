@@ -101,6 +101,16 @@ describe('theme isolation', () => {
     })
   }
 
+  it('requests its Google Fonts import from the trusted host only', () => {
+    const theme = STYLESHEET_SOURCES.find(({ path }) => path === 'styles/theme.css')
+    expect(theme).toBeDefined()
+    const urls = [...(theme?.source.matchAll(/@import\s+url\(["']?([^"')]+)["']?\)/g) ?? [])].map(
+      (match) => match[1] as string,
+    )
+    expect(urls.length).toBeGreaterThan(0)
+    for (const url of urls) expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
+  })
+
   /**
    * D5 (`docs/lots/L25-templates-pro.md`): a gradient reads as the generic
    * "AI-generated" look. This theme is built entirely from flat colour
@@ -108,20 +118,60 @@ describe('theme isolation', () => {
    * change cannot quietly reintroduce one, in a stylesheet or in an inline
    * style string built by the renderer.
    */
-  const RAW_STYLESHEETS = FILES.filter(({ path }) => path.endsWith('.css')).map(
-    ({ path, source }) => ({
-      path: path.replaceAll('\\', '/'),
-      source,
-    }),
-  )
   const RENDER_SOURCES = FILES.filter(
     ({ path }) => path.replaceAll('\\', '/').startsWith('render/') && path.endsWith('.ts'),
   )
 
   it('paints no gradient, in a stylesheet or an inline style', () => {
-    const offenders = [...RAW_STYLESHEETS, ...RENDER_SOURCES]
+    const offenders = [...STYLESHEET_SOURCES, ...RENDER_SOURCES]
       .filter(({ source }) => /gradient\(/.test(source))
       .map(({ path }) => path)
+    expect(offenders).toEqual([])
+  })
+
+  /**
+   * L27 charter: nothing fades or slides in as the page scrolls. A
+   * scroll-driven entrance also leaves whole sections blank on a full-page
+   * capture and in the appearance gallery's preview.
+   */
+  it('drives no animation from scrolling', () => {
+    const offenders = [...STYLESHEET_SOURCES, ...RENDER_SOURCES]
+      .filter(({ source }) => /animation-timeline|scroll-timeline|view-timeline/.test(source))
+      .map(({ path }) => path)
+    expect(offenders).toEqual([])
+  })
+
+  /**
+   * L27 charter: the typefaces generated templates reach for first are not
+   * this theme's, in a stylesheet or in a font stack a renderer might write.
+   */
+  it('names none of the typefaces the studio charter reserves for generated templates', () => {
+    const forbidden =
+      /['"\s,(](Inter|Inter Tight|Poppins|Plus Jakarta Sans|Space Grotesk|DM Sans|Manrope|Outfit|Sora|Nunito)['"\s,)]/
+    const offenders = [...STYLESHEET_SOURCES, ...RENDER_SOURCES]
+      .filter(
+        ({ source }) =>
+          forbidden.test(source) || /family=(Inter|Poppins|Manrope|Sora|Nunito)/.test(source),
+      )
+      .map(({ path }) => path)
+    expect(offenders).toEqual([])
+  })
+
+  it('draws no shadow, glow or tint over a photograph', () => {
+    const offenders = STYLESHEET_SOURCES.filter(({ source }) =>
+      /(?:img|image|media|cover|plate|photo)[^{]*\{[^}]*(?:box-shadow|drop-shadow|mix-blend-mode|background-image)/i.test(
+        source.replace(/\/\*[\s\S]*?\*\//g, ''),
+      ),
+    ).map(({ path }) => path)
+    expect(offenders).toEqual([])
+  })
+
+  it('emits no script and no inline event handler from a renderer', () => {
+    const offenders = RENDER_SOURCES.filter(({ source }) =>
+      /<script|['"]on[a-z]+['"]\s*:|\son[a-z]+=/.test(
+        source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''),
+      ),
+    ).map(({ path }) => path)
     expect(offenders).toEqual([])
   })
 
@@ -129,7 +179,7 @@ describe('theme isolation', () => {
     // A blur serving a real accessibility purpose would be exempt if the
     // same line carried a `/* a11y */` comment; none of this theme's
     // surfaces need one.
-    const offenders = [...RAW_STYLESHEETS, ...RENDER_SOURCES].flatMap(({ path, source }) =>
+    const offenders = [...STYLESHEET_SOURCES, ...RENDER_SOURCES].flatMap(({ path, source }) =>
       source
         .split('\n')
         .some(
@@ -141,16 +191,6 @@ describe('theme isolation', () => {
         : [],
     )
     expect(offenders).toEqual([])
-  })
-
-  it('requests its Google Fonts import from the trusted host only', () => {
-    const theme = STYLESHEET_SOURCES.find(({ path }) => path === 'styles/theme.css')
-    expect(theme).toBeDefined()
-    const urls = [...(theme?.source.matchAll(/@import\s+url\(["']?([^"')]+)["']?\)/g) ?? [])].map(
-      (match) => match[1] as string,
-    )
-    expect(urls.length).toBeGreaterThan(0)
-    for (const url of urls) expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
   })
 })
 

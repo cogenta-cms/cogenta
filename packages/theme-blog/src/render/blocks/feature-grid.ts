@@ -1,6 +1,5 @@
 import type { FeatureGridBlock, FeatureItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
   type HeadingTag,
   type HtmlElement,
   h,
@@ -8,58 +7,47 @@ import {
   href,
   nestedHeadingTag,
   type RenderContext,
-  renderIcon,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * "Topics" — a row of icon tiles (`renderIcon`), the closest thing this
- * theme has to a section-front rail. Each icon sits in a small rounded tile
- * with a hairline ring; `renderIcon` returns `null` for a name outside its
- * closed set, in which case the tile is simply omitted rather than left
- * showing an empty ring.
+ * A publication's table of contents rather than a grid of tiles: one ruled
+ * row per item, its name set in the text face in the margin columns and its
+ * description on the text line beside it. A linked item makes its name the
+ * link.
+ *
+ * `icon` is deliberately not drawn. A symbol in a square beside every topic
+ * is the pastel-tile pattern this theme exists to avoid, and a reading site
+ * names its subjects in words.
  */
-function renderItem(
-  item: FeatureItem,
-  ctx: RenderContext,
-  index: number,
-  tag: HeadingTag,
-): HtmlElement {
-  const icon =
-    item.icon === undefined ? null : renderIcon(item.icon, { className: 'cg-topic__icon' })
-  const title =
-    item.link === undefined
-      ? heading(tag, { class: 'cg-topic__title' }, item.title)
-      : heading(
-          tag,
-          { class: 'cg-topic__title' },
-          h('a', { class: 'cg-topic__link', href: href(ctx, item.link) }, item.title),
-        )
+function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
   return h(
     'li',
-    { class: 'cg-topic', 'data-index': index },
-    icon === null ? null : h('span', { class: 'cg-topic__tile' }, icon),
-    title,
-    item.text === undefined ? null : h('p', { class: 'cg-topic__text' }, item.text),
+    { class: 'cg-contents__item' },
+    heading(
+      tag,
+      { class: 'cg-contents__title' },
+      item.link === undefined
+        ? item.title
+        : h('a', { class: 'cg-contents__link', href: href(ctx, item.link) }, item.title),
+    ),
+    item.text === undefined ? null : h('p', { class: 'cg-contents__text' }, item.text),
   )
 }
 
 export function renderFeatureGrid(block: FeatureGridBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const itemTag = nestedHeadingTag('featureGrid', hasTitle)
-  return h(
+  const itemTag = nestedHeadingTag('featureGrid', block.title !== undefined)
+  return section(
     'section',
-    { class: 'cg-topics', 'data-block': 'featureGrid' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('featureGrid') ?? 'h2',
-          { class: 'cg-topics__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'featureGrid',
+    'cg-contents',
+    {},
+    'div',
+    sectionHead('featureGrid', block.title),
     h(
       'ul',
-      { class: 'cg-topics__items' },
-      block.items.map((item, index) => renderItem(item, ctx, index, itemTag)),
+      { class: 'cg-contents__items' },
+      block.items.map((item) => renderItem(item, ctx, itemTag)),
     ),
   )
 }

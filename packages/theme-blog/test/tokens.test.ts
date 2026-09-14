@@ -57,23 +57,50 @@ describe('the default skin', () => {
     expect(contrast(tokens.color.mutedFg, tokens.color.muted)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('picks a deliberate ink-blue accent, distinct from the terracotta another Cogenta theme already uses for a warm palette', () => {
-    expect(tokens.color.accent.toLowerCase()).not.toBe('#b8452f')
+  it('picks one ink-blue accent: blue over red and green, dark enough for links, never violet', () => {
+    const hex = tokens.color.accent.replace('#', '')
+    const [r, g, b] = [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16))
+    expect(b as number).toBeGreaterThan(r as number)
+    expect(b as number).toBeGreaterThan(g as number)
+    // A violet reads as the default of a generated template: red never climbs
+    // to meet blue.
+    expect((b as number) - (r as number)).toBeGreaterThan(50)
+    expect(contrast(tokens.color.accent, tokens.color.bg)).toBeGreaterThanOrEqual(7)
   })
 
-  it('names Google Fonts families this theme actually loads, with a real system fallback', () => {
-    expect(tokens.font.sans).toContain('Inter Tight')
+  it('names the Google Fonts families this theme loads, with a real system fallback', () => {
+    expect(tokens.font.serif.startsWith("'Literata'")).toBe(true)
+    expect(tokens.font.serif).toMatch(/serif$/)
+    expect(tokens.font.sans.startsWith("'Figtree'")).toBe(true)
     expect(tokens.font.sans).toMatch(/system-ui/)
-    expect(tokens.font.serif).toContain('Fraunces')
-    expect(tokens.font.serif).toMatch(/serif/)
+    const theme = readFileSync(new URL('../src/styles/theme.css', import.meta.url), 'utf8')
+    expect(theme).toContain('family=Literata:ital,opsz,wght@')
+    expect(theme).toContain('family=Figtree:')
   })
 
-  it('avoids the most overused default sans faces as its primary choice', () => {
-    const primary = tokens.font.sans.split(',')[0]?.replace(/['"]/g, '').trim()
-    for (const overused of ['Inter', 'Roboto', 'Space Grotesk']) {
-      expect(primary).not.toBe(overused)
+  it('names none of the typefaces generated templates reach for first', () => {
+    for (const stack of [tokens.font.sans, tokens.font.serif, tokens.font.mono]) {
+      const primary = stack.split(',')[0]?.replace(/['"]/g, '').trim()
+      for (const overused of [
+        'Inter',
+        'Inter Tight',
+        'Roboto',
+        'Poppins',
+        'Plus Jakarta Sans',
+        'Space Grotesk',
+        'DM Sans',
+        'Manrope',
+        'Outfit',
+        'Sora',
+        'Nunito',
+      ]) {
+        expect(primary).not.toBe(overused)
+      }
     }
-    expect(primary).toBe('Inter Tight')
+  })
+
+  it('keeps two families and a system monospace, never a third web font', () => {
+    expect(tokens.font.mono.startsWith('ui-monospace')).toBe(true)
   })
 
   it('uses a typographic scale that increases monotonically', () => {
@@ -86,6 +113,10 @@ describe('the default skin', () => {
 
   it('uses a density the contract allows', () => {
     expect(['compact', 'comfortable', 'spacious']).toContain(tokens.space.density)
+  })
+
+  it('keeps corners barely softened: the largest radius stays under a third of a rem', () => {
+    expect(Number.parseFloat(tokens.radius.lg)).toBeLessThan(0.33)
   })
 
   it('reads as a warm, paper-light ground rather than a stark white', () => {

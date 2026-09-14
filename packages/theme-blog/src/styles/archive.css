@@ -1,78 +1,146 @@
 /*
- * The taxonomy-term archive (contract D `theme@1.3`) — only what an archive
- * adds beyond what `collectionList`'s grid already styles: a breadcrumb, a
- * kicker/heading, a sub-term row, and a prev/next pager.
+ * The taxonomy-term archive: a chapter of the table of contents. Its rows
+ * are the `collectionList` index (`blocks.css`), so only the head and the
+ * pager live here.
  */
 
-.cg-archive {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  padding: var(--cg-s10) var(--cg-gutter) var(--cg-section-y);
+.cg-archive__head {
+  padding-block: calc(var(--cg-section) * 0.45) var(--cg-s2);
 }
 
 .cg-archive__breadcrumb ol {
   display: flex;
   flex-wrap: wrap;
   gap: var(--cg-s2);
-  margin: 0 0 var(--cg-s5);
+  margin: 0 0 var(--cg-s3);
   padding: 0;
   list-style: none;
-  font-family: var(--cogenta-font-sans);
+  font-family: var(--cg-font-ui);
   font-size: var(--cg-text-sm);
-  color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-ui);
 }
 
-.cg-archive__breadcrumb ol li:not(:last-child)::after {
+.cg-archive__breadcrumb li + li::before {
   content: "/";
-  margin-inline-start: var(--cg-s2);
+  margin-inline-end: var(--cg-s2);
   color: var(--cg-ink-subtle);
 }
 
-.cg-archive__header {
-  margin-block-end: var(--cg-s8);
+.cg-archive__breadcrumb a {
+  color: var(--cg-ink-muted);
+  text-decoration-color: transparent;
+}
+
+.cg-archive__breadcrumb a:hover {
+  color: var(--cg-ink);
+  text-decoration-color: currentColor;
 }
 
 .cg-archive__kicker {
   margin: 0 0 var(--cg-s3);
-  color: var(--cg-accent);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-semibold);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
+  color: var(--cg-ink-muted);
+}
+
+.cg-archive__title {
+  font-size: var(--cg-size-title);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
 }
 
 .cg-archive__children {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--cg-s3);
-  margin: 0 0 var(--cg-s8);
+  gap: var(--cg-s2) var(--cg-s6);
+  margin: var(--cg-s5) 0 0;
   padding: 0;
   list-style: none;
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-ui);
 }
 
 .cg-archive__children a {
-  display: inline-flex;
-  padding: var(--cg-s2) var(--cg-s4);
-  border: 1px solid var(--cg-line);
-  border-radius: var(--cg-radius-pill);
-  text-decoration: none;
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-line-strong);
+  text-underline-offset: 0.3em;
 }
 
 .cg-archive__children a:hover {
-  border-color: var(--cg-accent);
-  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+.cg-archive .cg-collection {
+  padding-block-start: var(--cg-s8);
+}
+
+.cg-archive .cg-index {
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+}
+
+.cg-archive .cg-index__row:first-child {
+  padding-block-start: var(--cg-s6);
 }
 
 .cg-archive__pager {
   display: flex;
   justify-content: space-between;
-  gap: var(--cg-s4);
-  margin-block-start: var(--cg-s10);
-  padding-block-start: var(--cg-s5);
-  border-block-start: 1px solid var(--cg-line-soft);
-  font-family: var(--cogenta-font-sans);
-  font-weight: var(--cg-weight-semibold);
+  gap: var(--cg-s6);
+  margin-block-start: var(--cg-s8);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-ui);
+}
+
+.cg-archive__pager-link {
+  padding-block: var(--cg-s3);
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-line-strong);
+  text-underline-offset: 0.32em;
+}
+
+.cg-archive__pager-link:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+.cg-archive__pager-link[rel="prev"]::before {
+  content: "\2190" / "";
+  display: inline-block;
+  margin-inline-end: 0.4em;
+}
+
+.cg-archive__pager-link[rel="next"] {
+  margin-inline-start: auto;
+}
+
+.cg-archive__pager-link[rel="next"]::after {
+  content: "\2192" / "";
+  display: inline-block;
+  margin-inline-start: 0.4em;
+}
+
+@media (min-width: 64rem) {
+  .cg-archive__breadcrumb,
+  .cg-archive__kicker {
+    grid-column: 1 / span 3;
+  }
+
+  .cg-archive__kicker {
+    grid-row: 2;
+    align-self: start;
+    margin: 0;
+    padding-block-start: 1.2em;
+  }
+
+  .cg-archive__title {
+    grid-column: 4 / span 8;
+    grid-row: 2;
+  }
+
+  .cg-archive__children {
+    grid-column: 4 / span 7;
+  }
+
+  .cg-archive__pager {
+    grid-column: 4 / span 7;
+  }
 }

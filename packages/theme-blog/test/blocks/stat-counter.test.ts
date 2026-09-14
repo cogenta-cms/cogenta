@@ -4,25 +4,25 @@ import { renderStatCounter } from '../../src/render/blocks/stat-counter.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = (block = BLOCKS.statCounter): string => serialize(renderStatCounter(block, ctx))
 
-describe('statCounter — the impact band', () => {
+describe('statCounter, the figures a page wants remembered', () => {
   it('renders a real <dl>, label before figure in markup', () => {
-    const html = serialize(renderStatCounter(BLOCKS.statCounter, ctx))
-    expect(html).toContain('data-block="statCounter"')
-    const dtIndex = html.indexOf('Posts published')
-    const ddIndex = html.indexOf('>412<')
-    expect(ddIndex).toBeGreaterThan(dtIndex)
+    expect(html()).toContain(
+      '<div class="cg-tally__item"><dt class="cg-tally__label">Pages of drafts</dt><dd class="cg-tally__value">1,240</dd></div>',
+    )
   })
 
   it('renders every declared figure', () => {
-    const html = serialize(renderStatCounter(BLOCKS.statCounter, ctx))
-    expect(html).toContain('8,300')
-    expect(html).toContain('Weekly readers')
+    expect(html().match(/<dd class="cg-tally__value">/g)).toHaveLength(2)
   })
 
-  it('omits the title heading entirely when the block has none', () => {
-    const { title: _title, ...noTitle } = BLOCKS.statCounter
-    const html = serialize(renderStatCounter(noTitle, ctx))
-    expect(html).not.toContain('cg-kpis__title')
+  it('says how many figures it holds, capped at four columns', () => {
+    expect(html()).toContain('data-count="2"')
+  })
+
+  it('omits the section head entirely when the block has none', () => {
+    const { title: _title, ...untitled } = BLOCKS.statCounter
+    expect(html(untitled)).not.toContain('cg-head')
   })
 })

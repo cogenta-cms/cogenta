@@ -7,40 +7,54 @@ import {
   type RenderContext,
   renderRichText,
 } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
-/** "About this blog" — `<details>`/`<summary>` disclosure rows, zero JavaScript, expanding/keyboard behaviour and the announced open state both native. */
+/**
+ * Questions readers ask, in two columns: the title holds the margin (and
+ * stays in view while the answers scroll past on a wide screen), the
+ * questions run down the text line as ruled `<details>` rows. Opening and
+ * keyboard behaviour, and the announced open state, are all native: no
+ * script. The plus that turns into a minus is two hairlines drawn in CSS.
+ */
 function renderItem(item: FaqItem, ctx: RenderContext): HtmlElement {
   return h(
     'li',
-    { class: 'cg-faq__item' },
+    { class: 'cg-questions__item' },
     h(
       'details',
-      { class: 'cg-faq__details' },
+      { class: 'cg-questions__details' },
       h(
         'summary',
-        { class: 'cg-faq__question' },
-        h('span', { class: 'cg-faq__question-text' }, item.question),
-        h('span', { class: 'cg-faq__mark', 'aria-hidden': 'true' }),
+        { class: 'cg-questions__question' },
+        h('span', { class: 'cg-questions__question-text' }, item.question),
+        h('span', { class: 'cg-questions__mark', 'aria-hidden': 'true' }),
       ),
-      h('div', { class: 'cg-faq__answer' }, renderRichText(ctx, item.answer)),
+      h('div', { class: 'cg-questions__answer' }, renderRichText(ctx, item.answer)),
     ),
   )
 }
 
 export function renderFaq(block: FaqBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-faq', 'data-block': 'faq' },
+    'faq',
+    'cg-questions',
+    { 'data-titled': block.title === undefined ? 'false' : 'true' },
+    'div',
     block.title === undefined
       ? null
-      : heading(
-          blockHeadingTag('faq') ?? 'h2',
-          { class: 'cg-faq__title', 'data-field': 'title' },
-          block.title,
+      : h(
+          'div',
+          { class: 'cg-questions__head' },
+          heading(
+            blockHeadingTag('faq') ?? 'h2',
+            { class: 'cg-questions__title', 'data-field': 'title' },
+            block.title,
+          ),
         ),
     h(
       'ul',
-      { class: 'cg-faq__items' },
+      { class: 'cg-questions__items' },
       block.items.map((item) => renderItem(item, ctx)),
     ),
   )

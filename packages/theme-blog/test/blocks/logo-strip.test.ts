@@ -4,23 +4,31 @@ import { renderLogoStrip } from '../../src/render/blocks/logo-strip.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = (block = BLOCKS.logoStrip): string => serialize(renderLogoStrip(block, ctx))
 
-describe('logoStrip — "As featured in"', () => {
-  it('renders every logo in a dense row', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect(html).toContain('data-block="logoStrip"')
-    expect(html).toContain('cg-logo-band__item')
+describe('logoStrip, where the writing has appeared', () => {
+  it('renders the row as a figure, so the caption names the whole row', () => {
+    expect(html()).toMatch(
+      /^<div class="cg-section cg-mentions" data-block="logoStrip"><figure class="cg-container cg-mentions__inner">/,
+    )
   })
 
-  it('renders the caption', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect(html).toContain('data-field="caption"')
-    expect(html).toContain('As featured in')
+  it('renders every logo in one list', () => {
+    expect(
+      html().match(/<li class="cg-mentions__item"><img class="cg-mentions__logo"/g),
+    ).toHaveLength(2)
+  })
+
+  it('sets the caption before the row, in the margin', () => {
+    const out = html()
+    expect(out).toContain(
+      '<figcaption class="cg-mentions__caption" data-field="caption">As featured in</figcaption>',
+    )
+    expect(out.indexOf('figcaption')).toBeLessThan(out.indexOf('cg-mentions__items'))
   })
 
   it('omits the figcaption entirely when there is no caption', () => {
-    const { caption: _caption, ...noCaption } = BLOCKS.logoStrip
-    const html = serialize(renderLogoStrip(noCaption, ctx))
-    expect(html).not.toContain('<figcaption')
+    const { caption: _caption, ...block } = BLOCKS.logoStrip
+    expect(html(block)).not.toContain('<figcaption')
   })
 })

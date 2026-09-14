@@ -1,18 +1,22 @@
 import type { QuoteBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * A reader's words, set as a large display serif pull-quote with an oversized
- * quotation mark standing in the margin — the one place this theme spends a
- * genuinely large display size outside the hero.
+ * An epigraph: the words in the italic of the text face, large, on the text
+ * line, with the opening quotation mark hung in the margin so the first
+ * letter keeps the column's edge. The attribution follows in the interface
+ * face, a small portrait beside it when the block carries one.
  */
 export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement {
   const hasAttribution =
     block.author !== undefined || block.role !== undefined || block.avatar !== undefined
-  return h(
+  return section(
+    'div',
+    'quote',
+    'cg-quote',
+    {},
     'figure',
-    { class: 'cg-quote', 'data-block': 'quote' },
-    h('span', { class: 'cg-quote__mark', 'aria-hidden': 'true' }, '“'),
     h('blockquote', { class: 'cg-quote__text' }, h('p', { 'data-field': 'text' }, block.text)),
     hasAttribution
       ? h(

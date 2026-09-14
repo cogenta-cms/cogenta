@@ -4,24 +4,29 @@ import { renderPricingTable } from '../../src/render/blocks/pricing-table.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
 
-describe('pricingTable — "Support this blog"', () => {
-  it('renders every tier with its name, price and features', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('data-block="pricingTable"')
-    expect(html).toContain('Reader')
-    expect(html).toContain('Supporter')
-    expect(html).toContain('cg-pricing__feature')
+describe('pricingTable, the columns of a ruled table', () => {
+  it('renders every tier with its name, price, interval and features', () => {
+    expect(html.match(/<li class="cg-tiers__tier"/g)).toHaveLength(2)
+    expect(html).toContain('<h3 class="cg-tiers__name">Supporter</h3>')
+    expect(html).toContain(
+      '<p class="cg-tiers__price"><span class="cg-tiers__amount">$5</span><span class="cg-tiers__interval">/month</span></p>',
+    )
+    expect(html).toContain('<li class="cg-tiers__feature">A monthly extra post</li>')
   })
 
-  it('marks the highlighted tier with both a data attribute and aria-current', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toMatch(/data-highlighted="true"[^>]*aria-current="true"[^>]*>[\s\S]*?Supporter/)
-  })
-
-  it('never marks the non-highlighted tier', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    // Exactly one of the two tiers in the fixture is `highlighted`.
+  it('marks only the highlighted tier, as data the stylesheet draws a rule in ink for', () => {
     expect(html.match(/data-highlighted="true"/g)).toHaveLength(1)
+    expect(html).toMatch(/data-highlighted="true"><h3 class="cg-tiers__name">Supporter/)
+  })
+
+  it('keeps an explicit emphasis, and fills only the highlighted tier by default', () => {
+    expect(html).toMatch(/data-emphasis="primary"[^>]*>Become a supporter</)
+    expect(html).toMatch(/data-emphasis="secondary"[^>]*>Subscribe free</)
+  })
+
+  it('says how many tiers it holds, so two tiers can sit on the text line', () => {
+    expect(html).toContain('data-count="2"')
   })
 })

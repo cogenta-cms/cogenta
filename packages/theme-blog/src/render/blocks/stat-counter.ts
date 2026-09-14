@@ -1,33 +1,30 @@
 import type { StatCounterBlock, StatCounterItem } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import { type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
-/** A narrower, single-figure "impact numbers" band — the one block in this theme that spends a solid accent fill. */
+/**
+ * A few large figures side by side, each column opened by a vertical
+ * hairline: the number in the light cut of the text face at its largest
+ * size, the label beneath. Where `stats` is a ruled line of facts, this is
+ * the figure a page wants remembered.
+ */
 function renderItem(item: StatCounterItem): HtmlElement {
   return h(
     'div',
-    { class: 'cg-kpi' },
-    h('dt', { class: 'cg-kpi__label' }, item.label),
-    h('dd', { class: 'cg-kpi__value' }, item.value),
+    { class: 'cg-tally__item' },
+    h('dt', { class: 'cg-tally__label' }, item.label),
+    h('dd', { class: 'cg-tally__value' }, item.value),
   )
 }
 
 export function renderStatCounter(block: StatCounterBlock, _ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-kpis', 'data-block': 'statCounter' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('statCounter') ?? 'h2',
-          { class: 'cg-kpis__title', 'data-field': 'title' },
-          block.title,
-        ),
-    h('dl', { class: 'cg-kpis__items' }, block.stats.map(renderItem)),
+    'statCounter',
+    'cg-tally',
+    { 'data-count': String(Math.min(block.stats.length, 4)) },
+    'div',
+    sectionHead('statCounter', block.title),
+    h('dl', { class: 'cg-tally__items' }, block.stats.map(renderItem)),
   )
 }

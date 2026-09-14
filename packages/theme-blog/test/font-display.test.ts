@@ -26,11 +26,26 @@ describe('web fonts', () => {
     expect(offenders).toEqual([])
   })
 
-  it("requests all three of this theme's identity typefaces", () => {
+  it("requests exactly this theme's two identity typefaces, in one request", () => {
     const theme = SHEETS.find((sheet) => sheet.name === 'theme.css')
     expect(theme).toBeDefined()
-    expect(theme?.source).toContain('Fraunces')
-    expect(theme?.source).toContain('Source+Serif+4')
-    expect(theme?.source).toContain('Inter+Tight')
+    const imports = [...(theme?.source ?? '').matchAll(/@import\s+url\(/g)]
+    expect(imports).toHaveLength(1)
+    const families = [...(theme?.source ?? '').matchAll(/family=([A-Za-z+0-9]+)/g)].map(
+      (match) => match[1],
+    )
+    expect(families.sort()).toEqual(['Figtree', 'Literata'])
+  })
+
+  it("asks for Literata's optical-size axis and its italic, which the quotations use", () => {
+    const theme = SHEETS.find((sheet) => sheet.name === 'theme.css')
+    expect(theme?.source).toMatch(/family=Literata:ital,opsz,wght@0,7\.\.72,[^;&]*;1,7\.\.72,/)
+  })
+
+  it('imports no font file from a stylesheet other than the entry point', () => {
+    const offenders = SHEETS.filter(
+      ({ name, source }) => name !== 'theme.css' && /@import\s+url\(["']?https:/.test(source),
+    ).map(({ name }) => name)
+    expect(offenders).toEqual([])
   })
 })

@@ -4,14 +4,13 @@ import {
   type HtmlElement,
   h,
   type PageContent,
-  type PageEntryMeta,
   pageHasOwnHeading,
   type RenderContext,
-  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
 } from '@cogenta/theme-kit'
+import { isArticle, renderArticleFooter, renderArticleHeader, renderPageHeader } from './article.js'
 import { renderAccordion } from './blocks/accordion.js'
 import { renderCollectionList } from './blocks/collection-list.js'
 import { renderCta } from './blocks/cta.js'
@@ -38,9 +37,14 @@ export function renderBlock(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement | null {
+  // A stored block is not always literally one of the shared vocabulary:
+  // resolving here turns an unimplemented theme-private block into its
+  // declared fallback instead of a silently blank slot.
   const resolved = resolveBlockForRender(block, VOCABULARY_NAMES, registry)
   if (resolved === null) return null
   const known = resolved as unknown as VocabularyBlock
+  // `variant` is envelope data every block carries identically, applied
+  // once here rather than by each of the seventeen renderers.
   return withBlockVariant(renderKnownBlock(known, ctx, entries), known.variant)
 }
 
@@ -85,6 +89,9 @@ function renderKnownBlock(
     case 'logoStrip':
       return renderLogoStrip(known, ctx)
     default: {
+      // Exhaustive over contract B: `known` is `never` here, so a block this
+      // package does not implement stops it compiling until it is. `null`
+      // rather than a throw: choosing a fallback is the render layer's job.
       const unreachable: never = known
       void unreachable
       return null
@@ -93,41 +100,18 @@ function renderKnownBlock(
 }
 
 /**
- * A quiet "back to home / more in this topic" strip after a post's own
- * content. Never invented data: the topic link is the first of the entry's
- * own already-resolved taxonomy terms that carries a live archive href — the
- * same terms `renderEntryHeader`'s own eyebrow shows — so a post with no
- * resolvable term prints only the "back to home" link rather than a link to
- * a page that does not exist. Never dynamic: `renderPage` is synchronous, so
- * this is never a "related posts" query.
- */
-function renderPostFooter(entry: PageEntryMeta, ctx: RenderContext): HtmlElement {
-  const topic = entry.terms?.find((term) => term.href !== null)
-  return h(
-    'nav',
-    { class: 'cg-post-footer', 'aria-label': 'More from this blog' },
-    h('a', { class: 'cg-post-footer__link', href: ctx.link('/') }, '← Back to home'),
-    topic === undefined
-      ? null
-      : h(
-          'a',
-          { class: 'cg-post-footer__link', href: topic.href as string },
-          `More in ${topic.label}`,
-        ),
-  )
-}
-
-/**
- * `<main id="cg-main">` is mandatory — the skip-link target written by
- * `@cogenta/cli`'s `theme-render.ts`.
+ * `<main id="cg-main">` is mandatory: it is the skip link's target, written
+ * by `@cogenta/cli`'s `theme-render.ts` outside any theme's control.
  *
- * A page carrying `entry` (contract D `theme@1.4`) gets `renderEntryHeader`'s
- * furniture — eyebrow terms, title, excerpt, date/author/reading-time meta,
- * cover — instead of the bare `<h1>` every other page falls back to;
- * `renderEntryHeader` itself returns `null` for a `blocks`-only page (e.g.
- * `about`, which carries no `entry`) or one that already draws its own
- * heading, so the bare-title fallback still applies there, exactly as in
- * every other theme.
+ * Three openings, and exactly one `h1` in each:
+ *
+ * - a page whose blocks start with a `hero` lets the hero carry the title;
+ * - an entry that carries what an essay has (`isArticle`) gets the essay
+ *   header, and after its blocks the list of terms it is filed under;
+ * - anything else gets its title set plainly on the text line.
+ *
+ * `withBlockKey` stamps every rendered block with its contract-B `_key`, so
+ * the visual page builder (L16) can map a clicked element back to its block.
  */
 export function renderPage(
   page: PageContent,
@@ -136,16 +120,20 @@ export function renderPage(
   registry?: BlockRegistry,
 ): HtmlElement {
   const ownHeading = pageHasOwnHeading(page.blocks)
-  const entryHeader = ownHeading ? null : renderEntryHeader(page, ctx)
+  const article = !ownHeading && isArticle(page.entry) ? page.entry : undefined
+  const opening = ownHeading
+    ? null
+    : article === undefined
+      ? renderPageHeader(page)
+      : renderArticleHeader(page, article, ctx)
+
   return h(
     'main',
-    { class: 'cg-main', id: 'cg-main' },
-    ownHeading ? null : (entryHeader ?? h('h1', { class: 'cg-page__title' }, page.title)),
+    { class: article === undefined ? 'cg-main' : 'cg-main cg-article', id: 'cg-main' },
+    opening,
     page.blocks.map((block) =>
       withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
     ),
-    !ownHeading && entryHeader !== null && page.entry !== undefined
-      ? renderPostFooter(page.entry, ctx)
-      : null,
+    article === undefined ? null : renderArticleFooter(article),
   )
 }

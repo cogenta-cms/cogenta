@@ -1,11 +1,16 @@
 import type { EmbedBlock } from '@cogenta/blocks'
 import { aspectRatio, type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
  * Nothing here contacts a third party before the visitor consents: when
- * `consentRequired` is set (or the provider has no trusted, cookie-free
- * frame source), a self-contained card and an outbound link render instead
- * of an `<iframe>` — no preconnect, no thumbnail fetched from the provider.
+ * `consentRequired` is set, or the provider has no trusted cookie-free frame
+ * source, a notice and an outbound link render instead of an `<iframe>`. No
+ * preconnect, no thumbnail fetched from the provider.
+ *
+ * The frame and the notice both sit in the reading column at the block's
+ * ratio. The notice is framed by a hairline, labelled in small capitals, and
+ * never tinted: it holds the place the player will take.
  */
 function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string | null {
   const url = URL.parse(rawUrl)
@@ -40,15 +45,20 @@ function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string |
   }
 }
 
-function consentCard(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElement {
+function notice(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElement {
   return h(
     'div',
-    { class: 'cg-embed__placeholder' },
-    h('p', { class: 'cg-embed__provider', 'aria-hidden': 'true' }, block.provider),
-    h('p', { class: 'cg-embed__notice' }, reason),
+    { class: 'cg-embed__notice' },
+    h('p', { class: 'cg-embed__label' }, ctx.t('embed.label')),
+    h('p', { class: 'cg-embed__reason' }, reason),
     h(
       'a',
-      { class: 'cg-embed__link', href: ctx.link(block.url), rel: 'noopener noreferrer nofollow' },
+      {
+        class: 'cg-action',
+        'data-emphasis': 'secondary',
+        href: ctx.link(block.url),
+        rel: 'noopener noreferrer nofollow',
+      },
       ctx.t('embed.open', { provider: block.provider }),
     ),
   )
@@ -58,31 +68,37 @@ export function renderEmbed(block: EmbedBlock, ctx: RenderContext): HtmlElement 
   const source = block.consentRequired ? null : frameSource(block.provider, block.url)
   const ratio = aspectRatio(block.ratio) ?? '16 / 9'
 
-  return h(
+  return section(
     'div',
+    'embed',
+    'cg-embed',
     {
-      class: 'cg-embed',
-      'data-block': 'embed',
       'data-provider': block.provider,
       'data-consent': block.consentRequired ? 'required' : 'not-required',
       style: `--cg-ratio:${ratio}`,
     },
-    source === null
-      ? consentCard(
-          block,
-          ctx,
-          block.consentRequired
-            ? ctx.t('embed.consentRequired', { provider: block.provider })
-            : ctx.t('embed.unsupported', { provider: block.provider }),
-        )
-      : h('iframe', {
-          class: 'cg-embed__frame',
-          src: source,
-          title: ctx.t('embed.title', { provider: block.provider }),
-          loading: 'lazy',
-          referrerpolicy: 'strict-origin-when-cross-origin',
-          allow: 'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',
-          allowfullscreen: true,
-        }),
+    'div',
+    h(
+      'div',
+      { class: 'cg-embed__frame' },
+      source === null
+        ? notice(
+            block,
+            ctx,
+            block.consentRequired
+              ? ctx.t('embed.consentRequired', { provider: block.provider })
+              : ctx.t('embed.unsupported', { provider: block.provider }),
+          )
+        : h('iframe', {
+            class: 'cg-embed__player',
+            src: source,
+            title: ctx.t('embed.title', { provider: block.provider }),
+            loading: 'lazy',
+            referrerpolicy: 'strict-origin-when-cross-origin',
+            allow:
+              'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',
+            allowfullscreen: true,
+          }),
+    ),
   )
 }

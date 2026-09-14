@@ -1,8 +1,7 @@
 /*
- * Document, accessibility floor, page frame, chrome (header/footer/nav,
- * including the CSS-only mobile menu) and the one control the theme ships
- * (an action link). Everything here reads the design system from
- * `tokens.css`; nothing here reads a `--cogenta-*` token directly.
+ * Document, accessibility floor, the grid, the chrome, the actions, and the
+ * utility pages the host renders (search, forms, comments). Everything reads
+ * `tokens.css`.
  */
 
 /* --------------------------------------------------------------------------
@@ -15,43 +14,72 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-block-start: var(--cg-s8);
+  hanging-punctuation: first allow-end last;
+}
+
 body {
   margin: 0;
   background: var(--cg-canvas);
   color: var(--cg-ink);
-  font-family: var(--cg-font-reading);
+  font-family: var(--cg-font-text);
   font-size: var(--cg-text-md);
-  line-height: var(--cg-leading-normal);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-text);
   font-kerning: normal;
+  font-optical-sizing: auto;
   font-variant-ligatures: common-ligatures;
-  text-underline-offset: 0.15em;
-  text-decoration-thickness: from-font;
-  -webkit-text-size-adjust: 100%;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: var(--cg-accent-soft);
-  color: var(--cg-accent-soft-fg);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
 }
 
 img,
 video,
 iframe {
-  max-width: 100%;
-  height: auto;
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
 }
 
 img {
-  display: block;
   object-fit: cover;
+}
+
+:where(img, video) {
+  filter: brightness(var(--cg-image-brightness));
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  font-family: var(--cg-font-text);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-heading);
+  letter-spacing: var(--cg-tracking-heading);
+  text-wrap: balance;
+}
+
+:where(p, li, dd, figcaption, blockquote) {
+  text-wrap: pretty;
 }
 
 :where(a) {
   color: var(--cg-accent);
-  text-decoration-color: color-mix(in oklab, var(--cg-accent) 42%, transparent);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: var(--cg-accent-line);
+  text-underline-offset: 0.22em;
   transition:
-    color var(--cg-duration-fast) var(--cg-ease),
-    text-decoration-color var(--cg-duration-fast) var(--cg-ease);
+    color var(--cg-duration) var(--cg-ease),
+    text-decoration-color var(--cg-duration) var(--cg-ease);
 }
 
 :where(a:hover) {
@@ -60,142 +88,138 @@ img {
 }
 
 :where(hr) {
-  block-size: 1px;
+  block-size: var(--cg-rule);
   border: 0;
   margin-block: var(--cg-s10);
   background: var(--cg-line);
+}
+
+:where(code, kbd, samp, pre) {
+  font-family: var(--cg-font-code);
+  font-size: 0.86em;
 }
 
 .cg-visually-hidden {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
+  margin: -1px;
+  padding: 0;
   overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
   white-space: nowrap;
+  border: 0;
 }
 
 /* --------------------------------------------------------------------------
-   Focus, targets, motion
+   Focus, targets, motion. Motion is a colour or an underline changing, in
+   under 150 ms; nothing moves in space, nothing fades in on scroll.
    -------------------------------------------------------------------------- */
 
-:where(a, button, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--cg-accent);
+:where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--cg-rule-strong) solid var(--cg-accent);
   outline-offset: 3px;
-  border-radius: var(--cg-radius-xs);
 }
 
-:where(.cg-action, .cg-faq__question, .cg-panels__question, .cg-menu__toggle, .cg-clients__link) {
+:where(.cg-action, .cg-nav-toggle-label, .cg-theme-toggle, summary) {
   min-block-size: 44px;
-  min-inline-size: 44px;
 }
 
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    @keyframes cg-settle {
-      from {
-        opacity: 0;
-        transform: translateY(var(--cg-s3));
-      }
-
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-
-    .cg-block {
-      animation: cg-settle linear both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 20%;
-    }
-  }
-}
-
+/* Every transition in this theme reads `--cg-duration`, so reduced motion is
+   one declaration rather than an `!important` sweep over every element. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
-    scroll-behavior: auto !important;
+  :root {
+    --cg-duration: 0ms;
   }
 }
 
 .cg-skip-link {
   position: absolute;
   inset-inline-start: var(--cg-s3);
-  inset-block-start: calc(var(--cg-s3) * -8);
+  inset-block-start: calc(var(--cg-s16) * -1);
   z-index: 20;
   padding: var(--cg-s2) var(--cg-s4);
-  background: var(--cg-ink);
-  color: var(--cg-canvas);
-  border-radius: var(--cg-radius-sm);
-  font-family: var(--cogenta-font-sans);
-  font-weight: var(--cg-weight-semibold);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-ui);
+  font-weight: var(--cg-weight-medium);
   text-decoration: none;
-  transition: inset-block-start var(--cg-duration) var(--cg-ease);
 }
 
 .cg-skip-link:focus-visible {
   inset-block-start: var(--cg-s3);
-  outline-color: var(--cg-canvas);
 }
 
 /* --------------------------------------------------------------------------
-   Page frame
+   The grid. Every block is a section around a twelve-column container; the
+   section rhythm is one variable, applied to all of them.
    -------------------------------------------------------------------------- */
 
 .cg-main {
   display: flow-root;
+  overflow-x: clip;
+  padding-block-end: calc(var(--cg-section) / 2);
 }
 
-.cg-block {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y);
-  padding-inline: var(--cg-gutter);
-}
-
-/* Every block is a page-width, gutter-padded section by default — `:where()`
-   keeps this at zero specificity so a block that sets its own narrower
-   measure (`.cg-letter`, `.cg-quote`, `.cg-prose`…) still wins, while a block
-   that never set one (`.cg-hero`, `.cg-topics`) no longer sits flush against
-   the viewport edge on a wide screen. `data-variant-width="full"` below opts
-   a block back out. */
-:where(.cg-main > [data-block]) {
-  max-inline-size: var(--cg-page);
+.cg-container {
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-col-gap);
+  align-items: start;
+  inline-size: 100%;
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
   margin-inline: auto;
   padding-inline: var(--cg-gutter);
+  container-type: inline-size;
 }
 
-/* --- per-block visual variant (blocks@2.0, RFC 0002) --------------------- */
+/* Below the wide breakpoint twelve columns only make slivers: every child
+   takes the full row, and each block redistributes from there. */
+.cg-container > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+.cg-section {
+  padding-block: calc(var(--cg-section) / 2);
+}
+
+.cg-main > .cg-section:first-child {
+  padding-block-start: calc(var(--cg-section) * 0.45);
+}
+
+/* --- section heads ----------------------------------------------------------
+   One head for every titled block: a rule in ink across the grid, and the
+   title set under it in the text face, flush with the margin. */
+
+.cg-head {
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+  margin-block-end: var(--cg-s8);
+}
+
+.cg-head__title {
+  font-size: var(--cg-size-subheading);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-heading);
+  letter-spacing: var(--cg-tracking-heading);
+}
+
+/* --- per-block variants (blocks@2.0, RFC 0002) --------------------------- */
 
 [data-block][data-variant-background="muted"],
 [data-block][data-variant-background="image"] {
-  padding-block: var(--cg-s10);
-  border-radius: var(--cg-radius-lg);
-}
-
-[data-block][data-variant-background="muted"] {
   background: var(--cg-surface-sunken);
-}
-
-[data-block][data-variant-background="image"] {
-  background: var(--cg-surface-tinted);
+  padding-block: calc(var(--cg-section) * 0.7);
 }
 
 [data-block][data-variant-spacing="compact"] {
-  margin-block: calc(var(--cg-section-y) / 2);
+  padding-block: calc(var(--cg-section) / 4);
 }
 
 [data-block][data-variant-spacing="spacious"] {
-  margin-block: calc(var(--cg-section-y) * 1.6);
-}
-
-[data-block][data-variant-align="start"] {
-  text-align: start;
+  padding-block: calc(var(--cg-section) * 0.8);
 }
 
 [data-block][data-variant-align="center"] {
@@ -206,252 +230,271 @@ img {
   text-align: end;
 }
 
-[data-block][data-variant-width="full"] {
+[data-block][data-variant-width="full"] > .cg-container {
   max-inline-size: none;
-  padding-inline: 0;
+}
+
+/* --- the title of a page that is not an essay ------------------------------ */
+
+.cg-page-head {
+  padding-block: calc(var(--cg-section) * 0.45) var(--cg-s4);
 }
 
 .cg-page__title {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y) var(--cg-s6);
-  padding-inline: var(--cg-gutter);
-  font-family: var(--cogenta-font-serif);
-  font-size: var(--cg-text-3xl);
-  line-height: var(--cg-leading-tight);
-  letter-spacing: var(--cg-tracking-tight);
-  font-weight: var(--cg-weight-semibold);
-  text-wrap: balance;
+  font-size: var(--cg-size-title);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
+}
+
+@media (min-width: 64rem) {
+  .cg-page__title {
+    grid-column: 4 / span 8;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   Chrome — header, with the CSS-only mobile menu
+   Actions: a filled rectangle in ink for the primary intent, an outlined one
+   for the header's own, and for the rest the words underlined with an arrow
+   after them. Corners barely softened, no lift, no shadow.
+   -------------------------------------------------------------------------- */
+
+.cg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s3) var(--cg-s8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-action {
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-ui);
+  font-weight: var(--cg-weight-medium);
+  line-height: 1.2;
+  letter-spacing: 0.005em;
+  text-decoration: none;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease),
+    text-decoration-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-action[data-emphasis="primary"],
+.cg-action[data-emphasis="outline"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--cg-s3) var(--cg-s5);
+  border: var(--cg-rule) solid var(--cg-action);
+  border-radius: var(--cg-radius-control);
+  white-space: nowrap;
+}
+
+.cg-action[data-emphasis="primary"] {
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+}
+
+.cg-action[data-emphasis="primary"]:hover {
+  background: var(--cg-action-hover);
+  border-color: var(--cg-action-hover);
+  color: var(--cg-action-hover-fg);
+}
+
+.cg-action[data-emphasis="outline"] {
+  background: transparent;
+  color: var(--cg-ink);
+}
+
+.cg-action[data-emphasis="outline"]:hover {
+  border-color: var(--cg-accent);
+  color: var(--cg-accent);
+}
+
+/* A text link with an arrow after it. Not a flex container: in one, the
+   words and the arrow are two flex items and each gets its own underline.
+   As inline content the words carry one continuous underline, and the
+   arrow, an inline-block, inherits none (CSS Text Decoration: decorations
+   do not propagate to atomic inlines). */
+.cg-action[data-emphasis="secondary"] {
+  display: inline-block;
+  padding-block: var(--cg-s3);
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: var(--cg-line-strong);
+  text-underline-offset: 0.32em;
+}
+
+.cg-action[data-emphasis="secondary"]::after {
+  content: "\2192" / "";
+  display: inline-block;
+  margin-inline-start: 0.4em;
+}
+
+.cg-action[data-emphasis="secondary"]:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+/* --------------------------------------------------------------------------
+   Header: one quiet line, not sticky.
    -------------------------------------------------------------------------- */
 
 .cg-site-header {
-  position: sticky;
-  inset-block-start: 0;
+  position: relative;
   z-index: 10;
-  padding: var(--cg-s3) var(--cg-gutter);
-  /* Flat and fully opaque, not a frosted-glass blur: a sticky header reads
-     as a solid plane sitting above the page, with a hairline marking where
-     it ends. */
   background: var(--cg-canvas);
-  border-block-end: 1px solid var(--cg-line-soft);
+  border-block-end: var(--cg-rule) solid var(--cg-line);
 }
 
 .cg-site-header__inner {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--cg-gap);
-  max-inline-size: var(--cg-page);
+  gap: var(--cg-s8);
+  min-block-size: var(--cg-header-height);
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
   margin-inline: auto;
+  padding-inline: var(--cg-gutter);
 }
 
 .cg-site-header__home {
-  /* Pushes the nav (or hamburger) and the theme toggle into a single
-     right-hand cluster, rather than `justify-content: space-between`
-     spreading three children (home, nav, toggle) into three separate
-     clusters across the header. */
+  display: inline-flex;
+  align-items: center;
   margin-inline-end: auto;
   color: var(--cg-ink);
-  font-family: var(--cogenta-font-serif);
-  font-weight: var(--cg-weight-semibold);
-  font-size: var(--cg-text-lg);
-  font-optical-sizing: auto;
-  letter-spacing: var(--cg-tracking-snug);
   text-decoration: none;
+}
+
+.cg-site-header__home:hover {
+  color: var(--cg-ink);
+}
+
+.cg-site-header__name {
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-semibold);
+  font-variation-settings: "opsz" 36;
+  letter-spacing: -0.012em;
+  line-height: 1;
 }
 
 .cg-site-header__logo {
   display: block;
-  block-size: 2rem;
+  block-size: var(--cg-s8);
   inline-size: auto;
-  max-inline-size: 12rem;
+  max-inline-size: 14rem;
   object-fit: contain;
+  filter: none;
 }
 
-/* The disclosure that carries both the nav list and the header action —
-   collapsed to the hamburger `<summary>` under the desktop breakpoint,
-   forced open above it (see the media query at the bottom of this section). */
-.cg-menu {
-  position: relative;
+.cg-nav-toggle-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.cg-menu__toggle {
+.cg-nav-toggle-label {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.42rem;
+  inline-size: 2.75rem;
+  padding: 0.7rem;
+  cursor: pointer;
+}
+
+.cg-nav-toggle-input:focus-visible ~ .cg-nav-toggle-label {
+  outline: var(--cg-rule-strong) solid var(--cg-accent);
+  outline-offset: 2px;
+}
+
+.cg-nav-toggle-bar {
+  display: block;
+  inline-size: 100%;
+  block-size: 1.5px;
+  background: var(--cg-ink);
+}
+
+.cg-site-header__nav {
   display: flex;
   align-items: center;
-  justify-content: center;
-  inline-size: 2.75rem;
-  block-size: 2.75rem;
-  border-radius: var(--cg-radius-sm);
-  cursor: pointer;
-  list-style: none;
+  gap: var(--cg-s8);
 }
 
-.cg-menu__toggle::-webkit-details-marker {
-  display: none;
-}
-
-.cg-menu__toggle:hover {
-  background: var(--cg-surface-sunken);
-}
-
-.cg-menu__bars {
-  position: relative;
-  display: block;
-  inline-size: 1.35rem;
-  block-size: 1px;
-  background: var(--cg-ink);
-}
-
-.cg-menu__bars::before,
-.cg-menu__bars::after {
-  content: "";
-  position: absolute;
-  inset-inline-start: 0;
-  inline-size: 100%;
-  block-size: 1px;
-  background: var(--cg-ink);
-  transition: transform var(--cg-duration) var(--cg-ease);
-}
-
-.cg-menu__bars::before {
-  inset-block-start: -0.4rem;
-}
-
-.cg-menu__bars::after {
-  inset-block-start: 0.4rem;
-}
-
-.cg-menu[open] .cg-menu__bars {
-  background: transparent;
-}
-
-.cg-menu[open] .cg-menu__bars::before {
-  inset-block-start: 0;
-  transform: rotate(45deg);
-}
-
-.cg-menu[open] .cg-menu__bars::after {
-  inset-block-start: 0;
-  transform: rotate(-45deg);
-}
-
-.cg-menu__panel {
-  position: absolute;
-  inset-inline-end: 0;
-  inset-block-start: calc(100% + var(--cg-s3));
-  z-index: 15;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--cg-s4);
-  min-inline-size: 14rem;
-  padding: var(--cg-s5);
-  background: var(--cg-surface-raised);
-  border: 1px solid var(--cg-line);
-  border-radius: var(--cg-radius-md);
-  box-shadow: var(--cogenta-shadow-md);
-}
-
-/* Unscoped (not `.cg-menu__panel .cg-nav__items`): the exact same list is
-   reused verbatim by `.cg-site-nav` (the always-native desktop nav — see
-   `chrome.ts`'s comment on why a closed `<details>` cannot be the one nav
-   for both breakpoints), so its styling cannot live behind a selector that
-   only matches inside the mobile disclosure. */
 .cg-nav__items {
   display: flex;
-  flex-direction: column;
-  gap: var(--cg-s3);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s2) var(--cg-s8);
   margin: 0;
   padding: 0;
   list-style: none;
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-medium);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-ui);
+  line-height: var(--cg-leading-ui);
 }
 
 .cg-nav__items a,
 .cg-nav__items span {
-  color: var(--cg-ink-muted);
-  text-decoration: none;
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.4em;
 }
 
 .cg-nav__items a:hover {
   color: var(--cg-ink);
+  text-decoration-color: var(--cg-ink);
 }
 
-.cg-menu__action {
-  align-self: flex-start;
+.cg-site-header__action.cg-action[data-emphasis="outline"] {
+  min-block-size: 40px;
+  padding-block: var(--cg-s2);
+  padding-inline: var(--cg-s4);
 }
 
-/* The desktop nav — hidden on narrow viewports (the `<details>` disclosure
-   is the mobile nav there), shown in its place from 56rem. */
-.cg-site-nav {
-  display: none;
-}
-
-@media (min-width: 56rem) {
-  .cg-menu {
-    display: none;
-  }
-
-  .cg-site-nav {
-    display: flex;
-    align-items: center;
-    gap: var(--cg-s6);
-  }
-
-  .cg-site-nav .cg-nav__items {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .cg-site-nav .cg-menu__action {
-    align-self: center;
-  }
-}
-
-/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
-   theme-kit`) — sized to match `.cg-menu__toggle` (the hamburger it sits
-   beside on narrow viewports), not the block vocabulary's `.cg-action`
-   style, so it never reads as a call-to-action competing with a real one. */
 .cg-theme-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  flex: none;
   inline-size: 2.75rem;
-  block-size: 2.75rem;
-  border-radius: var(--cg-radius-sm);
+  margin-inline: calc(var(--cg-s4) * -1) calc(var(--cg-s3) * -1);
+  padding: 0;
   border: 0;
   background: transparent;
-  color: var(--cg-ink);
+  color: var(--cg-ink-muted);
   cursor: pointer;
+  transition: color var(--cg-duration) var(--cg-ease);
 }
 
 .cg-theme-toggle:hover {
-  background: var(--cg-surface-sunken);
+  color: var(--cg-ink);
 }
 
 .cg-theme-toggle__icon {
-  inline-size: 1.15rem;
-  block-size: 1.15rem;
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
 }
 
 .cg-theme-toggle__icon--moon {
   display: none;
 }
 
-/* Icon reflects the *current* effective appearance — sun while light, moon
-   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
-   `tokens.css` already keys the whole palette on. */
 @media (prefers-color-scheme: dark) {
   :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
     display: none;
   }
+
   :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
     display: block;
   }
@@ -465,275 +508,261 @@ img {
   display: block;
 }
 
-/* --------------------------------------------------------------------------
-   Chrome — footer, three real columns
-   -------------------------------------------------------------------------- */
+/* Below the breakpoint the links become a panel under the line, shown while
+   the checkbox is checked: the whole mechanism is one selector. */
+@media (max-width: 47.99rem) {
+  .cg-site-header__inner {
+    gap: var(--cg-s2);
+    min-block-size: var(--cg-s16);
+  }
 
-.cg-site-footer {
-  padding: var(--cg-s16) var(--cg-gutter) var(--cg-s8);
-  background: var(--cg-surface-sunken);
-  color: var(--cg-ink-muted);
-  border-block-start: 1px solid var(--cg-line-soft);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
-}
+  .cg-theme-toggle {
+    order: 1;
+    margin-inline: 0;
+  }
 
-.cg-site-footer__grid {
-  display: grid;
-  gap: var(--cg-gap-loose);
-  grid-template-columns: 1fr;
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  padding-block-end: var(--cg-s10);
-  border-block-end: 1px solid var(--cg-line-soft);
-}
+  .cg-nav-toggle-label {
+    display: flex;
+    order: 2;
+    margin-inline-end: calc(var(--cg-s3) * -1);
+  }
 
-@media (min-width: 50rem) {
-  .cg-site-footer__grid {
-    grid-template-columns: 1.2fr 1fr 1.2fr;
-    align-items: start;
+  /* The open panel covers the rest of the viewport under the header's own
+     hairline, so the page never shows through beneath the menu. */
+  .cg-site-header__nav {
+    display: none;
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: calc(100% + var(--cg-rule));
+    block-size: calc(100dvh - var(--cg-s16) - var(--cg-rule));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--cg-s10);
+    padding: var(--cg-s4) var(--cg-gutter) var(--cg-s12);
+    background: var(--cg-canvas);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-site-header__nav {
+    display: flex;
+  }
+
+  :root:has(.cg-nav-toggle-input:checked) {
+    overflow: hidden;
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(1) {
+    transform: translateY(0.3rem) rotate(45deg);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(2) {
+    transform: translateY(-0.3rem) rotate(-45deg);
+  }
+
+  .cg-site-header__nav .cg-nav__items {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    font-family: var(--cg-font-text);
+    font-size: var(--cg-text-2xl);
+    line-height: var(--cg-leading-heading);
+  }
+
+  .cg-site-header__nav .cg-nav__items li {
+    border-block-end: var(--cg-rule) solid var(--cg-line);
+  }
+
+  .cg-site-header__nav .cg-nav__items a,
+  .cg-site-header__nav .cg-nav__items span {
+    display: block;
+    padding-block: var(--cg-s4);
+  }
+
+  .cg-site-header__nav .cg-site-header__action {
+    align-self: flex-start;
   }
 }
 
-.cg-site-footer__brand-link {
-  display: inline-block;
-  color: var(--cg-ink);
-  font-family: var(--cogenta-font-serif);
+/* --------------------------------------------------------------------------
+   Footer: a short colophon on the same grid.
+   -------------------------------------------------------------------------- */
+
+.cg-site-footer {
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+  background: var(--cg-canvas);
+  color: var(--cg-ink-muted);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-ui);
+}
+
+.cg-site-footer__inner {
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin-inline: auto;
+  padding: var(--cg-s12) var(--cg-gutter) var(--cg-s8);
+}
+
+.cg-site-footer__top {
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-col-gap);
+  row-gap: var(--cg-s8);
+  padding-block-end: var(--cg-s12);
+}
+
+.cg-site-footer__top > * {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 48rem) {
+  .cg-site-footer__brand {
+    grid-column: 1 / span 7;
+  }
+
+  .cg-site-footer__nav {
+    grid-column: 8 / span 3;
+  }
+
+  .cg-site-footer__social-col {
+    grid-column: 11 / span 2;
+    justify-self: end;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-site-footer__brand {
+    grid-column: 1 / span 6;
+  }
+
+  .cg-site-footer__nav {
+    grid-column: 8 / span 2;
+  }
+}
+
+.cg-site-footer__name {
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-xl);
   font-weight: var(--cg-weight-semibold);
-  font-size: var(--cg-text-lg);
-  letter-spacing: var(--cg-tracking-snug);
+  font-variation-settings: "opsz" 36;
+  letter-spacing: -0.012em;
+  line-height: 1.1;
+  color: var(--cg-ink);
   text-decoration: none;
+}
+
+.cg-site-footer__name:hover {
+  color: var(--cg-ink);
 }
 
 .cg-site-footer__tagline {
   margin: var(--cg-s3) 0 0;
-  max-inline-size: 24ch;
-  font-family: var(--cg-font-reading);
+  max-inline-size: var(--cg-measure-short);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-md);
   font-style: italic;
-  line-height: var(--cg-leading-relaxed);
-}
-
-.cg-site-footer__nav .cg-nav__items {
-  display: flex;
-  flex-direction: column;
-  gap: var(--cg-s3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-site-footer__nav a,
-.cg-site-footer__nav span {
-  color: var(--cg-ink-muted);
-  text-decoration: none;
-}
-
-.cg-site-footer__nav a:hover {
+  line-height: var(--cg-leading-snug);
   color: var(--cg-ink);
 }
 
-.cg-site-footer__meta {
-  display: flex;
+.cg-site-footer__note {
+  margin-block-start: var(--cg-s4);
+  max-inline-size: var(--cg-measure-short);
+}
+
+.cg-site-footer__note p {
+  margin: 0;
+}
+
+.cg-site-footer__note p + p {
+  margin-block-start: var(--cg-s2);
+}
+
+.cg-site-footer__nav .cg-nav__items {
   flex-direction: column;
-  gap: var(--cg-s4);
+  align-items: flex-start;
+  gap: var(--cg-s2);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-site-footer__nav .cg-nav__items a {
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-line-strong);
+  text-underline-offset: 0.3em;
+}
+
+.cg-site-footer__nav .cg-nav__items a:hover {
+  text-decoration-color: currentColor;
 }
 
 .cg-site-footer__social {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--cg-s3);
-  margin: 0;
+  gap: var(--cg-s1);
+  margin: 0 calc(var(--cg-s2) * -1);
   padding: 0;
   list-style: none;
 }
 
 .cg-site-footer__social-item a {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: 2.25rem;
-  block-size: 2.25rem;
-  border: 1px solid var(--cg-line);
-  border-radius: var(--cg-radius-pill);
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
   color: var(--cg-ink-muted);
-  transition:
-    color var(--cg-duration) var(--cg-ease),
-    border-color var(--cg-duration) var(--cg-ease);
+  transition: color var(--cg-duration) var(--cg-ease);
 }
 
 .cg-site-footer__social-item a:hover {
-  color: var(--cg-accent);
-  border-color: var(--cg-accent);
+  color: var(--cg-ink);
 }
 
 .cg-social__icon {
-  inline-size: 1rem;
-  block-size: 1rem;
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
 }
 
-.cg-site-footer__note {
+.cg-site-footer__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cg-s4) var(--cg-s8);
+  padding-block-start: var(--cg-s5);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+  font-size: var(--cg-text-xs);
+  letter-spacing: 0.02em;
+}
+
+.cg-site-footer__legal {
   margin: 0;
-  max-inline-size: 34ch;
-  line-height: var(--cg-leading-normal);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .cg-site-footer__branding a {
   display: inline-flex;
   align-items: center;
-  gap: 0.4em;
-  opacity: 0.75;
-  transition: opacity var(--cg-duration) var(--cg-ease);
+  gap: 0.5em;
+  color: var(--cg-ink-subtle);
+  text-decoration: none;
 }
 
-.cg-site-footer__branding a:hover,
-.cg-site-footer__branding a:focus-visible {
-  opacity: 1;
+.cg-site-footer__branding a:hover {
+  color: var(--cg-ink);
 }
 
 .cg-site-footer__brand-logo {
   display: block;
-  block-size: 22px;
+  block-size: 18px;
   inline-size: auto;
 }
 
-.cg-site-footer__bottom {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  padding-block-start: var(--cg-s6);
-  font-size: var(--cg-text-xs);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
-  color: var(--cg-ink-subtle);
+.cg-site-footer__version {
+  font-variant-numeric: tabular-nums;
 }
 
 /* --------------------------------------------------------------------------
-   Post footer — "back to home / more in this topic"
-   -------------------------------------------------------------------------- */
-
-.cg-post-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cg-s6);
-  max-inline-size: var(--cg-measure);
-  margin: var(--cg-s12) auto var(--cg-section-y);
-  padding-block-start: var(--cg-s6);
-  padding-inline: var(--cg-gutter);
-  border-block-start: 1px solid var(--cg-line-soft);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-medium);
-}
-
-.cg-post-footer__link {
-  text-decoration: none;
-}
-
-/* --------------------------------------------------------------------------
-   Actions
-   -------------------------------------------------------------------------- */
-
-.cg-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cg-s3);
-  margin: var(--cg-s8) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--cg-s2);
-  padding: var(--cg-s3) var(--cg-s6);
-  border: 0;
-  border-radius: var(--cg-radius-pill);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-semibold);
-  letter-spacing: var(--cg-tracking-snug);
-  line-height: var(--cg-leading-snug);
-  text-decoration: none;
-  white-space: nowrap;
-  transition:
-    background-color var(--cg-duration) var(--cg-ease),
-    color var(--cg-duration) var(--cg-ease),
-    box-shadow var(--cg-duration) var(--cg-ease),
-    transform var(--cg-duration-fast) var(--cg-ease);
-}
-
-.cg-action[data-emphasis="primary"] {
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
-}
-
-.cg-action[data-emphasis="primary"]:hover {
-  background: var(--cg-accent-hover);
-  box-shadow: var(--cogenta-shadow-sm);
-  transform: translateY(-1px);
-}
-
-.cg-action[data-emphasis="secondary"] {
-  background: transparent;
-  color: var(--cg-ink);
-  box-shadow: var(--cg-ring-strong);
-}
-
-.cg-action[data-emphasis="secondary"]:hover {
-  color: var(--cg-accent);
-  box-shadow: var(--cg-ring-accent);
-}
-
-.cg-action:active {
-  transform: translateY(0);
-  box-shadow: none;
-}
-
-/* --------------------------------------------------------------------------
-   Shared block furniture
-   -------------------------------------------------------------------------- */
-
-.cg-topics__title,
-.cg-letter__title,
-.cg-faq__title,
-.cg-metrics__title,
-.cg-clients__title,
-.cg-list__title-heading {
-  margin: 0 0 var(--cg-s8);
-  font-family: var(--cogenta-font-serif);
-  font-size: var(--cg-text-2xl);
-  line-height: var(--cg-leading-snug);
-  letter-spacing: var(--cg-tracking-tight);
-  font-weight: var(--cg-weight-semibold);
-  text-wrap: balance;
-}
-
-.cg-topics__items,
-.cg-clients__items,
-.cg-gallery__items,
-.cg-list__items,
-.cg-faq__items {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-gallery__viewport,
-.cg-list__viewport {
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--cg-line-strong) transparent;
-  padding-block: var(--cg-s2);
-  margin-block: calc(var(--cg-s2) * -1);
-}
-
-/* --------------------------------------------------------------------------
-   Search, forms, comments — public utility pages and post-content
-   furniture, styled with the same reading-first language as the blocks.
+   Search and forms: the utility pages, in the same register.
    -------------------------------------------------------------------------- */
 
 .cg-search__form,
@@ -741,12 +770,10 @@ img {
 .cg-search__empty,
 .cg-search__error,
 .cg-form,
-.cg-form__confirmation,
-.cg-comments {
-  max-inline-size: var(--cg-page);
+.cg-form__confirmation {
+  max-inline-size: calc(var(--cg-measure) + var(--cg-gutter) * 2);
   margin-inline: auto;
   padding-inline: var(--cg-gutter);
-  font-family: var(--cogenta-font-sans);
 }
 
 .cg-search__form {
@@ -754,31 +781,41 @@ img {
   flex-wrap: wrap;
   align-items: end;
   gap: var(--cg-s3);
-  margin-block-end: var(--cg-s8);
+  margin-block: var(--cg-s10);
 }
 
-.cg-search__form label {
+.cg-search__form label,
+.cg-form__field label,
+.cg-comment__form label {
   display: block;
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-semibold);
   margin-block-end: var(--cg-s2);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-medium);
+  color: var(--cg-ink-muted);
 }
 
 .cg-search__form input[type="search"] {
-  flex: 1 1 16rem;
+  flex: 1 1 18rem;
 }
 
 .cg-search__results {
-  margin: 0 auto;
-  padding-inline-start: var(--cg-gutter);
   display: grid;
-  gap: var(--cg-s4);
-  font-size: var(--cg-text-lg);
+  gap: 0;
+  margin-block: 0 var(--cg-section);
+  list-style: none;
+  font-size: var(--cg-size-entry);
+}
+
+.cg-search__results > * {
+  padding-block: var(--cg-s5);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
 }
 
 .cg-search__empty,
 .cg-comments__empty,
-.cg-comments__closed {
+.cg-comments__closed,
+.cg-form__help {
   color: var(--cg-ink-muted);
 }
 
@@ -786,9 +823,11 @@ img {
 .cg-form__error,
 .cg-form__field-error {
   color: var(--cg-ink);
-  font-weight: var(--cg-weight-bold);
+  font-weight: var(--cg-weight-semibold);
 }
 
+/* Fields are a baseline, not a box: a rule under the words, the rule
+   darkening to ink on focus. */
 .cg-search__form input,
 .cg-form__field input,
 .cg-form__field select,
@@ -796,58 +835,78 @@ img {
 .cg-comment__form input,
 .cg-comment__form textarea {
   inline-size: 100%;
-  padding: var(--cg-s3) var(--cg-s4);
-  border: 1px solid var(--cg-line);
-  border-radius: var(--cg-radius-sm);
-  background: var(--cg-surface);
+  min-block-size: 44px;
+  padding: var(--cg-s2) 0;
+  border: 0;
+  border-block-end: var(--cg-rule) solid var(--cg-line-strong);
+  border-radius: 0;
+  background: transparent;
   color: var(--cg-ink);
-  font: inherit;
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-snug);
+  transition: border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-form__field textarea,
+.cg-comment__form textarea {
+  padding: var(--cg-s3);
+  border: var(--cg-rule) solid var(--cg-line-strong);
+  border-radius: var(--cg-radius);
+  resize: vertical;
+}
+
+.cg-search__form input:focus-visible,
+.cg-form__field :is(input, select, textarea):focus-visible,
+.cg-comment__form :is(input, textarea):focus-visible {
+  outline: none;
+  border-color: var(--cg-ink);
+  box-shadow: inset 0 calc(var(--cg-rule) * -1) 0 var(--cg-ink);
 }
 
 .cg-form__field input[aria-invalid="true"],
 .cg-form__field select[aria-invalid="true"],
 .cg-form__field textarea[aria-invalid="true"] {
-  border-width: 2px;
-  border-color: var(--cg-line-strong);
+  border-color: var(--cg-ink);
+  border-block-end-width: var(--cg-rule-strong);
 }
 
 .cg-search__form button,
 .cg-form button[type="submit"],
 .cg-comment__form button[type="submit"] {
-  padding: var(--cg-s3) var(--cg-s6);
-  border: 0;
-  border-radius: var(--cg-radius-pill);
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
-  font-weight: var(--cg-weight-semibold);
+  min-block-size: 44px;
+  padding: var(--cg-s3) var(--cg-s5);
+  border: var(--cg-rule) solid var(--cg-action);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-ui);
+  font-weight: var(--cg-weight-medium);
   cursor: pointer;
-  transition: background-color var(--cg-duration) var(--cg-ease);
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease);
 }
 
 .cg-search__form button:hover,
 .cg-form button[type="submit"]:hover,
 .cg-comment__form button[type="submit"]:hover {
-  background: var(--cg-accent-hover);
+  background: var(--cg-action-hover);
+  border-color: var(--cg-action-hover);
+  color: var(--cg-action-hover-fg);
 }
 
-.cg-form__field,
-.cg-comment__form p {
+.cg-form__field {
   display: block;
-  margin-block-end: var(--cg-s5);
-}
-
-.cg-form__field label,
-.cg-comment__form label {
-  display: block;
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-semibold);
-  margin-block-end: var(--cg-s2);
+  margin-block-end: var(--cg-s6);
 }
 
 .cg-form__help {
   margin: var(--cg-s2) 0 0;
+  font-family: var(--cg-font-ui);
   font-size: var(--cg-text-sm);
-  color: var(--cg-ink-muted);
 }
 
 .cg-form__choice {
@@ -855,7 +914,7 @@ img {
   align-items: center;
   gap: var(--cg-s2);
   margin-inline-end: var(--cg-s4);
-  font-weight: normal;
+  font-weight: var(--cg-weight-regular);
 }
 
 .cg-form__honeypot,
@@ -865,52 +924,4 @@ img {
   block-size: 1px;
   overflow: hidden;
   inset-inline-start: -9999px;
-}
-
-.cg-comments {
-  margin-block-start: var(--cg-section-y);
-  padding-block-start: var(--cg-s8);
-  padding-block-end: var(--cg-section-y);
-  border-block-start: 1px solid var(--cg-line-soft);
-}
-
-.cg-comments__list,
-.cg-comment__replies {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-comment {
-  padding-block: var(--cg-s5);
-  border-block-end: 1px solid var(--cg-line-soft);
-}
-
-.cg-comment__replies {
-  padding-block-start: var(--cg-s5);
-}
-
-.cg-comment__replies .cg-comment {
-  padding-inline-start: var(--cg-s6);
-  border-inline-start: 2px solid var(--cg-line-soft);
-  border-block-end: 0;
-}
-
-.cg-comment__meta {
-  display: flex;
-  gap: var(--cg-s3);
-  align-items: baseline;
-  font-size: var(--cg-text-sm);
-  color: var(--cg-ink-muted);
-  margin-block-end: var(--cg-s2);
-}
-
-.cg-comment__author {
-  font-weight: var(--cg-weight-semibold);
-  color: var(--cg-ink);
-}
-
-.cg-comment__body {
-  margin: 0;
-  font-family: var(--cg-font-reading);
 }

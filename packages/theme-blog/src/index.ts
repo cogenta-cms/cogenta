@@ -1,3 +1,4 @@
+export * from './render/article.js'
 export * from './render/blocks/accordion.js'
 export * from './render/blocks/collection-list.js'
 export * from './render/blocks/cta.js'

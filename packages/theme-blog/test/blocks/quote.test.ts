@@ -4,35 +4,31 @@ import { renderQuote } from '../../src/render/blocks/quote.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = (block = BLOCKS.quote): string => serialize(renderQuote(block, ctx))
 
-describe("quote — a reader's words", () => {
-  it('renders the text inside a real <blockquote>', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toContain('data-block="quote"')
-    expect(html).toContain('<blockquote')
-    expect(html).toContain('data-field="text"')
+describe('quote, an epigraph', () => {
+  it('renders the text inside a real <blockquote>, the container being the figure', () => {
+    expect(html()).toMatch(
+      /<figure class="cg-container cg-quote__inner"><blockquote class="cg-quote__text"><p data-field="text">The greatest part/,
+    )
   })
 
-  it('renders the decorative quotation mark as aria-hidden', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toMatch(/<span class="cg-quote__mark" aria-hidden="true">/)
+  it('leaves the quotation marks to the stylesheet, never typed into the text', () => {
+    expect(html()).not.toMatch(/[“”"]The greatest/)
   })
 
   it('renders the attribution outside the blockquote, in a figcaption', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toContain('<figcaption')
-    expect(html).toContain('A. Reader')
-    expect(html).toContain('Longtime subscriber')
+    expect(html()).toMatch(
+      /<\/blockquote><figcaption class="cg-quote__attribution">[\s\S]*<span class="cg-quote__author" data-field="author">Samuel Johnson<\/span><span class="cg-quote__role" data-field="role">/,
+    )
   })
 
   it('renders no figcaption at all when there is no attribution', () => {
-    const { author: _a, role: _r, avatar: _av, ...bare } = BLOCKS.quote
-    const html = serialize(renderQuote(bare, ctx))
-    expect(html).not.toContain('<figcaption')
+    const { author: _a, role: _r, avatar: _v, ...block } = BLOCKS.quote
+    expect(html(block)).not.toContain('<figcaption')
   })
 
-  it('always writes an alt attribute on the avatar, even though it is decorative', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toMatch(/<img[^>]*\salt="/)
+  it('always writes an alt attribute on the portrait, even though it is decorative', () => {
+    expect(html()).toMatch(/<img class="cg-quote__avatar"[^>]*\salt=""/)
   })
 })

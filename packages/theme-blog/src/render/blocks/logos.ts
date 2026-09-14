@@ -1,47 +1,43 @@
 import type { LogoItem, LogosBlock } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  image,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
-/** A "trusted by" client strip — grayscale until hovered, matching the restrained rule this theme uses for every non-editorial image. */
+/**
+ * Publications, presses or institutions, as a ruled row of wordmarks: each
+ * one in greyscale at a common height, inverted onto the ink in dark mode,
+ * none of them louder than the text around them. The organisation's name is
+ * the image's accessible name when the media library has none.
+ */
 function renderItem(item: LogoItem, ctx: RenderContext): HtmlElement {
   const logo = image(ctx, item.media, {
-    className: 'cg-clients__logo',
+    className: 'cg-marks__logo',
     altFrom: item.name,
     variant: { fit: 'contain' },
   })
   return h(
     'li',
-    { class: 'cg-clients__item' },
+    { class: 'cg-marks__item' },
     item.url === undefined
       ? logo
       : h(
           'a',
-          { class: 'cg-clients__link', href: ctx.link(item.url), rel: 'noopener noreferrer' },
+          { class: 'cg-marks__link', href: ctx.link(item.url), rel: 'noopener noreferrer' },
           logo,
         ),
   )
 }
 
 export function renderLogos(block: LogosBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-clients', 'data-block': 'logos' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('logos') ?? 'h2',
-          { class: 'cg-clients__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'logos',
+    'cg-marks',
+    {},
+    'div',
+    sectionHead('logos', block.title),
     h(
       'ul',
-      { class: 'cg-clients__items' },
+      { class: 'cg-marks__items' },
       block.items.map((item) => renderItem(item, ctx)),
     ),
   )

@@ -324,8 +324,10 @@ describe('a menu whose language the site does not declare', () => {
     render(<App />)
     await goToMenus()
 
+    // The heading renders before the menu list request resolves.
+    const option = await screen.findByRole('option', { name: /Ancien menu/u })
     fireEvent.change(screen.getByLabelText('Menu'), {
-      target: { value: screen.getByRole('option', { name: /Ancien menu/u }).getAttribute('value') },
+      target: { value: option.getAttribute('value') },
     })
 
     expect(await screen.findByText(/Ce menu ne s'affichera nulle part sur ce site/u)).toBeDefined()

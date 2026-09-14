@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -104,9 +104,9 @@ describe('prompt settings — the open row has its own URL (fiche 71)', () => {
     // the very first render, not only after a click.
     render(<App />)
     await screen.findByText('Rewrite')
-    expect((await screen.findByLabelText('Nom')) as HTMLInputElement).toHaveProperty(
-      'value',
-      'Rewrite',
+    // The edit field mounts before the template it edits has loaded into it.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Nom') as HTMLInputElement).toHaveProperty('value', 'Rewrite'),
     )
   })
 

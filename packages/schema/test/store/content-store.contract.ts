@@ -119,13 +119,16 @@ export function runContentStoreContract(
       articles = createContentStore({ ...common, collection: article })
       authors = createContentStore({ ...common, collection: author })
       tags = createContentStore({ ...common, collection: tag })
-    })
+      // Dropping and recreating every table on a file-backed SQLite runs past
+      // the 10 s default on a loaded Windows CI runner, on a different test
+      // each time; the work itself is correct, only slow there.
+    }, 60_000)
 
     afterEach(async () => {
       await dropSchemaTables(db, schema)
       await db.close()
       await harness.dispose?.()
-    })
+    }, 60_000)
 
     const countRows = async (table: string, entryId: string): Promise<number> => {
       const result = await db.query<{ n: number }>(

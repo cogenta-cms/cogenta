@@ -12,16 +12,6 @@ import {
   createTaxonomyStore,
 } from '@cogenta/schema'
 import {
-  type FetchedEntries,
-  type HtmlNode,
-  type PageContent,
-  type RenderContext,
-  renderPage,
-  serialize,
-  type ContentEntry as ThemeContentEntry,
-} from '@cogenta/theme-canonical'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
   BLOG_DEMO_CATEGORIES,
   BLOG_DEMO_POSTS,
   BLOG_DEMO_TAGS,
@@ -31,7 +21,17 @@ import {
   page,
   post,
   tag,
-} from '../../starters/src/blueprints/blog.js'
+} from '@cogenta/starters/blueprints/blog'
+import {
+  type FetchedEntries,
+  type HtmlNode,
+  type PageContent,
+  type RenderContext,
+  renderPage,
+  serialize,
+  type ContentEntry as ThemeContentEntry,
+} from '@cogenta/theme-canonical'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
 // The blueprint seeds five bundled photographs through the real media

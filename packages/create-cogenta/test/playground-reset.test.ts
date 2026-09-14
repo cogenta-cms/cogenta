@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
 import { createContentStore, createSearchIndex } from '@cogenta/schema'
+import { post } from '@cogenta/starters/blueprints/blog'
 import { afterEach, describe, expect, it } from 'vitest'
-import { post } from '../../starters/src/blueprints/blog.js'
 import { resetPlaygroundData } from '../src/playground-reset.js'
 
 describe('resetPlaygroundData', () => {

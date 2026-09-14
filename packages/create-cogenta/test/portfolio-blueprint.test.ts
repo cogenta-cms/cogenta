@@ -11,14 +11,6 @@ import {
   createTaxonomyStore,
 } from '@cogenta/schema'
 import {
-  type FetchedEntries,
-  type RenderContext,
-  renderPage,
-  serialize,
-  type ContentEntry as ThemeContentEntry,
-} from '@cogenta/theme-canonical'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
   client,
   disciplines,
   PORTFOLIO_DEMO_DISCIPLINES,
@@ -29,7 +21,15 @@ import {
   page,
   project,
   team,
-} from '../../starters/src/blueprints/portfolio.js'
+} from '@cogenta/starters/blueprints/portfolio'
+import {
+  type FetchedEntries,
+  type RenderContext,
+  renderPage,
+  serialize,
+  type ContentEntry as ThemeContentEntry,
+} from '@cogenta/theme-canonical'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
 // The blueprint seeds twenty-seven bundled images through the real media

@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { createOutput, runServe } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import { createContentStore } from '@cogenta/schema'
+import { post } from '@cogenta/starters/blueprints/blog'
 import { afterEach, describe, expect, it } from 'vitest'
-import { post } from '../../starters/src/blueprints/blog.js'
 import { scaffoldSite } from '../src/scaffold.js'
 
 /**

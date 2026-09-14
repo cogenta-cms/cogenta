@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import { createContentStore, createMenuStore } from '@cogenta/schema'
+import { docPage, page } from '@cogenta/starters/blueprints/documentation'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { docPage, page } from '../../starters/src/blueprints/documentation.js'
 import { scaffoldSite } from '../src/scaffold.js'
 
 // One bundled diagram through the real media pipeline, and thirteen pages.

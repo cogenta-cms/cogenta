@@ -12,13 +12,6 @@ import {
   SITE_SETTINGS_SITE_SCOPE,
 } from '@cogenta/schema'
 import {
-  type PageContent,
-  type RenderContext,
-  renderPage,
-  serialize,
-} from '@cogenta/theme-canonical'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
   ASSOCIATION_DEMO_EVENTS,
   ASSOCIATION_MEDIA_SPECS,
   ASSOCIATION_MENUS,
@@ -28,7 +21,14 @@ import {
   event,
   page,
   programme,
-} from '../../starters/src/blueprints/association.js'
+} from '@cogenta/starters/blueprints/association'
+import {
+  type PageContent,
+  type RenderContext,
+  renderPage,
+  serialize,
+} from '@cogenta/theme-canonical'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
 // Fourteen bundled pictures through the real media pipeline, with WebP

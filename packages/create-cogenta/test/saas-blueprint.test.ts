@@ -6,13 +6,6 @@ import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import { buildPath, createContentStore, createMenuStore, createSearchIndex } from '@cogenta/schema'
 import {
-  type PageContent,
-  type RenderContext,
-  renderPage,
-  serialize,
-} from '@cogenta/theme-canonical'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
   buildSaasDemoPages,
   changelog,
   feature,
@@ -21,7 +14,14 @@ import {
   SAAS_DEMO_UPDATES,
   SAAS_MEDIA_SPECS,
   SAAS_MENUS,
-} from '../../starters/src/blueprints/saas.js'
+} from '@cogenta/starters/blueprints/saas'
+import {
+  type PageContent,
+  type RenderContext,
+  renderPage,
+  serialize,
+} from '@cogenta/theme-canonical'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
 // Fourteen bundled images through the real media pipeline, with WebP

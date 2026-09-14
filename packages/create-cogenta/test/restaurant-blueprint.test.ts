@@ -6,14 +6,6 @@ import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import { buildPath, createContentStore, createSearchIndex } from '@cogenta/schema'
 import {
-  type FetchedEntries,
-  type RenderContext,
-  renderPage,
-  serialize,
-  type ContentEntry as ThemeContentEntry,
-} from '@cogenta/theme-restaurant'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
   buildRestaurantDemoPages,
   menuItem,
   page,
@@ -21,7 +13,15 @@ import {
   RESTAURANT_DISH_PHOTOS,
   RESTAURANT_MEDIA_SPECS,
   RESTAURANT_MENUS,
-} from '../../starters/src/blueprints/restaurant.js'
+} from '@cogenta/starters/blueprints/restaurant'
+import {
+  type FetchedEntries,
+  type RenderContext,
+  renderPage,
+  serialize,
+  type ContentEntry as ThemeContentEntry,
+} from '@cogenta/theme-restaurant'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
 // The blueprint seeds nine bundled photographs through the real media

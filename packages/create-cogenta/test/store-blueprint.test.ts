@@ -6,14 +6,6 @@ import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import { buildPath, createContentStore, createSearchIndex } from '@cogenta/schema'
 import {
-  type FetchedEntries,
-  type RenderContext,
-  renderPage,
-  serialize,
-  type ContentEntry as ThemeContentEntry,
-} from '@cogenta/theme-canonical'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
   buildStoreDemoPages,
   category,
   orderLinkFor,
@@ -22,7 +14,15 @@ import {
   STORE_DEMO_PRODUCTS,
   STORE_MEDIA_SPECS,
   STORE_MENUS,
-} from '../../starters/src/blueprints/store.js'
+} from '@cogenta/starters/blueprints/store'
+import {
+  type FetchedEntries,
+  type RenderContext,
+  renderPage,
+  serialize,
+  type ContentEntry as ThemeContentEntry,
+} from '@cogenta/theme-canonical'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
 // The blueprint seeds eighteen bundled photographs through the real media

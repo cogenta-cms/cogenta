@@ -5,6 +5,7 @@ import type { VocabularyBlock } from '@cogenta/blocks'
 import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import { buildPath, createContentStore } from '@cogenta/schema'
+import { caseStudy, page, service } from '@cogenta/starters/blueprints/vitrine'
 import {
   type FetchedEntries,
   type HtmlNode,
@@ -15,7 +16,6 @@ import {
   type ContentEntry as ThemeContentEntry,
 } from '@cogenta/theme-canonical'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { caseStudy, page, service } from '../../starters/src/blueprints/vitrine.js'
 import { scaffoldSite } from '../src/scaffold.js'
 
 // The blueprint seeds fifteen bundled images (a cropped hero photograph, a

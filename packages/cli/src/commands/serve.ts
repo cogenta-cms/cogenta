@@ -6141,6 +6141,7 @@ export function createRequestListener(
                   seo: () => readSeoRenderDefaults(site.siteSettingsStore),
                   identity: () => identityForSite(site),
                   loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
+                  chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
                 },
                 context,
               )

@@ -12,7 +12,7 @@ import {
 } from '@cogenta/theme-kit'
 import type { SeoRenderDefaults } from './seo.js'
 import { resolveTheme, type ThemeModule } from './theme-registry.js'
-import type { BrandingSettings } from './theme-render.js'
+import type { BrandingSettings, ChromeExtras } from './theme-render.js'
 import {
   entryTitle,
   type PageChromeMenus,
@@ -77,6 +77,8 @@ export interface TermArchivePageOptions {
   readonly seo?: () => Promise<SeoRenderDefaults>
   readonly identity?: () => Promise<SiteIdentityMedia>
   readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, MediaAsset>>
+  /** `general.tagline`/`general.socialLinks`/`general.footerNote`, the same live read an entry page's chrome gets. */
+  readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
 }
 
 const LABELS: Record<string, TermArchiveLabels> = {
@@ -287,6 +289,7 @@ export async function renderTermArchivePage(
       ...(options.seo === undefined ? {} : { seo: options.seo }),
       ...(options.identity === undefined ? {} : { identity: options.identity }),
       ...(options.loadMedia === undefined ? {} : { loadMedia: options.loadMedia }),
+      ...(options.chromeExtras === undefined ? {} : { chromeExtras: options.chromeExtras }),
     },
     context,
   )

@@ -182,6 +182,38 @@ describe('the public term archive (audit T01)', () => {
     }
   }, 90_000)
 
+  it('gives an archive the same site chrome an entry gets: tagline, footer note and social links', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await session(root, server.base)
+      await term(server.base, token, 'cuisine', 'Cooking')
+      const settings: readonly (readonly [string, unknown])[] = [
+        ['general.tagline', 'Recipes from a small kitchen'],
+        ['general.footerNote', 'Written and photographed in Lyon.'],
+        [
+          'general.socialLinks',
+          [{ label: 'Instagram', url: 'https://instagram.com/archive-site' }],
+        ],
+      ]
+      for (const [key, value] of settings) {
+        const written = await fetch(`${server.base}/api/settings`, {
+          method: 'PATCH',
+          headers: auth(token),
+          body: JSON.stringify({ key, value, locale: 'en' }),
+        })
+        expect(written.status).toBe(200)
+      }
+
+      const html = await (await fetch(`${server.base}/topic/cuisine`)).text()
+      expect(html).toContain('Recipes from a small kitchen')
+      expect(html).toContain('Written and photographed in Lyon.')
+      expect(html).toContain('href="https://instagram.com/archive-site"')
+    } finally {
+      await server.stop()
+    }
+  }, 90_000)
+
   it('answers 200 with an empty list for a term that classifies nothing, and 404 for a term that does not exist', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

@@ -44,7 +44,7 @@ jobs:
 
       # Opens or updates a "Version Packages" PR while changesets are pending;
       # publishes to npm once that PR is merged.
-      - uses: changesets/action@v1
+      - uses: changesets/action@v2
         with:
           version: pnpm version-packages
           publish: pnpm release

@@ -1,76 +1,32 @@
-import { type HtmlElement, h, type TermArchiveInput } from '@cogenta/theme-kit'
+import {
+  type HtmlElement,
+  h,
+  type TermArchiveEntry,
+  type TermArchiveInput,
+} from '@cogenta/theme-kit'
+import { taxonomyLabel, yearOf } from './layout.js'
+import { renderIndexRow, type Work } from './work.js'
 
 /**
- * The taxonomy-term archive (contract D `theme@1.3`), in this theme's own
- * brutalist-editorial voice: the term set as a display heading with the
- * taxonomy name as a kicker above it, and the entries as the same numbered
- * `cg-entry` rows `collectionList` already renders here — an index, not a
- * card grid.
+ * The page of one taxonomy term (contract D `theme@1.3`): every project filed
+ * under a discipline, a client or a member of the team.
  *
- * Reusing the block's own classes rather than inventing archive-only ones is
- * deliberate: it is what makes an archive of work look like this theme's
- * lists without a second stylesheet to keep in step.
+ * It is set as the studio's index, not as a grid: an archive entry carries no
+ * picture (`TermArchiveEntry` has none), and a grid of empty frames is worse
+ * than a well-set list. The taxonomy's own name sits above the term in the
+ * caption size; the term itself is the page's one `h1`, very large; each
+ * project is a ruled row with its title, its statement when it has one, and
+ * its year; sub-terms and the pager are
+ * underlined words, the pager's arrows drawn by the stylesheet.
  */
-export function renderTermArchive(input: TermArchiveInput): HtmlElement {
-  const items = input.entries.map((entry, index) =>
-    h(
-      'li',
-      { class: 'cg-entry' },
-      h(
-        'div',
-        { class: 'cg-entry__body' },
-        h(
-          'span',
-          { class: 'cg-entry__index', 'aria-hidden': 'true' },
-          String(index + 1).padStart(2, '0'),
-        ),
-        h(
-          'h2',
-          { class: 'cg-entry__title' },
-          entry.href === null
-            ? entry.title
-            : h('a', { class: 'cg-entry__link', href: entry.href }, entry.title),
-        ),
-        entry.publishedAt === null
-          ? null
-          : h(
-              'time',
-              { class: 'cg-entry__date', datetime: entry.publishedAt },
-              entry.publishedAt.slice(0, 10),
-            ),
-        entry.summary === null ? null : h('p', { class: 'cg-entry__excerpt' }, entry.summary),
-      ),
-    ),
-  )
-
-  return h(
-    'main',
-    { class: 'cg-main cg-archive', id: 'cg-main' },
-    input.ancestors.length === 0
-      ? null
-      : h(
-          'nav',
-          { class: 'cg-archive__breadcrumb', 'aria-label': input.labels.breadcrumb },
-          h(
-            'ol',
-            {},
-            ...input.ancestors.map((l) => h('li', {}, h('a', { href: l.href }, l.label))),
-          ),
-        ),
-    h('p', { class: 'cg-collection__title' }, input.taxonomyName),
-    h('h1', { class: 'cg-page__title' }, input.term.label),
-    input.children.length === 0
-      ? null
-      : h(
-          'ul',
-          { class: 'cg-archive__children', 'aria-label': input.labels.subterms },
-          ...input.children.map((c) => h('li', {}, h('a', { href: c.href }, c.label))),
-        ),
-    items.length === 0
-      ? h('p', { class: 'cg-collection__empty' }, input.labels.empty)
-      : h('ul', { class: 'cg-collection__items' }, ...items),
-    pager(input),
-  )
+function workFromArchive(entry: TermArchiveEntry): Work {
+  const year = entry.publishedAt === null ? undefined : yearOf(entry.publishedAt)
+  return {
+    href: entry.href,
+    title: entry.title,
+    caption: year === undefined ? {} : { year },
+    ...(entry.summary === null ? {} : { summary: entry.summary }),
+  }
 }
 
 function pager(input: TermArchiveInput): HtmlElement | null {
@@ -80,9 +36,75 @@ function pager(input: TermArchiveInput): HtmlElement | null {
     { class: 'cg-archive__pager', 'aria-label': input.labels.pagination },
     input.page.previousHref === null
       ? null
-      : h('a', { rel: 'prev', href: input.page.previousHref }, input.labels.previous),
+      : h(
+          'a',
+          {
+            class: 'cg-arrow-link',
+            'data-direction': 'back',
+            rel: 'prev',
+            href: input.page.previousHref,
+          },
+          input.labels.previous,
+        ),
     input.page.nextHref === null
       ? null
-      : h('a', { rel: 'next', href: input.page.nextHref }, input.labels.next),
+      : h(
+          'a',
+          { class: 'cg-arrow-link', rel: 'next', href: input.page.nextHref },
+          input.labels.next,
+        ),
+  )
+}
+
+export function renderTermArchive(input: TermArchiveInput): HtmlElement {
+  return h(
+    'main',
+    { class: 'cg-main cg-archive', id: 'cg-main' },
+    h(
+      'header',
+      { class: 'cg-archive__head' },
+      h(
+        'div',
+        { class: 'cg-container cg-archive__head-inner' },
+        input.ancestors.length === 0
+          ? null
+          : h(
+              'nav',
+              { class: 'cg-archive__breadcrumb', 'aria-label': input.labels.breadcrumb },
+              h(
+                'ol',
+                { class: 'cg-archive__trail' },
+                input.ancestors.map((link) => h('li', {}, h('a', { href: link.href }, link.label))),
+              ),
+            ),
+        h('p', { class: 'cg-archive__kicker' }, taxonomyLabel(input.taxonomyName, input.locale)),
+        h('h1', { class: 'cg-archive__title' }, input.term.label),
+        input.children.length === 0
+          ? null
+          : h(
+              'ul',
+              { class: 'cg-archive__children', 'aria-label': input.labels.subterms },
+              input.children.map((child) =>
+                h('li', {}, h('a', { class: 'cg-arrow-link', href: child.href }, child.label)),
+              ),
+            ),
+      ),
+    ),
+    h(
+      'section',
+      { class: 'cg-section cg-collection', 'data-form': 'index' },
+      h(
+        'div',
+        { class: 'cg-container cg-collection__inner' },
+        input.entries.length === 0
+          ? h('p', { class: 'cg-empty' }, input.labels.empty)
+          : h(
+              'ol',
+              { class: 'cg-index', 'data-count': String(input.entries.length) },
+              input.entries.map((entry) => renderIndexRow(workFromArchive(entry), 'h2')),
+            ),
+        pager(input),
+      ),
+    ),
   )
 }

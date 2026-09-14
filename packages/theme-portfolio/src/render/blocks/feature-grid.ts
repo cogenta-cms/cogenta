@@ -1,6 +1,5 @@
 import type { FeatureGridBlock, FeatureItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
   type HeadingTag,
   type HtmlElement,
   h,
@@ -8,61 +7,59 @@ import {
   href,
   nestedHeadingTag,
   type RenderContext,
-  renderIcon,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * The item's title is the link, so the link's accessible name is the
- * feature's name — a bare "learn more" repeated across a grid is the
- * classic failure of WCAG 2.4.4, and the block carries no label field to
- * write one anyway.
+ * Services, disciplines, principles or clients, set as a typographic list
+ * rather than as cards with icons. Two forms, chosen from the data itself:
  *
- * `icon` names a symbol (`renderIcon`, `theme@1.4`) — drawn small and
- * accent-coloured, decorative (`aria-hidden`, the title already carries the
- * accessible name) — sitting *above* the running index numeral this theme
- * has always drawn from a CSS counter, never replacing it: the numeral is
- * this theme's own editorial device, the icon is the shared vocabulary's.
- * An item with no icon, or one whose name this theme does not recognise,
- * keeps exactly the pre-1.4 numeral-only card.
+ * - **rows**, when any item carries a sentence: each item a ruled row, its
+ *   name in the display width on the left and the sentence beside it. A
+ *   linked item links its name, drawn as an arrow link.
+ * - **names**, when no item does: a list of names in columns, the way a
+ *   studio lists its clients.
+ *
+ * An item's `icon` is not drawn: a studio's list of services is words, and a
+ * pictogram beside each would be decoration. The value stays in the content
+ * for a theme that wants it.
  */
-function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const title =
+function renderItem(
+  item: FeatureItem,
+  ctx: RenderContext,
+  tag: HeadingTag,
+  form: 'rows' | 'names',
+): HtmlElement {
+  const name =
     item.link === undefined
-      ? heading(tag, { class: 'cg-feature__title' }, item.title)
-      : heading(
-          tag,
-          { class: 'cg-feature__title' },
-          h('a', { class: 'cg-feature__link', href: href(ctx, item.link) }, item.title),
-        )
-  const icon =
-    item.icon === undefined ? null : renderIcon(item.icon, { className: 'cg-feature__icon' })
+      ? item.title
+      : h('a', { class: 'cg-arrow-link cg-list__link', href: href(ctx, item.link) }, item.title)
+  // A name in a list of names is an item, not a section of the page: only a
+  // row with its own sentence earns a heading in the outline.
+  if (form === 'names') return h('li', { class: 'cg-list__item cg-list__name' }, name)
   return h(
     'li',
-    { class: 'cg-feature', 'data-icon': item.icon },
-    icon,
-    h('span', { class: 'cg-feature__index', 'aria-hidden': 'true' }),
-    title,
-    item.text === undefined ? null : h('p', { class: 'cg-feature__text' }, item.text),
+    { class: 'cg-list__item' },
+    heading(tag, { class: 'cg-list__name' }, name),
+    item.text === undefined ? null : h('p', { class: 'cg-list__text' }, item.text),
   )
 }
 
 export function renderFeatureGrid(block: FeatureGridBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const itemTag = nestedHeadingTag('featureGrid', hasTitle)
-  return h(
+  const titled = block.title !== undefined
+  const tag = nestedHeadingTag('featureGrid', titled)
+  const form = block.items.some((item) => item.text !== undefined) ? 'rows' : 'names'
+  return section(
     'section',
-    { class: 'cg-block cg-features', 'data-block': 'featureGrid' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('featureGrid') ?? 'h2',
-          { class: 'cg-features__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'featureGrid',
+    'cg-list cg-split',
+    { 'data-form': form, 'data-titled': titled ? 'true' : 'false' },
+    'div',
+    sectionHead('featureGrid', block.title),
     h(
       'ul',
-      { class: 'cg-features__items' },
-      block.items.map((item) => renderItem(item, ctx, itemTag)),
+      { class: 'cg-list__items', 'data-count': String(block.items.length) },
+      block.items.map((item) => renderItem(item, ctx, tag, form)),
     ),
   )
 }

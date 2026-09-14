@@ -1,27 +1,27 @@
 import type { QuoteBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * `<figure><blockquote>…</blockquote><figcaption>` is the attribution
- * pattern the HTML spec prescribes: putting the author inside the
- * `<blockquote>` would claim the author's name is part of what was said.
- *
- * Set left-aligned at display scale rather than centred — a pull quote that
- * fills the column edge to edge, the way a magazine breaks one out of a
- * feature. The attribution is set in the mono register, the theme's
- * register for credits and metadata.
- *
- * The avatar is decorative here — the name is right beside it in text — so
- * its media entity's alt text is expected to be empty. `image` still writes
- * the attribute either way.
+ * A client's words, set large in the text width from the fourth column, with
+ * typographic quotation marks from the stylesheet (`quotes`), and the speaker
+ * under them in the caption size: their name, then their role. The portrait,
+ * when there is one, is a small square: it is decorative (the name is beside
+ * it in text), so it keeps the media library's own empty `alt`.
  */
 export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement {
-  const hasAttribution =
-    block.author !== undefined || block.role !== undefined || block.avatar !== undefined
-  return h(
+  const hasAttribution = block.author !== undefined || block.role !== undefined
+  return section(
+    'div',
+    'quote',
+    'cg-quote',
+    {},
     'figure',
-    { class: 'cg-block cg-quote', 'data-block': 'quote' },
-    h('blockquote', { class: 'cg-quote__text' }, h('p', { 'data-field': 'text' }, block.text)),
+    h(
+      'blockquote',
+      { class: 'cg-quote__quote' },
+      h('p', { class: 'cg-quote__text', 'data-field': 'text' }, block.text),
+    ),
     hasAttribution
       ? h(
           'figcaption',
@@ -34,7 +34,7 @@ export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement 
               }),
           h(
             'span',
-            { class: 'cg-quote__names' },
+            { class: 'cg-quote__who' },
             block.author === undefined
               ? null
               : h('span', { class: 'cg-quote__author', 'data-field': 'author' }, block.author),

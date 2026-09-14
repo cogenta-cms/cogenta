@@ -4,72 +4,56 @@ import { renderHero } from '../../src/render/blocks/hero.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderHero(BLOCKS.hero, ctx))
 
-describe('renderHero', () => {
-  it('renders the h1 with the title field marked', () => {
-    const html = serialize(renderHero(BLOCKS.hero, ctx))
-    expect(html).toContain('<h1 class="cg-hero__title" data-field="title">')
-    expect(html).toContain('A studio that ships in the open')
+describe('renderHero, the statement', () => {
+  it('sits on the shared twelve-column container', () => {
+    expect(html).toMatch(/^<section class="cg-section cg-statement" data-block="hero"/)
+    expect(html).toContain('class="cg-container cg-statement__inner"')
   })
 
-  it('renders the eyebrow as a plain-text field, no decorative markup inside it', () => {
-    const html = serialize(renderHero(BLOCKS.hero, ctx))
-    expect(html).toMatch(/<p class="cg-hero__eyebrow" data-field="eyebrow">Selected work<\/p>/)
+  it('renders the title as the page h1 carrying the field marker', () => {
+    expect(html).toContain(
+      '<h1 class="cg-statement__title" data-field="title">Studio Hale designs identities, books, signs and exhibitions.</h1>',
+    )
   })
 
-  it('omits the eyebrow paragraph entirely when the field is absent', () => {
-    const { eyebrow: _eyebrow, ...withoutEyebrow } = BLOCKS.hero
-    const html = serialize(renderHero(withoutEyebrow, ctx))
-    expect(html).not.toContain('cg-hero__eyebrow')
+  it('sets the eyebrow as a line of text above the title, never a heading or a badge', () => {
+    expect(html).toContain(
+      '<p class="cg-statement__eyebrow" data-field="eyebrow">Independent design studio</p>',
+    )
+    expect(html.indexOf('cg-statement__eyebrow')).toBeLessThan(html.indexOf('cg-statement__title'))
   })
 
-  it('renders the subtitle when present', () => {
-    const html = serialize(renderHero(BLOCKS.hero, ctx))
-    expect(html).toContain('cg-hero__subtitle')
-    expect(html).toContain('Design, motion and code')
-  })
-
-  it('omits the subtitle paragraph when the field is absent', () => {
-    const { subtitle: _subtitle, ...withoutSubtitle } = BLOCKS.hero
-    const html = serialize(renderHero(withoutSubtitle, ctx))
-    expect(html).not.toContain('cg-hero__subtitle')
-  })
-
-  it('renders the media eagerly and without a lazy loading attribute', () => {
-    const html = serialize(renderHero(BLOCKS.hero, ctx))
-    expect(html).toContain('cg-hero__media')
-    expect(html).toContain('loading="eager"')
-  })
-
-  it('omits the media wrapper entirely when there is no media', () => {
-    const { media: _media, ...withoutMedia } = BLOCKS.hero
-    const html = serialize(renderHero(withoutMedia, ctx))
-    expect(html).not.toContain('cg-hero__media')
-  })
-
-  it('renders the action list with the primary/secondary emphasis contract B gave it', () => {
-    const html = serialize(renderHero(BLOCKS.hero, ctx))
+  it('groups the subtitle and the actions to the side of the title', () => {
+    expect(html).toContain(
+      '<div class="cg-statement__aside"><p class="cg-statement__subtitle" data-field="subtitle">',
+    )
+    expect(html).toContain('aria-label="hero.actions"')
     expect(html).toContain('data-emphasis="primary"')
     expect(html).toContain('data-emphasis="secondary"')
   })
 
-  it('renders no action list when there are no actions', () => {
-    const html = serialize(renderHero({ ...BLOCKS.hero, actions: [] }, ctx))
-    expect(html).not.toContain('cg-actions')
+  it('omits the eyebrow, and the aside when there is neither subtitle nor action', () => {
+    const { eyebrow: _e, subtitle: _s, actions: _a, ...bare } = BLOCKS.hero
+    const out = serialize(renderHero(bare, ctx))
+    expect(out).not.toContain('cg-statement__eyebrow')
+    expect(out).not.toContain('cg-statement__aside')
   })
 
-  it('wraps the whole block in a section carrying the contract-B block name', () => {
-    const html = serialize(renderHero(BLOCKS.hero, ctx))
-    expect(html).toMatch(/^<section class="cg-block cg-hero" data-block="hero">/)
+  it('runs its picture under the words, loaded eagerly, and says whether there is one', () => {
+    expect(html).toContain('data-media="image"')
+    expect(html.indexOf('cg-statement__title')).toBeLessThan(html.indexOf('cg-statement__media'))
+    expect(html).toMatch(/<img class="cg-statement__image"[^>]*loading="eager"/)
+    const { media: _m, ...withoutMedia } = BLOCKS.hero
+    const out = serialize(renderHero(withoutMedia, ctx))
+    expect(out).toContain('data-media="none"')
+    expect(out).not.toContain('<img')
   })
 
-  it('resolves an external action target with the noopener/noreferrer guard', () => {
-    const html = serialize(renderHero(BLOCKS.hero, ctx))
-    expect(html).toContain('href="https://github.com/cogenta-cms/cogenta"')
-    expect(html).toContain('rel="noopener noreferrer"')
-  })
-
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderHero(BLOCKS.hero, ctx))).toMatchSnapshot()
+  it('plays a film in place of a picture', () => {
+    const out = serialize(renderHero({ ...BLOCKS.hero, media: 'media-showreel' }, ctx))
+    expect(out).toContain('<video class="cg-statement__image"')
+    expect(out).toContain('poster="/img/showreel-poster.avif"')
   })
 })

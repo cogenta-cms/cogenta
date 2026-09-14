@@ -5,70 +5,58 @@ import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
 
-describe('renderEmbed', () => {
-  it('renders a bracketed provider tag on the consent card', () => {
+describe('renderEmbed, a film at the size of a picture', () => {
+  it('holds a notice in the frame’s place while consent is required', () => {
     const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('<span class="cg-embed__tag">[ youtube ]</span>')
-  })
-
-  it('carries the ratio as a CSS custom property', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('--cg-ratio:16 / 9')
-  })
-
-  it('defaults the ratio to 16/9 when the field is absent', () => {
-    const { ratio: _ratio, ...withoutRatio } = BLOCKS.embed
-    const html = serialize(renderEmbed(withoutRatio, ctx))
-    expect(html).toContain('--cg-ratio:16 / 9')
-  })
-
-  it('resolves a Vimeo numeric id to the player embed URL', () => {
-    const html = serialize(
-      renderEmbed(
-        {
-          ...BLOCKS.embed,
-          provider: 'vimeo',
-          url: 'https://vimeo.com/76979871',
-          consentRequired: false,
-        },
-        ctx,
-      ),
-    )
-    expect(html).toContain('src="https://player.vimeo.com/video/76979871"')
-  })
-
-  it('resolves a Spotify path to its embed form', () => {
-    const html = serialize(
-      renderEmbed(
-        {
-          ...BLOCKS.embed,
-          provider: 'spotify',
-          url: 'https://open.spotify.com/track/abc123',
-          consentRequired: false,
-        },
-        ctx,
-      ),
-    )
-    expect(html).toContain('src="https://open.spotify.com/embed/track/abc123"')
-  })
-
-  it('carries the provider and consent state as data attributes', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('data-provider="youtube"')
     expect(html).toContain('data-consent="required"')
-  })
-
-  it('renders no iframe at all when consent is required', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
+    expect(html).toContain('<p class="cg-embed__reason">embed.consentRequired</p>')
+    expect(html).toContain(
+      '<a class="cg-arrow-link cg-embed__link" href="https://vimeo.com/76979871" rel="noopener noreferrer nofollow">embed.open</a>',
+    )
     expect(html).not.toContain('<iframe')
   })
 
-  it('renders a real outbound link on the consent card, with the safety rel', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('rel="noopener noreferrer nofollow"')
+  it('plays from the provider’s own player once consent is not required', () => {
+    const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: false }, ctx))
+    expect(html).toContain('src="https://player.vimeo.com/video/76979871"')
+    expect(html).toContain('title="embed.title"')
+    expect(html).toContain('loading="lazy"')
   })
 
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderEmbed(BLOCKS.embed, ctx))).toMatchSnapshot()
+  it('uses the cookie-free YouTube host', () => {
+    const html = serialize(
+      renderEmbed(
+        {
+          ...BLOCKS.embed,
+          provider: 'youtube',
+          url: 'https://www.youtube.com/watch?v=abc123',
+          consentRequired: false,
+        },
+        ctx,
+      ),
+    )
+    expect(html).toContain('src="https://www.youtube-nocookie.com/embed/abc123"')
+  })
+
+  it('explains, never frames, a provider with no embeddable player', () => {
+    const html = serialize(
+      renderEmbed(
+        {
+          ...BLOCKS.embed,
+          provider: 'other',
+          url: 'https://example.org/x',
+          consentRequired: false,
+        },
+        ctx,
+      ),
+    )
+    expect(html).not.toContain('<iframe')
+    expect(html).toContain('embed.unsupported')
+  })
+
+  it('carries the ratio as a custom property, 16:9 when none is set', () => {
+    expect(serialize(renderEmbed(BLOCKS.embed, ctx))).toContain('style="--cg-ratio:16 / 9"')
+    const { ratio: _r, ...unset } = BLOCKS.embed
+    expect(serialize(renderEmbed(unset, ctx))).toContain('style="--cg-ratio:16 / 9"')
   })
 })

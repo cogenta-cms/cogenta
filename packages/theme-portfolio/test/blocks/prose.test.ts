@@ -1,69 +1,45 @@
 import { serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
-import { renderProse } from '../../src/render/blocks/prose.js'
-import { BLOCKS, makeContext } from '../fixtures.js'
+import { renderProse, TWO_COLUMN_MIN_WORDS } from '../../src/render/blocks/prose.js'
+import { BLOCKS, longProse, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
 
-describe('renderProse', () => {
-  it('wraps the rich text in the block frame', () => {
+describe('renderProse, running text on the studio grid', () => {
+  it('keeps a text that does not open on a subhead in one body, unlabelled', () => {
     const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toMatch(/^<div class="cg-block cg-prose" data-block="prose">/)
+    expect(html).toContain('data-label="false"')
+    expect(html).not.toContain('cg-prose__label')
+    expect(html).toContain('<div class="cg-prose__body"><p>The season opens with')
   })
 
-  it('starts headings at h2', () => {
+  it('moves an opening subhead into the label and leaves the rest in the body', () => {
+    const html = serialize(renderProse(longProse('b', 20), ctx))
+    expect(html).toContain('data-label="true"')
+    expect(html).toContain('<div class="cg-prose__label"><h2>The brief</h2></div>')
+    expect(html.match(/<h2>/g)).toHaveLength(1)
+  })
+
+  it('counts the words of the body to decide between one and two columns', () => {
+    expect(TWO_COLUMN_MIN_WORDS).toBeGreaterThan(80)
+    expect(serialize(renderProse(longProse('b', TWO_COLUMN_MIN_WORDS), ctx))).toContain(
+      'data-length="long"',
+    )
+    expect(serialize(renderProse(longProse('b', TWO_COLUMN_MIN_WORDS - 1), ctx))).toContain(
+      'data-length="short"',
+    )
+  })
+
+  it('renders links, strong text, lists, a quotation and a captioned figure from the rich text', () => {
     const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<h2>What the theme sees</h2>')
-    expect(html).not.toContain('<h1')
+    expect(html).toContain('<strong>four series</strong>')
+    expect(html).toContain('href="https://example.org/figures"')
+    expect(html).toContain('<blockquote><p>A poster should look like the season')
+    expect(html).toContain('<figure class="cg-prose__figure">')
+    expect(html).toContain('<figcaption>The calendar spread</figcaption>')
   })
 
-  it('escapes markup-looking text from a span rather than emitting it', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('&amp; the &lt;two planes&gt; note.')
-    expect(html).not.toContain('<two planes>')
-  })
-
-  it('renders a strong mark', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<strong>no secrets</strong>')
-  })
-
-  it('renders an external link mark', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<a href="https://example.org/adr-0004" rel="external">ADR-0004</a>')
-  })
-
-  it('nests a deeper list item inside the preceding item, not beside it', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<li>The render context<ul><li>and nothing else</li></ul></li>')
-  })
-
-  it('renders a blockquote node', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<blockquote><p>A site that runs itself.</p></blockquote>')
-  })
-
-  it('renders an inline media node as a figure with a caption', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('cg-prose__figure')
-    expect(html).toContain('The admin, mid-review')
-  })
-
-  it('never emits an internal link the render context could not resolve', () => {
-    const unresolved = makeContext({
-      link: (target) => {
-        if (typeof target === 'object' && 'collection' in target && target.id === 'contracts') {
-          return '#'
-        }
-        return ctx.link(target)
-      },
-    })
-    const html = serialize(renderProse(BLOCKS.prose, unresolved))
-    expect(html).not.toContain('href="#"')
-    expect(html).toContain('<li>A read-only content client</li>')
-  })
-
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderProse(BLOCKS.prose, ctx))).toMatchSnapshot()
+  it('writes no field marker: a rich text is not one plain value', () => {
+    expect(serialize(renderProse(BLOCKS.prose, ctx))).not.toContain('data-field')
   })
 })

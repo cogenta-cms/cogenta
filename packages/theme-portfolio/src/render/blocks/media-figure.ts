@@ -1,38 +1,42 @@
 import type { MediaFigureBlock } from '@cogenta/blocks'
 import { aspectRatio, type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * `<figure>`/`<figcaption>` rather than a div and a paragraph: the
- * association between the picture and its caption is then in the markup,
- * and a screen reader announces the caption as belonging to the image
- * instead of as loose text after it.
+ * An image placed on the grid by its alignment, square-cornered, with a
+ * small caption under it on the image's own left edge and the credit after
+ * the caption. Alignment is how a case study gets its rhythm of large and
+ * small pictures:
  *
- * The "Fig. 01" plate number that precedes the caption is drawn entirely
- * from a CSS counter (`counter-increment: cg-figure` in `blocks.css`) — it
- * is not stored data, so it renumbers itself as figures are added or
- * removed and never needs updating here.
- *
- * `align` is written as a data attribute, never as a class: contract B's
- * values are `start`/`end`, an intent that mirrors in right-to-left
- * locales, and the skin decides what it means.
+ * - `center` (the default): columns 3 to 10.
+ * - `start`: the first seven columns. `end`: the last seven.
+ * - `wide`: the whole container.
+ * - `full`: edge to edge, the caption returning to the grid.
  */
 export function renderMediaFigure(block: MediaFigureBlock, ctx: RenderContext): HtmlElement {
   const ratio = aspectRatio(block.ratio)
+  const align = block.align ?? 'center'
   const hasCaption = block.caption !== undefined || block.credit !== undefined
-  return h(
-    'figure',
+  return section(
+    'div',
+    'mediaFigure',
+    'cg-figure',
     {
-      class: 'cg-block cg-figure',
-      'data-block': 'mediaFigure',
-      'data-align': block.align ?? 'center',
+      'data-align': align,
       style: ratio === undefined ? undefined : `--cg-ratio:${ratio}`,
     },
+    'figure',
     h(
       'div',
       { class: 'cg-figure__frame' },
       image(ctx, block.media, {
-        className: 'cg-figure__media',
-        sizes: '(min-width: 48rem) 42rem, 100vw',
+        className: 'cg-figure__image',
+        sizes:
+          align === 'full'
+            ? '100vw'
+            : align === 'wide'
+              ? '(min-width: 96rem) 92rem, 100vw'
+              : '(min-width: 64rem) 56rem, 100vw',
       }),
     ),
     hasCaption
@@ -41,7 +45,11 @@ export function renderMediaFigure(block: MediaFigureBlock, ctx: RenderContext): 
           { class: 'cg-figure__caption' },
           block.caption === undefined
             ? null
-            : h('span', { class: 'cg-figure__plate' }, block.caption),
+            : h(
+                'span',
+                { class: 'cg-figure__caption-text', 'data-field': 'caption' },
+                block.caption,
+              ),
           block.credit === undefined
             ? null
             : h('span', { class: 'cg-figure__credit', 'data-field': 'credit' }, block.credit),

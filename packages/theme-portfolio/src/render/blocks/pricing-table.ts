@@ -1,7 +1,6 @@
 import type { PricingTableBlock, PricingTier } from '@cogenta/blocks'
 import {
   actionLink,
-  blockHeadingTag,
   type HeadingTag,
   type HtmlElement,
   h,
@@ -9,60 +8,60 @@ import {
   nestedHeadingTag,
   type RenderContext,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * `highlighted` is an editorial signal, never a colour (RFC 0001's own
- * comment on the field): it is written as `data-highlighted="true"` for the
- * skin to key off, and the tier additionally carries `aria-current="true"`
- * — the closest native semantic for "the one the author means you to pick"
- * among a set of siblings.
+ * Fees or engagements, set as the columns of a ruled table rather than as
+ * cards: each tier opens on a hairline, its name in the text face, the price
+ * in the display width with tabular numerals and the interval after it, what
+ * it includes as a list divided by hairlines, and its action at the foot. The
+ * tier the editor highlighted opens on a heavy rule in ink instead, and its
+ * action is the filled one; the others keep their words underlined.
  */
 function renderTier(tier: PricingTier, ctx: RenderContext, tag: HeadingTag): HtmlElement {
+  const highlighted = tier.highlighted === true
   return h(
     'li',
-    {
-      class: 'cg-pricing__tier',
-      'data-highlighted': tier.highlighted === true ? 'true' : undefined,
-      'aria-current': tier.highlighted === true ? 'true' : undefined,
-    },
-    heading(tag, { class: 'cg-pricing__name' }, tier.name),
+    { class: 'cg-fees__tier', 'data-highlighted': highlighted ? 'true' : undefined },
+    heading(tag, { class: 'cg-fees__name' }, tier.name),
     h(
       'p',
-      { class: 'cg-pricing__price' },
-      tier.price,
-      tier.interval === undefined
-        ? null
-        : h('span', { class: 'cg-pricing__interval' }, tier.interval),
+      { class: 'cg-fees__price' },
+      h('span', { class: 'cg-fees__amount' }, tier.price),
+      tier.interval === undefined ? null : h('span', { class: 'cg-fees__interval' }, tier.interval),
     ),
     tier.features.length === 0
       ? null
       : h(
           'ul',
-          { class: 'cg-pricing__features' },
-          tier.features.map((feature) => h('li', {}, feature)),
+          { class: 'cg-fees__features' },
+          tier.features.map((feature) => h('li', { class: 'cg-fees__feature' }, feature)),
         ),
     tier.action === undefined
       ? null
-      : h('div', { class: 'cg-pricing__action' }, actionLink(ctx, tier.action)),
+      : h(
+          'div',
+          { class: 'cg-fees__action' },
+          actionLink(ctx, {
+            ...tier.action,
+            emphasis: tier.action.emphasis ?? (highlighted ? 'primary' : 'secondary'),
+          }),
+        ),
   )
 }
 
 export function renderPricingTable(block: PricingTableBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const tierTag = nestedHeadingTag('pricingTable', hasTitle)
-  return h(
+  const tierTag = nestedHeadingTag('pricingTable', block.title !== undefined)
+  return section(
     'section',
-    { class: 'cg-block cg-pricing', 'data-block': 'pricingTable' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('pricingTable') ?? 'h2',
-          { class: 'cg-pricing__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'pricingTable',
+    'cg-fees',
+    { 'data-count': String(Math.min(block.tiers.length, 4)) },
+    'div',
+    sectionHead('pricingTable', block.title),
     h(
       'ul',
-      { class: 'cg-pricing__tiers' },
+      { class: 'cg-fees__tiers' },
       block.tiers.map((tier) => renderTier(tier, ctx, tierTag)),
     ),
   )

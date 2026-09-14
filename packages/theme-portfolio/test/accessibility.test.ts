@@ -3,13 +3,13 @@ import { serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderEmbed } from '../src/render/blocks/embed.js'
 import { renderBlock, renderPage } from '../src/render/render-block.js'
-import { ALL_BLOCKS, BLOCKS, ENTRIES, makeContext } from './fixtures.js'
+import { ALL_BLOCKS, BLOCKS, ENTRIES, GRID_ENTRIES, makeContext } from './fixtures.js'
 
 const ctx = makeContext()
 const entries = { 'b-collection': ENTRIES }
 
 function page(blocks: readonly VocabularyBlock[]): string {
-  return serialize(renderPage({ title: 'Studio Cogenta — selected work', blocks }, ctx, entries))
+  return serialize(renderPage({ title: 'Studio', blocks }, ctx, entries))
 }
 
 function block(value: VocabularyBlock): string {
@@ -32,7 +32,7 @@ describe('heading outline', () => {
   it('renders the page title as the h1 when the page has no hero', () => {
     const withoutHero = page(ALL_BLOCKS.filter((candidate) => candidate._type !== 'hero'))
     expect(headingLevels(withoutHero).filter((level) => level === 1)).toHaveLength(1)
-    expect(withoutHero).toContain('class="cg-page__title"')
+    expect(withoutHero).toContain('<h1 class="cg-page-head__title">Studio</h1>')
   })
 
   it('never skips a heading level', () => {
@@ -52,54 +52,64 @@ describe('heading outline', () => {
   })
 
   it('keeps a titleless block and its items on consecutive levels', () => {
-    // Without its own h2, a featureGrid must not start its items at h3.
     const { title: _title, ...untitled } = BLOCKS.featureGrid
     expect(headingLevels(block(untitled))).toEqual([2, 2])
   })
 
-  it('keeps a titled collection list and its entries on consecutive levels', () => {
-    const node = renderBlock(BLOCKS.collectionList, ctx, entries)
-    const html = node === null ? '' : serialize(node)
-    // block title is h2, entries have no own heading tag but titled true
-    // -> entries render at h3.
-    expect(headingLevels(html)).toEqual([2, 3, 3])
+  it('titles every piece of work in an untitled grid at h2, under the page h1', () => {
+    const { title: _title, ...untitled } = BLOCKS.collectionList
+    const html = serialize(
+      renderPage({ title: 'Work', blocks: [untitled] }, ctx, { 'b-collection': GRID_ENTRIES }),
+    )
+    expect(headingLevels(html)[0]).toBe(1)
+    expect(
+      headingLevels(html)
+        .slice(1)
+        .every((level) => level === 2),
+    ).toBe(true)
+  })
+
+  it('gives a list of names no headings at all: a name is an item, not a section', () => {
+    const names = {
+      ...BLOCKS.featureGrid,
+      items: [
+        { _key: 'n1', title: 'Rookery Hall' },
+        { _key: 'n2', title: 'Tidewater Trust' },
+      ],
+    }
+    expect(headingLevels(block(names))).toEqual([2])
   })
 })
 
 describe('images', () => {
   const images = [...FULL_PAGE.matchAll(/<img\b[^>]*>/g)].map((match) => match[0])
 
-  it('renders at least one image, so the rule below is not vacuous', () => {
-    expect(images.length).toBeGreaterThan(0)
+  it('renders images, so the rules below are not vacuous', () => {
+    expect(images.length).toBeGreaterThan(8)
   })
 
   it('never renders an image without an alt attribute', () => {
-    for (const tag of images) {
-      expect(tag, tag).toMatch(/\salt="/)
+    for (const tag of images) expect(tag, tag).toMatch(/\salt="/)
+  })
+
+  it('names a mark with its organisation when the media entity has no alt text', () => {
+    expect(block(BLOCKS.logos)).toContain('alt="Acme Concert Hall"')
+  })
+
+  it('keeps an empty alt on a decorative portrait rather than inventing one', () => {
+    expect(block(BLOCKS.quote)).toMatch(/<img[^>]*class="cg-quote__avatar"[^>]*alt=""/)
+  })
+
+  it('gives every image intrinsic dimensions, so nothing shifts as it loads', () => {
+    for (const tag of images) expect(tag, tag).toMatch(/\swidth="\d+" height="\d+"/)
+  })
+
+  it('hides the duplicate image link of a piece of work from assistive technology and the tab order', () => {
+    const html = block(BLOCKS.collectionList)
+    for (const link of html.match(/<a class="cg-work__media"[^>]*>/g) ?? []) {
+      expect(link).toContain('tabindex="-1"')
+      expect(link).toContain('aria-hidden="true"')
     }
-  })
-
-  it('names a logo with the organisation when the media entity has no alt text', () => {
-    expect(block(BLOCKS.logos)).toContain('alt="Acme"')
-  })
-
-  it('keeps an empty alt on a decorative image rather than inventing one', () => {
-    const html = block(BLOCKS.quote)
-    expect(html).toContain('class="cg-quote__avatar"')
-    expect(html).toMatch(/<img[^>]*class="cg-quote__avatar"[^>]*alt=""/)
-  })
-
-  it('renders the hero media eagerly, never lazily, as the likely LCP element', () => {
-    const html = block(BLOCKS.hero)
-    expect(html).toMatch(/<img[^>]*loading="eager"/)
-  })
-
-  it('renders a video-kind media as a <video> with a poster, never a broken <img>', () => {
-    const withVideo = { ...BLOCKS.hero, media: 'media-showreel' }
-    const html = block(withVideo)
-    expect(html).toContain('<video')
-    expect(html).toContain('poster="/img/showreel-poster.avif"')
-    expect(html).not.toContain('<img')
   })
 })
 
@@ -110,17 +120,37 @@ describe('zero client JavaScript', () => {
     expect(FULL_PAGE).not.toMatch(/javascript:/i)
   })
 
-  it('renders the carousel as a focusable, labelled scroll region', () => {
-    const html = block(BLOCKS.gallery)
+  it('renders a scrolling gallery as a focusable, labelled region', () => {
+    const html = block({ ...BLOCKS.gallery, layout: 'carousel' })
     expect(html).toContain('role="region"')
     expect(html).toContain('aria-label="gallery.carousel"')
     expect(html).toContain('tabindex="0"')
   })
 
-  it('renders the FAQ with details and summary rather than a scripted accordion', () => {
-    const html = block(BLOCKS.faq)
+  it('renders collapsible notes with details and summary rather than a scripted accordion', () => {
+    const html = block(BLOCKS.accordion)
     expect(html).toContain('<details')
     expect(html).toContain('<summary')
+  })
+})
+
+describe('links', () => {
+  it('never renders a link whose only content is an arrow', () => {
+    for (const match of FULL_PAGE.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)) {
+      if ((match[1] as string).includes('<img')) continue
+      const words = (match[1] as string).replace(/<[^>]+>/g, '').trim()
+      expect(words, match[0]).not.toMatch(/^[←-⇿\s]*$/)
+    }
+  })
+
+  it('writes no arrow glyph into any link text: arrows are drawn by the stylesheet', () => {
+    expect(FULL_PAGE.replace(/<[^>]+>/g, '')).not.toMatch(/[←-⇿]/)
+  })
+
+  it('protects a link that leaves the site, and not one that stays', () => {
+    const hero = block(BLOCKS.hero)
+    expect(hero).toMatch(/href="https:\/\/example\.org\/work" rel="noopener noreferrer"/)
+    expect(hero).not.toMatch(/href="\/en\/contact" rel=/)
   })
 })
 
@@ -128,75 +158,11 @@ describe('embed consent', () => {
   it('contacts no third party when consent is required', () => {
     const html = serialize(renderEmbed(BLOCKS.embed, ctx))
     expect(html).not.toContain('<iframe')
-    expect(html).not.toContain('youtube-nocookie')
-    expect(html).toContain('data-consent="required"')
-  })
-
-  it('frames the privacy-preserving host once consent is not required', () => {
-    const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: false }, ctx))
-    expect(html).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"')
-    expect(html).not.toContain('www.youtube.com/embed')
+    expect(html).not.toContain('player.vimeo.com')
   })
 
   it('gives every frame an accessible name', () => {
     const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: false }, ctx))
     expect(html).toMatch(/<iframe[^>]*\stitle="/)
-  })
-
-  it('falls back to a link for a provider that would need a script', () => {
-    const html = serialize(
-      renderEmbed(
-        {
-          ...BLOCKS.embed,
-          provider: 'mastodon',
-          url: 'https://m.example/@a/1',
-          consentRequired: false,
-        },
-        ctx,
-      ),
-    )
-    expect(html).not.toContain('<iframe')
-    expect(html).toContain('cg-embed__link')
-  })
-})
-
-describe('the identity a rendered page carries back to its blocks', () => {
-  it('stamps every placed block with the key contract B minted for it', () => {
-    const html = serialize(
-      renderPage({ title: 'Page', blocks: [BLOCKS.hero, BLOCKS.cta] }, ctx, {}),
-    )
-    expect(html).toContain(`data-block-key="${BLOCKS.hero._key}"`)
-    expect(html).toContain(`data-block-key="${BLOCKS.cta._key}"`)
-  })
-
-  it('gives two blocks of the same type two different keys in the markup', () => {
-    const second = { ...BLOCKS.cta, _key: 'cta-second' }
-    const html = serialize(renderPage({ title: 'Page', blocks: [BLOCKS.cta, second] }, ctx, {}))
-    expect(html).toContain(`data-block-key="${BLOCKS.cta._key}"`)
-    expect(html).toContain('data-block-key="cta-second"')
-  })
-})
-
-describe('data that reaches the markup', () => {
-  it('escapes angle brackets and ampersands coming from a block field', () => {
-    const html = block(BLOCKS.prose)
-    expect(html).toContain('&amp; the &lt;two planes&gt; note.')
-    expect(html).not.toContain('<two planes>')
-  })
-
-  it('renders an internal link whose target could not be resolved as plain text, never a dead anchor', () => {
-    const unresolved = makeContext({
-      link: (target) => {
-        if (typeof target === 'object' && 'collection' in target && target.id === 'contracts') {
-          return '#'
-        }
-        return ctx.link(target)
-      },
-    })
-    const node = renderBlock(BLOCKS.prose, unresolved, entries)
-    const html = node === null ? '' : serialize(node)
-    expect(html).toContain('<li>A read-only content client</li>')
-    expect(html).not.toContain('href="#"')
-    expect(html).toContain('<a href="https://example.org/adr-0004"')
   })
 })

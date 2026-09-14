@@ -36,13 +36,22 @@ function sourceFiles(directory: string): string[] {
 }
 
 const FILES = sourceFiles(SRC).map((path) => ({
-  path: relative(SRC, path),
+  path: relative(SRC, path).replaceAll('\\', '/'),
   source: readFileSync(path, 'utf8'),
 }))
 
+const STYLESHEETS = FILES.filter(({ path }) => path.endsWith('.css')).map(({ path, source }) => ({
+  path,
+  source: source.replace(/\/\*[\s\S]*?\*\//g, ''),
+}))
+const RAW_STYLESHEETS = FILES.filter(({ path }) => path.endsWith('.css'))
+const RENDER_SOURCES = FILES.filter(
+  ({ path }) => path.startsWith('render/') && path.endsWith('.ts'),
+)
+
 describe('theme isolation', () => {
   it('scans the sources it claims to scan', () => {
-    expect(FILES.length).toBeGreaterThan(15)
+    expect(FILES.length).toBeGreaterThan(20)
   })
 
   for (const forbidden of FORBIDDEN_IMPORTS) {
@@ -59,29 +68,19 @@ describe('theme isolation', () => {
     expect(offenders.map(({ path }) => path)).toEqual([])
   })
 
-  it('hydrates nothing: no client directive in any component', () => {
+  it('hydrates nothing: no client directive in any file', () => {
     const offenders = FILES.filter(({ source }) =>
       /client:(load|idle|visible|media|only)/.test(source),
     )
     expect(offenders.map(({ path }) => path)).toEqual([])
   })
 
-  /**
-   * A literal colour in a stylesheet is a colour no skin can override, which
-   * is what would break hot skin switching. The rule is on *every* sheet, not
-   * just the entry.
-   *
-   * Relative colour syntax is the one exception, and only in its derived
-   * form: `oklch(from var(--cogenta-…) …)` reads its hue and chroma from a
-   * skin token, so the skin still owns the colour — that is the rule's
-   * intent, where a bare `oklch(0.5 0.1 240)` would defeat it. The check
-   * below strips the derived form first and then refuses anything left.
-   */
-  const STYLESHEETS = FILES.filter(({ path }) => path.endsWith('.css')).map(({ path, source }) => ({
-    path: path.replaceAll('\\', '/'),
-    // A comment naming a forbidden function is documentation, not a colour.
-    source: source.replace(/\/\*[\s\S]*?\*\//g, ''),
-  }))
+  it('never emits a <script> element or an inline handler from a block or the chrome', () => {
+    const offenders = RENDER_SOURCES.filter(({ source }) =>
+      /<script|['"`]on[a-z]+['"`]\s*:|\son[a-z]+="/i.test(source),
+    ).map(({ path }) => path)
+    expect(offenders).toEqual([])
+  })
 
   it('ships the stylesheets it claims to check', () => {
     expect(STYLESHEETS.map(({ path }) => path).sort()).toEqual([
@@ -90,44 +89,54 @@ describe('theme isolation', () => {
       'styles/blocks.css',
       'styles/theme.css',
       'styles/tokens.css',
+      'styles/work.css',
     ])
   })
 
+  /**
+   * A literal colour in a stylesheet is a colour no skin can override. The
+   * rule is on *every* sheet, not just the entry point. Relative colour
+   * syntax is the one exception, and only in its derived form:
+   * `oklch(from var(--cogenta-…) …)` still reads its hue and chroma from a
+   * skin token.
+   */
   for (const { path, source } of STYLESHEETS) {
     it(`writes no style value the skin cannot change, in ${path}`, () => {
-      // `currentColor` covers the `@supports` probe, which needs a syntactically
-      // valid relative colour to test for and must not smuggle in a real one.
       const derived = /\boklch\(\s*from\s+(?:var\(--cogenta-[a-z-]+\)|currentColor)[^)]*\)/g
       const remainder = source.replace(derived, '')
       expect(remainder).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
       expect(remainder).not.toMatch(/\b(?:rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/)
+      expect(remainder).not.toMatch(/:\s*(?:white|black|red|orange|blue|violet|purple)\s*;/)
     })
   }
 
-  it('never emits a <script> element from a block or the chrome', () => {
-    const offenders = FILES.filter(
-      ({ path, source }) => path.endsWith('.ts') && /<script/i.test(source),
-    ).map(({ path }) => path)
-    expect(offenders).toEqual([])
+  it('loads its fonts only from the one host every theme may reach', () => {
+    const imports = STYLESHEETS.flatMap(({ source }) =>
+      [...source.matchAll(/@import\s+url\(["']([^"']+)["']\)/g)].map((match) => match[1] as string),
+    )
+    expect(imports).toHaveLength(1)
+    for (const url of imports) expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
+  })
+
+  it('loads every other sheet by a relative import the host inlines, in order', () => {
+    const theme = STYLESHEETS.find(({ path }) => path === 'styles/theme.css')?.source ?? ''
+    const local = [...theme.matchAll(/@import\s+"([^"]+)";/g)].map((match) => match[1])
+    expect(local).toEqual([
+      './tokens.css',
+      './base.css',
+      './work.css',
+      './blocks.css',
+      './archive.css',
+    ])
   })
 
   /**
-   * D5 (`docs/lots/L25-templates-pro.md`): a gradient reads as the generic
-   * "AI-generated" look. This theme is built entirely from flat colour
-   * fields, hairlines and shadows instead — locked in here so a later
-   * change cannot quietly reintroduce one, in a stylesheet or in an inline
-   * style string built by the renderer.
+   * D5 (`docs/lots/L25-templates-pro.md`) and the L27 studio charter: a
+   * gradient, a glow, a scroll-driven entrance are the look of a generated
+   * template. This theme is built from flat colour, hairlines and space,
+   * locked in here so a later change cannot quietly reintroduce one, in a
+   * stylesheet or in an inline style string built by the renderer.
    */
-  const RAW_STYLESHEETS = FILES.filter(({ path }) => path.endsWith('.css')).map(
-    ({ path, source }) => ({
-      path: path.replaceAll('\\', '/'),
-      source,
-    }),
-  )
-  const RENDER_SOURCES = FILES.filter(
-    ({ path }) => path.replaceAll('\\', '/').startsWith('render/') && path.endsWith('.ts'),
-  )
-
   it('paints no gradient, in a stylesheet or an inline style', () => {
     const offenders = [...RAW_STYLESHEETS, ...RENDER_SOURCES]
       .filter(({ source }) => /gradient\(/.test(source))
@@ -135,78 +144,46 @@ describe('theme isolation', () => {
     expect(offenders).toEqual([])
   })
 
-  it('fakes no glow with a decorative blur filter', () => {
-    // A blur serving a real accessibility purpose would be exempt if the
-    // same line carried a `/* a11y */` comment; none of this theme's
-    // surfaces need one.
-    const offenders = [...RAW_STYLESHEETS, ...RENDER_SOURCES].flatMap(({ path, source }) =>
-      source
-        .split('\n')
-        .some(
-          (line) =>
-            /(?:filter|backdrop-filter)\s*:\s*[^;]*\bblur\(/.test(line) &&
-            !line.includes('/* a11y */'),
-        )
-        ? [path]
-        : [],
-    )
+  it('fades nothing in on scroll and declares no keyframes, in a stylesheet or an inline style', () => {
+    const offenders = [...RAW_STYLESHEETS, ...RENDER_SOURCES]
+      .filter(({ source }) =>
+        /animation-timeline|view-timeline|scroll-timeline|@keyframes|animation\s*:/.test(source),
+      )
+      .map(({ path }) => path)
     expect(offenders).toEqual([])
   })
 
-  /**
-   * A real regression, found by looking at an actual screenshot at 360px:
-   * the desktop `.cg-site-header__nav { display: flex }` rule and the
-   * mobile `@media (max-width: 56rem) { .cg-site-header__nav { display:
-   * none } }` override share the exact same specificity (0,1,0) — with no
-   * specificity difference, CSS falls back to source order, so whichever of
-   * the two is declared *later in the file* wins at every width, media
-   * query or not. Having the unconditional rule declared after the media
-   * query silently defeated "hidden below the breakpoint" everywhere: the
-   * mobile nav rendered permanently open, overlapping the hero. Locked in
-   * here so the fix cannot regress by simple reordering during a future
-   * edit.
-   */
-  /**
-   * A real regression, also found by looking at an actual screenshot: the
-   * `<ol class="cg-collection__items">` a `collectionList` renders never
-   * suppressed the browser's own decimal marker, so every entry showed the
-   * native "1." right beside this theme's own "01" index badge — on every
-   * layout, since this rule predates L25.
-   */
-  it('suppresses the native <ol> marker on collectionList items', () => {
-    const blocks = RAW_STYLESHEETS.find(({ path }) => path === 'styles/blocks.css')
-    expect(blocks, 'styles/blocks.css must exist').toBeDefined()
-    const source = blocks?.source ?? ''
-    const ruleStart = source.indexOf('.cg-collection__items {')
-    expect(ruleStart).toBeGreaterThan(-1)
-    const ruleEnd = source.indexOf('}', ruleStart)
-    const rule = source.slice(ruleStart, ruleEnd)
-    expect(rule).toContain('list-style: none')
+  it('fakes no glow, no frosted glass: no blur filter and no backdrop filter', () => {
+    const offenders = [...STYLESHEETS, ...RENDER_SOURCES]
+      .filter(({ source }) => /blur\(|backdrop-filter/.test(source))
+      .map(({ path }) => path)
+    expect(offenders).toEqual([])
   })
 
-  /**
-   * A real regression, also found by looking at a real project page
-   * screenshot: the blueprint's own "Role / Year" panel is a `prose` block
-   * with `variant.background: "muted"`, and it inherited the editorial
-   * drop-cap `blocks.css` gives every `prose` block's first paragraph — its
-   * first word ("Role") rendered as a giant serif capital, not a spec-sheet
-   * label.
-   */
-  it('opts a background-variant prose block out of the editorial drop cap', () => {
-    const blocks = RAW_STYLESHEETS.find(({ path }) => path === 'styles/blocks.css')
-    const source = blocks?.source ?? ''
-    expect(source).toContain('.cg-prose[data-variant-background] > p:first-child::first-letter')
+  it('writes no inline style from a renderer beyond a ratio', () => {
+    const styles = RENDER_SOURCES.flatMap(({ source }) =>
+      [...source.matchAll(/style:\s*(`[^`]*`|'[^']*')/g)].map((match) => match[1] as string),
+    )
+    expect(styles.length).toBeGreaterThan(0)
+    for (const style of styles) expect(style).toMatch(/--cg-ratio/)
   })
 
-  it('declares the header nav open by default before the mobile-menu media query, never after', () => {
-    const base = RAW_STYLESHEETS.find(({ path }) => path === 'styles/base.css')
-    expect(base, 'styles/base.css must exist').toBeDefined()
-    const source = base?.source ?? ''
-    const defaultRuleIndex = source.indexOf('.cg-site-header__nav {')
-    const mediaQueryIndex = source.indexOf('@media (max-width: 56rem)')
-    expect(defaultRuleIndex).toBeGreaterThan(-1)
-    expect(mediaQueryIndex).toBeGreaterThan(-1)
-    expect(defaultRuleIndex).toBeLessThan(mediaQueryIndex)
+  it('sets no font family literally: the skin names Archivo, the stylesheets read the token', () => {
+    const literal = STYLESHEETS.flatMap(({ path, source }) =>
+      [...source.matchAll(/font-family:\s*([^;]+);/g)]
+        .map((match) => (match[1] as string).trim())
+        .filter((value) => !value.startsWith('var(--cg-font'))
+        .map((value) => `${path}: ${value}`),
+    )
+    expect(literal).toEqual([])
+  })
+
+  it('never names a typeface generated templates reach for first', () => {
+    for (const { path, source } of [...RAW_STYLESHEETS, ...RENDER_SOURCES]) {
+      expect(source, path).not.toMatch(
+        /\b(Inter|Poppins|Plus Jakarta Sans|Space Grotesk|DM Sans|Manrope|Outfit|Sora|Nunito|Bricolage Grotesque|JetBrains Mono)\b/,
+      )
+    }
   })
 })
 
@@ -231,5 +208,9 @@ describe('the manifest', () => {
 
   it('names itself distinctly from the reference theme', () => {
     expect(manifest.name).toBe('portfolio')
+  })
+
+  it('describes the theme without a word a studio would not use of itself', () => {
+    expect(manifest.description).not.toMatch(/ultra|modern|brutalist|electric|stunning|sleek/i)
   })
 })

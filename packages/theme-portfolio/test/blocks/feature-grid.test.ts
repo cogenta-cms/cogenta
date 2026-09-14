@@ -4,98 +4,60 @@ import { renderFeatureGrid } from '../../src/render/blocks/feature-grid.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
-
-describe('renderFeatureGrid', () => {
-  it('renders the title at h2 when present', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<h2 class="cg-features__title" data-field="title">What we do</h2>')
-  })
-
-  it('renders no title heading when the field is absent', () => {
-    const { title: _title, ...untitled } = BLOCKS.featureGrid
-    const html = serialize(renderFeatureGrid(untitled, ctx))
-    expect(html).not.toContain('cg-features__title')
-  })
-
-  it('renders an item title as a link when the item carries one', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<a class="cg-feature__link" href="/en/page/services">Brand systems</a>')
-  })
-
-  it('renders an item title as plain text when the item has no link', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<h3 class="cg-feature__title">Product design</h3>')
-  })
-
-  it('carries the icon name as a data attribute and renders it via the shared renderIcon helper', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('data-icon="shield"')
-    expect(html).toContain('class="cg-feature__icon"')
-    expect(html).toContain('<svg')
-    expect(html).not.toContain('<i class="icon')
-  })
-
-  it('renders no icon svg for an item with no icon field', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    const items = html.split('<li class="cg-feature"')
-    // items[0] is the markup before the first item; items[2] is the second
-    // item's own fragment (Product design, no icon).
-    expect(items[2]).not.toContain('<svg')
-  })
-
-  it('renders no icon svg for an unrecognised icon name, never a broken glyph', () => {
-    const [firstItem] = BLOCKS.featureGrid.items
-    if (firstItem === undefined) throw new Error('fixture must have at least one item')
-    const withUnknownIcon = {
+const rows = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
+const names = serialize(
+  renderFeatureGrid(
+    {
       ...BLOCKS.featureGrid,
-      items: [{ ...firstItem, icon: 'not-a-real-icon' }],
-    }
-    const html = serialize(renderFeatureGrid(withUnknownIcon, ctx))
-    expect(html).not.toContain('<svg')
+      title: 'Clients',
+      items: [
+        { _key: 'c1', title: 'Rookery Hall' },
+        { _key: 'c2', title: 'Tidewater Trust', link: { href: '/client/tidewater-trust' } },
+      ],
+    },
+    ctx,
+  ),
+)
+
+describe('renderFeatureGrid, a typographic list', () => {
+  it('is a split block: the label beside the list', () => {
+    expect(rows).toMatch(/^<section class="cg-section cg-list cg-split" data-block="featureGrid"/)
+    expect(rows).toContain(
+      '<div class="cg-head"><h2 class="cg-head__title" data-field="title">Disciplines</h2></div>',
+    )
   })
 
-  it('renders a decorative, hidden index marker for every item, never invented markup', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<span class="cg-feature__index" aria-hidden="true"></span>')
+  it('sets items with a sentence as rows: a name at h3 and the sentence beside it', () => {
+    expect(rows).toContain('data-form="rows"')
+    expect(rows).toContain('<li class="cg-list__item"><h3 class="cg-list__name">')
+    expect(rows).toContain('<p class="cg-list__text">Signs tested on site.</p>')
   })
 
-  it('renders the item text when present', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('Identity, type and motion, documented.')
+  it('links a linked item’s name as an arrow link, words only', () => {
+    expect(rows).toContain(
+      '<h3 class="cg-list__name"><a class="cg-arrow-link cg-list__link" href="/en/disciplines/identity">Identity</a></h3>',
+    )
   })
 
-  it('omits the item text paragraph when absent', () => {
-    const [firstItem, secondItem] = BLOCKS.featureGrid.items
-    if (firstItem === undefined || secondItem === undefined) {
-      throw new Error('fixture must have at least two items')
-    }
-    const { text: _text, ...itemWithoutText } = secondItem
-    const withoutText = {
-      ...BLOCKS.featureGrid,
-      items: [firstItem, itemWithoutText],
-    }
-    const html = serialize(renderFeatureGrid(withoutText, ctx))
-    const items = html.split('<li class="cg-feature"')
-    expect(items[2]).not.toContain('cg-feature__text')
+  it('draws no icon: a studio lists its services in words', () => {
+    expect(rows).not.toContain('<svg')
+    expect(rows).not.toContain('data-icon')
   })
 
-  it('starts items at h2 when the block has no title of its own', () => {
-    const { title: _title, ...untitled } = BLOCKS.featureGrid
+  it('sets items with no sentence as a list of names, with no heading per name', () => {
+    expect(names).toContain('data-form="names"')
+    expect(names).toContain('<li class="cg-list__item cg-list__name">Rookery Hall</li>')
+    expect(names).toContain(
+      '<li class="cg-list__item cg-list__name"><a class="cg-arrow-link cg-list__link" href="/en/client/tidewater-trust">Tidewater Trust</a></li>',
+    )
+    expect(names).not.toMatch(/<h3/)
+  })
+
+  it('counts its items and says whether it has a label', () => {
+    expect(rows).toContain('<ul class="cg-list__items" data-count="2">')
+    const { title: _t, ...untitled } = BLOCKS.featureGrid
     const html = serialize(renderFeatureGrid(untitled, ctx))
-    expect([...html.matchAll(/<h([1-6])/g)].map((m) => m[1])).toEqual(['2', '2'])
-  })
-
-  it('starts items at h3 when the block has its own h2 title', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect([...html.matchAll(/<h([1-6])/g)].map((m) => m[1])).toEqual(['2', '3', '3'])
-  })
-
-  it('wraps items in a plain unordered list', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<ul class="cg-features__items">')
-  })
-
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))).toMatchSnapshot()
+    expect(html).toContain('data-titled="false"')
+    expect(html).not.toContain('cg-head')
   })
 })

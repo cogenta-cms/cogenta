@@ -1,40 +1,80 @@
 /*
- * The taxonomy-term archive (contract D `theme@1.3`).
- *
- * Only the three things an archive adds beyond what `collectionList` already
- * styles — a breadcrumb, a sub-term row, a prev/next pager. The entry list
- * itself reuses the `cg-entry`/`cg-collection__items` rules, on purpose: an
- * archive of articles must look like this theme's list of articles, and a
- * second set of card rules is exactly how those two drift apart.
+ * The page of one taxonomy term: the taxonomy's name small, the term very
+ * large, then the studio's index of every project filed under it.
  */
 
-.cg-archive {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  padding: var(--cg-s10) var(--cg-gutter);
+.cg-archive__head {
+  padding-block: calc(var(--cg-section) * 0.45) calc(var(--cg-section) * 0.15);
 }
 
-.cg-archive__breadcrumb ol,
+.cg-archive__head-inner {
+  row-gap: var(--cg-s4);
+}
+
+.cg-archive__breadcrumb {
+  font-size: var(--cg-text-caption);
+}
+
+.cg-archive__trail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--cg-s2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-archive__trail li + li::before {
+  content: "/" / "";
+  margin-inline-end: var(--cg-s2);
+  color: var(--cg-ink-subtle);
+}
+
+.cg-archive__trail a {
+  color: var(--cg-ink-muted);
+}
+
+.cg-archive__kicker {
+  margin: 0;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-caption);
+  font-weight: var(--cg-weight-medium);
+}
+
+.cg-archive__title {
+  font-size: var(--cg-size-title);
+  font-stretch: var(--cg-width-display);
+  font-weight: var(--cg-weight-medium);
+  line-height: var(--cg-leading-title);
+  letter-spacing: var(--cg-tracking-display);
+}
+
 .cg-archive__children {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--cg-s3);
-  margin: 0 0 var(--cg-s4);
+  gap: var(--cg-s2) var(--cg-s8);
+  margin: var(--cg-s4) 0 0;
   padding: 0;
   list-style: none;
-  font-size: var(--cg-text-sm);
 }
 
-.cg-archive__children {
-  margin-block: var(--cg-s4) var(--cg-s8);
+.cg-archive .cg-index {
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
 }
 
 .cg-archive__pager {
   display: flex;
   justify-content: space-between;
-  gap: var(--cg-s4);
+  gap: var(--cg-s8);
   margin-block-start: var(--cg-s10);
-  padding-block-start: var(--cg-s5);
-  border-block-start: 1px solid var(--cg-line-soft);
-  font-weight: var(--cg-weight-semibold);
+}
+
+.cg-archive__pager [rel="next"] {
+  margin-inline-start: auto;
+}
+
+@media (min-width: 64rem) {
+  .cg-archive__title {
+    grid-column: 1 / span 10;
+  }
 }

@@ -4,50 +4,36 @@ import { renderStats } from '../../src/render/blocks/stats.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderStats(BLOCKS.stats, ctx))
 
-describe('renderStats', () => {
-  it('renders a description list, not a generic div grid', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('<dl class="cg-stats__items">')
+describe('renderStats, figures side by side', () => {
+  it('sets the figures as a description list, one group per figure', () => {
+    expect(html).toContain('<dl class="cg-figures__items">')
+    expect(html.match(/<div class="cg-figures__item">/g)).toHaveLength(2)
   })
 
-  it('renders the title at h2 when present', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('<h2 class="cg-stats__title" data-field="title">By the numbers</h2>')
+  it('sets the value, then the unit after it, then what it counts', () => {
+    expect(html).toContain(
+      '<dt class="cg-figures__figure"><span class="cg-figures__value">38</span><span class="cg-figures__unit">%</span></dt><dd class="cg-figures__label">fewer questions at the desk</dd>',
+    )
   })
 
-  it('renders no title heading when the field is absent', () => {
-    const { title: _title, ...untitled } = BLOCKS.stats
-    const html = serialize(renderStats(untitled, ctx))
-    expect(html).not.toContain('cg-stats__title')
+  it('writes no unit element for a figure without one', () => {
+    expect(html).toContain(
+      '<dt class="cg-figures__figure"><span class="cg-figures__value">16</span></dt>',
+    )
   })
 
-  it('puts the label before the figure in the markup, for reading order', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    const dtIndex = html.indexOf('<dt')
-    const ddIndex = html.indexOf('<dd')
-    expect(dtIndex).toBeGreaterThanOrEqual(0)
-    expect(dtIndex).toBeLessThan(ddIndex)
+  it('counts its figures, at most four, for the stylesheet', () => {
+    expect(html).toContain('data-count="2"')
+    const many = {
+      ...BLOCKS.stats,
+      items: Array.from({ length: 6 }, (_, i) => ({ _key: `s${i}`, value: String(i), label: 'x' })),
+    }
+    expect(serialize(renderStats(many, ctx))).toContain('data-count="4"')
   })
 
-  it('renders the unit inside the value, as a separate span', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('<span class="cg-stat__unit">/100</span>')
-  })
-
-  it('omits the unit span when the item has none', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    // the second item ("0" / "Kilobytes of JavaScript") has no unit
-    const rows = html.split('<div class="cg-stat">')
-    expect(rows[2]).not.toContain('cg-stat__unit')
-  })
-
-  it('renders one row per item', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect([...html.matchAll(/<div class="cg-stat">/g)]).toHaveLength(2)
-  })
-
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderStats(BLOCKS.stats, ctx))).toMatchSnapshot()
+  it('carries its title as a label', () => {
+    expect(html).toContain('<h2 class="cg-head__title" data-field="title">Since 2011</h2>')
   })
 })

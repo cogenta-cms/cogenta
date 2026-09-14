@@ -1,49 +1,31 @@
 import type { StatCounterBlock, StatCounterItem } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import { type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * Narrower than `stats` (no `unit`, RFC 0001's own reasoning), so this is not
- * `stats.ts`'s description list of labelled figures again with a field
- * dropped — it is set as a single running strip of oversized digits
- * separated by hairlines, the way a spec sheet's headline numbers run across
- * a masthead, each with its own zero-padded index the way `logos.ts` numbers
- * its marks. `stats.ts` stays the fuller, boxed "by the numbers" panel.
+ * A ruled table of figures from the fourth column, one row per figure: what
+ * it counts on the left in the text face, the value on the right in the
+ * display width with tabular numerals, so a column of numbers lines up.
+ * Where `stats` sets figures side by side, this sets them as a list read
+ * down the page. It carries no unit, the narrower shape contract B gives it.
  */
-function renderItem(item: StatCounterItem, index: number): HtmlElement {
+function renderItem(item: StatCounterItem): HtmlElement {
   return h(
-    'li',
-    { class: 'cg-counter__item' },
-    h(
-      'span',
-      { class: 'cg-counter__index', 'aria-hidden': 'true' },
-      String(index + 1).padStart(2, '0'),
-    ),
-    h('span', { class: 'cg-counter__value' }, item.value),
-    h('span', { class: 'cg-counter__label' }, item.label),
+    'div',
+    { class: 'cg-tally__row' },
+    h('dt', { class: 'cg-tally__label' }, item.label),
+    h('dd', { class: 'cg-tally__value' }, item.value),
   )
 }
 
 export function renderStatCounter(block: StatCounterBlock, _ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-block cg-counter', 'data-block': 'statCounter' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('statCounter') ?? 'h2',
-          { class: 'cg-counter__title', 'data-field': 'title' },
-          block.title,
-        ),
-    h(
-      'ul',
-      { class: 'cg-counter__items' },
-      block.stats.map((item, index) => renderItem(item, index)),
-    ),
+    'statCounter',
+    'cg-tally cg-split',
+    { 'data-titled': block.title === undefined ? 'false' : 'true' },
+    'div',
+    sectionHead('statCounter', block.title),
+    h('dl', { class: 'cg-tally__rows' }, block.stats.map(renderItem)),
   )
 }

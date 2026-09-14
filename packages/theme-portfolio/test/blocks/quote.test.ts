@@ -4,53 +4,35 @@ import { renderQuote } from '../../src/render/blocks/quote.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderQuote(BLOCKS.quote, ctx))
 
-describe('renderQuote', () => {
-  it('wraps the quotation text in figure/blockquote, never a bare paragraph', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toMatch(/^<figure class="cg-block cg-quote" data-block="quote">/)
-    expect(html).toContain('<blockquote class="cg-quote__text">')
-  })
-
-  it('marks the quotation text as the addressable text field', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toContain('<p data-field="text">')
-  })
-
-  it('keeps the author outside the blockquote, in the figcaption', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
+describe('renderQuote, a client’s line set large', () => {
+  it('is a figure holding a blockquote and its attribution', () => {
+    expect(html).toContain(
+      '<figure class="cg-container cg-quote__inner"><blockquote class="cg-quote__quote">',
+    )
     expect(html).toContain('<figcaption class="cg-quote__attribution">')
-    expect(html).toContain('<span class="cg-quote__author" data-field="author">A. Reviewer</span>')
   })
 
-  it('renders the role field', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toContain('<span class="cg-quote__role" data-field="role">Client, Globex</span>')
+  it('writes the words without quotation marks: the stylesheet sets real ones', () => {
+    expect(html).toContain(
+      '<p class="cg-quote__text" data-field="text">The team can make a poster on a Tuesday afternoon and it looks like the season.</p>',
+    )
+    expect(html.replace(/<[^>]+>/g, '')).not.toMatch(/["“”]/)
   })
 
-  it('renders no figcaption when there is no author, role or avatar', () => {
-    const { author: _author, role: _role, avatar: _avatar, ...bare } = BLOCKS.quote
-    const html = serialize(renderQuote(bare, ctx))
-    expect(html).not.toContain('<figcaption')
+  it('names the speaker, then the role, each with its field marker', () => {
+    expect(html).toContain(
+      '<span class="cg-quote__who"><span class="cg-quote__author" data-field="author">Helen Marsh</span><span class="cg-quote__role" data-field="role">Director of programming, Rookery Hall</span></span>',
+    )
   })
 
-  it('renders the avatar with an empty alt, since the name is right beside it', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toMatch(/<img[^>]*class="cg-quote__avatar"[^>]*alt=""/)
+  it('shows a small square portrait asked for at 96 pixels', () => {
+    expect(html).toMatch(/<img class="cg-quote__avatar"[^>]*width="96" height="96"/)
   })
 
-  it('omits the avatar image entirely when the field is absent', () => {
-    const { avatar: _avatar, ...withoutAvatar } = BLOCKS.quote
-    const html = serialize(renderQuote(withoutAvatar, ctx))
-    expect(html).not.toContain('cg-quote__avatar')
-  })
-
-  it('groups author and role together under a single wrapper', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toContain('<span class="cg-quote__names">')
-  })
-
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderQuote(BLOCKS.quote, ctx))).toMatchSnapshot()
+  it('renders no attribution at all for words with no speaker', () => {
+    const { author: _a, role: _r, avatar: _v, ...bare } = BLOCKS.quote
+    expect(serialize(renderQuote(bare, ctx))).not.toContain('figcaption')
   })
 })

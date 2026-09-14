@@ -1,124 +1,94 @@
 import { serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
-import { renderCollectionList } from '../../src/render/blocks/collection-list.js'
-import { BLOCKS, ENTRIES, makeContext } from '../fixtures.js'
+import { query, renderCollectionList } from '../../src/render/blocks/collection-list.js'
+import { BLOCKS, ENTRIES, GRID_ENTRIES, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const grid = serialize(renderCollectionList(BLOCKS.collectionList, ctx, GRID_ENTRIES))
+const index = serialize(
+  renderCollectionList({ ...BLOCKS.collectionList, layout: 'list' }, ctx, GRID_ENTRIES),
+)
+const strip = serialize(
+  renderCollectionList(
+    { ...BLOCKS.collectionList, layout: 'carousel' },
+    ctx,
+    GRID_ENTRIES.slice(0, 4),
+  ),
+)
 
-describe('renderCollectionList', () => {
-  it('renders an ordered list of entries — this is a numbered index, not a card wall', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('<ol class="cg-collection__items">')
+describe('renderCollectionList, the three forms a list of work takes', () => {
+  it('names its form from the layout the editor chose', () => {
+    expect(grid).toContain('data-form="grid"')
+    expect(index).toContain('data-form="index"')
+    expect(strip).toContain('data-form="strip"')
   })
 
-  it('renders a zero-padded running index for every entry', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('<span class="cg-entry__index" aria-hidden="true">01</span>')
-    expect(html).toContain('<span class="cg-entry__index" aria-hidden="true">02</span>')
+  it('places the grid in a sequence of six, and starts the sequence again after six', () => {
+    const places = [...grid.matchAll(/data-place="(\d)"/g)].map((match) => match[1])
+    expect(places).toEqual(['1', '2', '3', '4', '5', '6', '1', '2'])
   })
 
-  it('falls back to a readable title when the entry has none', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('entry.untitled')
-    expect(html).not.toContain('>undefined<')
+  it('loads the first two covers eagerly and the rest lazily', () => {
+    const images = grid.match(/<img[^>]*>/g) ?? []
+    expect(images).toHaveLength(8)
+    expect(images.slice(0, 2).every((tag) => tag.includes('loading="eager"'))).toBe(true)
+    expect(images.slice(2).every((tag) => tag.includes('loading="lazy"'))).toBe(true)
   })
 
-  it('renders an empty collection as a message rather than an empty list', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, []))
-    expect(html).toContain('collection.empty')
-    expect(html).not.toContain('<ol')
-  })
-
-  it('renders the title at h2 when present', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('<h2 class="cg-collection__title" data-field="title">Latest work</h2>')
-  })
-
-  it('wraps a carousel layout in a focusable, labelled region', () => {
-    const html = serialize(
-      renderCollectionList({ ...BLOCKS.collectionList, layout: 'carousel' }, ctx, ENTRIES),
+  it('asks for a full-width cover at the full-width places only', () => {
+    expect(grid).toMatch(
+      /data-place="3"><article class="cg-work"><a[^>]*><img[^>]*sizes="\(min-width: 64rem\) 92rem, 100vw"/,
     )
-    expect(html).toContain('cg-collection__viewport')
-    expect(html).toContain('role="region"')
-  })
-
-  it('carries the layout as a data attribute', () => {
-    const html = serialize(
-      renderCollectionList({ ...BLOCKS.collectionList, layout: 'grid' }, ctx, ENTRIES),
+    expect(grid).toMatch(
+      /data-place="2"><article class="cg-work"><a[^>]*><img[^>]*sizes="\(min-width: 64rem\) 30rem, 100vw"/,
     )
-    expect(html).toContain('data-layout="grid"')
   })
 
-  it('renders a real <time> element with a machine-readable datetime', () => {
+  it('titles each piece of work one level under the list title', () => {
+    expect(grid).toContain('<h2 class="cg-head__title" data-field="title">Selected work</h2>')
+    expect(grid).toContain('<h3 class="cg-work__title">')
+  })
+
+  it('sets the caption line under each title: client, discipline, year', () => {
+    expect(grid).toContain(
+      '<p class="cg-work__caption"><span class="cg-work__caption-part" data-part="client">Client 1</span><span class="cg-work__caption-part" data-part="discipline">Wayfinding</span><span class="cg-work__caption-part" data-part="year">2025</span></p>',
+    )
+  })
+
+  it('sets the index as an ordered list of rows, no picture', () => {
+    expect(index).toContain('<ol class="cg-index" data-count="8">')
+    expect(index.match(/<li class="cg-index__row">/g)).toHaveLength(8)
+    expect(index).not.toContain('<img')
+  })
+
+  it('sets the strip as a focusable region labelled by the list title', () => {
+    expect(strip).toContain(
+      '<div class="cg-strip" role="region" aria-label="Selected work" tabindex="0"><ul class="cg-strip__items" data-count="4">',
+    )
+    const { title: _t, ...untitled } = BLOCKS.collectionList
+    expect(
+      serialize(renderCollectionList({ ...untitled, layout: 'carousel' }, ctx, GRID_ENTRIES)),
+    ).toContain('aria-label="collection.carousel"')
+  })
+
+  it('keeps its label and says so in one line when there is nothing to list', () => {
+    const empty = serialize(renderCollectionList(BLOCKS.collectionList, ctx, []))
+    expect(empty).toContain('cg-head__title')
+    expect(empty).toContain('<p class="cg-empty">collection.empty</p>')
+    expect(empty).not.toContain('cg-grid')
+  })
+
+  it('reads the entries it is given, a title missing or not', () => {
     const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('<time class="cg-entry__date" datetime="2026-02-11T09:00:00.000Z">')
+    expect(html).toContain('>entry.untitled</a>')
+    expect(html).toContain('data-part="year">2024</span>')
   })
 
-  it('renders the excerpt when the entry has one', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    expect(html).toContain('Why the render process holds neither the secrets nor the database.')
-  })
-
-  it('links each entry through the render context, never a hand-built path', () => {
-    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
-    const [firstEntry] = ENTRIES
-    expect(html).toContain(`href="/en/article/${firstEntry?.id}"`)
-  })
-
-  it('exposes the same query-building helper theme-kit ships, unmodified', async () => {
-    const { query } = await import('../../src/render/blocks/collection-list.js')
+  it('builds its query from contract B alone', () => {
     expect(query(BLOCKS.collectionList)).toEqual({
-      collection: 'article',
-      filter: undefined,
-      sort: { field: 'publishedAt', direction: 'desc' },
-      limit: 5,
-    })
-  })
-
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))).toMatchSnapshot()
-  })
-
-  describe('grid layout — full-bleed project cards', () => {
-    const grid = { ...BLOCKS.collectionList, layout: 'grid' as const }
-
-    it('renders a cover image for an entry that has one', () => {
-      const html = serialize(renderCollectionList(grid, ctx, ENTRIES))
-      expect(html).toContain('class="cg-entry__cover"')
-      expect(html).toContain('alt="A workshop bench seen from above"')
-    })
-
-    it('renders an empty cover placeholder for an entry with no image field', () => {
-      const html = serialize(
-        renderCollectionList(grid, ctx, [ENTRIES[1] as (typeof ENTRIES)[number]]),
-      )
-      expect(html).toContain('class="cg-entry__cover-empty"')
-      expect(html).not.toContain('class="cg-entry__cover"')
-    })
-
-    it("shows the entry's own raw role/year fields as a meta line", () => {
-      const html = serialize(renderCollectionList(grid, ctx, ENTRIES))
-      expect(html).toContain('class="cg-collection__meta"')
-      expect(html).toContain('<span class="cg-collection__meta-role">Art direction</span>')
-      expect(html).toContain('<span class="cg-collection__meta-year">2025</span>')
-    })
-
-    it('renders no meta line for an entry with neither field', () => {
-      const html = serialize(
-        renderCollectionList(grid, ctx, [ENTRIES[1] as (typeof ENTRIES)[number]]),
-      )
-      expect(html).not.toContain('cg-collection__meta')
-    })
-
-    it('marks the card up with the shared card class, never the plain row class', () => {
-      const html = serialize(renderCollectionList(grid, ctx, ENTRIES))
-      expect(html).toContain('class="cg-entry cg-entry--card"')
-    })
-
-    it('still gives the card a real, followable link to the entry', () => {
-      const html = serialize(renderCollectionList(grid, ctx, ENTRIES))
-      const [firstEntry] = ENTRIES
-      expect(html).toContain(`href="/en/article/${firstEntry?.id}"`)
+      collection: 'project',
+      sort: { field: 'createdAt', direction: 'desc' },
+      limit: 6,
     })
   })
 })

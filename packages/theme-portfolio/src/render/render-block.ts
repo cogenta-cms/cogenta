@@ -6,7 +6,6 @@ import {
   type PageContent,
   pageHasOwnHeading,
   type RenderContext,
-  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
@@ -28,14 +27,10 @@ import { renderQuote } from './blocks/quote.js'
 import { renderStatCounter } from './blocks/stat-counter.js'
 import { renderStats } from './blocks/stats.js'
 import { renderTestimonial } from './blocks/testimonial.js'
+import { isProject, renderPageHeader, renderProjectHeader } from './project.js'
 
-/**
- * `PageContent`/`FetchedEntries`/`pageHasOwnHeading`/`withBlockKey` are
- * `@cogenta/theme-kit`'s own — re-exported here so this package's public
- * surface names them, the same shape every theme package shares them under.
- */
 export type { FetchedEntries, PageContent }
-export { pageHasOwnHeading, renderEntryHeader, withBlockKey }
+export { pageHasOwnHeading, withBlockKey }
 
 export function renderBlock(
   block: VocabularyBlock,
@@ -43,17 +38,14 @@ export function renderBlock(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement | null {
-  // `block`'s type says `VocabularyBlock`, but the value crossing this
-  // boundary from stored content is not always literally one of the shared
-  // vocabulary — resolving here is what turns an unimplemented theme-private
-  // block into its declared fallback instead of a silently blank slot.
+  // A stored block is not always literally one of the shared vocabulary:
+  // resolving here turns an unimplemented theme-private block into its
+  // declared fallback instead of a silently blank slot.
   const resolved = resolveBlockForRender(block, VOCABULARY_NAMES, registry)
   if (resolved === null) return null
   const known = resolved as unknown as VocabularyBlock
-  // `withBlockVariant` (blocks@2.0, RFC 0002) is applied once here, after
-  // dispatch, rather than inside each of the seventeen block renderers —
-  // `variant` is envelope data every block carries identically, exactly the
-  // same reasoning `withBlockKey` in `renderPage` already follows for `_key`.
+  // `variant` is envelope data every block carries identically, applied once
+  // here rather than by each of the seventeen renderers.
   return withBlockVariant(renderKnownBlock(known, ctx, entries), known.variant)
 }
 
@@ -98,8 +90,9 @@ function renderKnownBlock(
     case 'logoStrip':
       return renderLogoStrip(known, ctx)
     default: {
-      // Exhaustive over contract B's vocabulary: `known` is `never` here, so a
-      // block this package does not implement stops it compiling until it is.
+      // Exhaustive over contract B: `known` is `never` here, so a block this
+      // package does not implement stops it compiling until it is. `null`
+      // rather than a throw: choosing a fallback is the render layer's job.
       const unreachable: never = known
       void unreachable
       return null
@@ -108,48 +101,53 @@ function renderKnownBlock(
 }
 
 /**
- * `renderEntryHeader` (`theme@1.4`) draws the eyebrow/title/excerpt/meta/
- * cover furniture for a page backed by a real content entry — a project —
- * and already returns `null` for a page with no `entry` meta *and* for one
- * whose blocks draw their own heading (a `hero`), so the bare
- * `<h1 class="cg-page__title">` fallback below is the right markup in both
- * of those cases and only those — never a double heading, and never a page
- * with none at all. A page rendered before `theme@1.4` (`page.entry`
- * absent) gets exactly the pre-1.4 markup, byte for byte.
+ * The block's own `_key` doubles as an in-page anchor: it is unique within a
+ * page (contract B), so a menu item such as `/#home-work` lands on the block
+ * it names rather than on a fragment nothing answers to.
  */
-/**
- * `withBlockKey` stamps `data-block-key` (the L16 builder's own hook); this
- * theme additionally stamps a real `id`, the block's own `_key`, on the same
- * element — `_key` is already unique within a page (contract B), so it
- * doubles as a genuine in-page anchor. The header/footer's own single-page
- * links (the `portfolio` blueprint's "Work"/"Services" nav) resolve to a
- * real target this way, rather than a `#fragment` nothing on the page
- * answers to.
- */
-function withBlockAnchor(element: HtmlElement | null, key: string): HtmlElement | null {
+function withAnchor(element: HtmlElement | null, key: string): HtmlElement | null {
   if (element === null) return null
   return { ...element, attrs: { ...element.attrs, id: key } }
 }
 
+/**
+ * `<main id="cg-main">` is mandatory: it is the skip link's target, written
+ * by `@cogenta/cli`'s `theme-render.ts` outside any theme's control.
+ *
+ * Three openings, and exactly one `h1` in each:
+ *
+ * - a page whose blocks include a `hero` lets the hero carry the title (the
+ *   studio's statement, on a home page);
+ * - a project (`isProject`: an entry with a cover that is not a plain page)
+ *   gets the project header: title, statement, lead visual, fact sheet;
+ * - anything else gets its title set large on the grid.
+ *
+ * `withBlockKey` stamps every rendered block with its contract-B `_key`, so
+ * the visual page builder (L16) can map a clicked element back to its block.
+ */
 export function renderPage(
   page: PageContent,
   ctx: RenderContext,
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement {
-  const entryHeader = renderEntryHeader(page, ctx)
+  const ownHeading = pageHasOwnHeading(page.blocks)
+  const project = !ownHeading && isProject(page.entry) ? page.entry : undefined
+  const opening = ownHeading
+    ? null
+    : project !== undefined
+      ? renderProjectHeader(page, project, ctx.locale)
+      : renderPageHeader(page)
+
   return h(
     'main',
-    { class: 'cg-main', id: 'cg-main' },
-    entryHeader,
-    entryHeader === null && !pageHasOwnHeading(page.blocks)
-      ? h('h1', { class: 'cg-page__title' }, page.title)
-      : null,
+    {
+      class: project !== undefined ? 'cg-main cg-project' : 'cg-main',
+      id: 'cg-main',
+    },
+    opening,
     page.blocks.map((block) =>
-      withBlockAnchor(
-        withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
-        block._key,
-      ),
+      withAnchor(withBlockKey(renderBlock(block, ctx, entries, registry), block._key), block._key),
     ),
   )
 }

@@ -1,64 +1,44 @@
 import type { AccordionBlock, AccordionItem } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-  renderRichText,
-} from '@cogenta/theme-kit'
+import { type HtmlElement, h, type RenderContext, renderRichText } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * Same zero-JS mechanism as `faq.ts` — `<details>`/`<summary>` gives
- * expand/collapse, keyboard operation and the `[open]` state to assistive
- * technology for free — but with markup and class names of its own
- * (`cg-accordion__*`, never `cg-faq__*`) so the two blocks can diverge
- * visually later without one quietly dragging the other along. RFC 0001
- * treats them as two distinct editorial intents sharing one data shape; this
- * package keeps that distinction in its markup too.
- *
- * The marker here is a plain rotating caret rather than `faq.ts`'s plus/
- * cross, and questions sit in a numbered ledger the same way `logos.ts`'s
- * items do — an accordion reads as an indexed list of topics, not a wall of
- * frequently-asked questions.
+ * Collapsible notes on a ruled list, from the fourth column: each question on
+ * its own row in the display width, a plus drawn from two bars that loses its
+ * upright when the row is open, and the answer at the reading measure.
+ * Opening, keyboard behaviour and the announced state are all native
+ * `<details>`. No script.
  */
-function renderItem(item: AccordionItem, ctx: RenderContext, index: number): HtmlElement {
+function renderItem(item: AccordionItem, ctx: RenderContext): HtmlElement {
   return h(
     'li',
-    { class: 'cg-accordion__item' },
+    { class: 'cg-notes__item' },
     h(
       'details',
-      { class: 'cg-accordion__details' },
+      { class: 'cg-notes__details' },
       h(
         'summary',
-        { class: 'cg-accordion__question' },
-        h(
-          'span',
-          { class: 'cg-accordion__index', 'aria-hidden': 'true' },
-          String(index + 1).padStart(2, '0'),
-        ),
-        h('span', { class: 'cg-accordion__label' }, item.question),
+        { class: 'cg-notes__question' },
+        h('span', { class: 'cg-notes__question-text' }, item.question),
+        h('span', { class: 'cg-notes__mark', 'aria-hidden': 'true' }),
       ),
-      h('div', { class: 'cg-accordion__answer' }, renderRichText(ctx, item.answer)),
+      h('div', { class: 'cg-notes__answer' }, renderRichText(ctx, item.answer)),
     ),
   )
 }
 
 export function renderAccordion(block: AccordionBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-block cg-accordion', 'data-block': 'accordion' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('accordion') ?? 'h2',
-          { class: 'cg-accordion__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'accordion',
+    'cg-notes cg-split',
+    { 'data-titled': block.title === undefined ? 'false' : 'true' },
+    'div',
+    sectionHead('accordion', block.title),
     h(
       'ul',
-      { class: 'cg-accordion__items' },
-      block.items.map((item, index) => renderItem(item, ctx, index)),
+      { class: 'cg-notes__items' },
+      block.items.map((item) => renderItem(item, ctx)),
     ),
   )
 }

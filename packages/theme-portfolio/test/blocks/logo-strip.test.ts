@@ -4,46 +4,28 @@ import { renderLogoStrip } from '../../src/render/blocks/logo-strip.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
 
-describe('renderLogoStrip', () => {
-  it('renders a figure wrapping a plain list of marks, never a ledger of links', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect(html).toMatch(/^<figure class="cg-block cg-logostrip" data-block="logoStrip">/)
-    expect(html).toContain('<ul class="cg-logostrip__items">')
-    expect(html).not.toContain('<a ')
-  })
-
-  it('renders no index marker per logo, unlike logos', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect(html).not.toContain('cg-logostrip__index')
-  })
-
-  it('names each mark with the media entity’s own alt text, never invented text', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    // both fixture logos carry empty alt text on the media entity
-    expect(html).toContain('alt=""')
-    expect(html).not.toContain('alt="Acme"')
-  })
-
-  it('renders one list item per logo', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect([...html.matchAll(/<li class="cg-logostrip__item">/g)]).toHaveLength(2)
-  })
-
-  it('renders the caption when present', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
+describe('renderLogoStrip, a line of marks between two hairlines', () => {
+  it('sets the caption first, with its field marker', () => {
     expect(html).toContain(
-      '<figcaption class="cg-logostrip__caption" data-field="caption">As seen in</figcaption>',
+      '<p class="cg-credits__caption" data-field="caption">Printers and fabricators we work with</p>',
     )
+    expect(html).toContain('data-captioned="true"')
   })
 
-  it('omits the figcaption entirely when the field is absent', () => {
-    const { caption: _caption, ...withoutCaption } = BLOCKS.logoStrip
-    const html = serialize(renderLogoStrip(withoutCaption, ctx))
-    expect(html).not.toContain('<figcaption')
+  it('sets one list item per mark', () => {
+    expect(html.match(/<li class="cg-credits__item">/g)).toHaveLength(2)
   })
 
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))).toMatchSnapshot()
+  it('names each mark by the alt text the media library holds', () => {
+    expect(html).toContain('alt="Globex Records"')
+  })
+
+  it('renders without a caption, and says so', () => {
+    const { caption: _c, ...bare } = BLOCKS.logoStrip
+    const out = serialize(renderLogoStrip(bare, ctx))
+    expect(out).toContain('data-captioned="false"')
+    expect(out).not.toContain('cg-credits__caption')
   })
 })

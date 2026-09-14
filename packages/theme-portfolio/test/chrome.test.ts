@@ -1,233 +1,227 @@
-import type { ChromeInput } from '@cogenta/theme-kit'
+import type { ChromeBrand, ChromeInput, ImageSource } from '@cogenta/theme-kit'
 import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
 const BASE: ChromeInput = {
-  site: { name: 'Studio Cogenta' },
+  site: { name: 'Studio Hale' },
   locale: 'en',
-  homeHref: '/en',
+  homeHref: '/',
   headerNav: [
-    { label: 'Work', href: '/en/work', openInNewTab: false, kind: 'page', title: null },
-    { label: 'About', href: '/en/about', openInNewTab: false, kind: 'page', title: null },
+    { label: 'Work', href: '/work', openInNewTab: false, kind: 'url', title: null },
+    { label: 'Studio', href: '/studio', openInNewTab: false, kind: 'url', title: null },
   ],
   footerNav: [
-    { label: 'Contact', href: '/en/contact', openInNewTab: false, kind: 'page', title: null },
+    { label: 'Contact', href: '/contact', openInNewTab: false, kind: 'url', title: null },
+    { label: 'Privacy', href: '/privacy', openInNewTab: false, kind: 'url', title: null },
   ],
-  brandingHtml: '<a href="https://cogenta.dev">Powered by Cogenta</a>',
+  brandingHtml: '<a href="https://cogenta.dev">Made with Cogenta</a>',
 }
 
-describe('renderChrome', () => {
-  it('renders the site name in the header, linked to home', () => {
+const FULL: ChromeInput = {
+  ...BASE,
+  tagline: 'Identity, print, wayfinding and exhibitions.',
+  footerNote: 'Second floor, 41 Hatherley Mews, London.\n\nVisits by appointment.',
+  social: [
+    { label: 'Instagram', href: 'https://instagram.com/example' },
+    { label: 'LinkedIn', href: 'https://linkedin.com/company/example' },
+  ],
+  headerAction: { label: 'Start a project', href: '/contact' },
+}
+
+function source(src: string): ImageSource {
+  return { kind: 'image', src, srcset: '', width: 200, height: 48, alt: '', focal: null }
+}
+
+const BRAND: ChromeBrand = {
+  name: 'Studio Hale',
+  logo: source('/_image?id=light&w=400'),
+  logoDark: source('/_image?id=dark&w=400'),
+  faviconUrl: null,
+}
+
+describe('renderChrome, the header', () => {
+  it('sets the studio name as a wordmark, linking home', () => {
+    expect(renderChrome(BASE).header).toContain(
+      '<a class="cg-masthead__home" href="/"><span class="cg-masthead__wordmark">Studio Hale</span></a>',
+    )
+  })
+
+  it('replaces the wordmark with an uploaded logo named after the site, and a dark variant beside it', () => {
+    const { header } = renderChrome({ ...BASE, brand: BRAND })
+    expect(header).toContain('class="cg-masthead__logo"')
+    expect(header).toContain('alt="Studio Hale"')
+    expect(header).toContain('media="(prefers-color-scheme: dark)"')
+    expect(header).not.toContain('cg-masthead__wordmark')
+  })
+
+  it('lists the navigation in one landmark, links as given', () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('Studio Cogenta')
-    expect(header).toContain('href="/en"')
+    expect(header.match(/<nav /g)).toHaveLength(1)
+    expect(header).toContain(
+      '<nav class="cg-masthead__nav" id="cg-nav" aria-label="Primary"><ul class="cg-masthead__links"><li class="cg-masthead__item"><a href="/work">Work</a></li>',
+    )
   })
 
-  it('renders every header nav link, real hrefs only', () => {
+  it('numbers nothing: a studio’s navigation is words, not an index', () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('href="/en/work"')
-    expect(header).toContain('>Work<')
-    expect(header).toContain('href="/en/about"')
-    expect(header).toContain('>About<')
+    expect(header).not.toMatch(/>0\d</)
+    expect(header).not.toContain('__index')
   })
 
-  it('renders every footer nav link', () => {
-    const { footer } = renderChrome(BASE)
-    expect(footer).toContain('href="/en/contact"')
-    expect(footer).toContain('>Contact<')
+  it('opens the navigation on a narrow screen with a CSS-only checkbox, placed before the navigation', () => {
+    const { header } = renderChrome(BASE)
+    expect(header).toContain(
+      '<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">',
+    )
+    expect(header).toContain(
+      '<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">',
+    )
+    expect(header.indexOf('cg-nav-toggle-label')).toBeLessThan(header.indexOf('cg-masthead__nav'))
+    expect(header).not.toMatch(/<script|\son[a-z]+="/i)
   })
 
-  it('places the branding fragment in the footer, unaltered', () => {
-    const { footer } = renderChrome(BASE)
-    expect(footer).toContain('<a href="https://cogenta.dev">Powered by Cogenta</a>')
+  it('renders no toggle and no navigation when there are no links and no action', () => {
+    const { header } = renderChrome({ ...BASE, headerNav: [] })
+    expect(header).not.toContain('cg-nav-toggle')
+    expect(header).not.toContain('<nav')
+    expect(header).toContain('data-nav="none"')
   })
 
-  it('never drops the branding fragment even when it is empty', () => {
-    const { footer } = renderChrome({ ...BASE, brandingHtml: '' })
-    expect(footer).toContain('cg-site-footer__branding')
-  })
-
-  it('repeats the site name as the footer statement', () => {
-    const { footer } = renderChrome(BASE)
-    expect(footer).toContain('cg-site-footer__statement')
-    const statementMatch = /cg-site-footer__statement" href="\/en">([^<]*)</.exec(footer)
-    expect(statementMatch?.[1]).toBe('Studio Cogenta')
-  })
-
-  it('renders no nav element when a nav list is empty', () => {
-    const { header, footer } = renderChrome({ ...BASE, headerNav: [], footerNav: [] })
-    expect(header).not.toContain('cg-site-header__nav')
-    expect(footer).not.toContain('<nav')
-  })
-
-  it('opens an external link in a new tab with rel="noopener"', () => {
+  it('keeps a toggle for a header that has only an action', () => {
     const { header } = renderChrome({
       ...BASE,
-      headerNav: [
-        {
-          label: 'Blog',
-          href: 'https://blog.example',
-          openInNewTab: true,
-          kind: 'external',
-          title: null,
-        },
-      ],
+      headerNav: [],
+      headerAction: { label: 'Start a project', href: '/contact' },
     })
-    expect(header).toContain('target="_blank"')
-    expect(header).toContain('rel="noopener"')
+    expect(header).toContain('cg-nav-toggle-input')
+    expect(header).toContain('data-nav="links"')
   })
 
-  it('renders an unlinked submenu placeholder as a span, not a dead link', () => {
+  it('sets the header action as the last link of the navigation, words and no button', () => {
+    const { header } = renderChrome(FULL)
+    expect(header).toContain(
+      '</ul><a class="cg-masthead__action" href="/contact">Start a project</a></nav>',
+    )
+    expect(header).not.toContain('data-emphasis')
+  })
+
+  it('sets the tagline beside the name only when there is one', () => {
+    expect(renderChrome(FULL).header).toContain(
+      '<p class="cg-masthead__tagline">Identity, print, wayfinding and exhibitions.</p>',
+    )
+    expect(renderChrome(BASE).header).not.toContain('cg-masthead__tagline')
+  })
+
+  it('renders a placeholder item as text, honours a new tab, a title, and drops a dead link', () => {
     const { header } = renderChrome({
       ...BASE,
       headerNav: [
         {
-          label: 'Services',
+          label: 'More',
           href: null,
           openInNewTab: false,
           kind: 'submenu-placeholder',
           title: null,
         },
+        {
+          label: 'Journal',
+          href: 'https://journal.example',
+          openInNewTab: true,
+          kind: 'url',
+          title: 'Our notes',
+        },
+        { label: 'Gone', href: null, openInNewTab: false, kind: 'entry', title: null },
       ],
     })
-    expect(header).toContain('<span>Services</span>')
-    expect(header).not.toContain('href="null"')
+    expect(header).toContain('<li class="cg-masthead__item"><span>More</span></li>')
+    expect(header).toContain(
+      '<a href="https://journal.example" target="_blank" rel="noopener" title="Our notes">Journal</a>',
+    )
+    expect(header).not.toContain('Gone')
   })
 
-  it('escapes a site name that contains markup-like characters', () => {
+  it('escapes every string it is given', () => {
     const { header, footer } = renderChrome({ ...BASE, site: { name: 'A & <B>' } })
     expect(header).toContain('A &amp; &lt;B&gt;')
     expect(footer).toContain('A &amp; &lt;B&gt;')
     expect(header).not.toContain('<B>')
   })
 
-  it('writes a running index number beside each nav link', () => {
+  it('always renders the theme-kit light and dark toggle, after the navigation, in the page locale', () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('cg-nav__index')
-    expect(header).toContain('>01<')
-    expect(header).toContain('>02<')
+    expect(header).toContain(serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' })))
+    expect(header.indexOf('cg-masthead__nav')).toBeLessThan(header.indexOf('cg-theme-toggle'))
+    expect(renderChrome({ ...BASE, locale: 'fr' }).header).toContain(
+      serialize(renderThemeToggle('fr', { className: 'cg-theme-toggle' })),
+    )
+    expect(renderChrome({ ...BASE, headerNav: [] }).header).toContain('data-cg-theme-toggle')
+  })
+})
+
+describe('renderChrome, the footer', () => {
+  it('repeats the name as a link home', () => {
+    expect(renderChrome(BASE).footer).toContain(
+      '<a class="cg-colophon__name" href="/">Studio Hale</a>',
+    )
   })
 
-  it('carries a title attribute through to the rendered link', () => {
-    const { header } = renderChrome({
-      ...BASE,
-      headerNav: [
-        {
-          label: 'Work',
-          href: '/en/work',
-          openInNewTab: false,
-          kind: 'page',
-          title: 'Selected projects',
-        },
-      ],
-    })
-    expect(header).toContain('title="Selected projects"')
+  it('sets the tagline and each paragraph of the footer note', () => {
+    const { footer } = renderChrome(FULL)
+    expect(footer).toContain(
+      'data-field="tagline">Identity, print, wayfinding and exhibitions.</p>',
+    )
+    expect(footer).toContain(
+      '<div class="cg-colophon__note"><p>Second floor, 41 Hatherley Mews, London.</p><p>Visits by appointment.</p></div>',
+    )
   })
 
-  describe('theme@1.4 — without the new fields', () => {
-    it('renders no header action, no tagline, no social, no footer note', () => {
-      const { header, footer } = renderChrome(BASE)
-      expect(header).not.toContain('cg-site-header__action')
-      expect(footer).not.toContain('cg-site-footer__tagline')
-      expect(footer).not.toContain('cg-site-footer__social')
-      expect(footer).not.toContain('cg-site-footer__note')
-    })
-
-    it('renders no mobile-menu toggle at all when there is no nav and no action', () => {
-      const { header } = renderChrome({ ...BASE, headerNav: [] })
-      expect(header).not.toContain('cg-nav-toggle-input')
-    })
+  it('lists the footer navigation in its own landmark', () => {
+    expect(renderChrome(BASE).footer).toContain(
+      '<nav class="cg-colophon__nav" aria-label="Footer"><ul class="cg-colophon__links"><li class="cg-colophon__item"><a href="/contact">Contact</a></li>',
+    )
   })
 
-  describe('theme@1.4 — the header action', () => {
-    const action = { label: "Let's talk", href: '/en/contact' }
-    const withAction: ChromeInput = { ...BASE, headerAction: action }
-
-    it('renders it as a filled action button inside the primary nav', () => {
-      const { header } = renderChrome(withAction)
-      expect(header).toContain('class="cg-action cg-site-header__action" data-emphasis="primary"')
-      expect(header).toContain('href="/en/contact"')
-      expect(header).toContain(">Let's talk<")
-    })
-
-    it('still shows a mobile-menu toggle for a header with only an action and no nav', () => {
-      const { header } = renderChrome({ ...BASE, headerAction: action })
-      expect(header).toContain('cg-nav-toggle-input')
-    })
+  it('lists the social profiles with real icons and their names', () => {
+    const { footer } = renderChrome(FULL)
+    expect(footer).toContain('class="cg-colophon__social"')
+    expect(footer.match(/<svg/g)).toHaveLength(2)
+    expect(footer).toContain('<span class="cg-visually-hidden">Instagram</span>')
   })
 
-  describe('theme@1.4 — the mobile-menu toggle', () => {
-    it('appears once a header nav exists, pointing at the same real nav desktop uses', () => {
-      const { header } = renderChrome(BASE)
-      expect(header).toContain('id="cg-nav-toggle"')
-      expect(header).toContain('for="cg-nav-toggle"')
-      expect(header).toContain('id="cg-nav"')
-      expect((header.match(/<nav /g) ?? []).length).toBe(1)
-    })
+  it('writes the legal line with the year and the name beside the branding, placed once and unaltered', () => {
+    const { footer } = renderChrome(BASE)
+    expect(footer).toContain(
+      `<p class="cg-colophon__copyright">© ${new Date().getFullYear()} Studio Hale</p>`,
+    )
+    expect(footer.match(/Made with Cogenta/g)).toHaveLength(1)
+    expect(footer).toContain('<a href="https://cogenta.dev">Made with Cogenta</a>')
   })
 
-  describe('theme@1.4 — footer extras', () => {
-    const rich: ChromeInput = {
-      ...BASE,
-      tagline: 'Design, motion and code, made in the open.',
-      social: [
-        { label: 'Instagram', href: 'https://instagram.com/example' },
-        { label: 'LinkedIn', href: 'https://linkedin.com/company/example' },
-      ],
-      footerNote: 'Studio Cogenta · Lisbon',
-    }
-
-    it('renders the tagline beneath the closing statement', () => {
-      const { footer } = renderChrome(rich)
-      expect(footer).toContain(
-        '<p class="cg-site-footer__tagline" data-field="tagline">Design, motion and code, made in the open.</p>',
-      )
-    })
-
-    it('renders the social links through the shared theme-kit helper', () => {
-      const { footer } = renderChrome(rich)
-      expect(footer).toContain('cg-site-footer__social')
-      expect(footer).toContain('href="https://instagram.com/example"')
-      expect(footer).toContain('cg-visually-hidden')
-    })
-
-    it('renders the footer note', () => {
-      const { footer } = renderChrome(rich)
-      expect(footer).toContain('<p class="cg-site-footer__note">Studio Cogenta · Lisbon</p>')
-    })
-
-    it('keeps the branding fragment alongside the note rather than replacing it', () => {
-      const { footer } = renderChrome({
-        ...rich,
-        brandingHtml: '<a href="/">Powered by Cogenta</a>',
-      })
-      expect(footer).toContain('<a href="/">Powered by Cogenta</a>')
-      expect(footer).toContain('Studio Cogenta · Lisbon')
-    })
+  it('keeps the branding slot when the branding is empty', () => {
+    expect(renderChrome({ ...BASE, brandingHtml: '' }).footer).toContain(
+      '<div class="cg-colophon__branding"></div>',
+    )
   })
 
-  describe('the manual light/dark/system toggle (L26)', () => {
-    it('always renders the toggle from theme-kit, byte for byte, unconditionally', () => {
-      const { header } = renderChrome(BASE)
-      const expectedToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
-      expect(header).toContain(expectedToggle)
-    })
+  it('writes no heading of its own: a heading is a word the theme cannot translate', () => {
+    expect(renderChrome(FULL).footer).not.toMatch(/<h[1-6]/)
+  })
 
-    it('renders it even when there is no nav and no header action at all', () => {
-      const { header } = renderChrome({ ...BASE, headerNav: [] })
-      expect(header).toContain('cg-theme-toggle')
-    })
+  it('renders the name and the navigation for a host that predates theme@1.4', () => {
+    const { header, footer } = renderChrome(BASE)
+    expect(header).not.toContain('cg-masthead__action')
+    expect(footer).not.toContain('cg-colophon__tagline')
+    expect(footer).not.toContain('cg-colophon__note')
+    expect(footer).not.toContain('cg-colophon__follow')
+    expect(footer).toContain('cg-colophon__nav')
+  })
 
-    it('renders it after the nav so it is never mistaken for a nav link', () => {
-      const { header } = renderChrome(BASE)
-      expect(header.indexOf('cg-site-header__nav')).toBeLessThan(header.indexOf('cg-theme-toggle'))
-    })
+  it('renders no footer navigation landmark when the footer menu is empty', () => {
+    expect(renderChrome({ ...BASE, footerNav: [] }).footer).not.toContain('<nav')
+  })
 
-    it('localises its labels to the page locale', () => {
-      const { header } = renderChrome({ ...BASE, locale: 'fr' })
-      const expectedToggle = serialize(renderThemeToggle('fr', { className: 'cg-theme-toggle' }))
-      expect(header).toContain(expectedToggle)
-    })
+  it('still names the site in the footer when a logo replaces the wordmark in the header', () => {
+    expect(renderChrome({ ...BASE, brand: BRAND }).footer).toContain('Studio Hale')
   })
 })

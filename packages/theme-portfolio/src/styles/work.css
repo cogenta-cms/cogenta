@@ -1,0 +1,405 @@
+/*
+ * The work: the asymmetric grid, the index, the strip, and the page of one
+ * project. Every cover is 3:2, square-cornered and edge to edge within its
+ * columns; the asymmetry is in the columns and the drop, never in the crop.
+ */
+
+/* --------------------------------------------------------------------------
+   One piece of work
+   -------------------------------------------------------------------------- */
+
+.cg-work {
+  display: grid;
+  gap: var(--cg-s4);
+}
+
+.cg-work__media {
+  display: block;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  background: var(--cg-surface-sunken);
+}
+
+.cg-work__image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.cg-work__text {
+  display: grid;
+  gap: var(--cg-s1);
+  font-size: var(--cg-size-work);
+  line-height: var(--cg-leading-ui);
+}
+
+.cg-work__title {
+  font-size: inherit;
+  font-weight: var(--cg-weight-medium);
+  line-height: inherit;
+  letter-spacing: 0;
+}
+
+.cg-work__link,
+.cg-index__title a {
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.25em;
+}
+
+.cg-work:hover .cg-work__link,
+.cg-work__link:focus-visible,
+.cg-index__row:hover .cg-index__title a {
+  text-decoration-color: currentColor;
+}
+
+.cg-work__caption {
+  margin: 0;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-caption);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-work__caption-part + .cg-work__caption-part::before {
+  content: "\00B7" / "";
+  margin-inline: 0.5em;
+}
+
+/* --------------------------------------------------------------------------
+   The grid: six places on twelve columns.
+   -------------------------------------------------------------------------- */
+
+.cg-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-col-gap);
+  row-gap: var(--cg-row-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-grid__item {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+@media (min-width: 40rem) and (max-width: 63.99rem) {
+  .cg-grid__item {
+    grid-column: span 6;
+  }
+
+  .cg-grid__item:is([data-place="3"], [data-place="6"]) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-grid__item[data-place="1"] {
+    grid-column: 1 / span 7;
+  }
+
+  .cg-grid__item[data-place="2"] {
+    grid-column: 9 / span 4;
+    margin-block-start: clamp(var(--cg-s16), 13vw, var(--cg-s32));
+  }
+
+  .cg-grid__item[data-place="4"] {
+    grid-column: 1 / span 4;
+    margin-block-start: clamp(var(--cg-s16), 13vw, var(--cg-s32));
+  }
+
+  .cg-grid__item[data-place="5"] {
+    grid-column: 6 / span 7;
+  }
+
+  .cg-grid__item:is([data-place="3"], [data-place="6"]) {
+    grid-column: 1 / -1;
+  }
+
+  /* The full-width places show the cover at 2:1: covers keep their subject
+     inside the middle three quarters of their height for exactly this. */
+  .cg-grid__item:is([data-place="3"], [data-place="6"]) .cg-work__media {
+    aspect-ratio: 2 / 1;
+  }
+
+  .cg-grid__item:is([data-place="3"], [data-place="6"]) .cg-work__text {
+    grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+    column-gap: var(--cg-col-gap);
+  }
+
+  .cg-grid__item:is([data-place="3"], [data-place="6"]) .cg-work__title {
+    grid-column: 1 / span 7;
+  }
+
+  .cg-grid__item:is([data-place="3"], [data-place="6"]) .cg-work__caption {
+    grid-column: 1 / span 7;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The index: one ruled row per project.
+   -------------------------------------------------------------------------- */
+
+.cg-collection[data-form="index"] .cg-head {
+  margin-block-end: 0;
+}
+
+.cg-index {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-size-work);
+  line-height: var(--cg-leading-ui);
+}
+
+.cg-index__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--cg-col-gap);
+  align-items: baseline;
+  padding-block: var(--cg-s4);
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-index__title {
+  font-size: inherit;
+  font-weight: var(--cg-weight-medium);
+  line-height: inherit;
+  letter-spacing: 0;
+}
+
+.cg-index__cell {
+  color: var(--cg-ink-muted);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-index__cell:empty {
+  display: none;
+}
+
+.cg-index__cell[data-part="year"] {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: end;
+}
+
+/* On a phone the client and the discipline read as one caption line under
+   the title, separated like the caption of a card. */
+.cg-index__meta {
+  grid-column: 1 / -1;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-caption);
+}
+
+.cg-index__meta .cg-index__cell:not(:empty) + .cg-index__cell:not(:empty)::before {
+  content: "\00B7" / "";
+  margin-inline: 0.5em;
+}
+
+.cg-index__summary {
+  display: block;
+  max-inline-size: var(--cg-measure-short);
+  margin-block-start: var(--cg-s1);
+}
+
+@media (min-width: 48rem) {
+  .cg-index__row {
+    grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  }
+
+  .cg-index__title {
+    grid-column: 1 / span 5;
+  }
+
+  .cg-index__meta {
+    display: contents;
+    font-size: inherit;
+  }
+
+  .cg-index__meta .cg-index__cell:not(:empty) + .cg-index__cell:not(:empty)::before {
+    content: none;
+  }
+
+  .cg-index__cell[data-part="client"] {
+    grid-column: 6 / span 3;
+    grid-row: 1;
+  }
+
+  .cg-index__cell[data-part="discipline"] {
+    grid-column: 9 / span 2;
+    grid-row: 1;
+  }
+
+  .cg-index__summary {
+    grid-column: 6 / span 5;
+    grid-row: 1;
+    margin: 0;
+    color: var(--cg-ink-muted);
+  }
+
+  .cg-index__cell[data-part="year"] {
+    grid-column: 11 / span 2;
+  }
+
+  .cg-index__cell:empty {
+    display: block;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The strip: cards at one width, scrolling and snapping.
+   -------------------------------------------------------------------------- */
+
+.cg-strip {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--cg-gutter);
+  margin-inline: calc(var(--cg-gutter) * -1);
+  padding-inline: var(--cg-gutter);
+}
+
+.cg-strip__items {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: min(80vw, 34rem);
+  gap: var(--cg-col-gap);
+  margin: 0;
+  padding: 0 0 var(--cg-s4);
+  list-style: none;
+}
+
+.cg-strip__item {
+  scroll-snap-align: start;
+}
+
+/* --------------------------------------------------------------------------
+   The page of one project
+   -------------------------------------------------------------------------- */
+
+.cg-project-head {
+  padding-block: calc(var(--cg-section) * 0.45) calc(var(--cg-section) * 0.25);
+}
+
+.cg-project-head__title {
+  font-size: var(--cg-size-title);
+  font-stretch: var(--cg-width-display);
+  font-weight: var(--cg-weight-medium);
+  line-height: var(--cg-leading-title);
+  letter-spacing: var(--cg-tracking-display);
+}
+
+.cg-project-head__statement {
+  margin: var(--cg-s8) 0 0;
+  font-size: var(--cg-size-lead);
+  line-height: var(--cg-leading-lead);
+  letter-spacing: -0.006em;
+}
+
+.cg-project-head__lead {
+  margin: calc(var(--cg-section) * 0.4) 0 0;
+  background: var(--cg-surface-sunken);
+}
+
+.cg-project-head__image {
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.cg-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cg-s6) var(--cg-col-gap);
+  margin: var(--cg-s8) 0 0;
+}
+
+.cg-facts__item {
+  padding-block-start: var(--cg-s3);
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+}
+
+.cg-facts__label {
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-caption);
+  line-height: var(--cg-leading-ui);
+}
+
+.cg-facts__values {
+  margin: var(--cg-s1) 0 0;
+}
+
+.cg-facts__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-ui);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-facts__link {
+  color: var(--cg-ink);
+  text-decoration-color: transparent;
+}
+
+.cg-facts__link:hover {
+  text-decoration-color: currentColor;
+}
+
+@media (min-width: 64rem) {
+  .cg-project-head__title {
+    grid-column: 1 / span 11;
+  }
+
+  /* On a wide screen the lead visual is set at 16:9, so the first view of a
+     project is the work and its facts; covers keep their subject inside the
+     middle of their height for exactly this. */
+  .cg-project-head__lead {
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+  }
+
+  .cg-project-head__image {
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  .cg-project-head__statement {
+    grid-column: 5 / span 8;
+  }
+
+  .cg-facts {
+    grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  }
+
+  .cg-facts__item {
+    grid-column: span 3;
+  }
+}
+
+/* The case study reads in two columns on a wide screen, from the fourth
+   column, level with its label. Each column keeps a measure a reader can
+   follow; a paragraph may cross from one column to the next. */
+@media (min-width: 64rem) {
+  .cg-project .cg-prose .cg-prose__body {
+    grid-column: 4 / -1;
+  }
+
+  .cg-project .cg-prose[data-length="long"] .cg-prose__body {
+    columns: 2;
+    column-gap: calc(var(--cg-col-gap) * 2);
+    orphans: 3;
+    widows: 3;
+  }
+
+  .cg-project .cg-prose[data-length="long"] .cg-prose__body > * {
+    max-inline-size: none;
+  }
+
+  .cg-project .cg-prose[data-length="long"] .cg-prose__body > :is(h2, h3, figure, blockquote) {
+    break-inside: avoid;
+  }
+}

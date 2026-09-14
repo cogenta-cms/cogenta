@@ -4,50 +4,35 @@ import { renderCta } from '../../src/render/blocks/cta.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderCta(BLOCKS.cta, ctx))
 
-describe('renderCta', () => {
-  it('renders the title at h2, marked as the title field', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
+describe('renderCta, the contact line', () => {
+  it('sets the title at h2 and the sentence beside the address', () => {
+    expect(html).toContain('<h2 class="cg-contact__title" data-field="title">New work</h2>')
+    expect(html).toContain('<p class="cg-contact__text" data-field="text">')
+  })
+
+  it('sets the first action as the very large link, never as a button', () => {
     expect(html).toContain(
-      '<h2 class="cg-cta__title" data-field="title">Let\'s talk about your project</h2>',
+      '<p class="cg-contact__lead"><a class="cg-action cg-contact__link" data-emphasis="primary" href="mailto:hello@studiohale.com" rel="noopener noreferrer">hello@studiohale.com</a></p>',
     )
   })
 
-  it('wraps the panel content in an inner frame, for the inverted background', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
-    expect(html).toMatch(
-      /^<section class="cg-block cg-cta" data-block="cta"><div class="cg-cta__frame">/,
+  it('lists any further action as ordinary words, labelled by the block title', () => {
+    expect(html).toContain('<ul class="cg-actions" aria-label="New work">')
+    expect(html).toContain('data-emphasis="secondary" href="/en/contact">Visit the studio</a>')
+  })
+
+  it('renders no second list when there is one action', () => {
+    const one = serialize(
+      renderCta({ ...BLOCKS.cta, actions: BLOCKS.cta.actions.slice(0, 1) }, ctx),
     )
+    expect(one).not.toContain('cg-actions')
+    expect(one).toContain('cg-contact__link')
   })
 
-  it('renders the text field when present', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
-    expect(html).toContain('<p class="cg-cta__text" data-field="text">One call, no obligation.</p>')
-  })
-
-  it('omits the text paragraph when absent', () => {
-    const { text: _text, ...withoutText } = BLOCKS.cta
-    const html = serialize(renderCta(withoutText, ctx))
-    expect(html).not.toContain('cg-cta__text')
-  })
-
-  it('always renders the action list, required and non-empty by contract B', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
-    expect(html).toContain('cg-actions')
-    expect(html).toContain('data-emphasis="primary"')
-  })
-
-  it('gives the action list the block title as its accessible label', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
-    expect(html).toContain('aria-label="Let&#39;s talk about your project"')
-  })
-
-  it('resolves a same-site href through the render context', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
-    expect(html).toContain('href="/en/contact"')
-  })
-
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderCta(BLOCKS.cta, ctx))).toMatchSnapshot()
+  it('omits the sentence when there is none', () => {
+    const { text: _t, ...bare } = BLOCKS.cta
+    expect(serialize(renderCta(bare, ctx))).not.toContain('cg-contact__text')
   })
 })

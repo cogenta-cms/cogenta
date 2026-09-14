@@ -1,54 +1,45 @@
 import type { FaqBlock, FaqItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
+  type HeadingTag,
   type HtmlElement,
   h,
   heading,
+  nestedHeadingTag,
   type RenderContext,
   renderRichText,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * `<details>`/`<summary>` rather than a scripted accordion: expanding,
- * keyboard operation, the expanded state announced to assistive technology
- * and in-page search all come from the browser, at zero bytes of
- * JavaScript.
- *
- * The question is plain text inside `<summary>`, not a heading: a heading
- * nested in a summary is rendered inconsistently across screen readers, and
- * the questions are already reachable as a list under the block's own
- * heading. A CSS-drawn plus mark (rotated to a cross on `[open]`) replaces
- * the native marker rather than a chevron — the theme's own vocabulary of
- * shapes, kept purely visual.
+ * Questions a client asks before a project starts, set open: the label in
+ * the first three columns, and from the fourth each question in the display
+ * width with its answer beside it on a wide screen, divided by hairlines.
+ * Nothing is hidden behind a disclosure: a short set of answers is read
+ * whole. (`accordion` is the collapsible form of the same content.)
  */
-function renderItem(item: FaqItem, ctx: RenderContext): HtmlElement {
+function renderItem(item: FaqItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
   return h(
-    'li',
-    { class: 'cg-faq__item' },
-    h(
-      'details',
-      { class: 'cg-faq__details' },
-      h('summary', { class: 'cg-faq__question' }, h('span', {}, item.question)),
-      h('div', { class: 'cg-faq__answer' }, renderRichText(ctx, item.answer)),
-    ),
+    'div',
+    { class: 'cg-answers__item' },
+    heading(tag, { class: 'cg-answers__question' }, item.question),
+    h('div', { class: 'cg-answers__answer' }, renderRichText(ctx, item.answer)),
   )
 }
 
 export function renderFaq(block: FaqBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  const titled = block.title !== undefined
+  const tag = nestedHeadingTag('faq', titled)
+  return section(
     'section',
-    { class: 'cg-block cg-faq', 'data-block': 'faq' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('faq') ?? 'h2',
-          { class: 'cg-faq__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'faq',
+    'cg-answers cg-split',
+    { 'data-titled': titled ? 'true' : 'false' },
+    'div',
+    sectionHead('faq', block.title),
     h(
-      'ul',
-      { class: 'cg-faq__items' },
-      block.items.map((item) => renderItem(item, ctx)),
+      'div',
+      { class: 'cg-answers__items' },
+      block.items.map((item) => renderItem(item, ctx, tag)),
     ),
   )
 }

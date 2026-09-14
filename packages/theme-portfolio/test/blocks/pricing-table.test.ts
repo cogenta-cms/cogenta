@@ -4,86 +4,61 @@ import { renderPricingTable } from '../../src/render/blocks/pricing-table.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
 
-describe('renderPricingTable', () => {
-  it('renders the title at h2 when present', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('<h2 class="cg-pricing__title" data-field="title">Plans</h2>')
+describe('renderPricingTable, engagements as the columns of a ruled table', () => {
+  it('sets one list item per tier and counts them for the stylesheet', () => {
+    expect(html).toContain('data-count="2"')
+    expect(html.match(/<li class="cg-fees__tier"/g)).toHaveLength(2)
   })
 
-  it('renders no title heading when the field is absent', () => {
-    const { title: _title, ...untitled } = BLOCKS.pricingTable
-    const html = serialize(renderPricingTable(untitled, ctx))
-    expect(html).not.toContain('cg-pricing__title')
+  it('titles each tier one level under the table title', () => {
+    expect(html).toContain('<h2 class="cg-head__title" data-field="title">Engagements</h2>')
+    expect(html).toContain('<h3 class="cg-fees__name">Audit</h3>')
   })
 
-  it('renders one tier per list item, in a plain unordered list', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('<ul class="cg-pricing__tiers">')
-    expect([...html.matchAll(/<li class="cg-pricing__tier"/g)]).toHaveLength(2)
-  })
-
-  it('renders the price and interval', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('$1,200<span class="cg-pricing__interval">/mo</span>')
-  })
-
-  it('omits the interval span when the tier has none', () => {
-    const [firstTier] = BLOCKS.pricingTable.tiers
-    if (firstTier === undefined) throw new Error('fixture must have at least one tier')
-    const { interval: _interval, ...withoutInterval } = firstTier
-    const html = serialize(
-      renderPricingTable({ ...BLOCKS.pricingTable, tiers: [withoutInterval] }, ctx),
+  it('sets the price, then its interval', () => {
+    expect(html).toContain(
+      '<p class="cg-fees__price"><span class="cg-fees__amount">£45,000</span><span class="cg-fees__interval">from</span></p>',
     )
-    expect(html).not.toContain('cg-pricing__interval')
   })
 
-  it('lists every feature of a tier', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('<ul class="cg-pricing__features"><li>Two projects</li>')
-    expect(html).toContain('<li>Async reviews</li>')
-  })
-
-  it('marks the highlighted tier with a data attribute and aria-current, never a colour class', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('data-highlighted="true" aria-current="true"')
-  })
-
-  it('leaves the highlighted attribute off a tier that is not highlighted', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    const rows = html.split('<li class="cg-pricing__tier"')
-    expect(rows[1]).not.toContain('data-highlighted')
-    expect(rows[1]).not.toContain('aria-current')
-  })
-
-  it('renders the optional action as a link', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('<div class="cg-pricing__action">')
-    expect(html).toContain('class="cg-action"')
-  })
-
-  it('omits the action wrapper when a tier has none', () => {
-    const [firstTier] = BLOCKS.pricingTable.tiers
-    if (firstTier === undefined) throw new Error('fixture must have at least one tier')
-    const { action: _action, ...withoutAction } = firstTier
-    const html = serialize(
-      renderPricingTable({ ...BLOCKS.pricingTable, tiers: [withoutAction] }, ctx),
+  it('lists what a tier includes', () => {
+    expect(html).toContain(
+      '<ul class="cg-fees__features"><li class="cg-fees__feature">Two weeks</li><li class="cg-fees__feature">A written report</li></ul>',
     )
-    expect(html).not.toContain('cg-pricing__action')
   })
 
-  it('starts tier names at h3 when the block has its own h2 title', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect([...html.matchAll(/<h([1-6])/g)].map((m) => m[1])).toEqual(['2', '3', '3'])
+  it('marks the highlighted tier and gives its action the primary emphasis', () => {
+    expect(html).toContain('<li class="cg-fees__tier" data-highlighted="true">')
+    expect(html).toMatch(
+      /<div class="cg-fees__action"><a class="cg-action" data-emphasis="primary" href="\/en\/contact">Start a project<\/a><\/div>/,
+    )
   })
 
-  it('starts tier names at h2 when the block has no title of its own', () => {
-    const { title: _title, ...untitled } = BLOCKS.pricingTable
-    const html = serialize(renderPricingTable(untitled, ctx))
-    expect([...html.matchAll(/<h([1-6])/g)].map((m) => m[1])).toEqual(['2', '2'])
+  it('gives an ordinary tier’s action the secondary emphasis, and writes no action where there is none', () => {
+    const [first] = BLOCKS.pricingTable.tiers
+    expect(first?.action).toBeUndefined()
+    const withAction = {
+      ...BLOCKS.pricingTable,
+      tiers: [
+        {
+          ...first,
+          _key: 'p9',
+          name: 'Audit',
+          price: '£8,000',
+          features: [],
+          action: { label: 'Ask', target: { href: '/contact' } },
+        },
+      ],
+    }
+    const out = serialize(renderPricingTable(withAction, ctx))
+    expect(out).toContain('data-emphasis="secondary"')
+    expect(out).not.toContain('cg-fees__features')
   })
 
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderPricingTable(BLOCKS.pricingTable, ctx))).toMatchSnapshot()
+  it('moves the tier names up to h2 when the table has no title', () => {
+    const { title: _t, ...untitled } = BLOCKS.pricingTable
+    expect(serialize(renderPricingTable(untitled, ctx))).toContain('<h2 class="cg-fees__name">')
   })
 })

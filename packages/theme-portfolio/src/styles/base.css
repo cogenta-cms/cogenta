@@ -1,7 +1,7 @@
 /*
- * Document, accessibility floor, page frame, chrome and the theme's one
- * control (an action link). Everything here reads the design system from
- * `tokens.css`; nothing here reads a `--cogenta-*` token directly.
+ * Document, accessibility floor, the grid, section labels, actions, the
+ * header and footer, and the utility pages the host renders (search, forms,
+ * comments). Everything reads `tokens.css`.
  */
 
 /* --------------------------------------------------------------------------
@@ -14,121 +14,135 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-block-start: var(--cg-s6);
+  hanging-punctuation: first allow-end last;
+}
+
 body {
   margin: 0;
   background: var(--cg-canvas);
   color: var(--cg-ink);
-  font-family: var(--cogenta-font-sans);
+  font-family: var(--cg-font);
   font-size: var(--cg-text-md);
-  line-height: var(--cg-leading-normal);
+  font-stretch: var(--cg-width-text);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-text);
   font-kerning: normal;
   font-variant-ligatures: common-ligatures;
-  text-underline-offset: 0.16em;
-  text-decoration-thickness: from-font;
-  -webkit-text-size-adjust: 100%;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
+  background: var(--cg-signal);
+  color: var(--cg-signal-fg);
 }
 
 img,
 video,
 iframe {
-  max-width: 100%;
-  height: auto;
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
 }
 
 img {
-  display: block;
   object-fit: cover;
 }
 
+:where(img, video) {
+  filter: brightness(var(--cg-image-brightness));
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  font-family: var(--cg-font);
+  font-weight: var(--cg-weight-medium);
+  line-height: var(--cg-leading-heading);
+  letter-spacing: var(--cg-tracking-heading);
+  text-wrap: balance;
+}
+
+:where(p, li, dd, figcaption, blockquote) {
+  text-wrap: pretty;
+}
+
 :where(a) {
-  color: currentColor;
-  text-decoration-color: color-mix(in oklab, var(--cg-accent) 55%, transparent);
-  text-underline-offset: 0.2em;
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: var(--cg-line-strong);
+  text-underline-offset: 0.22em;
   transition:
-    color var(--cg-duration-fast) var(--cg-ease),
-    text-decoration-color var(--cg-duration-fast) var(--cg-ease);
+    color var(--cg-duration) var(--cg-ease),
+    text-decoration-color var(--cg-duration) var(--cg-ease);
 }
 
 :where(a:hover) {
-  color: var(--cg-accent);
   text-decoration-color: currentColor;
 }
 
 :where(hr) {
-  block-size: 1px;
+  block-size: var(--cg-rule);
   border: 0;
   margin-block: var(--cg-s10);
   background: var(--cg-line);
 }
 
+:where(code, kbd, samp, pre) {
+  font-family: var(--cg-font-code);
+  font-size: 0.86em;
+}
+
+.cg-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* --------------------------------------------------------------------------
-   Focus, targets, motion — the three that decide whether AA holds
+   Focus, targets, motion. Motion is a colour or an underline changing, in
+   under 150 ms; nothing moves in space, nothing fades in on scroll.
    -------------------------------------------------------------------------- */
 
-:where(a, button, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--cg-accent);
+:where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--cg-rule-strong) solid var(--cg-signal);
   outline-offset: 3px;
-  border-radius: var(--cg-radius-xs);
 }
 
-:where(.cg-action, .cg-faq__question, .cg-logo__link) {
+:where(.cg-action, .cg-nav-toggle-label, .cg-theme-toggle, summary) {
   min-block-size: 44px;
-  min-inline-size: 44px;
 }
 
-/* The entrance sweep every block opts into. Scroll-driven, so a section
-   arrives as it is scrolled to rather than firing eleven times on load, and
-   wrapped in a feature query because the starting state is `opacity: 0`. */
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    @keyframes cg-rise {
-      from {
-        opacity: 0;
-        transform: translateY(var(--cg-s5));
-      }
-
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-
-    .cg-block {
-      animation: cg-rise linear both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 20%;
-    }
-  }
-}
-
+/* Every transition in this theme reads `--cg-duration`, so reduced motion is
+   one declaration rather than an `!important` sweep over every element. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
-    scroll-behavior: auto !important;
+  :root {
+    --cg-duration: 0ms;
   }
 }
 
 .cg-skip-link {
   position: absolute;
   inset-inline-start: var(--cg-s3);
-  inset-block-start: calc(var(--cg-s3) * -8);
-  z-index: 20;
+  inset-block-start: calc(var(--cg-s16) * -1);
+  z-index: 30;
   padding: var(--cg-s2) var(--cg-s4);
-  background: var(--cg-surface-inverted);
-  color: var(--cg-surface-inverted-fg);
-  border-radius: var(--cg-radius-xs);
-  font-weight: var(--cg-weight-bold);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  font-size: var(--cg-text-caption);
+  font-weight: var(--cg-weight-medium);
   text-decoration: none;
-  transition: inset-block-start var(--cg-duration) var(--cg-ease);
 }
 
 .cg-skip-link:focus-visible {
@@ -136,89 +150,108 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   Page frame
+   The grid. Every block is a section around a twelve-column container; the
+   section rhythm is one variable, applied to all of them.
    -------------------------------------------------------------------------- */
 
 .cg-main {
   display: flow-root;
-  /* Drives the "Fig. 01" plate number in `mediaFigure` — a page-wide count,
-     since a plate numbers *the page's* figures, not one block's own. Every
-     other numbered list (`featureGrid`, `gallery`) resets its own counter
-     locally in `blocks.css`, since those numbers restart per list. */
-  counter-reset: cg-figure;
-  /* The hero's negative-margin media overlap (`.cg-hero__media`) and a
-     full-bleed grid card's own offset-on-hover both read past the page's
-     own edge by design; `clip` — not `hidden` — cuts them at the viewport
-     without turning `<main>` into a scroll container of its own. */
   overflow-x: clip;
+  padding-block-end: calc(var(--cg-section) / 2);
 }
 
-/* The standard clip-to-1px technique — visible to assistive tech, invisible
-   on screen, unlike `display:none` (which removes it from both). Every
-   social icon link's own text label (`renderSocialLinks`, `@cogenta/
-   theme-kit`) depends on this class existing here: theme-kit ships no CSS
-   of its own (contract D, R5 — a theme owns its own stylesheet). */
-.cg-visually-hidden {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-}
-
-.cg-block {
-  max-inline-size: var(--cg-page);
+.cg-container {
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-col-gap);
+  align-items: start;
+  inline-size: 100%;
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
   margin-inline: auto;
-  margin-block: var(--cg-section-y);
   padding-inline: var(--cg-gutter);
 }
 
-/* --- per-block visual variant (blocks@2.0, RFC 0002) ----------------------
-   `withBlockVariant` (`@cogenta/theme-kit`) stamps one `data-variant-<axis>`
-   attribute per axis an author actually set — never all four, never one this
-   theme does not resolve. Two attribute selectors give every rule here the
-   same specificity, (0,2,0), which is what lets it override `.cg-block`
-   above regardless of source order, without `!important` anywhere.
+/* Below the wide breakpoint twelve columns only make slivers: every child
+   takes the full row, and each block redistributes from there. */
+.cg-container > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
 
-   `background: 'image'` has no theme mechanism to attach an actual image to
-   a block instance (RFC 0002 adds only the semantic token, not a media
-   field) — resolved to the same tinted surface as the closest honest
-   approximation this theme has, rather than silently doing nothing with a
-   stated author intent.
-   ------------------------------------------------------------------------- */
+.cg-section {
+  padding-block: calc(var(--cg-section) / 2);
+}
+
+.cg-main > .cg-section:first-child {
+  padding-block-start: calc(var(--cg-section) * 0.4);
+}
+
+/* --- section labels ---------------------------------------------------------
+   One label for every titled block: a hairline across the container and the
+   title under it, small, in the text face. Above a grid it runs full width;
+   in a split block it takes the first three columns. */
+
+.cg-head {
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+  margin-block-end: var(--cg-s10);
+}
+
+.cg-head__title {
+  font-size: var(--cg-text-caption);
+  font-weight: var(--cg-weight-medium);
+  line-height: var(--cg-leading-ui);
+  letter-spacing: var(--cg-tracking-caption);
+}
+
+/* In a split block the label keeps its hairline over the first three
+   columns and the content takes its own over the rest: one rule broken at the
+   gutter, the way a studio's printed matter sets a label beside its text. */
+@media (min-width: 64rem) {
+  .cg-split .cg-head {
+    grid-column: 1 / span 3;
+    margin: 0;
+  }
+
+  .cg-split .cg-head ~ * {
+    grid-column: 4 / -1;
+    padding-block-start: var(--cg-s4);
+    border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+  }
+
+  .cg-split[data-titled="false"] .cg-container > * {
+    grid-column: 4 / -1;
+  }
+}
+
+.cg-empty {
+  margin: 0;
+  padding-block: var(--cg-s6);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-caption);
+}
+
+/* Under a label the label's own rule is enough. */
+.cg-head + .cg-empty {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
+/* --- per-block variants (blocks@2.0, RFC 0002) --------------------------- */
 
 [data-block][data-variant-background="muted"],
 [data-block][data-variant-background="image"] {
-  padding-block: var(--cg-s10);
-  border-radius: var(--cg-radius-lg);
-}
-
-[data-block][data-variant-background="muted"] {
   background: var(--cg-surface-sunken);
-}
-
-[data-block][data-variant-background="image"] {
-  background: var(--cg-surface-tinted);
+  padding-block: calc(var(--cg-section) * 0.75);
 }
 
 [data-block][data-variant-spacing="compact"] {
-  margin-block: calc(var(--cg-section-y) / 2);
+  padding-block: calc(var(--cg-section) / 4);
 }
-
-/* No rule for "comfortable": it names this theme's existing default, so an
-   author who picks it explicitly gets exactly what an absent `variant`
-   already gave them — the whole point of "theme default" being a real,
-   selectable option and not only the absence of a choice. */
 
 [data-block][data-variant-spacing="spacious"] {
-  margin-block: calc(var(--cg-section-y) * 1.6);
-}
-
-[data-block][data-variant-align="start"] {
-  text-align: start;
+  padding-block: calc(var(--cg-section) * 0.85);
 }
 
 [data-block][data-variant-align="center"] {
@@ -229,320 +262,241 @@ img {
   text-align: end;
 }
 
-[data-block][data-variant-width="full"] {
+[data-block][data-variant-width="full"] > .cg-container {
   max-inline-size: none;
-  padding-inline: 0;
 }
 
-.cg-page__title {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y) var(--cg-s6);
-  padding-inline: var(--cg-gutter);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-hero);
-  line-height: var(--cg-leading-tight);
-  letter-spacing: var(--cg-tracking-tighter);
-  font-weight: var(--cg-weight-black);
-  text-wrap: balance;
+/* --- the title of a page that is not a project ------------------------------ */
+
+.cg-page-head {
+  padding-block: calc(var(--cg-section) * 0.45) calc(var(--cg-section) * 0.15);
+}
+
+.cg-page-head__title {
+  font-size: var(--cg-size-title);
+  font-stretch: var(--cg-width-display);
+  font-weight: var(--cg-weight-medium);
+  line-height: var(--cg-leading-title);
+  letter-spacing: var(--cg-tracking-display);
+}
+
+@media (min-width: 64rem) {
+  .cg-page-head__title {
+    grid-column: 1 / span 10;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   Entry header (`renderEntryHeader`, `@cogenta/theme-kit`, `theme@1.4`) — a
-   project page's own furniture: the display title at the same scale as
-   `.cg-page__title`, the excerpt (`summary`) in the reading measure, and a
-   full-bleed cover with a hard, flat frame — no scrim, this theme never
-   overlays text on an image.
+   Actions: a filled rectangle in ink for the primary intent, and for the rest
+   the words underlined with an arrow after them. Square corners, no lift, no
+   shadow.
    -------------------------------------------------------------------------- */
 
-.cg-entry-header {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y) var(--cg-s10);
-  padding-inline: var(--cg-gutter);
-}
-
-.cg-entry-header__terms {
+.cg-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--cg-s4);
-  margin: 0 0 var(--cg-s5);
+  align-items: center;
+  gap: var(--cg-s3) var(--cg-s8);
+  margin: 0;
   padding: 0;
   list-style: none;
-  color: var(--cg-ink-muted);
-  font-family: var(--cogenta-font-mono);
-  font-size: var(--cg-text-xs);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
 }
 
-.cg-entry-header__terms a {
-  color: var(--cg-accent);
-  text-decoration: none;
-}
-
-.cg-entry-header__terms a:hover {
-  text-decoration: underline;
-}
-
-.cg-entry-header__title {
-  margin: 0;
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-hero);
-  line-height: var(--cg-leading-tight);
-  letter-spacing: var(--cg-tracking-tighter);
-  font-weight: var(--cg-weight-black);
-  text-wrap: balance;
-}
-
-.cg-entry-header__excerpt {
-  margin: var(--cg-s6) 0 0;
-  max-inline-size: var(--cg-measure-narrow);
-  font-size: var(--cg-text-lg);
-  line-height: var(--cg-leading-relaxed);
-  color: var(--cg-ink-muted);
-  text-wrap: pretty;
-}
-
-.cg-entry-header__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--cg-s4);
-  margin: var(--cg-s6) 0 0;
-  padding-block-start: var(--cg-s4);
-  border-block-start: 1px solid var(--cg-line);
-  color: var(--cg-ink-subtle);
-  font-family: var(--cogenta-font-mono);
-  font-size: var(--cg-text-xs);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
-}
-
-.cg-entry-header__author {
-  color: var(--cg-ink);
+.cg-action {
+  font-size: var(--cg-text-md);
   font-weight: var(--cg-weight-medium);
+  line-height: 1.2;
+  text-decoration: none;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease),
+    text-decoration-color var(--cg-duration) var(--cg-ease);
 }
 
-.cg-entry-header__reading-time::before {
-  content: "·";
-  margin-inline-end: var(--cg-s4);
-  color: var(--cg-line-strong);
-}
-
-.cg-entry-header__cover {
-  margin: var(--cg-s10) 0 0;
-  border: 1px solid var(--cg-line);
-}
-
-.cg-entry-header__cover img,
-.cg-entry-header__cover video {
-  display: block;
-  inline-size: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-}
-
-/* --------------------------------------------------------------------------
-   Chrome — a thin index bar and a footer that becomes a second headline.
-   -------------------------------------------------------------------------- */
-
-.cg-site-header {
-  position: sticky;
-  inset-block-start: 0;
-  z-index: 10;
-  padding: var(--cg-s4) var(--cg-gutter);
-  /* Flat and fully opaque, not a frosted-glass blur: a plane above the
-     page, marked off by a hairline rather than a haze. */
-  background: var(--cg-canvas);
-  border-block-end: 1px solid var(--cg-line);
-}
-
-.cg-site-header__inner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--cg-gap);
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-}
-
-.cg-site-header__mark {
+.cg-action[data-emphasis="primary"] {
   display: inline-flex;
   align-items: center;
-  gap: var(--cg-s2);
-  color: var(--cg-ink);
-  font-family: var(--cogenta-font-sans);
-  font-weight: var(--cg-weight-black);
-  font-size: var(--cg-text-lg);
-  letter-spacing: var(--cg-tracking-snug);
-  text-decoration: none;
-  margin-inline-end: auto;
-}
-
-/* The uploaded site logo. Height-constrained, so a wordmark and a square
-   mark both leave the index bar exactly as tall as it was. */
-.cg-site-header__logo {
-  display: block;
-  block-size: 1.75rem;
-  inline-size: auto;
-  max-inline-size: 14rem;
-  object-fit: contain;
-}
-
-.cg-site-header__glyph {
-  color: var(--cg-accent);
-  font-size: 1.2em;
-  transition: transform var(--cg-duration-slow) var(--cg-ease);
-}
-
-.cg-site-header__mark:hover .cg-site-header__glyph {
-  transform: rotate(90deg);
-}
-
-/* The mobile-menu checkbox: visually hidden the accessible way (still in
-   the tab order, still Space-operable) rather than `display: none` (which
-   would remove it from the tab order entirely). */
-.cg-nav-toggle-input {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+  justify-content: center;
+  padding: var(--cg-s3) var(--cg-s6);
+  border: var(--cg-rule) solid var(--cg-action);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
   white-space: nowrap;
 }
 
-.cg-nav-toggle-label {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.3rem;
-  inline-size: 2.5rem;
-  block-size: 2.5rem;
-  padding: 0.5rem;
-  margin-inline-start: auto;
-  cursor: pointer;
+.cg-action[data-emphasis="primary"]:hover {
+  background: var(--cg-action-hover);
+  border-color: var(--cg-action-hover);
+  color: var(--cg-action-hover-fg);
 }
 
-.cg-nav-toggle-input:focus-visible ~ .cg-nav-toggle-label {
-  outline: 2px solid var(--cg-accent);
-  outline-offset: 2px;
-  border-radius: var(--cg-radius-xs);
+/* A text link with an arrow after it. Not a flex container: in one, the
+   words and the arrow are two flex items and each gets its own underline.
+   As inline content the words carry one continuous underline, and the
+   arrow, an inline-block, inherits none (CSS Text Decoration: decorations do
+   not propagate to atomic inlines). The same rule draws every arrow link of
+   the theme, so a lone arrow cannot exist anywhere. */
+.cg-action[data-emphasis="secondary"],
+.cg-arrow-link {
+  display: inline-block;
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: var(--cg-line-strong);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 0.3em;
 }
 
-.cg-nav-toggle-bar {
-  display: block;
-  inline-size: 100%;
-  block-size: 2px;
-  background: var(--cg-ink);
-  transition: transform var(--cg-duration) var(--cg-ease);
+.cg-action[data-emphasis="secondary"] {
+  padding-block: var(--cg-s3);
 }
 
-/* Shared by the header's nav list and the footer's own (`.cg-site-footer__row
-   .cg-nav`) — declared here, ahead of the chrome media query below, so a
-   later, more specific override (`.cg-site-header__nav .cg-nav` inside it)
-   never has to fight a same-or-lower-specificity rule declared after it. */
-.cg-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cg-s6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-family: var(--cogenta-font-mono);
-  font-size: var(--cg-text-xs);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
+.cg-action[data-emphasis="secondary"]::after,
+.cg-arrow-link::after {
+  content: "\2192" / "";
+  display: inline-block;
+  margin-inline-start: 0.4em;
 }
 
-.cg-nav li {
+.cg-arrow-link[data-direction="back"]::after {
+  content: none;
+}
+
+.cg-arrow-link[data-direction="back"]::before {
+  content: "\2190" / "";
+  display: inline-block;
+  margin-inline-end: 0.4em;
+}
+
+.cg-action[data-emphasis="secondary"]:hover,
+.cg-arrow-link:hover {
+  color: var(--cg-ink);
+  text-decoration-color: currentColor;
+}
+
+/* --------------------------------------------------------------------------
+   Header: one row on the grid. The name, the tagline, the navigation.
+   -------------------------------------------------------------------------- */
+
+.cg-masthead {
+  position: relative;
+  z-index: 20;
+  background: var(--cg-canvas);
+}
+
+.cg-masthead__inner {
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-col-gap);
+  align-items: center;
+  min-block-size: var(--cg-header-height);
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+}
+
+.cg-masthead__home {
+  grid-column: 1 / span 4;
+  grid-row: 1;
+  justify-self: start;
   display: inline-flex;
-  align-items: baseline;
-  gap: var(--cg-s1);
-}
-
-.cg-nav a,
-.cg-nav span:not(.cg-nav__index) {
-  color: inherit;
+  align-items: center;
+  min-block-size: 44px;
+  color: var(--cg-ink);
   text-decoration: none;
 }
 
-.cg-nav a {
-  padding-block: var(--cg-s1);
-  border-block-end: 1px solid transparent;
-  transition:
-    border-color var(--cg-duration) var(--cg-ease),
-    color var(--cg-duration) var(--cg-ease);
+.cg-masthead__wordmark {
+  font-size: var(--cg-text-lg);
+  font-stretch: var(--cg-width-display);
+  font-weight: var(--cg-weight-semibold);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
-.cg-nav a:hover {
-  color: var(--cg-accent);
-  border-block-end-color: currentColor;
+.cg-masthead__logo {
+  display: block;
+  block-size: 2rem;
+  inline-size: auto;
+  max-inline-size: min(14rem, 50vw);
+  object-fit: contain;
+  filter: none;
 }
 
-.cg-nav__index {
-  color: var(--cg-accent);
-  opacity: 0.85;
+.cg-masthead__tagline {
+  display: none;
+  margin: 0;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-caption);
+  line-height: var(--cg-leading-ui);
 }
 
-/* The desktop shape — a real, always-visible `<nav>` — declared *before* the
-   media query below, on purpose: both rules below share this selector's
-   exact specificity (0,1,0), so with equal specificity the later one in the
-   file wins regardless of which media query is active. Declaring the
-   override after the default is what makes "hidden below the breakpoint"
-   actually win at narrow widths, rather than this unconditional rule
-   silently overriding the media query's own `display: none` at every width
-   because it happened to be declared later in the file. */
-.cg-site-header__nav {
+.cg-masthead__links {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--cg-s8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-masthead__item a,
+.cg-masthead__item span,
+.cg-masthead__action {
+  display: inline-flex;
   align-items: center;
-  gap: var(--cg-s6);
+  min-block-size: 44px;
+  color: var(--cg-ink);
+  font-size: var(--cg-text-md);
+  font-weight: var(--cg-weight-medium);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.35em;
 }
 
-.cg-site-header__action {
-  flex: none;
+.cg-masthead__item a:hover,
+.cg-masthead__action:hover {
+  text-decoration-color: currentColor;
 }
 
-/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
-   theme-kit`, L26) — a plain icon button in this theme's own hairline-bordered,
-   sharp-cornered register (`--cg-radius-xs`, not the pill canonical uses),
-   sized to match the mobile-menu toggle beside it (`.cg-nav-toggle-label`)
-   rather than a second, unrelated control size. */
+.cg-masthead__action {
+  text-decoration-color: var(--cg-line-strong);
+}
+
 .cg-theme-toggle {
+  grid-column: 12;
+  grid-row: 1;
+  justify-self: end;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  block-size: 2.5rem;
-  inline-size: 2.5rem;
-  flex-shrink: 0;
-  margin-inline-start: var(--cg-s2);
-  border: 1px solid var(--cg-line);
-  border-radius: var(--cg-radius-xs);
+  inline-size: 2.75rem;
+  margin-inline-end: calc(var(--cg-s3) * -1);
+  padding: 0;
+  border: 0;
   background: transparent;
   color: var(--cg-ink);
   cursor: pointer;
-  transition:
-    color var(--cg-duration) var(--cg-ease),
-    border-color var(--cg-duration) var(--cg-ease);
+  transition: color var(--cg-duration) var(--cg-ease);
 }
 
 .cg-theme-toggle:hover {
-  color: var(--cg-accent);
-  border-color: var(--cg-accent);
+  color: var(--cg-ink-muted);
 }
 
 .cg-theme-toggle__icon {
-  block-size: 1.1rem;
-  inline-size: 1.1rem;
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
 }
 
 .cg-theme-toggle__icon--moon {
   display: none;
 }
 
-/* Icon reflects the *current* effective appearance — sun while light, moon
-   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
-   `tokens.css` already keys this theme's whole (dark-by-default) palette on. */
 @media (prefers-color-scheme: dark) {
   :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
     display: none;
@@ -561,322 +515,300 @@ img {
   display: block;
 }
 
-/* Below the breakpoint: the toggle button appears, and the real nav becomes
-   a full-width panel anchored under the header, shown only while the
-   checkbox is checked — one selector, no JavaScript, and the same `<nav>`
-   desktop uses, never a second copy of the links. */
-@media (max-width: 56rem) {
-  .cg-nav-toggle-label {
-    display: flex;
-  }
-
-  .cg-site-header__nav {
-    display: none;
-    position: absolute;
-    inset-inline: 0;
-    inset-block-start: 100%;
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--cg-s6);
-    padding: var(--cg-s6) var(--cg-gutter);
-    background: var(--cg-canvas);
-    border-block-end: 1px solid var(--cg-line);
-  }
-
-  .cg-nav-toggle-input:checked ~ .cg-site-header__nav {
-    display: flex;
-  }
-
-  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(1) {
-    transform: translateY(0.45rem) rotate(45deg);
-  }
-
-  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(2) {
-    opacity: 0;
-  }
-
-  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(3) {
-    transform: translateY(-0.45rem) rotate(-45deg);
-  }
-
-  .cg-site-header__nav .cg-nav {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--cg-s5);
-  }
-
-  .cg-site-header__action {
-    align-self: flex-start;
-  }
+.cg-nav-toggle-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.cg-site-footer {
-  padding: var(--cg-s24) var(--cg-gutter) var(--cg-s10);
-  background: var(--cg-surface-inverted);
-  color: var(--cg-surface-inverted-fg);
-  border-block-start: 1px solid var(--cg-line-strong);
+.cg-nav-toggle-label {
+  grid-column: 11;
+  grid-row: 1;
+  justify-self: end;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4rem;
+  inline-size: 2.75rem;
+  padding: 0.7rem 0.55rem;
+  cursor: pointer;
 }
 
-.cg-site-footer__inner {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
+.cg-nav-toggle-input:focus-visible ~ .cg-nav-toggle-label {
+  outline: var(--cg-rule-strong) solid var(--cg-signal);
+  outline-offset: 2px;
 }
 
-.cg-site-footer__statement {
+.cg-nav-toggle-bar {
   display: block;
-  color: inherit;
-  font-family: var(--cogenta-font-sans);
-  font-weight: var(--cg-weight-black);
-  font-size: var(--cg-text-jumbo);
-  line-height: 0.92;
-  letter-spacing: var(--cg-tracking-tighter);
+  inline-size: 100%;
+  block-size: 2px;
+  background: var(--cg-ink);
+}
+
+/* Open: the two bars cross. A state, drawn at once; nothing is animated. */
+.cg-nav-toggle-input:checked ~ .cg-nav-toggle-label {
+  gap: 0;
+}
+
+.cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:first-child {
+  transform: translateY(1px) rotate(45deg);
+}
+
+.cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:last-child {
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+/* Below the wide breakpoint the navigation is a panel of large links under
+   the header, the full height of the screen. */
+@media (max-width: 63.99rem) {
+  .cg-masthead__home {
+    grid-column: 1 / span 9;
+  }
+
+  .cg-masthead__nav {
+    display: none;
+    position: fixed;
+    inset: var(--cg-header-height) 0 0;
+    z-index: 19;
+    overflow-y: auto;
+    padding: var(--cg-s6) var(--cg-gutter) var(--cg-s12);
+    border-block-start: var(--cg-rule) solid var(--cg-line);
+    background: var(--cg-canvas);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-masthead__nav {
+    display: block;
+  }
+
+  .cg-masthead__links {
+    display: block;
+  }
+
+  .cg-masthead__item {
+    border-block-end: var(--cg-rule) solid var(--cg-line);
+  }
+
+  .cg-masthead__item a,
+  .cg-masthead__item span,
+  .cg-masthead__action {
+    min-block-size: 0;
+    padding-block: var(--cg-s3);
+    font-size: var(--cg-size-nav);
+    font-stretch: var(--cg-width-display);
+    line-height: var(--cg-leading-title);
+    letter-spacing: var(--cg-tracking-display);
+  }
+
+  .cg-masthead__action {
+    margin-block-start: var(--cg-s6);
+    font-size: var(--cg-text-xl);
+    letter-spacing: var(--cg-tracking-heading);
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-nav-toggle-label {
+    display: none;
+  }
+
+  .cg-masthead__tagline {
+    display: block;
+    grid-column: 5 / span 4;
+    grid-row: 1;
+  }
+
+  .cg-masthead__nav {
+    grid-column: 9 / span 3;
+    grid-row: 1;
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: var(--cg-s8);
+  }
+
+  .cg-masthead[data-nav="none"] .cg-masthead__tagline {
+    grid-column: 5 / span 7;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Footer: a hairline, three columns, the legal line.
+   -------------------------------------------------------------------------- */
+
+.cg-colophon {
+  margin-block-start: calc(var(--cg-section) / 2);
+  color: var(--cg-ink);
+  font-size: var(--cg-text-caption);
+  line-height: var(--cg-leading-ui);
+}
+
+.cg-colophon__inner {
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-col-gap);
+  row-gap: var(--cg-s8);
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin-inline: auto;
+  padding: 0 var(--cg-gutter) var(--cg-s8);
+}
+
+.cg-colophon__inner > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+/* The hairline over the footer, on the grid rather than across the gutters. */
+.cg-colophon__inner::before {
+  content: "";
+  grid-column: 1 / -1;
+  block-size: var(--cg-rule);
+  margin-block-end: calc(var(--cg-s5) - var(--cg-s8));
+  background: var(--cg-line-ink);
+}
+
+.cg-colophon__name {
+  display: inline-block;
+  margin-block-end: var(--cg-s2);
+  color: var(--cg-ink);
+  font-size: var(--cg-text-md);
+  font-stretch: var(--cg-width-display);
+  font-weight: var(--cg-weight-semibold);
   text-decoration: none;
-  text-wrap: balance;
-  word-break: break-word;
 }
 
-.cg-site-footer__statement:hover {
-  color: var(--cg-accent);
+.cg-colophon__tagline,
+.cg-colophon__note p {
+  margin: 0;
+  max-inline-size: 36ch;
+  color: var(--cg-ink-muted);
 }
 
-.cg-site-footer__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--cg-s6);
-  margin-block-start: var(--cg-s16);
-  padding-block-start: var(--cg-s8);
-  border-block-start: 1px solid color-mix(in oklab, var(--cg-surface-inverted-fg) 25%, transparent);
+.cg-colophon__note {
+  margin-block-start: var(--cg-s3);
 }
 
-.cg-site-footer__row .cg-nav {
-  color: inherit;
+.cg-colophon__note p + p {
+  margin-block-start: var(--cg-s2);
 }
 
-.cg-site-footer__row .cg-nav__index {
-  color: var(--cg-accent);
-}
-
-/* `general.tagline` (`theme@1.4`) — the second line of the closing
-   statement, in the same reading measure the hero's own subtitle uses. */
-.cg-site-footer__tagline {
-  margin: var(--cg-s4) 0 0;
-  max-inline-size: var(--cg-measure-narrow);
-  color: color-mix(in oklab, var(--cg-surface-inverted-fg) 70%, transparent);
-  font-size: var(--cg-text-lg);
-  line-height: var(--cg-leading-relaxed);
-  text-wrap: pretty;
-}
-
-/* `general.socialLinks` (`theme@1.4`), rendered by `renderSocialLinks` as a
-   row of flat, hairline-ringed icon buttons — never a filled chip, so the
-   row reads as a set of quiet exits rather than a second set of actions. */
-.cg-site-footer__social {
-  display: flex;
-  gap: var(--cg-s3);
+.cg-colophon__links,
+.cg-colophon__social {
+  display: grid;
+  gap: var(--cg-s1);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.cg-site-footer__social-item a {
+.cg-colophon__item a,
+.cg-colophon__item span,
+.cg-colophon__social-item a {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  inline-size: 2.5rem;
-  block-size: 2.5rem;
-  border: 1px solid color-mix(in oklab, var(--cg-surface-inverted-fg) 30%, transparent);
-  border-radius: var(--cg-radius-xs);
-  color: inherit;
-  transition:
-    color var(--cg-duration) var(--cg-ease),
-    border-color var(--cg-duration) var(--cg-ease),
-    transform var(--cg-duration-fast) var(--cg-ease);
+  gap: var(--cg-s2);
+  min-block-size: 2rem;
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.3em;
 }
 
-.cg-site-footer__social-item a:hover {
-  color: var(--cg-accent);
-  border-color: var(--cg-accent);
-  transform: translate(-2px, -2px);
+.cg-colophon__item a:hover,
+.cg-colophon__social-item a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* The social profiles keep their names: a list of icons alone asks a reader
+   to recognise every logo, and a studio's footer has room for the words. */
+.cg-colophon__social .cg-visually-hidden {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
 }
 
 .cg-social__icon {
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
+  flex: none;
 }
 
-.cg-site-footer__meta {
+.cg-colophon__legal {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--cg-s3);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cg-s3) var(--cg-s8);
+  padding-block-start: var(--cg-s5);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
 }
 
-@media (min-width: 48rem) {
-  .cg-site-footer__meta {
-    align-items: flex-end;
-    text-align: end;
-  }
-}
-
-/* `general.footerNote` (`theme@1.4`) — a short site-wide line, set quietly
-   above the branding credit rather than as a fourth headline. */
-.cg-site-footer__note {
+.cg-colophon__copyright {
   margin: 0;
-  max-inline-size: 32ch;
-  color: color-mix(in oklab, var(--cg-surface-inverted-fg) 70%, transparent);
-  font-family: var(--cogenta-font-mono);
-  font-size: var(--cg-text-xs);
-  letter-spacing: var(--cg-tracking-wide);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
-.cg-site-footer__branding {
-  display: flex;
+.cg-colophon__branding a {
+  display: inline-flex;
   align-items: center;
+  gap: 0.5em;
+  color: var(--cg-ink-muted);
+  text-decoration: none;
 }
 
-.cg-site-footer__branding a {
-  display: flex;
-  align-items: center;
-  gap: 0.4em;
-  color: inherit;
-  opacity: 0.75;
-  font-family: var(--cogenta-font-mono);
-  font-size: var(--cg-text-xs);
-  transition: opacity var(--cg-duration) var(--cg-ease);
-}
-
-.cg-site-footer__version {
-  font-variant-numeric: tabular-nums;
-  font-size: 0.9em;
-}
-
-.cg-site-footer__branding a:hover,
-.cg-site-footer__branding a:focus-visible {
-  opacity: 1;
+.cg-colophon__branding a:hover {
+  color: var(--cg-ink);
 }
 
 .cg-site-footer__brand-logo {
   display: block;
-  /* Explicit pixels, not `em`: relative sizing cascaded from the footer's
-     own small font-size and made the credit mark unreadably tiny. */
-  block-size: 25px;
+  block-size: 18px;
   inline-size: auto;
 }
 
-/* --------------------------------------------------------------------------
-   Actions — the theme's only control
-   -------------------------------------------------------------------------- */
-
-.cg-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cg-s3);
-  margin: var(--cg-s8) 0 0;
-  padding: 0;
-  list-style: none;
+.cg-site-footer__version {
+  font-variant-numeric: tabular-nums;
 }
 
-.cg-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--cg-s2);
-  padding: var(--cg-s3) var(--cg-s6);
-  border: 1px solid transparent;
-  border-radius: var(--cg-radius-xs);
-  font-family: var(--cogenta-font-mono);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-medium);
-  letter-spacing: var(--cg-tracking-normal);
-  line-height: var(--cg-leading-snug);
-  text-decoration: none;
-  white-space: nowrap;
-  transition:
-    background-color var(--cg-duration) var(--cg-ease),
-    color var(--cg-duration) var(--cg-ease),
-    border-color var(--cg-duration) var(--cg-ease),
-    box-shadow var(--cg-duration) var(--cg-ease),
-    transform var(--cg-duration-fast) var(--cg-ease);
+@media (min-width: 40rem) {
+  .cg-colophon__about {
+    grid-column: 1 / span 6;
+  }
+
+  .cg-colophon__nav {
+    grid-column: 7 / span 3;
+  }
+
+  .cg-colophon__follow {
+    grid-column: 10 / span 3;
+  }
+
+  .cg-colophon__legal {
+    grid-column: 1 / -1;
+  }
 }
 
-.cg-action[data-emphasis="primary"] {
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
-  box-shadow: var(--cg-elevation-1);
-}
+@media (min-width: 64rem) {
+  .cg-colophon__about {
+    grid-column: 1 / span 4;
+  }
 
-.cg-action[data-emphasis="primary"]:hover {
-  box-shadow: var(--cg-elevation-2);
-  transform: translate(-2px, -2px);
-}
-
-.cg-action[data-emphasis="secondary"] {
-  background: transparent;
-  color: currentColor;
-  border-color: currentColor;
-}
-
-.cg-action[data-emphasis="secondary"]:hover {
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
-  border-color: var(--cg-accent);
-  transform: translate(-2px, -2px);
-}
-
-.cg-action:active {
-  transform: translate(0, 0);
-  box-shadow: none;
+  .cg-colophon__nav {
+    grid-column: 7 / span 3;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   Shared block furniture
-   -------------------------------------------------------------------------- */
-
-.cg-features__title,
-.cg-faq__title,
-.cg-stats__title,
-.cg-logos__title,
-.cg-collection__title {
-  margin: 0 0 var(--cg-s10);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-2xl);
-  line-height: var(--cg-leading-snug);
-  letter-spacing: var(--cg-tracking-tight);
-  font-weight: var(--cg-weight-black);
-  text-wrap: balance;
-}
-
-.cg-features__items,
-.cg-logos__items,
-.cg-gallery__items,
-.cg-faq__items {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-collection__items {
-  margin: 0;
-  padding: 0;
-}
-
-.cg-gallery__viewport,
-.cg-collection__viewport {
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--cg-line-strong) transparent;
-  padding-block: var(--cg-s2);
-  margin-block: calc(var(--cg-s2) * -1);
-}
-
-/* --------------------------------------------------------------------------
-   Search, forms, comments — public utility pages and post-content furniture,
-   dressed in the same mono-labelled, hairline-ruled register as the blocks.
+   Search, forms and comments: the utility pages, in the same register.
    -------------------------------------------------------------------------- */
 
 .cg-search__form,
@@ -884,9 +816,8 @@ img {
 .cg-search__empty,
 .cg-search__error,
 .cg-form,
-.cg-form__confirmation,
-.cg-comments {
-  max-inline-size: var(--cg-page);
+.cg-form__confirmation {
+  max-inline-size: calc(var(--cg-measure) + var(--cg-gutter) * 2);
   margin-inline: auto;
   padding-inline: var(--cg-gutter);
 }
@@ -896,36 +827,40 @@ img {
   flex-wrap: wrap;
   align-items: end;
   gap: var(--cg-s3);
-  margin-block-end: var(--cg-s10);
+  margin-block: var(--cg-s10);
 }
 
 .cg-search__form label,
 .cg-form__field label,
 .cg-comment__form label {
   display: block;
-  font-family: var(--cogenta-font-mono);
-  font-size: var(--cg-text-xs);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
-  font-weight: var(--cg-weight-medium);
   margin-block-end: var(--cg-s2);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-caption);
+  font-weight: var(--cg-weight-medium);
 }
 
 .cg-search__form input[type="search"] {
-  flex: 1 1 16rem;
+  flex: 1 1 18rem;
 }
 
 .cg-search__results {
-  margin: 0 auto;
-  padding-inline-start: var(--cg-gutter);
   display: grid;
-  gap: var(--cg-s5);
-  font-size: var(--cg-text-lg);
+  gap: 0;
+  margin-block: 0 var(--cg-section);
+  list-style: none;
+  font-size: var(--cg-size-work);
+}
+
+.cg-search__results > * {
+  padding-block: var(--cg-s5);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
 }
 
 .cg-search__empty,
 .cg-comments__empty,
-.cg-comments__closed {
+.cg-comments__closed,
+.cg-form__help {
   color: var(--cg-ink-muted);
 }
 
@@ -933,9 +868,11 @@ img {
 .cg-form__error,
 .cg-form__field-error {
   color: var(--cg-ink);
-  font-weight: var(--cg-weight-bold);
+  font-weight: var(--cg-weight-semibold);
 }
 
+/* Fields are a baseline, not a box: a rule under the words, darkening to ink
+   on focus. */
 .cg-search__form input,
 .cg-form__field input,
 .cg-form__field select,
@@ -943,51 +880,77 @@ img {
 .cg-comment__form input,
 .cg-comment__form textarea {
   inline-size: 100%;
-  padding: var(--cg-s3) var(--cg-s4);
-  border: 1px solid var(--cg-line);
-  border-radius: var(--cg-radius-xs);
-  background: var(--cg-surface);
+  min-block-size: 44px;
+  padding: var(--cg-s2) 0;
+  border: 0;
+  border-block-end: var(--cg-rule) solid var(--cg-line-strong);
+  border-radius: 0;
+  background: transparent;
   color: var(--cg-ink);
-  font: inherit;
+  font-family: var(--cg-font);
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-ui);
+  transition: border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-form__field textarea,
+.cg-comment__form textarea {
+  padding: var(--cg-s3);
+  border: var(--cg-rule) solid var(--cg-line-strong);
+  border-radius: var(--cg-radius);
+  resize: vertical;
+}
+
+.cg-search__form input:focus-visible,
+.cg-form__field :is(input, select, textarea):focus-visible,
+.cg-comment__form :is(input, textarea):focus-visible {
+  outline: none;
+  border-color: var(--cg-ink);
+  box-shadow: inset 0 calc(var(--cg-rule) * -1) 0 var(--cg-ink);
 }
 
 .cg-form__field input[aria-invalid="true"],
 .cg-form__field select[aria-invalid="true"],
 .cg-form__field textarea[aria-invalid="true"] {
-  border-width: 2px;
-  border-color: var(--cg-line-strong);
+  border-color: var(--cg-ink);
+  border-block-end-width: var(--cg-rule-strong);
 }
 
 .cg-search__form button,
 .cg-form button[type="submit"],
 .cg-comment__form button[type="submit"] {
+  min-block-size: 44px;
   padding: var(--cg-s3) var(--cg-s6);
-  border: 1px solid var(--cg-accent);
-  border-radius: var(--cg-radius-xs);
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
-  font-family: var(--cogenta-font-mono);
+  border: var(--cg-rule) solid var(--cg-action);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  font-family: var(--cg-font);
+  font-size: var(--cg-text-md);
   font-weight: var(--cg-weight-medium);
   cursor: pointer;
-  transition: background-color var(--cg-duration) var(--cg-ease);
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease);
 }
 
 .cg-search__form button:hover,
 .cg-form button[type="submit"]:hover,
 .cg-comment__form button[type="submit"]:hover {
-  background: var(--cg-accent-hover);
+  background: var(--cg-action-hover);
+  border-color: var(--cg-action-hover);
+  color: var(--cg-action-hover-fg);
 }
 
-.cg-form__field,
-.cg-comment__form p {
+.cg-form__field {
   display: block;
-  margin-block-end: var(--cg-s5);
+  margin-block-end: var(--cg-s6);
 }
 
 .cg-form__help {
   margin: var(--cg-s2) 0 0;
   font-size: var(--cg-text-sm);
-  color: var(--cg-ink-muted);
 }
 
 .cg-form__choice {
@@ -995,7 +958,7 @@ img {
   align-items: center;
   gap: var(--cg-s2);
   margin-inline-end: var(--cg-s4);
-  font-weight: normal;
+  font-weight: var(--cg-weight-regular);
 }
 
 .cg-form__honeypot,
@@ -1007,11 +970,33 @@ img {
   inset-inline-start: -9999px;
 }
 
+/* Comments sit on the same twelve columns as the text above them. */
 .cg-comments {
-  margin-block-start: var(--cg-section-y);
-  padding-block-start: var(--cg-s8);
-  padding-block-end: var(--cg-section-y);
-  border-block-start: 1px solid var(--cg-line);
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-col-gap);
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin: 0 auto var(--cg-section);
+  padding: var(--cg-s5) var(--cg-gutter) 0;
+}
+
+.cg-comments > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+@media (min-width: 64rem) {
+  .cg-comments > * {
+    grid-column: 4 / span 7;
+  }
+}
+
+.cg-comments > h2 {
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+  margin-block-end: var(--cg-s5);
+  font-size: var(--cg-text-caption);
+  font-weight: var(--cg-weight-medium);
 }
 
 .cg-comments__list,
@@ -1023,34 +1008,51 @@ img {
 
 .cg-comment {
   padding-block: var(--cg-s5);
-  border-block-end: 1px solid var(--cg-line-soft);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
 }
 
 .cg-comment__replies {
-  padding-block-start: var(--cg-s5);
-}
-
-.cg-comment__replies .cg-comment {
+  margin-block-start: var(--cg-s4);
   padding-inline-start: var(--cg-s6);
-  border-inline-start: 2px solid var(--cg-line);
-  border-block-end: 0;
+  border-inline-start: var(--cg-rule) solid var(--cg-line);
 }
 
 .cg-comment__meta {
   display: flex;
-  gap: var(--cg-s3);
-  align-items: baseline;
-  font-family: var(--cogenta-font-mono);
-  font-size: var(--cg-text-xs);
-  color: var(--cg-ink-muted);
-  margin-block-end: var(--cg-s2);
+  flex-wrap: wrap;
+  gap: var(--cg-s1) var(--cg-s3);
+  margin: 0 0 var(--cg-s2);
+  font-size: var(--cg-text-sm);
 }
 
 .cg-comment__author {
-  font-weight: var(--cg-weight-semibold);
   color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
 }
 
-.cg-comment__body {
+.cg-comment__date {
+  color: var(--cg-ink-muted);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-comment__body p {
   margin: 0;
+}
+
+.cg-comment__body p + p {
+  margin-block-start: var(--cg-s3);
+}
+
+.cg-comment__form {
+  display: grid;
+  gap: var(--cg-s3);
+  margin-block-start: var(--cg-s6);
+}
+
+.cg-comment__form > * {
+  margin: 0;
+}
+
+.cg-comment__form button[type="submit"] {
+  justify-self: start;
 }

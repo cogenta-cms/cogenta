@@ -11,132 +11,122 @@ import {
 } from '@cogenta/theme-kit'
 
 /**
- * The chrome this theme ships (`theme@1.4`): a thin, sticky index bar up
- * top — the site name treated as a typographic mark rather than a logo
- * slot, a running index number, a real desktop `<nav>`, `headerAction`
- * (`"Let's talk"`, a flat filled button) and a CSS-only mobile menu — and a
- * footer that becomes a second headline: the site name set at display
- * scale, repeated as a closing statement, the `tagline` beneath it, then a
- * real row of footer navigation, social icons (`renderSocialLinks`) and the
- * `footerNote` beside the branding fragment.
+ * The header and the footer (`theme@1.4`), as quiet as a studio's own.
  *
- * The mobile menu is the same checkbox/label trick every L25 theme uses —
- * a visually-hidden `<input type="checkbox">` paired with a `<label>`
- * styled as a three-bar button; `base.css`'s sibling combinator is what
- * reveals the panel when the box is checked, so there is exactly one real
- * `<nav>` in the markup (the same one desktop and mobile both use, retiled
- * by CSS at the breakpoint), never two copies of the same links.
+ * Header, one row on the twelve columns: the studio's name on the left (or
+ * its uploaded logo), the `tagline` in the middle columns on a wide screen,
+ * the navigation on the right with the `headerAction` as its last link, and
+ * the light/dark control. No bar, no button, no sticky shadow. Below the
+ * breakpoint the navigation becomes a full-height panel of large links opened
+ * by a CSS-only toggle: a visually hidden checkbox paired with a `<label>`,
+ * placed before the `<nav>` so the sibling combinator in `base.css` reaches
+ * it. There is exactly one `<nav>` in the markup, retiled by CSS.
  *
- * Both fragments are built with the same string-escaping discipline
- * `theme-kit`'s own reference chrome uses (`escapeText`/`escapeAttribute`) —
- * `headerNav`/`footerNav` arrive pre-resolved and are rendered as given,
- * never invented or dropped, and `brandingHtml` is placed, never altered.
- * Every `theme@1.4` field (`tagline`/`social`/`footerNote`/`headerAction`)
- * is optional and additive: a host or a site that never sets one gets
- * exactly the `1.3` markup in that spot, byte for byte (`chrome.test.ts`'s
- * "without the new fields" cases).
- *
- * The manual light/dark/system toggle (`renderThemeToggle`, `@cogenta/
- * theme-kit`, L26) is unconditional — every render carries it, `theme@1.4`
- * or not — placed as its own sibling after the nav/hamburger pair so it
- * stays visible whether or not the mobile menu is open, styled in this
- * theme's own hairline-bordered, sharp-cornered register in `base.css`
- * rather than canonical's pill button.
+ * Footer, a hairline and three columns: the name, the tagline and the
+ * `footerNote`; the footer navigation; the social profiles with their names.
+ * Then the legal line: the copyright year and the studio's name beside
+ * Cogenta's credit (`brandingHtml`, placed once, as received). No column
+ * carries a heading: a heading is a word, and a theme has no translation for
+ * it. Every `theme@1.4` field renders only when present, so a host that
+ * predates them still gets the name and the navigation.
  */
 
-function renderNavLinks(links: readonly ChromeNavLink[], className: string): string {
-  if (links.length === 0) return ''
-  const items = links
+function navItems(links: readonly ChromeNavLink[], className: string): string {
+  return links
     .filter((link) => link.href !== null || link.kind === 'submenu-placeholder')
-    .map((link, index) => {
+    .map((link) => {
       const label = escapeText(link.label)
       const titleAttr = link.title === null ? '' : ` title="${escapeAttribute(link.title)}"`
-      const number = String(index + 1).padStart(2, '0')
-      if (link.href === null) {
-        return `<li><span class="cg-nav__index" aria-hidden="true">${number}</span><span${titleAttr}>${label}</span></li>`
-      }
+      if (link.href === null)
+        return `<li class="${className}"><span${titleAttr}>${label}</span></li>`
       const href = escapeAttribute(link.href)
       const target = link.openInNewTab ? ' target="_blank" rel="noopener"' : ''
-      return (
-        `<li><span class="cg-nav__index" aria-hidden="true">${number}</span>` +
-        `<a href="${href}"${target}${titleAttr}>${label}</a></li>`
-      )
+      return `<li class="${className}"><a href="${href}"${target}${titleAttr}>${label}</a></li>`
     })
     .join('')
-  return items === '' ? '' : `<ul class="${className}">${items}</ul>`
 }
 
-/** The header's own call-to-action link (`theme@1.4`) — a flat filled button, the theme's one accent-coloured control, at the tail of the nav list. */
-function renderHeaderAction(action: ChromeInput['headerAction']): string {
-  if (action === undefined) return ''
-  return (
-    `<a class="cg-action cg-site-header__action" data-emphasis="primary" ` +
-    `href="${escapeAttribute(action.href)}">${escapeText(action.label)}</a>`
-  )
-}
-
-/** A hamburger mark drawn from three stacked bars — no icon font, no glyph a font might not ship. */
-function menuGlyph(): string {
-  return '<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>'
+/** `footerNote` as paragraphs: a blank line starts a new one. */
+function renderFooterNote(note: string): string {
+  const paragraphs = note
+    .replace(/\r\n?/g, '\n')
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s*\n\s*/g, ' ').trim())
+    .filter((paragraph) => paragraph !== '')
+  if (paragraphs.length === 0) return ''
+  return `<div class="cg-colophon__note">${paragraphs
+    .map((paragraph) => `<p>${escapeText(paragraph)}</p>`)
+    .join('')}</div>`
 }
 
 export function renderChrome(input: ChromeInput): ChromeResult {
   const siteName = escapeText(input.site.name)
   const home = escapeAttribute(input.homeHref)
-  const headerNav = renderNavLinks(input.headerNav, 'cg-nav')
-  const footerNav = renderNavLinks(input.footerNav, 'cg-nav cg-nav--footer')
-  const headerAction = renderHeaderAction(input.headerAction)
-  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
-  // The asterisk glyph is this theme's own typographic mark. It belongs to
-  // the *wordmark* treatment, so an uploaded logo replaces both together —
-  // an asterisk stapled to somebody else's logo is not a design decision
-  // this theme gets to make on their behalf.
-  const logo = renderBrandMark(input.brand, { className: 'cg-site-header__logo' })
-  const mark = logo ?? `<span class="cg-site-header__glyph" aria-hidden="true">*</span>${siteName}`
-
-  const hasMenu = headerNav !== '' || headerAction !== ''
-  const nav = hasMenu
-    ? `<nav class="cg-site-header__nav" id="cg-nav" aria-label="Primary">${headerNav}${headerAction}</nav>`
-    : ''
-  const toggle = hasMenu
-    ? `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
-      `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">${menuGlyph()}</label>`
-    : ''
-
-  const header =
-    `<header class="cg-site-header"><div class="cg-site-header__inner">` +
-    `<a class="cg-site-header__mark" href="${home}">${mark}</a>` +
-    `${toggle}${nav}` +
-    `${themeToggle}` +
-    `</div></header>`
-
+  const links = navItems(input.headerNav, 'cg-masthead__item')
+  const action =
+    input.headerAction === undefined
+      ? ''
+      : `<a class="cg-masthead__action" href="${escapeAttribute(input.headerAction.href)}">${escapeText(
+          input.headerAction.label,
+        )}</a>`
+  const toggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
+  const logo = renderBrandMark(input.brand, { className: 'cg-masthead__logo' })
+  const mark = logo ?? `<span class="cg-masthead__wordmark">${siteName}</span>`
   const tagline =
     input.tagline === undefined
       ? ''
-      : `<p class="cg-site-footer__tagline" data-field="tagline">${escapeText(input.tagline)}</p>`
-  const social =
-    input.social === undefined
+      : `<p class="cg-masthead__tagline">${escapeText(input.tagline)}</p>`
+
+  const hasMenu = links !== '' || action !== ''
+  const menu = hasMenu
+    ? `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
+      `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">` +
+      `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
+      `</label>` +
+      `<nav class="cg-masthead__nav" id="cg-nav" aria-label="Primary">` +
+      `${links === '' ? '' : `<ul class="cg-masthead__links">${links}</ul>`}` +
+      `${action}` +
+      `</nav>`
+    : ''
+
+  const header =
+    `<header class="cg-masthead" data-nav="${hasMenu ? 'links' : 'none'}">` +
+    `<div class="cg-masthead__inner">` +
+    `<a class="cg-masthead__home" href="${home}">${mark}</a>` +
+    `${tagline}` +
+    `${menu}` +
+    `${toggle}` +
+    `</div></header>`
+
+  const footerTagline =
+    input.tagline === undefined
       ? ''
-      : serialize(
-          renderSocialLinks(input.social, {
-            className: 'cg-site-footer__social',
-            itemClassName: 'cg-site-footer__social-item',
-          }) ?? { kind: 'text', value: '' },
-        )
-  const footerNote =
-    input.footerNote === undefined
-      ? ''
-      : `<p class="cg-site-footer__note">${escapeText(input.footerNote)}</p>`
+      : `<p class="cg-colophon__tagline" data-field="tagline">${escapeText(input.tagline)}</p>`
+  const note = input.footerNote === undefined ? '' : renderFooterNote(input.footerNote)
+  const footerLinks = navItems(input.footerNav, 'cg-colophon__item')
+  const social = renderSocialLinks(input.social, {
+    className: 'cg-colophon__social',
+    itemClassName: 'cg-colophon__social-item',
+  })
+  const year = new Date().getFullYear()
 
   const footer =
-    `<footer class="cg-site-footer"><div class="cg-site-footer__inner">` +
-    `<a class="cg-site-footer__statement" href="${home}">${siteName}</a>` +
-    `${tagline}` +
-    `<div class="cg-site-footer__row">` +
-    `${footerNav === '' ? '' : `<nav aria-label="Footer">${footerNav}</nav>`}` +
-    `${social === '' ? '' : `<div class="cg-site-footer__social-col">${social}</div>`}` +
-    `<div class="cg-site-footer__meta">${footerNote}<div class="cg-site-footer__branding">${input.brandingHtml}</div></div>` +
-    `</div></div></footer>`
+    `<footer class="cg-colophon"><div class="cg-colophon__inner">` +
+    `<div class="cg-colophon__about">` +
+    `<a class="cg-colophon__name" href="${home}">${siteName}</a>` +
+    `${footerTagline}${note}` +
+    `</div>` +
+    `${
+      footerLinks === ''
+        ? ''
+        : `<nav class="cg-colophon__nav" aria-label="Footer"><ul class="cg-colophon__links">${footerLinks}</ul></nav>`
+    }` +
+    `${social === null ? '' : `<div class="cg-colophon__follow">${serialize(social)}</div>`}` +
+    `<div class="cg-colophon__legal">` +
+    `<p class="cg-colophon__copyright">© ${year} ${siteName}</p>` +
+    `<div class="cg-colophon__branding">${input.brandingHtml}</div>` +
+    `</div>` +
+    `</div></footer>`
 
   return { header, footer }
 }

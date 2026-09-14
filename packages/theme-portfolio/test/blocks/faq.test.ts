@@ -4,54 +4,30 @@ import { renderFaq } from '../../src/render/blocks/faq.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderFaq(BLOCKS.faq, ctx))
 
-describe('renderFaq', () => {
-  it('renders the title at h2 when present', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('<h2 class="cg-faq__title" data-field="title">Questions</h2>')
+describe('renderFaq, answers set open', () => {
+  it('is a split block with its label', () => {
+    expect(html).toMatch(
+      /^<section class="cg-section cg-answers cg-split" data-block="faq" data-titled="true"/,
+    )
+    expect(html).toContain('<h2 class="cg-head__title" data-field="title">Working with us</h2>')
   })
 
-  it('renders no title heading when the field is absent', () => {
-    const { title: _title, ...untitled } = BLOCKS.faq
-    const html = serialize(renderFaq(untitled, ctx))
-    expect(html).not.toContain('cg-faq__title')
+  it('sets each question at h3 under a titled block, and its answer beside it', () => {
+    expect(html).toContain(
+      '<div class="cg-answers__item"><h3 class="cg-answers__question">How does a project start?</h3><div class="cg-answers__answer"><p>With a conversation and a written brief.</p></div></div>',
+    )
   })
 
-  it('renders each question inside <details>/<summary>, never a scripted widget', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('<details class="cg-faq__details">')
-    expect(html).toContain('<summary class="cg-faq__question">')
-    expect(html).toContain('Can I change skin without a build?')
+  it('hides nothing behind a disclosure', () => {
+    expect(html).not.toContain('<details')
   })
 
-  it('renders the answer as rich text, never a plain string', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('<div class="cg-faq__answer"><p>Yes, and without a build.</p></div>')
-  })
-
-  it('renders the question as plain text, not a nested heading', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).not.toMatch(/<summary[^>]*><h[1-6]/)
-  })
-
-  it('never emits a script tag or client directive', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).not.toMatch(/<script/i)
-    expect(html).not.toMatch(/client:/i)
-  })
-
-  it('renders one list item per question', () => {
-    const [firstQuestion] = BLOCKS.faq.items
-    if (firstQuestion === undefined) throw new Error('fixture must have at least one question')
-    const twoQuestions = {
-      ...BLOCKS.faq,
-      items: [...BLOCKS.faq.items, { ...firstQuestion, _key: 'q2', question: 'Another one?' }],
-    }
-    const html = serialize(renderFaq(twoQuestions, ctx))
-    expect([...html.matchAll(/<li class="cg-faq__item">/g)]).toHaveLength(2)
-  })
-
-  it('matches a stable snapshot', () => {
-    expect(serialize(renderFaq(BLOCKS.faq, ctx))).toMatchSnapshot()
+  it('moves the questions up to h2 when the block has no title', () => {
+    const { title: _t, ...untitled } = BLOCKS.faq
+    const out = serialize(renderFaq(untitled, ctx))
+    expect(out).toContain('<h2 class="cg-answers__question">')
+    expect(out).toContain('data-titled="false"')
   })
 })

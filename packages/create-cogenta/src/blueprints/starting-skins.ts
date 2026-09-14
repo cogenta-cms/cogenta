@@ -178,34 +178,38 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
     shadow: { sm: '0 1px 0 rgba(30, 27, 23, 0.06)', md: '0 8px 24px rgba(30, 27, 23, 0.1)' },
   },
   /**
-   * A SaaS marketing site (L25): the Linear/Stripe/Vercel register — a
-   * confident violet-blue accent on a near-white ground, and a rounder,
-   * friendlier button radius (10px) than any of the other presets above,
-   * matching `@cogenta/theme-saas`'s own default `tokens.json` exactly (its
-   * `defaultTheme`) so a freshly scaffolded site's applied skin and its
-   * active theme's own design system agree from the first render.
+   * B2B software for finance and operations teams (`@cogenta/theme-saas`,
+   * L27 studio pass): white and a structured grey scale, a near-black ink and
+   * one signal blue kept for links, focus and the primary button; Geist for
+   * everything a visitor reads and Geist Mono for identifiers, figures and
+   * labels. Copied from `packages/theme-saas/tokens.json` rather than
+   * referenced (a blueprint's starting skin and a theme's own default skin
+   * are two independent pieces of data the contract keeps separate), so a
+   * scaffolded `saas` site's skin names the theme's own typefaces and palette
+   * from the first render: the theme reads both from the skin, and a skin
+   * that named other fonts would silently replace them.
    */
   saas: {
     color: {
-      bg: '#f8f8fc',
-      fg: '#15131f',
-      accent: '#5a4aeb',
+      bg: '#ffffff',
+      fg: '#111113',
+      accent: '#0068d5',
       accentFg: '#ffffff',
-      muted: '#eeedf9',
-      mutedFg: '#4b4763',
-      border: '#e2e0f0',
+      muted: '#f4f4f5',
+      mutedFg: '#5c5c66',
+      border: '#e4e4e7',
     },
     font: {
-      sans: "'Inter Tight', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+      sans: "'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
       serif: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
-      mono: "'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      mono: "'Geist Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
       scale: 1.25,
       baseSize: '1rem',
     },
     space: { unit: '0.25rem', density: 'comfortable' },
-    radius: { sm: '0.5rem', md: '0.625rem', lg: '1.25rem' },
-    motion: { duration: '150ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
-    shadow: { sm: '0 1px 2px rgba(21, 19, 31, 0.06)', md: '0 16px 40px rgba(21, 19, 31, 0.16)' },
+    radius: { sm: '0.25rem', md: '0.375rem', lg: '0.5rem' },
+    motion: { duration: '120ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+    shadow: { sm: '0 1px 0 rgba(17, 17, 19, 0.05)', md: '0 8px 24px rgba(17, 17, 19, 0.08)' },
   },
   /**
    * A contemporary bistro (`@cogenta/theme-restaurant`, L27 studio pass): a

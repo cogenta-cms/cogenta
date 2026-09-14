@@ -3,11 +3,17 @@ import type { RenderContext } from '../../theme-contract.js'
 import { actionLink } from '../actions.js'
 import { blockHeadingTag, type HeadingTag, heading, nestedHeadingTag } from '../heading.js'
 import { type HtmlElement, h } from '../html.js'
+import { word } from '../strings.js'
 
 /**
  * `blocks@2.0` (RFC 0001). `highlighted` is editorial emphasis, not a colour:
- * it becomes `data-highlighted` for the skin to style, and `aria-current`
- * (loosely "the one on offer") so it is announced, not only shown.
+ * it becomes `data-highlighted` for the stylesheet, `aria-current` (loosely
+ * "the one on offer") so it is announced, and a short label under the plan's
+ * name so it is read in words, never only seen as a heavier rule.
+ *
+ * Each plan is four rows (name, price, features, action) that the stylesheet
+ * lines up across plans, so prices sit on one line and actions on another
+ * whatever the length of each feature list.
  */
 function renderTier(tier: PricingTier, ctx: RenderContext, tag: HeadingTag): HtmlElement {
   return h(
@@ -17,7 +23,14 @@ function renderTier(tier: PricingTier, ctx: RenderContext, tag: HeadingTag): Htm
       'data-highlighted': tier.highlighted === true ? 'true' : undefined,
       'aria-current': tier.highlighted === true ? 'true' : undefined,
     },
-    heading(tag, { class: 'cg-pricing__name' }, tier.name),
+    h(
+      'div',
+      { class: 'cg-pricing__head' },
+      heading(tag, { class: 'cg-pricing__name' }, tier.name),
+      tier.highlighted === true
+        ? h('p', { class: 'cg-pricing__flag' }, word(ctx.locale, 'recommended'))
+        : null,
+    ),
     h(
       'p',
       { class: 'cg-pricing__price' },
@@ -38,7 +51,12 @@ function renderTier(tier: PricingTier, ctx: RenderContext, tag: HeadingTag): Htm
       : h(
           'div',
           { class: 'cg-pricing__action' },
-          actionLink(ctx, { ...tier.action, emphasis: tier.action.emphasis ?? 'primary' }),
+          actionLink(ctx, {
+            ...tier.action,
+            // An emphasis the editor left unset follows the plan: the
+            // recommended plan gets the filled button, the others an outline.
+            emphasis: tier.action.emphasis ?? (tier.highlighted === true ? 'primary' : 'secondary'),
+          }),
         ),
   )
 }

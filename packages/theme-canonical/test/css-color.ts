@@ -166,6 +166,14 @@ function channel(expression: string, base: Oklch): number {
       return channel(match[1] as string, base) * Number.parseFloat(match[2] as string)
     }
   }
+  // `min(l, 0.5)`: a channel capped at a bound, the form the link colour uses
+  // to stay dark enough to read whatever accent a skin picks.
+  for (const name of ['min', 'max'] as const) {
+    const body = callBody(trimmed, name)
+    if (body === null) continue
+    const values = splitArguments(body).map((argument) => channel(argument, base))
+    return name === 'min' ? Math.min(...values) : Math.max(...values)
+  }
   throw new Error(`css-color: unsupported channel expression "${expression}"`)
 }
 

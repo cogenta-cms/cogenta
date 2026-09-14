@@ -16,7 +16,13 @@ export function renderHero(block: HeroBlock, ctx: RenderContext): HtmlElement {
   const tag = blockHeadingTag('hero') ?? 'h1'
   return h(
     'section',
-    { class: 'cg-block cg-hero', 'data-block': 'hero' },
+    {
+      class: 'cg-block cg-hero',
+      'data-block': 'hero',
+      // Two compositions: words alone, or words over a wide photograph. The
+      // attribute says which, so the stylesheet never has to guess.
+      'data-media': block.media === undefined ? 'false' : 'true',
+    },
     h(
       'div',
       { class: 'cg-hero__body' },
@@ -39,7 +45,8 @@ export function renderHero(block: HeroBlock, ctx: RenderContext): HtmlElement {
           // is a measured Lighthouse regression, not a theoretical one.
           image(ctx, block.media, {
             loading: 'eager',
-            sizes: '(min-width: 60rem) 50vw, 100vw',
+            className: 'cg-hero__image',
+            sizes: '(min-width: 72rem) 72rem, 100vw',
           }),
         ),
   )

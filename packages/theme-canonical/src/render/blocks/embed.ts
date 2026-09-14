@@ -1,5 +1,6 @@
 import type { EmbedBlock } from '@cogenta/blocks'
 import type { RenderContext } from '../../theme-contract.js'
+import { arrowWords } from '../arrow-link.js'
 import { type HtmlElement, h } from '../html.js'
 import { aspectRatio } from '../media.js'
 
@@ -64,11 +65,11 @@ function consentCard(block: EmbedBlock, ctx: RenderContext, reason: string): Htm
     h(
       'a',
       {
-        class: 'cg-embed__link',
+        class: 'cg-arrow-link cg-embed__link',
         href: ctx.link(block.url),
         rel: 'noopener noreferrer nofollow',
       },
-      ctx.t('embed.open', { provider: block.provider }),
+      arrowWords(ctx.t('embed.open', { provider: block.provider })),
     ),
   )
 }

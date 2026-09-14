@@ -1,0 +1,469 @@
+/*
+ * The site header, its CSS-only menu, and the footer (`src/render/chrome.ts`).
+ */
+
+/* --------------------------------------------------------------------------
+   Header
+   -------------------------------------------------------------------------- */
+
+.cg-site-header {
+  position: relative;
+  padding-inline: var(--cg-inset);
+  background: var(--cg-canvas);
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+/* Padded rather than given a minimum height: the bar keeps its height when
+   the menu panel opens under it. */
+.cg-site-header__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  column-gap: var(--cg-s3);
+  padding-block: var(--cg-s3);
+}
+
+.cg-site-header__home {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  margin-inline-end: auto;
+  color: var(--cg-ink);
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-heading);
+  line-height: var(--cg-leading-heading);
+  text-decoration: none;
+}
+
+.cg-site-header__home:hover {
+  color: var(--cg-ink);
+}
+
+/* The uploaded logo: a fixed height keeps the bar the same for a wide
+   wordmark and a square mark, and a maximum width stops a long wordmark from
+   pushing the pages off the row. */
+.cg-site-header__logo {
+  display: block;
+  block-size: 2rem;
+  inline-size: auto;
+  max-inline-size: 14rem;
+  object-fit: contain;
+  filter: none;
+}
+
+.cg-site-header__nav .cg-menu {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-site-header__nav a {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-medium);
+  text-decoration-line: none;
+}
+
+.cg-site-header__nav a:hover {
+  color: var(--cg-accent);
+  text-decoration-line: underline;
+}
+
+.cg-site-header__nav span {
+  color: var(--cg-ink-muted);
+  font-weight: var(--cg-weight-medium);
+}
+
+.cg-site-header__end {
+  display: flex;
+  align-items: center;
+  gap: var(--cg-s3);
+}
+
+.cg-site-header__action {
+  min-block-size: 2.5rem;
+  padding-inline: var(--cg-s4);
+  font-size: var(--cg-text-sm);
+}
+
+/* The light/dark control: an outlined square icon button, quieter than the
+   header's action so the two never compete. */
+.cg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  padding: 0;
+  border: var(--cg-rule) solid var(--cg-line);
+  border-radius: var(--cg-radius-control);
+  background: transparent;
+  color: var(--cg-ink);
+  cursor: pointer;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-theme-toggle:hover {
+  border-color: var(--cg-line-strong);
+  background: var(--cg-band);
+}
+
+.cg-theme-toggle__icon {
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+/* The icon shows the appearance in effect: a sun while light, a moon while
+   dark, from the same two signals the palette follows. */
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
+  display: block;
+}
+
+/* --- the menu below the wide breakpoint ----------------------------------- */
+
+/* Out of sight, still focusable: the label draws its focus ring instead. */
+.cg-nav-toggle {
+  position: absolute;
+  inset-block-start: var(--cg-s4);
+  inset-inline-end: var(--cg-inset);
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cg-nav-toggle__label {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.5rem;
+  padding-inline: var(--cg-s3);
+  border: var(--cg-rule) solid var(--cg-line);
+  border-radius: var(--cg-radius-control);
+  color: var(--cg-ink);
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-nav-toggle__label:hover {
+  border-color: var(--cg-line-strong);
+}
+
+.cg-nav-toggle:focus-visible + .cg-nav-toggle__label {
+  outline: var(--cg-rule-strong) solid var(--cg-accent);
+  outline-offset: 3px;
+}
+
+.cg-nav-toggle:checked + .cg-nav-toggle__label {
+  border-color: var(--cg-ink);
+}
+
+.cg-site-header__nav {
+  display: none;
+  order: 3;
+  flex-basis: 100%;
+  margin-block-start: var(--cg-s3);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-nav-toggle:checked ~ .cg-site-header__nav {
+  display: block;
+}
+
+.cg-site-header__nav li + li {
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-site-header__nav li > a,
+.cg-site-header__nav li > span {
+  display: flex;
+  align-items: center;
+  min-block-size: 3.25rem;
+  font-size: var(--cg-text-lg);
+}
+
+.cg-site-header__end {
+  order: 2;
+}
+
+/* With a menu, the action waits at the foot of the panel on a phone. */
+.cg-site-header[data-nav="links"] .cg-site-header__end .cg-site-header__action {
+  display: none;
+}
+
+.cg-site-header__menu-action {
+  padding-block: var(--cg-s4) var(--cg-s6);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-site-header__menu-action .cg-action {
+  inline-size: 100%;
+}
+
+@media (min-width: 56rem) {
+  .cg-site-header__inner {
+    flex-wrap: nowrap;
+    column-gap: var(--cg-s8);
+    padding-block: var(--cg-s4);
+  }
+
+  .cg-nav-toggle,
+  .cg-nav-toggle__label {
+    display: none;
+  }
+
+  .cg-site-header__nav {
+    display: block;
+    order: 0;
+    flex-basis: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .cg-site-header__nav .cg-menu {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--cg-s6);
+  }
+
+  .cg-site-header__nav li + li {
+    border: 0;
+  }
+
+  .cg-site-header__nav li > a,
+  .cg-site-header__nav li > span {
+    min-block-size: 2.75rem;
+    font-size: var(--cg-text-md);
+  }
+
+  .cg-site-header__end {
+    order: 0;
+    gap: var(--cg-s4);
+  }
+
+  .cg-site-header[data-nav="links"] .cg-site-header__end .cg-site-header__action {
+    display: inline-flex;
+  }
+
+  .cg-site-header__menu-action {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Footer
+   -------------------------------------------------------------------------- */
+
+.cg-site-footer {
+  padding-block: var(--cg-s16) var(--cg-s8);
+  padding-inline: var(--cg-inset);
+  background: var(--cg-footer);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-site-footer__inner {
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-column-gap);
+  row-gap: var(--cg-s12);
+}
+
+.cg-site-footer__inner > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+.cg-site-footer__name {
+  color: var(--cg-ink);
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: var(--cg-tracking-heading);
+  line-height: var(--cg-leading-heading);
+}
+
+.cg-site-footer__tagline {
+  margin-block-start: var(--cg-s2);
+  max-inline-size: var(--cg-measure-narrow);
+  color: var(--cg-ink);
+  font-size: var(--cg-text-md);
+}
+
+.cg-site-footer__about {
+  margin-block-start: var(--cg-s6);
+}
+
+.cg-site-footer__note {
+  max-inline-size: var(--cg-measure-narrow);
+}
+
+.cg-site-footer__note + .cg-site-footer__note {
+  margin-block-start: var(--cg-s3);
+}
+
+.cg-site-footer__social {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s2);
+  margin-block-start: var(--cg-s6);
+  padding: 0;
+  list-style: none;
+}
+
+.cg-site-footer__social-item a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border: var(--cg-rule) solid var(--cg-line-strong);
+  border-radius: var(--cg-radius-control);
+  color: var(--cg-ink);
+  transition:
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-site-footer__social-item a:hover {
+  border-color: var(--cg-ink);
+  color: var(--cg-accent);
+}
+
+.cg-social__icon {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+}
+
+.cg-site-footer__nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--cg-s10) var(--cg-column-gap);
+}
+
+.cg-site-footer__heading {
+  margin-block-end: var(--cg-s3);
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+}
+
+.cg-site-footer__nav .cg-menu {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-site-footer__nav li + li {
+  margin-block-start: var(--cg-s1);
+}
+
+.cg-site-footer__nav a,
+.cg-site-footer__nav span {
+  display: inline-block;
+  padding-block: var(--cg-s1);
+  color: var(--cg-ink);
+}
+
+.cg-site-footer__nav a {
+  text-decoration-line: none;
+}
+
+.cg-site-footer__nav a:hover {
+  color: var(--cg-accent);
+  text-decoration-line: underline;
+}
+
+.cg-site-footer__legal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cg-s3) var(--cg-s8);
+  padding-block-start: var(--cg-s6);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-site-footer__copyright {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cogenta's credit, or its white-label replacement, as the host sends it. */
+.cg-site-footer__branding {
+  display: flex;
+  align-items: center;
+}
+
+.cg-site-footer__branding a {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  color: var(--cg-ink-muted);
+  text-decoration-line: none;
+}
+
+.cg-site-footer__branding a:hover {
+  color: var(--cg-ink);
+}
+
+.cg-site-footer__version {
+  font-variant-numeric: tabular-nums;
+}
+
+.cg-site-footer__brand-logo {
+  display: block;
+  /* Pixels, not `em`: the footer's small text size would otherwise shrink
+     the mark below legibility. */
+  block-size: 24px;
+  inline-size: auto;
+  filter: none;
+}
+
+@media (min-width: 48rem) {
+  .cg-site-footer__identity {
+    grid-column: 1 / span 6;
+  }
+
+  .cg-site-footer__nav {
+    grid-column: 7 / -1;
+  }
+
+  .cg-site-footer__nav[data-columns="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cg-site-footer__legal {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-site-footer__identity {
+    grid-column: 1 / span 5;
+  }
+}

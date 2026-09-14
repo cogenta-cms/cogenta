@@ -81,7 +81,7 @@ describe('inlineImports', () => {
 })
 
 describe('the theme stylesheet cogenta serve actually sends', () => {
-  it('resolves the real package and flattens its three layers into one sheet', async () => {
+  it('resolves the real package and flattens its layers into one sheet', async () => {
     const css = await loadThemeCss(
       { read: (url) => readFile(url, 'utf8') },
       '@cogenta/theme-canonical',
@@ -91,10 +91,21 @@ describe('the theme stylesheet cogenta serve actually sends', () => {
     // One marker from each layer, so a lost `@import` fails here.
     expect(sheet).toContain('--cg-canvas')
     expect(sheet).toContain('.cg-skip-link')
+    expect(sheet).toContain('.cg-site-header')
     expect(sheet).toContain('.cg-hero__title')
-    // Nothing is left to fetch: an unresolved import would be a second request
-    // the page cannot make, since the sheet is inlined in a <style> element.
-    expect(sheet).not.toContain('@import')
+    expect(sheet).toContain('.cg-entry__title')
+    expect(sheet).toContain('.cg-archive__pager')
+    expect(sheet).toContain('.cg-comment__meta')
+    // No relative import is left unresolved: that would be a second request
+    // for a file the page cannot reach. Since L27 the canonical theme loads its
+    // two web fonts, so exactly one import remains, and it is the remote
+    // Google Fonts request the page head preconnects to.
+    const imports = [...sheet.matchAll(/@import\s+url\(["']?([^"')]+)["']?\)/g)].map(
+      (match) => match[1],
+    )
+    expect(imports).toHaveLength(sheet.match(/@import/g)?.length ?? 0)
+    expect(imports).toHaveLength(1)
+    expect(imports[0]).toMatch(/^https:\/\/fonts\.googleapis\.com\/css2\?family=Instrument\+Sans/)
   })
 
   it('sends the design system, not just the skin variables it is built from', async () => {

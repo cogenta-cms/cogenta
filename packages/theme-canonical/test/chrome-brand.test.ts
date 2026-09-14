@@ -46,6 +46,6 @@ describe('renderChrome — site logo', () => {
 
   it('keeps the site name in the footer, so a page whose logo fails still names the site', () => {
     const { footer } = renderChrome({ ...BASE, brand: BRAND })
-    expect(footer).toContain('<span>Reference Site</span>')
+    expect(footer).toContain('<p class="cg-site-footer__name">Reference Site</p>')
   })
 })

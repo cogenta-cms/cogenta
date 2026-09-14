@@ -89,9 +89,41 @@ describe('theme isolation', () => {
       'styles/archive.css',
       'styles/base.css',
       'styles/blocks.css',
+      'styles/chrome.css',
+      'styles/listings.css',
       'styles/theme.css',
       'styles/tokens.css',
+      'styles/utility.css',
     ])
+  })
+
+  it('imports every sheet it ships from the entry point, in the cascade order it documents', () => {
+    const entry = STYLESHEETS.find(({ path }) => path === 'styles/theme.css')?.source ?? ''
+    const imported = [...entry.matchAll(/@import\s+"\.\/([a-z-]+\.css)"/g)].map((m) => m[1])
+    expect(imported).toEqual([
+      'tokens.css',
+      'base.css',
+      'chrome.css',
+      'blocks.css',
+      'listings.css',
+      'archive.css',
+      'utility.css',
+    ])
+  })
+
+  it('requests its web fonts from the trusted Google Fonts host only', () => {
+    const urls = STYLESHEETS.flatMap(({ source }) =>
+      [...source.matchAll(/@import\s+url\(["']?([^"')]+)["']?\)/g)].map((m) => m[1] as string),
+    )
+    expect(urls.length).toBe(1)
+    for (const url of urls) expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
+  })
+
+  it('names none of the typefaces generated templates reach for, anywhere in its sources', () => {
+    const forbidden =
+      /['"\s,(=+](Inter|Poppins|Plus[ +]Jakarta[ +]Sans|Space[ +]Grotesk|DM[ +]Sans|Manrope|Outfit|Sora|Nunito)['"\s,):&;]/
+    const offenders = FILES.filter(({ source }) => forbidden.test(source)).map(({ path }) => path)
+    expect(offenders).toEqual([])
   })
 
   for (const { path, source } of STYLESHEETS) {

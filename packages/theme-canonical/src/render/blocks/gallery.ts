@@ -21,7 +21,10 @@ export function renderGallery(block: GalleryBlock, ctx: RenderContext): HtmlElem
       h(
         'li',
         { class: 'cg-gallery__item' },
-        image(ctx, item.media, { sizes: '(min-width: 45rem) 20rem, 60vw' }),
+        image(ctx, item.media, {
+          className: 'cg-gallery__image',
+          sizes: '(min-width: 64rem) 24rem, 50vw',
+        }),
       ),
     ),
   )

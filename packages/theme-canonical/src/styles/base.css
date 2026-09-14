@@ -1,8 +1,7 @@
 /*
- * Document, accessibility floor, page frame and the one control the theme
- * ships (an action link). Everything here reads the design system from
- * `tokens.css`; nothing here reads a `--cogenta-*` token directly, so a value
- * that needs changing is changed in one place.
+ * Document, accessibility floor, the page frame, page and entry titles,
+ * actions and the four per-block variants. Everything here reads the design
+ * system from `tokens.css`.
  */
 
 /* --------------------------------------------------------------------------
@@ -15,206 +14,218 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   background: var(--cg-canvas);
   color: var(--cg-ink);
-  font-family: var(--cogenta-font-sans);
+  font-family: var(--cg-font-text);
   font-size: var(--cg-text-md);
-  line-height: var(--cg-leading-normal);
-  /* Two opt-in font features rather than a font choice: `kern` is what stops
-     display type looking loose, `liga` what stops "fi" breaking apart. Both
-     are no-ops on a font that lacks them. */
+  line-height: var(--cg-leading-body);
   font-kerning: normal;
   font-variant-ligatures: common-ligatures;
-  text-underline-offset: 0.16em;
-  text-decoration-thickness: from-font;
-  -webkit-text-size-adjust: 100%;
+  /* A family that lacks a weight or an italic shows the real face, never a
+     smeared imitation of one. */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: var(--cg-accent-soft);
-  color: var(--cg-accent-soft-fg);
+  background: var(--cg-selection);
+  color: var(--cg-ink);
 }
 
-img,
-video,
-iframe {
-  max-width: 100%;
-  height: auto;
+:where(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  font-family: var(--cg-font-text);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-heading);
+  letter-spacing: var(--cg-tracking-heading);
+  text-wrap: balance;
 }
 
-img {
+:where(p, li, dd, figcaption, blockquote) {
+  text-wrap: pretty;
+}
+
+:where(p, ul, ol, dl, dd, figure, blockquote) {
+  margin: 0;
+}
+
+/* Dates, years, prices and figures keep their width from one line to the
+   next. */
+:where(data, time) {
+  font-variant-numeric: tabular-nums;
+}
+
+:where(img, video, iframe) {
   display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+:where(img, video) {
   object-fit: cover;
+  filter: brightness(var(--cg-image-brightness));
 }
 
 :where(a) {
   color: var(--cg-accent);
-  text-decoration-color: color-mix(in oklab, var(--cg-accent) 45%, transparent);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
+  text-underline-offset: 0.2em;
+  text-decoration-skip-ink: auto;
   transition:
-    color var(--cg-duration-fast) var(--cg-ease),
-    text-decoration-color var(--cg-duration-fast) var(--cg-ease);
+    color var(--cg-duration) var(--cg-ease),
+    text-decoration-color var(--cg-duration) var(--cg-ease);
 }
 
-:where(a:hover) {
+:where(a):hover {
   color: var(--cg-accent-hover);
   text-decoration-color: currentColor;
 }
 
 :where(hr) {
-  block-size: 1px;
+  block-size: 0;
+  margin: 0;
   border: 0;
-  margin-block: var(--cg-s10);
-  background: var(--cg-line);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
 }
 
 /* --------------------------------------------------------------------------
-   Focus, targets, motion — the three that decide whether AA holds
+   Focus, targets, the skip link
    -------------------------------------------------------------------------- */
 
-:where(a, button, summary, [tabindex]):focus-visible {
-  /* Two solid pixels against the page, offset so it never sits on the glyphs.
-     `outline`, not `box-shadow`: it survives forced-colors mode. */
-  outline: 2px solid var(--cg-accent);
+:where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
+  /* An outline, not a shadow: it survives forced-colours mode. */
+  outline: var(--cg-rule-strong) solid var(--cg-accent);
   outline-offset: 3px;
-  border-radius: var(--cg-radius-sm);
-}
-
-/* WCAG 2.2 asks 24x24 minimum (2.5.8); 44x44 is the comfortable target and
-   costs nothing here. Applied to the theme's own controls only — an inline link
-   inside a paragraph is exempt, and padding it would break the text flow. */
-:where(.cg-action, .cg-faq__question, .cg-logo__link) {
-  min-block-size: 44px;
-  min-inline-size: 44px;
-}
-
-/* The entrance animation the blocks opt into. Scroll-driven, so it plays as a
-   block arrives rather than firing eleven at once on load, and wrapped in a
-   feature query because the starting state is `opacity: 0`: a browser without
-   `animation-timeline` must never be left holding an invisible page. */
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    @keyframes cg-rise {
-      from {
-        opacity: 0;
-        transform: translateY(var(--cg-s4));
-      }
-
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-
-    .cg-block {
-      animation: cg-rise linear both;
-      animation-timeline: view();
-      /* Fully in by the time the block is a fifth of the way up the viewport;
-         it never animates back out on the way past. */
-      animation-range: entry 0% cover 22%;
-    }
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  /* The `motion.reduced` token says the skin's motion may be removed. Nothing
-     in this theme conveys meaning through movement, so removing all of it is
-     safe — including the smooth scroll of the carousel, which is the one people
-     forget and which triggers vestibular symptoms. */
-  *,
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
-    scroll-behavior: auto !important;
-  }
 }
 
 .cg-skip-link {
   position: absolute;
-  inset-inline-start: var(--cg-s3);
-  inset-block-start: calc(var(--cg-s3) * -8);
+  inset-inline-start: var(--cg-gutter);
+  inset-block-start: var(--cg-s2);
   z-index: 10;
-  padding: var(--cg-s2) var(--cg-s4);
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
-  border-radius: var(--cg-radius-md);
-  box-shadow: var(--cg-elevation-2);
+  padding: var(--cg-s3) var(--cg-s5);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
   font-weight: var(--cg-weight-semibold);
   text-decoration: none;
-  /* Moved, never hidden: `display:none` would take it out of the tab order,
-     which is the whole point of a skip link (WCAG 2.4.1). */
-  transition: inset-block-start var(--cg-duration) var(--cg-ease);
+  /* Moved off screen, never hidden: `display: none` would take it out of the
+     tab order, which is the whole point of a skip link (WCAG 2.4.1). */
+  translate: 0 -200%;
 }
 
 .cg-skip-link:focus-visible {
-  inset-block-start: var(--cg-s3);
+  translate: 0 0;
+}
+
+/* The standard clip technique: read by assistive technology, not drawn.
+   `renderSocialLinks` (`@cogenta/theme-kit`) depends on this class existing
+   in every theme that renders it. */
+.cg-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* --------------------------------------------------------------------------
-   Page frame
+   The page frame
+   --------------------------------------------------------------------------
+
+   Every block is as wide as the page and centres its content with side
+   padding (`--cg-inset`), so a band colour can reach both edges of the
+   window while the content keeps to the page width. A block that lays out
+   more than one thing is a twelve-column grid on that content box, which is
+   what puts a section title, a card and a caption on the same left edge.
    -------------------------------------------------------------------------- */
 
-/* `flow-root`, so the first and last block's own margins stay inside `<main>`
-   instead of collapsing through it and pushing the header and footer around.
-   That also means no padding is needed here: the last block already carries a
-   section's worth of space below itself, and adding more produced a dead band
-   three times too tall between the last block and the footer. */
 .cg-main {
   display: flow-root;
 }
 
-/* The one measurement every block shares. A block that wants to break out of
-   it says so itself (`.cg-figure[data-align="full"]`), so the default stays
-   one rule instead of eleven. */
 .cg-block {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y);
-  padding-inline: var(--cg-gutter);
+  padding-block: calc(var(--cg-section) / 2);
+  padding-inline: var(--cg-inset);
 }
 
-/* --- per-block visual variant (blocks@2.0, RFC 0002) ----------------------
-   `withBlockVariant` (`@cogenta/theme-kit`) stamps one `data-variant-<axis>`
-   attribute per axis an author actually set — never all four, never one this
-   theme does not resolve. Two attribute selectors give every rule here the
-   same specificity, (0,2,0), which is what lets it override `.cg-block`
-   above regardless of source order, without `!important` anywhere.
+.cg-grid,
+.cg-features,
+.cg-cta,
+.cg-gallery,
+.cg-quote,
+.cg-faq,
+.cg-stats,
+.cg-logos,
+.cg-collection,
+.cg-embed,
+.cg-testimonial,
+.cg-pricing,
+.cg-accordion,
+.cg-stat-counters,
+.cg-logo-strip,
+.cg-figure,
+.cg-hero {
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-column-gap);
+  align-content: start;
+}
 
-   `background: 'image'` has no theme mechanism to attach an actual image to
-   a block instance (RFC 0002 adds only the semantic token, not a media
-   field) — resolved to the same tinted surface as the closest honest
-   approximation this theme has, rather than silently doing nothing with a
-   stated author intent.
+.cg-block > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+/* The heading of a section: in the text face, from the first column, under
+   a rule in ink that spans what the section spans. */
+.cg-section-title,
+.cg-features__title,
+.cg-faq__title,
+.cg-stats__title,
+.cg-logos__title,
+.cg-collection__title,
+.cg-pricing__title,
+.cg-accordion__title,
+.cg-stat-counters__title {
+  padding-block-start: var(--cg-s5);
+  margin-block-end: var(--cg-s10);
+  border-block-start: var(--cg-rule) solid var(--cg-ink);
+  font-size: var(--cg-text-heading);
+}
+
+/* --- per-block variant (blocks@2.0, RFC 0002) -----------------------------
+   `withBlockVariant` stamps one `data-variant-<axis>` attribute per axis an
+   author set. `background: image` has no image to show (RFC 0002 carries the
+   intent, not a media field), so it resolves to the same band as `muted`,
+   the closest honest rendering this theme has.
    ------------------------------------------------------------------------- */
 
 [data-block][data-variant-background="muted"],
 [data-block][data-variant-background="image"] {
-  padding-block: var(--cg-s10);
-  border-radius: var(--cg-radius-lg);
-}
-
-[data-block][data-variant-background="muted"] {
-  background: var(--cg-surface-sunken);
-}
-
-[data-block][data-variant-background="image"] {
-  background: var(--cg-surface-tinted);
+  background: var(--cg-band);
 }
 
 [data-block][data-variant-spacing="compact"] {
-  margin-block: calc(var(--cg-section-y) / 2);
+  padding-block: calc(var(--cg-section) / 4);
 }
 
-/* No rule for "comfortable": it names this theme's existing default, so an
-   author who picks it explicitly gets exactly what an absent `variant`
-   already gave them — the whole point of "theme default" being a real,
-   selectable option and not only the absence of a choice. */
+/* No rule for "comfortable": it names this theme's default rhythm. */
 
 [data-block][data-variant-spacing="spacious"] {
-  margin-block: calc(var(--cg-section-y) * 1.6);
+  padding-block: calc(var(--cg-section) * 0.8);
 }
 
 [data-block][data-variant-align="start"] {
@@ -230,634 +241,209 @@ img {
 }
 
 [data-block][data-variant-width="full"] {
-  max-inline-size: none;
-  padding-inline: 0;
-}
-
-.cg-page__title {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y) var(--cg-s6);
   padding-inline: var(--cg-gutter);
-  font-size: var(--cg-text-3xl);
-  line-height: var(--cg-leading-tight);
-  letter-spacing: var(--cg-tracking-tight);
-  font-weight: var(--cg-weight-bold);
-  text-wrap: balance;
 }
 
 /* --------------------------------------------------------------------------
-   Entry header (`renderEntryHeader`, `@cogenta/theme-kit`, contract D
-   `theme@1.4`) — the article furniture (`PageContent.entry`) a `richText`
-   entry carries beyond its blocks: an eyebrow of taxonomy terms, the title
-   (replacing the bare `.cg-page__title` this same page would otherwise get
-   — `render-block.ts` renders exactly one of the two), an excerpt, a meta
-   line, a cover image.
+   Page title — a page without a hero and without entry furniture, and the
+   search, form and archive pages the host renders
+   -------------------------------------------------------------------------- */
+
+.cg-page__title {
+  padding-block: calc(var(--cg-section) * 0.6) calc(var(--cg-section) / 4);
+  padding-inline: var(--cg-inset);
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-text-title);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
+}
+
+@media (min-width: 64rem) {
+  .cg-page__title {
+    /* Ten columns at most, so a long title breaks into lines a reader takes
+       in at once. */
+    padding-inline-end: calc(var(--cg-inset) + (100% - 2 * var(--cg-inset)) / 6);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Entry header (`renderEntryHeader`, `@cogenta/theme-kit`, `theme@1.4`)
    -------------------------------------------------------------------------- */
 
 .cg-entry-header {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y) var(--cg-s6);
-  padding-inline: var(--cg-gutter);
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-column-gap);
+  padding-block: calc(var(--cg-section) * 0.6) calc(var(--cg-section) / 4);
+  padding-inline: var(--cg-inset);
+}
+
+.cg-entry-header > * {
+  grid-column: 1 / -1;
 }
 
 .cg-entry-header__terms {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--cg-s2);
-  margin: 0 0 var(--cg-s3);
+  gap: var(--cg-s1) var(--cg-s4);
+  margin-block-end: var(--cg-s6);
   padding: 0;
   list-style: none;
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-semibold);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
-  color: var(--cg-accent);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-medium);
 }
 
 .cg-entry-header__terms a {
-  color: inherit;
-  text-decoration: none;
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-underline);
 }
 
-.cg-entry-header__terms li:not(:last-child)::after {
-  content: "·";
-  margin-inline-start: var(--cg-s2);
-  color: var(--cg-ink-muted);
+.cg-entry-header__terms a:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
 }
 
 .cg-entry-header__title {
-  margin: 0 0 var(--cg-s4);
-  font-size: var(--cg-text-3xl);
-  line-height: var(--cg-leading-tight);
-  letter-spacing: var(--cg-tracking-tight);
-  font-weight: var(--cg-weight-bold);
-  text-wrap: balance;
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-text-title);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
 }
 
 .cg-entry-header__excerpt {
-  margin: 0 0 var(--cg-s4);
-  font-size: var(--cg-text-lg);
+  margin-block-start: var(--cg-s6);
+  max-inline-size: var(--cg-measure);
   color: var(--cg-ink-muted);
-  text-wrap: pretty;
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-snug);
 }
 
 .cg-entry-header__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--cg-s3);
-  margin: 0 0 var(--cg-s6);
-  font-size: var(--cg-text-sm);
+  gap: var(--cg-s1) var(--cg-s5);
+  margin-block-start: var(--cg-s8);
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
   color: var(--cg-ink-muted);
+  font-size: var(--cg-text-label);
+  font-variant-numeric: tabular-nums;
 }
 
-.cg-entry-header__meta > :not(:last-child)::after {
-  content: "·";
-  margin-inline-start: var(--cg-s3);
-  color: var(--cg-line-strong);
+.cg-entry-header__author {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-medium);
 }
 
 .cg-entry-header__cover {
-  margin: 0;
+  margin-block-start: var(--cg-s10);
 }
 
 .cg-entry-header__cover img,
 .cg-entry-header__cover video {
   inline-size: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--cg-radius-lg);
-  object-fit: cover;
+  aspect-ratio: 3 / 2;
 }
 
-.cg-site-header {
-  position: sticky;
-  inset-block-start: 0;
-  z-index: 5;
-  padding: var(--cg-s4) var(--cg-gutter);
-  /* Flat and fully opaque, not a frosted-glass blur: a sticky header reads
-     as a solid plane sitting above the page, with a hairline marking where
-     it ends. */
-  background: var(--cg-canvas);
-  border-block-end: 1px solid var(--cg-line-soft);
-}
-
-.cg-site-header__inner,
-.cg-site-footer__inner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--cg-gap);
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-}
-
-.cg-site-header__home {
-  color: var(--cg-ink);
-  font-weight: var(--cg-weight-semibold);
-  font-size: var(--cg-text-lg);
-  letter-spacing: var(--cg-tracking-snug);
-  text-decoration: none;
-  margin-inline-end: auto;
-}
-
-/* The uploaded site logo, when there is one. Height-constrained rather than
-   width-constrained: a wordmark logo and a square mark have wildly different
-   aspect ratios, and only a fixed height keeps the header bar the same
-   height for both. `max-inline-size` is the guard against a very wide
-   wordmark pushing the navigation off the row. */
-.cg-site-header__logo {
-  display: block;
-  block-size: 2rem;
-  inline-size: auto;
-  max-inline-size: 14rem;
-  object-fit: contain;
-}
-
-.cg-site-footer {
-  padding: var(--cg-s12) var(--cg-gutter);
-  background: var(--cg-surface-sunken);
-  color: var(--cg-ink-muted);
-  border-block-start: 1px solid var(--cg-line-soft);
-  font-size: var(--cg-text-sm);
-}
-
-/* `theme@1.4` (L25 D2) — a button-styled link at the end of the header nav.
-   Reuses `.cg-action`'s own look (see "Actions" below) rather than a second
-   button style. */
-.cg-site-header__action {
-  margin-inline-start: var(--cg-s2);
-}
-
-/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
-   theme-kit`) — a plain icon button, not the block vocabulary's `.cg-action`
-   style, so it never reads as a call-to-action competing with a real one. */
-.cg-theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  block-size: 2.25rem;
-  inline-size: 2.25rem;
-  flex-shrink: 0;
-  border-radius: var(--cg-radius-pill);
-  border: 1px solid var(--cg-line-soft);
-  background: transparent;
-  color: var(--cg-ink);
-  cursor: pointer;
-}
-
-.cg-theme-toggle:hover {
-  background: var(--cg-surface-sunken);
-}
-
-.cg-theme-toggle__icon {
-  block-size: 1.1rem;
-  inline-size: 1.1rem;
-}
-
-.cg-theme-toggle__icon--moon {
-  display: none;
-}
-
-/* Icon reflects the *current* effective appearance — sun while light, moon
-   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
-   `tokens.css` already keys the whole palette on. */
-@media (prefers-color-scheme: dark) {
-  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
-    display: none;
+@media (min-width: 64rem) {
+  .cg-entry-header__title {
+    grid-column: 1 / span 10;
   }
-  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
-    display: block;
+
+  .cg-entry-header__excerpt {
+    grid-column: 1 / span 8;
   }
-}
 
-:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
-  display: none;
-}
-
-:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
-  display: block;
-}
-
-/* `general.tagline`, shown right after the site name in the footer — prose,
-   never a heading, so it stays the same visual weight as the credit line
-   beside it. */
-.cg-site-footer__tagline {
-  margin: var(--cg-s1) 0 0;
-  max-inline-size: 28rem;
-}
-
-.cg-site-footer__social {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cg-s3);
-  margin: var(--cg-s4) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-site-footer__social-item a {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 2.25rem;
-  block-size: 2.25rem;
-  border-radius: var(--cg-radius-md);
-  color: var(--cg-ink-muted);
-  background: var(--cg-surface);
-  box-shadow: var(--cg-ring);
-  transition:
-    color var(--cg-duration-fast) var(--cg-ease),
-    background-color var(--cg-duration-fast) var(--cg-ease);
-}
-
-.cg-site-footer__social-item a:hover,
-.cg-site-footer__social-item a:focus-visible {
-  color: var(--cg-accent-fg);
-  background: var(--cg-accent);
-}
-
-.cg-social__icon {
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
-}
-
-/* `general.footerNote` — a short "about" column, visually distinct from the
-   tagline (which sits with the site name) and from Cogenta's own credit
-   (which stays pinned to the far end of the row, see
-   `.cg-site-footer__branding` above). */
-.cg-site-footer__about {
-  margin-inline-end: auto;
-  max-inline-size: 24rem;
-}
-
-.cg-site-footer__about p {
-  margin: 0;
-}
-
-/* The standard clip-to-1px technique — visible to assistive tech, invisible
-   on screen, unlike `display:none` (which removes it from both). Every
-   social icon link's own text label (`renderSocialLinks`,
-   `@cogenta/theme-kit`) depends on this class existing here: theme-kit ships
-   no CSS of its own (contract D, R5 — a theme owns its own stylesheet). */
-.cg-visually-hidden {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* Cogenta's own credit, or its white-label replacement (fiche L21 task 8) —
-   pushed to the far end of the footer row, after the site name and its own
-   navigation, never competing with either for space. */
-.cg-site-footer__branding {
-  margin-inline-start: auto;
-  display: flex;
-  align-items: center;
-}
-
-.cg-site-footer__branding a {
-  display: flex;
-  align-items: center;
-  gap: 0.4em;
-  opacity: 0.7;
-  transition: opacity 0.15s ease;
-}
-
-/* `@cogenta/core`'s package version, next to the logo (fiche 22 tâche 8) — only rendered at all when Cogenta's own credit is on. */
-.cg-site-footer__version {
-  font-variant-numeric: tabular-nums;
-  font-size: 0.9em;
-}
-
-.cg-site-footer__branding a:hover,
-.cg-site-footer__branding a:focus-visible {
-  opacity: 1;
-}
-
-.cg-site-footer__brand-logo {
-  display: block;
-  /* Explicit pixels, not `em`: a footer's own small font-size cascaded into
-     this and made the credit mark unreadably tiny — the same class of bug
-     the admin shell's own logo had before its fix. */
-  block-size: 25px;
-  inline-size: auto;
+  .cg-entry-header__cover img,
+  .cg-entry-header__cover video {
+    aspect-ratio: 2 / 1;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   Actions — the theme's only control
+   Actions
    -------------------------------------------------------------------------- */
 
 .cg-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--cg-s3);
-  margin: var(--cg-s8) 0 0;
+  align-items: center;
+  gap: var(--cg-s3) var(--cg-s8);
+  margin-block-start: var(--cg-s8);
   padding: 0;
   list-style: none;
 }
 
-.cg-action {
+/* `emphasis` stays a data attribute: it is the editor's intent, and the
+   stylesheet decides what it looks like. */
+.cg-action[data-emphasis="primary"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--cg-s2);
-  padding: var(--cg-s3) var(--cg-s6);
-  border: 0;
-  border-radius: var(--cg-radius-md);
-  font-size: var(--cg-text-sm);
+  min-block-size: 2.75rem;
+  padding: var(--cg-s2) var(--cg-s6);
+  border: var(--cg-rule) solid var(--cg-action);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  font-size: var(--cg-text-md);
   font-weight: var(--cg-weight-semibold);
-  letter-spacing: var(--cg-tracking-snug);
-  line-height: var(--cg-leading-snug);
+  line-height: var(--cg-leading-heading);
   text-decoration: none;
-  white-space: nowrap;
   transition:
     background-color var(--cg-duration) var(--cg-ease),
-    color var(--cg-duration) var(--cg-ease),
-    box-shadow var(--cg-duration) var(--cg-ease),
-    transform var(--cg-duration-fast) var(--cg-ease);
-}
-
-/* `emphasis` stays a data attribute, never a class: it is the editor's
-   semantic intent, and the skin — not the block — decides what it looks like. */
-.cg-action[data-emphasis="primary"] {
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
-  box-shadow: var(--cg-elevation-1);
+    border-color var(--cg-duration) var(--cg-ease);
 }
 
 .cg-action[data-emphasis="primary"]:hover {
-  background: var(--cg-accent-hover);
-  box-shadow: var(--cg-elevation-2);
-  transform: translateY(-1px);
+  border-color: var(--cg-action-hover);
+  background: var(--cg-action-hover);
+  color: var(--cg-action-fg);
+}
+
+/* A secondary action and every arrow link: words in ink under one continuous
+   underline, the arrow drawn after them as an atomic inline so the line does
+   not run under it, and the label kept on one line so the arrow never wraps
+   alone. */
+.cg-action[data-emphasis="secondary"],
+.cg-arrow-link {
+  display: inline-block;
+  padding-block: var(--cg-s3);
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+  text-decoration-line: underline;
+  text-decoration-color: var(--cg-underline);
 }
 
 .cg-action[data-emphasis="secondary"] {
-  background: var(--cg-surface);
-  color: var(--cg-ink);
-  box-shadow: var(--cg-ring);
+  white-space: nowrap;
 }
 
-.cg-action[data-emphasis="secondary"]:hover {
-  background: var(--cg-accent-soft);
-  color: var(--cg-accent-soft-fg);
-  box-shadow: var(--cg-ring-accent);
+.cg-arrow-link__end {
+  white-space: nowrap;
 }
 
-/* The press. Without it a hover lift reads as a bug on touch, where there is
-   no hover to come back from. */
-.cg-action:active {
-  transform: translateY(0);
-  box-shadow: var(--cg-elevation-1);
+.cg-action[data-emphasis="secondary"]::after,
+.cg-arrow-link__end::after {
+  content: "\2192" / "";
+  display: inline-block;
+  margin-inline-start: 0.35em;
 }
 
-/* --------------------------------------------------------------------------
-   Shared block furniture
-   -------------------------------------------------------------------------- */
-
-/* Every block that carries a heading uses the same one, so eleven blocks do
-   not drift into eleven title sizes. */
-.cg-features__title,
-.cg-cta__title,
-.cg-faq__title,
-.cg-stats__title,
-.cg-logos__title,
-.cg-collection__title {
-  margin: 0 0 var(--cg-s8);
-  font-size: var(--cg-text-xl);
-  line-height: var(--cg-leading-snug);
-  letter-spacing: var(--cg-tracking-tight);
-  font-weight: var(--cg-weight-bold);
-  text-wrap: balance;
+.cg-arrow-link__start::before {
+  content: "\2190" / "";
+  display: inline-block;
+  margin-inline-end: 0.35em;
 }
 
-.cg-features__items,
-.cg-logos__items,
-.cg-gallery__items,
-.cg-collection__items,
-.cg-faq__items {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.cg-arrow-link__start {
+  white-space: nowrap;
 }
 
-/* A scroll-snapping row, used by both `gallery` and `collectionList`. The
-   container is focusable and labelled, so it is operable from the keyboard —
-   at zero bytes of JavaScript. */
-.cg-gallery__viewport,
-.cg-collection__viewport {
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--cg-line-strong) transparent;
-  /* Room for the focus ring and the hover lift, which would otherwise be
-     clipped by the scroll container. */
-  padding-block: var(--cg-s2);
-  margin-block: calc(var(--cg-s2) * -1);
-}
-
-/* --------------------------------------------------------------------------
-   Search, forms, comments — public utility pages and post-content furniture
-
-   `/search` (`search-page.ts`), `/forms/{name}` (`forms-page.ts`) and the
-   comment thread appended after an entry page (`comments.ts`) all render
-   real markup with real `cg-*` classes, but none of it had a single rule
-   here (L20 audit, points 8-9) — the stylesheet loaded, the class names were
-   right there in the HTML, and nothing matched. These three follow the same
-   page-width measure `.cg-page__title` already sets, so a search result list
-   or a form lines up under its own heading rather than running edge to edge.
-   -------------------------------------------------------------------------- */
-
-.cg-search__form,
-.cg-search__results,
-.cg-search__empty,
-.cg-search__error,
-.cg-form,
-.cg-form__confirmation,
-.cg-comments {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  padding-inline: var(--cg-gutter);
-}
-
-.cg-search__form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: var(--cg-s3);
-  margin-block-end: var(--cg-s8);
-}
-
-.cg-search__form label {
-  display: block;
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-semibold);
-  margin-block-end: var(--cg-s2);
-}
-
-.cg-search__form input[type="search"] {
-  flex: 1 1 16rem;
-}
-
-.cg-search__results {
-  margin: 0 auto;
-  padding-inline-start: var(--cg-gutter);
-  display: grid;
-  gap: var(--cg-s4);
-  font-size: var(--cg-text-lg);
-}
-
-.cg-search__empty,
-.cg-comments__empty,
-.cg-comments__closed {
-  color: var(--cg-ink-muted);
-}
-
-/* No skin exposes a "danger" colour (contract D has none), so an error reads
-   through weight and a stronger border rather than a hue no skin can change —
-   the same constraint that keeps every other value in this file a function of
-   a token. */
-.cg-search__error,
-.cg-form__error,
-.cg-form__field-error {
-  color: var(--cg-ink);
-  font-weight: var(--cg-weight-bold);
-}
-
-/* Text controls, shared by `/forms/{name}` and the comment form — the same
-   input surface `.cg-search__form input` above uses. */
-.cg-search__form input,
-.cg-form__field input,
-.cg-form__field select,
-.cg-form__field textarea,
-.cg-comment__form input,
-.cg-comment__form textarea {
-  inline-size: 100%;
-  padding: var(--cg-s3) var(--cg-s4);
-  border: 1px solid var(--cg-line);
-  border-radius: var(--cg-radius-md);
-  background: var(--cg-surface);
-  color: var(--cg-ink);
-  font: inherit;
-}
-
-.cg-form__field input[aria-invalid="true"],
-.cg-form__field select[aria-invalid="true"],
-.cg-form__field textarea[aria-invalid="true"] {
-  border-width: 2px;
-  border-color: var(--cg-line-strong);
-}
-
-.cg-search__form button,
-.cg-form button[type="submit"],
-.cg-comment__form button[type="submit"] {
-  padding: var(--cg-s3) var(--cg-s6);
-  border: 0;
-  border-radius: var(--cg-radius-md);
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
-  font-weight: var(--cg-weight-semibold);
-  cursor: pointer;
-  transition: background-color var(--cg-duration) var(--cg-ease);
-}
-
-.cg-search__form button:hover,
-.cg-form button[type="submit"]:hover,
-.cg-comment__form button[type="submit"]:hover {
-  background: var(--cg-accent-hover);
-}
-
-.cg-form__field,
-.cg-comment__form p {
-  display: block;
-  margin-block-end: var(--cg-s5);
-}
-
-.cg-form__field label,
-.cg-comment__form label {
-  display: block;
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-semibold);
-  margin-block-end: var(--cg-s2);
-}
-
-.cg-form__help {
-  margin: var(--cg-s2) 0 0;
-  font-size: var(--cg-text-sm);
-  color: var(--cg-ink-muted);
-}
-
-.cg-form__choice {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--cg-s2);
-  margin-inline-end: var(--cg-s4);
-  font-weight: normal;
-}
-
-/* Visually hidden, not `display:none`: the honeypot must stay reachable by a
-   naive bot's "fill every input" script while never appearing for anyone
-   else — the same reasoning the inline style already carried before this
-   class existed to do it declaratively for `comments.ts`. */
-.cg-form__honeypot,
-.cg-comment__honeypot {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  inset-inline-start: -9999px;
-}
-
-.cg-comments {
-  margin-block-start: var(--cg-section-y);
-  padding-block-start: var(--cg-s8);
-  padding-block-end: var(--cg-section-y);
-  border-block-start: 1px solid var(--cg-line-soft);
-}
-
-.cg-comments__list,
-.cg-comment__replies {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-comment {
-  padding-block: var(--cg-s5);
-  border-block-end: 1px solid var(--cg-line-soft);
-}
-
-.cg-comment__replies {
-  padding-block-start: var(--cg-s5);
-}
-
-.cg-comment__replies .cg-comment {
-  padding-inline-start: var(--cg-s6);
-  border-inline-start: 2px solid var(--cg-line-soft);
-  border-block-end: 0;
-}
-
-.cg-comment__meta {
-  display: flex;
-  gap: var(--cg-s3);
-  align-items: baseline;
-  font-size: var(--cg-text-sm);
-  color: var(--cg-ink-muted);
-  margin-block-end: var(--cg-s2);
-}
-
-.cg-comment__author {
-  font-weight: var(--cg-weight-semibold);
-  color: var(--cg-ink);
-}
-
-.cg-comment__body {
-  margin: 0;
+.cg-action[data-emphasis="secondary"]:hover,
+.cg-arrow-link:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
 }

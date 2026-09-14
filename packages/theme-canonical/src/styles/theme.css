@@ -1,26 +1,37 @@
 /*
  * The canonical theme's stylesheet — the entry point, and nothing else.
  *
- * Three layers, in the only order that works:
+ *   tokens.css    the design system, derived entirely from the skin's
+ *                 `--cogenta-*` custom properties (contract D)
+ *   base.css      document, accessibility floor, the page frame and grid,
+ *                 page and entry titles, actions, block variants
+ *   chrome.css    the header, its CSS-only menu, and the footer
+ *   blocks.css    the vocabulary blocks
+ *   listings.css  lists of entries: the collection list and its index
+ *   archive.css   the taxonomy-term archive
+ *   utility.css   the search page, a public form, the comment thread
  *
- *   tokens.css  the design system, derived entirely from the skin's
- *               `--cogenta-*` custom properties (contract D)
- *   base.css    document, accessibility floor, page frame, actions
- *   blocks.css  the twelve vocabulary blocks
+ * Not one colour is written literally in any of them: every value comes from
+ * a `--cogenta-*` property or from a `--cg-*` property composed from those.
  *
- * Not one colour, font, radius, duration or shadow is written literally in any
- * of the three: every value comes from a `--cogenta-<group>-<name>` property
- * produced from the skin's tokens, or from a `--cg-*` property composed from
- * those. That is what makes changing skin a rewrite of one generated file with
- * no build (L3, "Skins et changement à chaud"). A single hard-coded hex would
- * be a colour no skin can change.
+ * The one thing this file adds on its own is the Google Fonts request for the
+ * two families the default skin names: Instrument Sans for everything a
+ * visitor reads, Instrument Serif for the display line of a page and for
+ * quotations. A skin only names a family; it never fetches one. A site whose
+ * skin names other families simply never uses these faces, and a browser does
+ * not download a face nothing uses. `display=swap` keeps text visible while
+ * they load, and `cogenta serve` hoists this `@import` above the skin's rules.
  *
- * `@import` is resolved at build time by Astro, and by `@cogenta/cli`'s own
- * inliner when `cogenta serve` renders without a build. Both flatten these
- * three into one sheet, so no visitor ever pays for three round trips.
+ * The relative `@import`s are flattened at build time by Astro, and by
+ * `@cogenta/cli`'s inliner when `cogenta serve` renders without a build.
  */
+
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Instrument+Serif:ital@0;1&display=swap");
 
 @import "./tokens.css";
 @import "./base.css";
+@import "./chrome.css";
 @import "./blocks.css";
+@import "./listings.css";
 @import "./archive.css";
+@import "./utility.css";

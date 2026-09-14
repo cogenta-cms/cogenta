@@ -1,0 +1,169 @@
+/*
+ * Lists of entries: the `collectionList` block in its three layouts, and the
+ * index the term archive shares with it (`src/render/term-archive.ts`).
+ *
+ * The markup reads title, date, summary, picture; the paint shows the picture
+ * first, then the date, then the title (`order`), so a screen reader hears
+ * the title first and a sighted reader scans a list by its dates.
+ */
+
+.cg-collection__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-entry__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.cg-entry__media {
+  order: 0;
+  display: block;
+  margin-block-end: var(--cg-s5);
+}
+
+.cg-entry__image {
+  inline-size: 100%;
+  aspect-ratio: 3 / 2;
+}
+
+.cg-entry__date {
+  order: 1;
+  margin-block-end: var(--cg-s2);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-entry__title {
+  order: 2;
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-heading);
+}
+
+.cg-entry__link {
+  color: var(--cg-ink);
+  text-decoration-line: none;
+}
+
+.cg-entry__link:hover {
+  color: var(--cg-accent);
+  text-decoration-line: underline;
+}
+
+.cg-entry__excerpt {
+  order: 3;
+  margin-block-start: var(--cg-s3);
+  max-inline-size: var(--cg-measure);
+  color: var(--cg-ink-muted);
+}
+
+/* An empty list says so in a sentence on the reading columns, between
+   hairlines, rather than leaving a hole in the page. */
+.cg-collection__empty {
+  padding-block: var(--cg-s6);
+  border-block: var(--cg-rule) solid var(--cg-line);
+  color: var(--cg-ink-muted);
+}
+
+/* --- list: an index --------------------------------------------------------- */
+
+.cg-collection[data-layout="list"] .cg-entry {
+  padding-block: var(--cg-s6);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-collection[data-layout="list"] .cg-entry:last-child {
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-collection[data-layout="list"] .cg-entry__title {
+  font-size: var(--cg-text-heading);
+}
+
+@media (min-width: 48rem) {
+  .cg-collection[data-layout="list"] .cg-collection__items,
+  .cg-collection[data-layout="list"] .cg-entry,
+  .cg-collection[data-layout="list"] .cg-entry__body {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+  }
+
+  .cg-collection[data-layout="list"] .cg-entry__body {
+    align-items: baseline;
+  }
+
+  .cg-collection[data-layout="list"] .cg-entry__date {
+    grid-column: 1 / span 3;
+    grid-row: 1;
+    margin: 0;
+  }
+
+  .cg-collection[data-layout="list"] .cg-entry__title,
+  .cg-collection[data-layout="list"] .cg-entry__excerpt {
+    grid-column: 4 / span 7;
+  }
+
+  .cg-collection[data-layout="list"] .cg-entry__title {
+    grid-row: 1;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-collection__empty {
+    grid-column: 1 / span 8;
+  }
+}
+
+/* --- grid: columns of entries ---------------------------------------------- */
+
+.cg-collection[data-layout="grid"] .cg-collection__items {
+  display: grid;
+  grid-template-columns: subgrid;
+  row-gap: var(--cg-s12);
+}
+
+.cg-collection[data-layout="grid"] .cg-entry {
+  grid-column: span 12;
+}
+
+/* An entry without a picture opens on a rule, at the height a picture's top
+   edge would be. */
+.cg-collection:not([data-layout="list"]) .cg-entry[data-picture="false"] {
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+@media (min-width: 40rem) {
+  .cg-collection[data-layout="grid"] .cg-entry {
+    grid-column: span 6;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-collection[data-layout="grid"] .cg-entry {
+    grid-column: span 4;
+  }
+
+  .cg-collection[data-layout="grid"] .cg-entry:first-child:nth-last-child(2),
+  .cg-collection[data-layout="grid"] .cg-entry:first-child:nth-last-child(2) ~ .cg-entry,
+  .cg-collection[data-layout="grid"] .cg-entry:first-child:nth-last-child(4),
+  .cg-collection[data-layout="grid"] .cg-entry:first-child:nth-last-child(4) ~ .cg-entry {
+    grid-column: span 6;
+  }
+}
+
+/* --- carousel: the grid as a row -------------------------------------------- */
+
+.cg-collection[data-layout="carousel"] .cg-collection__items {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: min(78%, 22rem);
+  gap: var(--cg-column-gap);
+}
+
+.cg-collection[data-layout="carousel"] .cg-entry {
+  scroll-snap-align: start;
+}

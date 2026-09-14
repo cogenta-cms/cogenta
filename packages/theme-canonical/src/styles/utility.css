@@ -1,0 +1,270 @@
+/*
+ * The pages and sections the host renders around a theme's own markup with
+ * this theme's classes: the search page (`search-page.ts`), a public form
+ * (`forms-page.ts`) and the comment thread after an entry (`comments.ts`,
+ * `@cogenta/theme-kit`). Each sits in the page frame, under the page title.
+ */
+
+/* --------------------------------------------------------------------------
+   Controls shared by the three
+   -------------------------------------------------------------------------- */
+
+.cg-search__form input,
+.cg-form__field input:not([type="checkbox"], [type="radio"]),
+.cg-form__field select,
+.cg-form__field textarea,
+.cg-comment__form input,
+.cg-comment__form textarea {
+  inline-size: 100%;
+  min-block-size: 2.75rem;
+  padding: var(--cg-s2) var(--cg-s3);
+  /* 3:1 against the page, the contrast a control's edge needs (WCAG 1.4.11). */
+  border: var(--cg-rule) solid var(--cg-line-strong);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-canvas);
+  color: var(--cg-ink);
+  font: inherit;
+  transition: border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-search__form input:hover,
+.cg-form__field :is(input, select, textarea):hover,
+.cg-comment__form :is(input, textarea):hover {
+  border-color: var(--cg-ink);
+}
+
+.cg-search__form button,
+.cg-form button[type="submit"],
+.cg-comment__form button[type="submit"] {
+  min-block-size: 2.75rem;
+  padding: var(--cg-s2) var(--cg-s6);
+  border: var(--cg-rule) solid var(--cg-action);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  font: inherit;
+  font-weight: var(--cg-weight-semibold);
+  cursor: pointer;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-search__form button:hover,
+.cg-form button[type="submit"]:hover,
+.cg-comment__form button[type="submit"]:hover {
+  border-color: var(--cg-action-hover);
+  background: var(--cg-action-hover);
+}
+
+.cg-search__form label,
+.cg-form__field label,
+.cg-comment__form label {
+  display: block;
+  margin-block-end: var(--cg-s2);
+  font-weight: var(--cg-weight-semibold);
+}
+
+/* No skin names a "danger" colour, so an error reads through weight and a
+   rule in ink, never through a hue a skin cannot change. */
+.cg-search__error,
+.cg-form__error,
+.cg-form__field-error {
+  padding-inline-start: var(--cg-s4);
+  border-inline-start: 4px solid var(--cg-ink);
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+}
+
+.cg-form__field :is(input, select, textarea)[aria-invalid="true"] {
+  border-width: var(--cg-rule-strong);
+  border-color: var(--cg-ink);
+}
+
+/* The honeypots: reachable by a script that fills every field, never shown. */
+.cg-form__honeypot,
+.cg-comment__honeypot {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  inset-inline-start: -9999px;
+}
+
+/* --------------------------------------------------------------------------
+   Search
+   -------------------------------------------------------------------------- */
+
+.cg-search__form,
+.cg-search__results,
+.cg-search__empty,
+.cg-search__error,
+.cg-form,
+.cg-form__confirmation,
+.cg-main > .cg-form__error,
+.cg-comments {
+  padding-inline: var(--cg-inset);
+}
+
+.cg-search__form {
+  display: grid;
+  grid-template-columns: minmax(0, 32rem) auto;
+  justify-content: start;
+  align-items: end;
+  column-gap: var(--cg-s3);
+  margin-block: var(--cg-s4) var(--cg-s12);
+}
+
+.cg-search__form label {
+  grid-column: 1 / -1;
+}
+
+.cg-search__results {
+  margin-block: 0 calc(var(--cg-section) / 2);
+  padding-block: 0;
+  list-style: none;
+}
+
+.cg-search__results li {
+  max-inline-size: 48rem;
+  padding-block: var(--cg-s5);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-semibold);
+}
+
+.cg-search__results li:last-child {
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-search__results a {
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-underline);
+}
+
+.cg-search__results a:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+.cg-search__empty,
+.cg-search__error {
+  margin-block-end: calc(var(--cg-section) / 2);
+  color: var(--cg-ink-muted);
+}
+
+/* --------------------------------------------------------------------------
+   A public form
+   -------------------------------------------------------------------------- */
+
+.cg-form {
+  margin-block: var(--cg-s4) calc(var(--cg-section) / 2);
+}
+
+.cg-form > *,
+.cg-form__confirmation > * {
+  max-inline-size: 36rem;
+}
+
+.cg-form__field {
+  margin-block-end: var(--cg-s6);
+}
+
+.cg-form__help {
+  margin-block-start: var(--cg-s2);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-form__field-error {
+  margin-block-start: var(--cg-s2);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-form__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cg-s2);
+  margin-inline-end: var(--cg-s5);
+  font-weight: var(--cg-weight-regular);
+}
+
+.cg-form__confirmation {
+  margin-block: var(--cg-s4) calc(var(--cg-section) / 2);
+  font-size: var(--cg-text-lg);
+}
+
+.cg-main > .cg-form__error {
+  margin-block: var(--cg-s4);
+}
+
+/* --------------------------------------------------------------------------
+   Comments
+   -------------------------------------------------------------------------- */
+
+.cg-comments {
+  padding-block: calc(var(--cg-section) / 2);
+}
+
+.cg-comments > * {
+  max-inline-size: 44rem;
+}
+
+.cg-comments > h2 {
+  max-inline-size: none;
+  margin-block-end: var(--cg-s8);
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-ink);
+  font-size: var(--cg-text-heading);
+}
+
+.cg-comments__list,
+.cg-comment__replies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-comment {
+  padding-block: var(--cg-s5);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-comment__replies {
+  margin-block-start: var(--cg-s5);
+  padding-inline-start: var(--cg-s6);
+  border-inline-start: var(--cg-rule-strong) solid var(--cg-line);
+}
+
+.cg-comment__replies > .cg-comment:first-child {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
+.cg-comment__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--cg-s1) var(--cg-s4);
+  margin-block-end: var(--cg-s2);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-comment__author {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+}
+
+.cg-comments__empty,
+.cg-comments__closed {
+  color: var(--cg-ink-muted);
+}
+
+.cg-comment__form {
+  margin-block-start: var(--cg-s10);
+}
+
+.cg-comment__form p {
+  margin-block-end: var(--cg-s5);
+}

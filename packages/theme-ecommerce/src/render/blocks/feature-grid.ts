@@ -1,7 +1,5 @@
 import type { FeatureGridBlock, FeatureItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
-  type HeadingTag,
   type HtmlElement,
   h,
   heading,
@@ -10,68 +8,83 @@ import {
   type RenderContext,
   renderIcon,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * The grid that most directly carries the "product grid" identity: each item
- * is a card of the exact aspect and rhythm a listed product would use, so a
- * site that lists services, features or bundles reads as shoppable without
- * inventing a price the block does not have.
+ * Two readings of the same block, chosen by its content rather than by a
+ * setting:
  *
- * The item's title is the whole link, which makes the link's accessible name
- * the feature's own name — a bare "shop now" repeated across a grid is the
- * classic WCAG 2.4.4 failure, and the block carries no separate label field
- * to write one with anyway. `icon` names a symbol, never markup, so it is a
- * data attribute for the skin, marked `aria-hidden`.
+ * - **A ruled line.** When no item carries a sentence, the items are short
+ *   statements (the shop's commitments: delivery, returns, repairs) and read
+ *   as one line of text between two hairlines, each statement a link when it
+ *   has one. No icon, no card.
+ * - **Ruled columns.** Otherwise each item is a column under a hairline: a
+ *   small line icon when the item names one this theme can draw, the name,
+ *   its sentence. Never a tinted tile behind an icon, never a card.
  */
-function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const title =
-    item.link === undefined
-      ? heading(tag, { class: 'ce-feature__title' }, item.title)
-      : heading(
-          tag,
-          { class: 'ce-feature__title' },
-          h('a', { class: 'ce-feature__link', href: href(ctx, item.link) }, item.title),
-        )
+function isLine(block: FeatureGridBlock): boolean {
+  return block.items.every((item) => item.text === undefined)
+}
+
+function lineItem(item: FeatureItem, ctx: RenderContext): HtmlElement {
   return h(
     'li',
-    { class: 'ce-feature' },
-    h(
-      'div',
-      { class: 'ce-feature__frame' },
-      item.icon === undefined
-        ? null
-        : h(
-            'span',
-            { class: 'ce-feature__icon', 'data-icon': item.icon, 'aria-hidden': 'true' },
-            renderIcon(item.icon),
-          ),
-    ),
-    h(
-      'div',
-      { class: 'ce-feature__body' },
-      title,
-      item.text === undefined ? null : h('p', { class: 'ce-feature__text' }, item.text),
-    ),
+    { class: 'ce-line__item' },
+    item.link === undefined
+      ? h('span', { class: 'ce-line__text' }, item.title)
+      : h('a', { class: 'ce-line__text ce-line__link', href: href(ctx, item.link) }, item.title),
+  )
+}
+
+function column(item: FeatureItem, ctx: RenderContext, titled: boolean): HtmlElement {
+  const icon =
+    item.icon === undefined
+      ? null
+      : renderIcon(item.icon, { className: 'ce-columns__icon', size: 20 })
+  const name = heading(
+    nestedHeadingTag('featureGrid', titled),
+    { class: 'ce-columns__name' },
+    item.link === undefined
+      ? item.title
+      : h('a', { class: 'ce-arrow-link', href: href(ctx, item.link) }, item.title),
+  )
+  return h(
+    'li',
+    { class: 'ce-columns__item' },
+    icon,
+    name,
+    item.text === undefined ? null : h('p', { class: 'ce-columns__text' }, item.text),
   )
 }
 
 export function renderFeatureGrid(block: FeatureGridBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const itemTag = nestedHeadingTag('featureGrid', hasTitle)
-  return h(
+  const titled = block.title !== undefined
+  if (isLine(block)) {
+    return section(
+      'section',
+      'featureGrid',
+      'ce-line',
+      { 'data-titled': String(titled) },
+      'div',
+      sectionHead('featureGrid', block.title),
+      h(
+        'ul',
+        { class: 'ce-line__items' },
+        block.items.map((item) => lineItem(item, ctx)),
+      ),
+    )
+  }
+  return section(
     'section',
-    { class: 'ce-block ce-features', 'data-block': 'featureGrid' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('featureGrid') ?? 'h2',
-          { class: 'ce-features__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'featureGrid',
+    'ce-columns',
+    { 'data-titled': String(titled), 'data-count': String(Math.min(block.items.length, 4)) },
+    'div',
+    sectionHead('featureGrid', block.title),
     h(
       'ul',
-      { class: 'ce-features__items' },
-      block.items.map((item) => renderItem(item, ctx, itemTag)),
+      { class: 'ce-columns__items' },
+      block.items.map((item) => column(item, ctx, titled)),
     ),
   )
 }

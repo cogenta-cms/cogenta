@@ -1,1384 +1,971 @@
 /*
- * The twelve vocabulary blocks, styled as a storefront: a product-card visual
- * language runs through `featureGrid`, `gallery` and `collectionList`, a
- * loud full-colour panel carries `cta`, and `logos`/`stats` read as trust and
- * social proof rather than as document furniture.
- *
- * Nothing here declares a colour, a size, a radius or a duration of its own —
- * every block composes the design system from `tokens.css`, which is what
- * keeps a skin swap a whole-theme change rather than a per-block one.
+ * The vocabulary blocks other than the lists (`shop.css`). Every one of them
+ * sits in the same section rhythm on the same twelve columns.
  */
 
-/* --- hero ------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   hero: the headline on the grid, the photograph across the window.
+   -------------------------------------------------------------------------- */
 
 .ce-hero {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  gap: var(--ce-gap-loose);
-  align-items: center;
-  margin-block-start: var(--ce-s10);
+  padding-block: calc(var(--ce-section) * 0.4) 0;
 }
 
-/* A flat solid disc of accent-tinted colour behind the copy — a geometric
-   accent, not a picture, so it never competes with the product shot for
-   attention. Purely decorative: it implies nothing about a discount or a
-   claim the block does not carry. */
-.ce-hero::before {
-  content: "";
-  position: absolute;
-  inset-block-start: calc(var(--ce-s10) * -1);
-  inset-inline-start: calc(var(--ce-s10) * -1);
-  inline-size: min(26rem, 60%);
-  aspect-ratio: 1;
-  z-index: -1;
-  border-radius: 50%;
-  background: var(--ce-accent-soft);
-  pointer-events: none;
+.ce-hero[data-media="false"] {
+  padding-block-end: calc(var(--ce-section) / 2);
 }
 
-@media (min-width: 62rem) {
-  .ce-hero {
-    grid-template-columns: 1.1fr 0.9fr;
-    gap: var(--ce-s20);
-  }
+.ce-hero__inner {
+  row-gap: var(--ce-s6);
+  align-items: end;
 }
 
 .ce-hero__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ce-s2);
-  margin: 0 0 var(--ce-s6);
-  padding: var(--ce-s2) var(--ce-s4);
-  background: var(--ce-ink);
-  color: var(--ce-canvas);
-  border-radius: var(--ce-radius-pill);
-  font-size: var(--ce-text-xs);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-wide);
-  text-transform: uppercase;
-}
-
-.ce-hero__eyebrow::before {
-  content: "";
-  inline-size: 0.5em;
-  block-size: 0.5em;
-  border-radius: 50%;
-  background: var(--ce-accent);
+  margin: 0 0 var(--ce-s4);
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-caption);
+  font-weight: var(--ce-weight-medium);
+  letter-spacing: var(--ce-tracking-caption);
 }
 
 .ce-hero__title {
-  margin: 0;
-  font-size: var(--ce-text-3xl);
-  line-height: var(--ce-leading-tight);
-  letter-spacing: var(--ce-tracking-tight);
-  font-weight: var(--ce-weight-black);
-  text-wrap: balance;
-}
-
-@media (min-width: 62rem) {
-  .ce-hero__title {
-    font-size: calc(var(--ce-text-3xl) * 1.25);
-  }
+  max-inline-size: 18ch;
+  font-size: var(--ce-size-display);
+  font-weight: var(--ce-weight-light);
+  line-height: var(--ce-leading-display);
+  letter-spacing: var(--ce-tracking-display);
 }
 
 .ce-hero__subtitle {
-  margin: var(--ce-s5) 0 0;
-  max-inline-size: var(--ce-measure-narrow);
-  font-size: var(--ce-text-lg);
-  line-height: var(--ce-leading-relaxed);
+  margin: 0;
+  max-inline-size: 40ch;
   color: var(--ce-ink-muted);
-  text-wrap: pretty;
+  font-size: var(--ce-size-lead);
+  line-height: var(--ce-leading-lead);
+}
+
+.ce-hero__subtitle + .cg-actions {
+  margin-block-start: var(--ce-s6);
 }
 
 .ce-hero__media {
-  position: relative;
+  margin: calc(var(--ce-section) * 0.35) 0 0;
+  background: var(--ce-plate);
 }
 
 .ce-hero__image {
   inline-size: 100%;
-  aspect-ratio: 4 / 5;
+  block-size: clamp(24rem, 112vw, 34rem);
   object-fit: cover;
-  border-radius: var(--ce-radius-xl);
-  box-shadow: var(--ce-elevation-3), var(--ce-ring);
 }
 
-/* --- prose --------------------------------------------------------------- */
+@media (min-width: 64rem) {
+  .ce-hero__heading {
+    grid-column: 1 / span 7;
+  }
 
-.ce-prose {
+  .ce-hero__aside {
+    grid-column: 9 / span 4;
+    padding-block-end: 0.5em;
+  }
+
+  .ce-hero__image {
+    block-size: clamp(28rem, 44vw, 46rem);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   prose: running text from the fourth column, at a reading measure.
+   -------------------------------------------------------------------------- */
+
+.ce-prose__body {
   max-inline-size: var(--ce-measure);
-  margin-inline: auto;
-  line-height: var(--ce-leading-relaxed);
+  font-size: var(--ce-text-reading);
+  line-height: var(--ce-leading-text);
 }
 
-.ce-prose > :first-child {
+@media (min-width: 64rem) {
+  .ce-prose__body {
+    grid-column: 4 / span 7;
+  }
+}
+
+.ce-prose__body > :first-child {
   margin-block-start: 0;
 }
 
-.ce-prose > :last-child {
+.ce-prose__body > :last-child {
   margin-block-end: 0;
 }
 
-.ce-prose h2,
-.ce-prose h3,
-.ce-prose h4 {
-  letter-spacing: var(--ce-tracking-snug);
-  line-height: var(--ce-leading-snug);
-  font-weight: var(--ce-weight-bold);
-  text-wrap: balance;
+.ce-prose__body p {
+  margin-block: 0 1.05em;
 }
 
-.ce-prose h2 {
-  margin-block: var(--ce-s12) var(--ce-s5);
-  font-size: var(--ce-text-xl);
-  letter-spacing: var(--ce-tracking-tight);
+.ce-prose__body h2 {
+  margin-block: var(--ce-s12) var(--ce-s4);
+  font-size: var(--ce-size-section);
 }
 
-.ce-prose h3 {
+.ce-prose__body h3 {
   margin-block: var(--ce-s10) var(--ce-s3);
   font-size: var(--ce-text-lg);
+  font-weight: var(--ce-weight-medium);
 }
 
-.ce-prose h4 {
+.ce-prose__body :is(h4, h5, h6) {
   margin-block: var(--ce-s8) var(--ce-s2);
   font-size: var(--ce-text-md);
-  text-transform: uppercase;
-  letter-spacing: var(--ce-tracking-wide);
-}
-
-.ce-prose p {
-  margin-block: var(--ce-s5);
-  text-wrap: pretty;
-}
-
-.ce-prose ul,
-.ce-prose ol {
-  margin-block: var(--ce-s5);
-  padding-inline-start: var(--ce-s6);
-}
-
-.ce-prose li {
-  margin-block: var(--ce-s2);
-  padding-inline-start: var(--ce-s1);
-}
-
-.ce-prose li::marker {
-  color: var(--ce-accent);
-  font-weight: var(--ce-weight-bold);
-}
-
-.ce-prose strong {
   font-weight: var(--ce-weight-semibold);
-  color: var(--ce-ink);
 }
 
-.ce-prose blockquote {
-  margin-block: var(--ce-s8);
-  margin-inline: 0;
-  padding: var(--ce-s6) var(--ce-s7);
-  border-inline-start: 4px solid var(--ce-accent);
-  border-start-end-radius: var(--ce-radius-md);
-  border-end-end-radius: var(--ce-radius-md);
-  background: var(--ce-surface-sunken);
+.ce-prose__body :is(ul, ol) {
+  margin-block: 0 1.05em;
+  padding-inline-start: 1.2em;
+}
+
+.ce-prose__body li + li {
+  margin-block-start: 0.35em;
+}
+
+.ce-prose__body li::marker {
   color: var(--ce-ink-muted);
-  font-family: var(--cogenta-font-serif);
-  font-size: var(--ce-text-lg);
-  line-height: var(--ce-leading-normal);
 }
 
-.ce-prose blockquote > :first-child {
-  margin-block-start: 0;
+.ce-prose__body a {
+  text-decoration-color: var(--ce-signal);
 }
 
-.ce-prose blockquote > :last-child {
-  margin-block-end: 0;
+.ce-prose__body a:hover {
+  text-decoration-color: currentColor;
 }
 
-.ce-prose code {
-  font-family: var(--cogenta-font-mono);
-  font-size: 0.875em;
-  background: var(--ce-surface-sunken);
-  border-radius: var(--ce-radius-sm);
-  box-shadow: var(--ce-ring);
-  padding: 0.15em 0.4em;
+.ce-prose__body strong {
+  font-weight: var(--ce-weight-semibold);
+}
+
+.ce-prose__body blockquote {
+  margin: var(--ce-s8) 0;
+  padding-inline-start: var(--ce-s6);
+  border-inline-start: var(--ce-rule) solid var(--ce-line-ink);
+  font-size: var(--ce-size-lead);
+  line-height: var(--ce-leading-lead);
+}
+
+.ce-prose__body blockquote p {
+  margin: 0;
 }
 
 .cg-prose__figure {
-  margin-block: var(--ce-s8);
-  margin-inline: 0;
+  margin: var(--ce-s10) 0;
 }
 
 .cg-prose__figure img {
   inline-size: 100%;
-  border-radius: var(--ce-radius-lg);
-  box-shadow: var(--ce-elevation-2);
+  background: var(--ce-plate);
 }
 
 .cg-prose__figure figcaption {
   margin-block-start: var(--ce-s3);
-  color: var(--ce-ink-subtle);
-  font-size: var(--ce-text-sm);
-  line-height: var(--ce-leading-normal);
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-caption);
 }
 
-/* --- mediaFigure ----------------------------------------------------------
-   Framed like a swatch card, matching the same padded-panel language the
-   product grid cards use so a lone figure reads as part of the same
-   catalogue.
-   ------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   mediaFigure: a photograph and its caption; `start`/`end` is a split.
+   -------------------------------------------------------------------------- */
 
-.ce-figure {
-  margin-inline: auto;
-}
-
-.ce-figure[data-align="start"],
-.ce-figure[data-align="end"] {
-  max-inline-size: calc(var(--ce-measure) / 2);
-}
-
-.ce-figure[data-align="start"] {
-  float: inline-start;
-  margin-inline-end: var(--ce-s6);
-}
-
-.ce-figure[data-align="end"] {
-  float: inline-end;
-  margin-inline-start: var(--ce-s6);
-}
-
-.ce-figure[data-align="full"] {
-  max-inline-size: none;
-  padding-inline: 0;
+.ce-figure__inner {
+  margin: 0 auto;
+  row-gap: var(--ce-s4);
 }
 
 .ce-figure__frame {
-  padding: var(--ce-s3);
-  background: var(--ce-surface-raised);
-  border-radius: var(--ce-radius-xl);
-  box-shadow: var(--ce-ring);
+  overflow: hidden;
+  background: var(--ce-plate);
 }
 
-.ce-figure[data-align="full"] .ce-figure__frame {
-  padding: 0;
-  border-radius: 0;
-  box-shadow: none;
-  background: none;
-}
-
-.ce-figure__media {
+.ce-figure__image {
   inline-size: 100%;
-  aspect-ratio: var(--ce-ratio, auto);
-  border-radius: var(--ce-radius-lg);
 }
 
-.ce-figure[data-align="full"] .ce-figure__media {
-  border-radius: 0;
+.ce-figure__frame[style] .ce-figure__image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
 }
 
 .ce-figure__caption {
   display: flex;
-  align-items: baseline;
-  gap: var(--ce-s2);
-  margin-block-start: var(--ce-s4);
-  padding-inline-start: var(--ce-gutter);
-  color: var(--ce-ink-subtle);
-  font-size: var(--ce-text-sm);
-  line-height: var(--ce-leading-normal);
-  text-wrap: pretty;
-}
-
-.ce-figure[data-align="full"] .ce-figure__caption {
-  max-inline-size: var(--ce-measure);
-  margin-inline: auto;
-}
-
-.ce-figure__caption-text::before {
-  content: "";
-  display: inline-block;
-  inline-size: 0.5em;
-  block-size: 0.5em;
-  margin-inline-end: var(--ce-s2);
-  border-radius: 50%;
-  background: var(--ce-accent);
-  vertical-align: middle;
+  flex-wrap: wrap;
+  gap: var(--ce-s1) var(--ce-s4);
+  max-inline-size: 64ch;
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-caption);
+  line-height: var(--ce-leading-ui);
 }
 
 .ce-figure__credit {
   color: var(--ce-ink-subtle);
 }
 
-.ce-figure__credit::before {
-  content: "— ";
+.ce-figure[data-align="full"] > .ce-figure__inner {
+  max-inline-size: none;
+  padding-inline: 0;
 }
 
-/* --- featureGrid ------------------------------------------------------- */
+.ce-figure[data-align="full"] .ce-figure__caption {
+  padding-inline: var(--ce-gutter);
+}
 
-.ce-features__items {
+.ce-figure[data-layout="split"] .ce-figure__caption {
   display: grid;
-  gap: var(--ce-gap);
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--ce-s5);
+  align-self: end;
 }
 
-.ce-feature {
-  overflow: hidden;
-  background: var(--ce-surface-raised);
-  border-radius: var(--ce-radius-lg);
-  box-shadow: var(--ce-ring);
-  transition:
-    box-shadow var(--ce-duration) var(--ce-ease),
-    transform var(--ce-duration) var(--ce-ease);
+.ce-figure[data-layout="split"] .ce-figure__text {
+  color: var(--ce-ink);
+  font-size: var(--ce-size-lead);
+  line-height: var(--ce-leading-lead);
 }
 
-.ce-feature:hover {
-  box-shadow: var(--ce-elevation-2), var(--ce-ring-accent);
-  transform: translateY(-3px);
+@media (min-width: 64rem) {
+  .ce-figure[data-align="center"] > .ce-figure__inner > * {
+    grid-column: 3 / span 8;
+  }
+
+  .ce-figure[data-align="start"] .ce-figure__frame {
+    grid-column: 1 / span 7;
+    grid-row: 1;
+  }
+
+  .ce-figure[data-align="start"] .ce-figure__caption {
+    grid-column: 9 / span 4;
+    grid-row: 1;
+  }
+
+  .ce-figure[data-align="end"] .ce-figure__frame {
+    grid-column: 6 / span 7;
+    grid-row: 1;
+  }
+
+  .ce-figure[data-align="end"] .ce-figure__caption {
+    grid-column: 1 / span 4;
+    grid-row: 1;
+  }
 }
 
-.ce-feature__frame {
-  aspect-ratio: 16 / 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--ce-accent-soft);
-}
+/* --------------------------------------------------------------------------
+   featureGrid: a ruled line of statements, or ruled columns.
+   -------------------------------------------------------------------------- */
 
-.ce-feature__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--ce-s12);
-  block-size: var(--ce-s12);
-  border-radius: var(--ce-radius-lg);
-  background: var(--ce-surface);
-  color: var(--ce-accent);
-  box-shadow: var(--ce-ring-accent);
-}
-
-.ce-feature__icon svg {
-  inline-size: var(--ce-s6);
-  block-size: var(--ce-s6);
-}
-
-.ce-feature__body {
-  position: relative;
-  padding: var(--ce-s6);
-}
-
-.ce-feature__link::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-}
-
-.ce-feature__link {
-  color: inherit;
-  text-decoration: none;
-}
-
-.ce-feature:hover .ce-feature__link {
-  color: var(--ce-accent);
-}
-
-.ce-feature__title {
-  margin: 0 0 var(--ce-s2);
-  font-size: var(--ce-text-md);
-  font-weight: var(--ce-weight-bold);
-  line-height: var(--ce-leading-snug);
-  letter-spacing: var(--ce-tracking-snug);
-  text-wrap: balance;
-}
-
-.ce-feature__text {
+.ce-line__items {
+  display: grid;
   margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-line__item {
+  padding-block: var(--ce-s4);
+}
+
+.ce-line__item + .ce-line__item {
+  border-block-start: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-line__text {
+  font-size: var(--ce-text-md);
+  line-height: var(--ce-leading-ui);
+}
+
+.ce-line__link {
+  color: var(--ce-ink);
+  text-decoration-color: var(--ce-line-strong);
+}
+
+.ce-line__link:hover {
+  text-decoration-color: currentColor;
+}
+
+@media (min-width: 64rem) {
+  .ce-line__items {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    column-gap: var(--ce-s12);
+    padding-block: var(--ce-s6);
+  }
+
+  .ce-line__item {
+    padding-block: 0;
+  }
+
+  .ce-line__item + .ce-line__item {
+    border-block-start: 0;
+  }
+}
+
+.ce-columns__items {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--ce-col-gap);
+  row-gap: var(--ce-s10);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 40rem) {
+  .ce-columns__items {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .ce-columns[data-count="3"] .ce-columns__items {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ce-columns[data-count="4"] .ce-columns__items {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.ce-columns__item {
+  padding-block-start: var(--ce-s5);
+  border-block-start: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-columns__icon {
+  display: block;
+  margin-block-end: var(--ce-s4);
+  color: var(--ce-ink);
+}
+
+.ce-columns__name {
+  font-size: var(--ce-text-md);
+  font-weight: var(--ce-weight-medium);
+  line-height: var(--ce-leading-ui);
+  letter-spacing: 0;
+}
+
+.ce-columns__text {
+  margin: var(--ce-s2) 0 0;
+  max-inline-size: 38ch;
   color: var(--ce-ink-muted);
-  line-height: var(--ce-leading-relaxed);
-  text-wrap: pretty;
 }
 
-/* --- cta ------------------------------------------------------------------
-   The loudest panel in the theme: full accent colour, not a tinted card —
-   the "shop the sale" strip that commits rather than hints.
-   ------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   cta: a line of the page, under a hairline in ink.
+   -------------------------------------------------------------------------- */
 
-.ce-cta {
-  margin-block: var(--ce-section-y);
+.ce-cta__inner {
+  row-gap: var(--ce-s5);
 }
 
-.ce-cta__panel {
-  position: relative;
-  overflow: hidden;
-  padding: var(--ce-s20) var(--ce-s10);
-  background: var(--ce-accent);
-  color: var(--ce-accent-fg);
-  border-radius: var(--ce-radius-xl);
-  text-align: center;
-}
-
-/* A flat triangular corner accent instead of a diagonal sheen — a crisp
-   geometric fold rather than a glow, at the same subtle tint. */
-.ce-cta__panel::before {
+.ce-cta__inner::before {
   content: "";
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-end: 0;
-  inline-size: min(14rem, 45%);
-  aspect-ratio: 1;
-  background: color-mix(in oklab, var(--ce-accent-fg) 14%, transparent);
-  clip-path: polygon(100% 0%, 100% 100%, 0% 0%);
-  pointer-events: none;
-}
-
-.ce-cta__panel > * {
-  position: relative;
+  grid-column: 1 / -1;
+  block-size: var(--ce-rule);
+  margin-block-end: var(--ce-s5);
+  background: var(--ce-line-ink);
 }
 
 .ce-cta__title {
-  margin: 0;
-  font-size: var(--ce-text-2xl);
-  line-height: var(--ce-leading-snug);
-  letter-spacing: var(--ce-tracking-tight);
-  font-weight: var(--ce-weight-black);
-  text-wrap: balance;
+  max-inline-size: 22ch;
+  font-size: var(--ce-size-section);
+  line-height: var(--ce-leading-heading);
 }
 
 .ce-cta__text {
-  margin: var(--ce-s4) auto 0;
-  max-inline-size: var(--ce-measure-narrow);
-  color: color-mix(in oklab, var(--ce-accent-fg) 88%, transparent);
-  font-size: var(--ce-text-lg);
-  line-height: var(--ce-leading-relaxed);
-  text-wrap: pretty;
+  margin: 0;
+  max-inline-size: 48ch;
+  color: var(--ce-ink-muted);
 }
 
-.ce-cta .cg-actions {
-  justify-content: center;
+.ce-cta__text + .cg-actions {
+  margin-block-start: var(--ce-s6);
 }
 
-/* On the solid accent panel, the shared action styles are re-cast so a
-   "primary" action reads as the loudest element on the page and a
-   "secondary" one still meets AA against the panel — both pairs reuse the
-   accent/accentFg contrast contract D itself already validated. */
-.ce-cta .cg-action[data-emphasis="primary"] {
-  background: var(--ce-accent-fg);
-  color: var(--ce-accent);
-  box-shadow: none;
+@media (min-width: 64rem) {
+  .ce-cta__title {
+    grid-column: 1 / span 6;
+  }
+
+  .ce-cta__body {
+    grid-column: 8 / span 5;
+  }
 }
 
-.ce-cta .cg-action[data-emphasis="primary"]:hover {
-  background: color-mix(in oklab, var(--ce-accent-fg) 85%, var(--ce-accent));
-  box-shadow: var(--ce-elevation-1);
-}
-
-.ce-cta .cg-action[data-emphasis="secondary"] {
-  background: transparent;
-  color: var(--ce-accent-fg);
-  box-shadow: inset 0 0 0 1.5px var(--ce-accent-fg);
-}
-
-.ce-cta .cg-action[data-emphasis="secondary"]:hover {
-  background: color-mix(in oklab, var(--ce-accent-fg) 16%, transparent);
-}
-
-/* --- gallery --------------------------------------------------------------
-   The lookbook strip. Consistent aspect ratios, generous gaps, a hover zoom
-   clipped by the frame so the tile itself never grows.
-   ------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   gallery
+   -------------------------------------------------------------------------- */
 
 .ce-gallery__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ce-gallery[data-layout="grid"] .ce-gallery__items {
   display: grid;
-  gap: var(--ce-gap-tight);
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ce-col-gap);
 }
 
-.ce-gallery__item {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--ce-radius-lg);
-  box-shadow: var(--ce-ring);
+@media (min-width: 64rem) {
+  .ce-gallery[data-layout="grid"] .ce-gallery__items {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
-.ce-gallery__image {
+.ce-gallery[data-layout="grid"] .ce-gallery__image {
   inline-size: 100%;
-  block-size: 100%;
-  transition: transform var(--ce-duration-slow) var(--ce-ease);
-}
-
-/* The category-tile label: a flat solid band anchored to the tile's own
-   foot, never a gradient scrim — the accent-tinted ink already meets AA
-   against the light band regardless of the skin swapped in, since both are
-   derived from the same token pair `design-system.test.ts` verifies. */
-.ce-gallery__caption {
-  position: absolute;
-  inset-inline: 0;
-  inset-block-end: 0;
-  padding: var(--ce-s4) var(--ce-s5);
-  background: var(--ce-canvas);
-  color: var(--ce-ink);
-  font-size: var(--ce-text-sm);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-wide);
-  text-transform: uppercase;
-}
-
-.ce-gallery__item:hover .ce-gallery__image {
-  transform: scale(1.05);
-}
-
-.ce-gallery:not([data-layout="masonry"]) .ce-gallery__image {
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 1 / 1;
+  background: var(--ce-plate);
 }
 
 .ce-gallery[data-layout="masonry"] .ce-gallery__items {
-  display: block;
-  columns: 3 15rem;
-  column-gap: var(--ce-gap-tight);
+  columns: 2;
+  column-gap: var(--ce-col-gap);
+}
+
+@media (min-width: 64rem) {
+  .ce-gallery[data-layout="masonry"] .ce-gallery__items {
+    columns: 3;
+  }
 }
 
 .ce-gallery[data-layout="masonry"] .ce-gallery__item {
   break-inside: avoid;
-  margin-block-end: var(--ce-gap-tight);
+  margin-block-end: var(--ce-col-gap);
 }
 
-.ce-gallery[data-layout="carousel"] .ce-gallery__items {
+.ce-gallery[data-layout="masonry"] .ce-gallery__image {
+  inline-size: 100%;
+  background: var(--ce-plate);
+}
+
+.ce-gallery__viewport {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ce-line-strong) transparent;
+  padding-block-end: var(--ce-s5);
+}
+
+.ce-gallery__viewport .ce-gallery__items {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(16rem, 38%);
+  grid-auto-columns: minmax(12rem, 70%);
+  gap: var(--ce-col-gap);
+}
+
+@media (min-width: 64rem) {
+  .ce-gallery__viewport .ce-gallery__items {
+    grid-auto-columns: calc((100% - var(--ce-col-gap) * 2.5) / 3.5);
+  }
 }
 
 .ce-gallery[data-layout="carousel"] .ce-gallery__item {
   scroll-snap-align: start;
 }
 
-/* --- quote ------------------------------------------------------------- */
-
-.ce-quote {
-  max-inline-size: var(--ce-page-narrow);
-  margin-inline: auto;
-  padding: var(--ce-s10) var(--ce-s8);
-  background: var(--ce-surface-raised);
-  border-radius: var(--ce-radius-xl);
-  box-shadow: var(--ce-ring);
-  text-align: center;
+.ce-gallery[data-layout="carousel"] .ce-gallery__image {
+  inline-size: 100%;
+  aspect-ratio: 4 / 5;
+  background: var(--ce-plate);
 }
 
-.ce-quote::before {
-  content: "\201C" / "";
-  display: block;
-  margin-block-end: calc(var(--ce-s3) * -1);
-  color: var(--ce-accent-soft);
-  font-family: var(--cogenta-font-serif);
-  font-size: calc(var(--ce-text-3xl) * 1.8);
-  line-height: 1;
+/* --------------------------------------------------------------------------
+   quote and testimonial: words set large and light.
+   -------------------------------------------------------------------------- */
+
+.ce-quote__inner,
+.ce-letter__inner {
+  margin: 0 auto;
+}
+
+.ce-quote__quote,
+.ce-letter__quote {
+  margin: 0;
 }
 
 .ce-quote__text {
   margin: 0;
-  font-family: var(--cogenta-font-serif);
-  font-size: var(--ce-text-2xl);
-  line-height: var(--ce-leading-snug);
-  letter-spacing: var(--ce-tracking-snug);
-  text-wrap: balance;
+  max-inline-size: 30ch;
+  font-size: var(--ce-size-quote);
+  font-weight: var(--ce-weight-light);
+  line-height: 1.24;
+  letter-spacing: var(--ce-tracking-heading);
 }
 
-.ce-quote__attribution {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--ce-s3);
-  margin-block-start: var(--ce-s8);
-  color: var(--ce-ink-subtle);
-  font-size: var(--ce-text-sm);
+.ce-quote__quote {
+  quotes: "\201C" "\201D";
 }
 
-.ce-quote__avatar {
-  inline-size: var(--ce-s12);
-  block-size: var(--ce-s12);
-  border-radius: var(--ce-radius-pill);
-  box-shadow: var(--ce-ring);
+.ce-quote__text::before,
+.ce-letter__quote > p:first-child::before {
+  content: open-quote;
 }
 
-.ce-quote__who {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ce-s2);
+.ce-quote__text::after,
+.ce-letter__quote > p:last-child::after {
+  content: close-quote;
 }
 
-.ce-quote__author {
-  font-weight: var(--ce-weight-bold);
-  color: var(--ce-ink);
-}
-
-.ce-quote__role::before {
-  content: "";
-  display: inline-block;
-  inline-size: 0.3em;
-  block-size: 0.3em;
-  border-radius: 50%;
-  background: var(--ce-ink-subtle);
-  vertical-align: middle;
-  margin-inline-end: var(--ce-s2);
-}
-
-/* --- faq --------------------------------------------------------------- */
-
-.ce-faq {
-  max-inline-size: var(--ce-page-narrow);
-  margin-inline: auto;
-}
-
-.ce-faq__items {
-  display: grid;
-  gap: var(--ce-s3);
-}
-
-.ce-faq__item {
-  background: var(--ce-surface-raised);
-  border-radius: var(--ce-radius-lg);
-  box-shadow: var(--ce-ring);
-  transition: box-shadow var(--ce-duration) var(--ce-ease);
-}
-
-.ce-faq__details[open] {
-  box-shadow: var(--ce-ring-accent);
-}
-
-.ce-faq__question {
+.ce-quote__attribution,
+.ce-letter__attribution {
   display: flex;
   align-items: center;
   gap: var(--ce-s4);
-  padding: var(--ce-s5) var(--ce-s6);
-  font-weight: var(--ce-weight-semibold);
+  margin-block-start: var(--ce-s8);
+  font-size: var(--ce-text-caption);
+  line-height: var(--ce-leading-ui);
+}
+
+.ce-quote__who,
+.ce-letter__who {
+  display: grid;
+}
+
+.ce-quote__author,
+.ce-letter__name {
+  font-weight: var(--ce-weight-medium);
+}
+
+.ce-quote__role,
+.ce-letter__role {
+  color: var(--ce-ink-muted);
+}
+
+.ce-quote__avatar,
+.ce-letter__avatar {
+  flex: none;
+  inline-size: 3rem;
+  block-size: 3rem;
+  object-fit: cover;
+  background: var(--ce-plate);
+}
+
+.ce-letter__quote {
+  quotes: "\201C" "\201D";
+  max-inline-size: 34ch;
+  font-size: var(--ce-size-quote);
+  font-weight: var(--ce-weight-light);
+  line-height: 1.24;
+  letter-spacing: var(--ce-tracking-heading);
+}
+
+.ce-letter__quote p {
+  margin: 0;
+}
+
+/* The opening mark hangs in the margin, so the words, not the mark, line up
+   with the name under them. */
+.ce-quote__text,
+.ce-letter__quote > p:first-child {
+  text-indent: -0.42em;
+}
+
+.ce-letter__quote p + p {
+  margin-block-start: 0.6em;
+}
+
+@media (min-width: 64rem) {
+  .ce-quote__quote,
+  .ce-quote__attribution {
+    grid-column: 2 / span 9;
+  }
+
+  .ce-letter__quote,
+  .ce-letter__attribution {
+    grid-column: 4 / span 8;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   faq and accordion: `<details>` rows under hairlines.
+   -------------------------------------------------------------------------- */
+
+.ce-answers__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block-end: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-answers__item {
+  border-block-start: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-answers__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ce-s6);
+  padding-block: var(--ce-s5);
   cursor: pointer;
   list-style: none;
 }
 
-.ce-faq__question::-webkit-details-marker {
+.ce-answers__summary::-webkit-details-marker {
   display: none;
 }
 
-.ce-faq__question-text {
-  flex: 1 1 auto;
+.ce-answers__question {
+  font-size: var(--ce-text-lg);
+  font-weight: var(--ce-weight-regular);
+  line-height: var(--ce-leading-heading);
+  letter-spacing: 0;
 }
 
-.ce-faq__marker {
+.ce-answers__summary:hover .ce-answers__question {
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--ce-rule);
+  text-underline-offset: 0.3em;
+}
+
+/* A plus drawn with two hairlines; open, the upright one is gone. */
+.ce-answers__mark {
+  position: relative;
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--ce-s8);
-  block-size: var(--ce-s8);
-  border-radius: 50%;
-  background: var(--ce-accent-soft);
-  transition:
-    background-color var(--ce-duration) var(--ce-ease),
-    transform var(--ce-duration) var(--ce-ease);
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
 }
 
-.ce-faq__marker::before {
+.ce-answers__mark::before,
+.ce-answers__mark::after {
   content: "";
-  inline-size: 0.45em;
-  block-size: 0.45em;
-  border-inline-end: 2px solid var(--ce-accent-soft-fg);
-  border-block-end: 2px solid var(--ce-accent-soft-fg);
-  transform: translateY(-0.1em) rotate(45deg);
-  transition: transform var(--ce-duration) var(--ce-ease);
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 0;
+  inline-size: 100%;
+  block-size: 1.5px;
+  margin-block-start: -0.75px;
+  background: var(--ce-ink);
 }
 
-.ce-faq__details[open] .ce-faq__marker {
-  background: var(--ce-accent);
+.ce-answers__mark::after {
+  transform: rotate(90deg);
 }
 
-.ce-faq__details[open] .ce-faq__marker::before {
-  border-color: var(--ce-accent-fg);
-  transform: translateY(0.12em) rotate(-135deg);
+.ce-answers__details[open] .ce-answers__mark::after {
+  display: none;
 }
 
-.ce-faq__answer {
-  padding: 0 var(--ce-s6) var(--ce-s6);
+.ce-answers__answer {
+  max-inline-size: var(--ce-measure);
+  padding-block-end: var(--ce-s6);
   color: var(--ce-ink-muted);
-  line-height: var(--ce-leading-relaxed);
 }
 
-.ce-faq__answer > :first-child {
-  margin-block-start: 0;
-}
-
-.ce-faq__answer > :last-child {
-  margin-block-end: 0;
-}
-
-/* --- stats ------------------------------------------------------------- */
-
-.ce-stats__items {
-  display: grid;
-  gap: var(--ce-gap);
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+.ce-answers__answer p {
   margin: 0;
 }
 
-.ce-stat {
+.ce-answers__answer p + p {
+  margin-block-start: 0.8em;
+}
+
+.ce-answers__answer a {
+  color: var(--ce-ink);
+}
+
+@media (min-width: 64rem) {
+  .ce-answers[data-titled="true"] .ce-head {
+    grid-column: 1 / span 4;
+    grid-row: 1;
+    position: sticky;
+    inset-block-start: calc(var(--ce-header-height) + var(--ce-s8));
+  }
+
+  .ce-answers .ce-answers__items {
+    grid-column: 6 / span 7;
+    grid-row: 1;
+  }
+
+  .ce-answers[data-variant="notes"][data-titled="true"] .ce-head {
+    grid-column: 1 / span 3;
+  }
+
+  .ce-answers[data-variant="notes"] .ce-answers__items {
+    grid-column: 4 / span 7;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   stats and statCounter: figures under one hairline.
+   -------------------------------------------------------------------------- */
+
+.ce-figures__items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--ce-col-gap);
+  row-gap: var(--ce-s10);
+  margin: 0;
+}
+
+@media (min-width: 64rem) {
+  .ce-figures[data-count="3"] .ce-figures__items {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ce-figures[data-count="4"] .ce-figures__items {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.ce-figures__item {
   display: flex;
   flex-direction: column-reverse;
-  gap: var(--ce-s2);
-  padding: var(--ce-s7) var(--ce-s6);
-  background: var(--ce-surface-sunken);
-  border-radius: var(--ce-radius-lg);
+  justify-content: flex-end;
+  padding-block-start: var(--ce-s5);
+  border-block-start: var(--ce-rule) solid var(--ce-line);
 }
 
-.ce-stat__value {
-  display: flex;
-  align-items: baseline;
-  gap: var(--ce-s1);
+.ce-figures__value {
   margin: 0;
-  color: var(--ce-accent);
-  font-size: calc(var(--ce-text-3xl) * 1.1);
-  font-weight: var(--ce-weight-black);
-  line-height: var(--ce-leading-tight);
-  letter-spacing: var(--ce-tracking-tight);
-  font-variant-numeric: tabular-nums;
+  font-size: var(--ce-size-figure);
+  font-weight: var(--ce-weight-light);
+  line-height: 1;
+  letter-spacing: var(--ce-tracking-display);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
-.ce-stat__unit {
-  font-size: var(--ce-text-lg);
-  font-weight: var(--ce-weight-medium);
+.ce-figures__unit {
+  margin-inline-start: 0.08em;
   color: var(--ce-ink-muted);
+  font-size: 0.5em;
+  letter-spacing: 0;
 }
 
-.ce-stat__label {
+.ce-figures__label {
+  margin-block-start: var(--ce-s3);
+  max-inline-size: 30ch;
   color: var(--ce-ink-muted);
-  font-size: var(--ce-text-xs);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-wide);
-  text-transform: uppercase;
+  font-size: var(--ce-text-caption);
+  line-height: var(--ce-leading-ui);
 }
 
-/* --- logos ------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   logos and logoStrip: marks in their own colours, small.
+   -------------------------------------------------------------------------- */
 
-.ce-logos {
-  padding-block: var(--ce-s10);
-}
-
-.ce-logos__items {
+/* One ruled row of marks, as many as there are, spaced along the line: a grid
+   of fixed cells would leave empty cells beside four marks. */
+.ce-marks__items {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  gap: var(--ce-s6) var(--ce-s12);
+  margin: 0;
+  padding: var(--ce-s8) 0;
+  list-style: none;
+  border-block: var(--ce-rule) solid var(--ce-line);
 }
 
-.ce-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--ce-s5) var(--ce-s8);
+.ce-marks__plate {
+  background: var(--ce-mark-plate);
 }
 
-.ce-logo:not(:first-child) {
-  border-inline-start: 1px solid var(--ce-line-soft);
-}
-
-.ce-logo__image {
-  block-size: var(--ce-s10);
-  inline-size: auto;
-  max-inline-size: 100%;
-  object-fit: contain;
-  filter: grayscale(1);
-  opacity: 0.6;
-  transition:
-    opacity var(--ce-duration) var(--ce-ease),
-    filter var(--ce-duration) var(--ce-ease);
-}
-
-.ce-logo__link {
+.ce-marks__item .ce-marks__plate {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border-radius: var(--ce-radius-md);
+  min-block-size: 3rem;
+  padding: var(--ce-s2) var(--ce-s3);
 }
 
-.ce-logo:hover .ce-logo__image,
-.ce-logo__link:focus-visible .ce-logo__image {
-  opacity: 1;
-  filter: grayscale(0);
+.ce-marks__image {
+  inline-size: auto;
+  max-inline-size: 10rem;
+  max-block-size: 2.25rem;
+  object-fit: contain;
+  filter: none;
 }
 
-/* --- collectionList ---------------------------------------------------
-   The main product grid — the block every other card in the theme is built
-   to match.
-   ------------------------------------------------------------------------- */
-
-.ce-collection__items {
-  display: grid;
-  gap: var(--ce-gap);
+.ce-strip__inner {
+  row-gap: var(--ce-s5);
+  align-items: center;
 }
 
-.ce-collection[data-layout="grid"] .ce-collection__items {
-  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
-}
-
-.ce-collection[data-layout="carousel"] .ce-collection__items {
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(17rem, 42%);
-}
-
-.ce-collection[data-layout="carousel"] .ce-entry {
-  scroll-snap-align: start;
-}
-
-.ce-entry__card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--ce-surface-raised);
-  border-radius: var(--ce-radius-lg);
-  box-shadow: var(--ce-ring);
-  transition:
-    box-shadow var(--ce-duration) var(--ce-ease),
-    transform var(--ce-duration) var(--ce-ease);
-}
-
-.ce-entry:hover .ce-entry__card {
-  box-shadow: var(--ce-elevation-2), var(--ce-ring-accent);
-  transform: translateY(-3px);
-}
-
-/* A square product photo — the shoppable-grid signature every card in this
-   theme leans on. */
-.ce-entry__media {
-  position: relative;
-  aspect-ratio: 1 / 1;
-  background: var(--ce-surface-sunken);
-}
-
-.ce-entry__image {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-}
-
-/* A flat solid tag, never a gradient scrim — reuses the same ink/canvas
-   pair `ce-gallery__caption` does, already AA-checked against the body. */
-.ce-entry__stock {
-  position: absolute;
-  inset-block-start: var(--ce-s3);
-  inset-inline-start: var(--ce-s3);
-  padding: var(--ce-s1) var(--ce-s3);
-  background: var(--ce-ink);
-  color: var(--ce-canvas);
-  border-radius: var(--ce-radius-pill);
-  font-size: var(--ce-text-xs);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-wide);
-  text-transform: uppercase;
-}
-
-.ce-entry__body {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  gap: var(--ce-s2);
-  padding: var(--ce-s5) var(--ce-s6) var(--ce-s6);
-}
-
-.ce-entry__category {
-  color: var(--ce-accent);
-  font-size: var(--ce-text-xs);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-wide);
-  text-transform: uppercase;
-}
-
-.ce-entry__title {
-  margin: 0;
-  font-size: var(--ce-text-lg);
-  font-weight: var(--ce-weight-bold);
-  line-height: var(--ce-leading-snug);
-  letter-spacing: var(--ce-tracking-snug);
-  text-wrap: balance;
-}
-
-.ce-entry__link {
-  color: inherit;
-  text-decoration: none;
-}
-
-.ce-entry__link::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-}
-
-.ce-entry:hover .ce-entry__link {
-  color: var(--ce-accent);
-}
-
-.ce-entry__price {
-  margin: 0;
-  color: var(--ce-ink);
-  font-size: var(--ce-text-lg);
-  font-weight: var(--ce-weight-black);
-  font-variant-numeric: tabular-nums;
-}
-
-.ce-entry__excerpt {
+.ce-strip__caption {
   margin: 0;
   color: var(--ce-ink-muted);
-  font-size: var(--ce-text-sm);
-  line-height: var(--ce-leading-relaxed);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
+  font-size: var(--ce-text-caption);
 }
 
-.ce-collection__empty {
-  padding: var(--ce-s10);
-  background: var(--ce-surface-sunken);
-  border-radius: var(--ce-radius-lg);
-  color: var(--ce-ink-subtle);
-  text-align: center;
+.ce-strip__items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ce-s6) var(--ce-s10);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-/* --- embed --------------------------------------------------------------- */
-
-.ce-embed {
-  aspect-ratio: var(--ce-ratio, 16 / 9);
-  max-inline-size: var(--ce-measure);
-  margin-inline: auto;
+.ce-strip__item .ce-marks__plate {
+  display: inline-flex;
+  padding: var(--ce-s2) var(--ce-s3);
 }
+
+.ce-strip__item .ce-marks__image {
+  max-inline-size: 9rem;
+  max-block-size: 1.75rem;
+}
+
+@media (min-width: 64rem) {
+  .ce-strip[data-captioned="true"] .ce-strip__caption {
+    grid-column: 1 / span 3;
+  }
+
+  .ce-strip[data-captioned="true"] .ce-strip__items {
+    grid-column: 4 / -1;
+    justify-content: space-between;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   embed: a frame eight columns wide, or its notice in the same shape.
+   -------------------------------------------------------------------------- */
 
 .ce-embed__frame {
+  position: relative;
+  overflow: hidden;
+  border: var(--ce-rule) solid var(--ce-line);
+  background: var(--ce-surface-sunken);
+}
+
+.ce-embed__player {
+  position: absolute;
+  inset: 0;
   inline-size: 100%;
   block-size: 100%;
   border: 0;
-  border-radius: var(--ce-radius-lg);
-}
-
-.ce-embed__placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--ce-s4);
-  block-size: 100%;
-  padding: var(--ce-s8);
-  background: var(--ce-surface-sunken);
-  color: var(--ce-ink-muted);
-  border: 1px dashed var(--ce-line-strong);
-  border-radius: var(--ce-radius-xl);
-  text-align: center;
-}
-
-.ce-embed__badge {
-  padding: var(--ce-s1) var(--ce-s4);
-  background: var(--ce-surface);
-  border-radius: var(--ce-radius-pill);
-  box-shadow: var(--ce-ring);
-  font-size: var(--ce-text-xs);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-wide);
-  text-transform: uppercase;
 }
 
 .ce-embed__notice {
+  display: grid;
+  align-content: end;
+  gap: var(--ce-s3);
+  block-size: 100%;
+  padding: var(--ce-s8);
+}
+
+.ce-embed__label,
+.ce-embed__reason {
   margin: 0;
-  max-inline-size: var(--ce-measure-narrow);
-  line-height: var(--ce-leading-relaxed);
-  text-wrap: pretty;
+}
+
+.ce-embed__label {
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-caption);
+  font-weight: var(--ce-weight-medium);
+}
+
+.ce-embed__reason {
+  max-inline-size: 46ch;
+  font-size: var(--ce-text-lg);
+  line-height: var(--ce-leading-heading);
 }
 
 .ce-embed__link {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: 44px;
-  padding: var(--ce-s3) var(--ce-s6);
-  background: var(--ce-accent);
-  color: var(--ce-accent-fg);
-  border-radius: var(--ce-radius-pill);
-  font-size: var(--ce-text-sm);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-wide);
-  text-transform: uppercase;
-  text-decoration: none;
-  transition: background-color var(--ce-duration) var(--ce-ease);
+  justify-self: start;
 }
 
-.ce-embed__link:hover {
-  background: var(--ce-accent-hover);
+@media (min-width: 64rem) {
+  .ce-embed__frame {
+    grid-column: 3 / span 8;
+  }
 }
 
-/* --- testimonial (blocks@2.0, RFC 0001) ------------------------------------
-   A testimonial-wall card rather than `quote`'s centred, full-bleed
-   statement: it is styled to sit in a grid of many, so the emphasis is a
-   compact accent tab rather than an oversized quotation mark.
-   ------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   pricingTable: ruled columns, the highlighted one under ink.
+   -------------------------------------------------------------------------- */
 
-.ce-testimonial {
-  position: relative;
-  max-inline-size: var(--ce-page-narrow);
-  margin-inline: auto;
-  padding: var(--ce-s8) var(--ce-s7) var(--ce-s7);
-  background: var(--ce-surface-raised);
-  border-radius: var(--ce-radius-lg);
-  box-shadow: var(--ce-ring);
-}
-
-.ce-testimonial::before {
-  content: "";
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-start: var(--ce-s7);
-  inline-size: var(--ce-s10);
-  block-size: 4px;
-  background: var(--ce-accent);
-  border-radius: var(--ce-radius-pill);
-}
-
-.ce-testimonial__quote {
+.ce-plans__tiers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--ce-col-gap);
+  row-gap: var(--ce-s12);
   margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 40rem) {
+  .ce-plans__tiers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .ce-plans[data-count="3"] .ce-plans__tiers {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ce-plans[data-count="4"] .ce-plans__tiers {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.ce-plans__tier {
+  display: flex;
+  flex-direction: column;
+  padding-block-start: var(--ce-s5);
+  border-block-start: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-plans__tier[data-highlighted="true"] {
+  border-block-start: var(--ce-rule-strong) solid var(--ce-line-ink);
+  padding-block-start: calc(var(--ce-s5) - 1px);
+}
+
+.ce-plans__name {
   font-size: var(--ce-text-lg);
   font-weight: var(--ce-weight-medium);
-  line-height: var(--ce-leading-relaxed);
-  text-wrap: pretty;
 }
 
-.ce-testimonial__quote > :first-child {
-  margin-block-start: 0;
-}
-
-.ce-testimonial__quote > :last-child {
-  margin-block-end: 0;
-}
-
-.ce-testimonial__attribution {
-  display: flex;
-  align-items: center;
-  gap: var(--ce-s3);
-  margin-block-start: var(--ce-s6);
-}
-
-.ce-testimonial__avatar {
-  inline-size: var(--ce-s12);
-  block-size: var(--ce-s12);
-  border-radius: var(--ce-radius-pill);
-  box-shadow: var(--ce-ring);
-}
-
-.ce-testimonial__who {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--ce-s1) / 2);
-  font-size: var(--ce-text-sm);
-}
-
-.ce-testimonial__name {
-  font-weight: var(--ce-weight-bold);
-  color: var(--ce-ink);
-}
-
-.ce-testimonial__role {
-  color: var(--ce-ink-muted);
-}
-
-/* --- pricingTable (blocks@2.0, RFC 0001) -----------------------------------
-   The plan-comparison shelf: cards in the same shoppable language as
-   `featureGrid`, with one tier allowed to stand up out of the row —
-   `highlighted` is read only as `data-highlighted`, never a class that
-   encodes a colour.
-   ------------------------------------------------------------------------- */
-
-.ce-pricing__title {
-  margin: 0 0 var(--ce-s7);
-  font-size: var(--ce-text-2xl);
-  font-weight: var(--ce-weight-black);
-  letter-spacing: var(--ce-tracking-tight);
-  text-align: center;
-  text-wrap: balance;
-}
-
-.ce-pricing__tiers {
-  display: grid;
-  align-items: start;
-  gap: var(--ce-gap);
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-}
-
-.ce-pricing__tier {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ce-s5);
-  padding: var(--ce-s7);
-  background: var(--ce-surface-raised);
-  border-radius: var(--ce-radius-xl);
-  box-shadow: var(--ce-ring);
-  transition:
-    box-shadow var(--ce-duration) var(--ce-ease),
-    transform var(--ce-duration) var(--ce-ease);
-}
-
-.ce-pricing__tier[data-highlighted="true"] {
-  background: var(--ce-surface-tinted);
-  box-shadow: var(--ce-elevation-2), var(--ce-ring-accent);
-  transform: translateY(calc(var(--ce-s3) * -1));
-}
-
-.ce-pricing__name {
-  margin: 0;
-  font-size: var(--ce-text-lg);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-snug);
-}
-
-.ce-pricing__price {
+.ce-plans__price {
   display: flex;
   align-items: baseline;
-  gap: var(--ce-s1);
-  margin: 0;
-}
-
-.ce-pricing__amount {
-  font-size: var(--ce-text-3xl);
-  font-weight: var(--ce-weight-black);
-  letter-spacing: var(--ce-tracking-tight);
-  font-variant-numeric: tabular-nums;
-  color: var(--ce-ink);
-}
-
-.ce-pricing__tier[data-highlighted="true"] .ce-pricing__amount {
-  color: var(--ce-accent);
-}
-
-.ce-pricing__interval {
-  color: var(--ce-ink-muted);
-  font-size: var(--ce-text-sm);
-}
-
-.ce-pricing__features {
-  display: grid;
-  gap: var(--ce-s2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  flex: 1 1 auto;
-}
-
-.ce-pricing__feature {
-  padding-inline-start: var(--ce-s6);
-  color: var(--ce-ink-muted);
-  font-size: var(--ce-text-sm);
-  line-height: var(--ce-leading-relaxed);
-  position: relative;
-}
-
-.ce-pricing__feature::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: 0;
-  inset-block-start: 0.55em;
-  inline-size: 0.55em;
-  block-size: 0.3em;
-  border-inline-start: 2px solid var(--ce-accent);
-  border-block-end: 2px solid var(--ce-accent);
-  transform: rotate(-45deg);
-}
-
-.ce-pricing__action .cg-action {
-  inline-size: 100%;
-  justify-content: center;
-}
-
-/* --- accordion (blocks@2.0, RFC 0001) --------------------------------------
-   Same zero-JS `<details>`/`<summary>` mechanism as `faq`, under its own
-   class names: a product-detail/shipping accordion is a distinct editorial
-   surface (sunken, not raised, and a plus/minus marker rather than a
-   chevron) so the two can diverge further without coupling.
-   ------------------------------------------------------------------------- */
-
-.ce-accordion {
-  max-inline-size: var(--ce-page-narrow);
-  margin-inline: auto;
-}
-
-.ce-accordion__title {
-  margin: 0 0 var(--ce-s5);
-  font-size: var(--ce-text-xl);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-snug);
-}
-
-.ce-accordion__items {
-  display: grid;
-  gap: var(--ce-s2);
-}
-
-.ce-accordion__item {
-  background: var(--ce-surface-sunken);
-  border-radius: var(--ce-radius-md);
-}
-
-.ce-accordion__question {
-  display: flex;
-  align-items: center;
-  gap: var(--ce-s4);
-  padding: var(--ce-s4) var(--ce-s5);
-  font-weight: var(--ce-weight-medium);
-  cursor: pointer;
-  list-style: none;
-}
-
-.ce-accordion__question::-webkit-details-marker {
-  display: none;
-}
-
-.ce-accordion__question-text {
-  flex: 1 1 auto;
-}
-
-.ce-accordion__marker {
-  flex: none;
-  position: relative;
-  inline-size: var(--ce-s5);
-  block-size: var(--ce-s5);
-}
-
-.ce-accordion__marker::before,
-.ce-accordion__marker::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  background: var(--ce-ink-muted);
-  transition: transform var(--ce-duration) var(--ce-ease);
-}
-
-.ce-accordion__marker::before {
-  inline-size: 100%;
-  block-size: 2px;
-}
-
-.ce-accordion__marker::after {
-  inline-size: 2px;
-  block-size: 100%;
-}
-
-.ce-accordion__details[open] .ce-accordion__marker::after {
-  transform: rotate(90deg);
-  opacity: 0;
-}
-
-.ce-accordion__answer {
-  padding: 0 var(--ce-s5) var(--ce-s5);
-  color: var(--ce-ink-muted);
-  line-height: var(--ce-leading-relaxed);
-}
-
-.ce-accordion__answer > :first-child {
-  margin-block-start: 0;
-}
-
-.ce-accordion__answer > :last-child {
-  margin-block-end: 0;
-}
-
-/* --- statCounter (blocks@2.0, RFC 0001) ------------------------------------
-   A headline-figure row, narrower in intent than `stats`: no unit, so the
-   number itself carries the whole statement — set larger and centred, in a
-   tinted chip rather than `stats`'s plain sunken tile.
-   ------------------------------------------------------------------------- */
-
-.ce-counters__title {
-  margin: 0 0 var(--ce-s7);
-  font-size: var(--ce-text-2xl);
-  font-weight: var(--ce-weight-black);
-  letter-spacing: var(--ce-tracking-tight);
-  text-align: center;
-  text-wrap: balance;
-}
-
-.ce-counters__items {
-  display: grid;
-  gap: var(--ce-gap);
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  margin: 0;
-}
-
-.ce-counter {
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: center;
-  gap: var(--ce-s2);
-  padding: var(--ce-s8) var(--ce-s5);
-  background: var(--ce-surface-tinted);
-  border-radius: var(--ce-radius-xl);
-  text-align: center;
-}
-
-.ce-counter__value {
-  margin: 0;
-  color: var(--ce-accent);
-  font-size: calc(var(--ce-text-3xl) * 1.25);
-  font-weight: var(--ce-weight-black);
-  line-height: var(--ce-leading-tight);
-  letter-spacing: var(--ce-tracking-tight);
-  font-variant-numeric: tabular-nums;
-}
-
-.ce-counter__label {
-  color: var(--ce-ink-muted);
-  font-size: var(--ce-text-xs);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-wide);
-  text-transform: uppercase;
-}
-
-/* --- logoStrip (blocks@2.0, RFC 0001) --------------------------------------
-   The lighter "as seen in" / payment-method row: pill chips rather than
-   `logos`'s divided band, since a strip carries no link to dress up as a
-   clickable segment.
-   ------------------------------------------------------------------------- */
-
-.ce-logo-strip {
-  margin: 0;
-  padding-block: var(--ce-s8);
-  text-align: center;
-}
-
-.ce-logo-strip__items {
-  display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--ce-s4);
+  gap: var(--ce-s2);
+  margin: var(--ce-s4) 0 var(--ce-s6);
+}
+
+.ce-plans__amount {
+  font-size: var(--ce-size-figure);
+  font-weight: var(--ce-weight-light);
+  line-height: 1;
+  letter-spacing: var(--ce-tracking-display);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.ce-plans__interval {
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-caption);
+}
+
+.ce-plans__features {
   margin: 0;
   padding: 0;
   list-style: none;
+  border-block-end: var(--ce-rule) solid var(--ce-line);
 }
 
-.ce-logo-strip__item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--ce-s3) var(--ce-s6);
-  background: var(--ce-surface-sunken);
-  border-radius: var(--ce-radius-pill);
+.ce-plans__feature {
+  padding-block: var(--ce-s3);
+  border-block-start: var(--ce-rule) solid var(--ce-line);
+  font-size: var(--ce-text-caption);
+  line-height: var(--ce-leading-ui);
 }
 
-.ce-logo-strip__image {
-  block-size: var(--ce-s8);
-  inline-size: auto;
-  max-inline-size: 100%;
-  object-fit: contain;
-  opacity: 0.75;
-}
-
-.ce-logo-strip__caption {
-  margin-block-start: var(--ce-s5);
-  color: var(--ce-ink-subtle);
-  font-size: var(--ce-text-xs);
-  font-weight: var(--ce-weight-bold);
-  letter-spacing: var(--ce-tracking-wide);
-  text-transform: uppercase;
+.ce-plans__action {
+  margin-block-start: var(--ce-s6);
 }

@@ -4,66 +4,42 @@ import { renderFaq } from '../../src/render/blocks/faq.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderFaq(BLOCKS.faq, ctx))
 
 describe('faq', () => {
   it('renders to stable markup', () => {
-    expect(serialize(renderFaq(BLOCKS.faq, ctx))).toMatchSnapshot()
+    expect(html).toMatchSnapshot()
   })
 
-  it('uses details/summary rather than a scripted accordion', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('<details')
-    expect(html).toContain('<summary')
+  it('opens each answer with details and summary, never a script', () => {
+    expect(html).toContain('<details class="ce-answers__details">')
+    expect(html).toContain('<summary class="ce-answers__summary">')
+    expect(html).not.toMatch(/<script|\son[a-z]+="/)
   })
 
-  it('renders the question as plain text, not a heading, inside summary', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toMatch(
-      /<summary[^>]*><span class="ce-faq__question-text">How long does delivery take\?<\/span>/,
-    )
+  it('keeps each question a real heading one level under the block title', () => {
+    expect(html).toContain('<h2 class="ce-head__title" data-field="title">Before you order</h2>')
+    expect(html).toContain('<h3 class="ce-answers__question">How long does delivery take?</h3>')
   })
 
-  it('renders the title at h2 when present', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain(
-      '<h2 class="ce-faq__title" data-field="title">Shipping &amp; returns</h2>',
-    )
-  })
-
-  it('omits the title entirely when the field is absent', () => {
+  it('starts the questions at h2 when the block has no title', () => {
     const { title: _title, ...rest } = BLOCKS.faq
-    const html = serialize(renderFaq(rest, ctx))
-    expect(html).not.toContain('ce-faq__title')
+    const untitled = serialize(renderFaq(rest, ctx))
+    expect(untitled).toContain('<h2 class="ce-answers__question">')
+    expect(untitled).toContain('data-titled="false"')
   })
 
-  it('renders the answer through the shared rich text renderer', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('<p>Yes, and without a build.</p>')
+  it('draws the open/closed mark as an empty, hidden element', () => {
+    expect(html).toContain('<span class="ce-answers__mark" aria-hidden="true"></span>')
   })
 
-  it('renders the decorative chevron marker as aria-hidden', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('class="ce-faq__marker" aria-hidden="true"')
+  it('renders the answer as rich text', () => {
+    expect(html).toContain(
+      '<div class="ce-answers__answer"><p>Two to three working days in Portugal.</p></div>',
+    )
   })
 
-  it('renders one item per question', () => {
-    const twoQuestions = {
-      ...BLOCKS.faq,
-      items: [
-        BLOCKS.faq.items[0] as (typeof BLOCKS.faq.items)[number],
-        {
-          _key: 'q2',
-          question: 'Do you ship internationally?',
-          answer: BLOCKS.faq.items[0]?.answer ?? [],
-        },
-      ],
-    }
-    const html = serialize(renderFaq(twoQuestions, ctx))
-    expect(html.match(/class="ce-faq__item"/g)).toHaveLength(2)
-  })
-
-  it('is stamped as its own block for CSS targeting', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('data-block="faq"')
+  it('tells the stylesheet the block is titled, for the two-column layout', () => {
+    expect(html).toContain('data-titled="true"')
   })
 })

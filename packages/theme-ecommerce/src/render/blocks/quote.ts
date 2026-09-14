@@ -1,34 +1,23 @@
 import type { QuoteBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * Styled as a customer-review card rather than an editorial pull-quote — the
- * shape a storefront reaches for when it wants a testimonial to read as
- * social proof. No star rating is invented: contract B carries no such field,
- * and a card that implied one without data behind it would be the exact
- * fabrication the theme has to avoid.
- *
- * `<figure><blockquote>…</blockquote><figcaption>` is the attribution pattern
- * the HTML spec prescribes — the author's name sits outside the quoted text,
- * never inside it.
+ * A pull quote: the words set large and light across nine columns, from the
+ * second, with real quotation marks drawn by the stylesheet; the name and
+ * role small beneath. A portrait, when there is one, is a small square
+ * beside the name, never a circle floating above the text.
  */
 export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement {
-  const hasAttribution =
-    block.author !== undefined || block.role !== undefined || block.avatar !== undefined
-  return h(
-    'figure',
-    { class: 'ce-block ce-quote', 'data-block': 'quote' },
-    h('blockquote', { class: 'ce-quote__text' }, h('p', { 'data-field': 'text' }, block.text)),
-    hasAttribution
-      ? h(
+  const who =
+    block.author === undefined && block.role === undefined
+      ? null
+      : h(
           'figcaption',
           { class: 'ce-quote__attribution' },
           block.avatar === undefined
             ? null
-            : image(ctx, block.avatar, {
-                className: 'ce-quote__avatar',
-                variant: { width: 96, height: 96, fit: 'cover' },
-              }),
+            : image(ctx, block.avatar, { className: 'ce-quote__avatar', sizes: '3rem' }),
           h(
             'span',
             { class: 'ce-quote__who' },
@@ -40,6 +29,18 @@ export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement 
               : h('span', { class: 'ce-quote__role', 'data-field': 'role' }, block.role),
           ),
         )
-      : null,
+
+  return section(
+    'div',
+    'quote',
+    'ce-quote',
+    {},
+    'figure',
+    h(
+      'blockquote',
+      { class: 'ce-quote__quote' },
+      h('p', { class: 'ce-quote__text', 'data-field': 'text' }, block.text),
+    ),
+    who,
   )
 }

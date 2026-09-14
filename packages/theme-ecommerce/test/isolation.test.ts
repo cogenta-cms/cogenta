@@ -93,6 +93,7 @@ describe('theme isolation', () => {
       'styles/archive.css',
       'styles/base.css',
       'styles/blocks.css',
+      'styles/shop.css',
       'styles/theme.css',
       'styles/tokens.css',
     ])

@@ -1,7 +1,9 @@
 import { defineTheme } from '@cogenta/render'
 
 /**
- * Contract D — Thème, `theme@1.0`/`1.1`.
+ * Contract D, `theme@1.5`: the product page reads `PageEntryMeta.fields`
+ * (price, stock, category, details) and renders the plain page header of
+ * `1.4` when a host does not send them.
  *
  * `implements` lists the seventeen blocks of contract B (`blocks@2.0`, RFC
  * 0001) in the order the contract lists them, unabridged: a theme that omits
@@ -14,9 +16,9 @@ import { defineTheme } from '@cogenta/render'
  */
 export default defineTheme({
   name: 'ecommerce',
-  version: '1.2.0',
+  version: '1.3.0',
   description:
-    'A confident, product-grid-native storefront: shoppable cards, a bold CTA accent, zero client JavaScript.',
+    'A shop for a brand of durable everyday goods: sand and ink, Albert Sans, product photographs at 4:5, a product page with price, stock and details, zero client JavaScript.',
   author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',
@@ -39,7 +41,7 @@ export default defineTheme({
     'statCounter',
     'logoStrip',
   ],
-  collections: ['article', 'page'],
+  collections: ['product', 'category', 'page'],
   runtime: 'static',
   tokens: './tokens.json',
   a11y: { verified: 'WCAG-2.2-AA' },

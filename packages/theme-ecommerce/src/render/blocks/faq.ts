@@ -1,57 +1,60 @@
 import type { FaqBlock, FaqItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
   type HtmlElement,
   h,
-  heading,
+  nestedHeadingTag,
   type RenderContext,
   renderRichText,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * Shipping, returns, sizing — the questions a storefront visitor actually
- * has before checking out. `<details>`/`<summary>` rather than a scripted
- * accordion: expanding, keyboard operation and the expanded state announced
- * to assistive technology all come from the browser, at zero bytes of
- * JavaScript.
+ * Questions before an order, in two columns on a wide screen: the title on
+ * the first four, held in view while the list scrolls past it, and the
+ * questions on the last seven, each under a hairline.
  *
- * The question is plain text inside `<summary>`, not a heading: a heading
- * nested in a summary renders inconsistently across screen readers, and the
- * questions are already reachable as a list under the block's own heading.
+ * Every answer is a `<details>`: it opens without a script and is found by
+ * the browser's own search. The question sits in a real heading inside the
+ * summary, so a screen reader's heading list still reaches every one of
+ * them. The plus that turns into a minus is two hairlines drawn by the
+ * stylesheet, not a glyph.
  */
-function renderItem(item: FaqItem, ctx: RenderContext): HtmlElement {
+export function faqItem(
+  item: FaqItem,
+  ctx: RenderContext,
+  blockName: 'faq' | 'accordion',
+  titled: boolean,
+): HtmlElement {
   return h(
     'li',
-    { class: 'ce-faq__item' },
+    { class: 'ce-answers__item' },
     h(
       'details',
-      { class: 'ce-faq__details' },
+      { class: 'ce-answers__details' },
       h(
         'summary',
-        { class: 'ce-faq__question' },
-        h('span', { class: 'ce-faq__question-text' }, item.question),
-        h('span', { class: 'ce-faq__marker', 'aria-hidden': 'true' }),
+        { class: 'ce-answers__summary' },
+        h(nestedHeadingTag(blockName, titled), { class: 'ce-answers__question' }, item.question),
+        h('span', { class: 'ce-answers__mark', 'aria-hidden': 'true' }),
       ),
-      h('div', { class: 'ce-faq__answer' }, renderRichText(ctx, item.answer)),
+      h('div', { class: 'ce-answers__answer' }, renderRichText(ctx, item.answer)),
     ),
   )
 }
 
 export function renderFaq(block: FaqBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  const titled = block.title !== undefined
+  return section(
     'section',
-    { class: 'ce-block ce-faq', 'data-block': 'faq' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('faq') ?? 'h2',
-          { class: 'ce-faq__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'faq',
+    'ce-answers',
+    { 'data-titled': String(titled) },
+    'div',
+    sectionHead('faq', block.title),
     h(
       'ul',
-      { class: 'ce-faq__items' },
-      block.items.map((item) => renderItem(item, ctx)),
+      { class: 'ce-answers__items' },
+      block.items.map((item) => faqItem(item, ctx, 'faq', titled)),
     ),
   )
 }

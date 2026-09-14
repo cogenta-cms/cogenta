@@ -4,69 +4,71 @@ import { renderFeatureGrid } from '../../src/render/blocks/feature-grid.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
 
-describe('featureGrid', () => {
+const COMMITMENTS = {
+  ...BLOCKS.featureGrid,
+  title: undefined,
+  items: [
+    {
+      _key: 'c1',
+      title: 'Delivery across the EU in 2 to 5 working days',
+      link: { href: '/delivery' },
+    },
+    { _key: 'c2', title: '30 days to return anything unworn' },
+  ],
+}
+const { title: _unused, ...UNTITLED_COMMITMENTS } = COMMITMENTS
+const line = serialize(renderFeatureGrid(UNTITLED_COMMITMENTS, ctx))
+
+describe('featureGrid, as ruled columns', () => {
   it('renders to stable markup', () => {
-    expect(serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))).toMatchSnapshot()
+    expect(html).toMatchSnapshot()
   })
 
-  it('renders the title at h2 when present', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain(
-      '<h2 class="ce-features__title" data-field="title">Shop by category</h2>',
+  it('renders items with a sentence as columns under hairlines', () => {
+    expect(html).toContain('class="ce-section ce-columns"')
+    expect(html.match(/class="ce-columns__item"/g)).toHaveLength(2)
+  })
+
+  it('draws a known icon as a small line icon, with no tile behind it', () => {
+    expect(html).toMatch(/<svg class="ce-columns__icon"[^>]*aria-hidden="true"/)
+    expect(html).not.toMatch(/icon-tile|__icon-wrap/)
+  })
+
+  it('titles the block at h2 and its items at h3', () => {
+    expect(html).toContain('<h2 class="ce-head__title" data-field="title">What we promise</h2>')
+    expect(html).toContain('<h3 class="ce-columns__name">')
+  })
+
+  it('turns a linked item title into an arrow link', () => {
+    expect(html).toContain('<a class="ce-arrow-link" href="/en/page/delivery">Tracked delivery</a>')
+  })
+
+  it('counts its columns for the stylesheet, capped at four', () => {
+    expect(html).toContain('data-count="2"')
+  })
+})
+
+describe('featureGrid, as a ruled line', () => {
+  it('renders to stable markup', () => {
+    expect(line).toMatchSnapshot()
+  })
+
+  it('reads items without a sentence as one line of statements', () => {
+    expect(line).toContain('class="ce-section ce-line"')
+    expect(line).not.toContain('ce-columns')
+  })
+
+  it('draws no icon and no heading on the line', () => {
+    expect(line).not.toContain('<svg')
+    expect(line).not.toMatch(/<h[1-6]/)
+  })
+
+  it('links a statement that has a link, and leaves the others as text', () => {
+    expect(line).toContain(
+      '<a class="ce-line__text ce-line__link" href="/en/delivery">Delivery across the EU in 2 to 5 working days</a>',
     )
-  })
-
-  it('keeps a titleless grid and its items on consecutive heading levels', () => {
-    const { title: _title, ...untitled } = BLOCKS.featureGrid
-    const html = serialize(renderFeatureGrid(untitled, ctx))
-    const levels = [...html.matchAll(/<h([1-6])[\s>]/g)].map((match) => Number(match[1]))
-    expect(new Set(levels)).toEqual(new Set([2]))
-  })
-
-  it('demotes item titles to h3 once the grid renders its own h2', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<h3 class="ce-feature__title">')
-  })
-
-  it("makes the item's whole title the link, so the accessible name is the feature's name", () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<a class="ce-feature__link" href="/en/page/apparel">Apparel</a>')
-  })
-
-  it('renders an unlinked title as plain text when the item carries no link', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<h3 class="ce-feature__title">Accessories</h3>')
-  })
-
-  it('writes the icon name as a data attribute, marked decorative', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('data-icon="shirt"')
-    expect(html).toMatch(/data-icon="shirt"[^>]*aria-hidden="true"/)
-  })
-
-  it('omits the icon chip entirely when the item carries no icon', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    // f2 ("Accessories") has no icon: exactly one icon chip should exist.
-    expect(html.match(/ce-feature__icon/g)).toHaveLength(1)
-  })
-
-  it('omits the item text paragraph when the field is absent', () => {
-    const block = {
-      ...BLOCKS.featureGrid,
-      items: [{ _key: 'x1', title: 'Sale' }],
-    }
-    const html = serialize(renderFeatureGrid(block, ctx))
-    expect(html).not.toContain('ce-feature__text')
-  })
-
-  it('renders one card per item', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html.match(/class="ce-feature"/g)).toHaveLength(2)
-  })
-
-  it('is stamped as its own block for CSS targeting', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('data-block="featureGrid"')
+    expect(line).toContain('<span class="ce-line__text">30 days to return anything unworn</span>')
   })
 })

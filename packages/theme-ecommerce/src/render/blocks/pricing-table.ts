@@ -1,73 +1,62 @@
 import type { PricingTableBlock, PricingTier } from '@cogenta/blocks'
 import {
   actionLink,
-  blockHeadingTag,
-  type HeadingTag,
   type HtmlElement,
   h,
   heading,
   nestedHeadingTag,
   type RenderContext,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * The side-by-side plan comparison a storefront reaches for — subscription
- * tiers, service bundles, shipping speeds — styled with the same card
- * language as `featureGrid`'s product cards, so a pricing panel reads as one
- * more shoppable surface rather than a bolted-on SaaS widget.
+ * Plans side by side (a repair plan, a subscription for coffee, a set price
+ * for a workshop), as ruled columns rather than cards: the name, the price at
+ * the section size in tabular figures with its interval, the inclusions each
+ * under a hairline, and the action at the foot.
  *
- * `highlighted` is an editorial signal, never a colour: it surfaces only as
- * `data-highlighted`/`aria-current`, both read by the stylesheet and by
- * assistive technology, and the skin decides what (if anything) that means
- * visually.
+ * `highlighted` is an editorial emphasis, drawn as the column's top rule in
+ * ink instead of a hairline. No ribbon, no raised card, no accent fill.
  */
-function renderTier(tier: PricingTier, ctx: RenderContext, tag: HeadingTag): HtmlElement {
+function tier(item: PricingTier, ctx: RenderContext, titled: boolean): HtmlElement {
   return h(
     'li',
-    {
-      class: 'ce-pricing__tier',
-      'data-highlighted': tier.highlighted === true ? 'true' : undefined,
-      'aria-current': tier.highlighted === true ? 'true' : undefined,
-    },
-    heading(tag, { class: 'ce-pricing__name' }, tier.name),
+    { class: 'ce-plans__tier', 'data-highlighted': item.highlighted === true ? 'true' : 'false' },
+    heading(nestedHeadingTag('pricingTable', titled), { class: 'ce-plans__name' }, item.name),
     h(
       'p',
-      { class: 'ce-pricing__price' },
-      h('span', { class: 'ce-pricing__amount' }, tier.price),
-      tier.interval === undefined
+      { class: 'ce-plans__price' },
+      h('span', { class: 'ce-plans__amount' }, item.price),
+      item.interval === undefined
         ? null
-        : h('span', { class: 'ce-pricing__interval' }, tier.interval),
+        : h('span', { class: 'ce-plans__interval' }, item.interval),
     ),
-    tier.features.length === 0
+    item.features.length === 0
       ? null
       : h(
           'ul',
-          { class: 'ce-pricing__features' },
-          tier.features.map((feature) => h('li', { class: 'ce-pricing__feature' }, feature)),
+          { class: 'ce-plans__features' },
+          item.features.map((feature) => h('li', { class: 'ce-plans__feature' }, feature)),
         ),
-    tier.action === undefined
+    item.action === undefined
       ? null
-      : h('div', { class: 'ce-pricing__action' }, actionLink(ctx, tier.action)),
+      : h('div', { class: 'ce-plans__action' }, actionLink(ctx, item.action)),
   )
 }
 
 export function renderPricingTable(block: PricingTableBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const tierTag = nestedHeadingTag('pricingTable', hasTitle)
-  return h(
+  const titled = block.title !== undefined
+  return section(
     'section',
-    { class: 'ce-block ce-pricing', 'data-block': 'pricingTable' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('pricingTable') ?? 'h2',
-          { class: 'ce-pricing__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'pricingTable',
+    'ce-plans',
+    { 'data-count': String(Math.min(block.tiers.length, 4)) },
+    'div',
+    sectionHead('pricingTable', block.title),
     h(
       'ul',
-      { class: 'ce-pricing__tiers' },
-      block.tiers.map((tier) => renderTier(tier, ctx, tierTag)),
+      { class: 'ce-plans__tiers' },
+      block.tiers.map((item) => tier(item, ctx, titled)),
     ),
   )
 }

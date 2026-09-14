@@ -4,69 +4,56 @@ import { renderMediaFigure } from '../../src/render/blocks/media-figure.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
 
 describe('mediaFigure', () => {
   it('renders to stable markup', () => {
-    expect(serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))).toMatchSnapshot()
+    expect(html).toMatchSnapshot()
   })
 
-  it('wraps the image in a framed panel, matching the product card language', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('class="ce-figure__frame"')
+  it('is a figure whose caption is its direct child', () => {
+    expect(html).toContain('<figure class="ce-container ce-figure__inner">')
+    expect(html).toMatch(/<\/div><figcaption class="ce-figure__caption">/)
   })
 
-  it('writes the align intent as a data attribute, never a class', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('data-align="wide"')
+  it('reads start and end as a split between the photograph and its caption', () => {
+    expect(html).toContain('data-align="start" data-layout="split"')
+    const end = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, align: 'end' }, ctx))
+    expect(end).toContain('data-align="end" data-layout="split"')
   })
 
-  it('defaults align to center when the field is absent', () => {
+  it('treats a missing align as wide, a single picture across the container', () => {
     const { align: _align, ...rest } = BLOCKS.mediaFigure
-    const html = serialize(renderMediaFigure(rest, ctx))
-    expect(html).toContain('data-align="center"')
+    expect(serialize(renderMediaFigure(rest, ctx))).toContain(
+      'data-align="wide" data-layout="single"',
+    )
   })
 
-  it('drops the frame padding when aligned full, so it bleeds edge to edge', () => {
-    const html = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, align: 'full' }, ctx))
-    expect(html).toContain('data-align="full"')
+  it('frames the picture at the ratio the editor chose', () => {
+    expect(html).toContain('style="aspect-ratio:1 / 1"')
   })
 
-  it('sets the aspect ratio as a custom property from the ratio field', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('--ce-ratio:16 / 9')
+  it('leaves the frame unstyled for the original ratio', () => {
+    const original = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, ratio: 'original' }, ctx))
+    expect(original).toContain('<div class="ce-figure__frame">')
   })
 
-  it('carries no ratio style when the field is absent', () => {
-    const { ratio: _ratio, ...rest } = BLOCKS.mediaFigure
-    const html = serialize(renderMediaFigure(rest, ctx))
-    expect(html).not.toContain('--ce-ratio')
-  })
-
-  it('renders a figcaption when either caption or credit is present', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('<figcaption')
-    expect(html).toContain('The two planes')
+  it('addresses caption and credit as editable text fields', () => {
+    expect(html).toContain('data-field="caption"')
     expect(html).toContain('data-field="credit"')
   })
 
-  it('renders no figcaption when neither caption nor credit is present', () => {
+  it('renders no figcaption when there is neither caption nor credit', () => {
     const { caption: _caption, credit: _credit, ...rest } = BLOCKS.mediaFigure
-    const html = serialize(renderMediaFigure(rest, ctx))
-    expect(html).not.toContain('<figcaption')
+    expect(serialize(renderMediaFigure(rest, ctx))).not.toContain('figcaption')
   })
 
-  it('writes an alt attribute on the figure image', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toMatch(/<img[^>]*\salt="/)
+  it('asks for a full-window image when the figure is full width', () => {
+    const full = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, align: 'full' }, ctx))
+    expect(full).toContain('sizes="100vw"')
   })
 
-  it('lazy-loads the figure image — it is never the page LCP element', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toMatch(/<img[^>]*loading="lazy"/)
-  })
-
-  it('is stamped as its own block for CSS targeting', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('data-block="mediaFigure"')
+  it('writes the alt text the media library holds', () => {
+    expect(html).toContain('alt="Enamel mug on an oak table"')
   })
 })

@@ -1,18 +1,23 @@
 import type { ProseBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, type RenderContext, renderRichText } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * `prose` declares `headingLevel: 'none'` — it contributes no heading of its
- * own, and whatever headings appear come from the rich text document, whose
- * vocabulary starts at `h2`. Editorial copy (a size guide, a brand story, a
- * shipping policy) reads as a narrow, generously spaced column rather than a
- * product card, which is the one place in this theme that is deliberately
- * calm.
+ * Running text: a brand story, a care guide, terms of sale.
+ *
+ * `prose` declares `headingLevel: 'none'`, so it adds no heading of its own;
+ * the rich text's own headings start at `h2`. The column starts at the
+ * fourth of twelve and holds a reading measure of about sixty-five
+ * characters, so a page title set at the first column and the text under it
+ * make one asymmetric line rather than a centred column.
  */
 export function renderProse(block: ProseBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'div',
-    { class: 'ce-block ce-prose', 'data-block': 'prose' },
-    renderRichText(ctx, block.body),
+    'prose',
+    'ce-prose',
+    {},
+    'div',
+    h('div', { class: 'ce-prose__body' }, renderRichText(ctx, block.body)),
   )
 }

@@ -4,79 +4,59 @@ import { renderEmbed } from '../../src/render/blocks/embed.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const consent = serialize(renderEmbed(BLOCKS.embed, ctx))
+const open = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: false }, ctx))
 
 describe('embed', () => {
   it('renders to stable markup', () => {
-    expect(serialize(renderEmbed(BLOCKS.embed, ctx))).toMatchSnapshot()
+    expect(consent).toMatchSnapshot()
   })
 
-  it('contacts no third party when consent is required', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).not.toContain('<iframe')
-    expect(html).not.toContain('youtube-nocookie')
-    expect(html).toContain('data-consent="required"')
+  it('contacts no third party while consent is required', () => {
+    expect(consent).not.toContain('<iframe')
+    expect(consent).not.toContain('youtube-nocookie.com')
   })
 
-  it('shows the provider name as a badge on the consent card', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('class="ce-embed__badge">youtube<')
+  it('keeps the frame at its ratio while it shows the notice', () => {
+    expect(consent).toContain('style="aspect-ratio:16 / 9"')
+    expect(consent).toContain('ce-embed__notice')
   })
 
-  it('frames the privacy-preserving host once consent is not required', () => {
-    const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: false }, ctx))
-    expect(html).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"')
-    expect(html).not.toContain('www.youtube.com/embed')
+  it('offers the original as an arrow link with no referrer', () => {
+    expect(consent).toContain(
+      '<a class="ce-arrow-link ce-embed__link" href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" rel="noopener noreferrer nofollow">',
+    )
+  })
+
+  it('embeds the cookie-free player once consent is not required', () => {
+    expect(open).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"')
   })
 
   it('gives every frame an accessible name', () => {
-    const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: false }, ctx))
-    expect(html).toMatch(/<iframe[^>]*\stitle="/)
+    expect(open).toMatch(/<iframe[^>]*\stitle="embed.title"/)
   })
 
-  it('falls back to a link for a provider that would need a script', () => {
-    const html = serialize(
-      renderEmbed(
-        {
-          ...BLOCKS.embed,
-          provider: 'mastodon',
-          url: 'https://m.example/@a/1',
-          consentRequired: false,
-        },
-        ctx,
-      ),
-    )
-    expect(html).not.toContain('<iframe')
-    expect(html).toContain('ce-embed__link')
+  it('lazy-loads the frame', () => {
+    expect(open).toContain('loading="lazy"')
   })
 
-  it('defaults the aspect ratio to 16 / 9 when the field is absent', () => {
+  it('falls back to 16:9 when the editor set no ratio', () => {
     const { ratio: _ratio, ...rest } = BLOCKS.embed
-    const html = serialize(renderEmbed(rest, ctx))
-    expect(html).toContain('--ce-ratio:16 / 9')
+    expect(serialize(renderEmbed(rest, ctx))).toContain('aspect-ratio:16 / 9')
   })
 
-  it('uses the declared ratio when present', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('--ce-ratio:16 / 9')
-  })
-
-  it('resolves a vimeo url to the vimeo player', () => {
-    const html = serialize(
+  it('renders a provider with no trusted frame as the notice, even without consent', () => {
+    const post = serialize(
       renderEmbed(
-        {
-          ...BLOCKS.embed,
-          provider: 'vimeo',
-          url: 'https://vimeo.com/76979871',
-          consentRequired: false,
-        },
+        { ...BLOCKS.embed, provider: 'bluesky', url: 'https://bsky.app/x', consentRequired: false },
         ctx,
       ),
     )
-    expect(html).toContain('src="https://player.vimeo.com/video/76979871"')
+    expect(post).not.toContain('<iframe')
+    expect(post).toContain('embed.unsupported')
   })
 
-  it('is stamped as its own block for CSS targeting', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('data-block="embed"')
+  it('records the consent state and the provider for the stylesheet', () => {
+    expect(consent).toContain('data-provider="youtube" data-consent="required"')
   })
 })

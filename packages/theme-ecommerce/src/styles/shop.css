@@ -1,0 +1,443 @@
+/*
+ * The goods: the product grid, the photographed tiles, the ruled index, and
+ * the page of one product.
+ */
+
+/* --------------------------------------------------------------------------
+   Lists. `data-layout` is contract B's layout; the `ce-goods`, `ce-tiles`
+   and `ce-index` classes are what the entries turned out to be.
+   -------------------------------------------------------------------------- */
+
+.ce-list__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* --- goods: photograph at 4:5, name and price under it -------------------- */
+
+.ce-goods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--ce-col-gap);
+  row-gap: var(--ce-row-gap);
+}
+
+@media (min-width: 48rem) {
+  .ce-goods {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .ce-goods {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.ce-goods__media {
+  display: block;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  background: var(--ce-plate);
+}
+
+.ce-goods__image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.ce-goods__text {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--ce-s4);
+  align-items: baseline;
+  padding-block-start: var(--ce-s4);
+}
+
+.ce-goods__name {
+  font-size: var(--ce-text-md);
+  font-weight: var(--ce-weight-medium);
+  line-height: var(--ce-leading-ui);
+  letter-spacing: 0;
+}
+
+.ce-goods__link {
+  color: var(--ce-ink);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.3em;
+}
+
+.ce-goods__link:hover {
+  text-decoration-color: currentColor;
+}
+
+.ce-goods__price {
+  margin: 0;
+  font-size: var(--ce-text-md);
+  line-height: var(--ce-leading-ui);
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+.ce-goods__stock {
+  grid-column: 1 / -1;
+  margin: var(--ce-s1) 0 0;
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-caption);
+  line-height: var(--ce-leading-ui);
+}
+
+/* Two narrow columns on a phone: the price goes under the name rather than
+   beside a name broken over two lines. */
+@media (max-width: 39.99rem) {
+  .ce-goods__text {
+    grid-template-columns: minmax(0, 1fr);
+    padding-block-start: var(--ce-s3);
+  }
+
+  .ce-goods__price {
+    margin-block-start: var(--ce-s1);
+  }
+}
+
+/* A list of goods: ruled rows, a small photograph at the start. */
+.ce-list[data-layout="list"] .ce-goods {
+  display: block;
+  border-block-end: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-list[data-layout="list"] .ce-goods__item {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  column-gap: var(--ce-s5);
+  align-items: center;
+  padding-block: var(--ce-s3);
+  border-block-start: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-list[data-layout="list"] .ce-goods__text {
+  padding: 0;
+}
+
+/* --- tiles: square photograph, the name under it -------------------------- */
+
+.ce-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--ce-col-gap);
+  row-gap: var(--ce-s10);
+}
+
+@media (min-width: 64rem) {
+  .ce-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .ce-tiles[data-count="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ce-tiles[data-count="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.ce-tiles__media {
+  display: block;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: var(--ce-plate);
+}
+
+.ce-tiles__image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.ce-tiles__name {
+  margin-block-start: var(--ce-s4);
+  font-size: var(--ce-text-lg);
+  line-height: var(--ce-leading-heading);
+}
+
+.ce-tiles__text {
+  margin: var(--ce-s2) 0 0;
+  max-inline-size: 34ch;
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-caption);
+  line-height: var(--ce-leading-ui);
+}
+
+/* On a phone the tiles become ruled rows: a small square photograph, the
+   name and its sentence beside it, so a summary is never squeezed into half
+   a screen. */
+@media (max-width: 39.99rem) {
+  .ce-tiles {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+    border-block-end: var(--ce-rule) solid var(--ce-line);
+  }
+
+  .ce-tiles__item {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    column-gap: var(--ce-s5);
+    padding-block: var(--ce-s4);
+    border-block-start: var(--ce-rule) solid var(--ce-line);
+  }
+
+  .ce-tiles__media {
+    grid-row: 1 / span 2;
+  }
+
+  .ce-tiles__name {
+    margin: 0;
+    font-size: var(--ce-text-md);
+  }
+}
+
+/* --- index: ruled rows of titles ------------------------------------------ */
+
+.ce-index {
+  border-block-end: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-index__item {
+  display: grid;
+  gap: var(--ce-s2) var(--ce-col-gap);
+  padding-block: var(--ce-s5);
+  border-block-start: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-index__name {
+  font-size: var(--ce-text-lg);
+}
+
+.ce-index__link {
+  color: var(--ce-ink);
+  text-decoration-color: transparent;
+}
+
+.ce-index__link:hover {
+  text-decoration-color: currentColor;
+}
+
+.ce-index__text {
+  margin: 0;
+  max-inline-size: 60ch;
+  color: var(--ce-ink-muted);
+}
+
+@media (min-width: 64rem) {
+  .ce-index__item {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    align-items: baseline;
+  }
+
+  .ce-index__name {
+    grid-column: 1 / span 5;
+  }
+
+  .ce-index__text {
+    grid-column: 7 / span 6;
+  }
+}
+
+/* --- carousel: one row that scrolls sideways ------------------------------ */
+
+.ce-list__viewport {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ce-line-strong) transparent;
+  padding-block-end: var(--ce-s5);
+}
+
+.ce-list__viewport > .ce-list__items {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: none;
+  grid-auto-columns: minmax(12rem, 44%);
+  column-gap: var(--ce-col-gap);
+}
+
+.ce-list__viewport > .ce-list__items > * {
+  scroll-snap-align: start;
+}
+
+@media (min-width: 64rem) {
+  .ce-list__viewport > .ce-list__items {
+    grid-auto-columns: calc((100% - var(--ce-col-gap) * 3.5) / 4.5);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The product page: the photograph on seven columns, the sheet on four, held
+   in view while the photograph scrolls past.
+   -------------------------------------------------------------------------- */
+
+/* On a phone the photograph meets the header and the window's edges. */
+.ce-product {
+  padding-block: 0 calc(var(--ce-section) / 2);
+}
+
+.ce-product__inner {
+  row-gap: var(--ce-s8);
+}
+
+.ce-product__media {
+  margin: 0 calc(var(--ce-gutter) * -1);
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  background: var(--ce-plate);
+}
+
+.ce-product__image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.ce-product__category {
+  margin: 0 0 var(--ce-s3);
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-caption);
+  font-weight: var(--ce-weight-medium);
+  letter-spacing: var(--ce-tracking-caption);
+}
+
+.ce-product__title {
+  font-size: var(--ce-size-product);
+  font-weight: var(--ce-weight-regular);
+  line-height: var(--ce-leading-heading);
+  letter-spacing: var(--ce-tracking-display);
+}
+
+.ce-product__price {
+  margin: var(--ce-s4) 0 0;
+  font-size: var(--ce-text-xl);
+  font-weight: var(--ce-weight-regular);
+  line-height: 1.2;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.ce-product__stock {
+  margin: var(--ce-s2) 0 0;
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-caption);
+}
+
+.ce-product__summary {
+  margin: var(--ce-s8) 0 0;
+  max-inline-size: 46ch;
+  font-size: var(--ce-text-reading);
+  line-height: var(--ce-leading-text);
+}
+
+.ce-product__order {
+  margin: var(--ce-s8) 0 0;
+}
+
+.ce-product__order .cg-action[data-emphasis="primary"] {
+  inline-size: 100%;
+  padding-block: var(--ce-s4);
+}
+
+.ce-product__delivery {
+  margin: var(--ce-s4) 0 0;
+  color: var(--ce-ink-muted);
+  font-size: var(--ce-text-caption);
+  line-height: var(--ce-leading-ui);
+}
+
+.ce-product__delivery-label {
+  color: var(--ce-ink);
+  font-weight: var(--ce-weight-medium);
+}
+
+.ce-product__details {
+  margin-block-start: var(--ce-s12);
+}
+
+.ce-product__details-title {
+  margin-block-end: var(--ce-s3);
+  font-size: var(--ce-text-caption);
+  font-weight: var(--ce-weight-medium);
+  letter-spacing: var(--ce-tracking-caption);
+}
+
+.ce-product__facts {
+  margin: 0;
+  border-block-end: var(--ce-rule) solid var(--ce-line);
+}
+
+.ce-product__fact {
+  display: grid;
+  grid-template-columns: minmax(6rem, 1fr) 2fr;
+  gap: var(--ce-s1) var(--ce-s4);
+  padding-block: var(--ce-s3);
+  border-block-start: var(--ce-rule) solid var(--ce-line);
+  font-size: var(--ce-text-caption);
+  line-height: var(--ce-leading-ui);
+}
+
+.ce-product__fact-label {
+  color: var(--ce-ink-muted);
+}
+
+.ce-product__fact-value {
+  margin: 0;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.ce-product__terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ce-s1) var(--ce-s4);
+  margin: var(--ce-s6) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--ce-text-caption);
+}
+
+@media (min-width: 64rem) {
+  .ce-product {
+    padding-block-start: var(--ce-s10);
+  }
+
+  .ce-product__media {
+    grid-column: 1 / span 7;
+    margin: 0;
+  }
+
+  .ce-product__info {
+    grid-column: 9 / span 4;
+    position: sticky;
+    inset-block-start: calc(var(--ce-header-height) + var(--ce-s10));
+    padding-block-start: var(--ce-s2);
+  }
+
+  .ce-product[data-media="false"] .ce-product__info {
+    grid-column: 1 / span 6;
+    position: static;
+  }
+
+  /* The story that follows a product aligns with its photograph. */
+  .ce-main--product .ce-prose__body,
+  .ce-main--product .ce-answers__items {
+    grid-column: 1 / span 7;
+  }
+}
+
+.ce-product[data-media="false"] {
+  padding-block-start: var(--ce-s10);
+}
+
+.ce-product[data-media="false"] .ce-product__info {
+  max-inline-size: 36rem;
+}

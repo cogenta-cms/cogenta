@@ -1,37 +1,30 @@
 /*
- * The storefront theme's stylesheet — the entry point, and nothing else.
+ * `@cogenta/theme-ecommerce`'s stylesheet: the entry point, and nothing else.
  *
- * Three layers, in the only order that works:
+ *   tokens.css   the design system, derived from the skin's `--cogenta-*`
+ *                custom properties (contract D)
+ *   base.css     document, accessibility floor, grid, section titles,
+ *                actions, header, footer, and the utility pages the host
+ *                renders (search, forms, comments)
+ *   shop.css     the product grid, tiles and index lists, the product page
+ *   blocks.css   the other vocabulary blocks
+ *   archive.css  the taxonomy-term archive
  *
- *   tokens.css  the design system, derived entirely from the skin's
- *               `--cogenta-*` custom properties (contract D)
- *   base.css    document, accessibility floor, page frame, header/footer,
- *               actions
- *   blocks.css  the twelve vocabulary blocks
+ * Not one colour is written literally in any of them: every value comes from
+ * a skin token or from a `--ce-*` property composed from those.
  *
- * Not one colour, font, radius, duration or shadow is written literally in
- * any of the three: every value comes from a `--cogenta-<group>-<name>`
- * property produced from the skin's tokens, or from a `--ce-*` property
- * composed from those. That is what makes a skin change a rewrite of one
- * generated file with no build. A single hard-coded hex would be a colour no
- * skin can change.
- *
- * `@import` is resolved at build time by Astro, and by `@cogenta/cli`'s own
- * inliner when `cogenta serve` renders without a build. Both flatten these
- * three into one sheet, so no visitor ever pays for three round trips.
- *
- * The one external request this theme's CSS makes: Google Fonts, for the two
- * families this skin's default `tokens.json` names (`font.sans`/`font.serif`
- * both carry a full system fallback stack, so a visitor whose network blocks
- * `fonts.googleapis.com` still gets a readable page, never a blank one — R9's
- * "zero dependency" applies to code, and a CSS `@import` from a site setting
- * that can be swapped in `tokens.json` is the one exception the shared spec
- * names explicitly). It has to be the first rule in the sheet: CSS refuses an
- * `@import` that follows any other rule.
+ * The one thing this file adds on its own is the Google Fonts request for
+ * Albert Sans, upright and italic, over its whole weight axis. A skin only
+ * names a family; it never fetches one. The family falls back to a real
+ * system stack if Google Fonts is unreachable, and `display=swap` keeps text
+ * visible while it loads. `cogenta serve` hoists this `@import` above the
+ * skin's rules.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Albert+Sans:ital,wght@0,100..900;1,100..900&display=swap");
+
 @import "./tokens.css";
 @import "./base.css";
+@import "./shop.css";
 @import "./blocks.css";
 @import "./archive.css";

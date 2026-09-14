@@ -9,132 +9,120 @@ import type {
 
 /**
  * A `RenderContext` that behaves like the real one and returns fixed values,
- * so a snapshot changes only when the markup changes. It exposes exactly
- * what contract D lists — nothing here can stand in for a database or a
- * secret, because the interface has no room for one.
- *
- * Same media ids and the same two content entries `@cogenta/theme-canonical`
- * uses (the shared spec's own instruction) — this fixture exercises the
- * identical vocabulary contract, not this theme's visual design.
+ * so a snapshot changes only when the markup changes. It exposes exactly what
+ * contract D lists: nothing here can stand in for a database or a secret,
+ * because the interface has no room for one.
  */
+
+function source(src: string, width: number, height: number, alt: string): ImageSource {
+  return { kind: 'image', src, srcset: `${src} ${width}w`, width, height, alt, focal: null }
+}
 
 const MEDIA: Readonly<Record<string, ImageSource>> = {
   'media-hero': {
-    kind: 'image',
-    src: '/img/hero-1200.avif',
-    srcset: '/img/hero-600.avif 600w, /img/hero-1200.avif 1200w',
-    width: 1200,
-    height: 630,
-    alt: 'A workshop bench seen from above',
-    focal: { x: 0.5, y: 0.33 },
+    ...source('/img/hero-1600.avif', 1600, 914, 'Canvas tote and a beanie on linen'),
+    focal: { x: 0.5, y: 0.4 },
   },
-  'media-figure': {
-    kind: 'image',
-    src: '/img/figure-800.avif',
-    srcset: '/img/figure-800.avif 800w',
-    width: 800,
-    height: 600,
-    alt: 'A diagram of the two planes',
-    focal: null,
-  },
-  'media-gallery-1': {
-    kind: 'image',
-    src: '/img/g1-400.avif',
-    srcset: '',
-    width: 400,
-    height: 400,
-    alt: 'Detail of a printed page',
-    focal: null,
-  },
-  'media-gallery-2': {
-    kind: 'image',
-    src: '/img/g2-400.avif',
-    srcset: '',
-    width: 400,
-    height: 400,
-    alt: 'Detail of a bound spine',
-    focal: null,
-  },
-  // Decorative: the author's name is right beside it in text.
-  'media-avatar': {
-    kind: 'image',
-    src: '/img/avatar-96.avif',
-    srcset: '',
-    width: 96,
-    height: 96,
-    alt: '',
-    focal: null,
-  },
-  'logo-acme': {
-    kind: 'image',
-    src: '/img/acme.svg',
-    srcset: '',
-    width: 160,
-    height: 40,
-    alt: '',
-    focal: null,
-  },
-  'logo-globex': {
-    kind: 'image',
-    src: '/img/globex.svg',
-    srcset: '',
-    width: 160,
-    height: 40,
-    alt: '',
-    focal: null,
-  },
-  'media-inline': {
-    kind: 'image',
-    src: '/img/inline-800.avif',
-    srcset: '',
-    width: 800,
-    height: 450,
-    alt: 'A screenshot of the admin',
-    focal: null,
-  },
+  'media-figure': source('/img/figure-1200.avif', 1200, 1200, 'Enamel mug on an oak table'),
+  'media-gallery-1': source('/img/g1-800.avif', 800, 800, 'Detail of a stitched strap'),
+  'media-gallery-2': source('/img/g2-800.avif', 800, 800, 'Detail of a knitted cuff'),
+  // Decorative: the name is right beside it in text.
+  'media-avatar': source('/img/avatar-96.avif', 96, 96, ''),
+  'logo-rossio': source('/img/rossio.png', 320, 80, ''),
+  'logo-marlowe': source('/img/marlowe.png', 320, 80, ''),
+  'media-inline': source('/img/inline-800.avif', 800, 533, 'The repair bench'),
+  'photo-jacket': source('/img/jacket-1024.avif', 1024, 1024, 'Olive field jacket'),
+  'photo-mug': source('/img/mug-1024.avif', 1024, 1024, 'Green enamel mug'),
+  'photo-wear': source('/img/wear-1024.avif', 1024, 1024, 'Charcoal beanie'),
 }
 
-const MISSING: ImageSource = {
-  kind: 'image',
-  src: '/img/missing.svg',
-  srcset: '',
-  width: 1,
-  height: 1,
-  alt: '',
-  focal: null,
-}
+const MISSING: ImageSource = source('/img/missing.png', 1, 1, '')
 
+/** Two plain entries: one with a title and an excerpt, one with neither. */
 export const ENTRIES: readonly ContentEntry[] = [
   {
     id: '0192f0c2-0000-7000-8000-000000000001',
     collection: 'article',
     locale: 'en',
     status: 'published',
-    title: 'Two planes, one site',
-    excerpt: 'Why the render process holds neither the secrets nor the database.',
-    publishedAt: '2026-02-11T09:00:00.000Z',
+    title: 'A letter from Manteigas',
+    excerpt: 'The mill still runs shuttle looms, and weaves for us twice a year.',
   },
   {
     id: '0192f0c2-0000-7000-8000-000000000002',
     collection: 'article',
     locale: 'en',
     status: 'published',
-    // No title field on purpose: `entryTitle` must fall back rather than
-    // render `undefined` into the page.
-    publishedAt: '2026-01-05T09:00:00.000Z',
+  },
+]
+
+/** Three products, one sold out and one priced with cents, all photographed. */
+export const PRODUCTS: readonly ContentEntry[] = [
+  {
+    id: 'p-jacket',
+    collection: 'product',
+    locale: 'en',
+    status: 'published',
+    name: 'Field jacket',
+    price: 245,
+    currency: 'EUR',
+    category: 'Wear',
+    inStock: true,
+    photo: 'photo-jacket',
+  },
+  {
+    id: 'p-mug',
+    collection: 'product',
+    locale: 'en',
+    status: 'published',
+    name: 'Enamel mug',
+    price: 24.5,
+    category: 'Kitchen',
+    inStock: false,
+    photo: 'photo-mug',
+  },
+  {
+    id: 'p-card',
+    collection: 'product',
+    locale: 'en',
+    status: 'published',
+    name: 'Leather card holder',
+    price: 55,
+    category: 'Carry',
+  },
+]
+
+/** Categories: pictures and no prices. */
+export const CATEGORIES: readonly ContentEntry[] = [
+  {
+    id: 'c-wear',
+    collection: 'category',
+    locale: 'en',
+    status: 'published',
+    name: 'Wear',
+    summary: 'Jackets, shirts and knitwear.',
+    photo: 'photo-wear',
+  },
+  {
+    id: 'c-kitchen',
+    collection: 'category',
+    locale: 'en',
+    status: 'published',
+    name: 'Kitchen',
+    photo: 'photo-mug',
   },
 ]
 
 export function makeContext(overrides: Partial<RenderContext> = {}): RenderContext {
   const base: RenderContext = {
     site: {
-      name: 'Cogenta demo',
-      url: 'https://demo.cogenta.dev',
+      name: 'Atelier Goods',
+      url: 'https://shop.example.org',
       locales: ['en', 'fr'],
       defaultLocale: 'en',
     },
     locale: 'en',
-    url: new URL('https://demo.cogenta.dev/en/articles/two-planes'),
+    url: new URL('https://shop.example.org/en/shop/field-jacket'),
     t: (key) => key,
     image: (media: MediaReference) => MEDIA[media] ?? MISSING,
     link: (target) => {
@@ -153,27 +141,35 @@ export function makeContext(overrides: Partial<RenderContext> = {}): RenderConte
   return { ...base, ...overrides }
 }
 
+function paragraph(key: string, text: string): RichTextDocument[number] {
+  return {
+    _key: key,
+    _type: 'block',
+    style: 'normal',
+    children: [{ _key: `${key}-s`, _type: 'span', text, marks: [] }],
+    markDefs: [],
+  }
+}
+
 const PROSE_BODY: RichTextDocument = [
   {
     _key: 'p1',
     _type: 'block',
     style: 'normal',
     children: [
-      { _key: 's1', _type: 'span', text: 'The render process holds ', marks: [] },
-      { _key: 's2', _type: 'span', text: 'no secrets', marks: ['strong'] },
-      { _key: 's3', _type: 'span', text: ' — see ', marks: [] },
-      { _key: 's4', _type: 'span', text: 'ADR-0004', marks: ['m1'] },
-      { _key: 's5', _type: 'span', text: ' & the <two planes> note.', marks: [] },
+      { _key: 's1', _type: 'span', text: 'Every piece is ', marks: [] },
+      { _key: 's2', _type: 'span', text: 'mended at the shop', marks: ['strong'] },
+      { _key: 's3', _type: 'span', text: ', see ', marks: [] },
+      { _key: 's4', _type: 'span', text: 'repairs', marks: ['m1'] },
+      { _key: 's5', _type: 'span', text: ' & the <bench> note.', marks: [] },
     ],
-    markDefs: [
-      { _key: 'm1', _type: 'link', href: 'https://example.org/adr-0004', rel: 'external' },
-    ],
+    markDefs: [{ _key: 'm1', _type: 'link', href: 'https://example.org/repairs', rel: 'external' }],
   },
   {
     _key: 'h1',
     _type: 'block',
     style: 'h2',
-    children: [{ _key: 's6', _type: 'span', text: 'What the theme sees', marks: [] }],
+    children: [{ _key: 's6', _type: 'span', text: 'What we mend', marks: [] }],
     markDefs: [],
   },
   {
@@ -182,7 +178,7 @@ const PROSE_BODY: RichTextDocument = [
     style: 'normal',
     listItem: 'bullet',
     level: 1,
-    children: [{ _key: 's7', _type: 'span', text: 'The render context', marks: [] }],
+    children: [{ _key: 's7', _type: 'span', text: 'Seams and buttons', marks: [] }],
     markDefs: [],
   },
   {
@@ -191,7 +187,7 @@ const PROSE_BODY: RichTextDocument = [
     style: 'normal',
     listItem: 'bullet',
     level: 2,
-    children: [{ _key: 's8', _type: 'span', text: 'and nothing else', marks: [] }],
+    children: [{ _key: 's8', _type: 'span', text: 'on anything we sold', marks: [] }],
     markDefs: [],
   },
   {
@@ -200,82 +196,35 @@ const PROSE_BODY: RichTextDocument = [
     style: 'normal',
     listItem: 'bullet',
     level: 1,
-    children: [{ _key: 's9', _type: 'span', text: 'A read-only content client', marks: ['m2'] }],
-    markDefs: [{ _key: 'm2', _type: 'internalLink', collection: 'page', id: 'contracts' }],
+    children: [{ _key: 's9', _type: 'span', text: 'Straps and hooks', marks: ['m2'] }],
+    markDefs: [{ _key: 'm2', _type: 'internalLink', collection: 'page', id: 'repairs' }],
   },
   {
     _key: 'q1',
     _type: 'block',
     style: 'blockquote',
-    children: [{ _key: 's10', _type: 'span', text: 'A site that runs itself.', marks: [] }],
+    children: [{ _key: 's10', _type: 'span', text: 'Made to be mended.', marks: [] }],
     markDefs: [],
   },
-  { _key: 'm3', _type: 'media', id: 'media-inline', caption: 'The admin, mid-review' },
-]
-
-const FAQ_ANSWER: RichTextDocument = [
-  {
-    _key: 'a1',
-    _type: 'block',
-    style: 'normal',
-    children: [{ _key: 'as1', _type: 'span', text: 'Yes, and without a build.', marks: [] }],
-    markDefs: [],
-  },
-]
-
-const TESTIMONIAL_QUOTE: RichTextDocument = [
-  {
-    _key: 't1',
-    _type: 'block',
-    style: 'normal',
-    children: [
-      {
-        _key: 'ts1',
-        _type: 'span',
-        text: 'The fit is exactly what the size guide promised — first time that has ever happened.',
-        marks: [],
-      },
-    ],
-    markDefs: [],
-  },
-]
-
-const ACCORDION_ANSWER: RichTextDocument = [
-  {
-    _key: 'ac1',
-    _type: 'block',
-    style: 'normal',
-    children: [
-      {
-        _key: 'acs1',
-        _type: 'span',
-        text: 'Orders over $75 ship free within 3–5 days.',
-        marks: [],
-      },
-    ],
-    markDefs: [],
-  },
+  { _key: 'm3', _type: 'media', id: 'media-inline', caption: 'The bench, mid-repair' },
 ]
 
 const VERSION = '1.0.0'
 
-/**
- * One valid, representative block per vocabulary entry.
- *
- * Mapped over `_type` rather than typed as `Record<string, VocabularyBlock>`:
- * `BLOCKS.embed` must arrive at `renderEmbed` as an `EmbedBlock`, not as the
- * whole union, or the tests stop checking the types the renderers claim.
- */
 type BlockOfType<T extends VocabularyBlock['_type']> = Extract<VocabularyBlock, { _type: T }>
 
+/**
+ * One valid, representative block per vocabulary entry, mapped over `_type`
+ * so `BLOCKS.embed` arrives at `renderEmbed` as an `EmbedBlock`.
+ */
 export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> } = {
   hero: {
     _key: 'b-hero',
     _type: 'hero',
     _version: VERSION,
-    eyebrow: 'New season',
-    title: 'A storefront that runs itself',
-    subtitle: 'The catalogue, the copy and the checkout all live on one CMS.',
+    eyebrow: 'Spring batch',
+    title: 'Things for every day, made to last',
+    subtitle: 'Clothing, bags and kitchenware from eleven small workshops.',
     media: 'media-hero',
     actions: [
       {
@@ -283,7 +232,7 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
         target: { collection: 'page', id: 'shop' },
         emphasis: 'primary',
       },
-      { label: 'Source', target: { href: 'https://github.com/cogenta-cms/cogenta' } },
+      { label: 'Our workshops', target: { href: 'https://example.org/workshops' } },
     ],
   },
   prose: { _key: 'b-prose', _type: 'prose', _version: VERSION, body: PROSE_BODY },
@@ -292,34 +241,34 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _type: 'mediaFigure',
     _version: VERSION,
     media: 'media-figure',
-    caption: 'The two planes',
-    credit: 'Cogenta',
-    ratio: '16:9',
-    align: 'wide',
+    caption: 'We opened in 2014 as a repair bench.',
+    credit: 'Enamel mug, made in Olkusz',
+    ratio: '1:1',
+    align: 'start',
   },
   featureGrid: {
     _key: 'b-features',
     _type: 'featureGrid',
     _version: VERSION,
-    title: 'Shop by category',
+    title: 'What we promise',
     items: [
       {
         _key: 'f1',
-        icon: 'shirt',
-        title: 'Apparel',
-        text: 'Everyday pieces, cut to last.',
-        link: { collection: 'page', id: 'apparel' },
+        icon: 'truck',
+        title: 'Tracked delivery',
+        text: 'Two to five working days across the EU.',
+        link: { collection: 'page', id: 'delivery' },
       },
-      { _key: 'f2', title: 'Accessories', text: 'Small things worth carrying.' },
+      { _key: 'f2', title: 'Repairs', text: 'For as long as we sell the piece.' },
     ],
   },
   cta: {
     _key: 'b-cta',
     _type: 'cta',
     _version: VERSION,
-    title: 'The new season is live',
-    text: 'One drop, no restock.',
-    actions: [{ label: 'Shop now', target: { href: '/shop' }, emphasis: 'primary' }],
+    title: 'Letters from the workshop',
+    text: 'Four letters a year about new batches and repairs.',
+    actions: [{ label: 'Ask for the letters', target: { href: 'mailto:letters@example.org' } }],
   },
   gallery: {
     _key: 'b-gallery',
@@ -335,46 +284,52 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-quote',
     _type: 'quote',
     _version: VERSION,
-    text: 'The fit is exactly what the size guide promised — first time that has ever happened.',
-    author: 'A. Reviewer',
-    role: 'Verified buyer',
+    text: 'We only sell what our workshops make to be mended.',
+    author: 'Marta Leal',
+    role: 'Founder',
     avatar: 'media-avatar',
   },
   faq: {
     _key: 'b-faq',
     _type: 'faq',
     _version: VERSION,
-    title: 'Shipping & returns',
-    items: [{ _key: 'q1', question: 'How long does delivery take?', answer: FAQ_ANSWER }],
+    title: 'Before you order',
+    items: [
+      {
+        _key: 'q1',
+        question: 'How long does delivery take?',
+        answer: [paragraph('a1', 'Two to three working days in Portugal.')],
+      },
+    ],
   },
   stats: {
     _key: 'b-stats',
     _type: 'stats',
     _version: VERSION,
-    title: 'By the numbers',
+    title: 'The shop in numbers',
     items: [
-      { _key: 's1', value: '48', unit: 'k+', label: 'Orders shipped' },
-      { _key: 's2', value: '4.8', unit: '/5', label: 'Average rating' },
+      { _key: 's1', value: '1,380', label: 'repairs last year' },
+      { _key: 's2', value: '62', unit: '%', label: 'done free of charge' },
     ],
   },
   logos: {
     _key: 'b-logos',
     _type: 'logos',
     _version: VERSION,
-    title: 'As seen in',
+    title: 'Stocked by',
     items: [
-      { _key: 'l1', media: 'logo-acme', name: 'Acme', url: 'https://acme.example' },
-      { _key: 'l2', media: 'logo-globex', name: 'Globex' },
+      { _key: 'l1', media: 'logo-rossio', name: 'Rossio Hardware', url: 'https://rossio.example' },
+      { _key: 'l2', media: 'logo-marlowe', name: 'Marlowe & Daughters' },
     ],
   },
   collectionList: {
     _key: 'b-collection',
     _type: 'collectionList',
     _version: VERSION,
-    title: 'New in',
-    collection: 'article',
-    sort: { field: 'publishedAt', direction: 'desc' },
-    limit: 5,
+    title: 'New this season',
+    collection: 'product',
+    sort: { field: 'createdAt', direction: 'desc' },
+    limit: 4,
     layout: 'grid',
   },
   embed: {
@@ -390,34 +345,30 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-testimonial',
     _type: 'testimonial',
     _version: VERSION,
-    quote: TESTIMONIAL_QUOTE,
-    attribution: { name: 'A. Reviewer', role: 'Verified buyer', avatar: 'media-avatar' },
+    quote: [paragraph('t1', 'It came home three weeks later with both pockets mended.')],
+    attribution: { name: 'Helena Duarte', role: 'Field jacket, bought in 2016' },
   },
   pricingTable: {
     _key: 'b-pricing',
     _type: 'pricingTable',
     _version: VERSION,
-    title: 'Choose your plan',
+    title: 'Repair plans',
     tiers: [
       {
-        _key: 'tier-standard',
-        name: 'Standard',
-        price: '$12',
-        interval: '/mo',
-        features: ['Free shipping over $75', 'Standard returns'],
-        action: { label: 'Choose Standard', target: { href: '/shop/standard' } },
+        _key: 'tier-single',
+        name: 'Single repair',
+        price: '€15',
+        interval: 'per piece',
+        features: ['Seams and buttons', 'Two weeks'],
+        action: { label: 'Send a piece', target: { href: '/repairs' } },
       },
       {
-        _key: 'tier-plus',
-        name: 'Plus',
-        price: '$24',
-        interval: '/mo',
-        features: ['Free shipping, no minimum', 'Extended returns', 'Early access drops'],
-        action: {
-          label: 'Choose Plus',
-          target: { href: '/shop/plus' },
-          emphasis: 'primary',
-        },
+        _key: 'tier-year',
+        name: 'Yearly',
+        price: '€60',
+        interval: 'per year',
+        features: ['Unlimited repairs', 'Collection from home'],
+        action: { label: 'Join', target: { href: '/repairs/yearly' }, emphasis: 'primary' },
         highlighted: true,
       },
     ],
@@ -426,27 +377,33 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-accordion',
     _type: 'accordion',
     _version: VERSION,
-    title: 'Shipping details',
-    items: [{ _key: 'acc1', question: 'What is the delivery window?', answer: ACCORDION_ANSWER }],
+    title: 'Care',
+    items: [
+      {
+        _key: 'acc1',
+        question: 'Washing',
+        answer: [paragraph('ac1', 'Wash at 30 °C inside out.')],
+      },
+    ],
   },
   statCounter: {
     _key: 'b-counters',
     _type: 'statCounter',
     _version: VERSION,
-    title: 'Trusted at scale',
+    title: 'Last year at the bench',
     stats: [
-      { _key: 'sc1', value: '48k+', label: 'Orders shipped' },
-      { _key: 'sc2', value: '4.8/5', label: 'Average rating' },
+      { _key: 'sc1', value: '1,380', label: 'repairs completed' },
+      { _key: 'sc2', value: '16', label: 'days on average' },
     ],
   },
   logoStrip: {
     _key: 'b-logostrip',
     _type: 'logoStrip',
     _version: VERSION,
-    caption: 'As seen in',
+    caption: 'Also sold by',
     logos: [
-      { _key: 'ls1', media: 'logo-acme' },
-      { _key: 'ls2', media: 'logo-globex' },
+      { _key: 'ls1', media: 'logo-rossio' },
+      { _key: 'ls2', media: 'logo-marlowe' },
     ],
   },
 }

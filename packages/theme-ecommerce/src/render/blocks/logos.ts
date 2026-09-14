@@ -1,55 +1,44 @@
-import type { LogoItem, LogosBlock } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  image,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import type { LogosBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * The "as seen in" / stockist strip — a horizontal, evenly spaced band with a
- * hairline separator between marks, the shape a press or partner strip takes
- * on a retail site. Contract B says the organisation's name **is** the
- * accessible name of the link, so the logo image carries it as alt text when
- * the media entity itself has none, and no visually hidden duplicate is
- * added.
+ * Stockists, makers, publications: their marks along one ruled row, as
+ * many as there are, each set small and in its own colours. A mark drawn for paper sits on a pale plate
+ * in the dark scheme so it never disappears.
+ *
+ * The organisation's name is the mark's accessible name when the media
+ * library has no alt text for it, and the link's own name when it links out.
  */
-function renderItem(item: LogoItem, ctx: RenderContext): HtmlElement {
-  const logo = image(ctx, item.media, {
-    className: 'ce-logo__image',
-    altFrom: item.name,
-    variant: { fit: 'contain' },
-  })
-  return h(
-    'li',
-    { class: 'ce-logo' },
-    item.url === undefined
-      ? logo
-      : h(
-          'a',
-          { class: 'ce-logo__link', href: ctx.link(item.url), rel: 'noopener noreferrer' },
-          logo,
-        ),
-  )
-}
-
 export function renderLogos(block: LogosBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'ce-block ce-logos', 'data-block': 'logos' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('logos') ?? 'h2',
-          { class: 'ce-logos__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'logos',
+    'ce-marks',
+    {},
+    'div',
+    sectionHead('logos', block.title),
     h(
       'ul',
-      { class: 'ce-logos__items' },
-      block.items.map((item) => renderItem(item, ctx)),
+      { class: 'ce-marks__items' },
+      block.items.map((item) => {
+        const mark = image(ctx, item.media, {
+          className: 'ce-marks__image',
+          altFrom: item.name,
+          sizes: '10rem',
+        })
+        return h(
+          'li',
+          { class: 'ce-marks__item' },
+          item.url === undefined
+            ? h('span', { class: 'ce-marks__plate' }, mark)
+            : h(
+                'a',
+                { class: 'ce-marks__plate', href: item.url, rel: 'noopener noreferrer' },
+                mark,
+              ),
+        )
+      }),
     ),
   )
 }

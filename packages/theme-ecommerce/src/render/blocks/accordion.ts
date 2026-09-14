@@ -1,54 +1,27 @@
-import type { AccordionBlock, AccordionItem } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-  renderRichText,
-} from '@cogenta/theme-kit'
+import type { AccordionBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
+import { faqItem } from './faq.js'
 
 /**
- * Product-detail specs, materials, shipping terms — the accordion covers a
- * different editorial intent than `faq` even though the item shape
- * coincides (RFC 0001's own reasoning). It reuses the same zero-JS
- * `<details>`/`<summary>` mechanism `faq.ts` uses, but under its own class
- * names so the two can diverge visually later without one depending on the
- * other.
+ * Collapsible notes: the materials of a piece, how it is made, how to look
+ * after it. The same `<details>` rows as `faq`, drawn in the same register,
+ * but set narrower (columns four to ten) because an accordion usually sits
+ * under a product or inside running text rather than as a section of its own.
  */
-function renderItem(item: AccordionItem, ctx: RenderContext): HtmlElement {
-  return h(
-    'li',
-    { class: 'ce-accordion__item' },
-    h(
-      'details',
-      { class: 'ce-accordion__details' },
-      h(
-        'summary',
-        { class: 'ce-accordion__question' },
-        h('span', { class: 'ce-accordion__question-text' }, item.question),
-        h('span', { class: 'ce-accordion__marker', 'aria-hidden': 'true' }),
-      ),
-      h('div', { class: 'ce-accordion__answer' }, renderRichText(ctx, item.answer)),
-    ),
-  )
-}
-
 export function renderAccordion(block: AccordionBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  const titled = block.title !== undefined
+  return section(
     'section',
-    { class: 'ce-block ce-accordion', 'data-block': 'accordion' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('accordion') ?? 'h2',
-          { class: 'ce-accordion__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'accordion',
+    'ce-answers',
+    { 'data-titled': String(titled), 'data-variant': 'notes' },
+    'div',
+    sectionHead('accordion', block.title),
     h(
       'ul',
-      { class: 'ce-accordion__items' },
-      block.items.map((item) => renderItem(item, ctx)),
+      { class: 'ce-answers__items' },
+      block.items.map((item) => faqItem(item, ctx, 'accordion', titled)),
     ),
   )
 }

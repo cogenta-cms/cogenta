@@ -1,42 +1,35 @@
 import type { TestimonialBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext, renderRichText } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * A testimonial wall card, distinct from `quote`'s centred editorial
- * pull-quote: this is the shape a storefront reaches for when it wants many
- * of these side by side (a grid of social proof), so it is styled as one
- * more shoppable card rather than a full-bleed statement.
- *
- * `attribution` is one grouped field, not three top-level ones (unlike
- * `quote`'s own `author`/`role`/`avatar`) — its members are nested data, not
- * a block-level plain-text field, so none of them carry `data-field`; only a
- * field the block schema itself declares at the top level gets one.
- *
- * The avatar is decorative, same convention as `quote.ts`'s own avatar: the
- * name sits right beside it in text, so no `altFrom` is passed.
+ * A customer's own words, set like a letter: the text large and light on
+ * eight columns, the name and what they bought beneath it at the caption
+ * size. The layout does not depend on a portrait; when one is there it is a
+ * small square beside the name.
  */
 export function renderTestimonial(block: TestimonialBlock, ctx: RenderContext): HtmlElement {
   const { attribution } = block
-  return h(
+  return section(
+    'div',
+    'testimonial',
+    'ce-letter',
+    {},
     'figure',
-    { class: 'ce-block ce-testimonial', 'data-block': 'testimonial' },
-    h('blockquote', { class: 'ce-testimonial__quote' }, renderRichText(ctx, block.quote)),
+    h('blockquote', { class: 'ce-letter__quote' }, renderRichText(ctx, block.quote)),
     h(
       'figcaption',
-      { class: 'ce-testimonial__attribution' },
+      { class: 'ce-letter__attribution' },
       attribution.avatar === undefined
         ? null
-        : image(ctx, attribution.avatar, {
-            className: 'ce-testimonial__avatar',
-            variant: { width: 96, height: 96, fit: 'cover' },
-          }),
+        : image(ctx, attribution.avatar, { className: 'ce-letter__avatar', sizes: '3.5rem' }),
       h(
         'span',
-        { class: 'ce-testimonial__who' },
-        h('span', { class: 'ce-testimonial__name' }, attribution.name),
+        { class: 'ce-letter__who' },
+        h('span', { class: 'ce-letter__name' }, attribution.name),
         attribution.role === undefined
           ? null
-          : h('span', { class: 'ce-testimonial__role' }, attribution.role),
+          : h('span', { class: 'ce-letter__role' }, attribution.role),
       ),
     ),
   )

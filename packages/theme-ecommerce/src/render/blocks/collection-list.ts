@@ -1,6 +1,6 @@
 import type { CollectionListBlock } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
+  buildCollectionListQuery,
   type ContentEntry,
   entryExcerpt,
   entryHref,
@@ -11,150 +11,202 @@ import {
   h,
   heading,
   nestedHeadingTag,
+  type QueryRequest,
   type RenderContext,
   renderImageSource,
 } from '@cogenta/theme-kit'
+import { currencyOf, formatPrice, priceOf, stockOf } from '../goods.js'
+import { section, sectionHead } from '../layout.js'
+import { shopString } from '../strings.js'
 
 /**
- * The one block of the seventeen that reads data at render time — contract B
- * marks it `runtime: 'server'` for that reason, and this file never performs
- * the read itself: `query` (theme-kit's own `buildCollectionListQuery`, pure
- * data derived from the block's own fields) is what the caller awaits before
- * this function is ever called, so this stays a pure function of the entries
- * it is handed.
+ * A list of entries, read by what the entries are rather than by a setting:
  *
- * This is the storefront's product grid — the block every other card style
- * in the theme is built to match: a square image, the entry's title reading
- * as a product name, a formatted price when the collection has one, and two
- * shopping-specific signals (`price`/`inStock`/`category` are raw contract-A
- * data, read by field-name convention the same way `entryImage` already
- * reads `photo`/`cover`/…, never a contract this block requires): an
- * "Out of stock" badge over the image and a category chip above the title.
- * A collection with none of those fields — an article, a project — still
- * renders correctly: no chip, no badge, and the excerpt takes the price
- * slot, so this card is genuinely usable for any collection, not only a
- * `product`-shaped one.
+ * - **Goods.** Every entry has a price: a product grid. The photograph at
+ *   4:5 on the stone ground, the name and the price on one line under it in
+ *   tabular figures, and "Sold out" as a quiet line of text when the entry
+ *   says so. No badge, no button, no card.
+ * - **Tiles.** Entries with a picture and no price (the shop's categories, a
+ *   journal): square photographs with the name under them, as an arrow link.
+ * - **Index.** Anything else: ruled rows of titles and their summaries.
+ *
+ * Contract B's `layout` then places them: `grid` (four across on a wide
+ * screen, two on a phone), `list` (ruled rows, a small photograph at the
+ * start of a product's row), or `carousel` (a row that scrolls sideways with
+ * native snapping, a focusable and labelled region).
+ *
+ * The page an entry is shown on is never listed on itself: a "more from this
+ * category" list on a product page skips the product above it.
+ *
+ * Each picture repeats the link of its title, so it is taken out of the tab
+ * order and hidden from assistive technology: one link per entry is
+ * announced, the title.
  */
-export { buildCollectionListQuery as query } from '@cogenta/theme-kit'
 
-/**
- * `Intl.NumberFormat`, in the page's own locale. EUR is the demo blueprint's
- * own default currency (`create-cogenta`'s `store` blueprint seeds a plain
- * number, not a currency code — contract B's `collectionList` has no field
- * for one, and neither does the `product` collection this ships against) —
- * a real storefront with a different currency edits this one constant, or a
- * future contract-A currency field would replace it outright.
- */
-const CURRENCY = 'EUR'
+type Shape = 'goods' | 'tiles' | 'index'
 
-function entryPrice(entry: ContentEntry, ctx: RenderContext): string | undefined {
-  const value = entry.price
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
-  try {
-    return new Intl.NumberFormat(ctx.locale, { style: 'currency', currency: CURRENCY }).format(
-      value,
-    )
-  } catch {
-    // An `Intl`-unsupported locale tag is not this card's problem to solve —
-    // no price is a truer answer than a thrown render.
-    return undefined
-  }
+function shapeOf(entries: readonly ContentEntry[], ctx: RenderContext): Shape {
+  if (entries.every((entry) => priceOf(entry.price) !== undefined)) return 'goods'
+  if (entries.every((entry) => entryImage(entry, ctx) !== undefined)) return 'tiles'
+  return 'index'
 }
 
-function entryCategory(entry: ContentEntry): string | undefined {
-  const value = entry.category
-  return typeof value === 'string' && value.trim() !== '' ? value : undefined
+function mediaLink(
+  entry: ContentEntry,
+  ctx: RenderContext,
+  className: string,
+  sizes: string,
+): HtmlElement | null {
+  const source = entryImage(entry, ctx)
+  if (source === undefined) return null
+  return h(
+    'a',
+    {
+      class: `${className}__media`,
+      href: entryHref(entry, ctx),
+      tabindex: '-1',
+      'aria-hidden': 'true',
+    },
+    renderImageSource(source, { className: `${className}__image`, sizes }),
+  )
 }
 
-/** `undefined`/anything but the literal `false` reads as "in stock, or stock is not tracked" — never a guess in the other direction. */
-function entryOutOfStock(entry: ContentEntry): boolean {
-  return entry.inStock === false
+function goodsItem(
+  entry: ContentEntry,
+  ctx: RenderContext,
+  tag: HeadingTag,
+  layout: CollectionListBlock['layout'],
+): HtmlElement {
+  const price = priceOf(entry.price) as number
+  const stock = stockOf(entry.inStock)
+  return h(
+    'li',
+    { class: 'ce-goods__item', 'data-stock': stock },
+    mediaLink(
+      entry,
+      ctx,
+      'ce-goods',
+      layout === 'list' ? '6rem' : '(min-width: 64rem) 22vw, (min-width: 40rem) 30vw, 50vw',
+    ),
+    h(
+      'div',
+      { class: 'ce-goods__text' },
+      heading(
+        tag,
+        { class: 'ce-goods__name' },
+        h('a', { class: 'ce-goods__link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
+      ),
+      h(
+        'p',
+        { class: 'ce-goods__price' },
+        h(
+          'data',
+          { value: String(price) },
+          formatPrice(price, currencyOf(entry.currency), ctx.locale),
+        ),
+      ),
+      stock === 'out'
+        ? h('p', { class: 'ce-goods__stock' }, shopString(ctx.locale, 'soldOut'))
+        : null,
+    ),
+  )
 }
 
-function renderEntry(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const cover = entryImage(entry, ctx)
-  const price = entryPrice(entry, ctx)
-  const category = entryCategory(entry)
-  const outOfStock = entryOutOfStock(entry)
+function tileItem(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
   const excerpt = entryExcerpt(entry)
   return h(
     'li',
-    { class: 'ce-entry' },
-    h(
-      'article',
-      { class: 'ce-entry__card' },
-      cover === undefined
-        ? null
-        : h(
-            'div',
-            { class: 'ce-entry__media' },
-            renderImageSource(cover, { className: 'ce-entry__image', loading: 'lazy' }),
-            // Hardcoded, not `ctx.t(...)`: the theme translator's key set is
-            // a fixed contract-D vocabulary this theme cannot extend on its
-            // own, and every blueprint this theme ships against writes its
-            // demo copy in English anyway.
-            outOfStock ? h('span', { class: 'ce-entry__stock' }, 'Out of stock') : null,
-          ),
-      h(
-        'div',
-        { class: 'ce-entry__body' },
-        category === undefined ? null : h('span', { class: 'ce-entry__category' }, category),
-        heading(
-          tag,
-          { class: 'ce-entry__title' },
-          h('a', { class: 'ce-entry__link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
-        ),
-        price !== undefined
-          ? h('p', { class: 'ce-entry__price' }, price)
-          : excerpt === undefined
-            ? null
-            : h('p', { class: 'ce-entry__excerpt' }, excerpt),
-      ),
+    { class: 'ce-tiles__item' },
+    mediaLink(entry, ctx, 'ce-tiles', '(min-width: 64rem) 22vw, 50vw'),
+    heading(
+      tag,
+      { class: 'ce-tiles__name' },
+      h('a', { class: 'ce-arrow-link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
     ),
+    excerpt === undefined ? null : h('p', { class: 'ce-tiles__text' }, excerpt),
   )
+}
+
+function indexItem(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
+  const excerpt = entryExcerpt(entry)
+  return h(
+    'li',
+    { class: 'ce-index__item' },
+    heading(
+      tag,
+      { class: 'ce-index__name' },
+      h('a', { class: 'ce-index__link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
+    ),
+    excerpt === undefined ? null : h('p', { class: 'ce-index__text' }, excerpt),
+  )
+}
+
+/** The entries that are not the page being rendered. */
+function othersThanThisPage(
+  entries: readonly ContentEntry[],
+  ctx: RenderContext,
+): readonly ContentEntry[] {
+  return entries.filter((entry) => entryHref(entry, ctx) !== ctx.url.pathname)
 }
 
 export function renderCollectionList(
   block: CollectionListBlock,
   ctx: RenderContext,
-  entries: readonly ContentEntry[],
+  fetched: readonly ContentEntry[],
 ): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const entryTag = nestedHeadingTag('collectionList', hasTitle)
-  const items =
-    entries.length === 0
-      ? h('p', { class: 'ce-collection__empty' }, ctx.t('collection.empty'))
-      : h(
-          'ul',
-          { class: 'ce-collection__items' },
-          entries.map((entry) => renderEntry(entry, ctx, entryTag)),
-        )
+  const titled = block.title !== undefined
+  const shown = othersThanThisPage(fetched, ctx)
+  const tag = nestedHeadingTag('collectionList', titled)
 
-  return h(
+  if (shown.length === 0) {
+    return section(
+      'section',
+      'collectionList',
+      'ce-list',
+      { 'data-layout': block.layout, 'data-shape': 'empty' },
+      'div',
+      sectionHead('collectionList', block.title),
+      h('p', { class: 'ce-empty' }, ctx.t('collection.empty')),
+    )
+  }
+
+  const shape = shapeOf(shown, ctx)
+  const items = shown.map((entry) =>
+    shape === 'goods'
+      ? goodsItem(entry, ctx, tag, block.layout)
+      : shape === 'tiles'
+        ? tileItem(entry, ctx, tag)
+        : indexItem(entry, ctx, tag),
+  )
+  const list = h(
+    'ul',
+    { class: `ce-list__items ce-${shape}`, 'data-count': String(Math.min(shown.length, 4)) },
+    items,
+  )
+
+  return section(
     'section',
-    {
-      class: 'ce-block ce-collection',
-      'data-block': 'collectionList',
-      'data-layout': block.layout,
-    },
-    hasTitle
-      ? heading(
-          blockHeadingTag('collectionList') ?? 'h2',
-          { class: 'ce-collection__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'collectionList',
+    'ce-list',
+    { 'data-layout': block.layout, 'data-shape': shape },
+    'div',
+    sectionHead('collectionList', block.title),
     block.layout === 'carousel'
       ? h(
           'div',
           {
-            class: 'ce-collection__viewport',
+            class: 'ce-list__viewport',
             role: 'region',
             'aria-label': block.title ?? ctx.t('collection.carousel'),
             tabindex: '0',
           },
-          items,
+          list,
         )
-      : items,
+      : list,
   )
+}
+
+/** The query this block needs, fetched by the host before any markup is built. */
+export function query(block: CollectionListBlock): QueryRequest {
+  return buildCollectionListQuery(block)
 }

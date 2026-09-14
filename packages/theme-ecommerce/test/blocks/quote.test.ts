@@ -4,61 +4,44 @@ import { renderQuote } from '../../src/render/blocks/quote.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderQuote(BLOCKS.quote, ctx))
 
 describe('quote', () => {
   it('renders to stable markup', () => {
-    expect(serialize(renderQuote(BLOCKS.quote, ctx))).toMatchSnapshot()
+    expect(html).toMatchSnapshot()
   })
 
-  it('puts the attribution outside the blockquote, never inside it', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    const quoteEnd = html.indexOf('</blockquote>')
-    const authorIndex = html.indexOf('A. Reviewer')
-    expect(quoteEnd).toBeGreaterThan(0)
-    expect(authorIndex).toBeGreaterThan(quoteEnd)
+  it('is a figure holding a blockquote and its attribution', () => {
+    expect(html).toContain('<figure class="ce-container ce-quote__inner"><blockquote')
+    expect(html).toContain('<figcaption class="ce-quote__attribution">')
   })
 
-  it('marks the quoted text as an addressable field', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toContain('data-field="text"')
+  it('writes no quotation marks into the text: the stylesheet draws them', () => {
+    expect(html).toContain(
+      '<p class="ce-quote__text" data-field="text">We only sell what our workshops make to be mended.</p>',
+    )
   })
 
-  it('renders no figcaption when the block carries no attribution', () => {
-    const bare = {
-      _key: 'q-bare',
-      _type: 'quote' as const,
-      _version: '1.0.0',
-      text: 'A quote with no attribution.',
-    }
-    const html = serialize(renderQuote(bare, ctx))
-    expect(html).not.toContain('<figcaption')
+  it('keeps an empty alt on a portrait beside a written name', () => {
+    expect(html).toMatch(/<img class="ce-quote__avatar"[^>]*alt=""/)
   })
 
-  it('keeps an empty alt on the decorative avatar rather than inventing one', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toContain('class="ce-quote__avatar"')
-    expect(html).toMatch(/<img[^>]*class="ce-quote__avatar"[^>]*alt=""/)
+  it('renders the name and the role as separate addressable fields', () => {
+    expect(html).toContain('data-field="author">Marta Leal<')
+    expect(html).toContain('data-field="role">Founder<')
   })
 
-  it('omits the avatar image when the field is absent', () => {
+  it('renders no attribution when there is neither author nor role', () => {
+    const { author: _author, role: _role, ...rest } = BLOCKS.quote
+    expect(serialize(renderQuote(rest, ctx))).not.toContain('figcaption')
+  })
+
+  it('renders no portrait when there is none', () => {
     const { avatar: _avatar, ...rest } = BLOCKS.quote
-    const html = serialize(renderQuote(rest, ctx))
-    expect(html).not.toContain('ce-quote__avatar')
+    expect(serialize(renderQuote(rest, ctx))).not.toContain('<img')
   })
 
-  it('omits the role span when the field is absent', () => {
-    const { role: _role, ...rest } = BLOCKS.quote
-    const html = serialize(renderQuote(rest, ctx))
-    expect(html).not.toContain('ce-quote__role')
-  })
-
-  it('escapes text arriving in the quoted passage', () => {
-    const html = serialize(renderQuote({ ...BLOCKS.quote, text: 'Best <em>ever</em>.' }, ctx))
-    expect(html).toContain('Best &lt;em&gt;ever&lt;/em&gt;.')
-  })
-
-  it('is stamped as its own block for CSS targeting', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toContain('data-block="quote"')
+  it('carries no heading: a quotation is not a section', () => {
+    expect(html).not.toMatch(/<h[1-6]/)
   })
 })

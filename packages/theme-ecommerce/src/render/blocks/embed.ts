@@ -1,22 +1,18 @@
 import type { EmbedBlock } from '@cogenta/blocks'
 import { aspectRatio, type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * Nothing here contacts a third party before the visitor has consented.
+ * A film or a recording from a third party, eight columns wide, at the
+ * block's ratio.
  *
- * When `consentRequired` is true the block renders a self-contained card and
- * an outbound link — no `<iframe>`, no `<script>`, no preconnect, no poster
- * image fetched from the provider. An embed that "only" loads a thumbnail has
- * already handed the visitor's IP address and a cookie to the provider, which
- * is the exact transfer consent was supposed to gate.
- *
- * The theme ships no consent *button*, because it ships no JavaScript:
- * granting consent is a site-wide decision that belongs to the consent layer,
- * not to a block. Until that layer exists, the card is the honest rendering —
- * it says what would be loaded and lets the visitor go there deliberately.
+ * Nothing here contacts a third party before the visitor consents: when
+ * `consentRequired` is set, or the provider has no cookie-free frame, a
+ * notice takes the frame's place and keeps its shape (a hairline frame, a
+ * small label, one sentence and one arrow link). No preconnect, no poster
+ * fetched from the provider. The theme ships no consent button because it
+ * ships no script; that decision belongs to a site-wide consent layer.
  */
-
-/** `null` means "this provider has no embeddable frame we trust". */
 function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string | null {
   const url = URL.parse(rawUrl)
   if (url === null) return null
@@ -47,21 +43,21 @@ function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string |
       return `https://w.soundcloud.com/player/?url=${encodeURIComponent(rawUrl)}`
     default:
       // bluesky, mastodon, other: a post embed is a script tag, which this
-      // theme does not load. The link card is the rendering.
+      // theme does not load. The notice is the rendering.
       return null
   }
 }
 
-function consentCard(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElement {
+function notice(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElement {
   return h(
     'div',
-    { class: 'ce-embed__placeholder' },
-    h('span', { class: 'ce-embed__badge' }, block.provider),
-    h('p', { class: 'ce-embed__notice' }, reason),
+    { class: 'ce-embed__notice' },
+    h('p', { class: 'ce-embed__label' }, ctx.t('embed.label')),
+    h('p', { class: 'ce-embed__reason' }, reason),
     h(
       'a',
       {
-        class: 'ce-embed__link',
+        class: 'ce-arrow-link ce-embed__link',
         href: ctx.link(block.url),
         rel: 'noopener noreferrer nofollow',
       },
@@ -72,39 +68,41 @@ function consentCard(block: EmbedBlock, ctx: RenderContext, reason: string): Htm
 
 export function renderEmbed(block: EmbedBlock, ctx: RenderContext): HtmlElement {
   const source = block.consentRequired ? null : frameSource(block.provider, block.url)
-  // Video providers default to 16:9 unless the editor framed them otherwise;
-  // without a ratio the frame would collapse and shift the layout as it
-  // loads.
+  // Without a ratio the frame would collapse and shift the layout as it loads.
   const ratio = aspectRatio(block.ratio) ?? '16 / 9'
 
-  return h(
+  return section(
     'div',
+    'embed',
+    'ce-embed',
     {
-      class: 'ce-block ce-embed',
-      'data-block': 'embed',
       'data-provider': block.provider,
       'data-consent': block.consentRequired ? 'required' : 'not-required',
-      style: `--ce-ratio:${ratio}`,
     },
-    source === null
-      ? consentCard(
-          block,
-          ctx,
-          block.consentRequired
-            ? ctx.t('embed.consentRequired', { provider: block.provider })
-            : ctx.t('embed.unsupported', { provider: block.provider }),
-        )
-      : h('iframe', {
-          class: 'ce-embed__frame',
-          src: source,
-          // An iframe with no accessible name is announced as "frame" and
-          // nothing else — WCAG 4.1.2, and the single most common embed
-          // defect.
-          title: ctx.t('embed.title', { provider: block.provider }),
-          loading: 'lazy',
-          referrerpolicy: 'strict-origin-when-cross-origin',
-          allow: 'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',
-          allowfullscreen: true,
-        }),
+    'div',
+    h(
+      'div',
+      { class: 'ce-embed__frame', style: `aspect-ratio:${ratio}` },
+      source === null
+        ? notice(
+            block,
+            ctx,
+            block.consentRequired
+              ? ctx.t('embed.consentRequired', { provider: block.provider })
+              : ctx.t('embed.unsupported', { provider: block.provider }),
+          )
+        : h('iframe', {
+            class: 'ce-embed__player',
+            src: source,
+            // A frame with no accessible name is announced as "frame" and
+            // nothing else (WCAG 4.1.2).
+            title: ctx.t('embed.title', { provider: block.provider }),
+            loading: 'lazy',
+            referrerpolicy: 'strict-origin-when-cross-origin',
+            allow:
+              'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',
+            allowfullscreen: true,
+          }),
+    ),
   )
 }

@@ -6,7 +6,6 @@ import {
   type PageContent,
   pageHasOwnHeading,
   type RenderContext,
-  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
@@ -28,6 +27,7 @@ import { renderQuote } from './blocks/quote.js'
 import { renderStatCounter } from './blocks/stat-counter.js'
 import { renderStats } from './blocks/stats.js'
 import { renderTestimonial } from './blocks/testimonial.js'
+import { isProductPage, renderPageHeader, renderProductHeader } from './product.js'
 
 export function renderBlock(
   block: VocabularyBlock,
@@ -35,17 +35,14 @@ export function renderBlock(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement | null {
-  // `block`'s type says `VocabularyBlock`, but the value crossing this
-  // boundary from stored content is not always literally one of the shared
-  // vocabulary — resolving here is what turns an unimplemented theme-private
-  // block into its declared fallback instead of a silently blank slot.
+  // A stored block is not always literally one of the shared vocabulary:
+  // resolving here turns an unimplemented theme-private block into its
+  // declared fallback instead of a silently blank slot.
   const resolved = resolveBlockForRender(block, VOCABULARY_NAMES, registry)
   if (resolved === null) return null
   const known = resolved as unknown as VocabularyBlock
-  // `withBlockVariant` (blocks@2.0, RFC 0002) is applied once here, after
-  // dispatch, rather than inside each of the seventeen block renderers —
-  // `variant` is envelope data every block carries identically, exactly the
-  // same reasoning `withBlockKey` in `renderPage` already follows for `_key`.
+  // `variant` is envelope data every block carries identically, applied once
+  // here rather than by each of the seventeen renderers.
   return withBlockVariant(renderKnownBlock(known, ctx, entries), known.variant)
 }
 
@@ -90,12 +87,9 @@ function renderKnownBlock(
     case 'logoStrip':
       return renderLogoStrip(known, ctx)
     default: {
-      // Exhaustive over contract B's vocabulary: `known` is `never` here, so
-      // a block this package does not implement stops it compiling until it
-      // is. Returning null rather than throwing is deliberate — a theme has
-      // no access to `@cogenta/core`'s error types (contract D refuses the
-      // import), and choosing a fallback is the render layer's job, not the
-      // theme's.
+      // Exhaustive over contract B: `known` is `never` here, so a block this
+      // package does not implement stops it compiling until it is. `null`
+      // rather than a throw: choosing a fallback is the render layer's job.
       const unreachable: never = known
       void unreachable
       return null
@@ -104,31 +98,22 @@ function renderKnownBlock(
 }
 
 /**
- * Dispatches the vocabulary's blocks into this theme's own markup and stamps
- * every rendered block with the key contract B minted for it (`withBlockKey`,
- * mandatory — it is what lets the visual page builder, L16, map a clicked
- * element back to the block that produced it, whatever theme is installed).
+ * `<main id="cg-main">` is mandatory: it is the skip link's target, written
+ * by the host outside any theme's control.
  *
- * `renderEntryHeader` (`theme@1.4`) draws the eyebrow/title/excerpt/meta/
- * cover furniture for a page backed by a real content entry — the store's
- * own `product` collection routes each item to its own page but declares
- * neither a `blocks` nor a `richText` field, so it reaches here with an
- * empty block list and `page.entry` is the *only* furniture such a page has:
- * a product's photo (`entryImage`'s `photo` convention) and its
- * `description` (`entryExcerpt`'s convention) both surface automatically.
- * It already returns `null` for a page with no `entry` meta *and* for one
- * whose blocks draw their own heading (a `hero`), so the bare
- * `<h1 class="ce-page__title">` fallback below is the right markup in both
- * of those cases and only those — never a double heading, and never a page
- * with none at all.
+ * Three openings, and exactly one `h1` in each:
  *
- * `PageEntryMeta` has no room for a schema-specific field, so a product's
- * own page cannot show its `price`/`inStock`/`category` without a contract D
- * change (out of scope here, and not needed): every one of those already
- * has a real, prominent home on the product grid card
- * (`blocks/collection-list.ts`), which is where a shopper compares them
- * across products anyway — this is the theme's honest limit, not an
- * oversight.
+ * - a page whose blocks include a `hero` lets the hero carry the title;
+ * - a product (`isProductPage`: its `theme@1.5` fields carry a price) gets the
+ *   product sheet: photograph, price, stock, the honest action, details;
+ * - anything else gets its title set large on the grid.
+ *
+ * A host older than `theme@1.5` sends no fields, so its product pages open
+ * like any other page: title and description, never a price read from
+ * somewhere it was not given.
+ *
+ * `withBlockKey` stamps every rendered block with its contract-B `_key`, so
+ * the visual page builder (L16) can map a clicked element back to its block.
  */
 export function renderPage(
   page: PageContent,
@@ -136,14 +121,21 @@ export function renderPage(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement {
-  const entryHeader = renderEntryHeader(page, ctx)
+  const ownHeading = pageHasOwnHeading(page.blocks)
+  const product = !ownHeading && isProductPage(page.entry) ? page.entry : undefined
+  const opening = ownHeading
+    ? null
+    : product !== undefined
+      ? renderProductHeader(page, product, ctx)
+      : renderPageHeader(page, ctx)
+
   return h(
     'main',
-    { class: 'ce-main', id: 'cg-main' },
-    entryHeader,
-    entryHeader === null && !pageHasOwnHeading(page.blocks)
-      ? h('h1', { class: 'ce-page__title' }, page.title)
-      : null,
+    {
+      class: product === undefined ? 'cg-main ce-main' : 'cg-main ce-main ce-main--product',
+      id: 'cg-main',
+    },
+    opening,
     page.blocks.map((block) =>
       withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
     ),

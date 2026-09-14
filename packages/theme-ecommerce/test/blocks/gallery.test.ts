@@ -4,53 +4,45 @@ import { renderGallery } from '../../src/render/blocks/gallery.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const carousel = serialize(renderGallery(BLOCKS.gallery, ctx))
+const grid = serialize(renderGallery({ ...BLOCKS.gallery, layout: 'grid' }, ctx))
+const masonry = serialize(renderGallery({ ...BLOCKS.gallery, layout: 'masonry' }, ctx))
 
 describe('gallery', () => {
   it('renders to stable markup', () => {
-    expect(serialize(renderGallery(BLOCKS.gallery, ctx))).toMatchSnapshot()
+    expect(carousel).toMatchSnapshot()
   })
 
-  it('renders the carousel as a focusable, labelled scroll region', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    expect(html).toContain('role="region"')
-    expect(html).toContain('aria-label="gallery.carousel"')
-    expect(html).toContain('tabindex="0"')
+  it('renders a carousel as a focusable, labelled scroll region', () => {
+    expect(carousel).toContain('role="region"')
+    expect(carousel).toContain('aria-label="gallery.carousel"')
+    expect(carousel).toContain('tabindex="0"')
   })
 
-  it('renders a grid layout with no scroll-region wrapper', () => {
-    const html = serialize(renderGallery({ ...BLOCKS.gallery, layout: 'grid' }, ctx))
-    expect(html).not.toContain('role="region"')
-    expect(html).toContain('data-layout="grid"')
-  })
-
-  it('renders a masonry layout with the same item markup as grid', () => {
-    const html = serialize(renderGallery({ ...BLOCKS.gallery, layout: 'masonry' }, ctx))
-    expect(html).toContain('data-layout="masonry"')
-    expect(html).not.toContain('role="region"')
-  })
-
-  it('renders one list item per gallery item', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    expect(html.match(/class="ce-gallery__item"/g)).toHaveLength(2)
-  })
-
-  it('writes an alt attribute on every image', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    const images = [...html.matchAll(/<img\b[^>]*>/g)].map((match) => match[0])
-    expect(images.length).toBeGreaterThan(0)
-    for (const tag of images) {
-      expect(tag).toMatch(/\salt="/)
+  it('renders a grid and a masonry without a scroll region', () => {
+    for (const html of [grid, masonry]) {
+      expect(html).not.toContain('role="region"')
+      expect(html).toContain('<ul class="ce-gallery__items">')
     }
   })
 
-  it('ships no script and no auto-advance: the carousel is CSS scroll-snap only', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    expect(html).not.toMatch(/<script/i)
-    expect(html).not.toMatch(/\son[a-z]+="/i)
+  it('names the layout for the stylesheet', () => {
+    expect(carousel).toContain('data-layout="carousel"')
+    expect(grid).toContain('data-layout="grid"')
+    expect(masonry).toContain('data-layout="masonry"')
   })
 
-  it('is stamped as its own block for CSS targeting', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    expect(html).toContain('data-block="gallery"')
+  it('renders one list item per picture, each with its own alt text', () => {
+    expect(grid.match(/<li class="ce-gallery__item">/g)).toHaveLength(2)
+    expect(grid).toContain('alt="Detail of a stitched strap"')
+    expect(grid).toContain('alt="Detail of a knitted cuff"')
+  })
+
+  it('lazy-loads its pictures: a gallery is never the first thing on a page', () => {
+    expect(grid.match(/loading="lazy"/g)).toHaveLength(2)
+  })
+
+  it('hints a quarter of the window for a grid picture on a wide screen', () => {
+    expect(grid).toContain('sizes="(min-width: 64rem) 22vw, 50vw"')
   })
 })

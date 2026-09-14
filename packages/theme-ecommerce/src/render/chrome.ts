@@ -11,142 +11,119 @@ import {
 } from '@cogenta/theme-kit'
 
 /**
- * The storefront's header and footer — real HTML strings, built independently
- * of the seventeen block renderers (contract D's chrome extension point is a
- * separate door from `renderPage`, and this theme uses it to look like a
- * retail site rather than a document).
+ * The shop's header and footer (`theme@1.4`).
  *
- * `theme@1.4` (L25 "templates pro") adds four fields, all optional: a
- * `headerAction` button ("Shop now"), a CSS-only mobile menu (a checkbox +
- * `<label>`, the same zero-JS mechanism `theme-saas` ships — not
- * `<details>`/`<summary>`: a *closed* `<details>` cannot render its
- * non-`<summary>` content at all in current Chrome, verified against a real
- * browser while building `theme-docs`, and the fix there was to stop using
- * `<details>` for the always-visible desktop nav; here there is only ever
- * one nav panel, shown or hidden by a sibling selector, so the checkbox
- * avoids that failure mode outright rather than working around it), and a
- * real four-column footer: brand + `tagline`, the site's own footer nav,
- * `social` (via `renderSocialLinks`), and a fourth column carrying
- * `footerNote` above `brandingHtml` — placed exactly once, exactly as
- * received, never altered or dropped.
+ * Header: one row on the grid, under a hairline. The shop's name on the left
+ * (or its uploaded logo), the navigation on the right in words at the text
+ * size, the `headerAction` as the last link, underlined, and the light/dark
+ * control. No cart icon, no search box, no account link: this theme draws no
+ * control it cannot back, and a cart that does nothing is worse than none.
+ * The header stays at the top of the window while the page scrolls, on the
+ * page's own ground, with no shadow.
  *
- * A site or a render that predates `1.4` gets exactly the `1.1` header/footer
- * shape, byte for byte (`test/chrome.test.ts`'s "without the new fields"
- * case) — every one of the four fields is rendered only when present.
+ * Below the wide breakpoint the navigation becomes a panel of large links
+ * under the header, opened by a CSS-only toggle: a visually hidden checkbox
+ * paired with a `<label>`, placed before the `<nav>` so the sibling
+ * combinator reaches it. One `<nav>` in the markup, retiled by CSS.
  *
- * No cart icon, no search box, no "sign in" link is drawn here: this theme
- * ships no such feature (`@cogenta/commerce` is a separate backend this
- * theme package does not integrate with), and a control that does nothing
- * when pressed is a worse storefront than one with no control at all.
- *
- * The manual light/dark toggle (L26) is unconditional, on every render,
- * `theme@1.4` or not — deliberately outside the "byte-identical without the
- * new fields" guarantee above, exactly like `@cogenta/theme-canonical`'s own
- * `renderChrome`. It sits after the primary nav, inside the same header bar,
- * so it survives the CSS-only mobile collapse without needing its own entry
- * in `hasMenu`.
+ * Footer: the shop's name with its `tagline` and `footerNote` (the company,
+ * its registration and its address, paragraph by paragraph), the footer
+ * navigation, the social profiles with their names; then the legal line, the
+ * copyright year and the shop's name beside the host's `brandingHtml`,
+ * placed once, as received. Every `theme@1.4` field renders only when
+ * present.
  */
 
-function renderNavLinks(links: readonly ChromeNavLink[], listClass: string): string {
-  const items = links
+function navItems(links: readonly ChromeNavLink[], className: string): string {
+  return links
     .filter((link) => link.href !== null || link.kind === 'submenu-placeholder')
     .map((link) => {
       const label = escapeText(link.label)
       const titleAttr = link.title === null ? '' : ` title="${escapeAttribute(link.title)}"`
-      if (link.href === null) return `<li><span${titleAttr}>${label}</span></li>`
-      const href = escapeAttribute(link.href)
+      if (link.href === null) {
+        return `<li class="${className}"><span${titleAttr}>${label}</span></li>`
+      }
       const target = link.openInNewTab ? ' target="_blank" rel="noopener"' : ''
-      return `<li><a href="${href}"${target}${titleAttr}>${label}</a></li>`
+      return `<li class="${className}"><a href="${escapeAttribute(link.href)}"${target}${titleAttr}>${label}</a></li>`
     })
     .join('')
-  return items === '' ? '' : `<ul class="${listClass}">${items}</ul>`
 }
 
-/** The header's own call-to-action link (`theme@1.4`) — a filled button, the loudest single control in the bar. */
-function renderHeaderAction(action: ChromeInput['headerAction']): string {
-  if (action === undefined) return ''
-  return (
-    `<a class="cg-action ce-header__action" data-emphasis="primary" ` +
-    `href="${escapeAttribute(action.href)}">${escapeText(action.label)}</a>`
-  )
-}
-
-/** A hamburger mark drawn from three stacked bars — no icon font, no glyph a font might not ship. */
-function toggleGlyph(): string {
-  return (
-    '<span class="ce-nav-toggle-bar"></span>' +
-    '<span class="ce-nav-toggle-bar"></span>' +
-    '<span class="ce-nav-toggle-bar"></span>'
-  )
+/** `footerNote` as paragraphs: a blank line starts a new one. */
+function renderFooterNote(note: string): string {
+  const paragraphs = note
+    .replace(/\r\n?/g, '\n')
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s*\n\s*/g, ' ').trim())
+    .filter((paragraph) => paragraph !== '')
+  if (paragraphs.length === 0) return ''
+  return `<div class="ce-footer__note">${paragraphs
+    .map((paragraph) => `<p>${escapeText(paragraph)}</p>`)
+    .join('')}</div>`
 }
 
 export function renderChrome(input: ChromeInput): ChromeResult {
   const siteName = escapeText(input.site.name)
-  const homeHref = escapeAttribute(input.homeHref)
-  const headerNav = renderNavLinks(input.headerNav, 'ce-menu ce-menu--header')
-  const footerNav = renderNavLinks(input.footerNav, 'ce-menu ce-menu--footer')
-  const headerAction = renderHeaderAction(input.headerAction)
-  // A storefront's header bar is exactly where a retailer expects its logo.
-  // The footer's brand link and the bottom bar keep the name in text: a
-  // shopper landing on a page whose images failed still knows whose shop
-  // this is.
-  const mark = renderBrandMark(input.brand, { className: 'ce-header__logo' }) ?? siteName
+  const home = escapeAttribute(input.homeHref)
+  const links = navItems(input.headerNav, 'ce-header__item')
+  const action =
+    input.headerAction === undefined
+      ? ''
+      : `<a class="ce-header__action" href="${escapeAttribute(input.headerAction.href)}">${escapeText(
+          input.headerAction.label,
+        )}</a>`
+  const toggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
+  const logo = renderBrandMark(input.brand, { className: 'ce-header__logo' })
+  const mark = logo ?? `<span class="ce-header__wordmark">${siteName}</span>`
 
-  // One nav panel, not two: below the breakpoint (`base.css`) it becomes a
-  // dropdown under the checkbox toggle; above it, the sibling selector shows
-  // it inline in the bar. Nothing at all is rendered — no toggle, no empty
-  // `<nav>` — when there is neither a real link nor a header action, which is
-  // what keeps `ce-header__nav`'s absence a true signal in `chrome.test.ts`.
-  const hasMenu = headerNav !== '' || headerAction !== ''
-  const toggle = !hasMenu
-    ? ''
-    : `<input type="checkbox" id="ce-nav-toggle" class="ce-nav-toggle-input" aria-label="Menu">` +
-      `<label for="ce-nav-toggle" class="ce-nav-toggle-label" aria-hidden="true">${toggleGlyph()}</label>`
-  const nav = !hasMenu
-    ? ''
-    : `<nav class="ce-header__nav" id="ce-nav" aria-label="Primary">${headerNav}${headerAction}</nav>`
-  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
+  const hasMenu = links !== '' || action !== ''
+  const menu = hasMenu
+    ? `<input type="checkbox" id="ce-nav-toggle" class="ce-nav-toggle-input" aria-label="Menu">` +
+      `<label for="ce-nav-toggle" class="ce-nav-toggle-label" aria-hidden="true">` +
+      `<span class="ce-nav-toggle-bar"></span><span class="ce-nav-toggle-bar"></span>` +
+      `</label>` +
+      `<nav class="ce-header__nav" id="ce-nav" aria-label="Primary">` +
+      `${links === '' ? '' : `<ul class="ce-header__links">${links}</ul>`}` +
+      `${action}` +
+      `</nav>`
+    : ''
 
   const header =
-    `<header class="ce-header">` +
-    `<div class="ce-header__bar">` +
-    `<a class="ce-header__brand" href="${homeHref}">${mark}</a>` +
+    `<header class="ce-header" data-nav="${hasMenu ? 'links' : 'none'}">` +
+    `<div class="ce-header__inner">` +
+    `<a class="ce-header__brand" href="${home}">${mark}</a>` +
+    `${menu}` +
     `${toggle}` +
-    `${nav}` +
-    `${themeToggle}` +
     `</div></header>`
 
   const tagline =
     input.tagline === undefined
       ? ''
       : `<p class="ce-footer__tagline" data-field="tagline">${escapeText(input.tagline)}</p>`
-  const social =
-    input.social === undefined
-      ? ''
-      : serialize(
-          renderSocialLinks(input.social, {
-            className: 'ce-footer__social',
-            itemClassName: 'ce-footer__social-item',
-          }) ?? { kind: 'text', value: '' },
-        )
-  const footerNote =
-    input.footerNote === undefined
-      ? ''
-      : `<p class="ce-footer__note">${escapeText(input.footerNote)}</p>`
+  const note = input.footerNote === undefined ? '' : renderFooterNote(input.footerNote)
+  const footerLinks = navItems(input.footerNav, 'ce-footer__item')
+  const social = renderSocialLinks(input.social, {
+    className: 'ce-footer__social',
+    itemClassName: 'ce-footer__social-item',
+  })
+  const year = new Date().getFullYear()
 
   const footer =
-    `<footer class="ce-footer">` +
-    `<div class="ce-footer__top">` +
-    `<div class="ce-footer__brand">` +
-    `<a class="ce-footer__brand-link" href="${homeHref}">${siteName}</a>` +
-    `${tagline}` +
+    `<footer class="ce-footer"><div class="ce-footer__inner">` +
+    `<div class="ce-footer__about">` +
+    `<a class="ce-footer__name" href="${home}">${siteName}</a>` +
+    `${tagline}${note}` +
     `</div>` +
-    `${footerNav === '' ? '' : `<nav class="ce-footer__nav" aria-label="Footer">${footerNav}</nav>`}` +
-    `${social === '' ? '' : `<div class="ce-footer__social-col">${social}</div>`}` +
-    `<div class="ce-footer__meta">${footerNote}${input.brandingHtml}</div>` +
+    `${
+      footerLinks === ''
+        ? ''
+        : `<nav class="ce-footer__nav" aria-label="Footer"><ul class="ce-footer__links">${footerLinks}</ul></nav>`
+    }` +
+    `${social === null ? '' : `<div class="ce-footer__follow">${serialize(social)}</div>`}` +
+    `<div class="ce-footer__legal">` +
+    `<p class="ce-footer__copyright">© ${year} ${siteName}</p>` +
+    `${input.brandingHtml === '' ? '' : `<div class="ce-footer__branding">${input.brandingHtml}</div>`}` +
     `</div>` +
-    `<div class="ce-footer__bottom">` +
-    `<span class="ce-footer__copy">${siteName}</span>` +
     `</div></footer>`
 
   return { header, footer }

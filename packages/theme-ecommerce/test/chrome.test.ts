@@ -1,66 +1,113 @@
-import type { ChromeInput } from '@cogenta/theme-kit'
+import type { ChromeBrand, ChromeInput, ImageSource } from '@cogenta/theme-kit'
 import { renderThemeToggle, serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
 const BASE: ChromeInput = {
-  site: { name: 'Cogenta Storefront' },
+  site: { name: 'Atelier Goods' },
   locale: 'en',
   homeHref: '/en',
   headerNav: [
-    { label: 'New in', href: '/en/new', openInNewTab: false, kind: 'link', title: null },
-    { label: 'Sale', href: '/en/sale', openInNewTab: false, kind: 'link', title: null },
+    { label: 'Shop', href: '/en/shop', openInNewTab: false, kind: 'link', title: null },
+    { label: 'Wear', href: '/en/category/wear', openInNewTab: false, kind: 'link', title: null },
   ],
   footerNav: [
-    { label: 'Shipping', href: '/en/shipping', openInNewTab: false, kind: 'link', title: null },
-    { label: 'Returns', href: '/en/returns', openInNewTab: false, kind: 'link', title: null },
+    {
+      label: 'Delivery and returns',
+      href: '/en/delivery',
+      openInNewTab: false,
+      kind: 'link',
+      title: null,
+    },
+    { label: 'Repairs', href: '/en/repairs', openInNewTab: false, kind: 'link', title: null },
   ],
   brandingHtml: '<div class="cg-site-footer__branding">Cogenta credit</div>',
 }
 
-describe('renderChrome', () => {
+const FULL: ChromeInput = {
+  ...BASE,
+  tagline: 'Everyday goods, made to last and to be mended.',
+  social: [{ label: 'Instagram', href: 'https://instagram.com/example' }],
+  footerNote: 'Rua da Boavista 84, 1200-066 Lisboa.\n\nRegistered in Portugal, NIPC 516 204 873.',
+  headerAction: { label: 'How to order', href: '/en/how-to-order' },
+}
+
+function source(src: string): ImageSource {
+  return { kind: 'image', src, srcset: '', width: 240, height: 56, alt: '', focal: null }
+}
+
+const BRAND: ChromeBrand = {
+  name: 'Atelier Goods',
+  logo: source('/_image?id=light&w=480'),
+  logoDark: null,
+  faviconUrl: null,
+}
+
+describe('the header', () => {
   it('renders to stable markup', () => {
-    expect(renderChrome(BASE)).toMatchSnapshot()
+    const { header } = renderChrome(FULL)
+    expect(header.replace(/© \d{4}/, '© YEAR')).toMatchSnapshot()
   })
 
-  it('renders the site name as the header brand, linking home', () => {
+  it('sets the shop’s name as its wordmark, linking home', () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('class="ce-header__brand" href="/en"')
-    expect(header).toContain('Cogenta Storefront')
+    expect(header).toContain(
+      '<a class="ce-header__brand" href="/en"><span class="ce-header__wordmark">Atelier Goods</span></a>',
+    )
   })
 
-  it('renders every real header nav link', () => {
+  it('shows the uploaded logo instead of the name, still named and linked home', () => {
+    const { header } = renderChrome({ ...BASE, brand: BRAND })
+    expect(header).toContain('class="ce-header__logo"')
+    expect(header).toContain('alt="Atelier Goods"')
+    expect(header).not.toContain('ce-header__wordmark')
+  })
+
+  it('renders every real navigation link', () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('href="/en/new"')
-    expect(header).toContain('>New in<')
-    expect(header).toContain('href="/en/sale"')
-    expect(header).toContain('>Sale<')
+    expect(header).toContain('<li class="ce-header__item"><a href="/en/shop">Shop</a></li>')
+    expect(header).toContain('href="/en/category/wear">Wear</a>')
   })
 
-  it('renders no header nav element when there are no links', () => {
+  it('renders the header action as the last link of the navigation, never a filled button', () => {
+    const { header } = renderChrome(FULL)
+    expect(header).toContain(
+      '<a class="ce-header__action" href="/en/how-to-order">How to order</a>',
+    )
+    expect(header).not.toMatch(/ce-header__action[^>]*data-emphasis/)
+    expect(header.indexOf('ce-header__links')).toBeLessThan(header.indexOf('ce-header__action'))
+  })
+
+  it('draws no cart, no search box and no account link', () => {
+    const { header } = renderChrome(FULL)
+    expect(header).not.toMatch(/cart|basket|search|account|sign in/i)
+  })
+
+  it('ships a CSS-only menu toggle ahead of the one nav it controls', () => {
+    const { header } = renderChrome(BASE)
+    expect(header.indexOf('id="ce-nav-toggle"')).toBeLessThan(header.indexOf('id="ce-nav"'))
+    expect(header).toMatch(/<input type="checkbox" id="ce-nav-toggle"[^>]*aria-label="Menu"/)
+    expect(header).toContain(
+      '<label for="ce-nav-toggle" class="ce-nav-toggle-label" aria-hidden="true">',
+    )
+    expect(header.match(/<nav/g)).toHaveLength(1)
+  })
+
+  it('renders neither toggle nor nav when there is no link and no action', () => {
     const { header } = renderChrome({ ...BASE, headerNav: [] })
+    expect(header).not.toContain('ce-nav-toggle')
     expect(header).not.toContain('ce-header__nav')
+    expect(header).toContain('data-nav="none"')
   })
 
-  it('renders every real footer nav link', () => {
-    const { footer } = renderChrome(BASE)
-    expect(footer).toContain('href="/en/shipping"')
-    expect(footer).toContain('>Shipping<')
-    expect(footer).toContain('href="/en/returns"')
-    expect(footer).toContain('>Returns<')
+  it('keeps the toggle and the nav when only the header action is set', () => {
+    const { header } = renderChrome({ ...FULL, headerNav: [] })
+    expect(header).toContain('ce-nav-toggle')
+    expect(header).toContain('ce-header__action')
+    expect(header).not.toContain('ce-header__links')
   })
 
-  it('places the branding fragment in the footer, byte for byte, never altered', () => {
-    const { footer } = renderChrome(BASE)
-    expect(footer).toContain('<div class="cg-site-footer__branding">Cogenta credit</div>')
-  })
-
-  it('renders nothing extra when brandingHtml is the empty string', () => {
-    const { footer } = renderChrome({ ...BASE, brandingHtml: '' })
-    expect(footer).not.toContain('cg-site-footer__branding')
-  })
-
-  it('renders a submenu placeholder as an unlinked span, not a dead link', () => {
+  it('renders a submenu placeholder as an unlinked span, and drops a link with no target', () => {
     const { header } = renderChrome({
       ...BASE,
       headerNav: [
@@ -71,195 +118,114 @@ describe('renderChrome', () => {
           kind: 'submenu-placeholder',
           title: null,
         },
+        { label: 'Ghost', href: null, openInNewTab: false, kind: 'link', title: null },
       ],
     })
     expect(header).toContain('<span>Collections</span>')
-    expect(header).not.toContain('<a href')
-  })
-
-  it('drops a link with no href and no submenu-placeholder kind', () => {
-    const { header } = renderChrome({
-      ...BASE,
-      headerNav: [{ label: 'Ghost', href: null, openInNewTab: false, kind: 'link', title: null }],
-    })
     expect(header).not.toContain('Ghost')
   })
 
-  it('opens an external link in a new tab with noopener protection', () => {
-    const { footer } = renderChrome({
+  it('carries a title attribute and a new-tab link through, with noopener', () => {
+    const { header } = renderChrome({
       ...BASE,
-      footerNav: [
+      headerNav: [
         {
-          label: 'Press kit',
-          href: 'https://press.example/kit',
+          label: 'Journal',
+          href: 'https://journal.example',
           openInNewTab: true,
-          kind: 'link',
-          title: null,
+          kind: 'url',
+          title: 'Letters',
         },
       ],
     })
-    expect(footer).toContain('target="_blank" rel="noopener"')
+    expect(header).toContain('target="_blank" rel="noopener" title="Letters"')
   })
 
   it('escapes a site name containing markup', () => {
     const { header, footer } = renderChrome({ ...BASE, site: { name: '<b>Evil</b> Co' } })
     expect(header).toContain('&lt;b&gt;Evil&lt;/b&gt; Co')
     expect(footer).toContain('&lt;b&gt;Evil&lt;/b&gt; Co')
-    expect(header).not.toContain('<b>Evil</b>')
+    expect(header + footer).not.toContain('<b>Evil</b>')
   })
 
-  it('carries a title attribute through to the rendered link', () => {
-    const { header } = renderChrome({
-      ...BASE,
-      headerNav: [
-        { label: 'Sale', href: '/en/sale', openInNewTab: false, kind: 'link', title: 'Ends soon' },
-      ],
-    })
-    expect(header).toContain('title="Ends soon"')
-  })
-
-  it('emits no script tag anywhere in the chrome', () => {
-    const { header, footer } = renderChrome(BASE)
-    expect(header).not.toMatch(/<script/i)
-    expect(footer).not.toMatch(/<script/i)
-  })
-
-  // -------------------------------------------------------------------------
-  // theme@1.4 (L25 "templates pro") — headerAction, the CSS-only mobile
-  // menu, tagline, social, footerNote. Every one of the four fields is
-  // optional and additive: a render that sets none of them must be
-  // byte-for-byte the `1.1` chrome, which is what the last test in this
-  // block asserts directly.
-  // -------------------------------------------------------------------------
-
-  it('ships a CSS-only mobile menu toggle ahead of the nav it controls', () => {
+  it('renders the theme toggle after the navigation, on every render', () => {
     const { header } = renderChrome(BASE)
-    const toggleIndex = header.indexOf('id="ce-nav-toggle"')
-    const navIndex = header.indexOf('id="ce-nav"')
-    expect(toggleIndex).toBeGreaterThan(-1)
-    expect(navIndex).toBeGreaterThan(toggleIndex)
-    expect(header).toContain('<input type="checkbox"')
-    expect(header).toContain('<label for="ce-nav-toggle"')
-  })
-
-  it('gives the mobile toggle an accessible name of its own', () => {
-    const { header } = renderChrome(BASE)
-    expect(header).toMatch(/<input type="checkbox" id="ce-nav-toggle"[^>]*aria-label="Menu"/)
-  })
-
-  it('renders neither the toggle nor the nav when there is no link and no action', () => {
-    const { header } = renderChrome({ ...BASE, headerNav: [], footerNav: BASE.footerNav })
-    expect(header).not.toContain('ce-nav-toggle')
-    expect(header).not.toContain('ce-header__nav')
-  })
-
-  it('still ships the toggle and the nav when only headerAction is set, with no links', () => {
-    const { header } = renderChrome({
-      ...BASE,
-      headerNav: [],
-      headerAction: { label: 'Shop now', href: '/en/shop' },
-    })
-    expect(header).toContain('ce-nav-toggle')
-    expect(header).toContain('ce-header__nav')
-  })
-
-  it('renders headerAction as a filled primary button inside the nav', () => {
-    const { header } = renderChrome({
-      ...BASE,
-      headerAction: { label: 'Shop now', href: '/en/shop' },
-    })
-    expect(header).toMatch(
-      /<a class="cg-action ce-header__action" data-emphasis="primary" href="\/en\/shop">Shop now<\/a>/,
-    )
-    expect(header.indexOf('id="ce-nav"')).toBeLessThan(header.indexOf('Shop now'))
-  })
-
-  it('renders nothing extra for headerAction when the site set none', () => {
-    const { header } = renderChrome(BASE)
-    expect(header).not.toContain('ce-header__action')
-  })
-
-  it('renders the footer as a real four-column grid: brand, nav, social, meta', () => {
-    const { footer } = renderChrome({
-      ...BASE,
-      tagline: 'Made to be used, not shelved.',
-      social: [{ label: 'Instagram', href: 'https://instagram.com/example' }],
-      footerNote: 'A demo store, scaffolded by create-cogenta.',
-    })
-    expect(footer).toContain('class="ce-footer__top"')
-    expect(footer).toContain('class="ce-footer__brand"')
-    expect(footer).toContain('class="ce-footer__nav"')
-    expect(footer).toContain('class="ce-footer__social-col"')
-    expect(footer).toContain('class="ce-footer__meta"')
-  })
-
-  it('renders the tagline under the brand name when set, and omits it when absent', () => {
-    const withTagline = renderChrome({ ...BASE, tagline: 'Made to be used, not shelved.' })
-    expect(withTagline.footer).toContain('ce-footer__tagline')
-    expect(withTagline.footer).toContain('Made to be used, not shelved.')
-    const without = renderChrome(BASE)
-    expect(without.footer).not.toContain('ce-footer__tagline')
-  })
-
-  it('renders social links via the shared icon-carrying helper, and omits the column when absent', () => {
-    const withSocial = renderChrome({
-      ...BASE,
-      social: [{ label: 'Pinterest', href: 'https://pinterest.com/example' }],
-    })
-    expect(withSocial.footer).toContain('ce-footer__social')
-    expect(withSocial.footer).toContain('https://pinterest.com/example')
-    const without = renderChrome(BASE)
-    expect(without.footer).not.toContain('ce-footer__social-col')
-  })
-
-  it('renders the footer note above the branding fragment, and omits it when absent', () => {
-    const withNote = renderChrome({
-      ...BASE,
-      footerNote: 'A demo store, scaffolded by create-cogenta.',
-    })
-    expect(withNote.footer).toContain('ce-footer__note')
-    expect(withNote.footer).toContain('A demo store, scaffolded by create-cogenta.')
-    const without = renderChrome(BASE)
-    expect(without.footer).not.toContain('ce-footer__note')
-  })
-
-  it('renders exactly as it would under theme@1.1 when none of the new fields are set, but for the theme toggle', () => {
-    const { header, footer } = renderChrome(BASE)
-    expect(header).not.toContain('ce-header__action')
-    expect(footer).not.toContain('ce-footer__tagline')
-    expect(footer).not.toContain('ce-footer__social-col')
-    expect(footer).not.toContain('ce-footer__note')
-  })
-
-  // -------------------------------------------------------------------------
-  // L26 — manual light/dark/system toggle. Unconditional, on every render,
-  // deliberately outside the theme@1.4 "byte-identical without the new
-  // fields" guarantee above — same as `@cogenta/theme-canonical`'s own
-  // `renderChrome`. The expected markup is derived from `renderThemeToggle`
-  // itself rather than a hand-typed literal, so it cannot silently drift
-  // from the real thing the first time either changes.
-  // -------------------------------------------------------------------------
-
-  it('renders the theme toggle in the header, after the primary nav, on every render', () => {
-    const { header } = renderChrome(BASE)
-    const themeToggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
-    expect(header).toContain(themeToggle)
+    const toggle = serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' }))
+    expect(header).toContain(toggle)
     expect(header.indexOf('id="ce-nav"')).toBeLessThan(header.indexOf('cg-theme-toggle'))
+    expect(renderChrome({ ...BASE, headerNav: [] }).header).toContain('cg-theme-toggle')
   })
 
-  it('renders the theme toggle even when there is no menu at all', () => {
-    const { header } = renderChrome({ ...BASE, headerNav: [], footerNav: BASE.footerNav })
-    expect(header).not.toContain('ce-nav-toggle')
-    expect(header).not.toContain('ce-header__nav')
-    expect(header).toContain('cg-theme-toggle')
-  })
-
-  it('localises the theme toggle labels from the chrome locale', () => {
+  it('localises the theme toggle from the chrome locale', () => {
     const { header } = renderChrome({ ...BASE, locale: 'fr' })
-    const themeToggleFr = serialize(renderThemeToggle('fr', { className: 'cg-theme-toggle' }))
-    expect(header).toContain(themeToggleFr)
-    expect(header).not.toContain(
-      serialize(renderThemeToggle('en', { className: 'cg-theme-toggle' })),
+    expect(header).toContain(serialize(renderThemeToggle('fr', { className: 'cg-theme-toggle' })))
+  })
+
+  it('emits no script tag and no inline handler', () => {
+    const { header, footer } = renderChrome(FULL)
+    expect(header + footer).not.toMatch(/<script|\son[a-z]+="/i)
+  })
+})
+
+describe('the footer', () => {
+  it('renders to stable markup', () => {
+    const { footer } = renderChrome(FULL)
+    expect(footer.replace(/© \d{4}/, '© YEAR')).toMatchSnapshot()
+  })
+
+  it('keeps the shop’s name in text, even when it has a logo', () => {
+    const { footer } = renderChrome({ ...BASE, brand: BRAND })
+    expect(footer).toContain('<a class="ce-footer__name" href="/en">Atelier Goods</a>')
+    expect(footer).not.toContain('ce-header__logo')
+  })
+
+  it('writes the copyright year and the shop’s name on the legal line', () => {
+    const { footer } = renderChrome(BASE)
+    expect(footer).toContain(
+      `<p class="ce-footer__copyright">© ${new Date().getFullYear()} Atelier Goods</p>`,
     )
+  })
+
+  it('places the branding fragment once, byte for byte', () => {
+    const { footer } = renderChrome(BASE)
+    expect(footer.split('<div class="cg-site-footer__branding">Cogenta credit</div>')).toHaveLength(
+      2,
+    )
+  })
+
+  it('renders no branding wrapper when the fragment is empty', () => {
+    const { footer } = renderChrome({ ...BASE, brandingHtml: '' })
+    expect(footer).not.toContain('ce-footer__branding')
+  })
+
+  it('renders every footer link in a labelled navigation', () => {
+    const { footer } = renderChrome(BASE)
+    expect(footer).toContain('<nav class="ce-footer__nav" aria-label="Footer">')
+    expect(footer).toContain('href="/en/repairs">Repairs</a>')
+  })
+
+  it('omits the footer navigation when there is none', () => {
+    expect(renderChrome({ ...BASE, footerNav: [] }).footer).not.toContain('ce-footer__nav')
+  })
+
+  it('sets the tagline under the name when set, and nothing when absent', () => {
+    expect(renderChrome(FULL).footer).toContain(
+      '<p class="ce-footer__tagline" data-field="tagline">Everyday goods, made to last and to be mended.</p>',
+    )
+    expect(renderChrome(BASE).footer).not.toContain('ce-footer__tagline')
+  })
+
+  it('splits the footer note into paragraphs at blank lines', () => {
+    expect(renderChrome(FULL).footer).toContain(
+      '<div class="ce-footer__note"><p>Rua da Boavista 84, 1200-066 Lisboa.</p><p>Registered in Portugal, NIPC 516 204 873.</p></div>',
+    )
+    expect(renderChrome(BASE).footer).not.toContain('ce-footer__note')
+  })
+
+  it('renders social profiles with their icons and names, and no column when there are none', () => {
+    const { footer } = renderChrome(FULL)
+    expect(footer).toContain('<div class="ce-footer__follow"><ul class="ce-footer__social">')
+    expect(footer).toContain('https://instagram.com/example')
+    expect(renderChrome(BASE).footer).not.toContain('ce-footer__follow')
   })
 })

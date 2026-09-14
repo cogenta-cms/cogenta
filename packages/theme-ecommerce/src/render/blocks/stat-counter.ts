@@ -1,39 +1,32 @@
-import type { StatCounterBlock, StatCounterItem } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import type { StatCounterBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * A narrower cousin of `stats` (no `unit`): a big committed figure and its
- * label, meant to read as a headline number rather than a fuller statistic.
- * Same `<dt>`/`<dd>` description-list pairing `stats.ts` uses, for the same
- * reason — the figure is the description of its label, and reading order
- * stays independent of the visual order the skin paints (WCAG 1.3.2).
+ * The narrower sibling of `stats` (a value and a label, no unit), drawn in
+ * the same register: figures in tabular numerals under one hairline. Nothing
+ * counts up; a number that animates into place is a number a reader has to
+ * wait for.
  */
-function renderItem(item: StatCounterItem): HtmlElement {
-  return h(
-    'div',
-    { class: 'ce-counter' },
-    h('dt', { class: 'ce-counter__label' }, item.label),
-    h('dd', { class: 'ce-counter__value' }, item.value),
-  )
-}
-
 export function renderStatCounter(block: StatCounterBlock, _ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'ce-block ce-counters', 'data-block': 'statCounter' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('statCounter') ?? 'h2',
-          { class: 'ce-counters__title', 'data-field': 'title' },
-          block.title,
+    'statCounter',
+    'ce-figures',
+    { 'data-count': String(Math.min(block.stats.length, 4)) },
+    'div',
+    sectionHead('statCounter', block.title),
+    h(
+      'dl',
+      { class: 'ce-figures__items' },
+      block.stats.map((stat) =>
+        h(
+          'div',
+          { class: 'ce-figures__item' },
+          h('dt', { class: 'ce-figures__label' }, stat.label),
+          h('dd', { class: 'ce-figures__value' }, stat.value),
         ),
-    h('dl', { class: 'ce-counters__items' }, block.stats.map(renderItem)),
+      ),
+    ),
   )
 }

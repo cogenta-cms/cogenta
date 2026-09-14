@@ -679,11 +679,11 @@ function homeBlocks(media: Media, name: string): readonly VocabularyBlock[] {
           label: 'The homework club, the garden and the winter coat bank',
         },
         { _key: 'hall', value: '17%', label: 'Heating, lighting, repairing and insuring the hall' },
-        { _key: 'staff', value: '13%', label: 'Two part-time staff who organise 312 volunteers' },
+        { _key: 'rest', value: '12%', label: 'The van, the accounts and fundraising' },
         {
-          _key: 'rest',
-          value: '9%',
-          label: 'The van, the independent examination and fundraising',
+          _key: 'staff',
+          value: '10%',
+          label: 'Two part-time staff who organise 312 volunteers',
         },
       ],
     } as VocabularyBlock,
@@ -929,7 +929,7 @@ function donateBlocks(name: string): readonly VocabularyBlock[] {
   const treasurer = associationEmail(name, 'treasurer')
   return [
     prose('donate-intro', [
-      `Every pound given to ${name} is spent in Ashworth, on food, on the homework club, the garden and the coat bank, and on keeping the hall warm and open. Last year 64% of our income came from people in the town.`,
+      `Every pound given to ${name} is spent in Ashworth, on food, on the homework club, the garden and the coat bank, and on keeping the hall warm and open. Last year 62% of our income came from people in the town.`,
       'We do not take card payments on this site. Here are the ways to give, and the people to ask.',
     ]),
     {

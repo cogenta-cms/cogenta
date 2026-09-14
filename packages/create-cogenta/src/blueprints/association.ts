@@ -315,7 +315,7 @@ export const ASSOCIATION_PROGRAMMES: readonly AssociationProgramme[] = [
       'Come to the side door on Elm Street any time between 5.30pm and 7.30pm. A volunteer takes your first name and the number of people at home, and nothing else. If you cannot carry a week of shopping, tell us: two drivers take parcels to 23 households who cannot get to the hall.',
       'We ask no one to prove they need help. The three neighbours who started the food bank in 1994 decided that asking for proof would turn people away who needed it most, and every committee since has kept that rule.',
       '## Where the food comes from',
-      'About two thirds of what we hand out is given: collection points at Brindle & Sons and at two schools, the harvest collection each autumn, and neighbours who leave a bag at the door. We buy the rest, mostly fresh food, milk, nappies and anything that runs short, which is where most of the money you give goes.',
+      'About two thirds of what we hand out is given: collection points at Brindle & Sons and at two schools, two big collections a year at Brindle & Sons, and neighbours who leave a bag at the door. We buy the rest, mostly fresh food, milk, nappies and anything that runs short, which is where most of the money you give goes.',
       '## Giving food',
       'The hall takes food on weekdays from 9.30am to 4pm. This month we are shortest of tinned fish, UHT milk, instant coffee and toiletries. Please do not bring anything past its date or opened.',
     ],
@@ -450,8 +450,8 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     ],
   },
   {
-    title: 'Harvest food collection',
-    slug: 'harvest-food-collection',
+    title: 'Food collection at Brindle & Sons',
+    slug: 'food-collection-brindle-and-sons',
     daysFromNow: 11,
     start: [10, 0],
     end: [14, 0],
@@ -463,7 +463,7 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
       'Our biggest collection of the year. Bring tins and dry food to the market car park, or give two hours to sort what arrives.',
     photo: 'programme-food-bank',
     body: [
-      'Last autumn this one day brought in 2.1 tonnes of food, enough to fill the food bank shelves until the end of November. Brindle & Sons lend us their car park and a van, and match every tenth tin with one of their own.',
+      'The last time we held this collection, one day brought in 2.1 tonnes of food, enough to fill the food bank shelves for eight weeks. Brindle & Sons lend us their car park and a van, and match every tenth tin with one of their own.',
       '## What to bring',
       'Tinned fish and meat, tinned vegetables, UHT milk, rice, pasta sauce, tea, coffee, and toiletries. Please nothing opened, homemade or past its date.',
       '## Helping on the day',
@@ -471,8 +471,8 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     ],
   },
   {
-    title: 'Spring planting morning',
-    slug: 'spring-planting-morning',
+    title: 'Planting morning in the garden',
+    slug: 'planting-morning-in-the-garden',
     daysFromNow: 17,
     start: [9, 30],
     end: [12, 30],
@@ -481,17 +481,17 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     cost: 'Free',
     booking: 'No booking needed',
     description:
-      'Planting out the raised beds for the season: potatoes, onions, beans and salad. Tools, gloves and tea provided, children welcome with an adult.',
+      'A morning of planting and clearing the raised beds and the polytunnel. Tools, gloves and tea provided, children welcome with an adult.',
     photo: 'programme-garden',
     body: [
-      'The first big morning of the gardening year. We plant seed potatoes and onion sets in six of the twelve beds, sow beans and salad leaves under the polytunnel, and give the rest of the beds a fresh layer of compost.',
+      'Six times a year the garden needs more hands than a regular session brings. We plant whatever the time of year allows in the open beds, sow salad leaves and herbs under the polytunnel, clear what has finished, and give the empty beds a fresh layer of compost.',
       '## Bring',
       'Clothes that can get muddy and boots if you have them. We have gloves in every size, tools for about forty people and a kettle in the shed. There is a bed kept for children, with fast-growing radishes and sunflowers.',
     ],
   },
   {
-    title: 'Winter coat collection',
-    slug: 'winter-coat-collection',
+    title: 'Coat and boot collection',
+    slug: 'coat-and-boot-collection',
     daysFromNow: 24,
     start: [10, 0],
     end: [15, 0],
@@ -500,10 +500,10 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     cost: 'Free',
     booking: 'Drop in any time',
     description:
-      'Bring clean coats, boots and school jumpers you no longer need. Everything is checked, sorted by size and ready for the coat bank in October.',
+      'Bring clean coats, boots and school jumpers you no longer need. Everything is checked, sorted by size and kept for the coat bank.',
     photo: 'programme-coat-bank',
     body: [
-      'The coat bank opens in October, and this collection stocks it. Bring what you can carry to the main hall between 10am and 3pm; a volunteer checks each coat with you at the door, so nothing needs to be sorted beforehand.',
+      'The coat bank is stocked by collections through the year, so there is a rail ready for every family when it opens. Bring what you can carry to the main hall between 10am and 3pm; a volunteer checks each coat with you at the door, so nothing needs to be sorted beforehand.',
       '## What we need most',
       'Children’s coats for ages 8 to 13, men’s coats and boots in large sizes, and grey or black school jumpers in any size. We cannot take coats that are torn, stained or missing a zip.',
     ],
@@ -531,8 +531,8 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     ],
   },
   {
-    title: 'Harvest supper',
-    slug: 'harvest-supper',
+    title: 'Community supper',
+    slug: 'community-supper',
     daysFromNow: 38,
     start: [18, 30],
     end: [22, 0],
@@ -541,13 +541,13 @@ export const ASSOCIATION_DEMO_EVENTS: readonly AssociationDemoEvent[] = [
     cost: '£25, or £12 for under-16s',
     booking: 'Tickets from the hall or by email; 180 places',
     description:
-      'Three courses cooked by volunteers from garden produce, a raffle, and a short word from the food bank team. Every ticket pays for four food parcels.',
+      'Three courses cooked by volunteers, a raffle, and a short word from the food bank team. Every ticket pays for four food parcels.',
     photo: 'event-supper',
     body: [
-      'Our one fundraising dinner of the year. Last year 170 people came and the evening raised £9,400, which paid for the fresh food at Thursday’s food bank from November to January.',
+      'Our one fundraising dinner of the year. Last year 170 people came and the evening raised £9,400, which paid for the fresh food at Thursday’s food bank for three months.',
       '## The evening',
-      'Doors open at 6.30pm, dinner is at 7pm, and the raffle is drawn between the main course and pudding. The menu is soup, a vegetable and bean casserole or roast chicken, and apple crumble, with a vegetarian or vegan option at every course if you tell us when you book.',
-      'The Wardle Room is step-free with an accessible toilet. The Market Square car park is free after 6pm.',
+      'Doors open at 6.30pm, dinner is at 7pm, and the raffle is drawn between the main course and pudding. The menu is soup, a vegetable and bean casserole or roast chicken, and a fruit crumble, with a vegetarian or vegan option at every course if you tell us when you book.',
+      'The Wardle Room is step-free with an accessible toilet. The Market Square car park is free in the evening.',
     ],
   },
 ]
@@ -902,7 +902,7 @@ function volunteerBlocks(media: Media, name: string): readonly VocabularyBlock[]
         ],
         [
           'Can my workplace volunteer as a team?',
-          'Yes, for the harvest collection, the coat collection and garden mornings, for groups of up to twelve. Write to us with a date.',
+          'Yes, for the food collections, the coat collections and garden mornings, for groups of up to twelve. Write to us with a date.',
         ],
       ]),
     } as VocabularyBlock,
@@ -1099,7 +1099,7 @@ function financesBlocks(name: string): readonly VocabularyBlock[] {
         { _key: 'trusts', value: '27%', label: 'Grants from six charitable trusts' },
         { _key: 'business', value: '11%', label: 'Local businesses, in money and in food' },
         { _key: 'giftaid', value: '9%', label: 'Gift Aid claimed on individual gifts' },
-        { _key: 'events', value: '7%', label: 'The harvest supper and sponsored events' },
+        { _key: 'events', value: '7%', label: 'The community supper and sponsored events' },
       ],
     } as VocabularyBlock,
     prose('finances-notes', [

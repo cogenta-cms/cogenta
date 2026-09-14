@@ -26,7 +26,9 @@ orientation evening, which is a real event page.
 The `event` collection gains `endsAt`, `address`, `cost` and `booking`; a new
 `programme` collection (`/what-we-do/:slug`) carries a schedule, place,
 audience, cost and contact. Six events are dated one to six weeks after the
-site is created, each with a page of its own. The footer is seeded in three
+site is created, each with a page of its own; since the month moves with the
+scaffold, their copy names no weekday and no season, and every clock time it
+writes falls inside the event's own hours. The footer is seeded in three
 headed columns and its note carries the registered charity number, the
 address, the telephone number and the site's own email address; comments are
 closed. The telephone number is in the range reserved for drama. The starting

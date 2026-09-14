@@ -199,10 +199,10 @@ describe('association blueprint, content model', () => {
   })
 
   it('resolves /events/:slug, /what-we-do/:slug and /:slug generically', () => {
-    expect(matchPath(ASSOCIATION_COLLECTIONS, '/events/harvest-supper')).toEqual({
+    expect(matchPath(ASSOCIATION_COLLECTIONS, '/events/community-supper')).toEqual({
       collection: 'event',
       locale: null,
-      params: { slug: 'harvest-supper' },
+      params: { slug: 'community-supper' },
     })
     expect(matchPath(ASSOCIATION_COLLECTIONS, '/what-we-do/homework-club')).toEqual({
       collection: 'programme',
@@ -260,6 +260,37 @@ describe('association blueprint, programmes and events', () => {
         ...blockTexts(associationEventBlocks(item)[0] as VocabularyBlock),
       ].join(' ')
       expect(copy, item.slug).not.toMatch(/\b(monday|tuesday|wednesday|friday|saturday|sunday)\b/i)
+    }
+  })
+
+  it('never names a season or a harvest in an event’s copy, since the month moves too', () => {
+    for (const item of ASSOCIATION_DEMO_EVENTS) {
+      const copy = [
+        item.title,
+        item.slug,
+        item.description,
+        ...blockTexts(associationEventBlocks(item)[0] as VocabularyBlock),
+      ].join(' ')
+      expect(copy, item.slug).not.toMatch(
+        /\b(spring|summer|autumn|fall|winter|harvest|christmas|easter)\b/i,
+      )
+    }
+  })
+
+  it('writes clock times in an event’s copy that fall within its own start and end', () => {
+    for (const item of ASSOCIATION_DEMO_EVENTS) {
+      const copy = [
+        item.description,
+        ...blockTexts(associationEventBlocks(item)[0] as VocabularyBlock),
+      ].join(' ')
+      const start = item.start[0] * 60 + item.start[1]
+      const end = item.end[0] * 60 + item.end[1]
+      for (const match of copy.matchAll(/\b(\d{1,2})(?:\.(\d{2}))?(am|pm)\b/g)) {
+        const hour = (Number(match[1]) % 12) + (match[3] === 'pm' ? 12 : 0)
+        const minutes = hour * 60 + Number(match[2] ?? 0)
+        expect(minutes, `${item.slug}: ${match[0]}`).toBeGreaterThanOrEqual(start)
+        expect(minutes, `${item.slug}: ${match[0]}`).toBeLessThanOrEqual(end)
+      }
     }
   })
 

@@ -1,58 +1,65 @@
 import type { HeroBlock } from '@cogenta/blocks'
-import {
-  actionList,
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  image,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import { actionList, type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { optionalText } from '../layout.js'
 
 /**
- * The full-bleed dining-room hero: the media (when present) fills the whole
- * band, a gradient scrim sits between it and the copy so the centred text
- * stays legible over a photo of any tone, and the eyebrow/title/subtitle are
- * centred — the "elegant restaurant homepage" convention (Divi/Astra
- * "Restaurant") rather than the left-aligned marketing hero the other
- * built-in themes use.
+ * The opening of a page: the photograph of the room across the whole width
+ * of the window, then the name of the place set large and light in the
+ * display serif, on the page's own ground.
  *
- * The scrim is a CSS gradient composed from `--cg-scrim` (itself derived
- * from the skin's own ink, see `tokens.css`), never a literal colour: a
- * skin with a lighter ink still gets a scrim tuned to it.
+ * The words sit under the picture, never on it. A headline laid over a
+ * photograph needs a veil to stay legible on every picture an editor may
+ * choose, and a veil over a dining room is exactly what makes it look like
+ * every other restaurant template; set on the paper, the name is legible in
+ * both schemes whatever the photograph, and the room stays as it was lit.
+ *
+ * Name on the first eight columns, its baseline shared with the subtitle and
+ * the action on the last four. An eyebrow, when there is one, is a line of
+ * small capitals above the name, never a badge. Without media the block is
+ * the name row alone.
+ *
+ * The image is the only one on a page loaded eagerly: it is above the fold
+ * by construction.
  */
 export function renderHero(block: HeroBlock, ctx: RenderContext): HtmlElement {
-  const tag = blockHeadingTag('hero') ?? 'h1'
+  const actions = actionList(ctx, block.actions, ctx.t('hero.actions'))
+  const hasAside = block.subtitle !== undefined || actions !== null
+
   return h(
     'section',
     {
-      class: 'cg-hero',
+      class: 'cr-section cr-hero',
       'data-block': 'hero',
-      'data-has-media': block.media === undefined ? 'false' : 'true',
+      'data-media': block.media === undefined ? 'false' : 'true',
     },
     block.media === undefined
       ? null
       : h(
-          'div',
-          { class: 'cg-hero__media' },
+          'figure',
+          { class: 'cr-hero__media' },
           image(ctx, block.media, {
-            className: 'cg-hero__image',
+            className: 'cr-hero__image',
             loading: 'eager',
             sizes: '100vw',
           }),
-          h('div', { class: 'cg-hero__scrim', 'aria-hidden': 'true' }),
         ),
     h(
       'div',
-      { class: 'cg-hero__body' },
-      block.eyebrow === undefined
-        ? null
-        : h('p', { class: 'cg-hero__eyebrow', 'data-field': 'eyebrow' }, block.eyebrow),
-      heading(tag, { class: 'cg-hero__title', 'data-field': 'title' }, block.title),
-      block.subtitle === undefined
-        ? null
-        : h('p', { class: 'cg-hero__subtitle', 'data-field': 'subtitle' }, block.subtitle),
-      actionList(ctx, block.actions, ctx.t('hero.actions')),
+      { class: 'cr-container cr-hero__inner' },
+      h(
+        'div',
+        { class: 'cr-hero__heading' },
+        optionalText('p', 'cr-hero__eyebrow', block.eyebrow, { 'data-field': 'eyebrow' }),
+        h('h1', { class: 'cr-hero__title', 'data-field': 'title' }, block.title),
+      ),
+      hasAside
+        ? h(
+            'div',
+            { class: 'cr-hero__aside' },
+            optionalText('p', 'cr-hero__subtitle', block.subtitle, { 'data-field': 'subtitle' }),
+            actions,
+          )
+        : null,
     ),
   )
 }

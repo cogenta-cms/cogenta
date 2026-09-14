@@ -8,189 +8,134 @@ import type {
 } from '@cogenta/theme-kit'
 
 /**
- * A `RenderContext` that behaves like the real one and returns fixed
- * values, so a snapshot changes only when the markup changes.
- *
- * It exposes exactly what contract D lists — nothing here can stand in for
- * a database or a secret, because the interface has no room for one.
+ * A `RenderContext` that behaves like the real one and returns fixed values,
+ * so a snapshot changes only when the markup changes. It exposes exactly what
+ * contract D lists: nothing here can stand in for a database or a secret,
+ * because the interface has no room for one.
  */
+
+function source(src: string, width: number, height: number, alt: string): ImageSource {
+  return { kind: 'image', src, srcset: `${src} ${width}w`, width, height, alt, focal: null }
+}
 
 const MEDIA: Readonly<Record<string, ImageSource>> = {
-  'media-hero': {
-    kind: 'image',
-    src: '/img/hero-1600.avif',
-    srcset: '/img/hero-800.avif 800w, /img/hero-1600.avif 1600w',
-    width: 1600,
-    height: 1000,
-    alt: 'The dining room, candlelit',
-    focal: { x: 0.5, y: 0.4 },
+  'media-room': {
+    ...source('/img/room-1600.avif', 1600, 914, 'The dining room set for dinner'),
+    focal: { x: 0.5, y: 0.6 },
   },
-  'media-figure': {
-    kind: 'image',
-    src: '/img/figure-800.avif',
-    srcset: '/img/figure-800.avif 800w',
-    width: 800,
-    height: 600,
-    alt: 'The pass, mid-service',
-    focal: null,
-  },
-  'media-gallery-1': {
-    kind: 'image',
-    src: '/img/g1-400.avif',
-    srcset: '',
-    width: 400,
-    height: 400,
-    alt: 'The dining room from the door',
-    focal: null,
-  },
-  'media-gallery-2': {
-    kind: 'image',
-    src: '/img/g2-400.avif',
-    srcset: '',
-    width: 400,
-    height: 400,
-    alt: 'A plate, ready to leave the pass',
-    focal: null,
-  },
-  // Decorative: the author's name is right beside it in text.
-  'media-avatar': {
-    kind: 'image',
-    src: '/img/avatar-96.avif',
-    srcset: '',
-    width: 96,
-    height: 96,
-    alt: '',
-    focal: null,
-  },
-  'logo-press-1': {
-    kind: 'image',
-    src: '/img/press-1.svg',
-    srcset: '',
-    width: 160,
-    height: 40,
-    alt: '',
-    focal: null,
-  },
-  'logo-press-2': {
-    kind: 'image',
-    src: '/img/press-2.svg',
-    srcset: '',
-    width: 160,
-    height: 40,
-    alt: '',
-    focal: null,
-  },
-  'media-inline': {
-    kind: 'image',
-    src: '/img/inline-800.avif',
-    srcset: '',
-    width: 800,
-    height: 450,
-    alt: 'A hand-written specials board',
-    focal: null,
-  },
-  'media-dish-1': {
-    kind: 'image',
-    src: '/img/dish-1-400.avif',
-    srcset: '',
-    width: 400,
-    height: 400,
-    alt: 'Roasted beet salad, plated',
-    focal: null,
-  },
+  'media-figure': source('/img/figure-1200.avif', 1200, 800, 'The counter before service'),
+  'photo-beetroot': source('/img/beetroot-717.avif', 717, 896, 'Beetroot and goat’s curd'),
+  'photo-octopus': source('/img/octopus-717.avif', 717, 896, 'Grilled octopus'),
+  'photo-duck': source('/img/duck-717.avif', 717, 896, 'Duck leg on red cabbage'),
+  // Decorative: the name is right beside it in text.
+  'media-avatar': source('/img/avatar-96.avif', 96, 96, ''),
+  'logo-tablees': source('/img/tablees.png', 320, 80, ''),
+  'logo-guide': source('/img/guide.png', 320, 80, ''),
+  'media-inline': source('/img/inline-800.avif', 800, 533, 'The pass at seven'),
 }
 
-const MISSING: ImageSource = {
-  kind: 'image',
-  src: '/img/missing.svg',
-  srcset: '',
-  width: 1,
-  height: 1,
-  alt: '',
-  focal: null,
-}
+const MISSING: ImageSource = source('/img/missing.png', 1, 1, '')
 
 /**
- * Shaped exactly like the `restaurant` blueprint's `menu_item` collection
- * (`name`/`description`/`price`/`category`/`photo`) — the fixture the
- * `collectionList` block's own test grounds itself in, since this theme
- * renders that collection as a real, grouped, priced menu rather than a
- * generic card grid.
+ * A week's menu in the order it is printed: two sections, a vegetarian dish,
+ * a price with cents, a dish without a photograph and a wine without a
+ * description.
  */
-export const MENU_ENTRIES: readonly ContentEntry[] = [
+export const DISHES: readonly ContentEntry[] = [
   {
-    id: '0192f0c2-0000-7000-8000-000000000001',
+    id: 'd-beetroot',
     collection: 'menu_item',
     locale: 'en',
     status: 'published',
-    name: 'Roasted beet salad',
-    description: 'Beets, goat cheese, walnuts, a light citrus dressing.',
-    price: 9.5,
+    name: 'Beetroot, goat’s curd and walnuts',
+    description: 'Crapaudine beetroot baked in salt, with fresh goat’s curd.',
+    price: 12,
     category: 'Starters',
-    photo: 'media-dish-1',
+    vegetarian: true,
+    photo: 'photo-beetroot',
   },
   {
-    id: '0192f0c2-0000-7000-8000-000000000002',
+    id: 'd-octopus',
     collection: 'menu_item',
     locale: 'en',
     status: 'published',
-    // No `photo` on purpose: a dish with no image still renders.
-    name: 'Soup of the day',
-    description: 'Changes with the season, made from scratch every morning.',
-    price: 7,
+    name: 'Grilled octopus, saffron and orange',
+    description: 'Braised for two hours, then grilled over vine cuttings.',
+    price: 17.5,
     category: 'Starters',
+    photo: 'photo-octopus',
   },
   {
-    id: '0192f0c2-0000-7000-8000-000000000003',
+    id: 'd-duck',
     collection: 'menu_item',
     locale: 'en',
     status: 'published',
-    name: 'Pan-seared trout',
-    description: 'Local trout, brown butter, seasonal vegetables.',
-    price: 22,
+    name: 'Duck leg, red cabbage and juniper',
+    description: 'Cooked slowly in its own fat and crisped to order.',
+    price: 26,
     category: 'Mains',
+    photo: 'photo-duck',
   },
   {
-    id: '0192f0c2-0000-7000-8000-000000000004',
+    id: 'd-morgon',
     collection: 'menu_item',
     locale: 'en',
     status: 'published',
-    // No `category` on purpose: an uncategorised dish still renders, in its
-    // own unlabelled group.
-    name: 'House bread, whipped butter',
-    price: 4,
+    name: 'Morgon Côte du Py, 2022',
+    price: 10,
+    category: 'Mains',
   },
 ]
 
-export const ENTRIES: readonly ContentEntry[] = [
+/** Notes from the kitchen: pictures and no prices. */
+export const NOTES: readonly ContentEntry[] = [
   {
-    id: '0192f0c2-1111-7000-8000-000000000001',
-    collection: 'article',
+    id: 'n-ceps',
+    collection: 'note',
     locale: 'en',
     status: 'published',
-    title: 'A note on where the produce comes from',
-    excerpt: 'Why the menu changes with the market, not the calendar.',
-    publishedAt: '2026-02-11T09:00:00.000Z',
+    title: 'The first ceps of the year',
+    excerpt: 'A picker from the Forez drove down with four crates.',
+    photo: 'photo-duck',
   },
   {
-    id: '0192f0c2-1111-7000-8000-000000000002',
+    id: 'n-pears',
+    collection: 'note',
+    locale: 'en',
+    status: 'published',
+    title: 'Pears from the Monts du Lyonnais',
+    photo: 'photo-octopus',
+  },
+]
+
+/** Two plain entries: one with a title and an excerpt, one with neither. */
+export const ENTRIES: readonly ContentEntry[] = [
+  {
+    id: '0192f0c2-0000-7000-8000-000000000001',
     collection: 'article',
     locale: 'en',
     status: 'published',
-    publishedAt: '2026-01-05T09:00:00.000Z',
+    title: 'Closed for three weeks in August',
+    excerpt: 'The kitchen reopens on Tuesday 25 August.',
+  },
+  {
+    id: '0192f0c2-0000-7000-8000-000000000002',
+    collection: 'article',
+    locale: 'en',
+    status: 'published',
   },
 ]
 
 export function makeContext(overrides: Partial<RenderContext> = {}): RenderContext {
   const base: RenderContext = {
     site: {
-      name: 'Amaranthe',
-      url: 'https://amaranthe.example',
+      name: 'Maison Verte',
+      url: 'https://maisonverte.example',
       locales: ['en', 'fr'],
       defaultLocale: 'en',
     },
     locale: 'en',
-    url: new URL('https://amaranthe.example/en/home'),
+    url: new URL('https://maisonverte.example/en/menu'),
     t: (key) => key,
     image: (media: MediaReference) => MEDIA[media] ?? MISSING,
     link: (target) => {
@@ -201,12 +146,22 @@ export function makeContext(overrides: Partial<RenderContext> = {}): RenderConte
       return `/en/${target.collection}/${target.id}`
     },
     content: {
-      entry: async () => MENU_ENTRIES[0] ?? null,
-      byPath: async () => MENU_ENTRIES[0] ?? null,
-      list: async (): Promise<Page<ContentEntry>> => ({ items: MENU_ENTRIES, nextCursor: null }),
+      entry: async () => ENTRIES[0] ?? null,
+      byPath: async () => ENTRIES[0] ?? null,
+      list: async (): Promise<Page<ContentEntry>> => ({ items: ENTRIES, nextCursor: null }),
     },
   }
   return { ...base, ...overrides }
+}
+
+function paragraph(key: string, text: string): RichTextDocument[number] {
+  return {
+    _key: key,
+    _type: 'block',
+    style: 'normal',
+    children: [{ _key: `${key}-s`, _type: 'span', text, marks: [] }],
+    markDefs: [],
+  }
 }
 
 const PROSE_BODY: RichTextDocument = [
@@ -215,21 +170,19 @@ const PROSE_BODY: RichTextDocument = [
     _type: 'block',
     style: 'normal',
     children: [
-      { _key: 's1', _type: 'span', text: 'Amaranthe opened in ', marks: [] },
-      { _key: 's2', _type: 'span', text: '1994', marks: ['strong'] },
-      { _key: 's3', _type: 'span', text: ', two streets from the market — see ', marks: [] },
-      { _key: 's4', _type: 'span', text: 'our suppliers', marks: ['m1'] },
-      { _key: 's5', _type: 'span', text: ' & the <specials> board.', marks: [] },
+      { _key: 's1', _type: 'span', text: 'We opened in ', marks: [] },
+      { _key: 's2', _type: 'span', text: '2016', marks: ['strong'] },
+      { _key: 's3', _type: 'span', text: ' and buy from ', marks: [] },
+      { _key: 's4', _type: 'span', text: 'eleven growers', marks: ['m1'] },
+      { _key: 's5', _type: 'span', text: ' & write the <menu> on Mondays.', marks: [] },
     ],
-    markDefs: [
-      { _key: 'm1', _type: 'link', href: 'https://example.org/suppliers', rel: 'external' },
-    ],
+    markDefs: [{ _key: 'm1', _type: 'link', href: 'https://example.org/growers', rel: 'external' }],
   },
   {
     _key: 'h1',
     _type: 'block',
     style: 'h2',
-    children: [{ _key: 's6', _type: 'span', text: 'What has not changed', marks: [] }],
+    children: [{ _key: 's6', _type: 'span', text: 'The kitchen', marks: [] }],
     markDefs: [],
   },
   {
@@ -238,7 +191,7 @@ const PROSE_BODY: RichTextDocument = [
     style: 'normal',
     listItem: 'bullet',
     level: 1,
-    children: [{ _key: 's7', _type: 'span', text: 'A menu rewritten twice a week', marks: [] }],
+    children: [{ _key: 's7', _type: 'span', text: 'Vegetables from Vourles', marks: [] }],
     markDefs: [],
   },
   {
@@ -247,89 +200,43 @@ const PROSE_BODY: RichTextDocument = [
     style: 'normal',
     listItem: 'bullet',
     level: 2,
-    children: [{ _key: 's8', _type: 'span', text: 'and a table for two by the window', marks: [] }],
+    children: [{ _key: 's8', _type: 'span', text: 'delivered twice a week', marks: [] }],
     markDefs: [],
-  },
-  {
-    _key: 'l3',
-    _type: 'block',
-    style: 'normal',
-    listItem: 'bullet',
-    level: 1,
-    children: [
-      { _key: 's9', _type: 'span', text: 'A dining room that seats thirty-two', marks: ['m2'] },
-    ],
-    markDefs: [{ _key: 'm2', _type: 'internalLink', collection: 'page', id: 'about' }],
   },
   {
     _key: 'q1',
     _type: 'block',
     style: 'blockquote',
-    children: [{ _key: 's10', _type: 'span', text: 'Cooked to order, always.', marks: [] }],
+    children: [{ _key: 's9', _type: 'span', text: 'Three things on a plate.', marks: [] }],
     markDefs: [],
   },
-  {
-    _key: 'm3',
-    _type: 'media',
-    id: 'media-inline',
-    caption: 'Tonight’s specials, chalked at four',
-  },
-]
-
-const FAQ_ANSWER: RichTextDocument = [
-  {
-    _key: 'a1',
-    _type: 'block',
-    style: 'normal',
-    children: [
-      { _key: 'as1', _type: 'span', text: 'Yes, most of the menu can be adjusted.', marks: [] },
-    ],
-    markDefs: [],
-  },
-]
-
-const TESTIMONIAL_QUOTE: RichTextDocument = [
-  {
-    _key: 't1',
-    _type: 'block',
-    style: 'normal',
-    children: [
-      { _key: 'ts1', _type: 'span', text: 'The kind of ', marks: [] },
-      { _key: 'ts2', _type: 'span', text: 'quiet, unhurried evening', marks: ['strong'] },
-      { _key: 'ts3', _type: 'span', text: ' we keep coming back for.', marks: [] },
-    ],
-    markDefs: [],
-  },
-]
-
-const ACCORDION_ANSWER: RichTextDocument = [
-  {
-    _key: 'p1',
-    _type: 'block',
-    style: 'normal',
-    children: [
-      { _key: 'ps1', _type: 'span', text: 'Open Tuesday to Sunday, 18:00 to 23:00.', marks: [] },
-    ],
-    markDefs: [],
-  },
+  { _key: 'm2', _type: 'media', id: 'media-inline', caption: 'The pass at seven' },
 ]
 
 const VERSION = '1.0.0'
 
 type BlockOfType<T extends VocabularyBlock['_type']> = Extract<VocabularyBlock, { _type: T }>
 
+/**
+ * One valid, representative block per vocabulary entry, mapped over `_type`
+ * so `BLOCKS.embed` arrives at `renderEmbed` as an `EmbedBlock`.
+ */
 export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> } = {
   hero: {
     _key: 'b-hero',
     _type: 'hero',
     _version: VERSION,
-    eyebrow: 'Est. 1994 · Lyon',
-    title: 'Amaranthe',
-    subtitle: 'Seasonal cooking, a short walk from the market, since 1994.',
-    media: 'media-hero',
+    eyebrow: 'Restaurant and wine bar, Lyon',
+    title: 'Maison Verte',
+    subtitle: 'Seasonal cooking on the slopes of the Croix-Rousse.',
+    media: 'media-room',
     actions: [
-      { label: 'Reserve a table', target: { href: '/contact' }, emphasis: 'primary' },
-      { label: 'View the menu', target: { href: '/menu' } },
+      { label: 'Reserve a table', target: { collection: 'page', id: 'reservations' } },
+      {
+        label: 'Gift vouchers',
+        target: { href: 'https://example.org/vouchers' },
+        emphasis: 'primary',
+      },
     ],
   },
   prose: { _key: 'b-prose', _type: 'prose', _version: VERSION, body: PROSE_BODY },
@@ -338,98 +245,97 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _type: 'mediaFigure',
     _version: VERSION,
     media: 'media-figure',
-    caption: 'The pass, seven o’clock on a Friday',
-    credit: 'Amaranthe',
-    ratio: '16:9',
-    align: 'wide',
+    caption: 'The counter, kept for guests without a booking.',
+    credit: 'Photograph: the house',
+    ratio: '3:2',
+    align: 'start',
   },
   featureGrid: {
     _key: 'b-features',
     _type: 'featureGrid',
     _version: VERSION,
-    title: 'How we cook',
+    title: 'Hours and address',
     items: [
-      {
-        _key: 'f1',
-        icon: 'leaf',
-        title: 'Bought that morning',
-        text: 'The menu is written after the market, not before it.',
-        link: { collection: 'page', id: 'about' },
-      },
+      { _key: 'f1', title: 'Dinner', text: 'Tuesday to Saturday, 19:30 to 21:45' },
       {
         _key: 'f2',
-        icon: 'utensils',
-        title: 'Cooked to order',
-        text: 'Nothing is held under a lamp.',
+        title: 'Telephone',
+        text: '+33 4 78 28 16 42',
+        link: { href: 'tel:+33478281642' },
       },
+      { _key: 'f3', title: 'Reservations', link: { collection: 'page', id: 'reservations' } },
     ],
   },
   cta: {
     _key: 'b-cta',
     _type: 'cta',
     _version: VERSION,
-    title: 'Book now',
-    text: 'Reservations recommended on weekends.',
-    actions: [
-      { label: 'Book now', target: { href: '/contact' }, emphasis: 'primary' },
-      { label: 'Call us', target: { href: 'tel:+330000000' } },
-    ],
+    title: 'The room upstairs',
+    text: 'Fourteen guests at one table.',
+    actions: [{ label: 'Private dining', target: { href: '/private-dining' } }],
   },
   gallery: {
     _key: 'b-gallery',
     _type: 'gallery',
     _version: VERSION,
-    layout: 'masonry',
+    layout: 'grid',
     items: [
-      { _key: 'g1', media: 'media-gallery-1' },
-      { _key: 'g2', media: 'media-gallery-2' },
+      { _key: 'g1', media: 'photo-beetroot' },
+      { _key: 'g2', media: 'photo-octopus' },
+      { _key: 'g3', media: 'photo-duck' },
+      { _key: 'g4', media: 'photo-beetroot' },
     ],
   },
   quote: {
     _key: 'b-quote',
     _type: 'quote',
     _version: VERSION,
-    text: 'The trout is worth the trip on its own.',
-    author: 'A regular',
-    role: 'Guestbook, March 2026',
+    text: 'There is nothing on the plate that is there for show.',
+    author: 'Hélène Vasseur',
+    role: 'Tablées, autumn guide 2026',
     avatar: 'media-avatar',
   },
   faq: {
     _key: 'b-faq',
     _type: 'faq',
     _version: VERSION,
-    title: 'Before you book',
-    items: [{ _key: 'q1', question: 'Can you cater for allergies?', answer: FAQ_ANSWER }],
+    title: 'Before you come',
+    items: [
+      {
+        _key: 'q1',
+        question: 'Do you welcome children?',
+        answer: [paragraph('a1', 'Yes, and we have two high chairs.')],
+      },
+    ],
   },
   stats: {
     _key: 'b-stats',
     _type: 'stats',
     _version: VERSION,
-    title: 'Since 1994',
+    title: 'The house in numbers',
     items: [
-      { _key: 's1', value: '3', label: 'Chefs' },
-      { _key: 's2', value: '120', label: 'Seats' },
-      { _key: 's3', value: '1', label: 'Michelin mention' },
+      { _key: 's1', value: '38', label: 'seats in the room' },
+      { _key: 's2', value: '100', unit: 'km', label: 'from the door' },
     ],
   },
   logos: {
     _key: 'b-logos',
     _type: 'logos',
     _version: VERSION,
-    title: 'As featured in',
+    title: 'Written about in',
     items: [
-      { _key: 'l1', media: 'logo-press-1', name: 'The Local Table', url: 'https://example.org' },
-      { _key: 'l2', media: 'logo-press-2', name: 'City Eats' },
+      { _key: 'l1', media: 'logo-tablees', name: 'Tablées', url: 'https://tablees.example' },
+      { _key: 'l2', media: 'logo-guide', name: 'The Rhône Guide' },
     ],
   },
   collectionList: {
-    _key: 'b-menu',
+    _key: 'b-collection',
     _type: 'collectionList',
     _version: VERSION,
-    title: 'The menu',
+    title: 'This week’s menu',
     collection: 'menu_item',
-    sort: { field: 'createdAt', direction: 'asc' },
-    limit: 12,
+    sort: { field: 'id', direction: 'asc' },
+    limit: 40,
     layout: 'grid',
   },
   embed: {
@@ -437,7 +343,7 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _type: 'embed',
     _version: VERSION,
     provider: 'other',
-    url: 'https://www.openstreetmap.org/#map=16/45.75/4.85',
+    url: 'https://www.openstreetmap.org/?mlat=45.7695&mlon=4.8325',
     ratio: '16:9',
     consentRequired: true,
   },
@@ -445,62 +351,74 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-testimonial',
     _type: 'testimonial',
     _version: VERSION,
-    quote: TESTIMONIAL_QUOTE,
-    attribution: { name: 'M. Bernard', role: 'A regular', avatar: 'media-avatar' },
+    quote: [paragraph('t1', 'We had my father’s seventieth birthday upstairs.')],
+    attribution: { name: 'Camille Roux', role: 'Dinner for twelve, March 2026' },
   },
   pricingTable: {
-    _key: 'b-set-menu',
+    _key: 'b-pricing',
     _type: 'pricingTable',
     _version: VERSION,
     title: 'Set menus',
     tiers: [
       {
-        _key: 'p1',
+        _key: 'tier-lunch',
         name: 'Lunch',
-        price: '€24',
-        features: ['Starter', 'Main', 'Coffee'],
-        action: { label: 'Reserve', target: { href: '/contact' } },
+        price: '€29',
+        interval: 'two courses',
+        features: ['A starter and a main', 'Three courses for €36'],
+        action: { label: 'See the menu', target: { href: '/menu' } },
       },
       {
-        _key: 'p2',
-        name: 'Tasting',
-        price: '€68',
-        features: ['Five courses', 'Wine pairing available'],
-        action: { label: 'Reserve', target: { href: '/contact' }, emphasis: 'primary' },
+        _key: 'tier-evening',
+        name: 'The evening menu',
+        price: '€62',
+        interval: 'five courses',
+        features: ['Served to the whole table'],
+        action: {
+          label: 'Reserve a table',
+          target: { href: '/reservations' },
+          emphasis: 'primary',
+        },
         highlighted: true,
       },
     ],
   },
   accordion: {
-    _key: 'b-hours',
+    _key: 'b-accordion',
     _type: 'accordion',
     _version: VERSION,
-    title: 'Hours & location',
-    items: [{ _key: 'ac1', question: 'Opening hours', answer: ACCORDION_ANSWER }],
+    title: 'Allergies',
+    items: [
+      {
+        _key: 'acc1',
+        question: 'Nuts',
+        answer: [paragraph('ac1', 'Our kitchen handles nuts every day.')],
+      },
+    ],
   },
   statCounter: {
-    _key: 'b-tallies',
+    _key: 'b-counters',
     _type: 'statCounter',
     _version: VERSION,
-    title: 'By the numbers',
+    title: 'Last year',
     stats: [
-      { _key: 'c1', value: '32', label: 'Years cooking together' },
-      { _key: 'c2', value: '4', label: 'Seasonal menus a year' },
+      { _key: 'sc1', value: '9,840', label: 'covers' },
+      { _key: 'sc2', value: '212', label: 'wines on the list' },
     ],
   },
   logoStrip: {
-    _key: 'b-press-strip',
+    _key: 'b-logostrip',
     _type: 'logoStrip',
     _version: VERSION,
+    caption: 'Listed in',
     logos: [
-      { _key: 'ls1', media: 'logo-press-1' },
-      { _key: 'ls2', media: 'logo-press-2' },
+      { _key: 'ls1', media: 'logo-tablees' },
+      { _key: 'ls2', media: 'logo-guide' },
     ],
-    caption: 'As seen in',
   },
 }
 
-/** The seventeen, in contract B's order (`blocks@2.0`, RFC 0001). */
+/** The seventeen of `blocks@2.0`, in contract B's order. */
 export const ALL_BLOCKS: readonly VocabularyBlock[] = [
   BLOCKS.hero,
   BLOCKS.prose,

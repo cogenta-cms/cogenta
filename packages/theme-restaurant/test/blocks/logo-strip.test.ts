@@ -4,24 +4,22 @@ import { renderLogoStrip } from '../../src/render/blocks/logo-strip.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
 
-describe('logoStrip — "As seen in"', () => {
-  it('renders every logo unlinked, at full colour, denser than logos', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect((html.match(/class="cg-press-strip__item"/g) ?? []).length).toBe(2)
-    expect(html).not.toContain('<a')
+describe('logoStrip', () => {
+  it('sets the caption beside the marks and says so for the stylesheet', () => {
+    expect(html).toContain('<p class="cr-strip__caption" data-field="caption">Listed in</p>')
+    expect(html).toContain('data-captioned="true"')
   })
 
-  it('renders the caption, and none at all when absent', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect(html).toContain('cg-press-strip__caption')
-    expect(html).toContain('As seen in')
-    const { caption: _c, ...uncaptioned } = BLOCKS.logoStrip
-    expect(serialize(renderLogoStrip(uncaptioned, ctx))).not.toContain('cg-press-strip__caption')
+  it('links nothing, by contract B', () => {
+    expect(html).not.toContain('<a ')
   })
 
-  it('is marked with data-block="logoStrip"', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect(html).toContain('data-block="logoStrip"')
+  it('renders without a caption, marked as such', () => {
+    const { caption: _caption, ...rest } = BLOCKS.logoStrip
+    const bare = serialize(renderLogoStrip(rest, ctx))
+    expect(bare).toContain('data-captioned="false"')
+    expect(bare).not.toContain('cr-strip__caption')
   })
 })

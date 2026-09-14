@@ -1,31 +1,29 @@
 /*
  * `@cogenta/theme-restaurant`'s design system.
  *
- * Contract D fixes a *closed* skin token set — seven colours, five type
- * tokens, two spacing tokens, three radii, three motion tokens, two shadows
- * — and refuses any skin that adds one. So this layer adds nothing to the
- * skin: every value below is *derived* from `--cogenta-*` by composition
- * (`calc`, `color-mix`, relative colour syntax). A skin swap rewrites the
- * generated `--cogenta-*` sheet and this whole system follows, with no
- * build step.
+ * The register is a contemporary bistro with serious cooking: warm cream
+ * paper and deep charcoal ink, the food and the room carrying the page, a
+ * great deal of air, and one brass kept for a few details (the small capitals
+ * that name a part of the menu, a focus ring, a selection, the underline of a
+ * link in running text). Structure is drawn with space and hairlines, never
+ * with boxes or shadows.
  *
- * Two rules hold everywhere in this file and the two that import it:
+ * Two families. Cormorant Garamond sets what a guest reads as the house's
+ * voice: the name of the place, titles, dish names, prices of set menus,
+ * quotations; light at large sizes, medium for a dish name at text size.
+ * Karla sets what a guest reads to find their way: running text,
+ * descriptions, navigation, labels and the prices of the menu.
  *
- * 1. **No colour literal.** Not one hex, `rgb()`, `hsl()` or bare `oklch()`.
- *    Every colour is either a skin token or a function *of* a skin token.
- * 2. **No second scale.** The type steps come from `--cogenta-font-size-*`
- *    and the spacing multiplier from `--cogenta-space-scale`, both emitted
- *    by `renderSkin` from the same tokens the validator checked.
+ * Contract D fixes a closed skin token set, so nothing here adds a token:
+ * every value is derived from a `--cogenta-*` property (`calc`, `color-mix`,
+ * relative colour syntax).
  *
- * The default skin (`tokens.json`) is a warm cream, charcoal-ink palette
- * with a deep wine/copper accent — the light scheme is designed on its own
- * terms, not treated as an afterthought to a dark-first theme. Elegance here
- * reads as generous negative space, thin hairlines standing in for most
- * elevation, and small-caps, letter-spaced labels (`--cg-tracking-caps`)
- * for every eyebrow/kicker. The dark palette below is designed on its own
- * terms too — the same five departures from a mechanical `bg`/`fg` swap
- * every built-in theme's dark mode uses, tuned to this palette's own wine
- * accent.
+ * Two rules hold in every stylesheet of this theme:
+ *
+ * 1. No colour literal. Every colour is a skin token or a function of one.
+ * 2. No second scale. Type steps come from `--cogenta-font-size-*`; the
+ *    display steps above `3xl` continue the same ratio, and fluid sizes only
+ *    interpolate between steps of that one ladder.
  */
 
 :where(:root) {
@@ -41,280 +39,296 @@
 }
 
 /* --------------------------------------------------------------------------
-   Space — a spacious scale (`space.density: "spacious"` in tokens.json):
-   this theme spends it on generous section rhythm and a very wide hero,
-   the "room to breathe" an elegant dining room's own website should have.
+   Space: one unit, one section rhythm, one twelve-column grid.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
-  --cg-density: var(--cogenta-space-scale, 1.25);
-  --cg-unit: calc(var(--cogenta-space-unit) * var(--cg-density));
+  --cr-density: var(--cogenta-space-scale, 1);
+  --cr-unit: calc(var(--cogenta-space-unit) * var(--cr-density));
 
-  --cg-s1: calc(var(--cg-unit) * 1);
-  --cg-s2: calc(var(--cg-unit) * 2);
-  --cg-s3: calc(var(--cg-unit) * 3);
-  --cg-s4: calc(var(--cg-unit) * 4);
-  --cg-s5: calc(var(--cg-unit) * 5);
-  --cg-s6: calc(var(--cg-unit) * 6);
-  --cg-s8: calc(var(--cg-unit) * 8);
-  --cg-s10: calc(var(--cg-unit) * 10);
-  --cg-s12: calc(var(--cg-unit) * 12);
-  --cg-s16: calc(var(--cg-unit) * 16);
-  --cg-s20: calc(var(--cg-unit) * 20);
-  --cg-s28: calc(var(--cg-unit) * 28);
+  --cr-s1: calc(var(--cr-unit) * 1);
+  --cr-s2: calc(var(--cr-unit) * 2);
+  --cr-s3: calc(var(--cr-unit) * 3);
+  --cr-s4: calc(var(--cr-unit) * 4);
+  --cr-s5: calc(var(--cr-unit) * 5);
+  --cr-s6: calc(var(--cr-unit) * 6);
+  --cr-s8: calc(var(--cr-unit) * 8);
+  --cr-s10: calc(var(--cr-unit) * 10);
+  --cr-s12: calc(var(--cr-unit) * 12);
+  --cr-s16: calc(var(--cr-unit) * 16);
+  --cr-s20: calc(var(--cr-unit) * 20);
+  --cr-s24: calc(var(--cr-unit) * 24);
+  --cr-s32: calc(var(--cr-unit) * 32);
 
-  --cg-gutter: var(--cg-s6);
-  --cg-gap-tight: var(--cg-s2);
-  --cg-gap: var(--cg-s5);
-  --cg-gap-loose: var(--cg-s10);
-  --cg-section-y: var(--cg-s20);
+  /* The only vertical rhythm between blocks. Every block is padded by half of
+     it above and below, so any two blocks sit one full step apart, whatever
+     their order. Generous: a dining room is mostly the space between tables. */
+  --cr-section: clamp(var(--cr-s20), 10vw, var(--cr-s32));
 
-  --cg-measure: 66ch;
-  --cg-measure-narrow: 40ch;
-  --cg-page: 76rem;
-  --cg-page-narrow: 46rem;
+  --cr-columns: 12;
+  --cr-gutter: clamp(var(--cr-s5), 4vw, var(--cr-s16));
+  --cr-col-gap: clamp(var(--cr-s4), 2vw, var(--cr-s8));
+  --cr-page: 86rem;
+
+  --cr-measure: 64ch;
+  --cr-header-height: 5rem;
 }
 
 :where([data-density="compact"]) {
-  --cg-density: 0.9;
+  --cr-density: 0.75;
 }
 
 :where([data-density="comfortable"]) {
-  --cg-density: 1.1;
+  --cr-density: 1;
 }
 
 :where([data-density="spacious"]) {
-  --cg-density: 1.25;
+  --cr-density: 1.25;
 }
 
 /* --------------------------------------------------------------------------
-   Type — the skin's scale, named, plus the two type families this theme
-   actually loads: Cormorant Garamond for display headings (light, generous
-   letter-spacing at large sizes) and Jost for body copy and every control.
+   Type: a display serif and a text face.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
-  --cg-text-xs: var(--cogenta-font-size-xs, 0.72rem);
-  --cg-text-sm: var(--cogenta-font-size-sm, 0.86rem);
-  --cg-text-md: var(--cogenta-font-size-md, var(--cogenta-font-base-size, 1rem));
-  --cg-text-lg: var(--cogenta-font-size-lg, 1.25rem);
-  --cg-text-xl: var(--cogenta-font-size-xl, 1.563rem);
-  --cg-text-2xl: var(--cogenta-font-size-2xl, 1.953rem);
-  --cg-text-3xl: var(--cogenta-font-size-3xl, 2.441rem);
-  --cg-text-4xl: calc(var(--cogenta-font-size-3xl, 2.441rem) * 1.2);
+  --cr-font-display: var(--cogenta-font-serif);
+  --cr-font-text: var(--cogenta-font-sans);
+  --cr-font-code: var(--cogenta-font-mono);
 
-  --cg-leading-tight: 1.05;
-  --cg-leading-snug: 1.28;
-  --cg-leading-normal: 1.65;
-  --cg-leading-relaxed: 1.8;
+  --cr-text-xs: var(--cogenta-font-size-xs, 0.64rem);
+  --cr-text-sm: var(--cogenta-font-size-sm, 0.8rem);
+  --cr-text-md: var(--cogenta-font-size-md, var(--cogenta-font-base-size, 1rem));
+  --cr-text-lg: var(--cogenta-font-size-lg, 1.25rem);
+  --cr-text-xl: var(--cogenta-font-size-xl, 1.56rem);
+  --cr-text-2xl: var(--cogenta-font-size-2xl, 1.95rem);
+  --cr-text-3xl: var(--cogenta-font-size-3xl, 2.44rem);
+  /* The same ladder, continued: each step is the previous one times the
+     skin's own ratio. */
+  --cr-text-4xl: calc(var(--cr-text-3xl) * var(--cogenta-font-scale, 1.25));
+  --cr-text-5xl: calc(var(--cr-text-4xl) * var(--cogenta-font-scale, 1.25));
+  --cr-text-6xl: calc(var(--cr-text-5xl) * var(--cogenta-font-scale, 1.25));
+  --cr-text-7xl: calc(var(--cr-text-6xl) * var(--cogenta-font-scale, 1.25));
+  --cr-text-8xl: calc(var(--cr-text-7xl) * var(--cogenta-font-scale, 1.25));
 
-  /* A light-weight display serif wants *wider* tracking at large sizes, not
-     tighter — the opposite instinct from a grotesque display face — and a
-     small-caps label wants it wider still. Both scale in `em`. */
-  --cg-tracking-tight: 0em;
-  --cg-tracking-snug: 0.01em;
-  --cg-tracking-normal: 0.01em;
-  --cg-tracking-wide: 0.08em;
-  --cg-tracking-caps: 0.22em;
-
-  --cg-weight-light: 300;
-  --cg-weight-regular: 400;
-  --cg-weight-medium: 500;
-  --cg-weight-semibold: 600;
-}
-
-/* --------------------------------------------------------------------------
-   Radius — kept close to square: hairlines carry this theme's structure,
-   never a soft rounded corner. `--cg-radius-pill` is the one rounded shape,
-   reserved for the small "chef's pick"/category pills.
-   -------------------------------------------------------------------------- */
-
-:where(:root) {
-  --cg-radius-xs: calc(var(--cogenta-radius-sm) / 2);
-  --cg-radius-sm: var(--cogenta-radius-sm);
-  --cg-radius-md: var(--cogenta-radius-md);
-  --cg-radius-lg: var(--cogenta-radius-lg);
-  --cg-radius-xl: calc(var(--cogenta-radius-lg) * 2);
-  --cg-radius-pill: 999rem;
-}
-
-/* --------------------------------------------------------------------------
-   Motion
-   -------------------------------------------------------------------------- */
-
-:where(:root) {
-  --cg-duration-fast: calc(var(--cogenta-motion-duration) * 0.6);
-  --cg-duration: var(--cogenta-motion-duration);
-  --cg-duration-slow: calc(var(--cogenta-motion-duration) * 3);
-  --cg-ease: var(--cogenta-motion-easing);
-}
-
-/* --------------------------------------------------------------------------
-   Colour — one palette per scheme, both derived from the same seven tokens.
-   --------------------------------------------------------------------------
-
-   The block below declares the **light** palette (this theme's default
-   skin: warm cream, charcoal ink, a deep wine accent) in plain terms; the
-   scheme-aware values live in the `@supports` block after it, guarded the
-   same way every built-in theme guards it: a browser that cannot parse
-   `light-dark()` still gets a usable light palette rather than an `unset`
-   custom property.
-
-   **The dark palette is designed on its own terms, not inverted** — the
-   same five departures from a mechanical `bg`/`fg` swap every built-in
-   theme's dark mode makes, applied to this palette's own wine hue:
-
-   1. Elevation is a hairline ring in both schemes; a real shadow is spent
-      only on hover, never on a resting surface.
-   2. The accent is lifted well past a mechanical brightening and
-      **desaturated** as it lifts — a wine pushed to the light-mode's own
-      lightness reads as a highlighter pink; this pulls chroma back as it
-      rises so it still reads as "the same considered wine".
-   3. The accent's foreground flips to ink: light text on a lifted accent
-      fails contrast.
-   4. Text is never pure light and never fully desaturated — ink carries a
-      trace of the accent's own hue.
-   5. A border lightens rather than darkens against its surface.
-
-   Known limit, recorded once for every built-in theme: the derivation
-   assumes a light-first skin (`bg` lighter than `fg`) — this theme's own
-   default. A skin that starts dark would need a second colour group in the
-   contract, a `theme@2.0` change no single theme can make on its own.
-   -------------------------------------------------------------------------- */
-
-:where(:root) {
-  --cg-canvas: var(--cogenta-color-bg);
-  --cg-surface: var(--cogenta-color-bg);
-  --cg-surface-raised: var(--cogenta-color-bg);
-  --cg-surface-sunken: var(--cogenta-color-muted);
-  --cg-surface-tinted: color-mix(in oklab, var(--cogenta-color-accent) 7%, var(--cogenta-color-bg));
-
-  --cg-ink: var(--cogenta-color-fg);
-  --cg-ink-muted: var(--cogenta-color-muted-fg);
-  --cg-ink-subtle: color-mix(in oklab, var(--cogenta-color-muted-fg) 85%, var(--cogenta-color-bg));
-
-  --cg-accent: var(--cogenta-color-accent);
-  --cg-accent-fg: var(--cogenta-color-accent-fg);
-  --cg-accent-hover: color-mix(in oklab, var(--cogenta-color-accent) 84%, var(--cogenta-color-fg));
-  --cg-accent-soft: color-mix(in oklab, var(--cogenta-color-accent) 9%, var(--cogenta-color-bg));
-  --cg-accent-soft-fg: color-mix(
-    in oklab,
-    var(--cogenta-color-accent) 70%,
-    var(--cogenta-color-fg)
+  /* Labels, captions and small print sit between `sm` and `md`. */
+  --cr-text-caption: calc((var(--cr-text-sm) + var(--cr-text-md)) / 2);
+  /* The reading size: `md` on a phone, a quarter step above it on a desk. */
+  --cr-text-reading: clamp(
+    var(--cr-text-md),
+    calc(0.94rem + 0.2vw),
+    calc((var(--cr-text-md) * 3 + var(--cr-text-lg)) / 4)
   );
 
-  --cg-line: var(--cogenta-color-border);
-  --cg-line-soft: color-mix(in oklab, var(--cogenta-color-border) 50%, var(--cogenta-color-bg));
-  --cg-line-strong: color-mix(in oklab, var(--cogenta-color-border) 60%, var(--cogenta-color-fg));
+  /* The display serif has a small eye: at the same nominal size it reads a
+     step smaller than the text face, so its sizes start a step higher. */
+  --cr-size-name: clamp(var(--cr-text-5xl), calc(1rem + 8.4vw), var(--cr-text-8xl));
+  --cr-size-title: clamp(var(--cr-text-4xl), calc(1rem + 4.6vw), var(--cr-text-6xl));
+  --cr-size-dish: clamp(var(--cr-text-3xl), calc(1rem + 3.2vw), var(--cr-text-5xl));
+  --cr-size-section: clamp(var(--cr-text-3xl), calc(1rem + 2.3vw), var(--cr-text-4xl));
+  --cr-size-welcome: clamp(
+    var(--cr-text-xl),
+    calc(0.9rem + 1.25vw),
+    calc((var(--cr-text-2xl) + var(--cr-text-3xl)) / 2)
+  );
+  --cr-size-quote: clamp(var(--cr-text-2xl), calc(0.95rem + 2.2vw), var(--cr-text-4xl));
+  --cr-size-lead: clamp(var(--cr-text-lg), calc(0.95rem + 0.7vw), var(--cr-text-2xl));
+  --cr-size-figure: clamp(var(--cr-text-3xl), calc(1rem + 3vw), var(--cr-text-5xl));
+  --cr-size-dish-name: clamp(var(--cr-text-lg), calc(0.95rem + 0.4vw), var(--cr-text-xl));
+  --cr-size-label: clamp(var(--cr-text-lg), calc(0.95rem + 0.35vw), var(--cr-text-xl));
+  --cr-size-nav: clamp(var(--cr-text-3xl), calc(1rem + 5vw), var(--cr-text-4xl));
+  --cr-size-wordmark: clamp(var(--cr-text-xl), calc(1rem + 0.6vw), var(--cr-text-2xl));
 
-  /* The hero's own flat scrim — a single semi-transparent veil over the
-     whole image (D5: no gradient fade), a function of ink rather than a
-     literal black wash, so a lighter-ink skin gets a lighter scrim too. */
-  --cg-scrim: color-mix(in oklab, var(--cogenta-color-fg) 55%, transparent);
+  --cr-leading-display: 0.98;
+  --cr-leading-heading: 1.12;
+  --cr-leading-lead: 1.38;
+  --cr-leading-text: 1.65;
+  --cr-leading-ui: 1.4;
+
+  --cr-tracking-display: -0.012em;
+  --cr-tracking-heading: -0.004em;
+  /* Small capitals need a little air between them to read as a word. */
+  --cr-tracking-caps: 0.075em;
+
+  --cr-weight-light: 300;
+  --cr-weight-regular: 400;
+  --cr-weight-medium: 500;
+  --cr-weight-semibold: 600;
+}
+
+/* --------------------------------------------------------------------------
+   Shape and motion: square corners, motion is a colour or an underline.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cr-radius: var(--cogenta-radius-sm);
+  --cr-radius-control: var(--cogenta-radius-sm);
+
+  --cr-duration: min(var(--cogenta-motion-duration), 150ms);
+  --cr-ease: var(--cogenta-motion-easing);
+
+  --cr-rule: 1px;
+  --cr-rule-strong: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Colour: cream, charcoal, and one brass.
+   --------------------------------------------------------------------------
+
+   The first block declares the light palette plainly; the scheme-aware
+   values follow behind a feature query, so a browser that cannot parse
+   `light-dark()` still gets a complete light palette.
+
+   Light is the default look, and it follows the visitor's own setting. The
+   references for this register (a printed menu card, a lunchtime room with
+   daylight on the tablecloths) are paper, and a site that forced its evening
+   palette on a visitor whose device is set to light would fight the very
+   control in the header that lets them choose.
+
+   The brass (the skin's accent) is for details only: the small capitals that
+   name a part of the menu, a focus ring, a selection, the underline of a link
+   inside running text. It is never a fill and never a price.
+
+   The dark palette is designed, not inverted. It is the room at night:
+
+   1. The ground is a deep warm charcoal, taken from the brass's own hue at a
+      very low chroma, so it reads like dark wood panelling under low light
+      rather than a grey screen. Bands step up in lightness.
+   2. Type is the paper's own cream, lowered a step from white.
+   3. The brass is lifted to hold against the dark ground, keeping its hue.
+   4. Hairlines are a step up in lightness from the ground.
+   5. Photographs are dimmed a very little, with a brightness step, so a white
+      plate does not glare in a dark room.
+
+   The footer is a charcoal band on the paper and a step below the ground in
+   the dark, so the page always ends on its heaviest band.
+
+   Every ratio is computed from this file by `test/design-system.test.ts`,
+   in both schemes.
+   -------------------------------------------------------------------------- */
+
+:where(:root) {
+  --cr-canvas: var(--cogenta-color-bg);
+  --cr-surface: var(--cogenta-color-muted);
+  --cr-plate: color-mix(in oklab, var(--cogenta-color-muted) 70%, var(--cogenta-color-bg));
+  --cr-mark-plate: var(--cogenta-color-bg);
+
+  --cr-ink: var(--cogenta-color-fg);
+  --cr-ink-muted: var(--cogenta-color-muted-fg);
+  --cr-ink-subtle: color-mix(in oklab, var(--cogenta-color-muted-fg) 88%, var(--cogenta-color-bg));
+
+  --cr-brass: var(--cogenta-color-accent);
+  --cr-brass-fg: var(--cogenta-color-accent-fg);
+
+  --cr-line: var(--cogenta-color-border);
+  --cr-line-strong: color-mix(in oklab, var(--cogenta-color-border) 45%, var(--cogenta-color-fg));
+  --cr-line-ink: var(--cogenta-color-fg);
+
+  --cr-action: var(--cogenta-color-fg);
+  --cr-action-fg: var(--cogenta-color-bg);
+  --cr-action-hover: color-mix(in oklab, var(--cogenta-color-fg) 82%, var(--cogenta-color-bg));
+  --cr-action-hover-fg: var(--cogenta-color-bg);
+
+  --cr-footer: var(--cogenta-color-fg);
+  --cr-footer-ink: var(--cogenta-color-bg);
+  --cr-footer-muted: color-mix(in oklab, var(--cogenta-color-bg) 72%, var(--cogenta-color-fg));
+  --cr-footer-line: color-mix(in oklab, var(--cogenta-color-bg) 22%, var(--cogenta-color-fg));
+
+  --cr-image-brightness: 1;
 }
 
 @supports (color: light-dark(currentColor, currentColor)) and
   (color: oklch(from currentColor l c h)) {
   :where(:root) {
-    --cg-canvas: light-dark(
+    --cr-canvas: light-dark(
       var(--cogenta-color-bg),
-      oklch(from var(--cogenta-color-fg) 0.145 calc(c * 0.6) h)
+      oklch(from var(--cogenta-color-accent) 0.195 calc(c * 0.09) h)
     );
-    --cg-surface: light-dark(
-      var(--cogenta-color-bg),
-      oklch(from var(--cogenta-color-fg) 0.145 calc(c * 0.6) h)
-    );
-    --cg-surface-raised: light-dark(
-      var(--cogenta-color-bg),
-      oklch(from var(--cogenta-color-fg) 0.21 calc(c * 0.55) h)
-    );
-    --cg-surface-sunken: light-dark(
+    --cr-surface: light-dark(
       var(--cogenta-color-muted),
-      oklch(from var(--cogenta-color-fg) 0.105 calc(c * 0.7) h)
+      oklch(from var(--cogenta-color-accent) 0.235 calc(c * 0.1) h)
     );
-    --cg-surface-tinted: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 7%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-accent) 0.225 calc(c * 0.5) h)
+    --cr-plate: light-dark(
+      color-mix(in oklab, var(--cogenta-color-muted) 70%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.25 calc(c * 0.09) h)
+    );
+    --cr-mark-plate: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-bg) 0.9 c h)
     );
 
-    --cg-ink: light-dark(
-      var(--cogenta-color-fg),
-      oklch(from var(--cogenta-color-accent) 0.94 0.012 h)
-    );
-    --cg-ink-muted: light-dark(
+    --cr-ink: light-dark(var(--cogenta-color-fg), oklch(from var(--cogenta-color-bg) 0.925 c h));
+    --cr-ink-muted: light-dark(
       var(--cogenta-color-muted-fg),
-      oklch(from var(--cogenta-color-accent) 0.77 0.018 h)
+      oklch(from var(--cogenta-color-muted) 0.78 c h)
     );
-    --cg-ink-subtle: light-dark(
-      color-mix(in oklab, var(--cogenta-color-muted-fg) 85%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-accent) 0.64 0.016 h)
+    --cr-ink-subtle: light-dark(
+      color-mix(in oklab, var(--cogenta-color-muted-fg) 88%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-muted) 0.72 c h)
     );
 
-    --cg-accent: light-dark(
+    --cr-brass: light-dark(
       var(--cogenta-color-accent),
-      oklch(from var(--cogenta-color-accent) 0.73 calc(c * 0.68) h)
+      oklch(from var(--cogenta-color-accent) 0.78 calc(c * 0.8) h)
     );
-    --cg-accent-fg: light-dark(
+    --cr-brass-fg: light-dark(
       var(--cogenta-color-accent-fg),
-      oklch(from var(--cogenta-color-accent) 0.15 calc(c * 0.55) h)
-    );
-    --cg-accent-hover: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 84%, var(--cogenta-color-fg)),
-      oklch(from var(--cogenta-color-accent) 0.82 calc(c * 0.64) h)
-    );
-    --cg-accent-soft: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 9%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-accent) 0.27 calc(c * 0.42) h)
-    );
-    --cg-accent-soft-fg: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 70%, var(--cogenta-color-fg)),
-      oklch(from var(--cogenta-color-accent) 0.88 calc(c * 0.38) h)
+      oklch(from var(--cogenta-color-accent) 0.195 calc(c * 0.09) h)
     );
 
-    --cg-line: light-dark(
+    --cr-line: light-dark(
       var(--cogenta-color-border),
-      oklch(from var(--cogenta-color-accent) 0.32 calc(c * 0.18) h)
+      oklch(from var(--cogenta-color-accent) 0.33 calc(c * 0.09) h)
     );
-    --cg-line-soft: light-dark(
-      color-mix(in oklab, var(--cogenta-color-border) 50%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-accent) 0.26 calc(c * 0.16) h)
+    --cr-line-strong: light-dark(
+      color-mix(in oklab, var(--cogenta-color-border) 45%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.52 calc(c * 0.08) h)
     );
-    --cg-line-strong: light-dark(
-      color-mix(in oklab, var(--cogenta-color-border) 60%, var(--cogenta-color-fg)),
-      oklch(from var(--cogenta-color-accent) 0.52 calc(c * 0.2) h)
+    --cr-line-ink: light-dark(
+      var(--cogenta-color-fg),
+      oklch(from var(--cogenta-color-bg) 0.925 c h)
     );
 
-    --cg-scrim: light-dark(
-      color-mix(in oklab, var(--cogenta-color-fg) 55%, transparent),
-      color-mix(in oklab, var(--cogenta-color-fg) 62%, transparent)
+    --cr-action: light-dark(var(--cogenta-color-fg), oklch(from var(--cogenta-color-bg) 0.925 c h));
+    --cr-action-fg: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-accent) 0.195 calc(c * 0.09) h)
+    );
+    --cr-action-hover: light-dark(
+      color-mix(in oklab, var(--cogenta-color-fg) 82%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-bg) 0.8 c h)
+    );
+    --cr-action-hover-fg: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-accent) 0.195 calc(c * 0.09) h)
+    );
+
+    --cr-footer: light-dark(
+      var(--cogenta-color-fg),
+      oklch(from var(--cogenta-color-accent) 0.155 calc(c * 0.08) h)
+    );
+    --cr-footer-ink: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-bg) 0.925 c h)
+    );
+    --cr-footer-muted: light-dark(
+      color-mix(in oklab, var(--cogenta-color-bg) 72%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-muted) 0.76 c h)
+    );
+    --cr-footer-line: light-dark(
+      color-mix(in oklab, var(--cogenta-color-bg) 22%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.3 calc(c * 0.09) h)
     );
   }
 }
 
-/* --------------------------------------------------------------------------
-   Elevation — a hairline ring by default in both schemes; a real shadow is
-   spent only on hover, never on a resting surface.
-   -------------------------------------------------------------------------- */
-
-:where(:root) {
-  --cg-ring: inset 0 0 0 1px var(--cg-line);
-  --cg-ring-accent: inset 0 0 0 1px var(--cg-accent);
-  --cg-ring-strong: inset 0 0 0 1px var(--cg-line-strong);
-
-  --cg-elevation-0: none;
-  --cg-elevation-1: var(--cg-ring);
-  --cg-elevation-2: var(--cogenta-shadow-sm), var(--cg-ring);
-  --cg-elevation-3: var(--cogenta-shadow-md), var(--cg-ring);
-}
-
+/* A photograph on the dark ground is dimmed a very little, so a white plate
+   does not glare in a dark room. A brightness step, never a blur. */
 @media (prefers-color-scheme: dark) {
   :where(:root:not([data-theme="light"])) {
-    --cg-elevation-2: var(--cg-ring-strong);
-    --cg-elevation-3: var(--cg-ring-strong), var(--cogenta-shadow-md);
+    --cr-image-brightness: 0.92;
   }
 }
 
 :where(:root[data-theme="dark"]) {
-  --cg-elevation-2: var(--cg-ring-strong);
-  --cg-elevation-3: var(--cg-ring-strong), var(--cogenta-shadow-md);
+  --cr-image-brightness: 0.92;
 }

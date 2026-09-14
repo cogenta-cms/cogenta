@@ -11,130 +11,138 @@ import {
 } from '@cogenta/theme-kit'
 
 /**
- * This theme's own header and footer, built for `theme@1.4` from the start
- * rather than retrofitted: `headerAction` renders as a button beside the
- * primary nav, `tagline`/`social`/`footerNote` fill the footer's brand
- * column, and — the one thing none of the four L23 themes had yet — a
- * genuinely CSS-only mobile menu.
+ * The restaurant's header and footer (`theme@1.4`).
  *
- * The mobile menu is a `<details>`/`<summary>` disclosure, not a checkbox
- * hack: expanding, keyboard operation (`Enter`/`Space` on the `<summary>`)
- * and the open/closed state announced to assistive technology all come from
- * the browser, at zero bytes of JavaScript. It carries the *same* links as
- * the desktop nav plus the header action — never a second, drifting list —
- * and is shown only below the breakpoint `base.css` sets for `.cg-nav`.
+ * Header: one quiet row on the grid, under a hairline. The restaurant's name
+ * on the left in the display serif (or its uploaded logo), the pages in words
+ * at the text size, then the `headerAction` ("Reserve") as the one underlined
+ * link after a hairline, and the light/dark control. The action sits outside
+ * the navigation list on purpose: on a phone it stays in the header row
+ * beside the menu toggle, because booking a table is what most visitors came
+ * to do.
  *
- * The manual light/dark toggle (L26) sits right after the desktop nav, before
- * the header action — `renderThemeToggle` (`@cogenta/theme-kit`) returns
- * markup only, this theme styles `.cg-theme-toggle` itself in `base.css`. It
- * is unconditional (rendered on every page, `theme@1.4` fields or not),
- * unlike the header/footer additions above it.
+ * Below the wide breakpoint the pages become a panel of large serif links
+ * under the header, opened by a CSS-only toggle: a visually hidden checkbox
+ * paired with a `<label>`, placed before the `<nav>` so the sibling
+ * combinator reaches it. One `<nav>` in the markup, retiled by CSS. Under
+ * the links the open panel repeats the `footerNote` (the address card), which
+ * the stylesheet shows in the panel only.
+ *
+ * Footer: a charcoal band. The name and the `tagline`; the `footerNote` set as
+ * the restaurant's address card (a blank line starts a new paragraph, a line
+ * break stays a line break, so an address and a set of opening hours keep
+ * their shape); the footer navigation; the social profiles with their names;
+ * then the legal line, with the copyright year and the name beside the host's
+ * `brandingHtml`, placed once, as received. Every `theme@1.4` field renders
+ * only when present.
  */
 
-function navItems(links: readonly ChromeNavLink[]): string {
+function navItems(links: readonly ChromeNavLink[], className: string): string {
   return links
     .filter((link) => link.href !== null || link.kind === 'submenu-placeholder')
     .map((link) => {
       const label = escapeText(link.label)
       const titleAttr = link.title === null ? '' : ` title="${escapeAttribute(link.title)}"`
-      if (link.href === null) return `<li><span${titleAttr}>${label}</span></li>`
-      const href = escapeAttribute(link.href)
+      if (link.href === null) {
+        return `<li class="${className}"><span${titleAttr}>${label}</span></li>`
+      }
       const target = link.openInNewTab ? ' target="_blank" rel="noopener"' : ''
-      return `<li><a href="${href}"${target}${titleAttr}>${label}</a></li>`
+      return `<li class="${className}"><a href="${escapeAttribute(link.href)}"${target}${titleAttr}>${label}</a></li>`
     })
     .join('')
 }
 
-/** Three bars, drawn directly rather than pulled from an icon font (R9/R10) — the universal "menu" glyph. */
-const HAMBURGER_GLYPH =
-  '<svg class="cg-mobile-nav__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-  'stroke-width="1.5" stroke-linecap="round" aria-hidden="true" focusable="false">' +
-  '<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>'
-
-/** The header's own call-to-action link (`theme@1.4`), styled like the block vocabulary's own primary action. */
-function renderHeaderAction(action: ChromeInput['headerAction']): string {
-  if (action === undefined) return ''
-  return (
-    `<a class="cg-action cg-nav__cta" data-emphasis="primary" ` +
-    `href="${escapeAttribute(action.href)}">${escapeText(action.label)}</a>`
-  )
-}
-
-/**
- * The mobile drawer — the same nav links and header action as the desktop
- * header, in one `<details>` disclosure. Absent entirely when there is
- * nothing to show, exactly like the desktop `<nav>` above it.
- */
-function renderMobileNav(input: ChromeInput): string {
-  const items = navItems(input.headerNav)
-  const actionItem =
-    input.headerAction === undefined ? '' : `<li>${renderHeaderAction(input.headerAction)}</li>`
-  if (items === '' && actionItem === '') return ''
-  return (
-    `<details class="cg-mobile-nav">` +
-    `<summary class="cg-mobile-nav__toggle" aria-label="Menu">${HAMBURGER_GLYPH}</summary>` +
-    `<div class="cg-mobile-nav__panel"><ul class="cg-mobile-nav__items">${items}${actionItem}</ul></div>` +
-    `</details>`
-  )
+/** `footerNote` as paragraphs at blank lines, each keeping its own line breaks. */
+function renderFooterNote(note: string, className: string): string {
+  const paragraphs = note
+    .replace(/\r\n?/g, '\n')
+    .split(/\n\s*\n/)
+    .map((paragraph) =>
+      paragraph
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== ''),
+    )
+    .filter((lines) => lines.length > 0)
+  if (paragraphs.length === 0) return ''
+  return `<div class="${className}">${paragraphs
+    .map((lines) => `<p>${lines.map((line) => escapeText(line)).join('<br>')}</p>`)
+    .join('')}</div>`
 }
 
 export function renderChrome(input: ChromeInput): ChromeResult {
-  const siteNameText = escapeText(input.site.name)
-  const headerNav = navItems(input.headerNav)
-  const footerNav = navItems(input.footerNav)
-  // The uploaded logo replaces the wordmark, and only the wordmark: the
-  // footer keeps the site's name in text, so a site whose logo fails to
-  // load is still named somewhere on every page.
-  const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteNameText
-  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
-  const headerAction = renderHeaderAction(input.headerAction)
-  const mobileNav = renderMobileNav(input)
+  const siteName = escapeText(input.site.name)
+  const home = escapeAttribute(input.homeHref)
+  const links = navItems(input.headerNav, 'cr-header__item')
+  const action =
+    input.headerAction === undefined
+      ? ''
+      : `<a class="cr-header__action" href="${escapeAttribute(input.headerAction.href)}">${escapeText(
+          input.headerAction.label,
+        )}</a>`
+  const toggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
+  const logo = renderBrandMark(input.brand, { className: 'cr-header__logo' })
+  const mark = logo ?? `<span class="cr-header__wordmark">${siteName}</span>`
+
+  // On a phone the open panel also carries the address card, because the
+  // address and the hours are what a guest on the street opens the menu for.
+  // It is the footer's own note, shown only in the panel.
+  const panelCard =
+    input.footerNote === undefined ? '' : renderFooterNote(input.footerNote, 'cr-header__card')
+
+  const menu =
+    links === ''
+      ? ''
+      : `<input type="checkbox" id="cr-nav-toggle" class="cr-nav-toggle-input" aria-label="Navigation">` +
+        `<label for="cr-nav-toggle" class="cr-nav-toggle-label" aria-hidden="true">` +
+        `<span class="cr-nav-toggle-bar"></span><span class="cr-nav-toggle-bar"></span>` +
+        `</label>` +
+        `<nav class="cr-header__nav" id="cr-nav" aria-label="Primary">` +
+        `<ul class="cr-header__links">${links}</ul>` +
+        `${panelCard}` +
+        `</nav>`
 
   const header =
-    `<header class="cg-site-header"><div class="cg-site-header__inner">` +
-    `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
-    `${
-      headerNav === ''
-        ? ''
-        : `<nav class="cg-nav" aria-label="Primary"><ul class="cg-nav__items">${headerNav}</ul></nav>`
-    }` +
-    `${themeToggle}` +
-    `${headerAction}` +
-    `${mobileNav}` +
+    `<header class="cr-header" data-nav="${links === '' ? 'none' : 'links'}" data-action="${
+      action === '' ? 'none' : 'link'
+    }">` +
+    `<div class="cr-header__inner">` +
+    `<a class="cr-header__brand" href="${home}">${mark}</a>` +
+    `${menu}` +
+    `${action}` +
+    `${toggle}` +
     `</div></header>`
 
   const tagline =
     input.tagline === undefined
       ? ''
-      : `<p class="cg-site-footer__tagline">${escapeText(input.tagline)}</p>`
-  const social =
-    input.social === undefined
-      ? ''
-      : serialize(
-          renderSocialLinks(input.social, {
-            className: 'cg-site-footer__social',
-            itemClassName: 'cg-site-footer__social-item',
-          }) ?? { kind: 'text', value: '' },
-        )
-  const footerNote =
-    input.footerNote === undefined
-      ? ''
-      : `<p class="cg-site-footer__note">${escapeText(input.footerNote)}</p>`
+      : `<p class="cr-footer__tagline" data-field="tagline">${escapeText(input.tagline)}</p>`
+  const note =
+    input.footerNote === undefined ? '' : renderFooterNote(input.footerNote, 'cr-footer__note')
+  const footerLinks = navItems(input.footerNav, 'cr-footer__item')
+  const social = renderSocialLinks(input.social, {
+    className: 'cr-footer__social',
+    itemClassName: 'cr-footer__social-item',
+  })
+  const year = new Date().getFullYear()
 
   const footer =
-    `<footer class="cg-site-footer"><div class="cg-site-footer__grid">` +
-    `<div class="cg-site-footer__brand">` +
-    `<a class="cg-site-footer__brand-name" href="${escapeAttribute(input.homeHref)}">${siteNameText}</a>` +
-    `${tagline}${social}</div>` +
+    `<footer class="cr-footer"><div class="cr-footer__inner">` +
+    `<div class="cr-footer__about">` +
+    `<a class="cr-footer__name" href="${home}">${siteName}</a>` +
+    `${tagline}` +
+    `</div>` +
+    `${note}` +
     `${
-      footerNav === ''
+      footerLinks === ''
         ? ''
-        : `<nav class="cg-site-footer__nav" aria-label="Footer"><ul class="cg-nav__items">${footerNav}</ul></nav>`
+        : `<nav class="cr-footer__nav" aria-label="Footer"><ul class="cr-footer__links">${footerLinks}</ul></nav>`
     }` +
-    `<div class="cg-site-footer__about">${footerNote}</div>` +
-    `</div><div class="cg-site-footer__bottom">` +
-    `<span>${siteNameText}</span>` +
-    `<div class="cg-site-footer__branding">${input.brandingHtml}</div>` +
+    `${social === null ? '' : `<div class="cr-footer__follow">${serialize(social)}</div>`}` +
+    `<div class="cr-footer__legal">` +
+    `<p class="cr-footer__copyright">© ${year} ${siteName}</p>` +
+    `${input.brandingHtml === '' ? '' : `<div class="cr-footer__branding">${input.brandingHtml}</div>`}` +
+    `</div>` +
     `</div></footer>`
 
   return { header, footer }

@@ -1,48 +1,38 @@
-import type { StatItem, StatsBlock } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import type { StatsBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * "Since 1994 · 3 chefs · 120 seats" — a quiet row of figures set in the
- * display serif, separated by hairline rules rather than boxed into cards:
- * the restrained, editorial register this theme uses everywhere a fact is
- * stated rather than sold.
- *
- * A description list, as every built-in theme uses for `stats`: each figure
- * is the description of its label, which is what `<dt>`/`<dd>` mean, and it
- * survives being read linearly (WCAG 1.3.2 — reading order and visual order
- * stay independent regardless of how the skin repaints them).
+ * Figures a kitchen can stand behind (covers a night, farms it buys from, the
+ * year it opened), set as a row of columns under one hairline: the number
+ * (the `dd`, drawn above its label) light and large in the display serif with
+ * lining tabular figures, its unit a step smaller, and a sentence of context
+ * under it. No box, no tint, no counter animation.
  */
-function renderItem(item: StatItem): HtmlElement {
-  return h(
-    'div',
-    { class: 'cg-figures__item' },
-    h(
-      'dd',
-      { class: 'cg-figures__value' },
-      item.value,
-      item.unit === undefined ? null : h('span', { class: 'cg-figures__unit' }, item.unit),
-    ),
-    h('dt', { class: 'cg-figures__label' }, item.label),
-  )
-}
-
 export function renderStats(block: StatsBlock, _ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-figures', 'data-block': 'stats' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('stats') ?? 'h2',
-          { class: 'cg-figures__title', 'data-field': 'title' },
-          block.title,
+    'stats',
+    'cr-figures',
+    { 'data-count': String(Math.min(block.items.length, 4)) },
+    'div',
+    sectionHead('stats', block.title),
+    h(
+      'dl',
+      { class: 'cr-figures__items' },
+      block.items.map((item) =>
+        h(
+          'div',
+          { class: 'cr-figures__item' },
+          h('dt', { class: 'cr-figures__label' }, item.label),
+          h(
+            'dd',
+            { class: 'cr-figures__value' },
+            item.value,
+            item.unit === undefined ? null : h('span', { class: 'cr-figures__unit' }, item.unit),
+          ),
         ),
-    h('dl', { class: 'cg-figures__items' }, block.items.map(renderItem)),
+      ),
+    ),
   )
 }

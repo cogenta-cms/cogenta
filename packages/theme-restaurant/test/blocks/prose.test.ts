@@ -1,50 +1,52 @@
 import { serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderProse } from '../../src/render/blocks/prose.js'
+import { renderBlock } from '../../src/render/render-block.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderProse(BLOCKS.prose, ctx))
 
-describe('prose ("Our story")', () => {
-  it('wraps the rich text in a centred, narrow-measure column', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('class="cg-story"')
-    expect(html).toContain('class="cg-story__body"')
+describe('prose', () => {
+  it('sets the rich text in a body column inside the section rhythm', () => {
+    expect(html).toMatch(/^<div class="cr-section cr-prose" data-block="prose">/)
+    expect(html).toContain('<div class="cr-prose__body">')
   })
 
-  it('renders the document as real paragraph and heading tags, never a second h1', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
+  it('renders real paragraphs and headings, and never a second h1', () => {
     expect(html).toContain('<p>')
-    expect(html).toContain('<h2>')
+    expect(html).toContain('<h2>The kitchen</h2>')
     expect(html).not.toContain('<h1')
   })
 
   it('applies marks (bold, a real link) rather than leaving them as plain text', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<strong>1994</strong>')
+    expect(html).toContain('<strong>2016</strong>')
     expect(html).toContain(
-      '<a href="https://example.org/suppliers" rel="external">our suppliers</a>',
+      '<a href="https://example.org/growers" rel="external">eleven growers</a>',
     )
   })
 
   it('escapes literal markup-significant characters in the source text', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('&lt;specials&gt;')
+    expect(html).toContain('&amp; write the &lt;menu&gt; on Mondays.')
   })
 
-  it('renders a nested list as real <ul><li> markup, indented by level', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
+  it('renders a nested list as real nested lists', () => {
     expect(html).toMatch(/<ul>.*<li>.*<ul>.*<\/ul>.*<\/li>.*<\/ul>/s)
   })
 
-  it('renders an inline media node as a captioned figure', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('cg-prose__figure')
-    expect(html).toContain('Tonight')
+  it('renders a quotation and an inline photograph with its caption', () => {
+    expect(html).toContain('<blockquote><p>Three things on a plate.</p></blockquote>')
+    expect(html).toContain('<figure class="cg-prose__figure">')
+    expect(html).toContain('<figcaption>The pass at seven</figcaption>')
   })
 
-  it('is marked with data-block="prose"', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('data-block="prose"')
+  it('marks a centred prose block as the welcome through its variant, never through its content', () => {
+    const welcome = serialize(
+      renderBlock({ ...BLOCKS.prose, variant: { align: 'center' } }, ctx) as NonNullable<
+        ReturnType<typeof renderBlock>
+      >,
+    )
+    expect(welcome).toContain('data-variant-align="center"')
+    expect(html).not.toContain('data-variant-align')
   })
 })

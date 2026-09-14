@@ -1,74 +1,62 @@
 import type { PricingTableBlock, PricingTier } from '@cogenta/blocks'
 import {
   actionLink,
-  blockHeadingTag,
-  type HeadingTag,
   type HtmlElement,
   h,
   heading,
   nestedHeadingTag,
   type RenderContext,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * `blocks@2.0` (RFC 0001). Rendered as a set-menu comparison — a "tasting
- * menu" / "prix fixe" tier is the shape this block already has (a name, a
- * price, a feature list), so this theme reuses the same restrained bordered
- * plates the rest of the vocabulary uses rather than a distinct pricing
- * skin. `highlighted` becomes a small "chef's pick" rule rather than a
- * colour.
+ * Set menus side by side (lunch, the evening menu, a menu for a private
+ * party), set the way a menu card prints them: ruled columns rather than
+ * cards, the name of the menu in small capitals, the price light and large in
+ * the display serif with tabular figures and what it covers ("per guest")
+ * under it, then the courses one per line between hairlines, and the action
+ * at the foot.
+ *
+ * `highlighted` is an editorial emphasis, drawn as the column's top rule in
+ * ink instead of a hairline. No ribbon, no raised card, no accent fill.
  */
-function renderTier(tier: PricingTier, ctx: RenderContext, tag: HeadingTag): HtmlElement {
+function tier(item: PricingTier, ctx: RenderContext, titled: boolean): HtmlElement {
   return h(
     'li',
-    {
-      class: 'cg-set-menu__tier',
-      'data-highlighted': tier.highlighted === true ? 'true' : undefined,
-      'aria-current': tier.highlighted === true ? 'true' : undefined,
-    },
-    heading(tag, { class: 'cg-set-menu__name' }, tier.name),
+    { class: 'cr-set__tier', 'data-highlighted': item.highlighted === true ? 'true' : 'false' },
+    heading(nestedHeadingTag('pricingTable', titled), { class: 'cr-set__name' }, item.name),
     h(
       'p',
-      { class: 'cg-set-menu__price' },
-      h('span', { class: 'cg-set-menu__amount' }, tier.price),
-      tier.interval === undefined
-        ? null
-        : h('span', { class: 'cg-set-menu__interval' }, tier.interval),
+      { class: 'cr-set__price' },
+      h('span', { class: 'cr-set__amount' }, item.price),
+      item.interval === undefined ? null : h('span', { class: 'cr-set__interval' }, item.interval),
     ),
-    tier.features.length === 0
+    item.features.length === 0
       ? null
       : h(
           'ul',
-          { class: 'cg-set-menu__features' },
-          tier.features.map((feature) => h('li', { class: 'cg-set-menu__feature' }, feature)),
+          { class: 'cr-set__courses' },
+          item.features.map((feature) => h('li', { class: 'cr-set__course' }, feature)),
         ),
-    tier.action === undefined
+    item.action === undefined
       ? null
-      : h(
-          'div',
-          { class: 'cg-set-menu__action' },
-          actionLink(ctx, { ...tier.action, emphasis: tier.action.emphasis ?? 'primary' }),
-        ),
+      : h('div', { class: 'cr-set__action' }, actionLink(ctx, item.action)),
   )
 }
 
 export function renderPricingTable(block: PricingTableBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const tierTag = nestedHeadingTag('pricingTable', hasTitle)
-  return h(
+  const titled = block.title !== undefined
+  return section(
     'section',
-    { class: 'cg-set-menu', 'data-block': 'pricingTable' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('pricingTable') ?? 'h2',
-          { class: 'cg-set-menu__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'pricingTable',
+    'cr-set',
+    { 'data-count': String(Math.min(block.tiers.length, 4)) },
+    'div',
+    sectionHead('pricingTable', block.title),
     h(
       'ul',
-      { class: 'cg-set-menu__tiers' },
-      block.tiers.map((tier) => renderTier(tier, ctx, tierTag)),
+      { class: 'cr-set__tiers' },
+      block.tiers.map((item) => tier(item, ctx, titled)),
     ),
   )
 }

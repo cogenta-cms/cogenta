@@ -1,62 +1,84 @@
-import type { TermArchiveInput } from '@cogenta/theme-kit'
-import { serialize } from '@cogenta/theme-kit'
+import { serialize, type TermArchiveInput } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderTermArchive } from '../src/render/term-archive.js'
 
 const INPUT: TermArchiveInput = {
-  taxonomyName: 'category',
-  term: { label: 'Mains', slug: 'mains' },
-  ancestors: [],
-  children: [],
+  taxonomyName: 'produce',
+  term: { label: 'Mushrooms', slug: 'mushrooms' },
+  ancestors: [{ label: 'Produce', href: '/produce' }],
+  children: [{ label: 'Ceps', href: '/produce/mushrooms/ceps' }],
   entries: [
     {
-      title: 'Pan-seared trout',
-      href: '/menu/pan-seared-trout',
-      summary: 'Local trout, brown butter, seasonal vegetables.',
+      title: 'Risotto of ceps and girolles',
+      href: '/menu/ceps-risotto',
+      summary: 'Carnaroli rice cooked in a stock of roasted mushroom trimmings.',
       collection: 'menu_item',
-      publishedAt: '2026-02-11T09:00:00.000Z',
+      publishedAt: null,
     },
+    { title: 'Unrouted note', href: null, summary: null, collection: 'note', publishedAt: null },
   ],
-  page: { current: 1, totalPages: 1, previousHref: null, nextHref: null },
+  page: { current: 1, totalPages: 2, previousHref: null, nextHref: '/produce/mushrooms?page=2' },
   locale: 'en',
   labels: {
-    empty: 'Nothing to show yet.',
+    empty: 'Nothing is filed here yet.',
     previous: 'Previous',
     next: 'Next',
     breadcrumb: 'Breadcrumb',
-    pagination: 'Pagination',
-    subterms: 'Sub-categories',
+    pagination: 'Pages',
+    subterms: 'Sub-terms',
   },
 }
 
-describe('renderTermArchive', () => {
-  it('renders the term label as the page h1', () => {
-    const html = serialize(renderTermArchive(INPUT))
-    expect(html).toContain('<h1 class="cg-index__title-heading">Mains</h1>')
+const html = serialize(renderTermArchive(INPUT))
+
+describe('the term archive', () => {
+  it('renders to stable markup', () => {
+    expect(html).toMatchSnapshot()
   })
 
-  it('renders every entry as a linked row with its date and summary', () => {
-    const html = serialize(renderTermArchive(INPUT))
-    expect(html).toContain('Pan-seared trout')
-    expect(html).toContain('Local trout, brown butter, seasonal vegetables.')
-    expect(html).toContain('datetime="2026-02-11T09:00:00.000Z"')
+  it('is the skip link target and carries exactly one h1, the term', () => {
+    expect(html).toMatch(/^<main class="cg-main cr-main cr-archive" id="cg-main">/)
+    expect(html.match(/<h1/g)).toHaveLength(1)
+    expect(html).toContain('<h1 class="cr-page-head__title">Mushrooms</h1>')
   })
 
-  it('renders the translated empty state when there are no entries', () => {
-    const html = serialize(renderTermArchive({ ...INPUT, entries: [] }))
-    expect(html).toContain('Nothing to show yet.')
+  it('draws the breadcrumb as a labelled ordered list', () => {
+    expect(html).toContain('<nav class="cr-archive__breadcrumb" aria-label="Breadcrumb">')
+    expect(html).toContain('<a href="/produce">Produce</a>')
   })
 
-  it('renders no pager when there is only one page', () => {
-    const html = serialize(renderTermArchive(INPUT))
-    expect(html).not.toContain('cg-archive__pager')
+  it('lists sub-terms as a labelled line of links', () => {
+    expect(html).toContain('aria-label="Sub-terms"')
+    expect(html).toContain('href="/produce/mushrooms/ceps">Ceps</a>')
   })
 
-  it('renders a pager when a next page exists', () => {
-    const html = serialize(
-      renderTermArchive({ ...INPUT, page: { ...INPUT.page, nextHref: '/category/mains/2' } }),
+  it('lists entries as an index, linking only the routed ones, never as a menu without prices', () => {
+    expect(html).toContain(
+      '<a class="cr-index__link" href="/menu/ceps-risotto">Risotto of ceps and girolles</a>',
     )
-    expect(html).toContain('cg-archive__pager')
-    expect(html).toContain('rel="next"')
+    expect(html).toContain('<h2 class="cr-index__name">Unrouted note</h2>')
+    expect(html).not.toContain('cr-menu')
+  })
+
+  it('pages with arrow links, and only in the direction there is a page', () => {
+    expect(html).toContain(
+      '<a class="cr-arrow-link" rel="next" href="/produce/mushrooms?page=2">Next</a>',
+    )
+    expect(html).not.toContain('rel="prev"')
+  })
+
+  it('says so, in the host’s words, when nothing is filed under the term', () => {
+    const empty = serialize(
+      renderTermArchive({
+        ...INPUT,
+        entries: [],
+        ancestors: [],
+        children: [],
+        page: { current: 1, totalPages: 1, previousHref: null, nextHref: null },
+      }),
+    )
+    expect(empty).toContain('<p class="cr-empty">Nothing is filed here yet.</p>')
+    expect(empty).not.toContain('cr-archive__breadcrumb')
+    expect(empty).not.toContain('cr-archive__pager')
   })
 })

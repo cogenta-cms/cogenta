@@ -4,32 +4,35 @@ import { renderEmbed } from '../../src/render/blocks/embed.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderEmbed(BLOCKS.embed, ctx))
 
-describe('embed — the map placeholder', () => {
-  it("never loads an iframe when consentRequired is true, exactly the blueprint's own map embed", () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
+describe('embed', () => {
+  it('never loads a frame when consent is required', () => {
     expect(html).not.toContain('<iframe')
-    expect(html).toContain('cg-embed__placeholder')
+    expect(html).toContain('data-frame="notice"')
+    expect(html).toContain('<div class="cr-embed__notice">')
   })
 
-  it('links out to the real map URL rather than embedding it', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('openstreetmap.org')
+  it('draws the notice as a short card, never an empty frame kept at the video ratio', () => {
+    expect(html).not.toContain('aspect-ratio')
+    expect(html).not.toContain('cr-embed__frame')
+  })
+
+  it('links out to the original with an arrow link that has words, and nofollow', () => {
     expect(html).toContain('rel="noopener noreferrer nofollow"')
+    expect(html).toContain('class="cr-arrow-link cr-embed__link"')
+    expect(html).toContain('>embed.openOther</a>')
   })
 
-  it('names the provider and the consent reason, translated', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('embed.consentRequired')
+  it('names a known provider in the link rather than "other"', () => {
+    const video = serialize(
+      renderEmbed({ ...BLOCKS.embed, provider: 'vimeo', url: 'https://vimeo.com/76979871' }, ctx),
+    )
+    expect(video).toContain('>embed.open</a>')
   })
 
-  it('carries the aspect ratio as a custom property, defaulting to 16 / 9', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('--cg-ratio:16 / 9')
-  })
-
-  it('embeds a trusted YouTube frame once consent is not required', () => {
-    const html = serialize(
+  it('embeds a cookie-free YouTube frame, named and at its ratio, once consent is not required', () => {
+    const player = serialize(
       renderEmbed(
         {
           ...BLOCKS.embed,
@@ -40,14 +43,15 @@ describe('embed — the map placeholder', () => {
         ctx,
       ),
     )
-    expect(html).toContain('<iframe')
-    expect(html).toContain('youtube-nocookie.com/embed/dQw4w9WgXcQ')
-    expect(html).toMatch(/<iframe[^>]*\stitle="/)
+    expect(player).toContain('youtube-nocookie.com/embed/dQw4w9WgXcQ')
+    expect(player).toMatch(/<iframe[^>]*\stitle="embed.title"/)
+    expect(player).toContain('style="aspect-ratio:16 / 9"')
+    expect(player).toContain('data-frame="player"')
   })
 
-  it('is marked with data-block="embed" and the provider as data', () => {
-    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
-    expect(html).toContain('data-block="embed"')
-    expect(html).toContain('data-provider="other"')
+  it('shows the notice for a provider it has no trusted frame for, even without consent', () => {
+    const map = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: false }, ctx))
+    expect(map).not.toContain('<iframe')
+    expect(map).toContain('embed.unsupported')
   })
 })

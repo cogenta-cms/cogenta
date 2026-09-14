@@ -1,53 +1,60 @@
 import type { FaqBlock, FaqItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
   type HtmlElement,
   h,
-  heading,
+  nestedHeadingTag,
   type RenderContext,
   renderRichText,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * `<details>`/`<summary>` — zero bytes of JavaScript. Kept visually distinct
- * from `accordion` (this theme's own "Hours & location"): each question
- * carries a small serif numeral rather than the plus/minus mark, the
- * "questions before you book" register of a restaurant's own FAQ.
+ * Questions before a visit (a table for eight, a child's plate, a dog in the
+ * room), in two columns on a wide screen: the title on the first four, and
+ * the questions on the last eight, each under a hairline.
+ *
+ * Every answer is a `<details>`: it opens without a script and is found by
+ * the browser's own search. The question sits in a real heading inside the
+ * summary, so a screen reader's heading list still reaches every one of
+ * them. The plus that turns into a minus is two hairlines drawn by the
+ * stylesheet, not a glyph.
  */
-function renderItem(item: FaqItem, ctx: RenderContext, index: number): HtmlElement {
-  const number = String(index + 1).padStart(2, '0')
+export function answerItem(
+  item: FaqItem,
+  ctx: RenderContext,
+  blockName: 'faq' | 'accordion',
+  titled: boolean,
+): HtmlElement {
   return h(
     'li',
-    { class: 'cg-faq__item' },
+    { class: 'cr-answers__item' },
     h(
       'details',
-      { class: 'cg-faq__details' },
+      { class: 'cr-answers__details' },
       h(
         'summary',
-        { class: 'cg-faq__question' },
-        h('span', { class: 'cg-faq__index', 'aria-hidden': 'true' }, number),
-        h('span', { class: 'cg-faq__question-text' }, item.question),
+        { class: 'cr-answers__summary' },
+        h(nestedHeadingTag(blockName, titled), { class: 'cr-answers__question' }, item.question),
+        h('span', { class: 'cr-answers__mark', 'aria-hidden': 'true' }),
       ),
-      h('div', { class: 'cg-faq__answer' }, renderRichText(ctx, item.answer)),
+      h('div', { class: 'cr-answers__answer' }, renderRichText(ctx, item.answer)),
     ),
   )
 }
 
 export function renderFaq(block: FaqBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  const titled = block.title !== undefined
+  return section(
     'section',
-    { class: 'cg-faq', 'data-block': 'faq' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('faq') ?? 'h2',
-          { class: 'cg-faq__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'faq',
+    'cr-answers',
+    { 'data-titled': String(titled) },
+    'div',
+    sectionHead('faq', block.title),
     h(
       'ul',
-      { class: 'cg-faq__items' },
-      block.items.map((item, index) => renderItem(item, ctx, index)),
+      { class: 'cr-answers__items' },
+      block.items.map((item) => answerItem(item, ctx, 'faq', titled)),
     ),
   )
 }

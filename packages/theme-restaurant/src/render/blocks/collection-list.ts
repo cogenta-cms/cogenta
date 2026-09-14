@@ -1,9 +1,9 @@
 import type { CollectionListBlock } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
   buildCollectionListQuery,
   type ContentEntry,
   entryExcerpt,
+  entryHref,
   entryImage,
   entryTitle,
   type HeadingTag,
@@ -11,179 +11,291 @@ import {
   h,
   heading,
   nestedHeadingTag,
+  type QueryRequest,
   type RenderContext,
   renderImageSource,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
+import {
+  currencyOf,
+  formatPrice,
+  groupBySection,
+  isVegetarian,
+  type MenuSection,
+  priceOf,
+  sectionOf,
+} from '../menu.js'
+import { menuString } from '../strings.js'
 
 /**
- * The only block of the seventeen that reads data at render time — contract
- * B marks it `runtime: 'server'` for that reason. The read is *not* done
- * here: `query` builds the request from the block's own fields
- * (`@cogenta/theme-kit`'s `buildCollectionListQuery`, shared across every
- * theme), the caller awaits `ctx.content.list(...)` before rendering starts,
- * and this function stays a pure function of the entries handed to it.
- */
-export { buildCollectionListQuery as query }
-
-/**
- * The signature piece of this theme: a `collectionList` on a `menu_item`-shaped
- * collection is rendered as a real, priced menu, not a card grid.
+ * A list of entries, read by what the entries are rather than by a setting.
  *
- * Contract B fixes no "menu" block (a menu of dishes is a `collectionList`
- * grouped and formatted by the theme, per `docs/lots/L25-templates-pro.md`
- * "pièges connus" — a new block would need an RFC). Grouping reads the
- * entry's raw `category` field directly: a theme sees a whole entry, not
- * only the fields contract A's system columns declare, and `category` is
- * exactly the field the `restaurant` blueprint's `menu_item` collection
- * names for this. An entry with no `category` (or a collection that never
- * declares one) still renders, in one unlabelled group — grouping is a
- * presentation choice, never a requirement placed back on the schema.
+ * - **A menu.** Every entry has a price, so this is a menu, and it is set like
+ *   a printed one: grouped by the section each dish names (in the order the
+ *   dishes arrive), each section under its name in small capitals, each dish
+ *   on one line (its name in the display serif, a dotted leader, the price in
+ *   tabular figures aligned right) with its description under it in muted
+ *   text. `grid` sets the sections in two columns on a wide screen, `list` in
+ *   one column at a reading measure. `carousel` turns the same dishes into a
+ *   band of plates: the photograph at 4:5, the name and the price under it,
+ *   in a row that scrolls sideways.
+ * - **Photographs.** Entries with a picture and no price (a note from the
+ *   kitchen, a private room): 4:5 photographs with the name under them, as an
+ *   arrow link, and the summary.
+ * - **An index.** Anything else: ruled rows of titles and their summaries.
  *
- * `price` is read as a plain number (contract A's `f.number`, not a
- * currency type — commerce's real money lives in contract E, untouched
- * here) and formatted with `Intl.NumberFormat`'s `currency: 'EUR'`: the
- * currency itself is not part of what a theme's `RenderContext` carries, so
- * EUR is this theme's own documented demo default, exactly the way the
- * `store` blueprint's own catalogue prices need no currency conversion
- * either. A site that prices in another currency still gets a sensibly
- * localised number; only the currency symbol would need a real per-site
- * setting this contract does not yet offer.
+ * The page an entry is shown on is never listed on itself: a "more starters"
+ * list on a dish's own page skips the dish above it.
+ *
+ * Each picture repeats the link of its name, so it is taken out of the tab
+ * order and hidden from assistive technology: one link per entry is
+ * announced, the name.
  */
 
-function priceLabel(entry: ContentEntry, ctx: RenderContext): string | null {
-  const raw = entry.price
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null
-  try {
-    return new Intl.NumberFormat(ctx.locale, { style: 'currency', currency: 'EUR' }).format(raw)
-  } catch {
-    // An `Intl` failure (an exotic `ctx.locale`) is still a real number worth
-    // showing, just without locale-aware grouping/decimal marks.
-    return raw.toFixed(2)
-  }
-}
+type Shape = 'menu' | 'plates' | 'photos' | 'index'
 
-function categoryOf(entry: ContentEntry): string {
-  const raw = entry.category
-  return typeof raw === 'string' && raw.trim() !== '' ? raw : ''
-}
-
-/** One level below `tag`, clamped at `h6` — the same rule `nestedHeadingTag` applies, extended one step further for the dish name under its category heading. */
-function stepDown(tag: HeadingTag): HeadingTag {
-  const level = Math.min(6, Number(tag.slice(1)) + 1)
-  return `h${level}` as HeadingTag
-}
-
-function renderDish(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const excerpt = entryExcerpt(entry)
-  const price = priceLabel(entry, ctx)
-  const photo = entryImage(entry, ctx, { width: 120, height: 120, fit: 'cover' })
-  return h(
-    'li',
-    { class: 'cg-menu__dish' },
-    photo === undefined
-      ? null
-      : h(
-          'div',
-          { class: 'cg-menu__dish-photo' },
-          renderImageSource(photo, { sizes: '5rem', className: 'cg-menu__dish-image' }),
-        ),
-    h(
-      'div',
-      { class: 'cg-menu__dish-body' },
-      h(
-        'div',
-        { class: 'cg-menu__dish-row' },
-        heading(tag, { class: 'cg-menu__dish-name' }, entryTitle(entry, ctx)),
-        // Leader and price are one wrapping unit (`cg-menu__dish-tail`): on
-        // a narrow screen where the name alone fills the row, the dotted
-        // leader must move to the next line together with the price it
-        // points to — never left dangling at the end of the name's line
-        // with the price it introduces stranded on a line of its own.
-        h(
-          'span',
-          { class: 'cg-menu__dish-tail' },
-          h('span', { class: 'cg-menu__dish-leader', 'aria-hidden': 'true' }),
-          price === null ? null : h('span', { class: 'cg-menu__dish-price' }, price),
-        ),
-      ),
-      excerpt === undefined ? null : h('p', { class: 'cg-menu__dish-description' }, excerpt),
-    ),
-  )
-}
-
-function renderGroup(
-  category: string,
+function shapeOf(
   entries: readonly ContentEntry[],
   ctx: RenderContext,
-  groupTag: HeadingTag,
+  layout: CollectionListBlock['layout'],
+): Shape {
+  if (entries.every((entry) => priceOf(entry.price) !== undefined)) {
+    return layout === 'carousel' ? 'plates' : 'menu'
+  }
+  if (entries.every((entry) => entryImage(entry, ctx) !== undefined)) return 'photos'
+  return 'index'
+}
+
+function price(entry: ContentEntry, ctx: RenderContext, className: string): HtmlElement {
+  const amount = priceOf(entry.price) as number
+  return h(
+    'data',
+    { class: className, value: String(amount) },
+    formatPrice(amount, currencyOf(entry.currency), ctx.locale),
+  )
+}
+
+function dish(entry: ContentEntry, ctx: RenderContext): HtmlElement {
+  const description = entryExcerpt(entry)
+  const vegetarian = isVegetarian(entry)
+  return h(
+    'li',
+    { class: 'cr-menu__item', 'data-vegetarian': vegetarian ? 'true' : undefined },
+    h(
+      'p',
+      { class: 'cr-menu__line' },
+      h('a', { class: 'cr-menu__name', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
+      h('span', { class: 'cr-menu__leader', 'aria-hidden': 'true' }),
+      price(entry, ctx, 'cr-menu__price'),
+    ),
+    description === undefined && !vegetarian
+      ? null
+      : h(
+          'p',
+          { class: 'cr-menu__description' },
+          description === undefined ? null : h('span', { class: 'cr-menu__text' }, description),
+          vegetarian
+            ? h('span', { class: 'cr-menu__diet' }, menuString(ctx.locale, 'vegetarian'))
+            : null,
+        ),
+  )
+}
+
+function menuSection(
+  group: MenuSection<ContentEntry>,
+  ctx: RenderContext,
+  tag: HeadingTag,
+  named: boolean,
 ): HtmlElement {
-  const dishTag = stepDown(groupTag)
   return h(
     'div',
-    { class: 'cg-menu__group' },
-    category === '' ? null : heading(groupTag, { class: 'cg-menu__group-title' }, category),
+    { class: 'cr-menu__section' },
+    group.title === undefined || !named
+      ? null
+      : heading(tag, { class: 'cr-menu__section-title' }, group.title),
     h(
       'ul',
-      { class: 'cg-menu__dishes' },
-      entries.map((entry) => renderDish(entry, ctx, dishTag)),
+      { class: 'cr-menu__items' },
+      group.items.map((entry) => dish(entry, ctx)),
     ),
   )
 }
 
-function groupByCategory(entries: readonly ContentEntry[]): readonly [string, ContentEntry[]][] {
-  const order: string[] = []
-  const groups = new Map<string, ContentEntry[]>()
-  for (const entry of entries) {
-    const key = categoryOf(entry)
-    const bucket = groups.get(key)
-    if (bucket === undefined) {
-      groups.set(key, [entry])
-      order.push(key)
-    } else {
-      bucket.push(entry)
+function mediaLink(
+  entry: ContentEntry,
+  ctx: RenderContext,
+  className: string,
+  sizes: string,
+): HtmlElement | null {
+  const source = entryImage(entry, ctx)
+  if (source === undefined) return null
+  return h(
+    'a',
+    {
+      class: `${className}__media`,
+      href: entryHref(entry, ctx),
+      tabindex: '-1',
+      'aria-hidden': 'true',
+    },
+    renderImageSource(source, { className: `${className}__image`, sizes }),
+  )
+}
+
+function plate(entry: ContentEntry, ctx: RenderContext): HtmlElement {
+  const group = sectionOf(entry)
+  return h(
+    'li',
+    { class: 'cr-plates__item', 'data-media': String(entryImage(entry, ctx) !== undefined) },
+    mediaLink(entry, ctx, 'cr-plates', '(min-width: 64rem) 22vw, 70vw'),
+    h(
+      'p',
+      { class: 'cr-plates__line' },
+      h('a', { class: 'cr-plates__name', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
+      price(entry, ctx, 'cr-plates__price'),
+    ),
+    group === undefined ? null : h('p', { class: 'cr-plates__section' }, group),
+  )
+}
+
+function photo(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
+  const excerpt = entryExcerpt(entry)
+  return h(
+    'li',
+    { class: 'cr-photos__item' },
+    mediaLink(entry, ctx, 'cr-photos', '(min-width: 64rem) 28vw, 100vw'),
+    heading(
+      tag,
+      { class: 'cr-photos__name' },
+      h('a', { class: 'cr-arrow-link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
+    ),
+    excerpt === undefined ? null : h('p', { class: 'cr-photos__text' }, excerpt),
+  )
+}
+
+function indexItem(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
+  const excerpt = entryExcerpt(entry)
+  return h(
+    'li',
+    { class: 'cr-index__item' },
+    heading(
+      tag,
+      { class: 'cr-index__name' },
+      h('a', { class: 'cr-index__link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
+    ),
+    excerpt === undefined ? null : h('p', { class: 'cr-index__text' }, excerpt),
+  )
+}
+
+/** The entries that are not the page being rendered. */
+function othersThanThisPage(
+  entries: readonly ContentEntry[],
+  ctx: RenderContext,
+): readonly ContentEntry[] {
+  return entries.filter((entry) => entryHref(entry, ctx) !== ctx.url.pathname)
+}
+
+function body(
+  shape: Shape,
+  shown: readonly ContentEntry[],
+  block: CollectionListBlock,
+  ctx: RenderContext,
+  tag: HeadingTag,
+): HtmlElement {
+  switch (shape) {
+    case 'menu': {
+      const groups = groupBySection(shown)
+      // One section under a title of its own ("The other starters") is named
+      // by that title already; printing "Starters" under it again says nothing.
+      const named = groups.length > 1 || block.title === undefined
+      return h(
+        'div',
+        {
+          class: 'cr-list__items cr-menu',
+          'data-sections': String(groups.length),
+        },
+        groups.map((group) => menuSection(group, ctx, tag, named)),
+      )
     }
+    case 'plates':
+      return h(
+        'div',
+        {
+          class: 'cr-list__viewport',
+          role: 'region',
+          'aria-label': block.title ?? ctx.t('collection.carousel'),
+          tabindex: '0',
+        },
+        h(
+          'ul',
+          { class: 'cr-list__items cr-plates' },
+          shown.map((entry) => plate(entry, ctx)),
+        ),
+      )
+    case 'photos': {
+      const list = h(
+        'ul',
+        {
+          class: 'cr-list__items cr-photos',
+          'data-count': String(Math.min(shown.length, 3)),
+        },
+        shown.map((entry) => photo(entry, ctx, tag)),
+      )
+      return block.layout === 'carousel'
+        ? h(
+            'div',
+            {
+              class: 'cr-list__viewport',
+              role: 'region',
+              'aria-label': block.title ?? ctx.t('collection.carousel'),
+              tabindex: '0',
+            },
+            list,
+          )
+        : list
+    }
+    case 'index':
+      return h(
+        'ul',
+        { class: 'cr-list__items cr-index' },
+        shown.map((entry) => indexItem(entry, ctx, tag)),
+      )
   }
-  return order.map((key) => [key, groups.get(key) as ContentEntry[]])
 }
 
 export function renderCollectionList(
   block: CollectionListBlock,
   ctx: RenderContext,
-  entries: readonly ContentEntry[],
+  fetched: readonly ContentEntry[],
 ): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const groupTag = nestedHeadingTag('collectionList', hasTitle)
-  const groups = groupByCategory(entries)
-  const body =
-    entries.length === 0
-      ? h('p', { class: 'cg-menu__empty' }, ctx.t('collection.empty'))
-      : h(
-          'div',
-          { class: 'cg-menu__groups' },
-          groups.map(([category, items]) => renderGroup(category, items, ctx, groupTag)),
-        )
+  const titled = block.title !== undefined
+  const shown = othersThanThisPage(fetched, ctx)
+  const tag = nestedHeadingTag('collectionList', titled)
 
-  return h(
+  if (shown.length === 0) {
+    return section(
+      'section',
+      'collectionList',
+      'cr-list',
+      { 'data-layout': block.layout, 'data-shape': 'empty' },
+      'div',
+      sectionHead('collectionList', block.title),
+      h('p', { class: 'cr-empty' }, ctx.t('collection.empty')),
+    )
+  }
+
+  const shape = shapeOf(shown, ctx, block.layout)
+  return section(
     'section',
-    { class: 'cg-menu', 'data-block': 'collectionList', 'data-layout': block.layout },
-    hasTitle
-      ? heading(
-          blockHeadingTag('collectionList') ?? 'h2',
-          { class: 'cg-menu__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
-    block.layout === 'carousel'
-      ? h(
-          'div',
-          {
-            class: 'cg-menu__viewport',
-            role: 'region',
-            'aria-label': block.title ?? ctx.t('collection.carousel'),
-            tabindex: '0',
-          },
-          body,
-        )
-      : body,
+    'collectionList',
+    'cr-list',
+    { 'data-layout': block.layout, 'data-shape': shape },
+    'div',
+    sectionHead('collectionList', block.title),
+    body(shape, shown, block, ctx, tag),
   )
+}
+
+/** The query this block needs, fetched by the host before any markup is built. */
+export function query(block: CollectionListBlock): QueryRequest {
+  return buildCollectionListQuery(block)
 }

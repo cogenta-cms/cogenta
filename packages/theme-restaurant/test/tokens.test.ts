@@ -1,12 +1,11 @@
 import { readFileSync } from 'node:fs'
 import type { SkinTokens } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
+import { parseHex, toOklch } from './css-color.js'
 
 /**
- * Contract D fixes a **closed and complete** token set: a skin that omits a
- * token is refused, and this theme's default skin is the first one that has
- * to pass. The refusal itself belongs to the skin validator; this asserts
- * the shipped tokens would survive it.
+ * Contract D fixes a closed and complete token set: a skin that omits a token
+ * is refused, and this theme's default skin is the first one that has to pass.
  */
 const tokens = JSON.parse(
   readFileSync(new URL('../tokens.json', import.meta.url), 'utf8'),
@@ -22,23 +21,22 @@ const EXPECTED: Readonly<Record<string, readonly string[]>> = {
 }
 
 function luminance(hex: string): number {
-  const value = hex.replace('#', '')
-  const channels = [0, 2, 4].map(
-    (offset) => Number.parseInt(value.slice(offset, offset + 2), 16) / 255,
-  )
-  const linear = channels.map((channel) =>
-    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
-  )
+  const { r, g, b } = parseHex(hex)
+  const linear = [r, g, b].map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
   return (
     0.2126 * (linear[0] as number) + 0.7152 * (linear[1] as number) + 0.0722 * (linear[2] as number)
   )
 }
 
 function contrast(foreground: string, background: string): number {
-  const a = luminance(foreground)
-  const b = luminance(background)
-  const [light, dark] = a > b ? [a, b] : [b, a]
+  const [light, dark] = [luminance(foreground), luminance(background)].sort((a, b) => b - a)
   return ((light as number) + 0.05) / ((dark as number) + 0.05)
+}
+
+const oklch = (hex: string) => toOklch(parseHex(hex))
+
+function primary(stack: string): string {
+  return stack.split(',')[0]?.replace(/['"]/g, '').trim() ?? ''
 }
 
 describe('the default skin', () => {
@@ -56,51 +54,101 @@ describe('the default skin', () => {
     expect(contrast(tokens.color.fg, tokens.color.bg)).toBeGreaterThanOrEqual(4.5)
     expect(contrast(tokens.color.accentFg, tokens.color.accent)).toBeGreaterThanOrEqual(4.5)
     expect(contrast(tokens.color.mutedFg, tokens.color.muted)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(tokens.color.mutedFg, tokens.color.bg)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('picks a warm cream ground, not a stark white', () => {
-    // The brief's own design decision: the light scheme is a warm cream,
-    // not a neutral or blue-leaning white.
-    const [r, g, b] = [0, 2, 4].map((offset) =>
-      Number.parseInt(tokens.color.bg.replace('#', '').slice(offset, offset + 2), 16),
-    )
-    expect(r).toBeGreaterThan(b as number)
-    expect(g).toBeGreaterThan(b as number)
+  it('sets a deep charcoal ink on a warm cream paper, never pure black on pure white', () => {
+    expect(luminance(tokens.color.bg)).toBeGreaterThan(0.8)
+    expect(luminance(tokens.color.bg)).toBeLessThan(0.95)
+    expect(luminance(tokens.color.fg)).toBeLessThan(0.03)
+    expect(tokens.color.fg).not.toBe('#000000')
+    expect(tokens.color.bg).not.toBe('#ffffff')
   })
 
-  it('picks a deliberate copper/wine accent, not a generic corporate blue', () => {
-    const hex = tokens.color.accent.toLowerCase()
-    const r = Number.parseInt(hex.slice(1, 3), 16)
-    const b = Number.parseInt(hex.slice(5, 7), 16)
-    expect(r).toBeGreaterThan(b)
+  it('keeps the neutrals warm and nearly without colour', () => {
+    for (const hex of [tokens.color.bg, tokens.color.muted, tokens.color.border, tokens.color.fg]) {
+      const { c, h } = oklch(hex)
+      expect(c, hex).toBeLessThan(0.03)
+      expect(h, hex).toBeGreaterThan(40)
+      expect(h, hex).toBeLessThan(100)
+    }
   })
 
-  it('names Google Fonts families this theme actually loads, with a real system fallback', () => {
-    expect(tokens.font.serif).toContain('Cormorant Garamond')
-    expect(tokens.font.serif).toMatch(/serif/)
-    expect(tokens.font.sans).toContain('Jost')
+  it('keeps one accent, a brass: never an indigo, a violet or a wine red', () => {
+    const { l, c, h } = oklch(tokens.color.accent)
+    expect(h).toBeGreaterThan(60)
+    expect(h).toBeLessThan(100)
+    expect(c).toBeGreaterThan(0.06)
+    expect(c).toBeLessThan(0.16)
+    expect(l).toBeLessThan(0.6)
+  })
+
+  it('holds the brass as text on the cream paper, since it names the parts of the menu', () => {
+    expect(contrast(tokens.color.accent, tokens.color.bg)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('names Cormorant Garamond for display and Karla for text, each with a real system fallback', () => {
+    expect(primary(tokens.font.serif)).toBe('Cormorant Garamond')
+    expect(tokens.font.serif).toMatch(/Georgia/)
+    expect(primary(tokens.font.sans)).toBe('Karla')
     expect(tokens.font.sans).toMatch(/system-ui/)
+    expect(tokens.font.mono.startsWith('ui-monospace')).toBe(true)
   })
 
-  it('names the display serif first in its own stack', () => {
-    const primary = tokens.font.serif.split(',')[0]?.replace(/['"]/g, '').trim()
-    expect(primary).toBe('Cormorant Garamond')
+  it('names none of the typefaces generated templates reach for first, nor one another theme owns', () => {
+    for (const stack of [tokens.font.sans, tokens.font.serif, tokens.font.mono]) {
+      for (const reserved of [
+        'Inter',
+        'Inter Tight',
+        'Roboto',
+        'Poppins',
+        'Plus Jakarta Sans',
+        'Space Grotesk',
+        'DM Sans',
+        'Manrope',
+        'Outfit',
+        'Sora',
+        'Nunito',
+        'Jost',
+        'Archivo',
+        'Albert Sans',
+        'Fraunces',
+        'Libre Franklin',
+        'Source Serif 4',
+        'Literata',
+        'Figtree',
+        'Newsreader',
+        'Hanken Grotesk',
+        'Geist',
+        'Bricolage Grotesque',
+        'Source Sans 3',
+        'IBM Plex Sans',
+        'Instrument Sans',
+        'Instrument Serif',
+      ]) {
+        expect(primary(stack)).not.toBe(reserved)
+      }
+    }
   })
 
-  it('uses a typographic scale that increases monotonically', () => {
-    expect(tokens.font.scale).toBeGreaterThan(1)
+  it('uses a typographic ratio that still increases, and a base size a guest can read', () => {
+    expect(tokens.font.scale).toBeGreaterThan(1.1)
+    expect(tokens.font.scale).toBeLessThanOrEqual(1.25)
+    expect(Number.parseFloat(tokens.font.baseSize)).toBeGreaterThanOrEqual(1)
   })
 
-  it('allows motion to be removed under prefers-reduced-motion', () => {
+  it('allows motion to be removed under prefers-reduced-motion, and keeps it short', () => {
     expect(tokens.motion.reduced).toBe(true)
+    expect(Number.parseFloat(tokens.motion.duration)).toBeLessThanOrEqual(150)
   })
 
-  it('uses a spacious density — the "room to breathe" of an elegant dining room', () => {
-    expect(tokens.space.density).toBe('spacious')
+  it('uses a density the contract allows', () => {
+    expect(['compact', 'comfortable', 'spacious']).toContain(tokens.space.density)
   })
 
-  it('keeps radii close to square — hairlines carry the structure, not rounded corners', () => {
-    const asRem = (value: string): number => Number.parseFloat(value)
-    expect(asRem(tokens.radius.lg)).toBeLessThan(0.5)
+  it('keeps corners square, softened at most by a hair', () => {
+    expect(Number.parseFloat(tokens.radius.sm)).toBe(0)
+    expect(Number.parseFloat(tokens.radius.md)).toBe(0)
+    expect(Number.parseFloat(tokens.radius.lg)).toBeLessThanOrEqual(0.125)
   })
 })

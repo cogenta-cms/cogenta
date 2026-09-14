@@ -1,84 +1,74 @@
 /*
- * The taxonomy-term archive (contract D `theme@1.3`).
- *
- * Only the three things an archive adds beyond what `collectionList`
- * already styles — a breadcrumb, a sub-term row, a prev/next pager. The
- * entry list reuses its own `cg-index__*` rules rather than a second set,
- * so an archive looks like the rest of this theme's reading lists.
+ * The taxonomy-term archive (contract D `theme@1.3`): the page title and the
+ * index rows come from `base.css` and `menu.css`; this sheet adds the
+ * breadcrumb, the sub-terms and the pager.
  */
 
-.cg-archive {
-  max-inline-size: var(--cg-page-narrow);
-  margin-inline: auto;
-  padding: var(--cg-s10) var(--cg-gutter);
+.cr-archive__breadcrumb {
+  margin-block-end: var(--cr-s2);
 }
 
-.cg-index__title-heading {
-  margin: 0 0 var(--cg-s8);
-  font-size: var(--cg-text-2xl);
-  text-align: center;
-}
-
-.cg-archive__breadcrumb ol,
-.cg-archive__children {
+.cr-archive__trail {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--cg-s3);
-  margin: 0 0 var(--cg-s4);
-  padding: 0;
-  list-style: none;
-  font-size: var(--cg-text-sm);
-}
-
-.cg-archive__children {
-  margin-block: var(--cg-s4) var(--cg-s8);
-}
-
-.cg-index__items {
+  gap: 0 var(--cr-s2);
   margin: 0;
   padding: 0;
   list-style: none;
+  color: var(--cr-ink-muted);
+  font-size: var(--cr-text-caption);
 }
 
-.cg-index__row {
+.cr-archive__trail li + li::before {
+  content: "/" / "";
+  margin-inline-end: var(--cr-s2);
+  color: var(--cr-ink-subtle);
+}
+
+.cr-archive__trail a {
+  color: var(--cr-ink-muted);
+}
+
+.cr-archive__children {
+  padding-block: 0;
+}
+
+.cr-archive__terms {
   display: flex;
-  gap: var(--cg-s4);
-  padding-block: var(--cg-s5);
-  border-block-end: 1px solid var(--cg-line-soft);
-}
-
-.cg-index__date {
-  flex: 0 0 auto;
-  font-size: var(--cg-text-sm);
-  color: var(--cg-ink-muted);
-}
-
-.cg-index__title {
-  margin: 0 0 var(--cg-s1);
-  font-size: var(--cg-text-lg);
-}
-
-.cg-index__link {
-  color: var(--cg-ink);
-  text-decoration: none;
-}
-
-.cg-index__excerpt {
+  flex-wrap: wrap;
+  gap: var(--cr-s2) var(--cr-s8);
   margin: 0;
-  color: var(--cg-ink-muted);
+  padding-block: var(--cr-s4);
+  padding-inline: 0;
+  border-block: var(--cr-rule) solid var(--cr-line);
+  list-style: none;
 }
 
-.cg-index__empty {
-  text-align: center;
-  color: var(--cg-ink-muted);
+.cr-archive__term a {
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-text-xl);
+  text-decoration-color: transparent;
 }
 
-.cg-archive__pager {
+.cr-archive__term a:hover {
+  text-decoration-color: currentColor;
+}
+
+.cr-archive__pager {
   display: flex;
   justify-content: space-between;
-  gap: var(--cg-s4);
-  margin-block-start: var(--cg-s10);
-  padding-block-start: var(--cg-s5);
-  border-block-start: 1px solid var(--cg-line-soft);
+  gap: var(--cr-s8);
+  margin-block-start: var(--cr-s10);
+}
+
+.cr-archive__pager a[rel="next"] {
+  margin-inline-start: auto;
+}
+
+@media (min-width: 64rem) {
+  .cr-archive .cr-index,
+  .cr-archive .cr-empty,
+  .cr-archive__pager {
+    grid-column: 1 / span 9;
+  }
 }

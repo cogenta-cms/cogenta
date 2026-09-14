@@ -1,0 +1,482 @@
+/*
+ * The menu, the band of plates, lists of photographed or plain entries, and
+ * the page of one dish. Everything reads `tokens.css`.
+ */
+
+/* --------------------------------------------------------------------------
+   Lists: the frame every `collectionList` shape sits in.
+   -------------------------------------------------------------------------- */
+
+.cr-list__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cr-list__viewport {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  padding-block-end: var(--cr-s4);
+}
+
+/* One column holds a printed menu's width, not the page's: the leaders stay
+   the length of a few words. */
+.cr-list[data-layout="list"] .cr-menu {
+  max-inline-size: 38rem;
+}
+
+@media (min-width: 64rem) {
+  .cr-list[data-layout="list"] .cr-menu {
+    grid-column: 3 / span 8;
+  }
+
+  /* A titled menu: the title on the first three columns, the menu on the
+     last eight, so the sections read as a card set beside its name. */
+  .cr-list[data-shape="menu"] .cr-head {
+    position: sticky;
+    inset-block-start: var(--cr-s8);
+    grid-column: 1 / span 3;
+    grid-row: 1;
+  }
+
+  .cr-list[data-shape="menu"] .cr-head + .cr-menu {
+    grid-column: 5 / span 8;
+    grid-row: 1;
+  }
+
+  .cr-list[data-shape="menu"] .cr-head__title {
+    max-inline-size: 10ch;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The menu: sections in small capitals, a dish per line with a dotted leader
+   to its price, the description under it.
+   -------------------------------------------------------------------------- */
+
+.cr-menu__section {
+  padding-block-end: var(--cr-s12);
+}
+
+.cr-menu__section:last-child {
+  padding-block-end: 0;
+}
+
+.cr-menu__section-title {
+  margin: 0 0 var(--cr-s3);
+  padding-block-end: var(--cr-s3);
+  border-block-end: var(--cr-rule) solid var(--cr-line-ink);
+  color: var(--cr-brass);
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-size-label);
+  font-weight: var(--cr-weight-semibold);
+  font-variant-caps: all-small-caps;
+  line-height: 1.2;
+  letter-spacing: var(--cr-tracking-caps);
+}
+
+.cr-menu__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Dishes are separated by space alone, the way a printed menu sets them: a
+   rule under every dish would make a form of it. */
+.cr-menu__item {
+  padding-block: var(--cr-s3) var(--cr-s4);
+}
+
+/* One line: the name, a leader of dots on the shared baseline, the price.
+   A long name wraps and the leader and price follow its last line. */
+.cr-menu__line {
+  display: flex;
+  align-items: last baseline;
+  gap: 0 var(--cr-s3);
+  margin: 0;
+}
+
+.cr-menu__name {
+  flex: 0 1 auto;
+  color: var(--cr-ink);
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-size-dish-name);
+  font-weight: var(--cr-weight-semibold);
+  line-height: 1.2;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.2em;
+}
+
+.cr-menu__name:hover {
+  text-decoration-color: currentColor;
+}
+
+.cr-menu__leader {
+  flex: 1 1 var(--cr-s8);
+  min-inline-size: var(--cr-s6);
+  margin-block-end: 0.3em;
+  border-block-end: var(--cr-rule-strong) dotted var(--cr-line-strong);
+}
+
+.cr-menu__price {
+  flex: none;
+  color: var(--cr-ink);
+  font-size: var(--cr-text-md);
+  font-weight: var(--cr-weight-medium);
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
+}
+
+.cr-menu__description {
+  margin: var(--cr-s1) 0 0;
+  max-inline-size: 52ch;
+  color: var(--cr-ink-muted);
+  font-size: var(--cr-text-caption);
+  line-height: 1.5;
+}
+
+.cr-menu__diet {
+  color: var(--cr-ink-muted);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.cr-menu__text + .cr-menu__diet {
+  margin-inline-start: 0.5em;
+}
+
+/* Two columns of sections on a wide screen, balanced, never a section split
+   across them. */
+@media (min-width: 48rem) {
+  .cr-list[data-layout="grid"] .cr-menu:not([data-sections="1"]),
+  .cr-list[data-layout="carousel"] .cr-menu:not([data-sections="1"]) {
+    column-count: 2;
+    column-gap: clamp(var(--cr-s10), 5vw, var(--cr-s20));
+  }
+
+  .cr-list[data-layout="grid"] .cr-menu__section,
+  .cr-list[data-layout="carousel"] .cr-menu__section {
+    break-inside: avoid;
+  }
+
+  .cr-list[data-layout="grid"] .cr-menu:not([data-sections="1"]) .cr-menu__section:last-child {
+    padding-block-end: 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cr-list[data-layout="list"] .cr-head + .cr-menu {
+    grid-column: 5 / span 7;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   A band of plates: the photograph at 4:5, the name and the price under it.
+   -------------------------------------------------------------------------- */
+
+.cr-plates {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 72%;
+  gap: var(--cr-col-gap);
+}
+
+@media (min-width: 40rem) {
+  .cr-plates {
+    grid-auto-columns: calc((100% - var(--cr-col-gap) * 2) / 3);
+  }
+}
+
+@media (min-width: 64rem) {
+  .cr-plates {
+    grid-auto-columns: calc((100% - var(--cr-col-gap) * 3) / 4);
+  }
+}
+
+.cr-plates__item {
+  scroll-snap-align: start;
+}
+
+.cr-plates__media {
+  display: block;
+  margin-block-end: var(--cr-s4);
+  background: var(--cr-plate);
+}
+
+.cr-plates__image {
+  inline-size: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+}
+
+.cr-plates__item[data-media="false"] {
+  padding-block-start: var(--cr-s4);
+  border-block-start: var(--cr-rule) solid var(--cr-line-ink);
+}
+
+.cr-plates__line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cr-s4);
+  margin: 0;
+}
+
+.cr-plates__name {
+  color: var(--cr-ink);
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-size-dish-name);
+  font-weight: var(--cr-weight-semibold);
+  line-height: 1.2;
+  text-decoration-color: transparent;
+}
+
+.cr-plates__name:hover {
+  text-decoration-color: currentColor;
+}
+
+.cr-plates__price {
+  flex: none;
+  font-weight: var(--cr-weight-medium);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cr-plates__section {
+  margin: var(--cr-s1) 0 0;
+  color: var(--cr-ink-muted);
+  font-size: var(--cr-text-caption);
+}
+
+/* --------------------------------------------------------------------------
+   Photographed entries without a price, and a plain index.
+   -------------------------------------------------------------------------- */
+
+.cr-photos {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--cr-s12) var(--cr-col-gap);
+}
+
+@media (min-width: 40rem) {
+  .cr-photos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .cr-photos[data-count="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.cr-list__viewport .cr-photos {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: 72%;
+}
+
+@media (min-width: 40rem) {
+  .cr-list__viewport .cr-photos {
+    grid-auto-columns: calc((100% - var(--cr-col-gap) * 2) / 3);
+  }
+}
+
+.cr-photos__item {
+  scroll-snap-align: start;
+}
+
+.cr-photos__media {
+  display: block;
+  margin-block-end: var(--cr-s5);
+  background: var(--cr-plate);
+}
+
+.cr-photos__image {
+  inline-size: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+}
+
+.cr-photos__name {
+  font-size: var(--cr-text-2xl);
+  font-weight: var(--cr-weight-regular);
+}
+
+.cr-photos__text {
+  margin: var(--cr-s2) 0 0;
+  max-inline-size: 42ch;
+  color: var(--cr-ink-muted);
+  font-size: var(--cr-text-caption);
+}
+
+.cr-index__item {
+  padding-block: var(--cr-s6);
+  border-block-start: var(--cr-rule) solid var(--cr-line);
+}
+
+.cr-index__item:last-child {
+  border-block-end: var(--cr-rule) solid var(--cr-line);
+}
+
+.cr-index__name {
+  font-size: var(--cr-text-2xl);
+  font-weight: var(--cr-weight-regular);
+}
+
+.cr-index__link {
+  color: var(--cr-ink);
+  text-decoration-color: transparent;
+}
+
+.cr-index__link:hover {
+  text-decoration-color: currentColor;
+}
+
+.cr-index__text {
+  margin: var(--cr-s2) 0 0;
+  max-inline-size: var(--cr-measure);
+  color: var(--cr-ink-muted);
+}
+
+@media (min-width: 64rem) {
+  .cr-list[data-shape="index"] .cr-head {
+    grid-column: 1 / span 4;
+    grid-row: 1;
+  }
+
+  .cr-list[data-shape="index"] .cr-index {
+    grid-column: 5 / span 8;
+  }
+
+  .cr-list[data-shape="index"] .cr-head + .cr-index {
+    grid-row: 1;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The page of one dish.
+   -------------------------------------------------------------------------- */
+
+.cr-dish {
+  padding-block: calc(var(--cr-section) * 0.4) calc(var(--cr-section) * 0.3);
+}
+
+.cr-dish__inner {
+  row-gap: var(--cr-s10);
+  align-items: center;
+}
+
+.cr-dish__media {
+  margin: 0;
+  background: var(--cr-plate);
+}
+
+.cr-dish__image {
+  inline-size: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+}
+
+.cr-dish__section {
+  margin: 0 0 var(--cr-s4);
+  color: var(--cr-brass);
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-size-label);
+  font-weight: var(--cr-weight-semibold);
+  font-variant-caps: all-small-caps;
+  line-height: 1.2;
+  letter-spacing: var(--cr-tracking-caps);
+}
+
+.cr-dish__title {
+  font-size: var(--cr-size-dish);
+  font-weight: var(--cr-weight-light);
+  line-height: 1.02;
+  letter-spacing: var(--cr-tracking-display);
+}
+
+.cr-dish__summary {
+  margin: var(--cr-s6) 0 0;
+  max-inline-size: 36ch;
+  color: var(--cr-ink-muted);
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-size-lead);
+  font-style: italic;
+  line-height: var(--cr-leading-lead);
+}
+
+.cr-dish__price-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cr-s2) var(--cr-s6);
+  margin: var(--cr-s10) 0 0;
+  padding-block: var(--cr-s4);
+  border-block: var(--cr-rule) solid var(--cr-line-ink);
+}
+
+.cr-dish__price {
+  color: var(--cr-ink);
+  font-size: var(--cr-text-xl);
+  font-weight: var(--cr-weight-medium);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cr-dish__diet {
+  color: var(--cr-ink-muted);
+  font-style: italic;
+}
+
+.cr-dish__details {
+  margin-block-start: var(--cr-s2);
+}
+
+.cr-dish__facts {
+  margin: 0;
+}
+
+.cr-dish__fact {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 1fr) 3fr;
+  gap: var(--cr-s1) var(--cr-s5);
+  padding-block: var(--cr-s4);
+  border-block-end: var(--cr-rule) solid var(--cr-line);
+}
+
+.cr-dish__fact-label {
+  color: var(--cr-ink-muted);
+  font-size: var(--cr-text-caption);
+}
+
+.cr-dish__fact-value {
+  margin: 0;
+  font-size: var(--cr-text-md);
+  line-height: 1.5;
+}
+
+.cr-dish__terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cr-s1) var(--cr-s5);
+  margin: var(--cr-s6) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--cr-text-caption);
+}
+
+@media (min-width: 64rem) {
+  .cr-dish[data-media="true"] .cr-dish__media {
+    grid-column: 1 / span 6;
+  }
+
+  .cr-dish[data-media="true"] .cr-dish__info {
+    grid-column: 8 / span 5;
+  }
+
+  .cr-dish[data-media="false"] .cr-dish__info {
+    grid-column: 1 / span 7;
+  }
+}

@@ -1,8 +1,7 @@
 /*
- * Document, accessibility floor, page frame, chrome (header/footer/nav, the
- * CSS-only mobile menu) and the one control the theme ships (an action
- * link). Everything here reads the design system from `tokens.css`; nothing
- * here reads a `--cogenta-*` token directly.
+ * Document, accessibility floor, the grid, section titles, page titles,
+ * actions, the header and footer, and the utility pages the host renders
+ * (search, forms, comments). Everything reads `tokens.css`.
  */
 
 /* --------------------------------------------------------------------------
@@ -15,208 +14,225 @@
   box-sizing: border-box;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-block-start: var(--cr-s6);
+  hanging-punctuation: first allow-end last;
+}
+
 body {
   margin: 0;
-  background: var(--cg-canvas);
-  color: var(--cg-ink);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-md);
-  line-height: var(--cg-leading-normal);
+  background: var(--cr-canvas);
+  color: var(--cr-ink);
+  font-family: var(--cr-font-text);
+  font-size: var(--cr-text-md);
+  font-weight: var(--cr-weight-regular);
+  line-height: var(--cr-leading-text);
   font-kerning: normal;
   font-variant-ligatures: common-ligatures;
-  text-underline-offset: 0.15em;
-  text-decoration-thickness: from-font;
-  -webkit-text-size-adjust: 100%;
-}
-
-/* The display serif, everywhere a heading appears — light weight, generous
-   tracking at large sizes, the opposite instinct from a grotesque display
-   face. Every custom class below inherits this rather than restating it. */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  margin: 0;
-  font-family: var(--cogenta-font-serif);
-  font-weight: var(--cg-weight-light);
-  line-height: var(--cg-leading-tight);
-  letter-spacing: var(--cg-tracking-tight);
-  text-wrap: balance;
-}
-
-/* The small-caps, letter-spaced label this theme uses for every eyebrow/
-   kicker — one utility rather than five near-identical declarations. */
-.cg-kicker {
-  display: inline-block;
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-xs);
-  font-weight: var(--cg-weight-medium);
-  letter-spacing: var(--cg-tracking-caps);
-  text-transform: uppercase;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: var(--cg-accent-soft);
-  color: var(--cg-accent-soft-fg);
+  background: var(--cr-brass);
+  color: var(--cr-brass-fg);
 }
 
 img,
 video,
 iframe {
-  max-width: 100%;
-  height: auto;
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
 }
 
 img {
-  display: block;
   object-fit: cover;
 }
 
+:where(img, video) {
+  filter: brightness(var(--cr-image-brightness));
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  font-family: var(--cr-font-display);
+  font-weight: var(--cr-weight-regular);
+  line-height: var(--cr-leading-heading);
+  letter-spacing: var(--cr-tracking-heading);
+  text-wrap: balance;
+}
+
+:where(p, li, dd, figcaption, blockquote) {
+  text-wrap: pretty;
+}
+
 :where(a) {
-  color: var(--cg-accent);
-  text-decoration-color: color-mix(in oklab, var(--cg-accent) 40%, transparent);
+  color: var(--cr-ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cr-rule);
+  text-decoration-color: var(--cr-line-strong);
+  text-underline-offset: 0.24em;
   transition:
-    color var(--cg-duration-fast) var(--cg-ease),
-    text-decoration-color var(--cg-duration-fast) var(--cg-ease);
+    color var(--cr-duration) var(--cr-ease),
+    text-decoration-color var(--cr-duration) var(--cr-ease);
 }
 
 :where(a:hover) {
-  color: var(--cg-accent-hover);
   text-decoration-color: currentColor;
 }
 
 :where(hr) {
-  block-size: 1px;
+  block-size: var(--cr-rule);
   border: 0;
-  margin-block: var(--cg-s10);
-  background: var(--cg-line);
+  margin-block: var(--cr-s10);
+  background: var(--cr-line);
+}
+
+:where(code, kbd, samp, pre) {
+  font-family: var(--cr-font-code);
+  font-size: 0.88em;
+}
+
+:where(data, time) {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* --------------------------------------------------------------------------
-   Focus, targets, motion
+   Focus, targets, motion. Motion is a colour or an underline changing, in
+   under 150 ms; nothing moves in space, nothing fades in on scroll.
    -------------------------------------------------------------------------- */
 
-:where(a, button, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--cg-accent);
+:where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--cr-rule-strong) solid var(--cr-brass);
   outline-offset: 3px;
-  border-radius: var(--cg-radius-xs);
 }
 
-:where(
-  .cg-action,
-  .cg-faq__question,
-  .cg-hours__question,
-  .cg-press__link,
-  .cg-nav__cta,
-  .cg-mobile-nav__toggle
-) {
+:where(.cg-action, .cr-nav-toggle-label, .cg-theme-toggle, summary) {
   min-block-size: 44px;
-  min-inline-size: 44px;
 }
 
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    @keyframes cg-settle {
-      from {
-        opacity: 0;
-        transform: translateY(var(--cg-s3));
-      }
-
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-
-    [data-block] {
-      animation: cg-settle linear both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 20%;
-    }
-  }
-}
-
+/* Every transition in this theme reads `--cr-duration`, so reduced motion is
+   one declaration rather than an `!important` sweep over every element. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
-    scroll-behavior: auto !important;
+  :root {
+    --cr-duration: 0ms;
   }
 }
 
 .cg-skip-link {
   position: absolute;
-  inset-inline-start: var(--cg-s3);
-  inset-block-start: calc(var(--cg-s3) * -8);
-  z-index: 20;
-  padding: var(--cg-s2) var(--cg-s4);
-  background: var(--cg-ink);
-  color: var(--cg-canvas);
-  border-radius: var(--cg-radius-sm);
-  font-weight: var(--cg-weight-medium);
+  inset-inline-start: var(--cr-s3);
+  inset-block-start: calc(var(--cr-s16) * -1);
+  z-index: 40;
+  padding: var(--cr-s2) var(--cr-s4);
+  background: var(--cr-action);
+  color: var(--cr-action-fg);
+  font-size: var(--cr-text-caption);
+  font-weight: var(--cr-weight-medium);
   text-decoration: none;
-  transition: inset-block-start var(--cg-duration) var(--cg-ease);
 }
 
 .cg-skip-link:focus-visible {
-  inset-block-start: var(--cg-s3);
-  outline-color: var(--cg-canvas);
+  inset-block-start: var(--cr-s3);
 }
 
 /* --------------------------------------------------------------------------
-   Page frame
+   The grid. Every block is a section around a twelve-column container; the
+   section rhythm is one variable, applied to all of them.
    -------------------------------------------------------------------------- */
 
-.cg-main {
+.cr-main {
   display: flow-root;
+  overflow-x: clip;
+  padding-block-end: calc(var(--cr-section) / 2);
 }
 
-[data-block] {
-  max-inline-size: var(--cg-page);
+.cr-container {
+  display: grid;
+  grid-template-columns: repeat(var(--cr-columns), minmax(0, 1fr));
+  column-gap: var(--cr-col-gap);
+  align-items: start;
+  inline-size: 100%;
+  max-inline-size: calc(var(--cr-page) + var(--cr-gutter) * 2);
   margin-inline: auto;
-  margin-block: var(--cg-section-y);
-  padding-inline: var(--cg-gutter);
+  padding-inline: var(--cr-gutter);
 }
 
-/* The hero and the closing CTA are full-bleed by design — the "full-cadre"
-   dining-room photograph and the dark closing band both run edge to edge. */
-[data-block="hero"],
-[data-block="cta"] {
-  max-inline-size: none;
-  padding-inline: 0;
-  margin-block: 0;
+/* Below the wide breakpoint twelve columns only make slivers: every child
+   takes the full row, and each block redistributes from there. */
+.cr-container > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
 }
 
-/* --- per-block visual variant (blocks@2.0, RFC 0002) ---------------------- */
+.cr-section {
+  padding-block: calc(var(--cr-section) / 2);
+}
+
+/* A page that ends on a band ends on it: no strip of paper between the band
+   and the footer. */
+.cr-main > [data-variant-background]:last-child {
+  margin-block-end: calc(var(--cr-section) / -2);
+}
+
+/* --- section titles ----------------------------------------------------------
+   A titled block names itself in the display serif, on the first column,
+   with the same space under it everywhere. */
+
+.cr-head {
+  margin-block-end: var(--cr-s10);
+}
+
+.cr-head__title {
+  max-inline-size: 24ch;
+  font-size: var(--cr-size-section);
+  font-weight: var(--cr-weight-light);
+  line-height: var(--cr-leading-heading);
+  letter-spacing: var(--cr-tracking-display);
+}
+
+.cr-empty {
+  margin: 0;
+  padding-block: var(--cr-s6);
+  border-block: var(--cr-rule) solid var(--cr-line);
+  color: var(--cr-ink-muted);
+  font-size: var(--cr-text-caption);
+}
+
+/* --- per-block variants (blocks@2.0, RFC 0002) --------------------------- */
 
 [data-block][data-variant-background="muted"],
 [data-block][data-variant-background="image"] {
-  padding-block: var(--cg-s10);
+  background: var(--cr-surface);
+  padding-block: calc(var(--cr-section) * 0.7);
 }
 
-[data-block][data-variant-background="muted"] {
-  background: var(--cg-surface-sunken);
-}
-
-[data-block][data-variant-background="image"] {
-  background: var(--cg-surface-tinted);
+[data-block][data-variant-background] + [data-block][data-variant-background] {
+  margin-block-start: calc(var(--cr-section) / 2);
 }
 
 [data-block][data-variant-spacing="compact"] {
-  margin-block: calc(var(--cg-section-y) / 2);
+  padding-block: calc(var(--cr-section) / 4);
 }
 
 [data-block][data-variant-spacing="spacious"] {
-  margin-block: calc(var(--cg-section-y) * 1.6);
-}
-
-[data-block][data-variant-align="start"] {
-  text-align: start;
+  padding-block: calc(var(--cr-section) * 0.85);
 }
 
 [data-block][data-variant-align="center"] {
@@ -227,193 +243,281 @@ img {
   text-align: end;
 }
 
-[data-block][data-variant-width="full"] {
+[data-block][data-variant-width="full"] > .cr-container {
   max-inline-size: none;
-  padding-inline: 0;
 }
 
-.cg-page__title {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y) var(--cg-s6);
-  padding-inline: var(--cg-gutter);
-  font-size: var(--cg-text-3xl);
-  text-align: center;
+/* --- the title of any page that has no hero and is not a dish ------------- */
+
+.cr-page-head {
+  padding-block: calc(var(--cr-section) * 0.5) calc(var(--cr-section) * 0.1);
 }
 
-/* `renderEntryHeader` (`@cogenta/theme-kit`, contract D `theme@1.4`) — the
-   shared entry furniture a routed collection with no `blocks` field of its
-   own (this theme's `menu_item`) still gets: title, excerpt, meta line,
-   cover photo, all centred like the rest of this theme's reading pages. */
-.cg-entry-header {
-  max-inline-size: var(--cg-page-narrow);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y) var(--cg-s8);
-  padding-inline: var(--cg-gutter);
-  text-align: center;
+.cr-page-head__inner {
+  row-gap: var(--cr-s5);
 }
 
-.cg-entry-header__terms {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--cg-s3);
-  margin: 0 0 var(--cg-s3);
-  padding: 0;
-  list-style: none;
-  font-size: var(--cg-text-xs);
-  letter-spacing: var(--cg-tracking-caps);
-  text-transform: uppercase;
-  color: var(--cg-accent);
+.cr-page-head__title {
+  font-size: var(--cr-size-title);
+  font-weight: var(--cr-weight-light);
+  line-height: var(--cr-leading-display);
+  letter-spacing: var(--cr-tracking-display);
 }
 
-.cg-entry-header__title {
-  margin: 0 0 var(--cg-s4);
-  font-size: var(--cg-text-3xl);
-}
-
-.cg-entry-header__excerpt {
-  margin: 0 0 var(--cg-s4);
-  font-style: italic;
-  color: var(--cg-ink-muted);
-}
-
-.cg-entry-header__meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--cg-s3);
-  margin: 0 0 var(--cg-s8);
-  font-size: var(--cg-text-sm);
-  color: var(--cg-ink-subtle);
-}
-
-.cg-entry-header__cover {
+.cr-page-head__lead {
   margin: 0;
-  border-radius: var(--cg-radius-md);
-  overflow: hidden;
+  max-inline-size: 38ch;
+  color: var(--cr-ink-muted);
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-size-lead);
+  font-style: italic;
+  line-height: var(--cr-leading-lead);
 }
 
-.cg-entry-header__cover img {
+.cr-page-head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cr-s1) var(--cr-s4);
+  margin: 0;
+  color: var(--cr-ink-muted);
+  font-size: var(--cr-text-caption);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cr-page-head__cover {
+  margin: var(--cr-s6) 0 0;
+}
+
+.cr-page-head__image {
   inline-size: 100%;
+  aspect-ratio: 3 / 2;
+  background: var(--cr-plate);
+}
+
+@media (min-width: 64rem) {
+  .cr-page-head__title,
+  .cr-page-head__meta,
+  .cr-archive__breadcrumb {
+    grid-column: 1 / span 9;
+  }
+
+  .cr-page-head__lead {
+    grid-column: 1 / span 7;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   Chrome — header, sticky, centred wordmark, CSS-only mobile menu
+   Actions: a filled rectangle in ink for the primary intent, and for the rest
+   the words underlined with an arrow after them. Square corners, no lift, no
+   shadow, no accent fill.
    -------------------------------------------------------------------------- */
 
-.cg-site-header {
-  position: sticky;
-  inset-block-start: 0;
-  z-index: 10;
-  padding: var(--cg-s4) var(--cg-gutter);
-  /* Flat and fully opaque, not a frosted-glass blur: a sticky header reads
-     as a solid plane sitting above the page, with a hairline marking where
-     it ends. */
-  background: var(--cg-canvas);
-  border-block-end: 1px solid var(--cg-line-soft);
-}
-
-.cg-site-header__inner {
-  display: flex;
-  align-items: center;
-  gap: var(--cg-gap);
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-}
-
-.cg-site-header__home {
-  color: var(--cg-ink);
-  font-family: var(--cogenta-font-serif);
-  font-weight: var(--cg-weight-regular);
-  font-size: var(--cg-text-lg);
-  letter-spacing: var(--cg-tracking-wide);
-  text-decoration: none;
-  margin-inline-end: auto;
-}
-
-.cg-site-header__logo {
-  display: block;
-  block-size: 2.25rem;
-  inline-size: auto;
-  max-inline-size: 14rem;
-  object-fit: contain;
-}
-
-.cg-nav {
-  display: none;
-}
-
-@media (min-width: 56rem) {
-  .cg-nav {
-    display: flex;
-    align-items: center;
-  }
-}
-
-.cg-nav__items {
+.cg-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--cg-s6);
+  gap: var(--cr-s3) var(--cr-s8);
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--cg-text-sm);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
 }
 
-.cg-nav__items a,
-.cg-nav__items span {
-  color: var(--cg-ink-muted);
+.cg-action {
+  font-family: var(--cr-font-text);
+  font-size: var(--cr-text-md);
+  font-weight: var(--cr-weight-medium);
+  line-height: 1.2;
   text-decoration: none;
+  transition:
+    background-color var(--cr-duration) var(--cr-ease),
+    color var(--cr-duration) var(--cr-ease),
+    border-color var(--cr-duration) var(--cr-ease),
+    text-decoration-color var(--cr-duration) var(--cr-ease);
 }
 
-.cg-nav__items a:hover {
-  color: var(--cg-ink);
-}
-
-.cg-nav__cta {
-  display: none;
-  margin-inline-start: var(--cg-s5);
-}
-
-@media (min-width: 56rem) {
-  .cg-nav__cta {
-    display: inline-flex;
-  }
-}
-
-/* The manual light/dark/system toggle (L26) — a plain circular icon button in
-   the header's own register, the same 2.25rem footprint and hairline border
-   as the footer's social icons, never a filled control (this theme has none
-   in its header). Icon visibility (sun/moon) is swapped by CSS alone, from
-   the same `[data-theme]`/`prefers-color-scheme` signals `tokens.css` already
-   keys the whole palette on — see `theme-canonical`'s identical comment. */
-.cg-theme-toggle {
+.cg-action[data-emphasis="primary"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  inline-size: 2.25rem;
-  block-size: 2.25rem;
-  border: 1px solid var(--cg-line-soft);
-  border-radius: 50%;
+  padding: var(--cr-s3) var(--cr-s8);
+  border: var(--cr-rule) solid var(--cr-action);
+  border-radius: var(--cr-radius-control);
+  background: var(--cr-action);
+  color: var(--cr-action-fg);
+  white-space: nowrap;
+}
+
+.cg-action[data-emphasis="primary"]:hover {
+  background: var(--cr-action-hover);
+  border-color: var(--cr-action-hover);
+  color: var(--cr-action-hover-fg);
+}
+
+/* A text link with an arrow after it. Not a flex container: in one, the
+   words and the arrow are two flex items and each gets its own underline.
+   As inline content the words carry one continuous underline, and the
+   arrow, an inline-block, inherits none (CSS Text Decoration: decorations do
+   not propagate to atomic inlines). The same rule draws every arrow link of
+   the theme, so a lone arrow cannot exist anywhere. */
+.cg-action[data-emphasis="secondary"],
+.cr-arrow-link {
+  display: inline-block;
+  color: var(--cr-ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cr-rule);
+  text-decoration-color: var(--cr-line-strong);
+  text-decoration-skip-ink: auto;
+  text-underline-offset: 0.3em;
+}
+
+.cg-action[data-emphasis="secondary"] {
+  padding-block: var(--cr-s3);
+}
+
+.cg-action[data-emphasis="secondary"]::after,
+.cr-arrow-link::after {
+  content: "\2192" / "";
+  display: inline-block;
+  margin-inline-start: 0.4em;
+}
+
+.cr-arrow-link[data-direction="back"]::after {
+  content: none;
+}
+
+.cr-arrow-link[data-direction="back"]::before {
+  content: "\2190" / "";
+  display: inline-block;
+  margin-inline-end: 0.4em;
+}
+
+.cg-action[data-emphasis="secondary"]:hover,
+.cr-arrow-link:hover {
+  color: var(--cr-ink);
+  text-decoration-color: currentColor;
+}
+
+/* --------------------------------------------------------------------------
+   Header: one quiet row under a hairline. Not held at the top of the window:
+   the photograph of the room below it deserves the whole screen once the
+   visitor starts to scroll.
+   -------------------------------------------------------------------------- */
+
+.cr-header {
+  position: relative;
+  z-index: 30;
+  border-block-end: var(--cr-rule) solid var(--cr-line);
+  background: var(--cr-canvas);
+}
+
+.cr-header__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--cr-s2) var(--cr-s8);
+  min-block-size: var(--cr-header-height);
+  max-inline-size: calc(var(--cr-page) + var(--cr-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--cr-gutter);
+}
+
+.cr-header__brand {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-block-size: 44px;
+  min-inline-size: 0;
+  color: var(--cr-ink);
+  text-decoration: none;
+}
+
+.cr-header__wordmark {
+  overflow: hidden;
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-size-wordmark);
+  font-weight: var(--cr-weight-medium);
+  line-height: 1;
+  letter-spacing: 0.005em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cr-header__logo {
+  display: block;
+  block-size: 2rem;
+  inline-size: auto;
+  max-inline-size: min(13rem, 46vw);
+  object-fit: contain;
+  filter: none;
+}
+
+.cr-header__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--cr-s8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cr-header__item a,
+.cr-header__item span {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  color: var(--cr-ink);
+  font-size: var(--cr-text-md);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cr-rule);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.42em;
+}
+
+.cr-header__item a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* The one action of the header: the words, underlined, after a hairline. */
+.cr-header__action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-block-size: 44px;
+  color: var(--cr-ink);
+  font-size: var(--cr-text-md);
+  font-weight: var(--cr-weight-medium);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cr-rule);
+  text-decoration-color: var(--cr-line-ink);
+  text-underline-offset: 0.42em;
+  white-space: nowrap;
+}
+
+.cr-header__action:hover {
+  text-decoration-color: var(--cr-brass);
+}
+
+.cg-theme-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.75rem;
+  margin-inline-end: calc(var(--cr-s3) * -1);
+  padding: 0;
+  border: 0;
   background: transparent;
-  color: var(--cg-ink);
+  color: var(--cr-ink);
   cursor: pointer;
-  transition: border-color var(--cg-duration-fast) var(--cg-ease);
+  transition: color var(--cr-duration) var(--cr-ease);
 }
 
 .cg-theme-toggle:hover {
-  border-color: var(--cg-accent);
-  color: var(--cg-accent);
+  color: var(--cr-ink-muted);
 }
 
 .cg-theme-toggle__icon {
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
 }
 
 .cg-theme-toggle__icon--moon {
@@ -438,364 +542,430 @@ img {
   display: block;
 }
 
-/* The CSS-only mobile menu: a `<details>`/`<summary>` disclosure, shown only
-   below the breakpoint the desktop `.cg-nav` appears at. No JavaScript
-   anywhere — expanding, focus and keyboard operation all come from the
-   browser's own `<details>` behaviour. */
-.cg-mobile-nav {
-  position: relative;
-  display: inline-flex;
-}
-
-@media (min-width: 56rem) {
-  .cg-mobile-nav {
-    display: none;
-  }
-}
-
-.cg-mobile-nav__toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--cg-ink);
-  list-style: none;
-}
-
-.cg-mobile-nav__toggle::-webkit-details-marker {
-  display: none;
-}
-
-.cg-mobile-nav__glyph {
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
-}
-
-.cg-mobile-nav__panel {
-  position: absolute;
-  inset-inline-end: 0;
-  inset-block-start: calc(100% + var(--cg-s3));
-  z-index: 30;
-  min-inline-size: 14rem;
-  padding: var(--cg-s4);
-  background: var(--cg-surface);
-  box-shadow: var(--cogenta-shadow-md), var(--cg-ring);
-  border-radius: var(--cg-radius-md);
-}
-
-.cg-mobile-nav__items {
-  display: flex;
-  flex-direction: column;
-  gap: var(--cg-s4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--cg-text-sm);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
-}
-
-.cg-mobile-nav__items a,
-.cg-mobile-nav__items span {
-  color: var(--cg-ink);
-  text-decoration: none;
-}
-
-.cg-mobile-nav__items .cg-nav__cta {
-  display: inline-flex;
-}
-
-/* --------------------------------------------------------------------------
-   Chrome — footer, columns
-   -------------------------------------------------------------------------- */
-
-.cg-site-footer {
-  padding: var(--cg-s16) var(--cg-gutter) var(--cg-s8);
-  background: var(--cg-surface-sunken);
-  color: var(--cg-ink-muted);
-  border-block-start: 1px solid var(--cg-line-soft);
-  font-size: var(--cg-text-sm);
-}
-
-.cg-site-footer__grid {
-  display: grid;
-  gap: var(--cg-gap-loose);
-  grid-template-columns: 1fr;
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  padding-block-end: var(--cg-s10);
-  border-block-end: 1px solid var(--cg-line-soft);
-}
-
-@media (min-width: 48rem) {
-  .cg-site-footer__grid {
-    grid-template-columns: 1.2fr 1fr 1fr;
-    align-items: start;
-  }
-}
-
-.cg-site-footer__brand-name {
-  display: block;
-  color: var(--cg-ink);
-  font-family: var(--cogenta-font-serif);
-  font-size: var(--cg-text-xl);
-  letter-spacing: var(--cg-tracking-wide);
-  text-decoration: none;
-  margin-block-end: var(--cg-s3);
-}
-
-.cg-site-footer__tagline {
-  margin: 0 0 var(--cg-s4);
-}
-
-.cg-site-footer__social {
-  display: flex;
-  gap: var(--cg-s3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-site-footer__social-item a {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 2.25rem;
-  block-size: 2.25rem;
-  border-radius: 50%;
-  box-shadow: var(--cg-ring);
-  color: var(--cg-ink-muted);
-}
-
-.cg-site-footer__social-item a:hover {
-  color: var(--cg-accent);
-  box-shadow: var(--cg-ring-accent);
-}
-
-.cg-social__icon {
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
-}
-
-.cg-visually-hidden {
+.cr-nav-toggle-input {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
   overflow: hidden;
-  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
-.cg-site-footer__nav .cg-nav__items {
+.cr-nav-toggle-label {
+  display: flex;
+  flex: none;
   flex-direction: column;
-  align-items: flex-start;
-  gap: var(--cg-s3);
-  text-transform: none;
-  letter-spacing: var(--cg-tracking-normal);
-}
-
-.cg-site-footer__about {
-  font-style: italic;
-}
-
-.cg-site-footer__bottom {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--cg-s4);
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  padding-block-start: var(--cg-s6);
-  font-size: var(--cg-text-xs);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
-  color: var(--cg-ink-subtle);
-}
-
-.cg-site-footer__branding {
-  display: flex;
-  align-items: center;
-  gap: 0.4em;
-  opacity: 0.8;
-  transition: opacity var(--cg-duration) var(--cg-ease);
-}
-
-.cg-site-footer__branding a {
-  display: flex;
-  align-items: center;
-  gap: 0.4em;
-}
-
-.cg-site-footer__branding a:hover,
-.cg-site-footer__branding a:focus-visible {
-  opacity: 1;
-}
-
-/* --------------------------------------------------------------------------
-   Actions — the theme's only control
-   -------------------------------------------------------------------------- */
-
-.cg-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cg-s4);
-  margin: var(--cg-s8) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-action {
-  display: inline-flex;
-  align-items: center;
   justify-content: center;
-  gap: var(--cg-s2);
-  padding: var(--cg-s3) var(--cg-s6);
-  border: 1px solid transparent;
-  border-radius: var(--cg-radius-sm);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-medium);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
-  line-height: var(--cg-leading-snug);
-  text-decoration: none;
-  white-space: nowrap;
-  transition:
-    background-color var(--cg-duration) var(--cg-ease),
-    color var(--cg-duration) var(--cg-ease),
-    border-color var(--cg-duration) var(--cg-ease),
-    transform var(--cg-duration-fast) var(--cg-ease);
+  gap: 0.45rem;
+  order: 4;
+  inline-size: 2.75rem;
+  margin-inline-end: calc(var(--cr-s2) * -1);
+  padding: 0.7rem 0.5rem;
+  cursor: pointer;
 }
 
-.cg-action[data-emphasis="primary"] {
-  background: var(--cg-accent);
-  border-color: var(--cg-accent);
-  color: var(--cg-accent-fg);
+.cr-nav-toggle-input:focus-visible ~ .cr-nav-toggle-label {
+  outline: var(--cr-rule-strong) solid var(--cr-brass);
+  outline-offset: 2px;
 }
 
-.cg-action[data-emphasis="primary"]:hover {
-  background: var(--cg-accent-hover);
-  border-color: var(--cg-accent-hover);
-  transform: translateY(-1px);
+.cr-nav-toggle-bar {
+  display: block;
+  inline-size: 100%;
+  block-size: 1.5px;
+  background: var(--cr-ink);
 }
 
-.cg-action[data-emphasis="secondary"] {
-  background: transparent;
-  border-color: var(--cg-line-strong);
-  color: var(--cg-ink);
+/* Open: the two bars cross. A state, drawn at once; nothing is animated. */
+.cr-nav-toggle-input:checked ~ .cr-nav-toggle-label {
+  gap: 0;
 }
 
-.cg-action[data-emphasis="secondary"]:hover {
-  border-color: var(--cg-accent);
-  color: var(--cg-accent);
+.cr-nav-toggle-input:checked ~ .cr-nav-toggle-label .cr-nav-toggle-bar:first-child {
+  transform: translateY(0.75px) rotate(45deg);
 }
 
-.cg-action:active {
-  transform: translateY(0);
+.cr-nav-toggle-input:checked ~ .cr-nav-toggle-label .cr-nav-toggle-bar:last-child {
+  transform: translateY(-0.75px) rotate(-45deg);
+}
+
+/* Below the wide breakpoint the pages are a panel of large serif links under
+   the header, down to the bottom of the screen; the reservation link and the
+   light/dark control stay in the header row. */
+@media (max-width: 63.99rem) {
+  .cr-header__inner {
+    gap: var(--cr-s2) var(--cr-s4);
+  }
+
+  .cr-header__action {
+    order: 2;
+  }
+
+  .cg-theme-toggle {
+    order: 3;
+    margin-inline-end: 0;
+  }
+
+  .cr-header__nav {
+    display: none;
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 100%;
+    z-index: 29;
+    min-block-size: calc(100svh - var(--cr-header-height));
+    overflow-y: auto;
+    padding: var(--cr-s4) var(--cr-gutter) var(--cr-s12);
+    border-block-start: var(--cr-rule) solid var(--cr-line);
+    background: var(--cr-canvas);
+  }
+
+  .cr-nav-toggle-input:checked ~ .cr-header__nav {
+    display: block;
+  }
+
+  .cr-header__links {
+    display: block;
+  }
+
+  .cr-header__item {
+    border-block-end: var(--cr-rule) solid var(--cr-line);
+  }
+
+  .cr-header__item a,
+  .cr-header__item span {
+    display: flex;
+    min-block-size: 0;
+    padding-block: var(--cr-s4);
+    font-family: var(--cr-font-display);
+    font-size: var(--cr-size-nav);
+    font-weight: var(--cr-weight-light);
+    line-height: var(--cr-leading-heading);
+    letter-spacing: var(--cr-tracking-display);
+  }
+
+  .cr-header__card {
+    margin-block-start: var(--cr-s10);
+  }
+
+  .cr-header__card p {
+    margin: 0;
+    color: var(--cr-ink);
+    font-size: var(--cr-text-md);
+    line-height: 1.55;
+  }
+
+  .cr-header__card p + p {
+    margin-block-start: var(--cr-s4);
+    color: var(--cr-ink-muted);
+    font-size: var(--cr-text-caption);
+  }
+}
+
+@media (max-width: 26rem) {
+  .cr-header__action {
+    font-size: var(--cr-text-caption);
+  }
+}
+
+@media (min-width: 64rem) {
+  .cr-nav-toggle-label,
+  .cr-header__card {
+    display: none;
+  }
+
+  .cr-header__nav {
+    order: 1;
+  }
+
+  .cr-header__action {
+    order: 2;
+    padding-inline-start: var(--cr-s8);
+    border-inline-start: var(--cr-rule) solid var(--cr-line);
+  }
+
+  .cg-theme-toggle {
+    order: 3;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   Shared block furniture — every custom title class this theme's seventeen
-   blocks declare, kept to one typographic rule so a page mixing all of them
-   reads as one system.
+   Footer: a charcoal band. The name, the address card, the pages, the
+   profiles, and the legal line.
    -------------------------------------------------------------------------- */
 
-.cg-craft__title-heading,
-.cg-close__title,
-.cg-faq__title,
-.cg-figures__title,
-.cg-press__title,
-.cg-set-menu__title,
-.cg-tallies__title,
-.cg-hours__title,
-.cg-menu__title {
-  margin: 0 0 var(--cg-s10);
-  font-size: var(--cg-text-2xl);
-  text-align: center;
+.cr-footer {
+  padding-block: var(--cr-s20) var(--cr-s10);
+  background: var(--cr-footer);
+  color: var(--cr-footer-ink);
+  font-size: var(--cr-text-caption);
+  line-height: var(--cr-leading-ui);
 }
 
-.cg-craft__items,
-.cg-press__items,
-.cg-press-strip__items,
-.cg-gallery__items,
-.cg-faq__items,
-.cg-hours__items,
-.cg-set-menu__tiers,
-.cg-menu__dishes {
+.cr-footer__inner {
+  display: grid;
+  grid-template-columns: repeat(var(--cr-columns), minmax(0, 1fr));
+  column-gap: var(--cr-col-gap);
+  row-gap: var(--cr-s12);
+  max-inline-size: calc(var(--cr-page) + var(--cr-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--cr-gutter);
+}
+
+.cr-footer__inner > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+.cr-footer :where(a) {
+  color: var(--cr-footer-ink);
+  text-decoration-color: var(--cr-footer-line);
+}
+
+.cr-footer :where(a:hover) {
+  text-decoration-color: currentColor;
+}
+
+.cr-footer__name {
+  display: inline-block;
+  color: var(--cr-footer-ink);
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-text-3xl);
+  font-weight: var(--cr-weight-light);
+  line-height: 1.05;
+  letter-spacing: var(--cr-tracking-display);
+  text-decoration: none;
+}
+
+.cr-footer__tagline {
+  margin: var(--cr-s3) 0 0;
+  max-inline-size: 30ch;
+  color: var(--cr-footer-muted);
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-text-lg);
+  font-style: italic;
+  line-height: var(--cr-leading-lead);
+}
+
+.cr-footer__note p {
+  margin: 0;
+  max-inline-size: 36ch;
+  color: var(--cr-footer-ink);
+  font-size: var(--cr-text-md);
+  line-height: 1.55;
+}
+
+.cr-footer__note p + p {
+  margin-block-start: var(--cr-s4);
+  color: var(--cr-footer-muted);
+  font-size: var(--cr-text-caption);
+}
+
+.cr-footer__links,
+.cr-footer__social {
+  display: grid;
+  gap: var(--cr-s1);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.cg-gallery__viewport,
-.cg-menu__viewport {
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--cg-line-strong) transparent;
-  padding-block: var(--cg-s2);
-  margin-block: calc(var(--cg-s2) * -1);
+.cr-footer__item a,
+.cr-footer__item span,
+.cr-footer__social-item a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cr-s2);
+  min-block-size: 2rem;
+  color: var(--cr-footer-ink);
+  font-size: var(--cr-text-md);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.3em;
+}
+
+.cr-footer__item a:hover,
+.cr-footer__social-item a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* The social profiles keep their names: a row of icons alone asks a guest to
+   recognise every logo, and a restaurant's footer has room for the words. */
+.cr-footer__social .cg-visually-hidden {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+}
+
+.cg-social__icon {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: none;
+}
+
+.cr-footer__legal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cr-s3) var(--cr-s8);
+  padding-block-start: var(--cr-s6);
+  border-block-start: var(--cr-rule) solid var(--cr-footer-line);
+  color: var(--cr-footer-muted);
+  font-size: var(--cr-text-sm);
+}
+
+.cr-footer__copyright {
+  margin: 0;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cr-footer__branding a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  color: var(--cr-footer-muted);
+  text-decoration: none;
+}
+
+.cr-footer__branding a:hover {
+  color: var(--cr-footer-ink);
+}
+
+.cg-site-footer__brand-logo {
+  display: block;
+  block-size: 18px;
+  inline-size: auto;
+}
+
+.cg-site-footer__version {
+  font-variant-numeric: tabular-nums;
+}
+
+.cr-footer__nav,
+.cr-footer__follow {
+  grid-column: span 6;
+}
+
+@media (min-width: 40rem) {
+  .cr-footer__about,
+  .cr-footer__note {
+    grid-column: span 6;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cr-footer__about {
+    grid-column: 1 / span 4;
+  }
+
+  .cr-footer__note {
+    grid-column: 5 / span 4;
+  }
+
+  .cr-footer__nav {
+    grid-column: 9 / span 2;
+  }
+
+  .cr-footer__follow {
+    grid-column: 11 / span 2;
+  }
+
+  .cr-footer__legal {
+    grid-column: 1 / -1;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   Search, forms, comments — public utility pages and post-content
-   furniture, styled with the same restrained, elegant language as the
-   seventeen blocks.
+   Search, forms and comments: the utility pages the host renders, in the
+   same register. The host sets them in a bare `<main class="cg-main">`.
    -------------------------------------------------------------------------- */
 
+.cg-main > .cg-page__title,
 .cg-search__form,
 .cg-search__results,
 .cg-search__empty,
 .cg-search__error,
 .cg-form,
-.cg-form__confirmation,
-.cg-comments {
-  max-inline-size: var(--cg-page);
+.cg-form__confirmation {
+  inline-size: 100%;
+  max-inline-size: calc(var(--cr-page) + var(--cr-gutter) * 2);
   margin-inline: auto;
-  padding-inline: var(--cg-gutter);
+  padding-inline: var(--cr-gutter);
+}
+
+.cg-main > .cg-page__title {
+  padding-block: calc(var(--cr-section) * 0.5) var(--cr-s8);
+  font-size: var(--cr-size-title);
+  font-weight: var(--cr-weight-light);
+  line-height: var(--cr-leading-display);
+  letter-spacing: var(--cr-tracking-display);
+}
+
+.cg-search__form > *,
+.cg-form > * {
+  max-inline-size: 44rem;
 }
 
 .cg-search__form {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: var(--cg-s3);
-  margin-block-end: var(--cg-s8);
+  gap: var(--cr-s3) var(--cr-s4);
+  margin-block: 0 var(--cr-s10);
+}
+
+.cg-search__form label,
+.cg-form__field label,
+.cg-comment__form label {
+  display: block;
+  margin-block-end: var(--cr-s2);
+  color: var(--cr-ink-muted);
+  font-size: var(--cr-text-caption);
+  font-weight: var(--cr-weight-medium);
 }
 
 .cg-search__form label {
-  display: block;
-  font-size: var(--cg-text-sm);
-  margin-block-end: var(--cg-s2);
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .cg-search__form input[type="search"] {
-  flex: 1 1 16rem;
+  flex: 1 1 18rem;
 }
 
 .cg-search__results {
-  margin: 0 auto;
-  padding-inline-start: var(--cg-gutter);
   display: grid;
-  gap: var(--cg-s4);
-  font-size: var(--cg-text-lg);
+  margin-block: 0 var(--cr-section);
+  list-style: none;
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-text-xl);
+}
+
+.cg-search__results > * {
+  padding-block: var(--cr-s5);
+  border-block-start: var(--cr-rule) solid var(--cr-line);
 }
 
 .cg-search__empty,
 .cg-comments__empty,
-.cg-comments__closed {
-  color: var(--cg-ink-muted);
+.cg-comments__closed,
+.cg-form__help {
+  color: var(--cr-ink-muted);
 }
 
 .cg-search__error,
 .cg-form__error,
 .cg-form__field-error {
-  color: var(--cg-ink);
-  font-weight: var(--cg-weight-semibold);
+  color: var(--cr-ink);
+  font-weight: var(--cr-weight-semibold);
 }
 
+/* Fields are a baseline, not a box: a rule under the words, darkening to ink
+   on focus. */
 .cg-search__form input,
 .cg-form__field input,
 .cg-form__field select,
@@ -803,67 +973,85 @@ img {
 .cg-comment__form input,
 .cg-comment__form textarea {
   inline-size: 100%;
-  padding: var(--cg-s3) var(--cg-s4);
-  border: 1px solid var(--cg-line);
-  border-radius: var(--cg-radius-sm);
-  background: var(--cg-surface);
-  color: var(--cg-ink);
-  font: inherit;
+  min-block-size: 44px;
+  padding: var(--cr-s2) 0;
+  border: 0;
+  border-block-end: var(--cr-rule) solid var(--cr-line-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--cr-ink);
+  font-family: var(--cr-font-text);
+  font-size: var(--cr-text-md);
+  line-height: var(--cr-leading-ui);
+  transition: border-color var(--cr-duration) var(--cr-ease);
+}
+
+.cg-form__field textarea,
+.cg-comment__form textarea {
+  padding: var(--cr-s3);
+  border: var(--cr-rule) solid var(--cr-line-strong);
+  border-radius: var(--cr-radius);
+  resize: vertical;
+}
+
+.cg-search__form input:focus-visible,
+.cg-form__field :is(input, select, textarea):focus-visible,
+.cg-comment__form :is(input, textarea):focus-visible {
+  outline: none;
+  border-color: var(--cr-ink);
+  box-shadow: inset 0 calc(var(--cr-rule) * -1) 0 var(--cr-ink);
 }
 
 .cg-form__field input[aria-invalid="true"],
 .cg-form__field select[aria-invalid="true"],
 .cg-form__field textarea[aria-invalid="true"] {
-  border-width: 2px;
-  border-color: var(--cg-line-strong);
+  border-color: var(--cr-ink);
+  border-block-end-width: var(--cr-rule-strong);
 }
 
 .cg-search__form button,
 .cg-form button[type="submit"],
 .cg-comment__form button[type="submit"] {
-  padding: var(--cg-s3) var(--cg-s6);
-  border: 0;
-  border-radius: var(--cg-radius-sm);
-  background: var(--cg-accent);
-  color: var(--cg-accent-fg);
-  font-weight: var(--cg-weight-medium);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
+  min-block-size: 44px;
+  padding: var(--cr-s3) var(--cr-s8);
+  border: var(--cr-rule) solid var(--cr-action);
+  border-radius: var(--cr-radius-control);
+  background: var(--cr-action);
+  color: var(--cr-action-fg);
+  font-family: var(--cr-font-text);
+  font-size: var(--cr-text-md);
+  font-weight: var(--cr-weight-medium);
   cursor: pointer;
-  transition: background-color var(--cg-duration) var(--cg-ease);
+  transition:
+    background-color var(--cr-duration) var(--cr-ease),
+    border-color var(--cr-duration) var(--cr-ease),
+    color var(--cr-duration) var(--cr-ease);
 }
 
 .cg-search__form button:hover,
 .cg-form button[type="submit"]:hover,
 .cg-comment__form button[type="submit"]:hover {
-  background: var(--cg-accent-hover);
+  background: var(--cr-action-hover);
+  border-color: var(--cr-action-hover);
+  color: var(--cr-action-hover-fg);
 }
 
-.cg-form__field,
-.cg-comment__form p {
+.cg-form__field {
   display: block;
-  margin-block-end: var(--cg-s5);
-}
-
-.cg-form__field label,
-.cg-comment__form label {
-  display: block;
-  font-size: var(--cg-text-sm);
-  margin-block-end: var(--cg-s2);
+  margin-block-end: var(--cr-s6);
 }
 
 .cg-form__help {
-  margin: var(--cg-s2) 0 0;
-  font-size: var(--cg-text-sm);
-  color: var(--cg-ink-muted);
+  margin: var(--cr-s2) 0 0;
+  font-size: var(--cr-text-sm);
 }
 
 .cg-form__choice {
   display: inline-flex;
   align-items: center;
-  gap: var(--cg-s2);
-  margin-inline-end: var(--cg-s4);
-  font-weight: normal;
+  gap: var(--cr-s2);
+  margin-inline-end: var(--cr-s4);
+  font-weight: var(--cr-weight-regular);
 }
 
 .cg-form__honeypot,
@@ -875,11 +1063,34 @@ img {
   inset-inline-start: -9999px;
 }
 
+/* Comments sit on the same twelve columns as the text above them, from the
+   third column, like running text. */
 .cg-comments {
-  margin-block-start: var(--cg-section-y);
-  padding-block-start: var(--cg-s8);
-  padding-block-end: var(--cg-section-y);
-  border-block-start: 1px solid var(--cg-line-soft);
+  display: grid;
+  grid-template-columns: repeat(var(--cr-columns), minmax(0, 1fr));
+  column-gap: var(--cr-col-gap);
+  max-inline-size: calc(var(--cr-page) + var(--cr-gutter) * 2);
+  margin: 0 auto var(--cr-section);
+  padding: 0 var(--cr-gutter);
+}
+
+.cg-comments > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+@media (min-width: 64rem) {
+  .cg-comments > * {
+    grid-column: 3 / span 7;
+  }
+}
+
+.cg-comments > h2 {
+  padding-block-start: var(--cr-s5);
+  border-block-start: var(--cr-rule) solid var(--cr-line-ink);
+  margin-block-end: var(--cr-s5);
+  font-size: var(--cr-size-section);
+  font-weight: var(--cr-weight-light);
 }
 
 .cg-comments__list,
@@ -890,34 +1101,52 @@ img {
 }
 
 .cg-comment {
-  padding-block: var(--cg-s5);
-  border-block-end: 1px solid var(--cg-line-soft);
+  padding-block: var(--cr-s5);
+  border-block-start: var(--cr-rule) solid var(--cr-line);
 }
 
 .cg-comment__replies {
-  padding-block-start: var(--cg-s5);
-}
-
-.cg-comment__replies .cg-comment {
-  padding-inline-start: var(--cg-s6);
-  border-inline-start: 2px solid var(--cg-line-soft);
-  border-block-end: 0;
+  margin-block-start: var(--cr-s4);
+  padding-inline-start: var(--cr-s6);
+  border-inline-start: var(--cr-rule) solid var(--cr-line);
 }
 
 .cg-comment__meta {
   display: flex;
-  gap: var(--cg-s3);
-  align-items: baseline;
-  font-size: var(--cg-text-sm);
-  color: var(--cg-ink-muted);
-  margin-block-end: var(--cg-s2);
+  flex-wrap: wrap;
+  gap: var(--cr-s1) var(--cr-s3);
+  margin: 0 0 var(--cr-s2);
+  font-size: var(--cr-text-sm);
 }
 
 .cg-comment__author {
-  font-weight: var(--cg-weight-semibold);
-  color: var(--cg-ink);
+  color: var(--cr-ink);
+  font-weight: var(--cr-weight-semibold);
 }
 
-.cg-comment__body {
+.cg-comment__date {
+  color: var(--cr-ink-muted);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-comment__body p {
   margin: 0;
+}
+
+.cg-comment__body p + p {
+  margin-block-start: var(--cr-s3);
+}
+
+.cg-comment__form {
+  display: grid;
+  gap: var(--cr-s3);
+  margin-block-start: var(--cr-s6);
+}
+
+.cg-comment__form > * {
+  margin: 0;
+}
+
+.cg-comment__form button[type="submit"] {
+  justify-self: start;
 }

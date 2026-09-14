@@ -1,39 +1,64 @@
 import type { MediaFigureBlock } from '@cogenta/blocks'
 import { aspectRatio, type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * A thin hairline frame around the image, a small italic caption beneath —
- * the restrained, "printed menu insert" treatment consistent with this
- * theme's gallery and embed placeholder.
+ * A photograph and its caption.
+ *
+ * `align` is an editorial intent, read as a layout:
+ *
+ * - `start` / `end`: the room-and-story split. The photograph takes seven
+ *   columns on its side and the caption, set in the serif italic at the lead
+ *   size, takes the other four, so a caption reads as a line from the house
+ *   beside the picture.
+ * - `center`: eight columns, set in from the left edge.
+ * - `wide` (and no value): the whole container.
+ * - `full`: the whole window, edge to edge.
+ *
+ * The ratio crops from the middle, or from the media's own focal point; the
+ * corners stay square and the picture casts no shadow.
  */
 export function renderMediaFigure(block: MediaFigureBlock, ctx: RenderContext): HtmlElement {
+  const align = block.align ?? 'wide'
+  const split = align === 'start' || align === 'end'
   const ratio = aspectRatio(block.ratio)
-  const hasCaption = block.caption !== undefined || block.credit !== undefined
-  return h(
-    'figure',
-    {
-      class: 'cg-plate',
-      'data-block': 'mediaFigure',
-      'data-align': block.align ?? 'center',
-      style: ratio === undefined ? undefined : `--cg-ratio:${ratio}`,
-    },
-    h(
-      'div',
-      { class: 'cg-plate__frame' },
-      image(ctx, block.media, {
-        className: 'cg-plate__media',
-        sizes: '(min-width: 48rem) 42rem, 100vw',
-      }),
-    ),
-    hasCaption
-      ? h(
+
+  const caption =
+    block.caption === undefined && block.credit === undefined
+      ? null
+      : h(
           'figcaption',
-          { class: 'cg-plate__caption' },
-          block.caption,
+          { class: 'cr-figure__caption' },
+          block.caption === undefined
+            ? null
+            : h('span', { class: 'cr-figure__text', 'data-field': 'caption' }, block.caption),
           block.credit === undefined
             ? null
-            : h('span', { class: 'cg-plate__credit', 'data-field': 'credit' }, block.credit),
+            : h('span', { class: 'cr-figure__credit', 'data-field': 'credit' }, block.credit),
         )
-      : null,
+
+  return section(
+    'div',
+    'mediaFigure',
+    'cr-figure',
+    { 'data-align': align, 'data-layout': split ? 'split' : 'single' },
+    'figure',
+    h(
+      'div',
+      {
+        class: 'cr-figure__frame',
+        style: ratio === undefined ? undefined : `aspect-ratio:${ratio}`,
+      },
+      image(ctx, block.media, {
+        className: 'cr-figure__image',
+        sizes:
+          align === 'full'
+            ? '100vw'
+            : split
+              ? '(min-width: 64rem) 55vw, 100vw'
+              : '(min-width: 90rem) 86rem, 100vw',
+      }),
+    ),
+    caption,
   )
 }

@@ -4,26 +4,26 @@ import { renderLogos } from '../../src/render/blocks/logos.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderLogos(BLOCKS.logos, ctx))
 
-describe('logos — "As featured in"', () => {
-  it('links a logo to its organisation URL when one is set', () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    expect(html).toMatch(/<a class="cg-press__link" href="[^"]*example\.org[^"]*"/)
+describe('logos', () => {
+  it('names each mark after its organisation when the media has no alt text', () => {
+    expect(html).toContain('alt="Tablées"')
+    expect(html).toContain('alt="The Rhône Guide"')
   })
 
-  it('renders the bare image, unlinked, when the item has no url', () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    const item2 = html.slice(html.lastIndexOf('cg-press__item'))
-    expect(item2).not.toContain('<a')
+  it('links a mark out with rel protection, and leaves an unlinked one as a plate', () => {
+    expect(html).toContain(
+      '<a class="cr-marks__plate" href="https://tablees.example" rel="noopener noreferrer">',
+    )
+    expect(html).toContain('<span class="cr-marks__plate">')
   })
 
-  it("writes the organisation's own name as alt text when the media entity has none", () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    expect(html).toContain('alt="The Local Table"')
+  it('sizes marks small, whatever their source width', () => {
+    expect(html.match(/sizes="10rem"/g)).toHaveLength(2)
   })
 
-  it('is marked with data-block="logos"', () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    expect(html).toContain('data-block="logos"')
+  it('titles the row at h2', () => {
+    expect(html).toContain('<h2 class="cr-head__title" data-field="title">Written about in</h2>')
   })
 })

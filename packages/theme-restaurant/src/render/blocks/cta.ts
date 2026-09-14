@@ -7,25 +7,34 @@ import {
   heading,
   type RenderContext,
 } from '@cogenta/theme-kit'
+import { optionalText, section } from '../layout.js'
 
 /**
- * "Book now / Call us" — a centred, dark, full-bleed close, mirroring the
- * hero's own centred treatment so the page opens and closes on the same
- * note. `--cg-scrim` gives the panel its depth; nothing here is a literal
- * colour (R3/isolation test).
+ * A call to action set as a line of the page, not a coloured box: a hairline
+ * in ink across the container, the title large and light on the first seven
+ * columns, the sentence and the actions on the last four. How to book a
+ * table, the private room, a gift for someone else.
+ *
+ * A site that wants a band asks for one with the `background` variant, which
+ * lays the same line on the paper's darker stock.
  */
 export function renderCta(block: CtaBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-close', 'data-block': 'cta' },
+    'cta',
+    'cr-cta',
+    {},
+    'div',
     heading(
       blockHeadingTag('cta') ?? 'h2',
-      { class: 'cg-close__title', 'data-field': 'title' },
+      { class: 'cr-cta__title', 'data-field': 'title' },
       block.title,
     ),
-    block.text === undefined
-      ? null
-      : h('p', { class: 'cg-close__text', 'data-field': 'text' }, block.text),
-    actionList(ctx, block.actions, block.title),
+    h(
+      'div',
+      { class: 'cr-cta__body' },
+      optionalText('p', 'cr-cta__text', block.text, { 'data-field': 'text' }),
+      actionList(ctx, block.actions, block.title),
+    ),
   )
 }

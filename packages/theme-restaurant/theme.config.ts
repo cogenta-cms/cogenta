@@ -1,7 +1,7 @@
 import { defineTheme } from '@cogenta/render'
 
 /**
- * Contract D — Theme, `theme@1.4`.
+ * Contract D — Theme, `theme@1.5`.
  *
  * `implements` lists the seventeen blocks of contract B (`blocks@2.0`, RFC
  * 0001) in the order the contract lists them — see
@@ -12,7 +12,7 @@ export default defineTheme({
   name: 'restaurant',
   version: '1.0.0',
   description:
-    'An elegant, dark-forward restaurant theme: a full-bleed hero, a real priced menu grouped by category, and a genuine dark mode.',
+    'A contemporary bistro: the room across the window, a typographic menu grouped by section with prices, dish pages, and an evening palette.',
   author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',

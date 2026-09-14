@@ -1,37 +1,32 @@
-import type { StatCounterBlock, StatCounterItem } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import type { StatCounterBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * `blocks@2.0` (RFC 0001). Narrower than `stats` (no `unit`) — rendered the
- * same restrained "figures row" way as `stats`, one accent hairline apart:
- * this theme has no boastful, boxed "impact numbers" register to reach for.
+ * The narrower sibling of `stats` (a value and a label, no unit), drawn in
+ * the same register: figures in the display serif under one hairline.
+ * Nothing counts up; a number that animates into place is a number a guest
+ * has to wait for.
  */
-function renderItem(item: StatCounterItem): HtmlElement {
-  return h(
-    'div',
-    { class: 'cg-tally' },
-    h('dd', { class: 'cg-tally__value' }, item.value),
-    h('dt', { class: 'cg-tally__label' }, item.label),
-  )
-}
-
 export function renderStatCounter(block: StatCounterBlock, _ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-tallies', 'data-block': 'statCounter' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('statCounter') ?? 'h2',
-          { class: 'cg-tallies__title', 'data-field': 'title' },
-          block.title,
+    'statCounter',
+    'cr-figures',
+    { 'data-count': String(Math.min(block.stats.length, 4)) },
+    'div',
+    sectionHead('statCounter', block.title),
+    h(
+      'dl',
+      { class: 'cr-figures__items' },
+      block.stats.map((stat) =>
+        h(
+          'div',
+          { class: 'cr-figures__item' },
+          h('dt', { class: 'cr-figures__label' }, stat.label),
+          h('dd', { class: 'cr-figures__value' }, stat.value),
         ),
-    h('dl', { class: 'cg-tallies__items' }, block.stats.map(renderItem)),
+      ),
+    ),
   )
 }

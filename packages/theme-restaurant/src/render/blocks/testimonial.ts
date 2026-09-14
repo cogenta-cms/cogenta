@@ -1,41 +1,36 @@
 import type { TestimonialBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext, renderRichText } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * A centred, oversized quotation mark stands above the quote (a CSS
- * pseudo-glyph, not markup) — the guestbook-page treatment this theme's
- * elegance calls for, rather than a bordered "client success" card.
- *
- * `<figure><blockquote>…</blockquote><figcaption>` is the attribution
- * pattern the HTML spec prescribes: putting the author inside the
- * `<blockquote>` would claim the author's name was part of what was said.
- *
- * The avatar is decorative — the name sits right beside it in text — so its
- * media entity's alt text is expected to be empty; `image` still writes the
- * attribute either way (WCAG 1.1.1).
+ * A guest's own words, set like a note left in the book by the door: the text
+ * in the serif italic at the lead size on seven columns from the fourth, the
+ * name and the occasion beneath it at the caption size. Smaller and quieter
+ * than a press quote, on purpose. The layout does not depend on a portrait;
+ * when one is there it is a small square beside the name.
  */
 export function renderTestimonial(block: TestimonialBlock, ctx: RenderContext): HtmlElement {
   const { attribution } = block
-  return h(
+  return section(
+    'div',
+    'testimonial',
+    'cr-note',
+    {},
     'figure',
-    { class: 'cg-testimonial', 'data-block': 'testimonial' },
-    h('blockquote', { class: 'cg-testimonial__quote' }, renderRichText(ctx, block.quote)),
+    h('blockquote', { class: 'cr-note__quote' }, renderRichText(ctx, block.quote)),
     h(
       'figcaption',
-      { class: 'cg-testimonial__attribution' },
+      { class: 'cr-note__attribution' },
       attribution.avatar === undefined
         ? null
-        : image(ctx, attribution.avatar, {
-            className: 'cg-testimonial__avatar',
-            variant: { width: 88, height: 88, fit: 'cover' },
-          }),
+        : image(ctx, attribution.avatar, { className: 'cr-note__avatar', sizes: '3.5rem' }),
       h(
         'span',
-        { class: 'cg-testimonial__who' },
-        h('span', { class: 'cg-testimonial__name' }, attribution.name),
+        { class: 'cr-note__who' },
+        h('span', { class: 'cr-note__name' }, attribution.name),
         attribution.role === undefined
           ? null
-          : h('span', { class: 'cg-testimonial__role' }, attribution.role),
+          : h('span', { class: 'cr-note__role' }, attribution.role),
       ),
     ),
   )

@@ -4,26 +4,49 @@ import { renderAccordion } from '../../src/render/blocks/accordion.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderAccordion(BLOCKS.accordion, ctx))
 
-describe('accordion — "Hours & location"', () => {
-  it('renders a <details>/<summary> disclosure per item, zero JavaScript', () => {
-    const html = serialize(renderAccordion(BLOCKS.accordion, ctx))
-    expect(html).toContain('<details class="cg-hours__details">')
-    expect(html).toContain('<summary class="cg-hours__question">')
+describe('accordion', () => {
+  it('is drawn with the same details rows as the FAQ', () => {
+    expect(html).toContain('<details class="cr-answers__details">')
+    expect(html).toContain('<h3 class="cr-answers__question">Nuts</h3>')
   })
 
-  it('renders a rotating plus/minus mark drawn from CSS, not an icon font', () => {
-    const html = serialize(renderAccordion(BLOCKS.accordion, ctx))
-    expect(html).toContain('cg-hours__mark')
-  })
-
-  it('renders the rich-text answer', () => {
-    const html = serialize(renderAccordion(BLOCKS.accordion, ctx))
-    expect(html).toContain('Open Tuesday to Sunday, 18:00 to 23:00.')
-  })
-
-  it('is marked with data-block="accordion"', () => {
-    const html = serialize(renderAccordion(BLOCKS.accordion, ctx))
+  it('marks itself as notes, so the stylesheet sets it in one narrower column', () => {
+    expect(html).toContain('data-variant="notes"')
     expect(html).toContain('data-block="accordion"')
+  })
+
+  it('renders every answer, not only the first', () => {
+    const two = serialize(
+      renderAccordion(
+        {
+          ...BLOCKS.accordion,
+          items: [
+            ...BLOCKS.accordion.items,
+            {
+              _key: 'acc2',
+              question: 'Gluten',
+              answer: [
+                {
+                  _key: 'g',
+                  _type: 'block',
+                  style: 'normal',
+                  children: [{ _key: 'gs', _type: 'span', text: 'Ask us.', marks: [] }],
+                  markDefs: [],
+                },
+              ],
+            },
+          ],
+        },
+        ctx,
+      ),
+    )
+    expect(two.match(/<details/g)).toHaveLength(2)
+  })
+
+  it('renders untitled notes without an empty heading', () => {
+    const { title: _title, ...rest } = BLOCKS.accordion
+    expect(serialize(renderAccordion(rest, ctx))).not.toContain('cr-head')
   })
 })

@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util'
 import { createLogger, isCogentaError } from '@cogenta/core'
 import { runBackup, runRestore } from './commands/backup.js'
 import { runChannels } from './commands/channels.js'
+import { runDev } from './commands/dev-supervisor.js'
 import { formatDoctorReport, runDoctor } from './commands/doctor.js'
 import { runExport, runImportContent } from './commands/export.js'
 import { runGenerate } from './commands/generate.js'
@@ -84,7 +85,8 @@ Commands
   skin apply <tokens.json>      Validate, then make it the active skin
   skin generate --description "…"   Generate a skin from a description
   roles export     Freeze the role permission override table into a file
-  serve, dev       Run the content and auth API over HTTP
+  serve            Run the site, its admin and its API over HTTP
+  dev              Same, with a writable schema; restarts when cogenta.schema.* changes
   mcp              Run an MCP server over stdin/stdout, exposing this site's tools
   channels         Connect Telegram/Slack/Discord and chat with an agent from there
   update check     Compare the installed @cogenta/core / @cogenta/cli against npm
@@ -410,13 +412,13 @@ export async function run(options: RunOptions): Promise<number> {
       }
     }
 
-    return runServe({
+    // ADR-0010: the schema is writable in development only, and L28 D7:
+    // only development restarts itself when that schema changes.
+    const start = command === 'dev' ? runDev : runServe
+    return start({
       out,
       stderr,
       env,
-      // ADR-0010: the schema is writable in development only. This is the
-      // one place the two commands differ in more than name.
-      development: command === 'dev',
       ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
       ...(port === undefined ? {} : { port }),
       ...(typeof parsed.values.host === 'string' ? { host: parsed.values.host } : {}),

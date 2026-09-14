@@ -316,7 +316,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         // table to exist before its foreign key can be created.
         await createSchemaTables(options.db, added, addedTaxonomies)
         followUp.push(
-          `${schemaPath} was rewritten — commit it (ADR-0010: the schema lives in git), then restart: the running process loaded its collections at start-up and does not see the new ones yet.`,
+          `${schemaPath} was rewritten — commit it (ADR-0010: the schema lives in git), the development server restarts on its own to load the new collections (a process started any other way must be restarted by hand).`,
         )
       }
 

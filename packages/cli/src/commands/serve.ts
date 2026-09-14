@@ -431,7 +431,7 @@ const SERVABLE_IMAGE_TYPES: ReadonlySet<string> = new Set([
   'image/png',
 ])
 
-const SCHEMA_FILE_CANDIDATES = [
+export const SCHEMA_FILE_CANDIDATES = [
   'cogenta.schema.ts',
   'cogenta.schema.mts',
   'cogenta.schema.mjs',
@@ -480,11 +480,18 @@ export async function loadSchemaModule(projectRoot: string): Promise<LoadedSchem
     // could not resolve its own `@cogenta/schema` import was reported as "No
     // schema file found", sending everyone looking for a file that was
     // sitting right there.
-    if (!(await stat(path).catch(() => null))) continue
+    const found = await stat(path).catch(() => null)
+    if (!found) continue
 
     let module: { default?: unknown; taxonomies?: unknown }
     try {
-      module = (await import(pathToFileURL(path).href)) as {
+      // The modification time rides in the URL because ESM caches a module by
+      // URL for the life of the process: `cogenta dev` restarts in-process
+      // when this file changes (L28 D7) and would otherwise be handed the
+      // collections it started with. An unchanged file keeps its URL, so
+      // `cogenta serve` imports it exactly once, as before.
+      const url = `${pathToFileURL(path).href}?mtime=${found.mtimeMs}`
+      module = (await import(url)) as {
         default?: unknown
         taxonomies?: unknown
       }

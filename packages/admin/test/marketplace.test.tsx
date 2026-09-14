@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -262,11 +262,15 @@ describe('fiche 29 — the installed extensions screen (task 1)', () => {
     const table = await screen.findByRole('table')
     await within(table).findByText('Widening Plugin')
 
+    // Each toggle reloads the list, which replaces the table element: query
+    // the current table every time instead of the one captured above.
     fireEvent.click(within(table).getByRole('button', { name: 'Désactiver' }))
-    await within(table).findByText('Désactivée')
+    await waitFor(() =>
+      expect(within(screen.getByRole('table')).getByText('Désactivée')).toBeDefined(),
+    )
 
-    fireEvent.click(within(table).getByRole('button', { name: 'Activer' }))
-    await within(table).findByText('Active')
+    fireEvent.click(within(screen.getByRole('table')).getByRole('button', { name: 'Activer' }))
+    await waitFor(() => expect(within(screen.getByRole('table')).getByText('Active')).toBeDefined())
   })
 
   it('flags an available update, and offers "review & update" when it would widen permissions', async () => {

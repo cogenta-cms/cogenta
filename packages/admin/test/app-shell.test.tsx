@@ -49,7 +49,9 @@ describe('App, signed in', () => {
     installMockFetch({ roles: ['admin'] })
     render(<App />)
     await screen.findAllByRole('heading', { name: 'Tableau de bord' })
-    expect(screen.getByRole('link', { name: "Journal d'audit" })).toBeDefined()
+    // Like "Contenus" above, the entry depends on a request that answers
+    // after the dashboard heading has rendered.
+    expect(await screen.findByRole('link', { name: "Journal d'audit" })).toBeDefined()
   })
 
   it('marks the current section as the active link', async () => {

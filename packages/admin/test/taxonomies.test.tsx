@@ -157,6 +157,16 @@ describe('the taxonomy screen', () => {
       const entrees = body.data.find((term) => term.id === 'term-entrees')
       expect(entrees?.parent).toBe('term-desserts')
     })
+    // The move is only the first of the indent's requests: its position
+    // write and the reload follow. Ending the test here let that write land
+    // in the next test's fixture (the up-button test below then saw two
+    // siblings on the same position and never reordered). The reloaded tree
+    // no longer offers to indent "Entrées", which has no preceding sibling.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Imbriquer Entrées sous le terme précédent' }),
+      ).toHaveProperty('disabled', true),
+    )
   })
 
   it('reorders two siblings with the up button', async () => {

@@ -262,7 +262,8 @@ describe('a product’s own images and a variant’s own photo', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
     fireEvent.click(within(row).getByRole('button', { name: 'Modifier Écharpe' }))
     const reopened = await screen.findByRole('dialog', { name: 'Modifier Écharpe' })
-    expect(within(reopened).getByText('seed-1.png')).toBeDefined()
+    // The reopened dialog loads the product's images after it opens.
+    expect(await within(reopened).findByText('seed-1.png')).toBeDefined()
   })
 
   it('sets a variant’s own photo, independently of the rest of the variant edit form', async () => {

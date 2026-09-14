@@ -97,7 +97,9 @@ describe('the "ask the site" chat screen', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Interroger le site' }))
     await screen.findByRole('heading', { name: 'Interroger le site' })
 
-    fireEvent.change(screen.getByLabelText('Votre question'), {
+    // The panel heading renders before the toolset check that decides
+    // whether the question field is offered at all.
+    fireEvent.change(await screen.findByLabelText('Votre question'), {
       target: { value: 'When did the museum open?' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Demander' }))

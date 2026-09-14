@@ -29,6 +29,9 @@ async function goToUpdates(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Mises à jour' }))
   await screen.findByRole('heading', { name: 'Mises à jour' })
+  // The heading renders before the update check answers; the package list
+  // (and the apply button) only after it.
+  await screen.findByText('@cogenta/core')
 }
 
 const CORE_UP_TO_DATE: UpdatePackageStatus = {

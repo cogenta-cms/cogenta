@@ -83,10 +83,10 @@ async function addUrlItem(label: string, url: string): Promise<void> {
   fireEvent.change(screen.getByLabelText('URL'), { target: { value: url } })
   fireEvent.click(screen.getByRole('button', { name: "Ajouter l'élément" }))
   // The tree only mounts once there is at least one item — an empty menu
-  // shows a plain message instead — so the very first item's own arrival is
-  // awaited before its containing list can be queried at all.
-  const tree = await screen.findByRole('list', { name: 'Éléments du menu' })
-  await within(tree).findByText(label)
+  // shows a plain message instead — and adding an item reloads the list,
+  // which can replace the tree element already on screen. The current tree
+  // is queried on every attempt, never one captured before the reload.
+  await waitFor(() => expect(within(treeRegion()).getByText(label)).toBeDefined())
 }
 
 /** The item's own row — the `<li>` `MenuTree` renders it as, carrying the drag handlers and the action buttons. */
@@ -167,7 +167,12 @@ describe('the menu screen', () => {
       expect(row.style.marginLeft).not.toBe('0rem')
     })
 
-    fireEvent.click(within(rowOf('B')).getByRole('button', { name: "Remonter d'un niveau" }))
+    // The indent shows at once, but the row's buttons are withdrawn until
+    // the new order has been saved.
+    const outdent = await waitFor(() =>
+      within(rowOf('B')).getByRole('button', { name: "Remonter d'un niveau" }),
+    )
+    fireEvent.click(outdent)
     await waitFor(() => {
       expect(rowOf('B').style.marginLeft).toBe('0rem')
     })
@@ -188,7 +193,8 @@ describe('the menu screen', () => {
     fireEvent.click(within(modal).getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    expect(within(treeRegion()).getByText('About')).toBeDefined()
+    // The modal closes before the reloaded item list is back.
+    await waitFor(() => expect(within(treeRegion()).getByText('About')).toBeDefined())
     expect(within(treeRegion()).queryByText('Abuot')).toBeNull()
   })
 
@@ -210,8 +216,7 @@ describe('the menu screen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: "Ajouter l'élément" }))
 
-    const tree = await screen.findByRole('list', { name: 'Éléments du menu' })
-    await within(tree).findByText('Second')
+    await waitFor(() => expect(within(treeRegion()).getByText('Second')).toBeDefined())
     // "Second article" is a draft in the fixture — the row must say so.
     expect(within(rowOf('Second')).getByText('Brouillon')).toBeDefined()
   })

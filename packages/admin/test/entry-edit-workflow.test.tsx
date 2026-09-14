@@ -185,48 +185,35 @@ describe('workflow transitions in the editor refresh the sidebar status', () => 
  * `assign-reviewer` itself, `editor` so it is itself a real candidate the
  * `publish` rule includes, and `admin` so the candidate list actually
  * populates. A heavier role set renders more of the shell (more nav/badge
- * fetches), so this describe uses its own longer-timeout open rather than
- * the shared `openWfEntry()` default.
+ * fetches), so this describe uses its own open rather than the shared
+ * `openWfEntry()`, waiting on the package-wide async budget (`test/setup.ts`).
  */
 describe('assigning a reviewer', () => {
   async function openWfEntrySlow(): Promise<void> {
     window.history.pushState(null, '', '/collections/wf-article/wf-entry-1')
     render(<App />)
-    await screen.findByRole('heading', { name: 'Modifier : Workflow article' }, { timeout: 8000 })
+    await screen.findByRole('heading', { name: 'Modifier : Workflow article' })
   }
 
   it('lists real candidates and assigns through the real route', async () => {
     signedIn(['contributor', 'editor', 'admin'])
     await openWfEntrySlow()
 
-    const select = await screen.findByRole(
-      'combobox',
-      { name: 'Relecteur assigné' },
-      { timeout: 8000 },
-    )
-    expect(
-      await within(select).findByRole('option', { name: 'alice@example.com' }, { timeout: 8000 }),
-    ).toBeDefined()
+    const select = await screen.findByRole('combobox', { name: 'Relecteur assigné' })
+    expect(await within(select).findByRole('option', { name: 'alice@example.com' })).toBeDefined()
 
     fireEvent.change(select, { target: { value: 'user-1' } })
 
-    await waitFor(
-      () => {
-        expect((select as HTMLSelectElement).value).toBe('user-1')
-      },
-      { timeout: 8000 },
-    )
+    await waitFor(() => {
+      expect((select as HTMLSelectElement).value).toBe('user-1')
+    })
   })
 
   it('offers only "unassigned" to a non-admin, who cannot browse the account list', async () => {
     signedIn(['contributor'])
     await openWfEntrySlow()
 
-    const select = await screen.findByRole(
-      'combobox',
-      { name: 'Relecteur assigné' },
-      { timeout: 8000 },
-    )
+    const select = await screen.findByRole('combobox', { name: 'Relecteur assigné' })
     expect(within(select).getAllByRole('option')).toHaveLength(1)
   })
 })

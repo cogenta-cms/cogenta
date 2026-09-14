@@ -117,8 +117,11 @@ describe('dashboard', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
     await screen.findByRole('heading', { name: 'Résumé du contenu' })
+    // The card's heading renders before its counts arrive: wait for the
+    // count, so the absence of a drafts link is checked against a loaded
+    // card rather than an empty one.
+    expect(await screen.findByRole('link', { name: '1 au total' })).toBeDefined()
     expect(screen.queryByRole('link', { name: /brouillons/u })).toBeNull()
-    expect(screen.getByRole('link', { name: '1 au total' })).toBeDefined()
   })
 
   it('offers a "new article" shortcut only to a role that may create one', async () => {

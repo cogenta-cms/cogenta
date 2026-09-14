@@ -144,11 +144,14 @@ describe('the trash screen', () => {
 
     // Gone from the trash because the server no longer holds it there —
     // gone specifically, not "the trash is empty": two other rows remain.
+    // The row also disappears while the trash reloads, before the reloaded
+    // list is back: wait for the rows that must remain, not only for the gap.
     await waitFor(() => {
       expect(screen.queryByText('Thrown away')).toBeNull()
     })
-    expect(screen.getByText('Still referenced elsewhere')).toBeDefined()
+    expect(await screen.findByText('Still referenced elsewhere')).toBeDefined()
     expect(screen.getByText('A note nobody kept')).toBeDefined()
+    expect(screen.queryByText('Thrown away')).toBeNull()
   })
 
   it('refreshes the sidebar status (L20 audit point 15) after a restore, not just once per session', async () => {
@@ -235,9 +238,10 @@ describe('the trash screen', () => {
 
     // The one that actually restored is gone from the trash; the blocked one
     // — still visibly in the table below, untouched — is why the report
-    // exists rather than a single pass/fail toast.
+    // exists rather than a single pass/fail toast. The report shows before the
+    // trash has finished reloading, so wait for the blocked row to be back.
+    expect(await screen.findByText('Still referenced elsewhere')).toBeDefined()
     expect(screen.queryByText('Thrown away')).toBeNull()
-    expect(screen.getByText('Still referenced elsewhere')).toBeDefined()
   })
 
   it('deletes a selection for good, naming the one purge a real restrict-style refusal blocks', async () => {
@@ -260,9 +264,10 @@ describe('the trash screen', () => {
     expect(await screen.findByText('1 entrée supprimée définitivement.')).toBeDefined()
     const purgeReport = screen.getByRole('status')
     expect(within(purgeReport).getByText(/cannot be removed from "article"/)).toBeDefined()
-    expect(screen.queryByText('Thrown away')).toBeNull()
     // Refused, so still there — purging is not silently retried or skipped.
-    expect(screen.getByText('Still referenced elsewhere')).toBeDefined()
+    // The report shows before the trash has finished reloading.
+    expect(await screen.findByText('Still referenced elsewhere')).toBeDefined()
+    expect(screen.queryByText('Thrown away')).toBeNull()
   })
 
   it("empties a single collection's trash with the exact total, through the same confirmation", async () => {

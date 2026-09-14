@@ -50,6 +50,9 @@ async function goToComments(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: /Commentaires/u }))
   await screen.findByRole('heading', { name: 'Commentaires' })
+  // The queue is fetched after the heading renders; every test here starts
+  // from the pending comment's row.
+  await screen.findByText(/A perfectly ordinary comment/u)
 }
 
 describe('the comment moderation queue', () => {

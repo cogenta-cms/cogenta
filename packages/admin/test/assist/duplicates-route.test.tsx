@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app.js'
 import { installMockFetch, VALID_TOKEN } from '../helpers/mock-fetch.js'
@@ -72,10 +72,17 @@ describe('the duplicate-detection screen', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Doublons' }))
     await screen.findByRole('heading', { name: 'Détection de doublons' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Chercher des doublons' }))
+    // The button renders disabled until the entry list it searches from has
+    // loaded; a click before that does nothing at all.
+    const search = await screen.findByRole('button', { name: 'Chercher des doublons' })
+    await waitFor(() => expect(search).toHaveProperty('disabled', false))
+    fireEvent.click(search)
 
-    expect(await screen.findByText('Second article')).toBeDefined()
-    expect(screen.getByText('93%')).toBeDefined()
+    // Scoped to the results: "Second article" is also an option of the entry
+    // picker, which is on screen before any search has run.
+    const results = await screen.findByRole('table', { name: 'Doublons possibles' })
+    expect(within(results).getByText('Second article')).toBeDefined()
+    expect(within(results).getByText('93%')).toBeDefined()
     // Nothing on this screen offers to merge or delete — only a link to go
     // compare the two entries by hand.
     expect(screen.getByRole('link', { name: 'Comparer' })).toBeDefined()

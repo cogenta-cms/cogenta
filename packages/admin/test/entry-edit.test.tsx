@@ -296,7 +296,9 @@ describe('multilingual editing', () => {
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     await screen.findByRole('heading', { name: 'Traductions' })
-    expect(screen.getByText('en (courant)')).toBeDefined()
+    // The panel's heading renders while the translation family is still
+    // being fetched.
+    expect(await screen.findByText('en (courant)')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'fr — créer la traduction' }))
     await screen.findByRole('heading', { name: 'Nouveau : Article' })

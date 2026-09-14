@@ -93,7 +93,9 @@ describe('the form submissions screen', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
     const link = await screen.findByRole('link', { name: /Soumissions/ })
-    expect(link.textContent).toContain('2')
+    // The link renders with the shell; its badge only once the unread count
+    // has been fetched.
+    await waitFor(() => expect(link.textContent).toContain('2'))
   })
 
   it('is not offered to a non-admin', async () => {

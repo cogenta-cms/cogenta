@@ -77,7 +77,8 @@ describe('subscriptions', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'Abonnements' }))
     await screen.findByRole('heading', { name: 'Abonnements' })
 
-    expect(within(table()).getByText('customer-1')).toBeDefined()
+    // The heading renders before the subscription list request resolves.
+    expect(await within(await screen.findByRole('table')).findByText('customer-1')).toBeDefined()
     expect(within(table()).getByText('Actif')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))

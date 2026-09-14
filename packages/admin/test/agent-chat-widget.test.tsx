@@ -19,7 +19,13 @@ function signIn(): void {
 async function openWidget(): Promise<HTMLElement> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(screen.getByRole('button', { name: 'Ouvrir la discussion avec un agent' }))
-  return screen.findByRole('dialog', { name: 'Discuter avec un agent' })
+  const dialog = await screen.findByRole('dialog', { name: 'Discuter avec un agent' })
+  // The panel opens before the agent list has arrived, and a message sent
+  // with no agent selected is silently dropped by the composer.
+  await waitFor(() =>
+    expect((within(dialog).getByLabelText('Agent') as HTMLSelectElement).value).not.toBe(''),
+  )
+  return dialog
 }
 
 /**
@@ -41,13 +47,11 @@ describe('the floating agent chat widget', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer' }))
 
     expect(await within(dialog).findByText('Bonjour')).toBeDefined()
-    // A longer timeout than the default 1s: this round-trips through the
-    // job's own poll interval (`JOB_POLL_INTERVAL_MS` in
-    // `use-agent-conversation.ts`), which real timers can push past 1s under
-    // a fully parallel `pnpm test` run.
-    expect(
-      await within(dialog).findByText('Mock reply to: Bonjour', {}, { timeout: 3000 }),
-    ).toBeDefined()
+    // This round-trips through the job's own poll interval
+    // (`JOB_POLL_INTERVAL_MS` in `use-agent-conversation.ts`), which a loaded
+    // runner stretches to several seconds: it waits on the package-wide async
+    // budget (`test/setup.ts`), never a shorter one of its own.
+    expect(await within(dialog).findByText('Mock reply to: Bonjour')).toBeDefined()
   })
 
   // Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
@@ -65,11 +69,9 @@ describe('the floating agent chat widget', () => {
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer' }))
 
-    const progress = await within(dialog).findByTestId('agent-chat-progress', {}, { timeout: 3000 })
-    await waitFor(() => expect(progress.textContent).toBe('Mock progress.'), { timeout: 3000 })
-    expect(
-      await within(dialog).findByText('Mock reply to: Bonjour', {}, { timeout: 3000 }),
-    ).toBeDefined()
+    const progress = await within(dialog).findByTestId('agent-chat-progress')
+    await waitFor(() => expect(progress.textContent).toBe('Mock progress.'))
+    expect(await within(dialog).findByText('Mock reply to: Bonjour')).toBeDefined()
     expect(within(dialog).queryByTestId('agent-chat-progress')).toBeNull()
   })
 
@@ -82,7 +84,7 @@ describe('the floating agent chat widget', () => {
       target: { value: 'First message' },
     })
     fireEvent.click(within(first).getByRole('button', { name: 'Envoyer' }))
-    await within(first).findByText('Mock reply to: First message', {}, { timeout: 3000 })
+    await within(first).findByText('Mock reply to: First message')
 
     // Close, then reopen — a fresh mount of the panel, same as the user's
     // report ("j'ai bien choisi l'agent mais ça ne charge pas la
@@ -92,9 +94,7 @@ describe('the floating agent chat widget', () => {
     const reopened = await openWidget()
 
     expect(await within(reopened).findByText('First message')).toBeDefined()
-    expect(
-      await within(reopened).findByText('Mock reply to: First message', {}, { timeout: 3000 }),
-    ).toBeDefined()
+    expect(await within(reopened).findByText('Mock reply to: First message')).toBeDefined()
   })
 
   it('loads a different thread when a different agent is selected', async () => {
@@ -119,7 +119,7 @@ describe('the floating agent chat widget', () => {
       target: { value: 'For security' },
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer' }))
-    await within(dialog).findByText('Mock reply to: For security', {}, { timeout: 3000 })
+    await within(dialog).findByText('Mock reply to: For security')
 
     fireEvent.change(picker, { target: { value: 'watcher' } })
     expect((picker as HTMLSelectElement).value).toBe('watcher')

@@ -72,8 +72,11 @@ describe('agent skills', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
     await screen.findByText('Fichiers de référence')
-    // The empty state shows once per standard folder (references/scripts/assets).
-    expect(screen.getAllByText("Aucun fichier pour l'instant.")).toHaveLength(3)
+    // The empty state shows once per standard folder (references/scripts/assets),
+    // once the file listing that follows the section heading has arrived.
+    await waitFor(() =>
+      expect(screen.getAllByText("Aucun fichier pour l'instant.")).toHaveLength(3),
+    )
 
     const uploadInputs = screen.getAllByLabelText('Téléverser un fichier')
     const file = new File(['# Style'], 'style.md', { type: 'text/markdown' })

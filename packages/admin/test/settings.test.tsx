@@ -321,8 +321,12 @@ describe('the site settings screen — Navigation tab (fiche 22 tâche 8, part 3
     await goToSettings()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Navigation' }))
-    const commerce = (await screen.findByRole('checkbox', { name: 'Boutique' })) as HTMLInputElement
-    expect(commerce.checked).toBe(false)
+    // The checkbox renders checked before the stored setting has arrived.
+    await waitFor(() =>
+      expect((screen.getByRole('checkbox', { name: 'Boutique' }) as HTMLInputElement).checked).toBe(
+        false,
+      ),
+    )
   })
 
   it('moves a section up, persisting the new order', async () => {

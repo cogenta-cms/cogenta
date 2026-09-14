@@ -360,10 +360,10 @@ describe('providers — "Réglages par défaut" card', () => {
     await goToProviders()
 
     const card = await screen.findByRole('region', { name: 'Réglages par défaut' })
-    expect(within(card).getByLabelText('Tokens de sortie max — défaut du site')).toHaveProperty(
-      'value',
-      '8000',
-    )
+    // The card renders before the site settings that fill it have arrived.
+    expect(
+      await within(card).findByLabelText('Tokens de sortie max — défaut du site'),
+    ).toHaveProperty('value', '8000')
     expect(
       within(card).getByLabelText("Délai d'attente — défaut du site (secondes)"),
     ).toHaveProperty('value', '180')
@@ -381,7 +381,7 @@ describe('providers — "Réglages par défaut" card', () => {
     await goToProviders()
 
     const card = await screen.findByRole('region', { name: 'Réglages par défaut' })
-    const field = within(card).getByLabelText('Tokens de sortie max — défaut du site')
+    const field = await within(card).findByLabelText('Tokens de sortie max — défaut du site')
     fireEvent.change(field, { target: { value: '12000' } })
     fireEvent.blur(field)
 

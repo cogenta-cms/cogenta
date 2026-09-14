@@ -253,14 +253,19 @@ describe('inviting an account by email', () => {
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
     await screen.findByText('Invitation envoyée à dave@example.com')
 
+    // The confirmation shows before the pending-invitation list has reloaded
+    // with the new row and its buttons.
     fireEvent.click(
-      screen.getByRole('button', { name: "Renvoyer l'invitation à dave@example.com" }),
+      await screen.findByRole('button', { name: "Renvoyer l'invitation à dave@example.com" }),
     )
     expect(
       await screen.findByText('Une nouvelle invitation a été envoyée à dave@example.com.'),
     ).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: "Annuler l'invitation à dave@example.com" }))
+    // Same again: the notice shows before the list it reloads is back.
+    fireEvent.click(
+      await screen.findByRole('button', { name: "Annuler l'invitation à dave@example.com" }),
+    )
     expect(await screen.findByText("L'invitation à dave@example.com a été annulée.")).toBeDefined()
     await waitFor(() => {
       expect(within(table()).queryByText('dave@example.com')).toBeNull()

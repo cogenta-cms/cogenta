@@ -294,8 +294,10 @@ describe('VersionHistory', () => {
     // The undo itself is a restore of the version that was live before the
     // first restore — asserted inside `stubFetch` above — and its result
     // reaches the caller the same way the first restore's did.
-    await waitFor(() => expect(restoreCalls).toBe(2))
-    expect(onRestored).toHaveBeenLastCalledWith(undone)
+    // The request count moves when the undo is sent; the caller only hears
+    // about it once its answer is back.
+    await waitFor(() => expect(onRestored).toHaveBeenLastCalledWith(undone))
+    expect(restoreCalls).toBe(2)
     // The notice is gone once its own action has been taken.
     expect(screen.queryByText('Cette version a été restaurée.')).toBeNull()
   })

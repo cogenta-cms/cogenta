@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { JSX } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '../../src/auth/auth-context.js'
+import { AuthProvider, useAuth } from '../../src/auth/auth-context.js'
 import { GlobalSearch } from '../../src/shell/global-search.js'
 
 /**
@@ -45,16 +46,29 @@ function stubAuthenticatedFetch(
   )
 }
 
+/**
+ * Marks the moment the session check has answered. The search box itself
+ * renders straight away, before it: opening the palette in between (a slow
+ * runner is enough) loops the component's default-palette effect on the
+ * signed-out `roles` fallback until the worker runs out of memory.
+ */
+function SessionReady(): JSX.Element | null {
+  const auth = useAuth()
+  return auth.state.status === 'authenticated' ? <span data-testid="session-ready" /> : null
+}
+
 async function renderSignedIn(): Promise<void> {
   localStorage.setItem('cogenta.session.token', ADMIN_TOKEN)
   render(
     <MemoryRouter>
       <AuthProvider>
+        <SessionReady />
         <GlobalSearch />
       </AuthProvider>
     </MemoryRouter>,
   )
   await screen.findByLabelText('Recherche globale')
+  await screen.findByTestId('session-ready')
 }
 
 function stubEditorFetch(
@@ -81,11 +95,13 @@ async function renderSignedInAsEditor(): Promise<void> {
   render(
     <MemoryRouter>
       <AuthProvider>
+        <SessionReady />
         <GlobalSearch />
       </AuthProvider>
     </MemoryRouter>,
   )
   await screen.findByLabelText('Recherche globale')
+  await screen.findByTestId('session-ready')
 }
 
 afterEach(() => {
@@ -169,7 +185,7 @@ describe('GlobalSearch', () => {
     // Debounced: nothing is visible until the pause elapses and every call resolves.
     expect(screen.queryByRole('listbox')).toBeNull()
 
-    await screen.findByRole('listbox', {}, { timeout: 2000 })
+    await screen.findByRole('listbox')
     expect(screen.getByText('Harbor lights')).toBeDefined()
     expect(screen.getByText('harbor.png')).toBeDefined()
     expect(screen.getByText('harbor-team@example.com')).toBeDefined()
@@ -204,7 +220,7 @@ describe('GlobalSearch', () => {
 
     const input = screen.getByLabelText('Recherche globale')
     fireEvent.change(input, { target: { value: 'page' } })
-    await screen.findByRole('listbox', {}, { timeout: 2000 })
+    await screen.findByRole('listbox')
 
     fireEvent.keyDown(input, { key: 'Escape' })
     expect(screen.queryByRole('listbox')).toBeNull()
@@ -235,7 +251,7 @@ describe('GlobalSearch', () => {
     await renderSignedIn()
 
     fireEvent.change(screen.getByLabelText('Recherche globale'), { target: { value: 'page' } })
-    await screen.findByRole('listbox', {}, { timeout: 2000 })
+    await screen.findByRole('listbox')
 
     fireEvent.mouseDown(document.body)
     expect(screen.queryByRole('listbox')).toBeNull()
@@ -292,9 +308,7 @@ describe('GlobalSearch', () => {
     await renderSignedInAsEditor()
 
     fireEvent.change(screen.getByLabelText('Recherche globale'), { target: { value: 'anything' } })
-    await waitFor(() => expect(calledUrls.some((url) => url.includes('/api/search'))).toBe(true), {
-      timeout: 2000,
-    })
+    await waitFor(() => expect(calledUrls.some((url) => url.includes('/api/search'))).toBe(true))
 
     expect(calledUrls.some((url) => url.includes('/api/users'))).toBe(false)
     expect(calledUrls.some((url) => url.includes('/api/marketplace'))).toBe(false)

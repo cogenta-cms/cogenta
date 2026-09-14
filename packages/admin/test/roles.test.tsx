@@ -266,8 +266,11 @@ describe('the write UI', () => {
     // The "create" cell itself, and only it, now shows the widened,
     // database-sourced rule, marked as an override — the other columns
     // (read/update/delete/publish) also read "editor" and must not be
-    // confused with this one.
-    expect(within(articleCreateCell()).getByText('editor, viewer')).toBeDefined()
+    // confused with this one. The dialog closes before the reloaded matrix is
+    // back, so the cell is looked up again on every attempt.
+    await waitFor(() =>
+      expect(within(articleCreateCell()).getByText('editor, viewer')).toBeDefined(),
+    )
     expect(within(articleCreateCell()).getByText('Surchargé')).toBeDefined()
   })
 

@@ -43,8 +43,10 @@ describe('CollectionListRoute', () => {
     // entry-1 is published, entry-2 is a draft — the tab's own count says so.
     fireEvent.click(screen.getByRole('button', { name: 'Brouillons (1)' }))
 
+    // First article goes as soon as the list starts reloading, before the
+    // filtered page is back.
     await waitFor(() => expect(screen.queryByText('First article')).toBeNull())
-    expect(screen.getByText('Second article')).toBeDefined()
+    expect(await screen.findByText('Second article')).toBeDefined()
     // Reflected in the URL, so the filtered list is shareable (task 5).
     expect(window.location.search).toContain('status=draft')
   })
@@ -185,7 +187,7 @@ describe('CollectionListRoute', () => {
     // table without erroring.
     fireEvent.change(screen.getByLabelText('Langue'), { target: { value: 'fr' } })
     await waitFor(() => expect(screen.queryByText('First article')).toBeNull())
-    expect(screen.getByText('Aucun contenu.')).toBeDefined()
+    expect(await screen.findByText('Aucun contenu.')).toBeDefined()
   })
 
   it('never shows a language column on a single-locale site', async () => {

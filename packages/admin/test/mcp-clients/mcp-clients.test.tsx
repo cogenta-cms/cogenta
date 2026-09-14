@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app.js'
 import { installMockFetch, VALID_TOKEN } from '../helpers/mock-fetch.js'
@@ -162,8 +162,10 @@ describe('MCP Clients', () => {
     })
     fireEvent.click(within(editDialog).getByRole('button', { name: 'Enregistrer' }))
 
+    // The row was already listed behind the dialog, so finding it says
+    // nothing about the save: the dialog closes once the save has answered.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(await screen.findByText('fake')).toBeDefined()
-    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('refuses to edit a connection’s settings for a role below admin', async () => {

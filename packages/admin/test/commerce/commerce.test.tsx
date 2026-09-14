@@ -32,6 +32,9 @@ async function goToOrders(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Commandes' }))
   await screen.findByRole('heading', { name: 'Commandes' })
+  // The heading renders while the order list is still loading; the table only
+  // once it has arrived.
+  await within(await screen.findByRole('table')).findByText('ORD-0001')
 }
 
 function table(): HTMLElement {
@@ -143,7 +146,9 @@ describe('the order list and detail', () => {
       expect(screen.queryByRole('button', { name: 'Marquer reçu' })).toBeNull()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Marquer Payée' }))
+    // The button disappears as soon as the order starts reloading, which is
+    // before the reloaded detail (and its transition buttons) comes back.
+    fireEvent.click(await screen.findByRole('button', { name: 'Marquer Payée' }))
     await screen.findByText(/Statut modifié/u)
   })
 
@@ -156,8 +161,11 @@ describe('the order list and detail', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Marquer reçu' })).toBeNull()
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Marquer Payée' }))
-    await screen.findByText('Payée', { exact: false })
+    fireEvent.click(await screen.findByRole('button', { name: 'Marquer Payée' }))
+    // Not just any "Payée": the button that was just clicked says it too,
+    // before the order has moved. The order's own status line only changes
+    // once the reloaded order is back.
+    await screen.findByText('shopper@example.com — Payée')
 
     // Shipment tracking (task 4): the form appears once the order is paid,
     // and submitting it both records the tracking and ships the order.
@@ -171,11 +179,11 @@ describe('the order list and detail', () => {
       target: { value: 'DHL123456' },
     })
     fireEvent.click(within(trackingForm).getByRole('button', { name: 'Expédier, avec suivi' }))
-    await screen.findByText('Expédiée', { exact: false })
+    await screen.findByText('shopper@example.com — Expédiée')
 
     // Partial refund (task 6): the amount defaults to what remains, and a
     // reason is mandatory — the button is only enabled with one filled in.
-    fireEvent.click(screen.getByRole('button', { name: 'Rembourser' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Rembourser' }))
     const reasonInput = await screen.findByLabelText('Motif (obligatoire)')
     fireEvent.change(reasonInput, { target: { value: 'Un article manquant dans le colis.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Confirmer le remboursement' }))
@@ -203,11 +211,11 @@ describe('the order list and detail', () => {
     })
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
     // Creating navigates straight to the new order's own detail screen.
-    await screen.findByText('second-buyer@example.com', { exact: false }, { timeout: 3000 })
+    await screen.findByText('second-buyer@example.com', { exact: false })
 
     fireEvent.click(await screen.findByRole('link', { name: 'Commandes' }))
     await screen.findByRole('heading', { name: 'Commandes' })
-    expect(within(table()).getByText('ORD-0001')).toBeDefined()
+    expect(await within(await screen.findByRole('table')).findByText('ORD-0001')).toBeDefined()
     expect(within(table()).getByText(/ORD-MANUAL-/)).toBeDefined()
 
     fireEvent.change(screen.getByLabelText('Rechercher'), {

@@ -204,11 +204,11 @@ describe('the theme generator workshop', () => {
     fireEvent.change(description, { target: { value: 'warm, editorial, paper-like' } })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
 
-    // A longer timeout than the default 1s: this round-trips through the
-    // job's own poll interval (`JOB_POLL_INTERVAL_MS` in
-    // `theme-generator.tsx`), which real timers can push past 1s under a
-    // fully parallel `pnpm test` run.
-    await screen.findByText('Warm editorial', {}, { timeout: 3000 })
+    // This round-trips through the job's own poll interval
+    // (`JOB_POLL_INTERVAL_MS` in `theme-generator.tsx`), which a loaded runner
+    // stretches to several seconds: every wait in this file uses the
+    // package-wide async budget (`test/setup.ts`), never a shorter one.
+    await screen.findByText('Warm editorial')
     expect(screen.getByText('Warm, paper-like, generous whitespace.')).toBeDefined()
 
     // Not activated yet — the mock's own `themeOverrides.activeTheme` (read
@@ -231,9 +231,7 @@ describe('the theme generator workshop', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
 
-    expect(
-      await screen.findByText('An attached image could not be analyzed.', {}, { timeout: 3000 }),
-    ).toBeDefined()
+    expect(await screen.findByText('An attached image could not be analyzed.')).toBeDefined()
   })
 
   it('says so when no usable candidate came back', async () => {
@@ -247,11 +245,7 @@ describe('the theme generator workshop', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
 
     expect(
-      await screen.findByText(
-        /Aucun candidat utilisable n'est revenu de cette description/,
-        {},
-        { timeout: 3000 },
-      ),
+      await screen.findByText(/Aucun candidat utilisable n'est revenu de cette description/),
     ).toBeDefined()
   })
 
@@ -280,16 +274,13 @@ describe('the theme generator workshop', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
 
-    const progress = await screen.findByTestId('theme-generator-progress', {}, { timeout: 3000 })
+    const progress = await screen.findByTestId('theme-generator-progress')
     // The panel opens as soon as the job is created, before the first poll
     // brings its first event: a slow runner reads it empty in between.
-    await waitFor(
-      () => {
-        expect(progress.textContent).toContain('Mock progress.')
-        expect(progress.textContent).toContain('En cours')
-      },
-      { timeout: 3000 },
-    )
+    await waitFor(() => {
+      expect(progress.textContent).toContain('Mock progress.')
+      expect(progress.textContent).toContain('En cours')
+    })
   })
 
   // The single loudest complaint about this screen: the trace of what the
@@ -319,7 +310,7 @@ describe('the theme generator workshop', () => {
       target: { value: 'warm, editorial' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Warm editorial', {}, { timeout: 3000 })
+    await screen.findByText('Warm editorial')
 
     const progress = screen.getByTestId('theme-generator-progress')
     expect(progress.textContent).toContain('Terminé')
@@ -344,7 +335,7 @@ describe('the theme generator workshop', () => {
 
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'anything' } })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Thinking… (step 1)', {}, { timeout: 3000 })
+    await screen.findByText('Thinking… (step 1)')
 
     fireEvent.click(screen.getByRole('button', { name: 'Masquer le journal' }))
     expect(screen.queryByText('Thinking… (step 1)')).toBeNull()
@@ -372,14 +363,15 @@ describe('the theme generator workshop', () => {
       target: { value: 'warm, editorial' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Warm editorial', {}, { timeout: 3000 })
+    await screen.findByText('Warm editorial')
 
     fireEvent.click(screen.getByRole('button', { name: 'Activer' }))
 
     await waitFor(() => {
       expect(screen.getByText('Activé.')).toBeDefined()
     })
-    expect(screen.getByRole('button', { name: 'Activé' })).toBeDefined()
+    // The confirmation shows before the theme reload that follows it is back.
+    expect(await screen.findByRole('button', { name: 'Activé' })).toBeDefined()
   })
 
   it('sends activeTheme when a candidate names a theme package', async () => {
@@ -414,7 +406,7 @@ describe('the theme generator workshop', () => {
       target: { value: 'a warm portfolio' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Portfolio, warm', {}, { timeout: 3000 })
+    await screen.findByText('Portfolio, warm')
 
     // The candidate targets Portfolio while Canonical is active — proof the
     // live preview actually carried the candidate's own tokens to the
@@ -470,7 +462,7 @@ describe('the theme generator workshop', () => {
     attach(screen.getByLabelText(/Pièces jointes/), imageFile('reference.png'))
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'like this' } })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Warm editorial', {}, { timeout: 3000 })
+    await screen.findByText('Warm editorial')
 
     fireEvent.click(screen.getByRole('button', { name: 'Comparer à la référence' }))
 
@@ -481,9 +473,14 @@ describe('the theme generator workshop', () => {
       'Référence jointe : reference.png',
     )
     // The candidate side is the same real server render the card shows, not a
-    // screenshot: an iframe, and a reachable one now that it is enlarged.
-    const frame = dialog.querySelector('iframe')
-    expect(frame?.getAttribute('aria-hidden')).toBeNull()
+    // screenshot: an iframe, and a reachable one now that it is enlarged. The
+    // dialog opens on a loading line; the iframe mounts once that render is back.
+    const frame = await waitFor(() => {
+      const found = dialog.querySelector('iframe')
+      expect(found).not.toBeNull()
+      return found as HTMLIFrameElement
+    })
+    expect(frame.getAttribute('aria-hidden')).toBeNull()
   })
 
   it('offers no comparison when nothing was attached', async () => {
@@ -503,7 +500,7 @@ describe('the theme generator workshop', () => {
 
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'anything' } })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Warm editorial', {}, { timeout: 3000 })
+    await screen.findByText('Warm editorial')
 
     expect(screen.queryByRole('button', { name: 'Comparer à la référence' })).toBeNull()
     expect(screen.getByRole('button', { name: "Agrandir l'aperçu" })).toBeDefined()
@@ -529,9 +526,7 @@ describe('the theme generator workshop', () => {
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'a real layout' } })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
 
-    expect(
-      await screen.findByText('2 fichier(s) de thème réel écrits', {}, { timeout: 3000 }),
-    ).toBeDefined()
+    expect(await screen.findByText('2 fichier(s) de thème réel écrits')).toBeDefined()
     expect(screen.getByText('src/theme.ts')).toBeDefined()
     expect(screen.getByText('src/styles.css')).toBeDefined()
   })
@@ -555,7 +550,7 @@ describe('the theme generator workshop', () => {
 
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'a real layout' } })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Mise en page personnalisée', {}, { timeout: 3000 })
+    await screen.findByText('Mise en page personnalisée')
 
     const name = screen.getByLabelText('Nom du thème') as HTMLInputElement
     expect(name.value).toBe('gen-1758')
@@ -586,7 +581,7 @@ describe('the theme generator workshop', () => {
 
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'a real layout' } })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Mise en page personnalisée', {}, { timeout: 3000 })
+    await screen.findByText('Mise en page personnalisée')
 
     fireEvent.change(screen.getByLabelText('Nom du thème'), { target: { value: 'ma-boutique' } })
     fireEvent.click(screen.getByRole('button', { name: 'Activer' }))
@@ -619,7 +614,7 @@ describe('the theme generator workshop', () => {
     attach(screen.getByLabelText(/Pièces jointes/), imageFile('reference.png'))
     fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'like this' } })
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-    await screen.findByText('Mise en page personnalisée', {}, { timeout: 3000 })
+    await screen.findByText('Mise en page personnalisée')
 
     await expectNoSeriousA11yViolations(document.body, { exclude: ['iframe'] })
   })
@@ -649,7 +644,7 @@ describe('the theme generator workshop', () => {
     async function firstTurn(text: string): Promise<void> {
       fireEvent.change(screen.getByLabelText('Description'), { target: { value: text } })
       fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-      await screen.findByText('Mise en page personnalisée', {}, { timeout: 3000 })
+      await screen.findByText('Mise en page personnalisée')
     }
 
     it('keeps what was asked on screen and offers a composer for the next turn', async () => {
@@ -697,12 +692,9 @@ describe('the theme generator workshop', () => {
       // candidate itself — asserting it synchronously passes alone and fails
       // under the load of the whole file, which is a flaky test rather than a
       // real difference in behaviour.
-      await waitFor(
-        () => {
-          expect(panel.querySelector('iframe')).not.toBeNull()
-        },
-        { timeout: 3000 },
-      )
+      await waitFor(() => {
+        expect(panel.querySelector('iframe')).not.toBeNull()
+      })
     })
 
     // The point of the whole screen: ask for a change, get a changed theme
@@ -732,13 +724,15 @@ describe('the theme generator workshop', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }))
 
       // The agent's answer to *this* turn, not the first turn replayed.
-      expect(
-        await screen.findByText('Assombri, titrage inchangé.', {}, { timeout: 3000 }),
-      ).toBeDefined()
+      expect(await screen.findByText('Assombri, titrage inchangé.')).toBeDefined()
       expect(screen.getByText('rends-le plus sombre')).toBeDefined()
-      expect(
-        screen.getByTestId('theme-generator-preview-panel').querySelector('iframe'),
-      ).not.toBeNull()
+      // The changed candidate is rendered again: its preview shows a loading
+      // line until that render is back.
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('theme-generator-preview-panel').querySelector('iframe'),
+        ).not.toBeNull(),
+      )
     })
 
     // Found in a live run: the second turn produced a genuinely darker theme
@@ -778,7 +772,7 @@ describe('the theme generator workshop', () => {
 
       fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'crème' } })
       fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-      await screen.findByText('Fond crème.', {}, { timeout: 3000 })
+      await screen.findByText('Fond crème.')
 
       // The mock echoes the accent into the previewed document, so the frame
       // itself is the evidence — not merely that a request went out.
@@ -786,25 +780,19 @@ describe('the theme generator workshop', () => {
         screen
           .getByTestId('theme-generator-preview-panel')
           .querySelector('iframe') as HTMLIFrameElement | null
-      await waitFor(
-        () => {
-          expect(frame()?.getAttribute('srcdoc') ?? '').toContain(WARM_TOKENS.color.accent)
-        },
-        { timeout: 3000 },
-      )
+      await waitFor(() => {
+        expect(frame()?.getAttribute('srcdoc') ?? '').toContain(WARM_TOKENS.color.accent)
+      })
 
       fireEvent.change(screen.getByLabelText('Votre demande'), {
         target: { value: 'rends-le presque noir' },
       })
       fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }))
-      await screen.findByText('Presque noir.', {}, { timeout: 3000 })
+      await screen.findByText('Presque noir.')
 
-      await waitFor(
-        () => {
-          expect(frame()?.getAttribute('srcdoc') ?? '').toContain('#3ddc84')
-        },
-        { timeout: 3000 },
-      )
+      await waitFor(() => {
+        expect(frame()?.getAttribute('srcdoc') ?? '').toContain('#3ddc84')
+      })
     })
 
     it('sends the sandbox being changed and the conversation so far, not just the last sentence', async () => {
@@ -818,12 +806,9 @@ describe('the theme generator workshop', () => {
       })
       fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }))
 
-      await waitFor(
-        () => {
-          expect(themeRefineRequests).toHaveLength(1)
-        },
-        { timeout: 3000 },
-      )
+      await waitFor(() => {
+        expect(themeRefineRequests).toHaveLength(1)
+      })
 
       const sent = themeRefineRequests[0] as {
         sandboxId?: string
@@ -863,26 +848,20 @@ describe('the theme generator workshop', () => {
 
       fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'chaleureux' } })
       fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
-      await screen.findByText('Warm editorial', {}, { timeout: 3000 })
+      await screen.findByText('Warm editorial')
 
       fireEvent.change(screen.getByLabelText('Votre demande'), {
         target: { value: 'plus de contraste' },
       })
       fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }))
 
-      await waitFor(
-        () => {
-          expect(screen.getAllByTestId('theme-generator-progress')).toHaveLength(2)
-        },
-        { timeout: 3000 },
-      )
-      await waitFor(
-        () => {
-          const logs = screen.getAllByTestId('theme-generator-progress')
-          expect(logs[1]?.textContent).toContain('Terminé')
-        },
-        { timeout: 3000 },
-      )
+      await waitFor(() => {
+        expect(screen.getAllByTestId('theme-generator-progress')).toHaveLength(2)
+      })
+      await waitFor(() => {
+        const logs = screen.getAllByTestId('theme-generator-progress')
+        expect(logs[1]?.textContent).toContain('Terminé')
+      })
       expect(screen.getByText('plus de contraste')).toBeDefined()
 
       // It went to the refinement route, carrying the tokens currently on
@@ -909,12 +888,9 @@ describe('the theme generator workshop', () => {
         target: { value: 'rends-le plus sombre' },
       })
       fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }))
-      await waitFor(
-        () => {
-          expect(screen.getAllByTestId('theme-generator-progress').length).toBeGreaterThan(1)
-        },
-        { timeout: 3000 },
-      )
+      await waitFor(() => {
+        expect(screen.getAllByTestId('theme-generator-progress').length).toBeGreaterThan(1)
+      })
 
       await expectNoSeriousA11yViolations(document.body, { exclude: ['iframe'] })
     })
@@ -929,12 +905,9 @@ describe('the theme generator workshop', () => {
     await waitForAiReady()
 
     const description = (await screen.findByLabelText('Description')) as HTMLTextAreaElement
-    await waitFor(
-      () => {
-        expect(description.value).toContain('A neighbourhood restaurant.')
-      },
-      { timeout: 3000 },
-    )
+    await waitFor(() => {
+      expect(description.value).toContain('A neighbourhood restaurant.')
+    })
     expect(description.value).toContain('Local families.')
     expect(description.value).toContain('Warm and unfussy.')
     // And says where it came from, so nobody wonders who typed it.

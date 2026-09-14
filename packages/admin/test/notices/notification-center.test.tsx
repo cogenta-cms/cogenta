@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app.js'
 import { installMockFetch, VALID_TOKEN } from '../helpers/mock-fetch.js'
@@ -9,13 +9,23 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/**
+ * The period filter counts back from the real clock (`sinceFor`), so the
+ * fixture has to as well: fixed dates silently age out of "the last 30
+ * days", and the narrowing test then only passed by reading the unfiltered
+ * list before the filtered one arrived.
+ */
+function daysAgo(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+}
+
 const RECENT = {
   id: 'notice-recent',
   code: 'test.recent',
   severity: 'info',
   dismissible: true,
-  firstSeenAt: '2026-03-10T00:00:00.000Z',
-  lastSeenAt: '2026-03-10T00:00:00.000Z',
+  firstSeenAt: daysAgo(3),
+  lastSeenAt: daysAgo(3),
   resolvedAt: null,
   readAt: null,
 }
@@ -25,8 +35,8 @@ const OLD = {
   code: 'test.old',
   severity: 'warning',
   dismissible: true,
-  firstSeenAt: '2025-11-01T00:00:00.000Z',
-  lastSeenAt: '2025-11-01T00:00:00.000Z',
+  firstSeenAt: daysAgo(90),
+  lastSeenAt: daysAgo(90),
   resolvedAt: null,
   readAt: null,
 }
@@ -72,8 +82,13 @@ describe('the notification centre — period filter', () => {
       target: { value: '30' },
     })
 
-    await screen.findAllByText('test.recent')
-    expect(screen.queryAllByText('test.old')).toHaveLength(0)
+    // The recent entry was already on screen before the filtered list
+    // arrived, so finding it proves nothing on its own: the list is only
+    // filtered once the old one has gone and the recent one is back.
+    await waitFor(() => {
+      expect(screen.queryAllByText('test.old')).toHaveLength(0)
+      expect(screen.queryAllByText('test.recent').length).toBeGreaterThan(0)
+    })
   })
 
   it('combines the period filter with the existing severity filter', async () => {
@@ -87,8 +102,13 @@ describe('the notification centre — period filter', () => {
     })
     // `test.recent` is `info`, so the severity filter alone already drops
     // it — the period filter narrowing further to 30 days should then drop
-    // `test.old` (an old `warning`) too, leaving nothing.
-    await screen.findAllByText('test.old')
+    // `test.old` (an old `warning`) too, leaving nothing. `test.old` is
+    // already on screen before the severity-filtered list arrives; its
+    // arrival is when `test.recent` goes.
+    await waitFor(() => {
+      expect(screen.queryAllByText('test.recent')).toHaveLength(0)
+      expect(screen.queryAllByText('test.old').length).toBeGreaterThan(0)
+    })
     fireEvent.change(screen.getByLabelText('Filtrer par période'), {
       target: { value: '30' },
     })

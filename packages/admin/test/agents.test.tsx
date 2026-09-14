@@ -13,6 +13,10 @@ async function goToAgents(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Agents' }))
   await screen.findByRole('heading', { name: 'Agents' })
+  // The heading renders before the agent list, providers and catalog have
+  // loaded; the create form silently refuses to save until a provider is
+  // known, so wait for the loaded list, not just the page.
+  await screen.findByRole('link', { name: 'security' })
 }
 
 describe('agents', () => {
@@ -328,7 +332,11 @@ describe('agent detail — a real route with its own URL (fiche 71)', () => {
     expect(await screen.findByText('10')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
-    fireEvent.change(await screen.findByLabelText('Rôle'), {
+    // The edit form opens empty and is filled once the agent's identity has
+    // been fetched: editing before that would be overwritten by it, and would
+    // save the empty budget fields too.
+    await screen.findByDisplayValue('Scans dependencies for known CVEs.')
+    fireEvent.change(screen.getByLabelText('Rôle'), {
       target: { value: 'Scans dependencies for known CVEs, thoroughly.' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))

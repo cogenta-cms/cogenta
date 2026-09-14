@@ -385,7 +385,11 @@ describe('Diagnostic — Search Console connector (fiche 70 task 4, ADR-0032)', 
     // Give the section's own fetch a turn to resolve before asserting
     // absence, or a false negative could just mean "not loaded yet".
     await screen.findByRole('heading', { name: 'Assistant de maillage interne' })
-    expect(screen.queryByText('Performance réelle (Google Search Console)')).toBeNull()
+    // The card is drawn while its status request is pending, and only
+    // removed once the answer says the connector is not configured.
+    await waitFor(() =>
+      expect(screen.queryByText('Performance réelle (Google Search Console)')).toBeNull(),
+    )
   })
 
   it('offers a Connect button once configured but not yet connected', async () => {
@@ -399,7 +403,10 @@ describe('Diagnostic — Search Console connector (fiche 70 task 4, ADR-0032)', 
     expect(
       await screen.findByRole('heading', { name: 'Performance réelle (Google Search Console)' }),
     ).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Connecter Google Search Console' })).toBeDefined()
+    // The heading is drawn before the status request answers; the button after.
+    expect(
+      await screen.findByRole('button', { name: 'Connecter Google Search Console' }),
+    ).toBeDefined()
   })
 
   it('sends the browser to the real Google authorization URL on Connect', async () => {
@@ -409,7 +416,7 @@ describe('Diagnostic — Search Console connector (fiche 70 task 4, ADR-0032)', 
     })
     render(<App />)
     await goToDiagnostics()
-    await screen.findByRole('heading', { name: 'Performance réelle (Google Search Console)' })
+    const connect = await screen.findByRole('button', { name: 'Connecter Google Search Console' })
 
     const originalLocation = window.location
     const assign = vi.fn()
@@ -423,12 +430,16 @@ describe('Diagnostic — Search Console connector (fiche 70 task 4, ADR-0032)', 
       },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Connecter Google Search Console' }))
-    await waitFor(() =>
-      expect(assign).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?mock=1'),
-    )
-
-    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation })
+    try {
+      fireEvent.click(connect)
+      await waitFor(() =>
+        expect(assign).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?mock=1'),
+      )
+    } finally {
+      // Restored even when the assertion fails: a stubbed `location` left
+      // behind breaks every later test in this file.
+      Object.defineProperty(window, 'location', { configurable: true, value: originalLocation })
+    }
   })
 
   it('shows real metrics and a Disconnect button once connected', async () => {
@@ -501,9 +512,13 @@ describe('Diagnostic — Search Console connector (fiche 70 task 4, ADR-0032)', 
     })
     render(<App />)
     await goToDiagnostics()
-    await screen.findByRole('button', { name: 'Déconnecter' })
+    // The button shows as soon as the status says "connected", but stays
+    // disabled until the metrics that follow have loaded: a click before
+    // that does nothing.
+    const disconnect = await screen.findByRole('button', { name: 'Déconnecter' })
+    await waitFor(() => expect(disconnect).toHaveProperty('disabled', false))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Déconnecter' }))
+    fireEvent.click(disconnect)
 
     expect(
       await screen.findByRole('button', { name: 'Connecter Google Search Console' }),

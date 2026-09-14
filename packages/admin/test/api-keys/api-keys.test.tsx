@@ -27,6 +27,8 @@ async function goToApiKeys(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Clés API' }))
   await screen.findByRole('heading', { name: 'Clés API' })
+  // The heading renders before the key list request resolves.
+  await screen.findByText('CI pipeline')
 }
 
 function table(): HTMLElement {

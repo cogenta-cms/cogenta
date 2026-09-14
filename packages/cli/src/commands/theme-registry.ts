@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { BlockRegistry } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
 import { loadTheme, type ThemeManifest } from '@cogenta/render'
@@ -375,7 +375,8 @@ export async function loadThemeDefaultTokens(
   let path: string
   if (BY_NAME.has(themeName)) {
     try {
-      path = new URL(import.meta.resolve(`${themeName}/tokens.json`)).pathname
+      // fileURLToPath, not URL.pathname: on Windows the latter is `/D:/…`.
+      path = fileURLToPath(import.meta.resolve(`${themeName}/tokens.json`))
     } catch {
       return undefined
     }
@@ -384,7 +385,7 @@ export async function loadThemeDefaultTokens(
     path = join(configuredProjectRoot, THEMES_DIRECTORY, themeName, 'tokens.json')
   }
   try {
-    const parsed = JSON.parse(await readFile(decodeURIComponent(path), 'utf8')) as unknown
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown
     return typeof parsed === 'object' && parsed !== null
       ? (parsed as Record<string, unknown>)
       : undefined

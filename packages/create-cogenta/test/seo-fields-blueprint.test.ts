@@ -25,7 +25,9 @@ const activeServers: AbortController[] = []
 
 afterEach(async () => {
   for (const controller of activeServers.splice(0)) controller.abort()
-  await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(
+    dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 10 })),
+  )
 })
 
 describe('the blog blueprint’s seoTitle field reaches the real rendered page', () => {
@@ -95,12 +97,13 @@ describe('the blog blueprint’s seoTitle field reaches the real rendered page',
       },
     })
 
-    for (let attempt = 0; attempt < 100 && address === undefined; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 10))
-    }
-    if (address === undefined) throw new Error('server never started listening')
-
     try {
+      // Generous: a cold Windows runner can take seconds to open the database.
+      for (let attempt = 0; attempt < 3000 && address === undefined; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      if (address === undefined) throw new Error('server never started listening')
+
       const response = await fetch(`http://${address.host}:${address.port}/blog/plain-text-editor`)
       expect(response.status).toBe(200)
       const html = await response.text()

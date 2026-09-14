@@ -167,6 +167,21 @@ describe('renderChrome — theme@1.4 fields', () => {
 })
 
 describe('the header menu', () => {
+  it('opens without a script: no script tag and no inline handler anywhere in the chrome', () => {
+    const { header, footer } = renderChrome({
+      ...BASE,
+      tagline: 'x',
+      footerNote: 'y',
+      social: [{ label: 'X', href: 'https://x.com/a' }],
+      headerAction: { label: 'Go', href: '/go' },
+    })
+    for (const part of [header, footer]) {
+      expect(part).not.toMatch(/<script/i)
+      expect(part).not.toMatch(/\son[a-z]+="/i)
+      expect(part).not.toMatch(/javascript:/i)
+    }
+  })
+
   it('draws no menu control at all for a site with no primary pages', () => {
     const { header } = renderChrome({ ...BASE, headerNav: [] })
     expect(header).toContain('data-nav="none"')

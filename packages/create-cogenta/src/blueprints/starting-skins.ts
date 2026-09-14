@@ -18,40 +18,36 @@ import type { SkinTokens } from '@cogenta/render'
  */
 export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
   /**
-   * A creative/freelance portfolio: brutalist-editorial, an electric violet
-   * accent, hard zero-blur offset shadows. L25 pro pass: this entry used to
-   * be a terracotta, soft-shadow palette from before `@cogenta/theme-
-   * portfolio` existed (L22 task 10 predates the L23 theme it now names) —
-   * a scaffolded `portfolio` site rendered the theme's own brutalist CSS
-   * against a palette the theme was never designed around. Brought into
-   * exact alignment with `packages/theme-portfolio/tokens.json` (colour,
-   * font stack — Bricolage Grotesque/Fraunces/JetBrains Mono — scale, radii,
-   * motion and the theme's own hard offset shadow), so day one matches the
-   * theme's real identity rather than fighting it.
+   * An independent design studio: black type on white paper, square corners
+   * and one signal orange kept for a couple of details (the underline of the
+   * contact line, the focus ring). Archivo sets everything, its width axis
+   * widening the display sizes. Identical to
+   * `packages/theme-portfolio/tokens.json`, so a new studio site starts in
+   * the theme's own identity.
    */
   portfolio: {
     color: {
-      bg: '#fafaf7',
-      fg: '#0a0a0b',
-      accent: '#6d28d9',
-      accentFg: '#ffffff',
-      muted: '#efede7',
-      mutedFg: '#4a4640',
-      border: '#dad7ce',
+      bg: '#ffffff',
+      fg: '#0b0b0b',
+      accent: '#ff4f00',
+      accentFg: '#000000',
+      muted: '#f1f1ef',
+      mutedFg: '#5b5b58',
+      border: '#dcdcd8',
     },
     font: {
-      sans: "'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif",
-      serif: "'Fraunces', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
-      mono: "'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
-      scale: 1.333,
-      baseSize: '1rem',
+      sans: "'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+      serif: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+      scale: 1.25,
+      baseSize: '1.0625rem',
     },
     space: { unit: '0.25rem', density: 'comfortable' },
-    radius: { sm: '0.125rem', md: '0.25rem', lg: '0.5rem' },
-    motion: { duration: '180ms', easing: 'cubic-bezier(0.16, 1, 0.3, 1)', reduced: true },
+    radius: { sm: '0rem', md: '0rem', lg: '0.125rem' },
+    motion: { duration: '140ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
     shadow: {
-      sm: '0.125rem 0.125rem 0 rgba(10, 10, 11, 0.9)',
-      md: '0.4rem 0.4rem 0 rgba(10, 10, 11, 0.9)',
+      sm: '0 1px 0 rgba(11, 11, 11, 0.06)',
+      md: '0 8px 24px rgba(11, 11, 11, 0.1)',
     },
   },
 

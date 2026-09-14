@@ -188,7 +188,7 @@ aucun autre thème** et le signale.
 | Icônes sociales méconnaissables (6 plateformes, tous thèmes) | fait | `cbfcc6d`, tracés Simple Icons CC0 |
 | `entreprise` (vitrine) | fait | `9102637`..`005cdb8` — Newsreader + Hanken Grotesk, grille 12 col, services en liste numérotée à filets, études de cas (nouvelle collection `case_study` + taxonomie `sector`), wordmarks clients rendus en OFL, graphique « exhibit » à la place de la photo à texte inventé, menu mobile plein écran ; 298 tests. Revu en captures par la session principale, une passe de finitions (soulignements, flèches orphelines, menu) |
 | `blog` | fait | Literata + Figtree, marge de 3 colonnes pour dates et libellés, « Latest » en index éditorial daté (image seulement quand l'entrée en a une), dix essais réels dont trois de 900 à 1 000 mots, six photos à texte inventé supprimées, « As featured in » retiré ; 284 tests. Revu en captures, fusionné sans reprise. Gap : l'inscription à la lettre ne propose que le flux (un formulaire exigerait `@cogenta/forms` dans le blueprint) |
-| `magazine` | à faire | |
+| `magazine` | fait | Fraunces + Source Serif 4 + Libre Franklin, manchette datée entre filets doubles, une asymétrique 8/4, rails de rubriques, « Most read » numéroté, article à légende et crédit ; rubriques et auteurs en vraies taxonomies, 18 articles (7 164 mots) ; les 12 photos d'origine retirées ou recadrées ; 334 tests. Revu en captures, fusionné sans reprise |
 | `portfolio` | à faire | |
 | `ecommerce` (store) | à faire | |
 | `restaurant` | à faire | |

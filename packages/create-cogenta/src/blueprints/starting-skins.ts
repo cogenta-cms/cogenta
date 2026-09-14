@@ -56,31 +56,34 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
   },
 
   /**
-   * An editorial magazine: denser type, a stronger scale ratio (the classic
-   * 1.333 "perfect fourth" editorial ladder), a red accent that reads as
-   * masthead rather than as a call-to-action button.
+   * An independent news and culture magazine: white newsprint, black ink and
+   * one editorial red kept for section kickers and a few rules. Fraunces sets
+   * the nameplate and the headlines, Libre Franklin the kickers, bylines and
+   * navigation; `@cogenta/theme-magazine` sets the text itself in Source
+   * Serif 4. Kept identical to `packages/theme-magazine/tokens.json`, so a
+   * scaffolded site renders the theme's own identity from its first page.
    */
   magazine: {
     color: {
       bg: '#ffffff',
-      fg: '#111111',
-      accent: '#b91c1c',
+      fg: '#151412',
+      accent: '#b3121c',
       accentFg: '#ffffff',
-      muted: '#f4f4f5',
-      mutedFg: '#3f3f46',
-      border: '#d4d4d8',
+      muted: '#f2f0eb',
+      mutedFg: '#4a4843',
+      border: '#d8d5ce',
     },
     font: {
-      sans: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-      serif: "ui-serif, Georgia, Cambria, 'Times New Roman', serif",
-      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
-      scale: 1.333,
+      sans: "'Libre Franklin', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+      serif: "'Fraunces', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
+      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+      scale: 1.25,
       baseSize: '1.0625rem',
     },
-    space: { unit: '0.25rem', density: 'compact' },
-    radius: { sm: '0.125rem', md: '0.25rem', lg: '0.5rem' },
-    motion: { duration: '150ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
-    shadow: { sm: '0 1px 2px rgba(17, 17, 17, 0.08)', md: '0 6px 20px rgba(17, 17, 17, 0.12)' },
+    space: { unit: '0.25rem', density: 'comfortable' },
+    radius: { sm: '0rem', md: '0.125rem', lg: '0.1875rem' },
+    motion: { duration: '140ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+    shadow: { sm: '0 1px 0 rgba(21, 20, 18, 0.06)', md: '0 8px 24px rgba(21, 20, 18, 0.1)' },
   },
 
   /**

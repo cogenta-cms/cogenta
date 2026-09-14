@@ -1,34 +1,119 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { VocabularyBlock } from '@cogenta/blocks'
+import { parseBlocks } from '@cogenta/blocks'
 import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
-import { buildPath, createContentStore, matchPath } from '@cogenta/schema'
+import {
+  buildPath,
+  createContentStore,
+  createSearchIndex,
+  createTaxonomyStore,
+  matchPath,
+} from '@cogenta/schema'
 import {
   type FetchedEntries,
-  type HtmlNode,
-  type ImageSource,
-  type PageContent,
   type RenderContext,
   renderPage,
   serialize,
   type ContentEntry as ThemeContentEntry,
 } from '@cogenta/theme-canonical'
-import { afterEach, describe, expect, it } from 'vitest'
-import { article, MAGAZINE_COLLECTIONS, page } from '../src/blueprints/magazine.js'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import {
+  article,
+  author,
+  buildMagazineDemoPages,
+  DEFAULT_PUBLICATION_NAME,
+  MAGAZINE_COLLECTIONS,
+  MAGAZINE_DEMO_ARTICLES,
+  MAGAZINE_DEMO_AUTHORS,
+  MAGAZINE_DEMO_SECTIONS,
+  MAGAZINE_MEDIA_SPECS,
+  MAGAZINE_MENUS,
+  MAGAZINE_SITE_SETTINGS,
+  magazineArticleBlocks,
+  page,
+  section,
+} from '../src/blueprints/magazine.js'
+import { bundledImageType, loadPhotoAsset } from '../src/blueprints/photo-assets.js'
+import { STARTING_SKINS } from '../src/blueprints/starting-skins.js'
 import { scaffoldSite } from '../src/scaffold.js'
 
-describe('scaffoldSite — magazine blueprint', () => {
-  const dirs: string[] = []
+// The blueprint seeds nine bundled photographs through the real media
+// pipeline, with WebP variants: slower than vitest's default, not a hang.
+const SCAFFOLD_TIMEOUT = 180_000
 
-  afterEach(async () => {
-    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
-  })
+const MEDIA = Object.fromEntries(
+  MAGAZINE_MEDIA_SPECS.map((spec) => [spec.name, `media-${spec.name}`]),
+)
 
-  // Audit fiche 06, T01 (P0): without these four fields, the admin's SEO
-  // panel (`seo-panel.tsx`) renders nothing for every entry of every routed
-  // collection this blueprint scaffolds.
+/** Every piece of visitor-facing text a value carries, flattened. */
+function textsOfValue(value: unknown): string[] {
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap(textsOfValue)
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, inner]) =>
+      key.startsWith('_') ||
+      [
+        'media',
+        'avatar',
+        'collection',
+        'id',
+        'marks',
+        'style',
+        'listItem',
+        'layout',
+        'filter',
+        'sort',
+        'target',
+        'ratio',
+        'align',
+      ].includes(key)
+        ? []
+        : textsOfValue(inner),
+    )
+  }
+  return []
+}
+
+/** One unit of text per paragraph, title, caption and setting: the unit the charter counts in. */
+function blockTexts(block: VocabularyBlock): string[] {
+  if (block._type === 'prose') {
+    return block.body.map((node) => textsOfValue(node).join(''))
+  }
+  return textsOfValue(block)
+}
+
+function allDemoCopy(siteName: string): string[] {
+  return [
+    ...buildMagazineDemoPages({ siteName }).flatMap((demo) => [
+      demo.title,
+      ...demo.blocks.flatMap(blockTexts),
+    ]),
+    ...MAGAZINE_DEMO_ARTICLES.flatMap((demo) => [
+      demo.title,
+      demo.kicker,
+      demo.excerpt,
+      ...magazineArticleBlocks(demo, { siteName }, MEDIA).flatMap(blockTexts),
+    ]),
+    ...MAGAZINE_DEMO_SECTIONS.flatMap((demo) => [demo.name, demo.description]),
+    ...MAGAZINE_MEDIA_SPECS.map((spec) => spec.alt),
+    String(MAGAZINE_SITE_SETTINGS['general.tagline']),
+    String(MAGAZINE_SITE_SETTINGS['general.footerNote']),
+  ].filter((text) => text !== '')
+}
+
+function wordCount(demo: (typeof MAGAZINE_DEMO_ARTICLES)[number]): number {
+  return magazineArticleBlocks(demo, { siteName: DEFAULT_PUBLICATION_NAME }, {})
+    .filter((block) => block._type === 'prose')
+    .flatMap(blockTexts)
+    .join(' ')
+    .split(/\s+/)
+    .filter((word) => word !== '').length
+}
+
+describe('magazine blueprint, content model and demo journalism', () => {
   it('declares the four conventional SEO override fields on every routed collection', () => {
     for (const collection of [article, page]) {
       expect(Object.keys(collection.fields)).toEqual(
@@ -37,78 +122,11 @@ describe('scaffoldSite — magazine blueprint', () => {
     }
   })
 
-  // These three scaffold a real site and seed twelve articles plus eighteen
-  // procedural media assets through the real image pipeline (`seedDemoMedia`)
-  // — genuinely more work than a lighter blueprint's default-timeout scaffold
-  // test. 60s, not a smaller round number: measured live against this exact
-  // suite under `pnpm turbo run test --force` (every package's typecheck and
-  // test running at once, no concurrency cap) on a shared machine —
-  // `restaurant-blueprint.test.ts`'s own slowest case took 63.8s and
-  // `blog-blueprint.test.ts`'s took 36.8s with no override at all, so a
-  // smaller margin here would still be tight under the same conditions.
-  it('writes a schema file loadCollections can load back, with article/page', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-magazine-'))
-    dirs.push(targetDir)
-
-    const result = await scaffoldSite({
-      targetDir,
-      siteName: 'My Magazine',
-      siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
-      databaseDriver: 'sqlite',
-      adminEmail: 'admin@example.com',
-      blueprintId: 'magazine',
-    })
-
-    expect(result.blueprintId).toBe('magazine')
-    expect(result.fellBackToBlank).toBe(false)
-
-    const collections = await loadCollections(targetDir)
-    expect(collections.map((c) => c.name).sort()).toEqual(['article', 'page'])
-  }, 180_000)
-
-  it('seeds real demo articles and pages into real SQLite', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-magazine-'))
-    dirs.push(targetDir)
-
-    const result = await scaffoldSite({
-      targetDir,
-      siteName: 'My Magazine',
-      siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
-      databaseDriver: 'sqlite',
-      adminEmail: 'admin@example.com',
-      blueprintId: 'magazine',
-    })
-    expect(result.migrateExitCode).toBe(0)
-    expect(result.usersExitCode).toBe(0)
-
-    const logger = createLogger({ level: 'silent' })
-    const selection = await createDatabaseRegistry({ logger }).select({
-      driver: 'sqlite',
-      url: join(targetDir, '.cogenta', 'site.db'),
-    })
-    try {
-      const articleStore = createContentStore({ db: selection.instance, collection: article })
-      const pageStore = createContentStore({ db: selection.instance, collection: page })
-
-      const articles = await articleStore.list()
-      expect(articles.items.length).toBeGreaterThanOrEqual(3)
-
-      const pages = await pageStore.list()
-      expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual(['about', 'home'])
-    } finally {
-      await selection.dispose()
-    }
-  }, 180_000)
-
   it('resolves /articles/:slug and /:slug generically through @cogenta/schema routing', () => {
-    expect(
-      matchPath(MAGAZINE_COLLECTIONS, '/articles/transit-line-approved-after-a-decade'),
-    ).toEqual({
+    expect(matchPath(MAGAZINE_COLLECTIONS, '/articles/council-approves-harbor-line')).toEqual({
       collection: 'article',
       locale: null,
-      params: { slug: 'transit-line-approved-after-a-decade' },
+      params: { slug: 'council-approves-harbor-line' },
     })
     expect(matchPath(MAGAZINE_COLLECTIONS, '/about')).toEqual({
       collection: 'page',
@@ -117,105 +135,434 @@ describe('scaffoldSite — magazine blueprint', () => {
     })
   })
 
-  it('renders the seeded home page into real HTML through the real theme-canonical pipeline', async () => {
-    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-magazine-'))
-    dirs.push(targetDir)
+  it('files articles under real section and author taxonomies, and keeps the kicker as plain text', () => {
+    expect(article.fields.section?.kind).toBe('taxonomy')
+    expect(article.fields.authors?.kind).toBe('taxonomy')
+    expect(article.fields.kicker?.kind).toBe('text')
+    expect(article.fields.frontPage?.kind).toBe('boolean')
+    expect(section.name).toBe('section')
+    expect(author.name).toBe('author')
+  })
 
-    await scaffoldSite({
+  it('publishes at least twelve articles across the four sections, each section with at least two', () => {
+    expect(MAGAZINE_DEMO_ARTICLES.length).toBeGreaterThanOrEqual(12)
+    for (const demo of MAGAZINE_DEMO_SECTIONS) {
+      const count = MAGAZINE_DEMO_ARTICLES.filter((entry) => entry.section === demo.slug).length
+      expect(count, demo.slug).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('writes three lead stories of 700 words or more, and no story shorter than 300', () => {
+    const counts = MAGAZINE_DEMO_ARTICLES.map(wordCount)
+    expect(counts.filter((words) => words >= 700).length).toBeGreaterThanOrEqual(3)
+    expect(
+      wordCount(MAGAZINE_DEMO_ARTICLES.at(-1) as (typeof MAGAZINE_DEMO_ARTICLES)[number]),
+    ).toBeGreaterThanOrEqual(700)
+    for (const [index, words] of counts.entries()) {
+      expect(words, MAGAZINE_DEMO_ARTICLES[index]?.slug).toBeGreaterThanOrEqual(300)
+      expect(words, MAGAZINE_DEMO_ARTICLES[index]?.slug).toBeLessThanOrEqual(1200)
+    }
+  })
+
+  it('dates the articles oldest first, so creation order matches the dates readers see', () => {
+    const dates = MAGAZINE_DEMO_ARTICLES.map((demo) => Date.parse(demo.publishedAt))
+    expect([...dates].sort((a, b) => a - b)).toEqual(dates)
+    expect(new Set(dates).size).toBe(dates.length)
+  })
+
+  it('gives every article a byline of writers the blueprint declares, and every opinion column its writer as kicker', () => {
+    const writers = new Map(MAGAZINE_DEMO_AUTHORS.map((demo) => [demo.slug, demo.name]))
+    for (const demo of MAGAZINE_DEMO_ARTICLES) {
+      expect(demo.authors.length, demo.slug).toBeGreaterThan(0)
+      for (const slug of demo.authors) expect(writers.has(slug), `${demo.slug}: ${slug}`).toBe(true)
+      if (demo.section === 'opinion') {
+        expect(demo.kicker, demo.slug).toBe(writers.get(demo.authors[0] as string))
+      }
+    }
+  })
+
+  it('writes every article body as valid contract-B blocks, its lead photograph first when it has one', () => {
+    for (const demo of MAGAZINE_DEMO_ARTICLES) {
+      const blocks = magazineArticleBlocks(demo, { siteName: 'X' }, MEDIA)
+      expect(() => parseBlocks([...blocks]), demo.slug).not.toThrow()
+      if (demo.photo !== undefined) {
+        expect(blocks[0]?._type, demo.slug).toBe('mediaFigure')
+        expect(blocks[0], demo.slug).toMatchObject({
+          media: MEDIA[demo.photo.media],
+          credit: `Photograph: ${demo.photo.photographer} for X`,
+        })
+      }
+    }
+  })
+
+  it('places a pull quote only where it does not follow the paragraph it repeats', () => {
+    for (const demo of MAGAZINE_DEMO_ARTICLES) {
+      const blocks = magazineArticleBlocks(demo, { siteName: 'X' }, MEDIA)
+      for (const [index, block] of blocks.entries()) {
+        if (block._type !== 'quote') continue
+        const before = blocks[index - 1]
+        const lastParagraphs =
+          before?._type === 'prose' ? blockTexts(before).slice(-2).join(' ') : ''
+        const opening = block.text.split('.')[0] ?? block.text
+        expect(lastParagraphs.includes(opening), demo.slug).toBe(false)
+      }
+    }
+  })
+
+  it('gives a photograph to some articles only, every one of them a bundled file', () => {
+    const covered = MAGAZINE_DEMO_ARTICLES.filter((demo) => demo.photo !== undefined)
+    expect(covered.length).toBeGreaterThanOrEqual(6)
+    expect(covered.length).toBeLessThan(MAGAZINE_DEMO_ARTICLES.length)
+    const names = new Set(MAGAZINE_MEDIA_SPECS.map((spec) => spec.name))
+    for (const demo of covered) expect(names.has(demo.photo?.media as string), demo.slug).toBe(true)
+  })
+
+  it('points every media slot at a bundled file, so no abstract placeholder art is ever seeded', () => {
+    for (const spec of MAGAZINE_MEDIA_SPECS) {
+      expect(spec.photo, spec.name).toBeDefined()
+      const bytes = loadPhotoAsset(spec.photo as string)
+      expect(bytes, spec.photo).toBeDefined()
+      expect(bundledImageType(bytes as Uint8Array).extension, spec.photo).toBe('jpg')
+      expect(spec.alt.length, spec.name).toBeGreaterThan(20)
+    }
+  })
+
+  it('names the publication the site belongs to, and falls back to a fictional one', () => {
+    const named = allDemoCopy('The Harbor Ledger').join('\n')
+    expect(named).toContain('The Harbor Ledger')
+    expect(named).not.toContain(DEFAULT_PUBLICATION_NAME)
+    expect(allDemoCopy(DEFAULT_PUBLICATION_NAME).join('\n')).toContain(DEFAULT_PUBLICATION_NAME)
+  })
+
+  it('never talks about the CMS, the scaffold or the demo itself', () => {
+    const copy = allDemoCopy(DEFAULT_PUBLICATION_NAME).join('\n')
+    expect(copy).not.toMatch(/cogenta|scaffold|\bdemo\b|editable|lorem|javascript|placeholder/i)
+  })
+
+  it('keeps to the studio charter: no buzzwords, no exclamation marks, at most one em dash per text', () => {
+    const buzzwords =
+      /\b(seamless|unlock|elevate|empower|supercharge|streamline|cutting-edge|robust|leverage)/i
+    for (const text of allDemoCopy(DEFAULT_PUBLICATION_NAME)) {
+      expect(text, text).not.toMatch(buzzwords)
+      expect(text, text).not.toContain('!')
+      expect((text.match(/—/g) ?? []).length, text).toBeLessThanOrEqual(1)
+      expect(text, text).not.toMatch(/\bnot\b[^.;:]*,\s*but\b/i)
+    }
+  })
+
+  it('titles no article and no section as a question', () => {
+    const titles = [
+      ...MAGAZINE_DEMO_ARTICLES.map((demo) => demo.title),
+      ...buildMagazineDemoPages().flatMap((demo) =>
+        demo.blocks.flatMap((block) =>
+          'title' in block && typeof block.title === 'string' ? [block.title] : [],
+        ),
+      ),
+    ]
+    for (const title of titles) {
+      if (title === 'Questions about subscriptions') continue
+      expect(title, title).not.toMatch(/\?/)
+    }
+  })
+
+  it('opens the front page on the stories flagged for it and lists no story twice in its rails', () => {
+    const [home] = buildMagazineDemoPages({
+      sectionIds: new Map(MAGAZINE_DEMO_SECTIONS.map((demo) => [demo.slug, `term-${demo.slug}`])),
+    })
+    expect(home?.slug).toBe('home')
+    const lists = (home?.blocks ?? []).filter(
+      (block): block is Extract<VocabularyBlock, { _type: 'collectionList' }> =>
+        block._type === 'collectionList',
+    )
+    expect(home?.blocks[0]?._type).toBe('collectionList')
+    const [front, opinion, culture, , business] = lists
+    expect(front?.title).toBeUndefined()
+    expect(front?.layout).toBe('grid')
+    expect(front?.filter).toEqual({ frontPage: true })
+    expect(opinion?.filter).toEqual({ section: 'term-opinion' })
+    expect(culture?.filter).toEqual({ section: 'term-culture', frontPage: false })
+    expect(business?.filter).toEqual({ section: 'term-business', frontPage: false })
+
+    const frontCount = MAGAZINE_DEMO_ARTICLES.filter((demo) => demo.frontPage).length
+    expect(frontCount).toBe(front?.limit)
+    expect(
+      MAGAZINE_DEMO_ARTICLES.some((demo) => demo.frontPage && demo.section === 'opinion'),
+    ).toBe(false)
+    // The newest article is the front page's lead, and carries a photograph.
+    const newest = MAGAZINE_DEMO_ARTICLES.at(-1)
+    expect(newest?.frontPage).toBe(true)
+    expect(newest?.photo).toBeDefined()
+  })
+
+  it('gives each rail a lead story with a photograph, so no rail opens on a blank slot', () => {
+    for (const slug of ['culture', 'business'] as const) {
+      const rail = MAGAZINE_DEMO_ARTICLES.filter(
+        (demo) => demo.section === slug && !demo.frontPage,
+      ).at(-1)
+      expect(rail?.photo, slug).toBeDefined()
+    }
+  })
+
+  it('sorts every list on a field contract B allows', () => {
+    for (const demo of buildMagazineDemoPages()) {
+      for (const block of demo.blocks) {
+        if (block._type !== 'collectionList') continue
+        expect(['id', 'createdAt', 'updatedAt']).toContain(block.sort?.field)
+      }
+    }
+  })
+
+  it('seeds valid contract-B pages that show off more than a heading and a list', () => {
+    const types = new Set<string>()
+    for (const demo of buildMagazineDemoPages()) {
+      expect(() => parseBlocks([...demo.blocks]), demo.slug).not.toThrow()
+      for (const block of demo.blocks) types.add(block._type)
+    }
+    expect(types.size).toBeGreaterThanOrEqual(9)
+  })
+
+  it('links every menu item to a page the blueprint seeds or a section front the server provides', () => {
+    const routes = new Set([
+      ...buildMagazineDemoPages().map((demo) => `/${demo.slug}`),
+      ...MAGAZINE_DEMO_SECTIONS.map((demo) => `/section/${demo.slug}`),
+    ])
+    for (const item of [
+      ...MAGAZINE_MENUS.header,
+      ...MAGAZINE_MENUS.footer,
+      MAGAZINE_MENUS.headerAction,
+    ]) {
+      expect(routes.has(item?.url as string), item?.url).toBe(true)
+    }
+  })
+
+  it('carries a footer note a real publisher would write', () => {
+    const note = String(MAGAZINE_SITE_SETTINGS['general.footerNote'])
+    expect(note).toMatch(/Published by/)
+    expect(note).not.toMatch(/create-cogenta|scaffold/i)
+  })
+
+  it("matches the theme's own palette and typefaces in its starting skin", async () => {
+    const theme = JSON.parse(
+      await readFile(new URL('../../theme-magazine/tokens.json', import.meta.url), 'utf8'),
+    )
+    expect(STARTING_SKINS.magazine).toEqual(theme)
+    expect(STARTING_SKINS.magazine?.font.serif.startsWith("'Fraunces'")).toBe(true)
+    expect(STARTING_SKINS.magazine?.font.sans.startsWith("'Libre Franklin'")).toBe(true)
+  })
+})
+
+describe('scaffoldSite, magazine blueprint', () => {
+  let targetDir = ''
+  let result: Awaited<ReturnType<typeof scaffoldSite>>
+
+  beforeAll(async () => {
+    targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-magazine-'))
+    result = await scaffoldSite({
       targetDir,
-      siteName: 'My Magazine',
+      siteName: 'The Harbor Ledger',
       siteUrl: 'http://localhost:4000',
       defaultLocale: 'en',
       databaseDriver: 'sqlite',
       adminEmail: 'admin@example.com',
       blueprintId: 'magazine',
     })
+  }, SCAFFOLD_TIMEOUT)
 
+  afterAll(async () => {
+    if (targetDir !== '') await rm(targetDir, { recursive: true, force: true })
+  })
+
+  async function withDatabase<T>(
+    use: (db: Parameters<typeof createContentStore>[0]['db']) => Promise<T>,
+  ): Promise<T> {
     const logger = createLogger({ level: 'silent' })
     const selection = await createDatabaseRegistry({ logger }).select({
       driver: 'sqlite',
       url: join(targetDir, '.cogenta', 'site.db'),
     })
     try {
-      const pageStore = createContentStore({ db: selection.instance, collection: page })
-      const articleStore = createContentStore({ db: selection.instance, collection: article })
+      return await use(selection.instance)
+    } finally {
+      await selection.dispose()
+    }
+  }
 
-      const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
-      expect(home).toBeDefined()
-      if (home === undefined) throw new Error('unreachable')
+  it('writes a schema file loadCollections can load back, with section and author as taxonomies', async () => {
+    expect(result.blueprintId).toBe('magazine')
+    expect(result.fellBackToBlank).toBe(false)
+    expect(result.migrateExitCode).toBe(0)
+    expect(result.usersExitCode).toBe(0)
+    const collections = await loadCollections(targetDir)
+    expect(collections.map((c) => c.name).sort()).toEqual(['article', 'page'])
+    const schemaSource = await readFile(result.schemaPath, 'utf8')
+    const taxonomiesMatch = schemaSource.match(/export const taxonomies = (\[[\s\S]*\])\s*$/)
+    const names = (JSON.parse(taxonomiesMatch?.[1] ?? '[]') as { readonly name: string }[])
+      .map((t) => t.name)
+      .sort()
+    expect(names).toEqual(['author', 'section'])
+  })
 
-      const pageContent: PageContent = {
-        title: home.values.title as string,
-        blocks: (home.blocks.blocks ?? []).map(
-          (block): VocabularyBlock =>
-            ({
-              _key: block.key,
-              _type: block.type,
-              _version: '1.0.0',
-              ...block.data,
-            }) as VocabularyBlock,
-        ),
+  it('activates @cogenta/theme-magazine with its own starting skin', async () => {
+    expect(result.activeTheme).toBe('@cogenta/theme-magazine')
+    expect(result.skinSource).toBe('preset')
+    const tokens = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
+    expect(tokens.color.accent).toBe('#b3121c')
+    expect(tokens.font.serif).toContain('Fraunces')
+    expect(tokens.font.sans).toContain('Libre Franklin')
+  })
+
+  it('seeds header, footer and header-action menus, general settings and nine photographs', () => {
+    expect(result.menusSeeded).toBe(
+      MAGAZINE_MENUS.header.length +
+        MAGAZINE_MENUS.footer.length +
+        (MAGAZINE_MENUS.headerAction ? 1 : 0),
+    )
+    expect(result.siteSettingsSeeded).toBeGreaterThanOrEqual(3)
+    expect(result.mediaSeeded).toBe(MAGAZINE_MEDIA_SPECS.length)
+  })
+
+  it('seeds published articles with their dates, section, byline, kicker and front-page flag', async () => {
+    await withDatabase(async (db) => {
+      const articles = await createContentStore({ db, collection: article }).list({ limit: 100 })
+      const sections = await createTaxonomyStore({ db, taxonomy: section }).list()
+      const authors = await createTaxonomyStore({ db, taxonomy: author }).list()
+      expect(articles.items).toHaveLength(MAGAZINE_DEMO_ARTICLES.length)
+      expect(sections).toHaveLength(MAGAZINE_DEMO_SECTIONS.length)
+      expect(authors).toHaveLength(MAGAZINE_DEMO_AUTHORS.length)
+      for (const entry of articles.items) {
+        const demo = MAGAZINE_DEMO_ARTICLES.find(
+          (candidate) => candidate.slug === entry.values.slug,
+        )
+        expect(demo, String(entry.values.slug)).toBeDefined()
+        expect(entry.status).toBe('published')
+        expect(entry.publishedAt).toBe(demo?.publishedAt)
+        expect(entry.values.section).not.toBeNull()
+        expect((entry.values.authors as readonly string[]).length).toBe(demo?.authors.length)
+        expect(entry.values.kicker).toBe(demo?.kicker)
+        expect(Boolean(entry.values.frontPage)).toBe(demo?.frontPage)
+        expect(typeof entry.values.coverImage === 'string').toBe(demo?.photo !== undefined)
       }
+    })
+  })
 
-      const articles = await articleStore.list()
-      const slugById = new Map(
-        articles.items.map((entry) => [entry.id, entry.values.slug as string]),
+  it('lists the front page, and each section rail, through the same filters the home page uses', async () => {
+    await withDatabase(async (db) => {
+      const store = createContentStore({ db, collection: article })
+      const sections = await createTaxonomyStore({ db, taxonomy: section }).list()
+      const culture = sections.find((term) => term.slug === 'culture')
+      const front = await store.list({
+        where: { frontPage: true },
+        sort: { field: 'createdAt', direction: 'desc' },
+        limit: 100,
+      })
+      expect(front.items.map((entry) => entry.values.slug)).toEqual(
+        MAGAZINE_DEMO_ARTICLES.filter((demo) => demo.frontPage)
+          .map((demo) => demo.slug)
+          .reverse(),
       )
-      const themeEntries: readonly ThemeContentEntry[] = articles.items.map((entry) => ({
+      const rail = await store.list({
+        where: { section: culture?.id, frontPage: false },
+        sort: { field: 'createdAt', direction: 'desc' },
+        limit: 100,
+      })
+      expect(rail.items.map((entry) => entry.values.slug)).toEqual(
+        MAGAZINE_DEMO_ARTICLES.filter((demo) => demo.section === 'culture' && !demo.frontPage)
+          .map((demo) => demo.slug)
+          .reverse(),
+      )
+    })
+  })
+
+  it('seeds the front page, about, subscribe and standards pages, published', async () => {
+    await withDatabase(async (db) => {
+      const pages = await createContentStore({ db, collection: page }).list()
+      expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual([
+        'about',
+        'home',
+        'standards',
+        'subscribe',
+      ])
+      expect(pages.items.every((entry) => entry.status === 'published')).toBe(true)
+    })
+  })
+
+  it('indexes the seeded articles for search, not only inserts them', async () => {
+    await withDatabase(async (db) => {
+      const index = await createSearchIndex({ db })
+      const results = await index.search({ text: 'banquet', locale: 'en' })
+      expect(results.hits.some((hit) => hit.collection === 'article')).toBe(true)
+    })
+  })
+
+  // Rendered through `@cogenta/theme-canonical`, the theme this package
+  // already depends on: what is checked here is that the seeded page and the
+  // seeded articles make a real page together. The magazine theme's own
+  // markup is covered by its own package and by the capture bench.
+  it('renders the seeded front page into real HTML, lead story first', async () => {
+    await withDatabase(async (db) => {
+      const pageStore = createContentStore({ db, collection: page })
+      const articleStore = createContentStore({ db, collection: article })
+      const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
+      if (home === undefined) throw new Error('the home page was not seeded')
+      const blocks = (home.blocks.blocks ?? []).map(
+        (block): VocabularyBlock =>
+          ({
+            _key: block.key,
+            _type: block.type,
+            _version: '1.0.0',
+            ...block.data,
+          }) as VocabularyBlock,
+      )
+      const front = await articleStore.list({
+        where: { frontPage: true },
+        sort: { field: 'createdAt', direction: 'desc' },
+        limit: 8,
+      })
+      const themeEntries: readonly ThemeContentEntry[] = front.items.map((entry) => ({
         id: entry.id,
         collection: 'article',
         locale: entry.locale,
         status: entry.status,
         ...entry.values,
       }))
+      const slugById = new Map(front.items.map((entry) => [entry.id, entry.values.slug as string]))
+      const entries: FetchedEntries = { 'demo-home-front': themeEntries }
 
-      const ctx = fakeThemeContext(slugById)
-      const entries: FetchedEntries = {
-        'demo-home-top-stories': themeEntries,
-        'demo-home-rail-news': themeEntries,
-        'demo-home-rail-culture': themeEntries,
-        'demo-home-rail-opinion': themeEntries,
-        'demo-home-rail-business': themeEntries,
-      }
-
-      const html = htmlOf(renderPage(pageContent, ctx, entries))
-
-      // The lead article — `MAGAZINE_DEMO_ARTICLES[0]` — becomes both the
-      // hero's own title and (via the "Top stories" collectionList) a card.
-      expect(html).toContain('City council approves the transit line after a decade of delay')
-      expect(html).toContain('cg-collection')
-      expect(html).toContain('The bakery that turned down three buyout offers')
-    } finally {
-      await selection.dispose()
-    }
-  }, 180_000)
+      const html = serialize(
+        renderPage({ title: home.values.title as string, blocks }, themeContext(slugById), entries),
+      )
+      expect(html.indexOf('Council approves the Harbor Line')).toBeGreaterThan(-1)
+      expect(html.indexOf('Council approves the Harbor Line')).toBeLessThan(
+        html.indexOf('The quiet shift in who is leaving Port Calder'),
+      )
+      expect(html).toContain('Journalism for Port Calder, paid for by its readers')
+      expect(html.match(/<h1[\s>]/g)).toHaveLength(1)
+    })
+  })
 })
 
-function htmlOf(node: HtmlNode | null): string {
-  if (node === null) throw new Error('renderPage returned null')
-  return serialize(node)
-}
-
-function fakeThemeContext(slugById: ReadonlyMap<string, string>): RenderContext {
+/**
+ * A minimal, real `RenderContext`: `link` resolves an entry id to its routed
+ * URL via `buildPath`, and `image` stands in for the media pipeline, which
+ * this test does not exercise.
+ */
+function themeContext(slugById: ReadonlyMap<string, string>): RenderContext {
   return {
     site: {
-      name: 'My Magazine',
+      name: 'The Harbor Ledger',
       url: 'http://localhost:4000',
       locales: ['en'],
       defaultLocale: 'en',
     },
     locale: 'en',
-    url: new URL('http://localhost:4000/home'),
+    url: new URL('http://localhost:4000/'),
     t: (key) => key,
-    // The lead article's own cover is now the hero's `media` (L25 pro pass),
-    // so this fake context needs a real answer rather than the "not used by
-    // this test" throw that was correct before the hero carried an image.
-    image: (): ImageSource => ({
+    image: (media) => ({
       kind: 'image',
-      src: '/img/lead-1200.avif',
+      src: `/_image?id=${media}`,
       srcset: '',
       width: 1200,
-      height: 630,
+      height: 800,
       alt: '',
       focal: null,
     }),
@@ -223,7 +570,7 @@ function fakeThemeContext(slugById: ReadonlyMap<string, string>): RenderContext 
       if (typeof target === 'string') return target
       if ('path' in target) return target.path
       const slug = slugById.get(target.id)
-      if (slug === undefined) throw new Error(`no slug indexed for entry ${target.id}`)
+      if (slug === undefined) return '#'
       return buildPath(article, { slug })
     },
     content: {

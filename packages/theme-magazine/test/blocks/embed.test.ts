@@ -6,8 +6,28 @@ import { BLOCKS, makeContext } from '../fixtures.js'
 const ctx = makeContext()
 
 describe('renderEmbed', () => {
-  it('resolves a vimeo URL to its numeric player id', () => {
-    const html = serialize(
+  it('contacts no third party while consent is required', () => {
+    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
+    expect(html).not.toContain('<iframe')
+    expect(html).toContain('data-consent="required"')
+    expect(html).toContain('<p class="cg-embed__reason">embed.consentRequired</p>')
+  })
+
+  it('offers the original as an arrow link with words, never a lone arrow', () => {
+    const html = serialize(renderEmbed(BLOCKS.embed, ctx))
+    expect(html).toMatch(
+      /<a class="cg-arrow-link cg-embed__link" href="https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ" rel="noopener noreferrer nofollow">embed\.open<\/a>/,
+    )
+  })
+
+  it('frames the privacy-preserving YouTube host once consent is not required', () => {
+    const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: false }, ctx))
+    expect(html).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"')
+    expect(html).toMatch(/<iframe[^>]*title="embed\.title"/)
+  })
+
+  it('frames Vimeo and Spotify from their player hosts', () => {
+    const vimeo = serialize(
       renderEmbed(
         {
           ...BLOCKS.embed,
@@ -18,11 +38,8 @@ describe('renderEmbed', () => {
         ctx,
       ),
     )
-    expect(html).toContain('src="https://player.vimeo.com/video/76979871"')
-  })
-
-  it('resolves a spotify URL to its embed path', () => {
-    const html = serialize(
+    expect(vimeo).toContain('src="https://player.vimeo.com/video/76979871"')
+    const spotify = serialize(
       renderEmbed(
         {
           ...BLOCKS.embed,
@@ -33,47 +50,34 @@ describe('renderEmbed', () => {
         ctx,
       ),
     )
-    expect(html).toContain('src="https://open.spotify.com/embed/episode/abc123"')
+    expect(spotify).toContain('src="https://open.spotify.com/embed/episode/abc123"')
   })
 
-  it('proxies a soundcloud URL through its player', () => {
+  it('falls back to the notice for a provider that would need a script', () => {
     const html = serialize(
       renderEmbed(
         {
           ...BLOCKS.embed,
-          provider: 'soundcloud',
-          url: 'https://soundcloud.com/artist/track',
+          provider: 'mastodon',
+          url: 'https://m.example/@a/1',
           consentRequired: false,
         },
         ctx,
       ),
     )
-    expect(html).toContain('src="https://w.soundcloud.com/player/?url=')
-  })
-
-  it('shows the sidebar note, not a frame, whenever consent is required, even for a supported provider', () => {
-    const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: true }, ctx))
     expect(html).not.toContain('<iframe')
-    expect(html).toContain('cg-sidenote__box')
-    expect(html).toContain('embed.consentRequired')
+    expect(html).toContain('embed.unsupported')
   })
 
-  it('labels the sidebar note with a small-caps kicker', () => {
-    const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: true }, ctx))
-    expect(html).toContain('cg-sidenote__label')
+  it('carries the ratio as a custom property, 16:9 by default', () => {
+    const { ratio: _ratio, ...unframed } = BLOCKS.embed
+    expect(serialize(renderEmbed(unframed, ctx))).toContain('--cg-ratio:16 / 9')
   })
 
-  it('links out to the original source from the note card', () => {
-    const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: true }, ctx))
-    // `ctx.link` returns an absolute external URL unchanged (it already has
-    // a scheme, so the fixture's own locale-prefixing rule does not apply).
-    expect(html).toContain(`href="${BLOCKS.embed.url}"`)
-    expect(html).toContain('rel="noopener noreferrer nofollow"')
-  })
-
-  it('carries a ratio into a CSS custom property, defaulting to 16 / 9', () => {
-    const { ratio: _ratio, ...withoutRatio } = BLOCKS.embed
-    const html = serialize(renderEmbed(withoutRatio, ctx))
-    expect(html).toContain('--cg-ratio:16 / 9')
+  it('falls back to the notice for a URL that cannot be parsed', () => {
+    const html = serialize(
+      renderEmbed({ ...BLOCKS.embed, url: 'not a url', consentRequired: false }, ctx),
+    )
+    expect(html).not.toContain('<iframe')
   })
 })

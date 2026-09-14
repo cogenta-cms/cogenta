@@ -1,39 +1,32 @@
 /*
- * The magazine theme's design system.
+ * `@cogenta/theme-magazine`'s design system.
  *
- * Contract D fixes a *closed* skin token set — seven colours, five type
- * tokens, two spacing tokens, three radii, three motion tokens, two shadows
- * — and refuses any skin that adds one. Nothing below adds to that set:
- * every value here is *derived* from `--cogenta-*` by composition (`calc`,
- * `color-mix`, relative colour syntax), so a skin swap rewrites the
- * generated `--cogenta-*` sheet and this whole system follows with no build
- * step.
+ * The register is a serious daily of quality: white newsprint, black ink, one
+ * editorial red kept for section kickers and a few rules, and structure drawn
+ * with rules and space, never with boxes or shadows. Fraunces sets the
+ * nameplate and every headline at the optical size drawn for its point size,
+ * Source Serif 4 sets the text a reader reads, and Libre Franklin sets what a
+ * reader scans: kickers, bylines, dates, navigation, captions.
  *
- * Two rules hold everywhere in this file and the two that import it:
+ * Contract D fixes a closed skin token set, so nothing here adds a token:
+ * every value is derived from a `--cogenta-*` property (`calc`, `color-mix`,
+ * relative colour syntax). The skin names the display face (`serif`) and the
+ * interface face (`sans`); the text face is this theme's own choice, set in
+ * front of the skin's serif stack so a skin that changes the display face
+ * never leaves the reading column without a text face.
  *
- * 1. **No colour literal.** Not one hex, `rgb()`, `hsl()` or bare `oklch()`.
- *    Every colour is either a skin token or a function *of* a skin token.
- *    `test/isolation.test.ts` enforces this on the source.
- * 2. **No second scale.** The type steps come from `--cogenta-font-size-*`
- *    and the spacing multiplier from `--cogenta-space-scale`, both emitted
- *    by `renderSkin` from the same tokens the validator checked.
+ * Two rules hold in every stylesheet of this theme:
  *
- * The two Google Fonts loaded below are the one deliberate exception to "no
- * external dependency": `fonts.googleapis.com` is the one host every
- * Cogenta theme is allowed to reach for a stylesheet, and both faces carry a
- * full system fallback stack in `tokens.json` — a browser that cannot reach
- * Google Fonts (or a site that strips the `@import` for a stricter CSP)
- * still gets Georgia/system-ui, never an unstyled page.
+ * 1. No colour literal. Every colour is a skin token or a function of one.
+ * 2. No second scale. Type steps come from `--cogenta-font-size-*`; the
+ *    display steps above `3xl` continue the same ratio, and fluid sizes only
+ *    interpolate between steps of that one ladder.
  */
-
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,500;1,9..144,600&family=Public+Sans:wght@400;500;600;700&display=swap");
 
 :where(:root) {
   color-scheme: light dark;
 }
 
-/* An explicit choice wins over the OS preference. No script ships with this
-   theme to set it; the attribute is the hook a site (or the admin) can flip. */
 :where(:root[data-theme="dark"]) {
   color-scheme: dark;
 }
@@ -43,7 +36,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   Space — one multiplier, one unit, a scale of multiples
+   Space: one unit, one section rhythm, one twelve-column grid.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
@@ -63,17 +56,20 @@
   --cg-s20: calc(var(--cg-unit) * 20);
   --cg-s24: calc(var(--cg-unit) * 24);
 
-  --cg-gutter: var(--cg-s5);
-  --cg-gap-tight: var(--cg-s2);
-  --cg-gap: var(--cg-s4);
-  --cg-gap-loose: var(--cg-s8);
-  --cg-section-y: var(--cg-s16);
-  --cg-rule-gap: var(--cg-s6);
+  /* The only vertical rhythm between blocks. Every block is padded by half of
+     it above and below, so any two blocks sit one full step apart, whatever
+     their order. A newspaper is denser than a book: the step is short. */
+  --cg-section: clamp(var(--cg-s10), 5.5vw, var(--cg-s16));
+
+  /* Twelve columns with constant gutters. A column rule sits in the middle
+     of a gutter, never against the text. */
+  --cg-columns: 12;
+  --cg-gutter: clamp(var(--cg-s4), 3.2vw, var(--cg-s10));
+  --cg-col-gap: clamp(var(--cg-s5), 2.2vw, var(--cg-s8));
+  --cg-page: 80rem;
 
   --cg-measure: 66ch;
-  --cg-measure-narrow: 46ch;
-  --cg-page: 76rem;
-  --cg-page-narrow: 48rem;
+  --cg-measure-short: 48ch;
 }
 
 :where([data-density="compact"]) {
@@ -89,220 +85,229 @@
 }
 
 /* --------------------------------------------------------------------------
-   Type — the skin's scale, named; the editorial rhythm the scale does not
-   carry. Two families: a characterful display serif for headlines and pull
-   quotes, a quiet sans for running text, bylines and dates — the split the
-   masthead itself uses on the front page.
+   Type: Fraunces to announce, Source Serif 4 to read, Libre Franklin to scan.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
-  --cg-text-xs: var(--cogenta-font-size-xs, 0.64rem);
-  --cg-text-sm: var(--cogenta-font-size-sm, 0.8rem);
-  --cg-text-md: var(--cogenta-font-size-md, var(--cogenta-font-base-size, 1rem));
-  --cg-text-lg: var(--cogenta-font-size-lg, 1.25rem);
-  --cg-text-xl: var(--cogenta-font-size-xl, 1.5625rem);
-  --cg-text-2xl: var(--cogenta-font-size-2xl, 1.9531rem);
-  --cg-text-3xl: var(--cogenta-font-size-3xl, 2.4414rem);
+  --cg-font-display: var(--cogenta-font-serif);
+  --cg-font-text: "Source Serif 4", var(--cogenta-font-serif);
+  --cg-font-ui: var(--cogenta-font-sans);
+  --cg-font-code: var(--cogenta-font-mono);
 
-  --cg-leading-tight: 1.02;
-  --cg-leading-snug: 1.22;
-  --cg-leading-normal: 1.5;
-  --cg-leading-relaxed: 1.72;
+  --cg-text-xs: var(--cogenta-font-size-xs, 0.68rem);
+  --cg-text-sm: var(--cogenta-font-size-sm, 0.85rem);
+  --cg-text-md: var(--cogenta-font-size-md, var(--cogenta-font-base-size, 1.0625rem));
+  --cg-text-lg: var(--cogenta-font-size-lg, 1.33rem);
+  --cg-text-xl: var(--cogenta-font-size-xl, 1.66rem);
+  --cg-text-2xl: var(--cogenta-font-size-2xl, 2.08rem);
+  --cg-text-3xl: var(--cogenta-font-size-3xl, 2.59rem);
+  /* The same ladder, continued: each step is the previous one times the
+     skin's own ratio. */
+  --cg-text-4xl: calc(var(--cg-text-3xl) * var(--cogenta-font-scale, 1.25));
+  --cg-text-5xl: calc(var(--cg-text-4xl) * var(--cogenta-font-scale, 1.25));
+  --cg-text-6xl: calc(var(--cg-text-5xl) * var(--cogenta-font-scale, 1.25));
 
-  /* Display serif reads best tightened; the sans used for metadata reads
-     best opened up into small-caps-style spacing. */
-  --cg-tracking-tight: -0.018em;
-  --cg-tracking-snug: -0.008em;
-  --cg-tracking-normal: 0em;
-  --cg-tracking-wide: 0.09em;
-  --cg-tracking-wider: 0.14em;
+  /* Labels sit between `xs` and `sm`: capitals at `sm` shout, at `xs` they
+     fade. Interface text sits between `sm` and `md`. */
+  --cg-text-label: calc((var(--cg-text-xs) + var(--cg-text-sm)) / 2);
+  --cg-text-ui: calc((var(--cg-text-sm) + var(--cg-text-md)) / 2);
+  /* The reading size: `md` on a phone, a little above it on a desk. */
+  --cg-text-reading: clamp(
+    var(--cg-text-md),
+    calc(0.94rem + 0.28vw),
+    calc((var(--cg-text-md) * 3 + var(--cg-text-lg)) / 4)
+  );
 
+  --cg-size-nameplate: clamp(var(--cg-text-3xl), calc(1rem + 5.4vw), var(--cg-text-6xl));
+  --cg-size-headline: clamp(var(--cg-text-2xl), calc(0.9rem + 3.6vw), var(--cg-text-5xl));
+  --cg-size-lead: clamp(var(--cg-text-xl), calc(0.9rem + 2.1vw), var(--cg-text-4xl));
+  --cg-size-rail: clamp(var(--cg-text-xl), calc(0.95rem + 1.1vw), var(--cg-text-2xl));
+  --cg-size-title: clamp(var(--cg-text-2xl), calc(1rem + 2.4vw), var(--cg-text-4xl));
+  --cg-size-heading: clamp(var(--cg-text-xl), calc(0.95rem + 1.2vw), var(--cg-text-2xl));
+  --cg-size-brief: clamp(
+    var(--cg-text-lg),
+    calc(0.95rem + 0.5vw),
+    calc((var(--cg-text-lg) + var(--cg-text-xl)) / 2)
+  );
+  --cg-size-story: calc((var(--cg-text-md) + var(--cg-text-lg)) / 2);
+  --cg-size-standfirst: clamp(var(--cg-text-lg), calc(1rem + 0.55vw), var(--cg-text-xl));
+  --cg-size-quote: clamp(var(--cg-text-xl), calc(1rem + 1.2vw), var(--cg-text-2xl));
+  --cg-size-figure: clamp(var(--cg-text-2xl), calc(1rem + 2.2vw), var(--cg-text-4xl));
+
+  --cg-leading-display: 1.02;
+  --cg-leading-heading: 1.1;
+  --cg-leading-snug: 1.3;
+  --cg-leading-text: 1.6;
+  --cg-leading-ui: 1.4;
+
+  --cg-tracking-display: -0.012em;
+  --cg-tracking-heading: -0.006em;
+  --cg-tracking-caps: 0.1em;
+  --cg-tracking-nav: 0.14em;
+
+  --cg-weight-light: 300;
   --cg-weight-regular: 400;
   --cg-weight-medium: 500;
   --cg-weight-semibold: 600;
   --cg-weight-bold: 700;
-  --cg-weight-black: 900;
+  --cg-weight-heavy: 800;
 }
 
 /* --------------------------------------------------------------------------
-   Radius — the skin's three, kept small: a print page has square corners,
-   and this theme's own `tokens.json` already ships tight radii, so nothing
-   here inflates them into the pill-shaped, card-heavy vocabulary a generic
-   admin dashboard uses.
+   Shape and motion: square corners, motion is a colour change.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
-  --cg-radius-sm: var(--cogenta-radius-sm);
-  --cg-radius-md: var(--cogenta-radius-md);
-  --cg-radius-lg: var(--cogenta-radius-lg);
-}
+  --cg-radius: var(--cogenta-radius-sm);
+  --cg-radius-control: var(--cogenta-radius-md);
 
-/* --------------------------------------------------------------------------
-   Motion
-   -------------------------------------------------------------------------- */
-
-:where(:root) {
-  --cg-duration-fast: calc(var(--cogenta-motion-duration) * 0.6);
-  --cg-duration: var(--cogenta-motion-duration);
-  --cg-duration-slow: calc(var(--cogenta-motion-duration) * 2.4);
+  --cg-duration: min(var(--cogenta-motion-duration), 150ms);
   --cg-ease: var(--cogenta-motion-easing);
+
+  --cg-rule: 1px;
+  --cg-rule-strong: 2px;
+  --cg-rule-heavy: 4px;
 }
 
 /* --------------------------------------------------------------------------
-   Colour — paper, ink, rule, accent. One palette per scheme, both derived
-   from the same seven skin tokens.
+   Colour: one palette per scheme, both derived from the same seven tokens.
+   --------------------------------------------------------------------------
 
-   The block below declares the **light** palette in plain terms; the
-   scheme-aware values live in the `@supports` block after it, and only
-   there — the same split `theme-canonical` uses and for the same reason: a
-   browser that does not know `light-dark()` still stores the declaration
-   and only fails when the value is *used*, so a feature query is the only
-   construct that actually falls back, written with `currentColor` so it
-   needs no colour literal of its own.
+   The first block declares the light palette plainly; the scheme-aware
+   values follow behind a feature query, so a browser that cannot parse
+   `light-dark()` still gets a complete light palette.
 
-   **This dark mode is designed for reading at night, not inverted.** Five
-   decisions, each independently checked by `test/design-system.test.ts`
-   against the real stylesheet:
+   The dark palette is designed, not inverted:
 
-   1. *Elevation runs upward in lightness*, not via shadow: on black ink,
-      shadow reads as nothing, so `--cg-paper-panel` (a boxed note, a pull
-      quote's rule background) is the darkest surface, `--cg-paper` the
-      canvas, `--cg-paper-raised` (a card, a lead story) the lightest of the
-      three — the opposite of the light scheme, where the three are the same
-      sheet of paper and a real drop shadow does the separating.
-   2. *The accent is lifted*, from an oklch lightness around 0.49 in daylight
-      to about 0.72 at night — a brick red that reads correctly on cream
-      goes muddy on near-black ink, so night mode pushes it toward a warm
-      ember rather than keeping the daylight value.
-   3. *Its foreground flips to ink*, because a light ember needs a dark label
-      the way the daylight accent needed a cream one — the clearest single
-      break from a mechanical `bg`/`fg` swap.
-   4. *Text stays off pure white* — a warm, slightly toned paper-white, not
-      `#fff`, which halates against a near-black canvas.
-   5. *Rules become light overlays* — a rule one step **up** from the
-      surface it sits on, never a step down, or it disappears.
+   1. The ground is ink: the skin's own `fg` at a low lightness, the colour
+      of a page of newsprint photographed at night. Surfaces step up in
+      lightness (sunken, canvas, raised).
+   2. Text is the paper lowered to an off-white, so a long article on ink
+      stays calm, and the rules that divide the page step down with it.
+   3. The red is lifted and desaturated until it reads as red on ink rather
+      than as a glow, and its foreground flips to ink.
+   4. Hairlines are a step up in lightness from the surface they sit on.
+
+   Every ratio is computed from this file by `test/design-system.test.ts`,
+   in both schemes.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
-  --cg-paper: var(--cogenta-color-bg);
-  --cg-paper-raised: var(--cogenta-color-bg);
-  --cg-paper-panel: var(--cogenta-color-muted);
-  --cg-paper-tint: color-mix(in oklab, var(--cogenta-color-accent) 9%, var(--cogenta-color-bg));
+  --cg-canvas: var(--cogenta-color-bg);
+  --cg-surface: var(--cogenta-color-bg);
+  --cg-surface-raised: var(--cogenta-color-bg);
+  --cg-surface-sunken: var(--cogenta-color-muted);
 
   --cg-ink: var(--cogenta-color-fg);
-  --cg-ink-soft: var(--cogenta-color-muted-fg);
-  --cg-ink-faint: color-mix(in oklab, var(--cogenta-color-muted-fg) 92%, var(--cogenta-color-bg));
+  --cg-ink-muted: var(--cogenta-color-muted-fg);
+  --cg-ink-subtle: color-mix(in oklab, var(--cogenta-color-muted-fg) 82%, var(--cogenta-color-bg));
 
   --cg-accent: var(--cogenta-color-accent);
-  --cg-accent-ink: var(--cogenta-color-accent-fg);
-  --cg-accent-hover: color-mix(in oklab, var(--cogenta-color-accent) 84%, var(--cogenta-color-fg));
-  --cg-accent-tint: color-mix(in oklab, var(--cogenta-color-accent) 12%, var(--cogenta-color-bg));
-  --cg-accent-tint-ink: color-mix(
-    in oklab,
-    var(--cogenta-color-accent) 70%,
-    var(--cogenta-color-fg)
-  );
+  --cg-accent-fg: var(--cogenta-color-accent-fg);
+  --cg-accent-hover: color-mix(in oklab, var(--cogenta-color-accent) 68%, var(--cogenta-color-fg));
+  --cg-accent-line: color-mix(in oklab, var(--cogenta-color-accent) 42%, var(--cogenta-color-bg));
 
-  --cg-rule: var(--cogenta-color-border);
-  --cg-rule-soft: color-mix(in oklab, var(--cogenta-color-border) 50%, var(--cogenta-color-bg));
-  --cg-rule-heavy: color-mix(in oklab, var(--cogenta-color-border) 45%, var(--cogenta-color-fg));
+  --cg-line: var(--cogenta-color-border);
+  --cg-line-soft: color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-bg));
+  --cg-line-strong: color-mix(in oklab, var(--cogenta-color-border) 38%, var(--cogenta-color-fg));
+  --cg-line-ink: var(--cogenta-color-fg);
 
-  --cg-scrim: color-mix(in oklab, var(--cogenta-color-fg) 60%, transparent);
+  --cg-action: var(--cogenta-color-fg);
+  --cg-action-fg: var(--cogenta-color-bg);
+  --cg-action-hover: var(--cogenta-color-accent);
+  --cg-action-hover-fg: var(--cogenta-color-accent-fg);
+
+  --cg-image-brightness: 1;
 }
 
 @supports (color: light-dark(currentColor, currentColor)) and
   (color: oklch(from currentColor l c h)) {
   :where(:root) {
-    --cg-paper: light-dark(
+    --cg-canvas: light-dark(var(--cogenta-color-bg), oklch(from var(--cogenta-color-fg) 0.185 c h));
+    --cg-surface: light-dark(
       var(--cogenta-color-bg),
-      oklch(from var(--cogenta-color-fg) 0.15 calc(c * 0.65) h)
+      oklch(from var(--cogenta-color-fg) 0.185 c h)
     );
-    --cg-paper-raised: light-dark(
+    --cg-surface-raised: light-dark(
       var(--cogenta-color-bg),
-      oklch(from var(--cogenta-color-fg) 0.225 calc(c * 0.55) h)
+      oklch(from var(--cogenta-color-fg) 0.235 c h)
     );
-    --cg-paper-panel: light-dark(
+    --cg-surface-sunken: light-dark(
       var(--cogenta-color-muted),
-      oklch(from var(--cogenta-color-fg) 0.115 calc(c * 0.75) h)
-    );
-    --cg-paper-tint: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 9%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-accent) 0.26 calc(c * 0.45) h)
+      oklch(from var(--cogenta-color-fg) 0.15 c h)
     );
 
-    --cg-ink: light-dark(
-      var(--cogenta-color-fg),
-      oklch(from var(--cogenta-color-accent) 0.92 0.014 h)
-    );
-    --cg-ink-soft: light-dark(
+    --cg-ink: light-dark(var(--cogenta-color-fg), oklch(from var(--cogenta-color-muted) 0.93 c h));
+    --cg-ink-muted: light-dark(
       var(--cogenta-color-muted-fg),
-      oklch(from var(--cogenta-color-accent) 0.75 0.02 h)
+      oklch(from var(--cogenta-color-muted) 0.8 c h)
     );
-    --cg-ink-faint: light-dark(
-      color-mix(in oklab, var(--cogenta-color-muted-fg) 92%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-accent) 0.63 0.018 h)
+    --cg-ink-subtle: light-dark(
+      color-mix(in oklab, var(--cogenta-color-muted-fg) 82%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-muted) 0.71 c h)
     );
 
     --cg-accent: light-dark(
       var(--cogenta-color-accent),
-      oklch(from var(--cogenta-color-accent) 0.72 calc(c * 0.9) h)
+      oklch(from var(--cogenta-color-accent) 0.66 calc(c * 0.92) h)
     );
-    --cg-accent-ink: light-dark(
+    --cg-accent-fg: light-dark(
       var(--cogenta-color-accent-fg),
-      oklch(from var(--cogenta-color-accent) 0.17 calc(c * 0.5) h)
+      oklch(from var(--cogenta-color-accent) 0.16 calc(c * 0.3) h)
     );
     --cg-accent-hover: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 84%, var(--cogenta-color-fg)),
-      oklch(from var(--cogenta-color-accent) 0.8 calc(c * 0.85) h)
+      color-mix(in oklab, var(--cogenta-color-accent) 68%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.8 calc(c * 0.6) h)
     );
-    --cg-accent-tint: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 12%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-accent) 0.29 calc(c * 0.5) h)
-    );
-    --cg-accent-tint-ink: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 70%, var(--cogenta-color-fg)),
-      oklch(from var(--cogenta-color-accent) 0.88 calc(c * 0.4) h)
+    --cg-accent-line: light-dark(
+      color-mix(in oklab, var(--cogenta-color-accent) 42%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.46 calc(c * 0.6) h)
     );
 
-    --cg-rule: light-dark(
+    --cg-line: light-dark(
       var(--cogenta-color-border),
-      oklch(from var(--cogenta-color-accent) 0.32 calc(c * 0.2) h)
+      oklch(from var(--cogenta-color-fg) 0.32 c h)
     );
-    --cg-rule-soft: light-dark(
-      color-mix(in oklab, var(--cogenta-color-border) 50%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-accent) 0.25 calc(c * 0.18) h)
+    --cg-line-soft: light-dark(
+      color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-fg) 0.26 c h)
     );
-    --cg-rule-heavy: light-dark(
-      color-mix(in oklab, var(--cogenta-color-border) 45%, var(--cogenta-color-fg)),
-      oklch(from var(--cogenta-color-accent) 0.56 calc(c * 0.22) h)
+    --cg-line-strong: light-dark(
+      color-mix(in oklab, var(--cogenta-color-border) 38%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-fg) 0.54 c h)
+    );
+    --cg-line-ink: light-dark(
+      var(--cogenta-color-fg),
+      oklch(from var(--cogenta-color-muted) 0.84 c h)
+    );
+
+    --cg-action: light-dark(
+      var(--cogenta-color-fg),
+      oklch(from var(--cogenta-color-muted) 0.93 c h)
+    );
+    --cg-action-fg: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-fg) 0.185 c h)
+    );
+    --cg-action-hover: light-dark(
+      var(--cogenta-color-accent),
+      oklch(from var(--cogenta-color-accent) 0.66 calc(c * 0.92) h)
+    );
+    --cg-action-hover-fg: light-dark(
+      var(--cogenta-color-accent-fg),
+      oklch(from var(--cogenta-color-accent) 0.16 calc(c * 0.3) h)
     );
   }
 }
 
-/* --------------------------------------------------------------------------
-   Elevation — a real drop shadow in daylight, a hairline rule at night
-   -------------------------------------------------------------------------- */
-
-:where(:root) {
-  --cg-ring: inset 0 0 0 1px var(--cg-rule);
-  --cg-ring-accent: inset 0 0 0 1px var(--cg-accent);
-
-  --cg-elevation-0: none;
-  --cg-elevation-1: var(--cogenta-shadow-sm);
-  --cg-elevation-2: var(--cogenta-shadow-md);
-  --cg-elevation-3: var(--cogenta-shadow-md), var(--cogenta-shadow-sm);
-}
-
+/* Photographs are dimmed a little on ink, so a white sky in a picture does
+   not glare in a dark room. A brightness step, not a blur. */
 @media (prefers-color-scheme: dark) {
   :where(:root:not([data-theme="light"])) {
-    --cg-elevation-1: var(--cg-ring);
-    --cg-elevation-2: var(--cg-ring);
-    --cg-elevation-3: var(--cg-ring), var(--cogenta-shadow-md);
+    --cg-image-brightness: 0.88;
   }
 }
 
 :where(:root[data-theme="dark"]) {
-  --cg-elevation-1: var(--cg-ring);
-  --cg-elevation-2: var(--cg-ring);
-  --cg-elevation-3: var(--cg-ring), var(--cogenta-shadow-md);
+  --cg-image-brightness: 0.88;
 }

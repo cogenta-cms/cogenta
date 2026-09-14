@@ -82,8 +82,10 @@ describe('theme isolation', () => {
   it('ships the stylesheets it claims to check', () => {
     expect(STYLESHEETS.map(({ path }) => path).sort()).toEqual([
       'styles/archive.css',
+      'styles/article.css',
       'styles/base.css',
       'styles/blocks.css',
+      'styles/stories.css',
       'styles/theme.css',
       'styles/tokens.css',
     ])
@@ -98,22 +100,33 @@ describe('theme isolation', () => {
     })
   }
 
-  it('loads its display fonts only from the one host every theme may reach', () => {
-    const tokens = FILES.find(({ path }) => path.replaceAll('\\', '/') === 'styles/tokens.css')
-    expect(tokens).toBeDefined()
-    const imports = [
-      ...(tokens as { source: string }).source.matchAll(/@import\s+url\(["']([^"']+)["']\)/g),
-    ].map((match) => match[1] as string)
+  it('loads its fonts only from the one host every theme may reach', () => {
+    const imports = STYLESHEETS.flatMap(({ source }) =>
+      [...source.matchAll(/@import\s+url\(["']([^"']+)["']\)/g)].map((match) => match[1] as string),
+    )
     expect(imports.length).toBeGreaterThan(0)
     for (const url of imports) {
       expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
     }
   })
 
+  it('loads every other sheet by a relative import the host inlines', () => {
+    const theme = STYLESHEETS.find(({ path }) => path === 'styles/theme.css')?.source ?? ''
+    const local = [...theme.matchAll(/@import\s+"([^"]+)";/g)].map((match) => match[1])
+    expect(local).toEqual([
+      './tokens.css',
+      './base.css',
+      './stories.css',
+      './article.css',
+      './blocks.css',
+      './archive.css',
+    ])
+  })
+
   /**
    * D5 (`docs/lots/L25-templates-pro.md`): a gradient reads as the generic
-   * "AI-generated" look. This theme is built entirely from flat colour
-   * fields, hairlines and shadows instead — locked in here so a later
+   * "AI-generated" look. This theme is built entirely from flat colour,
+   * rules and space instead, locked in here so a later
    * change cannot quietly reintroduce one, in a stylesheet or in an inline
    * style string built by the renderer.
    */
@@ -132,6 +145,23 @@ describe('theme isolation', () => {
       .filter(({ source }) => /gradient\(/.test(source))
       .map(({ path }) => path)
     expect(offenders).toEqual([])
+  })
+
+  it('fades nothing in on scroll, in a stylesheet or an inline style', () => {
+    const offenders = [...RAW_STYLESHEETS, ...RENDER_SOURCES]
+      .filter(({ source }) =>
+        /animation-timeline|view-timeline|scroll-timeline|@keyframes/.test(source),
+      )
+      .map(({ path }) => path)
+    expect(offenders).toEqual([])
+  })
+
+  it('writes no inline style from a renderer beyond a ratio or a focal point', () => {
+    const styles = RENDER_SOURCES.flatMap(({ source }) =>
+      [...source.matchAll(/style:\s*(`[^`]*`|'[^']*')/g)].map((match) => match[1] as string),
+    )
+    expect(styles.length).toBeGreaterThan(0)
+    for (const style of styles) expect(style).toMatch(/--cg-ratio/)
   })
 
   it('fakes no glow with a decorative blur filter', () => {

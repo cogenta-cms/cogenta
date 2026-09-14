@@ -4,28 +4,26 @@ import { renderLogoStrip } from '../../src/render/blocks/logo-strip.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
 
-describe('renderLogoStrip', () => {
-  it('renders one image per logo, with no name and no link', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect(html).toContain('<li class="cg-imprint__item"><img class="cg-imprint__image"')
+describe('renderLogoStrip, a line of credits', () => {
+  it('sets the caption as a label, never a heading', () => {
+    expect(html).toContain(
+      '<p class="cg-credits__caption" data-field="caption">Printed with type and ink donated by</p>',
+    )
+    expect(html).not.toMatch(/<h[1-6]/)
+  })
+
+  it('renders every mark as an image with its own alt attribute', () => {
+    expect(html.match(/<img class="cg-credits__image"[^>]*alt=""/g)).toHaveLength(2)
+  })
+
+  it('links nothing: logoStrip carries no URL', () => {
     expect(html).not.toContain('<a ')
   })
 
-  it('renders the caption when present', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect(html).toContain('<figcaption class="cg-imprint__caption" data-field="caption">')
-    expect(html).toContain('Printed with type and ink donated by')
-  })
-
-  it('omits the figcaption entirely when the caption is absent', () => {
-    const { caption: _caption, ...noCaption } = BLOCKS.logoStrip
-    const html = serialize(renderLogoStrip(noCaption, ctx))
-    expect(html).not.toContain('<figcaption')
-  })
-
-  it('never carries a title, unlike logos', () => {
-    const html = serialize(renderLogoStrip(BLOCKS.logoStrip, ctx))
-    expect(html).not.toContain('cg-imprint__title')
+  it('renders no caption element when the caption is absent', () => {
+    const { caption: _caption, ...bare } = BLOCKS.logoStrip
+    expect(serialize(renderLogoStrip(bare, ctx))).not.toContain('cg-credits__caption')
   })
 })

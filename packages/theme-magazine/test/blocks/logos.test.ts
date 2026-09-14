@@ -4,35 +4,40 @@ import { renderLogos } from '../../src/render/blocks/logos.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderLogos(BLOCKS.logos, ctx))
 
-describe('renderLogos', () => {
-  it('wraps a logo in a link when the item declares a URL', () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    expect(html).toContain(
-      '<a class="cg-press__link" href="https://acme.example" rel="noopener noreferrer">',
-    )
-  })
-
-  it('renders a bare image when the item declares no URL', () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    const globexIndex = html.indexOf('globex.svg')
-    const beforeGlobex = html.slice(0, globexIndex)
-    const lastAnchorOpen = beforeGlobex.lastIndexOf('<a class="cg-press__link"')
-    const lastAnchorClose = beforeGlobex.lastIndexOf('</a>')
-    // The last anchor before Globex's logo is already closed — it belongs
-    // to Acme, not to Globex.
-    expect(lastAnchorClose).toBeGreaterThan(lastAnchorOpen)
-  })
-
-  it('names the link with the organisation when the media entity carries no alt text', () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
+describe('renderLogos, marks credited by name', () => {
+  it('names each mark with its organisation when the media entity has no alt text', () => {
     expect(html).toContain('alt="Acme Trade Weekly"')
     expect(html).toContain('alt="Globex Review"')
   })
 
-  it('omits the block title when the field is absent', () => {
-    const { title: _title, ...untitled } = BLOCKS.logos
-    const html = serialize(renderLogos(untitled, ctx))
-    expect(html).not.toContain('cg-press__title')
+  it('links a mark that has a URL, with the external-link protection', () => {
+    expect(html).toMatch(
+      /<a class="cg-marks__link" href="https:\/\/acme\.example" rel="noopener noreferrer"><img class="cg-marks__image"/,
+    )
+  })
+
+  it('sets a mark without a URL as a plain image', () => {
+    expect(html).toMatch(
+      /<li class="cg-marks__item"><img class="cg-marks__image"[^>]*alt="Globex Review"/,
+    )
+  })
+
+  it('counts its marks for the stylesheet, between three and six columns', () => {
+    expect(html).toContain('data-count="3"')
+    const many = {
+      ...BLOCKS.logos,
+      items: Array.from({ length: 9 }, (_, i) => ({
+        _key: `m${i}`,
+        media: 'logo-acme',
+        name: `Org ${i}`,
+      })),
+    }
+    expect(serialize(renderLogos(many, ctx))).toContain('data-count="6"')
+  })
+
+  it('opens on the shared section head', () => {
+    expect(html).toContain('<h2 class="cg-head__title" data-field="title">As seen in</h2>')
   })
 })

@@ -1,46 +1,39 @@
-import type { RichTextDocument } from '@cogenta/blocks'
 import { serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderProse } from '../../src/render/blocks/prose.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderProse(BLOCKS.prose, ctx))
 
-describe('renderProse', () => {
-  it('wraps the rich text document in the block container', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toMatch(/^<div class="cg-block cg-prose" data-block="prose">/)
+describe('renderProse, the reading column', () => {
+  it('sets the text in one body element on the container', () => {
+    expect(html).toMatch(/^<div class="cg-section cg-prose" data-block="prose">/)
+    expect(html).toContain('<div class="cg-prose__body">')
   })
 
-  it('renders a single normal paragraph as a bare <p>', () => {
-    const body: RichTextDocument = [
-      {
-        _key: 'p1',
-        _type: 'block',
-        style: 'normal',
-        children: [{ _key: 's1', _type: 'span', text: 'A short dispatch.', marks: [] }],
-        markDefs: [],
-      },
-    ]
-    const html = serialize(renderProse({ ...BLOCKS.prose, body }, ctx))
-    expect(html).toBe(
-      '<div class="cg-block cg-prose" data-block="prose"><p>A short dispatch.</p></div>',
+  it('keeps subheads at h2, never h1', () => {
+    expect(html).toContain('<h2>What survives a closure</h2>')
+    expect(html).not.toContain('<h1')
+  })
+
+  it('renders a blockquote the stylesheet sets as a pull quote', () => {
+    expect(html).toContain(
+      '<blockquote><p>Nobody retires from this trade; the trade outlives them.</p></blockquote>',
     )
   })
 
-  it('renders an inline media node as a captioned figure with the shared theme-kit class', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('class="cg-prose__figure"')
-    expect(html).toContain('The composing stick, mid-line')
+  it('captions an inline photograph', () => {
+    expect(html).toMatch(
+      /<figure class="cg-prose__figure"><img[^>]*><figcaption>The composing stick, mid-line<\/figcaption><\/figure>/,
+    )
   })
 
-  it('renders a blockquote node distinctly from the pull-quote block', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<blockquote><p>Nobody retires from this trade')
+  it('carries no drop-cap marker of its own: only an article page adds one', () => {
+    expect(html).not.toContain('data-opening')
   })
 
-  it('renders no block-level heading of its own', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).not.toContain('data-field=')
+  it('escapes markup arriving in a text span', () => {
+    expect(html).toContain('&lt;foundry&gt;')
   })
 })

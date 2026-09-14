@@ -1,20 +1,13 @@
 import type { StatItem, StatsBlock } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import { type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * "By the numbers" — an infographic sidebar with a real newspaper
- * `column-rule` between figures, each set in the display serif with tabular
- * numerals so a column of changing digits never shifts width.
- *
- * A description list, as in the reference theme: each figure *describes* its
- * label, which is exactly what `<dt>`/`<dd>` mean, and it survives being read
- * linearly by anything that ignores the stylesheet.
+ * Figures in a row between two rules, the way a newspaper sets a fact box
+ * without the box: each value in the display face with lining tabular
+ * numerals, its unit smaller beside it, the label under it in the interface
+ * face, and a vertical hairline between figures. A description list, so
+ * each value is announced with its label.
  */
 function renderItem(item: StatItem): HtmlElement {
   return h(
@@ -24,23 +17,20 @@ function renderItem(item: StatItem): HtmlElement {
     h(
       'dd',
       { class: 'cg-figures__value' },
-      item.value,
+      h('span', { class: 'cg-figures__number' }, item.value),
       item.unit === undefined ? null : h('span', { class: 'cg-figures__unit' }, item.unit),
     ),
   )
 }
 
 export function renderStats(block: StatsBlock, _ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-block cg-figures', 'data-block': 'stats' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('stats') ?? 'h2',
-          { class: 'cg-figures__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'stats',
+    'cg-figures',
+    { 'data-count': String(Math.min(block.items.length, 4)) },
+    'div',
+    sectionHead('stats', block.title),
     h('dl', { class: 'cg-figures__items' }, block.items.map(renderItem)),
   )
 }

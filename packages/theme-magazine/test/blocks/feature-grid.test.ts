@@ -4,54 +4,55 @@ import { renderFeatureGrid } from '../../src/render/blocks/feature-grid.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
 
-describe('renderFeatureGrid', () => {
-  it('renders the block title at h2 and each item one level below, at h3', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toMatch(/<h2 class="cg-index__heading" data-field="title">In this issue<\/h2>/)
-    expect((html.match(/<h3 class="cg-index__title">/g) ?? []).length).toBe(2)
-  })
-
-  it('renders an item title at h2 when the block itself carries no title', () => {
-    const { title: _title, ...untitled } = BLOCKS.featureGrid
-    const html = serialize(renderFeatureGrid(untitled, ctx))
-    expect(html).not.toContain('cg-index__heading')
-    expect(html).toContain('<h2 class="cg-index__title">')
-  })
-
-  it('wraps an item title in a link only when the item declares one', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
+describe('renderFeatureGrid, a contents panel', () => {
+  it('opens on the shared section head, h2', () => {
     expect(html).toContain(
-      '<a class="cg-index__link" href="/en/article/last-cast">The last cast</a>',
-    )
-    expect(html).toContain('<h3 class="cg-index__title">Reading a forme</h3>')
-  })
-
-  it('carries the icon name as a data attribute, never as markup', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('data-icon="press"')
-  })
-
-  it('omits the icon attribute when an item declares none', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    const items = html.split('<li class="cg-index__item"')
-    expect(items[2]).not.toContain('data-icon')
-  })
-
-  it('renders an ordered list — the numbering is editorial, not incidental', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toMatch(
-      /^<section class="cg-block cg-index"[^>]*><h2[\s\S]*<ol class="cg-index__items">/,
+      '<div class="cg-head"><h2 class="cg-head__title" data-field="title">In this issue</h2></div>',
     )
   })
 
-  it('omits the item text paragraph when the field is absent', () => {
-    const bare = {
+  it('sets each item title one level below the head', () => {
+    expect(html).toContain('<h3 class="cg-contents__title">')
+  })
+
+  it('makes a linked title the link, with the arrow drawn after the words, never alone', () => {
+    expect(html).toContain(
+      '<h3 class="cg-contents__title"><a class="cg-arrow-link" href="/en/article/last-cast">The last cast</a></h3>',
+    )
+  })
+
+  it('sets an unlinked title as plain text', () => {
+    expect(html).toContain('<h3 class="cg-contents__title">Reading a forme</h3>')
+  })
+
+  it('draws no icon tile, whatever icon name the item carries', () => {
+    expect(html).not.toContain('press')
+    expect(html).not.toContain('<svg')
+  })
+
+  it('counts its items for the stylesheet, capped at four columns', () => {
+    expect(html).toContain('data-count="2"')
+    const many = {
       ...BLOCKS.featureGrid,
-      items: [{ _key: 'f1', title: 'No blurb here' }],
+      items: Array.from({ length: 7 }, (_, i) => ({ _key: `k${i}`, title: `Item ${i}` })),
     }
-    const html = serialize(renderFeatureGrid(bare, ctx))
-    expect(html).toContain('No blurb here')
-    expect(html).not.toContain('cg-index__text')
+    expect(serialize(renderFeatureGrid(many, ctx))).toContain('data-count="4"')
+  })
+
+  it('starts item titles at h2 when the block has no title of its own', () => {
+    const { title: _title, ...untitled } = BLOCKS.featureGrid
+    const out = serialize(renderFeatureGrid(untitled, ctx))
+    expect(out).not.toContain('cg-head')
+    expect(out).toContain('<h2 class="cg-contents__title">')
+  })
+
+  it('omits the text line of an item that has none', () => {
+    const { text: _text, ...first } = BLOCKS.featureGrid.items[0] as NonNullable<
+      (typeof BLOCKS.featureGrid.items)[number]
+    >
+    const out = serialize(renderFeatureGrid({ ...BLOCKS.featureGrid, items: [first] }, ctx))
+    expect(out).not.toContain('cg-contents__text')
   })
 })

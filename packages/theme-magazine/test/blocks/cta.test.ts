@@ -4,24 +4,32 @@ import { renderCta } from '../../src/render/blocks/cta.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderCta(BLOCKS.cta, ctx))
 
-describe('renderCta', () => {
-  it('renders the required title and the required, non-empty action list', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
-    expect(html).toMatch(/^<section class="cg-block cg-subscribe" data-block="cta">/)
-    expect(html).toContain('data-field="title"')
-    expect(html).toContain('Subscribe to the print edition')
-    expect(html).toContain('cg-actions')
+describe('renderCta, an appeal between two sections', () => {
+  it('renders the title as an h2 carrying its field marker', () => {
+    expect(html).toContain(
+      '<h2 class="cg-appeal__title" data-field="title">Subscribe to the print edition</h2>',
+    )
   })
 
-  it('omits the supporting text paragraph when the field is absent', () => {
-    const { text: _text, ...withoutText } = BLOCKS.cta
-    const html = serialize(renderCta(withoutText, ctx))
-    expect(html).not.toContain('cg-subscribe__text')
+  it('sets the text beside the title, in the body column', () => {
+    expect(html).toMatch(
+      /<div class="cg-appeal__body"><p class="cg-appeal__text" data-field="text">Four issues a year/,
+    )
   })
 
-  it('labels the action list with the block title, for a screen reader', () => {
-    const html = serialize(renderCta(BLOCKS.cta, ctx))
+  it('names the action list after the appeal it belongs to', () => {
     expect(html).toContain('aria-label="Subscribe to the print edition"')
+    expect(html).toContain('data-emphasis="primary"')
+  })
+
+  it('renders no text paragraph when the text is absent', () => {
+    const { text: _text, ...bare } = BLOCKS.cta
+    expect(serialize(renderCta(bare, ctx))).not.toContain('cg-appeal__text')
+  })
+
+  it('draws its separation with rules, never with a coloured box', () => {
+    expect(html).not.toMatch(/style=/)
   })
 })

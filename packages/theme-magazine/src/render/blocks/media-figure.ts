@@ -1,42 +1,58 @@
 import type { MediaFigureBlock } from '@cogenta/blocks'
 import { aspectRatio, type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * A plate, in the print sense: the picture runs large, and the caption sits
- * under a hairline rule set in small caps with the credit line trailing it —
- * the way a photo essay is captioned, rather than a card with a paragraph
- * under it.
+ * A photograph placed on the grid by its alignment, captioned the way a
+ * newspaper captions one: the caption in the interface face under the
+ * picture and the credit after it in small capitals, both starting on the
+ * picture's own left edge.
  *
- * `<figure>`/`<figcaption>` keep the caption announced as belonging to the
- * image; `align` stays a data attribute (contract B's intent, not a class),
- * so the skin — here, this theme — decides what `start`/`end`/`wide`/`full`
- * mean.
+ * - `center` (the default): the reading column.
+ * - `start` / `end`: half the page, from the left or to the right.
+ * - `wide`: ten columns, the width an article's lead photograph takes.
+ * - `full`: edge to edge, the caption returning to the grid.
  */
 export function renderMediaFigure(block: MediaFigureBlock, ctx: RenderContext): HtmlElement {
   const ratio = aspectRatio(block.ratio)
+  const align = block.align ?? 'center'
   const hasCaption = block.caption !== undefined || block.credit !== undefined
-  return h(
-    'figure',
+  return section(
+    'div',
+    'mediaFigure',
+    'cg-figure',
     {
-      class: 'cg-block cg-plate',
-      'data-block': 'mediaFigure',
-      'data-align': block.align ?? 'center',
+      'data-align': align,
       style: ratio === undefined ? undefined : `--cg-ratio:${ratio}`,
     },
-    image(ctx, block.media, {
-      className: 'cg-plate__media',
-      sizes: '(min-width: 60rem) 48rem, 100vw',
-    }),
+    'figure',
+    h(
+      'div',
+      { class: 'cg-figure__frame' },
+      image(ctx, block.media, {
+        className: 'cg-figure__image',
+        sizes:
+          align === 'full'
+            ? '100vw'
+            : align === 'wide'
+              ? '(min-width: 64rem) 66rem, 100vw'
+              : '(min-width: 64rem) 40rem, 100vw',
+      }),
+    ),
     hasCaption
       ? h(
           'figcaption',
-          { class: 'cg-plate__caption' },
+          { class: 'cg-figure__caption' },
           block.caption === undefined
             ? null
-            : h('span', { class: 'cg-plate__text' }, block.caption),
+            : h(
+                'span',
+                { class: 'cg-figure__caption-text', 'data-field': 'caption' },
+                block.caption,
+              ),
           block.credit === undefined
             ? null
-            : h('span', { class: 'cg-plate__credit', 'data-field': 'credit' }, block.credit),
+            : h('span', { class: 'cg-figure__credit', 'data-field': 'credit' }, block.credit),
         )
       : null,
   )

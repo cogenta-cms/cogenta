@@ -1,16 +1,17 @@
 import type { EmbedBlock } from '@cogenta/blocks'
 import { aspectRatio, type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * Nothing here contacts a third party before the visitor has consented — the
- * same rule the reference theme enforces, reused verbatim: an iframe (or a
- * thumbnail fetch) already hands the provider an IP address and a cookie,
- * which is exactly the transfer consent is supposed to gate. No consent
- * *button* ships either, because this theme ships no JavaScript to wire one
- * to: granting consent is a site-wide decision for a future consent layer,
- * not a block's.
+ * Nothing here contacts a third party before the visitor consents: when
+ * `consentRequired` is set, or the provider has no cookie-free frame source,
+ * a notice and an outbound link render instead of an `<iframe>`. No
+ * preconnect, no thumbnail fetched from the provider.
+ *
+ * The frame and the notice both take the reading column at the block's
+ * ratio. The notice holds the place the player will take: a hairline frame,
+ * the provider named in small capitals, one sentence, one arrow link.
  */
-
 function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string | null {
   const url = URL.parse(rawUrl)
   if (url === null) return null
@@ -40,23 +41,20 @@ function frameSource(provider: EmbedBlock['provider'], rawUrl: string): string |
     case 'soundcloud':
       return `https://w.soundcloud.com/player/?url=${encodeURIComponent(rawUrl)}`
     default:
-      // bluesky, mastodon, other: a post embed is a script tag this theme
-      // does not load. The sidebar note card is the rendering.
       return null
   }
 }
 
-/** A boxed sidebar note — dashed rule, small caps label — the editorial way of saying "not loaded here". */
-function noteCard(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElement {
+function notice(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElement {
   return h(
     'div',
-    { class: 'cg-sidenote__box' },
-    h('p', { class: 'cg-sidenote__label' }, ctx.t('embed.label')),
-    h('p', { class: 'cg-sidenote__notice' }, reason),
+    { class: 'cg-embed__notice' },
+    h('p', { class: 'cg-embed__label' }, ctx.t('embed.label')),
+    h('p', { class: 'cg-embed__reason' }, reason),
     h(
       'a',
       {
-        class: 'cg-sidenote__link',
+        class: 'cg-arrow-link cg-embed__link',
         href: ctx.link(block.url),
         rel: 'noopener noreferrer nofollow',
       },
@@ -69,31 +67,37 @@ export function renderEmbed(block: EmbedBlock, ctx: RenderContext): HtmlElement 
   const source = block.consentRequired ? null : frameSource(block.provider, block.url)
   const ratio = aspectRatio(block.ratio) ?? '16 / 9'
 
-  return h(
+  return section(
     'div',
+    'embed',
+    'cg-embed',
     {
-      class: 'cg-block cg-sidenote',
-      'data-block': 'embed',
       'data-provider': block.provider,
       'data-consent': block.consentRequired ? 'required' : 'not-required',
       style: `--cg-ratio:${ratio}`,
     },
-    source === null
-      ? noteCard(
-          block,
-          ctx,
-          block.consentRequired
-            ? ctx.t('embed.consentRequired', { provider: block.provider })
-            : ctx.t('embed.unsupported', { provider: block.provider }),
-        )
-      : h('iframe', {
-          class: 'cg-sidenote__frame',
-          src: source,
-          title: ctx.t('embed.title', { provider: block.provider }),
-          loading: 'lazy',
-          referrerpolicy: 'strict-origin-when-cross-origin',
-          allow: 'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',
-          allowfullscreen: true,
-        }),
+    'div',
+    h(
+      'div',
+      { class: 'cg-embed__frame' },
+      source === null
+        ? notice(
+            block,
+            ctx,
+            block.consentRequired
+              ? ctx.t('embed.consentRequired', { provider: block.provider })
+              : ctx.t('embed.unsupported', { provider: block.provider }),
+          )
+        : h('iframe', {
+            class: 'cg-embed__player',
+            src: source,
+            title: ctx.t('embed.title', { provider: block.provider }),
+            loading: 'lazy',
+            referrerpolicy: 'strict-origin-when-cross-origin',
+            allow:
+              'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',
+            allowfullscreen: true,
+          }),
+    ),
   )
 }

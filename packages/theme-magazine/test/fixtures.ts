@@ -107,7 +107,11 @@ export const ENTRIES: readonly ContentEntry[] = [
     locale: 'en',
     status: 'published',
     title: 'The last hot-metal shop in the county',
+    kicker: 'Print trades',
+    // A taxonomy field holds a term id: never a label a card may show.
+    section: '0192f0c2-0000-7000-8000-00000000aaaa',
     excerpt: 'What it takes to keep a Linotype running when no one makes the parts any more.',
+    coverImage: 'media-hero',
     publishedAt: '2026-02-11T09:00:00.000Z',
   },
   {
@@ -129,6 +133,23 @@ export const ENTRIES: readonly ContentEntry[] = [
     publishedAt: '2026-01-05T09:00:00.000Z',
   },
 ]
+
+/**
+ * Eight stories, the number a front page carries: a lead, three briefs and a
+ * row of four. Every other one has a photograph, and the fourth has a plain
+ * text `section` label, the field an older schema uses for a kicker.
+ */
+export const FRONT_ENTRIES: readonly ContentEntry[] = Array.from({ length: 8 }, (_, index) => ({
+  id: `0192f0c2-0000-7000-8000-0000000001${String(index).padStart(2, '0')}`,
+  collection: 'article',
+  locale: 'en',
+  status: 'published' as const,
+  title: `Front page story number ${index + 1}`,
+  ...(index === 3 ? { section: 'Business' } : { kicker: `Kicker ${index + 1}` }),
+  excerpt: `The standfirst of story ${index + 1}.`,
+  ...(index % 2 === 0 ? { coverImage: 'media-figure' } : {}),
+  publishedAt: `2026-03-${String(20 - index).padStart(2, '0')}T08:00:00.000Z`,
+}))
 
 export function makeContext(overrides: Partial<RenderContext> = {}): RenderContext {
   const base: RenderContext = {

@@ -1,7 +1,6 @@
 import type { PricingTableBlock, PricingTier } from '@cogenta/blocks'
 import {
   actionLink,
-  blockHeadingTag,
   type HeadingTag,
   type HtmlElement,
   h,
@@ -9,67 +8,63 @@ import {
   nestedHeadingTag,
   type RenderContext,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * `blocks@2.0` (RFC 0001). A classified-ads rate card: tiers set side by
- * side and separated by the theme's one visible column rule (the same
- * device `hero` and `collectionList` use), rather than a set of raised
- * cards — a print page has no elevation to raise a card off of.
- *
- * `highlighted` is an editorial signal, not a colour: it becomes
- * `data-highlighted` for the stylesheet to pick up (an ink-reversed panel,
- * here) and `aria-current` so it is announced, not only shown.
+ * Subscription rates, set as the columns of a ruled table rather than as
+ * cards: each tier opens on a hairline, its name in small capitals, the price
+ * in the display face with tabular numerals and the interval after it, what
+ * it includes as a list divided by hairlines, and its action at the foot. The
+ * tier the editor highlighted opens on a heavy red rule instead, and its
+ * action is the filled one; every other tier's action is drawn as an outlined
+ * control in `blocks.css`, so the four actions line up as one row.
  */
 function renderTier(tier: PricingTier, ctx: RenderContext, tag: HeadingTag): HtmlElement {
+  const highlighted = tier.highlighted === true
   return h(
     'li',
-    {
-      class: 'cg-ratecard__tier',
-      'data-highlighted': tier.highlighted === true ? 'true' : undefined,
-      'aria-current': tier.highlighted === true ? 'true' : undefined,
-    },
-    heading(tag, { class: 'cg-ratecard__name' }, tier.name),
+    { class: 'cg-rates__tier', 'data-highlighted': highlighted ? 'true' : undefined },
+    heading(tag, { class: 'cg-rates__name' }, tier.name),
     h(
       'p',
-      { class: 'cg-ratecard__price' },
-      h('span', { class: 'cg-ratecard__amount' }, tier.price),
+      { class: 'cg-rates__price' },
+      h('span', { class: 'cg-rates__amount' }, tier.price),
       tier.interval === undefined
         ? null
-        : h('span', { class: 'cg-ratecard__interval' }, tier.interval),
+        : h('span', { class: 'cg-rates__interval' }, tier.interval),
     ),
     tier.features.length === 0
       ? null
       : h(
           'ul',
-          { class: 'cg-ratecard__features' },
-          tier.features.map((feature) => h('li', { class: 'cg-ratecard__feature' }, feature)),
+          { class: 'cg-rates__features' },
+          tier.features.map((feature) => h('li', { class: 'cg-rates__feature' }, feature)),
         ),
     tier.action === undefined
       ? null
       : h(
           'div',
-          { class: 'cg-ratecard__action' },
-          actionLink(ctx, { ...tier.action, emphasis: tier.action.emphasis ?? 'primary' }),
+          { class: 'cg-rates__action' },
+          actionLink(ctx, {
+            ...tier.action,
+            emphasis: tier.action.emphasis ?? (highlighted ? 'primary' : 'secondary'),
+          }),
         ),
   )
 }
 
 export function renderPricingTable(block: PricingTableBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const tierTag = nestedHeadingTag('pricingTable', hasTitle)
-  return h(
+  const tierTag = nestedHeadingTag('pricingTable', block.title !== undefined)
+  return section(
     'section',
-    { class: 'cg-block cg-ratecard', 'data-block': 'pricingTable' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('pricingTable') ?? 'h2',
-          { class: 'cg-ratecard__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'pricingTable',
+    'cg-rates',
+    { 'data-count': String(Math.min(block.tiers.length, 4)) },
+    'div',
+    sectionHead('pricingTable', block.title),
     h(
       'ul',
-      { class: 'cg-ratecard__tiers' },
+      { class: 'cg-rates__tiers' },
       block.tiers.map((tier) => renderTier(tier, ctx, tierTag)),
     ),
   )

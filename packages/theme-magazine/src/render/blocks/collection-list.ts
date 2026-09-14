@@ -1,239 +1,178 @@
 import type { CollectionListBlock } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
   buildCollectionListQuery,
   type ContentEntry,
-  entryDate,
-  entryExcerpt,
-  entryHref,
-  entryImage,
-  entryTitle,
   type HeadingTag,
   type HtmlElement,
   h,
-  heading,
   nestedHeadingTag,
   type RenderContext,
-  renderImageSource,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
+import { renderStory, type Story, storyFromEntry } from '../story.js'
 
 export { buildCollectionListQuery as query }
 
 /**
- * A rubric label, read from whichever of the usual "section-like" field
- * names a collection actually declares — the same "never invented, only the
- * usual convention" rule `entryImage`/`entryExcerpt` (`@cogenta/theme-kit`)
- * already follow, extended locally: contract D's `PageEntryMeta` only
- * resolves *taxonomy* classifications into an eyebrow (`renderEntryHeader`),
- * never an arbitrary `select` field, so a magazine whose "section" is a
- * plain field (the `magazine` blueprint's own choice — see `blueprints/
- * magazine.ts`, kept deliberately non-taxonomic so this exact value is
- * readable raw here) can still show it on a card, where the full
- * `ContentEntry` — unlike a rendered page's `PageEntryMeta` — is available.
+ * A listing, set in one of four newspaper forms chosen from what the editor
+ * already decided in contract B (the layout, and whether the list has a
+ * title), never from a setting this theme invents:
+ *
+ * - `grid` without a title is **the front**: the first story across eight
+ *   columns with its photograph, a column of three briefs beside it behind a
+ *   vertical rule, and every further story in a row of four below, divided
+ *   by hairlines. This is the opening of a front page.
+ * - `grid` with a title is **a rail**: the section label on a heavy rule,
+ *   its newest story large with a photograph, and the rest as a column of
+ *   headlines beside it.
+ * - `carousel` is **a strip**: stories side by side between column rules,
+ *   scrolling on a narrow screen. It is how the opinion columns are set,
+ *   with the columnist's name in the kicker.
+ * - `list` is **a ranked list**: numbered, the numerals in the display face,
+ *   side by side on a wide screen.
+ *
+ * An empty list keeps its head and says so in one line.
  */
-const SECTION_FIELDS = ['section', 'category', 'topic', 'department'] as const
 
-function entrySection(entry: ContentEntry): string | undefined {
-  for (const field of SECTION_FIELDS) {
-    const value = entry[field]
-    if (typeof value === 'string' && value.trim() !== '') return value
-  }
-  return undefined
-}
+const FRONT_BRIEFS = 3
 
-function formatDate(iso: string, ctx: RenderContext, style: 'long' | 'medium'): string {
-  try {
-    return new Intl.DateTimeFormat(ctx.locale, { dateStyle: style }).format(new Date(iso))
-  } catch {
-    return iso
-  }
-}
-
-/**
- * The "une": a large 16:9 cover, the section eyebrow (falling back to the
- * generic "Featured" kicker when the entry carries none), a big headline and
- * the full excerpt — the front-page treatment `layout: 'grid'` gives its
- * first entry, per the L25 pro-pass brief.
- */
-function renderLead(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const date = entryDate(entry)
-  const excerpt = entryExcerpt(entry)
-  const section = entrySection(entry)
-  const cover = entryImage(entry, ctx, { width: 1200, height: 675, fit: 'cover' })
-  return h(
-    'article',
-    { class: 'cg-issue__lead' },
-    cover === undefined
-      ? null
-      : h(
-          'a',
-          { class: 'cg-issue__lead-cover-link', href: entryHref(entry, ctx), tabindex: -1 },
-          renderImageSource(cover, {
-            className: 'cg-issue__lead-cover',
-            loading: 'eager',
-            sizes: '(min-width: 64rem) 76rem, 100vw',
-          }),
-        ),
-    h('div', { class: 'cg-issue__lead-body' }, [
-      h('p', { class: 'cg-issue__kicker' }, section ?? ctx.t('collection.featured')),
-      heading(
-        tag,
-        { class: 'cg-issue__lead-title' },
-        h('a', { class: 'cg-issue__link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
-      ),
-      excerpt === undefined ? null : h('p', { class: 'cg-issue__lead-excerpt' }, excerpt),
-      date === undefined
-        ? null
-        : h(
-            'time',
-            { class: 'cg-issue__lead-date', datetime: date },
-            formatDate(date, ctx, 'long'),
-          ),
-    ]),
-  )
-}
-
-/** A card in the "rest" 3-column grid: cover, section eyebrow, title, date — no excerpt (the lead alone carries one). */
-function renderCard(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const date = entryDate(entry)
-  const section = entrySection(entry)
-  const cover = entryImage(entry, ctx, { width: 480, height: 320, fit: 'cover' })
-  return h(
-    'li',
-    { class: 'cg-issue__card-item' },
-    h(
-      'article',
-      { class: 'cg-issue__card' },
-      cover === undefined
-        ? null
-        : h(
-            'a',
-            { class: 'cg-issue__card-cover-link', href: entryHref(entry, ctx), tabindex: -1 },
-            renderImageSource(cover, {
-              className: 'cg-issue__card-cover',
-              sizes: '(min-width: 64rem) 24rem, (min-width: 48rem) 45vw, 100vw',
-            }),
-          ),
-      section === undefined ? null : h('p', { class: 'cg-issue__card-eyebrow' }, section),
-      heading(
-        tag,
-        { class: 'cg-issue__card-title' },
-        h('a', { class: 'cg-issue__link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
-      ),
-      date === undefined
-        ? null
-        : h(
-            'time',
-            { class: 'cg-issue__card-date', datetime: date },
-            formatDate(date, ctx, 'medium'),
-          ),
-    ),
-  )
-}
-
-/**
- * A rail row for `layout: 'list'` — a small square thumbnail (when the entry
- * has one) beside the title and date, the "rubric rail" treatment; a plain
- * numbered row (this theme's original front-page-index look) when the entry
- * carries no image, so a collection with no cover field still reads as a
- * considered contents strip rather than a broken thumbnail.
- */
-function renderRow(
-  entry: ContentEntry,
-  ctx: RenderContext,
-  tag: HeadingTag,
-  index: number,
-): HtmlElement {
-  const date = entryDate(entry)
-  const cover = entryImage(entry, ctx, { width: 112, height: 112, fit: 'cover' })
-  return h(
-    'li',
-    { class: 'cg-issue__row' },
-    cover === undefined
-      ? h(
-          'span',
-          { class: 'cg-issue__row-number', 'aria-hidden': 'true' },
-          String(index).padStart(2, '0'),
-        )
-      : h(
-          'a',
-          { class: 'cg-issue__row-thumb-link', href: entryHref(entry, ctx), tabindex: -1 },
-          renderImageSource(cover, { className: 'cg-issue__row-thumb' }),
-        ),
-    h(
-      'div',
-      { class: 'cg-issue__row-body' },
-      heading(
-        tag,
-        { class: 'cg-issue__row-title' },
-        h('a', { class: 'cg-issue__link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
-      ),
-      date === undefined
-        ? null
-        : h(
-            'time',
-            { class: 'cg-issue__row-date', datetime: date },
-            formatDate(date, ctx, 'medium'),
-          ),
-    ),
-  )
-}
-
-/** A uniform frame for the horizontal-scroll `carousel` layout — a cover, the section eyebrow, title, date, excerpt. */
-function renderFrame(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const date = entryDate(entry)
-  const excerpt = entryExcerpt(entry)
-  const section = entrySection(entry)
-  const cover = entryImage(entry, ctx, { width: 480, height: 320, fit: 'cover' })
-  return h(
-    'li',
-    { class: 'cg-issue__frame' },
-    cover === undefined
-      ? null
-      : h(
-          'a',
-          { class: 'cg-issue__frame-cover-link', href: entryHref(entry, ctx), tabindex: -1 },
-          renderImageSource(cover, { className: 'cg-issue__frame-cover' }),
-        ),
-    section === undefined ? null : h('p', { class: 'cg-issue__card-eyebrow' }, section),
-    heading(
-      tag,
-      { class: 'cg-issue__frame-title' },
-      h('a', { class: 'cg-issue__link', href: entryHref(entry, ctx) }, entryTitle(entry, ctx)),
-    ),
-    date === undefined
-      ? null
-      : h(
-          'time',
-          { class: 'cg-issue__frame-date', datetime: date },
-          formatDate(date, ctx, 'medium'),
-        ),
-    excerpt === undefined ? null : h('p', { class: 'cg-issue__frame-excerpt' }, excerpt),
-  )
-}
-
-function renderGrid(entries: readonly ContentEntry[], ctx: RenderContext, tag: HeadingTag) {
-  const [first, ...rest] = entries
-  if (first === undefined) return null
+function frontStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
+  const [lead, ...others] = stories
+  const briefs = others.slice(0, FRONT_BRIEFS)
+  const more = others.slice(FRONT_BRIEFS)
   return h(
     'div',
-    { class: 'cg-issue__spread' },
-    renderLead(first, ctx, tag),
-    rest.length === 0
+    { class: 'cg-front', 'data-briefs': String(briefs.length), 'data-more': String(more.length) },
+    lead === undefined
+      ? null
+      : h(
+          'div',
+          { class: 'cg-front__lead' },
+          renderStory(lead, {
+            tag,
+            variant: 'lead',
+            image: true,
+            standfirst: true,
+            sizes: '(min-width: 64rem) 52rem, 100vw',
+            loading: 'eager',
+          }),
+        ),
+    briefs.length === 0
       ? null
       : h(
           'ul',
-          { class: 'cg-issue__cards' },
-          rest.map((entry) => renderCard(entry, ctx, tag)),
+          { class: 'cg-front__briefs' },
+          briefs.map((story) =>
+            h(
+              'li',
+              { class: 'cg-front__brief' },
+              renderStory(story, { tag, variant: 'brief', standfirst: true }),
+            ),
+          ),
+        ),
+    more.length === 0
+      ? null
+      : h(
+          'ul',
+          { class: 'cg-front__more' },
+          more.map((story) =>
+            h(
+              'li',
+              { class: 'cg-front__item' },
+              renderStory(story, {
+                tag,
+                variant: 'secondary',
+                image: true,
+                sizes: '(min-width: 64rem) 18rem, (min-width: 40rem) 45vw, 100vw',
+              }),
+            ),
+          ),
         ),
   )
 }
 
-function renderList(entries: readonly ContentEntry[], ctx: RenderContext, tag: HeadingTag) {
+function railStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
+  const [lead, ...others] = stories
   return h(
-    'ul',
-    { class: 'cg-issue__rows' },
-    entries.map((entry, index) => renderRow(entry, ctx, tag, index + 1)),
+    'div',
+    { class: 'cg-rail', 'data-count': String(stories.length) },
+    lead === undefined
+      ? null
+      : h(
+          'div',
+          { class: 'cg-rail__lead' },
+          renderStory(lead, {
+            tag,
+            variant: 'rail',
+            image: true,
+            standfirst: true,
+            date: true,
+            sizes: '(min-width: 64rem) 34rem, 100vw',
+          }),
+        ),
+    others.length === 0
+      ? null
+      : h(
+          'ul',
+          { class: 'cg-rail__list' },
+          others.map((story) =>
+            h(
+              'li',
+              { class: 'cg-rail__item' },
+              renderStory(story, {
+                tag,
+                variant: 'column',
+                image: true,
+                standfirst: true,
+                date: true,
+                sizes: '(min-width: 64rem) 9rem, 30vw',
+              }),
+            ),
+          ),
+        ),
+  )
+}
+
+function stripStories(
+  stories: readonly Story[],
+  tag: HeadingTag,
+  label: string,
+  count: number,
+): HtmlElement {
+  return h(
+    'div',
+    {
+      class: 'cg-strip',
+      role: 'region',
+      'aria-label': label,
+      tabindex: '0',
+      'data-count': String(Math.min(count, 4)),
+    },
+    h(
+      'ul',
+      { class: 'cg-strip__items' },
+      stories.map((story) =>
+        h(
+          'li',
+          { class: 'cg-strip__item' },
+          renderStory(story, { tag, variant: 'strip', standfirst: true }),
+        ),
+      ),
+    ),
+  )
+}
+
+function rankedStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
+  return h(
+    'ol',
+    { class: 'cg-ranked', 'data-count': String(Math.min(stories.length, 5)) },
+    stories.map((story, index) =>
+      h(
+        'li',
+        { class: 'cg-ranked__item' },
+        renderStory(story, { tag, variant: 'ranked', numeral: String(index + 1) }),
+      ),
+    ),
   )
 }
 
@@ -242,45 +181,42 @@ export function renderCollectionList(
   ctx: RenderContext,
   entries: readonly ContentEntry[],
 ): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const entryTag = nestedHeadingTag('collectionList', hasTitle)
+  const titled = block.title !== undefined
+  const tag = nestedHeadingTag('collectionList', titled)
+  const form =
+    block.layout === 'grid'
+      ? titled
+        ? 'rail'
+        : 'front'
+      : block.layout === 'carousel'
+        ? 'strip'
+        : 'ranked'
+  const imageWidth = form === 'front' ? 1200 : form === 'rail' ? 800 : 480
+  const stories = entries.map((entry) => storyFromEntry(entry, ctx, imageWidth))
 
   const body =
-    entries.length === 0
-      ? h('p', { class: 'cg-issue__empty' }, ctx.t('collection.empty'))
-      : block.layout === 'grid'
-        ? renderGrid(entries, ctx, entryTag)
-        : block.layout === 'carousel'
-          ? h(
-              'div',
-              {
-                class: 'cg-issue__viewport',
-                role: 'region',
-                'aria-label': block.title ?? ctx.t('collection.carousel'),
-                tabindex: '0',
-              },
-              h(
-                'ul',
-                { class: 'cg-issue__frames' },
-                entries.map((entry) => renderFrame(entry, ctx, entryTag)),
-              ),
-            )
-          : renderList(entries, ctx, entryTag)
+    stories.length === 0
+      ? h('p', { class: 'cg-empty' }, ctx.t('collection.empty'))
+      : form === 'front'
+        ? frontStories(stories, tag)
+        : form === 'rail'
+          ? railStories(stories, tag)
+          : form === 'strip'
+            ? stripStories(
+                stories,
+                tag,
+                block.title ?? ctx.t('collection.carousel'),
+                stories.length,
+              )
+            : rankedStories(stories, tag)
 
-  return h(
+  return section(
     'section',
-    {
-      class: 'cg-block cg-issue',
-      'data-block': 'collectionList',
-      'data-layout': block.layout,
-    },
-    hasTitle
-      ? heading(
-          blockHeadingTag('collectionList') ?? 'h2',
-          { class: 'cg-issue__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'collectionList',
+    'cg-listing',
+    { 'data-layout': block.layout, 'data-form': form },
+    'div',
+    sectionHead('collectionList', block.title),
     body,
   )
 }

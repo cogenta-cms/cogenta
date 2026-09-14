@@ -11,9 +11,9 @@ import { defineTheme } from '@cogenta/theme-kit'
  */
 export default defineTheme({
   name: 'magazine',
-  version: '1.2.0',
+  version: '1.3.0',
   description:
-    'An editorial magazine theme: print-inspired typography, a front-page "Top stories" grid with rubric rails, a masthead-styled article header, and zero client JavaScript.',
+    'A news and culture magazine theme: a dated masthead between double rules, an asymmetric front page with briefs and column rules, section rails, an opinion strip, a ranked list, and articles set in Fraunces, Source Serif 4 and Libre Franklin. Zero client JavaScript.',
   author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',

@@ -1,0 +1,593 @@
+/*
+ * Stories as a newspaper lists them: the story unit, then the four forms a
+ * listing takes (the front, a rail, a strip, a ranked list) and the section
+ * front a term archive reuses. Column rules sit in the middle of a gutter and
+ * are drawn as one-pixel pseudo-elements, never as borders on the text.
+ */
+
+/* --------------------------------------------------------------------------
+   The story unit
+   -------------------------------------------------------------------------- */
+
+.cg-story {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s3);
+  min-inline-size: 0;
+}
+
+.cg-story__media {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cg-story__image {
+  inline-size: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: var(--cg-radius);
+  background: var(--cg-surface-sunken);
+}
+
+.cg-story__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s2);
+  min-inline-size: 0;
+}
+
+.cg-story__kicker {
+  margin: 0;
+  color: var(--cg-accent);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-bold);
+  line-height: 1.2;
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
+}
+
+.cg-story__title {
+  font-size: var(--cg-size-story);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-heading);
+  letter-spacing: var(--cg-tracking-heading);
+}
+
+.cg-story__link {
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: var(--cg-rule);
+  text-underline-offset: 0.14em;
+}
+
+.cg-story__link:hover {
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-line-strong);
+}
+
+.cg-story__standfirst {
+  margin: 0;
+  color: var(--cg-ink-muted);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-story__meta {
+  margin: 0;
+  color: var(--cg-ink-subtle);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-xs);
+  letter-spacing: 0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-story__numeral {
+  display: block;
+  color: var(--cg-accent);
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-text-3xl);
+  font-weight: var(--cg-weight-regular);
+  line-height: 1;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* --- sizes by slot ------------------------------------------------------- */
+
+.cg-story--lead .cg-story__title {
+  font-size: var(--cg-size-lead);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
+}
+
+.cg-story--lead .cg-story__standfirst {
+  max-inline-size: 60ch;
+  font-size: var(--cg-text-reading);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-story--lead .cg-story__body {
+  gap: var(--cg-s3);
+}
+
+.cg-story--brief .cg-story__title {
+  font-size: var(--cg-size-brief);
+}
+
+.cg-story--rail .cg-story__title {
+  font-size: var(--cg-size-rail);
+  line-height: var(--cg-leading-heading);
+}
+
+.cg-story--rail .cg-story__standfirst {
+  font-size: var(--cg-text-md);
+}
+
+.cg-story--strip .cg-story__title {
+  font-size: var(--cg-size-brief);
+  font-weight: var(--cg-weight-medium);
+}
+
+.cg-story--ranked .cg-story__title {
+  font-size: var(--cg-size-story);
+}
+
+/* --------------------------------------------------------------------------
+   The front: a lead across eight columns, three briefs, a row of four.
+   -------------------------------------------------------------------------- */
+
+.cg-front {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--cg-s5);
+}
+
+.cg-front__briefs,
+.cg-front__more {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-front__brief,
+.cg-front__item {
+  position: relative;
+  min-inline-size: 0;
+}
+
+/* Phone: the briefs and the further stories become one ruled list, each
+   further story with a small photograph beside its headline. */
+.cg-front__briefs,
+.cg-front__more {
+  row-gap: 0;
+}
+
+.cg-front__brief,
+.cg-front__item {
+  padding-block: var(--cg-s5);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-front__more .cg-story[data-media="image"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5rem;
+  column-gap: var(--cg-s4);
+  align-items: start;
+}
+
+.cg-front__more .cg-story[data-media="image"] .cg-story__media {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.cg-front__more .cg-story[data-media="image"] .cg-story__body {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+@media (min-width: 48rem) {
+  .cg-front {
+    grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+    column-gap: var(--cg-col-gap);
+    row-gap: var(--cg-s8);
+  }
+
+  .cg-front > * {
+    grid-column: 1 / -1;
+  }
+
+  .cg-front__briefs,
+  .cg-front__more {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: var(--cg-col-gap);
+    border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+  }
+
+  .cg-front__more {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: var(--cg-s8);
+    padding-block-start: var(--cg-s5);
+  }
+
+  .cg-front__brief,
+  .cg-front__item {
+    padding-block: var(--cg-s5) 0;
+    border-block-start: 0;
+  }
+
+  .cg-front__item {
+    padding-block-start: 0;
+  }
+
+  .cg-front__more .cg-story[data-media="image"] {
+    display: flex;
+  }
+
+  /* A column rule in the middle of the gutter before every item that does
+     not open a row. */
+  .cg-front__brief + .cg-front__brief::before,
+  .cg-front__item:nth-child(2n)::before {
+    content: "";
+    position: absolute;
+    inset-block: var(--cg-s5) 0;
+    inset-inline-start: calc(var(--cg-col-gap) / -2);
+    inline-size: var(--cg-rule);
+    background: var(--cg-line);
+  }
+
+  .cg-front__item:nth-child(2n)::before {
+    inset-block-start: 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-front__lead {
+    grid-column: 1 / span 8;
+    grid-row: 1;
+  }
+
+  .cg-front__briefs {
+    position: relative;
+    grid-column: 9 / -1;
+    grid-row: 1;
+    grid-template-columns: minmax(0, 1fr);
+    align-self: stretch;
+    align-content: start;
+    border-block-start: 0;
+  }
+
+  /* The vertical rule between the lead and its briefs. */
+  .cg-front__briefs::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(var(--cg-col-gap) / -2);
+    inline-size: var(--cg-rule);
+    background: var(--cg-line);
+  }
+
+  .cg-front__brief {
+    padding-block: var(--cg-s5);
+    border-block-start: var(--cg-rule) solid var(--cg-line);
+  }
+
+  .cg-front__brief:first-child {
+    padding-block-start: 0;
+    border-block-start: 0;
+  }
+
+  .cg-front__brief + .cg-front__brief::before {
+    content: none;
+  }
+
+  .cg-front__more {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .cg-front__item::before {
+    content: none;
+  }
+
+  .cg-front__item + .cg-front__item::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(var(--cg-col-gap) / -2);
+    inline-size: var(--cg-rule);
+    background: var(--cg-line);
+  }
+
+  .cg-front__item:nth-child(4n + 1)::before {
+    content: none;
+  }
+
+  /* Without briefs the lead takes the whole row. */
+  .cg-front[data-briefs="0"] .cg-front__lead {
+    grid-column: 1 / -1;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   A rail: the newest story large beside its photograph, the rest as a column.
+   -------------------------------------------------------------------------- */
+
+.cg-rail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--cg-s6);
+}
+
+.cg-rail__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-rail__item {
+  padding-block: var(--cg-s5);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-rail__item:last-child {
+  padding-block-end: 0;
+}
+
+.cg-story--column[data-media="image"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6.5rem;
+  column-gap: var(--cg-s4);
+  align-items: start;
+}
+
+.cg-story--column[data-media="image"] .cg-story__media {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.cg-story--column[data-media="image"] .cg-story__body {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+@media (min-width: 64rem) {
+  .cg-rail {
+    grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+    column-gap: var(--cg-col-gap);
+  }
+
+  .cg-rail__lead {
+    grid-column: 1 / span 8;
+  }
+
+  .cg-rail__list {
+    position: relative;
+    grid-column: 9 / -1;
+    align-self: stretch;
+    align-content: start;
+  }
+
+  .cg-rail__list::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(var(--cg-col-gap) / -2);
+    inline-size: var(--cg-rule);
+    background: var(--cg-line);
+  }
+
+  .cg-rail__item:first-child {
+    padding-block-start: 0;
+    border-block-start: 0;
+  }
+
+  .cg-rail[data-count="1"] .cg-rail__lead {
+    grid-column: 1 / -1;
+  }
+
+  /* The lead sets its photograph across half of its eight columns at 4:3 and
+     the words in the other half, the way an inside page opens a section: a
+     long headline keeps a readable line instead of a stack of two words. */
+  .cg-story--rail[data-media="image"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--cg-col-gap);
+    align-items: start;
+  }
+
+  .cg-story--rail[data-media="image"] .cg-story__image {
+    aspect-ratio: 4 / 3;
+  }
+
+  .cg-story--rail[data-media="image"] .cg-story__body {
+    gap: var(--cg-s3);
+  }
+
+  /* On a desk the front's lead photograph is set wider than tall, so the
+     headline under it reaches the first screen. */
+  .cg-story--lead .cg-story__image {
+    aspect-ratio: 16 / 9;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   A strip: stories side by side between column rules. It scrolls on a phone.
+   -------------------------------------------------------------------------- */
+
+.cg-strip {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  margin-inline: calc(var(--cg-gutter) * -1);
+  padding-inline: var(--cg-gutter);
+  scroll-padding-inline: var(--cg-gutter);
+}
+
+.cg-strip:focus-visible {
+  outline-offset: -2px;
+}
+
+.cg-strip__items {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: min(78vw, 20rem);
+  column-gap: var(--cg-col-gap);
+  margin: 0;
+  padding: 0 0 var(--cg-s2);
+  list-style: none;
+}
+
+.cg-strip__item {
+  position: relative;
+  scroll-snap-align: start;
+}
+
+.cg-strip__item + .cg-strip__item::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(var(--cg-col-gap) / -2);
+  inline-size: var(--cg-rule);
+  background: var(--cg-line);
+}
+
+@media (min-width: 48rem) {
+  .cg-strip {
+    overflow-x: visible;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .cg-strip__items {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(var(--cg-strip-columns, 4), minmax(0, 1fr));
+    padding-block-end: 0;
+  }
+
+  .cg-strip[data-count="1"] {
+    --cg-strip-columns: 1;
+  }
+
+  .cg-strip[data-count="2"] {
+    --cg-strip-columns: 2;
+  }
+
+  .cg-strip[data-count="3"] {
+    --cg-strip-columns: 3;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   A ranked list: numbered, side by side on a wide screen.
+   -------------------------------------------------------------------------- */
+
+.cg-ranked {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-ranked__item {
+  position: relative;
+  padding-block: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-ranked__item:first-child {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
+.cg-story--ranked .cg-story__body {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  column-gap: var(--cg-s3);
+  align-items: baseline;
+}
+
+.cg-story--ranked .cg-story__numeral {
+  grid-row: 1 / span 3;
+}
+
+.cg-story--ranked .cg-story__kicker,
+.cg-story--ranked .cg-story__title {
+  grid-column: 2;
+}
+
+@media (min-width: 48rem) {
+  .cg-ranked {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: var(--cg-col-gap);
+    row-gap: var(--cg-s6);
+  }
+
+  .cg-ranked__item,
+  .cg-ranked__item:first-child {
+    padding-block: 0;
+    border-block-start: 0;
+  }
+
+  .cg-ranked__item + .cg-ranked__item::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(var(--cg-col-gap) / -2);
+    inline-size: var(--cg-rule);
+    background: var(--cg-line);
+  }
+
+  .cg-ranked__item:nth-child(3n + 1)::before {
+    content: none;
+  }
+
+  .cg-story--ranked .cg-story__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cg-s2);
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-ranked {
+    grid-template-columns: repeat(var(--cg-ranked-columns, 5), minmax(0, 1fr));
+  }
+
+  .cg-ranked__item:nth-child(3n + 1)::before {
+    content: "";
+  }
+
+  .cg-ranked__item:first-child::before {
+    content: none;
+  }
+
+  .cg-ranked[data-count="1"] {
+    --cg-ranked-columns: 1;
+  }
+
+  .cg-ranked[data-count="2"] {
+    --cg-ranked-columns: 2;
+  }
+
+  .cg-ranked[data-count="3"] {
+    --cg-ranked-columns: 3;
+  }
+
+  .cg-ranked[data-count="4"] {
+    --cg-ranked-columns: 4;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The front page: the first listing sits right under the masthead's rules.
+   -------------------------------------------------------------------------- */
+
+.cg-front-page > .cg-listing:first-of-type {
+  padding-block-start: var(--cg-s6);
+}

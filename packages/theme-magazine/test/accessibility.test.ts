@@ -3,7 +3,7 @@ import { serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
 import { renderEmbed } from '../src/render/blocks/embed.js'
 import { renderBlock, renderPage } from '../src/render/render-block.js'
-import { ALL_BLOCKS, BLOCKS, ENTRIES, makeContext } from './fixtures.js'
+import { ALL_BLOCKS, BLOCKS, ENTRIES, FRONT_ENTRIES, makeContext } from './fixtures.js'
 
 const ctx = makeContext()
 const entries = { 'b-collection': ENTRIES }
@@ -35,7 +35,7 @@ describe('heading outline', () => {
     const withoutHero = page(ALL_BLOCKS.filter((candidate) => candidate._type !== 'hero'))
     expect(headingLevels(withoutHero).filter((level) => level === 1)).toHaveLength(1)
     expect(withoutHero).toContain(
-      '<h1 class="cg-page__title">The last hot-metal shop in the county</h1>',
+      '<h1 class="cg-page-head__title">The last hot-metal shop in the county</h1>',
     )
   })
 
@@ -47,6 +47,21 @@ describe('heading outline', () => {
       const current = levels[index] as number
       expect(current, `h${previous} is followed by h${current}`).toBeLessThanOrEqual(previous + 1)
     }
+  })
+
+  it('keeps a front page outline whole: one hidden h1, then stories at h2', () => {
+    const { title: _title, ...untitled } = BLOCKS.collectionList
+    const html = serialize(
+      renderPage({ title: 'Front page', blocks: [{ ...untitled, layout: 'grid' }] }, ctx, {
+        'b-collection': FRONT_ENTRIES,
+      }),
+    )
+    expect(headingLevels(html)[0]).toBe(1)
+    expect(
+      headingLevels(html)
+        .slice(1)
+        .every((level) => level === 2),
+    ).toBe(true)
   })
 
   it('starts rich text headings at h2, never at h1', () => {
@@ -64,24 +79,24 @@ describe('heading outline', () => {
 describe('images', () => {
   const images = [...FULL_PAGE.matchAll(/<img\b[^>]*>/g)].map((match) => match[0])
 
-  it('renders at least one image, so the rule below is not vacuous', () => {
-    expect(images.length).toBeGreaterThan(0)
+  it('renders images, so the rules below are not vacuous', () => {
+    expect(images.length).toBeGreaterThan(5)
   })
 
   it('never renders an image without an alt attribute', () => {
-    for (const tag of images) {
-      expect(tag, tag).toMatch(/\salt="/)
-    }
+    for (const tag of images) expect(tag, tag).toMatch(/\salt="/)
   })
 
-  it('names a press logo with the organisation when the media entity has no alt text', () => {
+  it('names a logo with its organisation when the media entity has no alt text', () => {
     expect(block(BLOCKS.logos)).toContain('alt="Acme Trade Weekly"')
   })
 
   it('keeps an empty alt on a decorative avatar rather than inventing one', () => {
-    const html = block(BLOCKS.quote)
-    expect(html).toContain('class="cg-pullquote__avatar"')
-    expect(html).toMatch(/<img[^>]*class="cg-pullquote__avatar"[^>]*alt=""/)
+    expect(block(BLOCKS.quote)).toMatch(/<img[^>]*class="cg-pullquote__avatar"[^>]*alt=""/)
+  })
+
+  it('gives every image intrinsic dimensions, so nothing shifts as it loads', () => {
+    for (const tag of images) expect(tag, tag).toMatch(/\swidth="\d+" height="\d+"/)
   })
 })
 
@@ -92,17 +107,31 @@ describe('zero client JavaScript', () => {
     expect(FULL_PAGE).not.toMatch(/javascript:/i)
   })
 
-  it('renders the contact-sheet carousel as a focusable, labelled scroll region', () => {
+  it('renders a scrolling gallery as a focusable, labelled region', () => {
     const html = block(BLOCKS.gallery)
     expect(html).toContain('role="region"')
     expect(html).toContain('aria-label="gallery.carousel"')
     expect(html).toContain('tabindex="0"')
   })
 
-  it('renders the mailbag with details and summary rather than a scripted accordion', () => {
-    const html = block(BLOCKS.faq)
+  it('renders collapsible notes with details and summary rather than a scripted accordion', () => {
+    const html = block(BLOCKS.accordion)
     expect(html).toContain('<details')
     expect(html).toContain('<summary')
+  })
+})
+
+describe('links', () => {
+  it('never renders a link whose only content is an arrow', () => {
+    for (const match of FULL_PAGE.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)) {
+      const words = (match[1] as string).replace(/<[^>]+>/g, '').trim()
+      if ((match[1] as string).includes('<img')) continue
+      expect(words, match[0]).not.toMatch(/^[←-⇿\s]*$/)
+    }
+  })
+
+  it('writes no arrow glyph into any link text: arrows are drawn by the stylesheet', () => {
+    expect(FULL_PAGE.replace(/<[^>]+>/g, '')).not.toMatch(/[←-⇿]/)
   })
 })
 
@@ -111,33 +140,10 @@ describe('embed consent', () => {
     const html = serialize(renderEmbed(BLOCKS.embed, ctx))
     expect(html).not.toContain('<iframe')
     expect(html).not.toContain('youtube-nocookie')
-    expect(html).toContain('data-consent="required"')
-  })
-
-  it('frames the privacy-preserving host once consent is not required', () => {
-    const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: false }, ctx))
-    expect(html).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"')
-    expect(html).not.toContain('www.youtube.com/embed')
   })
 
   it('gives every frame an accessible name', () => {
     const html = serialize(renderEmbed({ ...BLOCKS.embed, consentRequired: false }, ctx))
     expect(html).toMatch(/<iframe[^>]*\stitle="/)
-  })
-
-  it('falls back to a link for a provider that would need a script', () => {
-    const html = serialize(
-      renderEmbed(
-        {
-          ...BLOCKS.embed,
-          provider: 'mastodon',
-          url: 'https://m.example/@a/1',
-          consentRequired: false,
-        },
-        ctx,
-      ),
-    )
-    expect(html).not.toContain('<iframe')
-    expect(html).toContain('cg-sidenote__link')
   })
 })

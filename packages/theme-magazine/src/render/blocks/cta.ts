@@ -7,27 +7,33 @@ import {
   heading,
   type RenderContext,
 } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * The subscription page a print magazine always carries: a panel framed by
- * a heavy top-and-bottom rule rather than a rounded, shadowed card — the
- * theme's one deliberately "loud" moment, reserved for the block whose whole
- * job is to ask for something.
+ * An appeal, set like the subscription panel a newspaper runs between two
+ * sections: a double rule above, the title large in the display face across
+ * the left seven columns, the text and the actions in the right five. No
+ * coloured box: the rules and the type carry it.
  */
 export function renderCta(block: CtaBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-block cg-subscribe', 'data-block': 'cta' },
+    'cta',
+    'cg-appeal',
+    {},
+    'div',
     heading(
       blockHeadingTag('cta') ?? 'h2',
-      { class: 'cg-subscribe__title', 'data-field': 'title' },
+      { class: 'cg-appeal__title', 'data-field': 'title' },
       block.title,
     ),
-    block.text === undefined
-      ? null
-      : h('p', { class: 'cg-subscribe__text', 'data-field': 'text' }, block.text),
-    // `actions` is required and non-empty for a `cta`, so this always renders;
-    // the null branch stays reachable only through invalid stored data.
-    actionList(ctx, block.actions, block.title),
+    h(
+      'div',
+      { class: 'cg-appeal__body' },
+      block.text === undefined
+        ? null
+        : h('p', { class: 'cg-appeal__text', 'data-field': 'text' }, block.text),
+      actionList(ctx, block.actions, block.title),
+    ),
   )
 }

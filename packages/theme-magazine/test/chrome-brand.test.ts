@@ -24,22 +24,34 @@ const BRAND: ChromeBrand = {
   faviconUrl: null,
 }
 
-describe('renderChrome — site logo', () => {
+describe('renderChrome, site logo', () => {
   it('sets the nameplate in type when no logo is set', () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('<a class="cg-masthead__wordmark" href="/en">The Composing Room</a>')
+    expect(header).toContain(
+      '<a class="cg-masthead__home" href="/en"><span class="cg-masthead__name">The Composing Room</span></a>',
+    )
     expect(header).not.toContain('cg-masthead__logo')
   })
 
-  it('sets the uploaded logo as the nameplate, at nameplate scale, still named', () => {
+  it('sets the uploaded logo as the nameplate, still named', () => {
     const { header } = renderChrome({ ...BASE, brand: BRAND })
     expect(header).toContain('class="cg-masthead__logo"')
     expect(header).toContain('alt="The Composing Room"')
-    // Still inside the nameplate anchor, so the masthead still links home.
-    expect(header).toContain('<a class="cg-masthead__wordmark" href="/en">')
+    expect(header).toContain('<a class="cg-masthead__home" href="/en">')
+    expect(header).not.toContain('cg-masthead__name')
   })
 
-  it('keeps the colophon wordmark in text', () => {
+  it('offers the dark logo beside the light one, never instead of it', () => {
+    const { header } = renderChrome({
+      ...BASE,
+      brand: { ...BRAND, logoDark: source('/_image?id=dark&w=800') },
+    })
+    expect(header).toContain(
+      '<picture><source srcset="/_image?id=dark&amp;w=800" media="(prefers-color-scheme: dark)">',
+    )
+  })
+
+  it('keeps the colophon name in text', () => {
     const { footer } = renderChrome({ ...BASE, brand: BRAND })
     expect(footer).toContain('The Composing Room')
     expect(footer).not.toContain('cg-masthead__logo')

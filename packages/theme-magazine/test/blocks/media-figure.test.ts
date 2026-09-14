@@ -5,43 +5,45 @@ import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
 
-describe('renderMediaFigure', () => {
-  it('renders a figure/figcaption pair so the caption is announced as belonging to the image', () => {
+describe('renderMediaFigure, a captioned photograph', () => {
+  it('uses figure and figcaption, the figcaption a direct child of the figure', () => {
     const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toMatch(/^<figure class="cg-block cg-plate"/)
-    expect(html).toContain('<figcaption class="cg-plate__caption">')
+    expect(html).toMatch(/<figure class="cg-container cg-figure__inner">[\s\S]*<figcaption/)
   })
 
-  it('carries the align value as a data attribute, never a class', () => {
+  it('sets the caption and then the credit, each carrying its field marker', () => {
     const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('data-align="wide"')
+    expect(html).toContain(
+      '<figcaption class="cg-figure__caption"><span class="cg-figure__caption-text" data-field="caption">The forme, locked and ready</span><span class="cg-figure__credit" data-field="credit">J. Okafor</span></figcaption>',
+    )
   })
 
-  it('defaults align to "center" when the block leaves it unset', () => {
-    const { align: _align, ...withoutAlign } = BLOCKS.mediaFigure
-    const html = serialize(renderMediaFigure(withoutAlign, ctx))
-    expect(html).toContain('data-align="center"')
+  it('keeps the alignment as data for the grid, defaulting to the reading column', () => {
+    expect(serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))).toContain('data-align="wide"')
+    const { align: _align, ...unaligned } = BLOCKS.mediaFigure
+    expect(serialize(renderMediaFigure(unaligned, ctx))).toContain('data-align="center"')
   })
 
-  it('turns the ratio into a CSS custom property, never a literal aspect-ratio value', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('style="--cg-ratio:16 / 9"')
+  it('carries the ratio as a custom property, and none for an original framing', () => {
+    expect(serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))).toContain('--cg-ratio:16 / 9')
+    const original = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, ratio: 'original' }, ctx))
+    expect(original).not.toContain('--cg-ratio')
   })
 
-  it('sets no --cg-ratio when the block leaves ratio at "original"', () => {
-    const html = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, ratio: 'original' }, ctx))
-    expect(html).not.toContain('--cg-ratio')
-  })
-
-  it('renders the credit line marked as its own field', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('data-field="credit"')
-    expect(html).toContain('J. Okafor')
-  })
-
-  it('renders no figcaption at all when neither caption nor credit is set', () => {
+  it('renders no caption element when neither caption nor credit is set', () => {
     const { caption: _caption, credit: _credit, ...bare } = BLOCKS.mediaFigure
-    const html = serialize(renderMediaFigure(bare, ctx))
-    expect(html).not.toContain('<figcaption')
+    expect(serialize(renderMediaFigure(bare, ctx))).not.toContain('<figcaption')
+  })
+
+  it('renders the credit alone when only the credit is set', () => {
+    const { caption: _caption, ...creditOnly } = BLOCKS.mediaFigure
+    const html = serialize(renderMediaFigure(creditOnly, ctx))
+    expect(html).toContain('cg-figure__credit')
+    expect(html).not.toContain('cg-figure__caption-text')
+  })
+
+  it('asks for a full-viewport rendition only when the figure is full-bleed', () => {
+    const full = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, align: 'full' }, ctx))
+    expect(full).toContain('sizes="100vw"')
   })
 })

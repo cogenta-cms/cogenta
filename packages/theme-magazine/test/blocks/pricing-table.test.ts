@@ -4,43 +4,51 @@ import { renderPricingTable } from '../../src/render/blocks/pricing-table.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
 
-describe('renderPricingTable', () => {
-  it('renders one tier per entry, each with its price', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('<span class="cg-ratecard__amount">$4</span>')
-    expect(html).toContain('<span class="cg-ratecard__amount">$12</span>')
+describe('renderPricingTable, subscription rates as a ruled table', () => {
+  it('sets each tier name as a heading one level below the head', () => {
+    expect(html).toContain('<h3 class="cg-rates__name">Digital</h3>')
   })
 
-  it('marks the highlighted tier with data-highlighted and aria-current, never a class', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toMatch(
-      /<li class="cg-ratecard__tier" data-highlighted="true" aria-current="true">/,
+  it('separates the amount from the interval', () => {
+    expect(html).toContain(
+      '<p class="cg-rates__price"><span class="cg-rates__amount">$12</span><span class="cg-rates__interval">/mo</span></p>',
     )
-    expect(html).toContain('<li class="cg-ratecard__tier">')
   })
 
-  it('renders a tier action as a link through actionLink', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toMatch(/<div class="cg-ratecard__action"><a class="cg-action"/)
-    expect(html).toContain('/subscribe/print')
+  it('marks the highlighted tier and gives it the filled action', () => {
+    expect(html).toMatch(
+      /<li class="cg-rates__tier" data-highlighted="true">[\s\S]*data-emphasis="primary"[\s\S]*<\/li>/,
+    )
   })
 
-  it('omits the action element when a tier has none', () => {
-    const digitalOnly = { ...BLOCKS.pricingTable, tiers: [BLOCKS.pricingTable.tiers[0]] }
-    const html = serialize(renderPricingTable(digitalOnly as typeof BLOCKS.pricingTable, ctx))
-    expect(html).not.toContain('cg-ratecard__action')
+  it('marks no other tier as highlighted', () => {
+    expect(html.match(/data-highlighted="true"/g)).toHaveLength(1)
   })
 
-  it('omits the block title when the field is absent', () => {
-    const { title: _title, ...untitled } = BLOCKS.pricingTable
-    const html = serialize(renderPricingTable(untitled, ctx))
-    expect(html).not.toContain('cg-ratecard__title')
+  it('lists the features of a tier, one per item', () => {
+    expect(html).toContain('<li class="cg-rates__feature">Weekly archive access</li>')
   })
 
-  it('lists every feature of a tier', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('Four issues a year, mailed flat')
-    expect(html).toContain('Full digital archive')
+  it('renders no action for a tier that has none', () => {
+    const digital = html.slice(0, html.indexOf('data-highlighted'))
+    expect(digital).not.toContain('cg-rates__action')
+  })
+
+  it('draws an unhighlighted action as the quieter control', () => {
+    const tiers = [
+      ...BLOCKS.pricingTable.tiers,
+      {
+        _key: 'p3',
+        name: 'Archive',
+        price: '$2',
+        features: [],
+        action: { label: 'Choose Archive', target: { href: '/archive' } },
+      },
+    ]
+    const out = serialize(renderPricingTable({ ...BLOCKS.pricingTable, tiers }, ctx))
+    expect(out).toMatch(/data-emphasis="secondary"[^>]*>Choose Archive</)
+    expect(out).toContain('data-count="3"')
   })
 })

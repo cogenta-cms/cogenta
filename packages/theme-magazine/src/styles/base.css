@@ -1,8 +1,7 @@
 /*
- * Document, accessibility floor, the masthead/colophon frame, and the
- * theme's one control (an action link). Everything here reads the design
- * system from `tokens.css`; nothing here reads a `--cogenta-*` token
- * directly.
+ * Document, accessibility floor, the grid, the actions, the masthead, the
+ * colophon, and the utility pages the host renders (search, forms, comments).
+ * Everything reads `tokens.css`.
  */
 
 /* --------------------------------------------------------------------------
@@ -15,153 +14,137 @@
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  background: var(--cg-paper);
-  color: var(--cg-ink);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-md);
-  line-height: var(--cg-leading-normal);
-  font-kerning: normal;
-  font-variant-ligatures: common-ligatures;
-  text-underline-offset: 0.16em;
-  text-decoration-thickness: from-font;
+html {
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-block-start: var(--cg-s8);
+  hanging-punctuation: first allow-end last;
 }
 
-/* The display serif is the theme's whole typographic identity: every
-   heading gets it once, here, so no block repeats the family. Blocks only
-   ever adjust size, weight and spacing on top of this. */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
+body {
   margin: 0;
-  font-family: var(--cogenta-font-serif);
-  font-weight: var(--cg-weight-bold);
-  letter-spacing: var(--cg-tracking-tight);
-  line-height: var(--cg-leading-tight);
-  text-wrap: balance;
+  background: var(--cg-canvas);
+  color: var(--cg-ink);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-md);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-text);
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  font-variant-ligatures: common-ligatures;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: var(--cg-accent-tint);
-  color: var(--cg-accent-tint-ink);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
 }
 
 img,
 video,
 iframe {
-  max-width: 100%;
-  height: auto;
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
 }
 
 img {
-  display: block;
   object-fit: cover;
 }
 
+:where(img, video) {
+  filter: brightness(var(--cg-image-brightness));
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  font-family: var(--cg-font-display);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-heading);
+  letter-spacing: var(--cg-tracking-heading);
+  text-wrap: balance;
+}
+
+:where(p, li, dd, figcaption, blockquote) {
+  text-wrap: pretty;
+}
+
 :where(a) {
-  color: var(--cg-accent);
-  text-decoration-color: color-mix(in oklab, var(--cg-accent) 40%, transparent);
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: var(--cg-accent-line);
+  text-underline-offset: 0.2em;
   transition:
-    color var(--cg-duration-fast) var(--cg-ease),
-    text-decoration-color var(--cg-duration-fast) var(--cg-ease);
+    color var(--cg-duration) var(--cg-ease),
+    text-decoration-color var(--cg-duration) var(--cg-ease);
 }
 
 :where(a:hover) {
-  color: var(--cg-accent-hover);
+  color: var(--cg-accent);
   text-decoration-color: currentColor;
 }
 
 :where(hr) {
-  block-size: 1px;
+  block-size: var(--cg-rule);
   border: 0;
   margin-block: var(--cg-s10);
-  background: var(--cg-rule);
+  background: var(--cg-line);
 }
 
-/* `renderSocialLinks` (`@cogenta/theme-kit`) hides each platform's own text
-   label behind its icon with this class — the standard clip-to-1px
-   technique, kept the accessible name without duplicating it visibly. */
+:where(code, kbd, samp, pre) {
+  font-family: var(--cg-font-code);
+  font-size: 0.86em;
+}
+
 .cg-visually-hidden {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
+  margin: -1px;
+  padding: 0;
   overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
   white-space: nowrap;
+  border: 0;
 }
 
 /* --------------------------------------------------------------------------
-   Focus, targets, motion
+   Focus, targets, motion. Motion is a colour or an underline changing, in
+   under 150 ms; nothing moves in space, nothing fades in on scroll.
    -------------------------------------------------------------------------- */
 
-:where(a, button, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--cg-accent);
+:where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--cg-rule-strong) solid var(--cg-accent);
   outline-offset: 3px;
-  border-radius: var(--cg-radius-sm);
 }
 
-:where(.cg-action, .cg-mailbag__question, .cg-press__link, .cg-sidenote__link) {
+:where(.cg-action, .cg-nav-toggle-label, .cg-theme-toggle, summary) {
   min-block-size: 44px;
-  min-inline-size: 44px;
 }
 
-/*
- * The one entrance the theme allows: a restrained fade, no translate — a
- * magazine reader scrolling a long feature should not feel the page moving
- * under them. Scroll-driven and wrapped in a feature query, since the
- * starting state is `opacity: 0` and a browser without
- * `animation-timeline` must never be left holding an invisible page.
- */
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    @keyframes cg-fade-in {
-      from {
-        opacity: 0;
-      }
-
-      to {
-        opacity: 1;
-      }
-    }
-
-    .cg-block {
-      animation: cg-fade-in linear both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 18%;
-    }
-  }
-}
-
+/* Every transition in this theme reads `--cg-duration`, so reduced motion is
+   one declaration rather than an `!important` sweep over every element. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
-    scroll-behavior: auto !important;
+  :root {
+    --cg-duration: 0ms;
   }
 }
 
 .cg-skip-link {
   position: absolute;
   inset-inline-start: var(--cg-s3);
-  inset-block-start: calc(var(--cg-s3) * -8);
-  z-index: 10;
+  inset-block-start: calc(var(--cg-s16) * -1);
+  z-index: 20;
   padding: var(--cg-s2) var(--cg-s4);
-  background: var(--cg-accent);
-  color: var(--cg-accent-ink);
-  border-radius: var(--cg-radius-sm);
-  box-shadow: var(--cg-elevation-2);
-  font-family: var(--cogenta-font-sans);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-ui);
   font-weight: var(--cg-weight-semibold);
   text-decoration: none;
-  transition: inset-block-start var(--cg-duration) var(--cg-ease);
 }
 
 .cg-skip-link:focus-visible {
@@ -169,64 +152,86 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   Page frame
+   The grid. Every block is a section around a twelve-column container; the
+   section rhythm is one variable, applied to all of them.
    -------------------------------------------------------------------------- */
 
 .cg-main {
   display: flow-root;
+  overflow-x: clip;
+  padding-block-end: calc(var(--cg-section) / 2);
 }
 
-.cg-block {
-  max-inline-size: var(--cg-page);
+.cg-container {
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-col-gap);
+  align-items: start;
+  inline-size: 100%;
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
   margin-inline: auto;
-  margin-block: var(--cg-section-y);
   padding-inline: var(--cg-gutter);
 }
 
-/* --- per-block visual variant (blocks@2.0, RFC 0002) ----------------------
-   `withBlockVariant` (`@cogenta/theme-kit`) stamps one `data-variant-<axis>`
-   attribute per axis an author actually set — never all four, never one this
-   theme does not resolve. Two attribute selectors give every rule here the
-   same specificity, (0,2,0), which is what lets it override `.cg-block`
-   above regardless of source order, without `!important` anywhere.
+/* Below the wide breakpoint twelve columns only make slivers: every child
+   takes the full row, and each block redistributes from there. */
+.cg-container > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
 
-   `background: 'image'` has no theme mechanism to attach an actual image to
-   a block instance (RFC 0002 adds only the semantic token, not a media
-   field) — resolved to the same tinted surface as the closest honest
-   approximation this theme has, rather than silently doing nothing with a
-   stated author intent. "muted" resolves to `--cg-paper-panel`, the boxed-note
-   surface this theme already uses for a pull quote's rule background.
-   ------------------------------------------------------------------------- */
+.cg-section {
+  padding-block: calc(var(--cg-section) / 2);
+}
+
+.cg-main > .cg-section:first-child {
+  padding-block-start: calc(var(--cg-section) * 0.5);
+}
+
+/* --- section heads ----------------------------------------------------------
+   One head for every titled block: a heavy rule in ink across the grid and
+   the title under it in the display face, the way a newspaper labels a
+   section of its front page. */
+
+.cg-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cg-s4);
+  padding-block-start: var(--cg-s3);
+  border-block-start: var(--cg-rule-heavy) solid var(--cg-line-ink);
+  margin-block-end: var(--cg-s6);
+}
+
+.cg-head__title {
+  font-size: var(--cg-size-heading);
+  font-weight: var(--cg-weight-bold);
+  line-height: var(--cg-leading-heading);
+  letter-spacing: var(--cg-tracking-heading);
+}
+
+.cg-empty {
+  margin: 0;
+  padding-block: var(--cg-s6);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+  color: var(--cg-ink-muted);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-ui);
+}
+
+/* --- per-block variants (blocks@2.0, RFC 0002) --------------------------- */
 
 [data-block][data-variant-background="muted"],
 [data-block][data-variant-background="image"] {
-  padding-block: var(--cg-s10);
-  border-radius: var(--cg-radius-lg);
-}
-
-[data-block][data-variant-background="muted"] {
-  background: var(--cg-paper-panel);
-}
-
-[data-block][data-variant-background="image"] {
-  background: var(--cg-paper-tint);
+  background: var(--cg-surface-sunken);
+  padding-block: calc(var(--cg-section) * 0.75);
 }
 
 [data-block][data-variant-spacing="compact"] {
-  margin-block: calc(var(--cg-section-y) / 2);
+  padding-block: calc(var(--cg-section) / 4);
 }
-
-/* No rule for "comfortable": it names this theme's existing default, so an
-   author who picks it explicitly gets exactly what an absent `variant`
-   already gave them — the whole point of "theme default" being a real,
-   selectable option and not only the absence of a choice. */
 
 [data-block][data-variant-spacing="spacious"] {
-  margin-block: calc(var(--cg-section-y) * 1.6);
-}
-
-[data-block][data-variant-align="start"] {
-  text-align: start;
+  padding-block: calc(var(--cg-section) * 0.85);
 }
 
 [data-block][data-variant-align="center"] {
@@ -237,187 +242,225 @@ img {
   text-align: end;
 }
 
-[data-block][data-variant-width="full"] {
+[data-block][data-variant-width="full"] > .cg-container {
   max-inline-size: none;
-  padding-inline: 0;
 }
 
-.cg-page__title {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y) var(--cg-s6);
-  padding-inline: var(--cg-gutter);
-  font-size: var(--cg-text-3xl);
-  text-wrap: balance;
+/* --- the title of a page that is not an article ---------------------------- */
+
+.cg-page-head {
+  padding-block: calc(var(--cg-section) * 0.6) 0;
+}
+
+.cg-page-head__inner {
+  row-gap: 0;
+}
+
+.cg-page-head__title {
+  padding-block: var(--cg-s4) var(--cg-s5);
+  border-block-start: var(--cg-rule-heavy) solid var(--cg-line-ink);
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+  font-size: var(--cg-size-title);
+  font-weight: var(--cg-weight-bold);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
 }
 
 /* --------------------------------------------------------------------------
-   The article header — `renderEntryHeader` (`@cogenta/theme-kit`): a
-   classification eyebrow set in the masthead's own journal-red accent, the
-   big serif headline, a dek, an editorial meta line (date, byline, reading
-   time) between two hairlines, and the cover last, full-bleed.
+   Actions: a filled rectangle in ink for the primary intent, and for the rest
+   the words underlined with an arrow after them. Square corners, no lift, no
+   shadow.
    -------------------------------------------------------------------------- */
 
-.cg-entry-header {
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  margin-block: var(--cg-section-y) var(--cg-s10);
-  padding-inline: var(--cg-gutter);
-}
-
-.cg-entry-header__terms {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cg-s2) var(--cg-s5);
-  margin: 0 0 var(--cg-s3);
-  padding: 0;
-  list-style: none;
-  color: var(--cg-accent);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-bold);
-  letter-spacing: var(--cg-tracking-wider);
-  text-transform: uppercase;
-}
-
-.cg-entry-header__terms a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.cg-entry-header__terms a:hover {
-  text-decoration: underline;
-}
-
-.cg-entry-header__title {
-  font-size: var(--cg-text-3xl);
-  text-wrap: balance;
-}
-
-@media (min-width: 48rem) {
-  .cg-entry-header__title {
-    font-size: calc(var(--cg-text-3xl) * 1.15);
-  }
-}
-
-.cg-entry-header__excerpt {
-  margin: var(--cg-s5) 0 0;
-  max-inline-size: var(--cg-measure);
-  color: var(--cg-ink-soft);
-  font-family: var(--cogenta-font-serif);
-  font-style: italic;
-  font-size: var(--cg-text-lg);
-  line-height: var(--cg-leading-relaxed);
-  text-wrap: pretty;
-}
-
-.cg-entry-header__meta {
+.cg-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--cg-s2) var(--cg-s5);
-  margin: var(--cg-s6) 0 0;
-  padding-block: var(--cg-s3);
-  border-block: 1px solid var(--cg-rule-soft);
-  color: var(--cg-ink-faint);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
+  gap: var(--cg-s3) var(--cg-s8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.cg-entry-header__author {
+.cg-action {
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-ui);
   font-weight: var(--cg-weight-semibold);
-  color: var(--cg-ink-soft);
+  line-height: 1.2;
+  text-decoration: none;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease),
+    text-decoration-color var(--cg-duration) var(--cg-ease);
 }
 
-.cg-entry-header__cover {
-  margin: var(--cg-s8) 0 0;
-}
-
-.cg-entry-header__cover img {
-  inline-size: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  box-shadow: var(--cg-elevation-2);
-}
-
-/* --------------------------------------------------------------------------
-   The masthead — a nameplate row, then a quiet rubric row beneath it, the
-   way a print front page separates the title from the contents strip.
-
-   L25 pro pass: the rubric row is a real desktop `<nav>` above `56rem` and a
-   CSS-only `<details>` disclosure below it — never one `<details>` forced
-   open at width (see `chrome.ts`'s file-level comment for why that fails in
-   a real browser).
-   -------------------------------------------------------------------------- */
-
-.cg-masthead {
-  position: sticky;
-  inset-block-start: 0;
-  z-index: 5;
-  border-block-end: 3px double var(--cg-rule-heavy);
-  background: var(--cg-paper);
-}
-
-.cg-masthead__top {
-  position: relative;
-  padding-block: var(--cg-s2);
-  text-align: center;
-  border-block-end: 1px solid var(--cg-rule-soft);
-}
-
-.cg-masthead__date {
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-xs);
-  font-weight: var(--cg-weight-semibold);
-  letter-spacing: var(--cg-tracking-wider);
-  text-transform: uppercase;
-  color: var(--cg-ink-faint);
-}
-
-/* The manual light/dark/system control (`renderThemeToggle`, `@cogenta/
-   theme-kit`) — a small outlined icon button pinned to the end of the top
-   strip, next to today's date, so it renders on every page regardless of
-   whether the rubric row below it has a nav or a header action (see
-   `chrome.ts`'s file-level comment). A plain outline, not `.cg-action`'s
-   underlined-link style, so it never reads as a navigation item. */
-.cg-theme-toggle {
-  position: absolute;
-  inset-inline-end: var(--cg-gutter);
-  inset-block-start: 50%;
-  transform: translateY(-50%);
+.cg-action[data-emphasis="primary"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
-  border-radius: var(--cg-radius-sm);
-  border: 1px solid var(--cg-rule-soft);
+  padding: var(--cg-s3) var(--cg-s6);
+  border: var(--cg-rule) solid var(--cg-action);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  white-space: nowrap;
+}
+
+.cg-action[data-emphasis="primary"]:hover {
+  background: var(--cg-action-hover);
+  border-color: var(--cg-action-hover);
+  color: var(--cg-action-hover-fg);
+}
+
+/* A text link with an arrow after it. Not a flex container: in one, the
+   words and the arrow are two flex items and each gets its own underline.
+   As inline content the words carry one continuous underline, and the
+   arrow, an inline-block, inherits none (CSS Text Decoration: decorations do
+   not propagate to atomic inlines). The same rule draws every arrow link of
+   the theme, so a lone arrow cannot exist anywhere. */
+.cg-action[data-emphasis="secondary"],
+.cg-arrow-link {
+  display: inline-block;
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: var(--cg-line-strong);
+  text-underline-offset: 0.3em;
+}
+
+.cg-action[data-emphasis="secondary"] {
+  padding-block: var(--cg-s3);
+}
+
+.cg-action[data-emphasis="secondary"]::after,
+.cg-arrow-link::after {
+  content: "\2192" / "";
+  display: inline-block;
+  margin-inline-start: 0.35em;
+}
+
+.cg-action[data-emphasis="secondary"]:hover,
+.cg-arrow-link:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+/* --------------------------------------------------------------------------
+   Masthead: a thin bar, the nameplate, the sections between rules. Not
+   sticky: a newspaper's nameplate belongs to the top of the page.
+   -------------------------------------------------------------------------- */
+
+.cg-masthead {
+  position: relative;
+  z-index: 10;
+  background: var(--cg-canvas);
+  font-family: var(--cg-font-ui);
+}
+
+.cg-masthead__bar {
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-masthead__bar-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--cg-s4);
+  min-block-size: 3rem;
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+}
+
+.cg-masthead__date {
+  margin: 0;
+  color: var(--cg-ink);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-semibold);
+  letter-spacing: 0.04em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-masthead__date-short {
+  display: none;
+}
+
+.cg-masthead__tagline {
+  margin: 0;
+  color: var(--cg-ink-muted);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-sm);
+  font-style: italic;
+  text-align: center;
+}
+
+.cg-masthead__tools {
+  grid-column: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--cg-s2);
+}
+
+.cg-action[data-emphasis="masthead"] {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.25rem;
+  padding: 0 var(--cg-s4);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-bold);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
+}
+
+/* The 44 px target is kept by the bar's own height: the button is drawn
+   smaller than the row it sits in, and the row is what a finger aims at. */
+.cg-masthead__tools .cg-action[data-emphasis="masthead"] {
+  min-block-size: 2.25rem;
+}
+
+.cg-action[data-emphasis="masthead"]:hover {
+  background: var(--cg-accent-hover);
+  color: var(--cg-accent-fg);
+}
+
+.cg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: 2.75rem;
+  margin-inline-end: calc(var(--cg-s3) * -1);
+  padding: 0;
+  border: 0;
   background: transparent;
-  color: var(--cg-ink-faint);
+  color: var(--cg-ink-muted);
   cursor: pointer;
+  transition: color var(--cg-duration) var(--cg-ease);
 }
 
 .cg-theme-toggle:hover {
-  color: var(--cg-accent);
-  border-color: var(--cg-accent);
+  color: var(--cg-ink);
 }
 
 .cg-theme-toggle__icon {
-  inline-size: 0.85rem;
-  block-size: 0.85rem;
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
 }
 
 .cg-theme-toggle__icon--moon {
   display: none;
 }
 
-/* Icon reflects the *current* effective appearance — sun while light, moon
-   while dark — from the same `[data-theme]`/`prefers-color-scheme` signals
-   `tokens.css` already keys the whole palette on. */
 @media (prefers-color-scheme: dark) {
   :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
     display: none;
   }
+
   :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
     display: block;
   }
@@ -431,425 +474,474 @@ img {
   display: block;
 }
 
-.cg-masthead__nameplate {
+.cg-masthead__plate {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: var(--cg-s4);
-  padding: var(--cg-s4) var(--cg-gutter);
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin-inline: auto;
+  padding: var(--cg-s5) var(--cg-gutter) var(--cg-s4);
 }
 
-.cg-masthead__wordmark {
-  display: inline-block;
+.cg-masthead__home {
+  display: inline-flex;
+  align-items: center;
   color: var(--cg-ink);
-  font-family: var(--cogenta-font-serif);
-  font-weight: var(--cg-weight-black);
-  font-size: var(--cg-text-2xl);
-  letter-spacing: var(--cg-tracking-tight);
-  line-height: 1;
   text-decoration: none;
 }
 
-@media (min-width: 32rem) {
-  .cg-masthead__wordmark {
-    font-size: var(--cg-text-3xl);
-  }
+.cg-masthead__home:hover {
+  color: var(--cg-ink);
 }
 
-/* The uploaded site logo, set at nameplate scale — a masthead's logo is the
-   nameplate, so it gets the height the wordmark had rather than a header-bar
-   height borrowed from another theme. */
+.cg-masthead__name {
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-size-nameplate);
+  font-weight: var(--cg-weight-heavy);
+  font-variation-settings: "opsz" 144;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
 .cg-masthead__logo {
   display: block;
-  block-size: 2.5rem;
+  block-size: clamp(2.5rem, 6vw, 4.5rem);
   inline-size: auto;
-  max-inline-size: min(60vw, 22rem);
+  max-inline-size: min(28rem, 80vw);
   object-fit: contain;
+  filter: none;
 }
 
-@media (min-width: 32rem) {
-  .cg-masthead__logo {
-    block-size: 3rem;
-  }
+.cg-nav-toggle-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.cg-masthead__wordmark:hover {
-  color: var(--cg-accent);
-}
-
-.cg-masthead__nav {
+.cg-nav-toggle-label {
   display: none;
-  border-block-start: 1px solid var(--cg-rule-soft);
-  padding-block: var(--cg-s3);
-}
-
-@media (min-width: 56rem) {
-  .cg-masthead__nav {
-    display: block;
-  }
-}
-
-.cg-masthead__nav-inner {
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
-  gap: var(--cg-s6);
-  max-inline-size: var(--cg-page);
+  gap: 0.42rem;
+  inline-size: 2.75rem;
+  padding: 0.7rem;
+  cursor: pointer;
+}
+
+.cg-nav-toggle-input:focus-visible ~ .cg-nav-toggle-label {
+  outline: var(--cg-rule-strong) solid var(--cg-accent);
+  outline-offset: 2px;
+}
+
+.cg-nav-toggle-bar {
+  display: block;
+  inline-size: 100%;
+  block-size: 2px;
+  background: var(--cg-ink);
+}
+
+/* The sections sit between a double rule (a heavy rule over a hairline, two
+   pixels apart) and a hairline. */
+.cg-masthead__nav {
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
   margin-inline: auto;
   padding-inline: var(--cg-gutter);
 }
 
-.cg-masthead__menu {
+.cg-masthead__sections {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: var(--cg-s6);
-  margin: 0;
-  padding: 0;
+  gap: 0 var(--cg-s8);
+  position: relative;
+  margin: calc(var(--cg-rule-heavy) + var(--cg-rule-strong)) 0 0;
+  padding: var(--cg-s1) 0;
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+  border-block-end: var(--cg-rule) solid var(--cg-line-ink);
   list-style: none;
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-semibold);
-  letter-spacing: var(--cg-tracking-wide);
+}
+
+/* The heavy half of the double rule, drawn two pixels above the hairline. */
+.cg-masthead__sections::before,
+.cg-colophon__plate::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: calc((var(--cg-rule-heavy) + var(--cg-rule-strong) + var(--cg-rule)) * -1);
+  block-size: var(--cg-rule-heavy);
+  background: var(--cg-line-ink);
+}
+
+.cg-masthead__sections a,
+.cg-masthead__sections span {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  color: var(--cg-ink);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-bold);
+  letter-spacing: var(--cg-tracking-nav);
   text-transform: uppercase;
-  white-space: nowrap;
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: var(--cg-rule-strong);
+  text-underline-offset: 0.5em;
 }
 
-.cg-masthead__menu a,
-.cg-masthead__menu span {
-  color: var(--cg-ink-soft);
-  text-decoration: none;
+.cg-masthead__sections a:hover {
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-accent);
 }
 
-.cg-masthead__menu a:hover {
-  color: var(--cg-accent);
+.cg-masthead[data-nav="none"] .cg-masthead__plate {
+  border-block-end: var(--cg-rule) solid var(--cg-line-ink);
 }
 
-/*
- * Higher specificity than the shared `.cg-action[data-emphasis="primary"]`
- * rule below (Actions section, which sets `color: var(--cg-accent)` — a
- * text-forward link on the page's own paper background) is required here,
- * not optional: this button sits on a solid accent fill, so it needs the
- * *foreground* token instead. Without the extra specificity the shared rule
- * wins regardless of source order (both are 0,2,0) — confirmed live: the
- * button rendered as a solid red rectangle with its own "Subscribe" label
- * painted the same red as the fill, and the shared rule's arrow glyph showed
- * through a `content: none` that lost the same tie.
- */
-.cg-masthead__action.cg-action[data-emphasis="primary"] {
-  color: var(--cg-accent-ink);
-  background: var(--cg-accent);
-  padding: var(--cg-s2) var(--cg-s4);
-  border-block-end-width: 0;
-}
+@media (max-width: 47.99rem) {
+  .cg-masthead__bar-inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-block-size: 2.75rem;
+  }
 
-.cg-masthead__action.cg-action::after {
-  content: none;
-}
-
-.cg-masthead__action.cg-action[data-emphasis="primary"]:hover {
-  background: var(--cg-accent-hover);
-  color: var(--cg-accent-ink);
-}
-
-/* The mobile disclosure — hidden above the desktop breakpoint, shown below it. */
-.cg-masthead__disclosure {
-  display: block;
-}
-
-@media (min-width: 56rem) {
-  .cg-masthead__disclosure {
+  .cg-masthead__tagline {
     display: none;
+  }
+
+  .cg-masthead__tools {
+    grid-column: 2;
+  }
+
+  .cg-masthead__date-long {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .cg-masthead__date-short {
+    display: inline;
+  }
+
+  .cg-masthead__plate {
+    justify-content: flex-start;
+    padding-block: var(--cg-s4);
+    padding-inline-end: calc(var(--cg-gutter) + 3rem);
+    border-block-end: var(--cg-rule-heavy) solid var(--cg-line-ink);
+  }
+
+  .cg-masthead__name {
+    font-size: clamp(var(--cg-text-2xl), 9vw, var(--cg-text-3xl));
+  }
+
+  .cg-nav-toggle-label {
+    display: flex;
+    position: absolute;
+    inset-inline-end: calc(var(--cg-gutter) - 0.7rem);
+    inset-block-start: calc(2.75rem + var(--cg-rule) + var(--cg-s3));
+  }
+
+  /* The open panel covers the rest of the viewport under the nameplate's
+     rule, so the page never shows through beneath the menu. */
+  .cg-masthead__nav {
+    display: none;
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 100%;
+    block-size: calc(100dvh - 100%);
+    max-inline-size: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 var(--cg-gutter) var(--cg-s12);
+    background: var(--cg-canvas);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-masthead__nav {
+    display: block;
+  }
+
+  :root:has(.cg-nav-toggle-input:checked) {
+    overflow: hidden;
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(1) {
+    transform: translateY(0.3rem) rotate(45deg);
+  }
+
+  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(2) {
+    transform: translateY(-0.3rem) rotate(-45deg);
+  }
+
+  .cg-masthead__sections {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .cg-masthead__sections::before {
+    display: none;
+  }
+
+  .cg-masthead__sections li {
+    border-block-end: var(--cg-rule) solid var(--cg-line);
+  }
+
+  .cg-masthead__sections a,
+  .cg-masthead__sections span {
+    display: flex;
+    min-block-size: 3.5rem;
+    font-family: var(--cg-font-display);
+    font-size: var(--cg-text-xl);
+    font-weight: var(--cg-weight-semibold);
+    letter-spacing: var(--cg-tracking-heading);
+    text-transform: none;
   }
 }
 
-.cg-masthead__toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 44px;
-  block-size: 44px;
-  border: 1px solid var(--cg-rule);
-  border-radius: var(--cg-radius-sm);
-  cursor: pointer;
-  list-style: none;
-}
-
-.cg-masthead__toggle::-webkit-details-marker {
-  display: none;
-}
-
-.cg-masthead__bars {
-  position: relative;
-  display: block;
-  inline-size: 18px;
-  block-size: 2px;
-  background: var(--cg-ink);
-}
-
-.cg-masthead__bars::before,
-.cg-masthead__bars::after {
-  content: "";
-  position: absolute;
-  inset-inline-start: 0;
-  inline-size: 18px;
-  block-size: 2px;
-  background: var(--cg-ink);
-}
-
-.cg-masthead__bars::before {
-  inset-block-start: -6px;
-}
-
-.cg-masthead__bars::after {
-  inset-block-start: 6px;
-}
-
-.cg-masthead__panel {
-  position: absolute;
-  inset-inline: var(--cg-gutter);
-  margin-block-start: var(--cg-s3);
-  padding: var(--cg-s5);
-  background: var(--cg-paper-raised);
-  border: 1px solid var(--cg-rule);
-  box-shadow: var(--cg-elevation-3);
-  border-radius: var(--cg-radius-md);
-}
-
-.cg-masthead__panel .cg-masthead__menu {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--cg-s3);
-}
-
-.cg-masthead__panel .cg-masthead__action {
-  display: inline-flex;
-  margin-block-start: var(--cg-s3);
-}
-
 /* --------------------------------------------------------------------------
-   The colophon — the print magazine's inside-back-cover imprint, in a dense
-   four-column layout: brand + tagline, a section index, social icons, and
-   a closing note with the branding fragment last, never dropped, never
-   restyled beyond the theme's palette.
+   Colophon: the nameplate again, four dense columns, the legal line.
    -------------------------------------------------------------------------- */
 
 .cg-colophon {
-  margin-block-start: var(--cg-section-y);
-  padding: var(--cg-s16) var(--cg-gutter) var(--cg-s10);
-  background: var(--cg-paper-panel);
-  color: var(--cg-ink-soft);
-  border-block-start: 3px double var(--cg-rule-heavy);
-  font-family: var(--cogenta-font-sans);
+  margin-block-start: calc(var(--cg-section) / 2);
+  background: var(--cg-canvas);
+  color: var(--cg-ink-muted);
+  font-family: var(--cg-font-ui);
   font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-ui);
+}
+
+.cg-colophon__inner {
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin-inline: auto;
+  padding: 0 var(--cg-gutter) var(--cg-s8);
+}
+
+.cg-colophon__plate {
+  position: relative;
+  margin-block-start: calc(var(--cg-rule-heavy) + var(--cg-rule-strong));
+  padding-block: var(--cg-s5) var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+}
+
+.cg-colophon__name {
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-text-2xl);
+  font-weight: var(--cg-weight-heavy);
+  letter-spacing: -0.015em;
+  line-height: 1;
+  color: var(--cg-ink);
+  text-decoration: none;
+}
+
+.cg-colophon__name:hover {
+  color: var(--cg-ink);
 }
 
 .cg-colophon__grid {
   display: grid;
-  gap: var(--cg-s10);
-  max-inline-size: var(--cg-page);
-  margin-inline: auto;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-col-gap);
+  row-gap: var(--cg-s8);
+  padding-block: var(--cg-s6) var(--cg-s10);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
 }
 
-@media (min-width: 40rem) {
-  .cg-colophon__grid {
-    grid-template-columns: 1fr 1fr;
+.cg-colophon__grid > * {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 48rem) {
+  .cg-colophon__about {
+    grid-column: 1 / span 5;
+  }
+
+  .cg-colophon__nav {
+    grid-column: 6 / span 5;
+  }
+
+  .cg-colophon__follow {
+    grid-column: 11 / span 2;
   }
 }
 
-@media (min-width: 68rem) {
-  .cg-colophon__grid {
-    grid-template-columns: 1.3fr 1fr 0.8fr 1fr;
-    align-items: start;
+@media (min-width: 64rem) {
+  .cg-colophon__about {
+    grid-column: 1 / span 4;
   }
-}
 
-.cg-colophon__wordmark {
-  display: inline-block;
-  color: var(--cg-ink);
-  font-family: var(--cogenta-font-serif);
-  font-weight: var(--cg-weight-bold);
-  font-size: var(--cg-text-lg);
-  text-decoration: none;
+  .cg-colophon__nav {
+    grid-column: 6 / span 5;
+  }
+
+  /* Without an about column (a host that passes no tagline and no note) the
+     links take its place, and the rule before them goes with it. */
+  .cg-colophon__nav:first-child {
+    grid-column: 1 / span 6;
+  }
+
+  .cg-colophon__nav:first-child::before {
+    content: none;
+  }
+
+  /* A column rule in the middle of each gutter between the columns. */
+  .cg-colophon__nav,
+  .cg-colophon__follow {
+    position: relative;
+  }
+
+  .cg-colophon__nav::before,
+  .cg-colophon__follow::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(var(--cg-col-gap) / -2);
+    inline-size: var(--cg-rule);
+    background: var(--cg-line);
+  }
 }
 
 .cg-colophon__tagline {
-  margin: var(--cg-s3) 0 0;
-  max-inline-size: 28ch;
-  line-height: var(--cg-leading-relaxed);
+  margin: 0;
+  max-inline-size: var(--cg-measure-short);
+  color: var(--cg-ink);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-md);
+  font-style: italic;
+  line-height: var(--cg-leading-snug);
 }
 
-.cg-colophon__heading {
-  margin: 0 0 var(--cg-s3);
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-xs);
-  font-weight: var(--cg-weight-bold);
-  letter-spacing: var(--cg-tracking-wider);
-  text-transform: uppercase;
-  color: var(--cg-ink-faint);
+.cg-colophon__note {
+  margin-block-start: var(--cg-s3);
+  max-inline-size: var(--cg-measure-short);
 }
 
-.cg-colophon__menu {
+.cg-colophon__note p {
+  margin: 0;
+}
+
+.cg-colophon__note p + p {
+  margin-block-start: var(--cg-s2);
+}
+
+.cg-colophon__links {
+  columns: 2;
+  column-gap: var(--cg-col-gap);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.cg-colophon__menu li {
-  margin-block-end: var(--cg-s2);
+.cg-colophon__links li {
+  break-inside: avoid;
 }
 
-.cg-colophon__menu a,
-.cg-colophon__menu span {
-  color: var(--cg-ink-soft);
-  text-decoration: none;
+.cg-colophon__links a,
+.cg-colophon__links span {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.25rem;
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-medium);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.3em;
 }
 
-.cg-colophon__menu a:hover {
-  color: var(--cg-accent);
+.cg-colophon__links a:hover {
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-accent);
 }
 
-/* The social-icon column — `renderSocialLinks` (`@cogenta/theme-kit`) emits
-   a bare `<ul>`; this theme styles the icons into a quiet row of circles. */
+/* The profiles are listed with their names: the column has no heading, so
+   the names are what tell a reader what the column is. */
 .cg-colophon__social {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--cg-s3);
+  flex-direction: column;
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .cg-colophon__social-item a {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  inline-size: 2.25rem;
-  block-size: 2.25rem;
-  border: 1px solid var(--cg-rule);
-  border-radius: 50%;
-  color: var(--cg-ink-soft);
-  transition:
-    color var(--cg-duration) var(--cg-ease),
-    border-color var(--cg-duration) var(--cg-ease);
+  gap: var(--cg-s3);
+  min-block-size: 2.25rem;
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-medium);
+  text-decoration: none;
+  transition: color var(--cg-duration) var(--cg-ease);
 }
 
 .cg-colophon__social-item a:hover {
   color: var(--cg-accent);
-  border-color: var(--cg-accent);
+}
+
+.cg-colophon__social .cg-visually-hidden {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
 }
 
 .cg-social__icon {
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: none;
 }
 
-.cg-colophon__note {
-  margin: 0 0 var(--cg-s4);
-  max-inline-size: 32ch;
-  line-height: var(--cg-leading-relaxed);
-}
-
-.cg-colophon__branding {
+.cg-colophon__legal {
   display: flex;
-  align-items: flex-start;
-}
-
-/* The fixed branding fragment (`cg-site-footer__branding`, emitted by
-   `cogenta serve` itself, never by this theme) — restyled to the palette
-   without touching its markup. */
-.cg-site-footer__branding a {
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.4em;
-  color: var(--cg-ink-faint);
-  opacity: 0.8;
-  transition: opacity var(--cg-duration) var(--cg-ease);
+  justify-content: space-between;
+  gap: var(--cg-s3) var(--cg-s8);
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+  font-size: var(--cg-text-xs);
+  letter-spacing: 0.02em;
 }
 
-.cg-site-footer__branding a:hover,
-.cg-site-footer__branding a:focus-visible {
-  opacity: 1;
+.cg-colophon__copyright {
+  margin: 0;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-colophon__branding a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  color: var(--cg-ink-subtle);
+  text-decoration: none;
+}
+
+.cg-colophon__branding a:hover {
+  color: var(--cg-ink);
 }
 
 .cg-site-footer__brand-logo {
   display: block;
-  /* Explicit pixels, not `em`: relative sizing cascaded from the footer's
-     own small font-size and made the credit mark unreadably tiny. */
-  block-size: 25px;
+  block-size: 18px;
   inline-size: auto;
 }
 
 .cg-site-footer__version {
   font-variant-numeric: tabular-nums;
-  font-size: 0.9em;
 }
 
 /* --------------------------------------------------------------------------
-   Actions — the theme's only control, a text-forward link rather than a
-   filled button, in keeping with a page whose whole vocabulary is type and
-   rules rather than UI chrome.
-   -------------------------------------------------------------------------- */
-
-.cg-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cg-s5);
-  margin: var(--cg-s8) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-action {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--cg-s2);
-  padding-block: var(--cg-s2);
-  border: 0;
-  border-block-end: 2px solid transparent;
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-bold);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
-  text-decoration: none;
-  white-space: nowrap;
-  transition:
-    color var(--cg-duration) var(--cg-ease),
-    border-color var(--cg-duration) var(--cg-ease);
-}
-
-.cg-action::after {
-  content: "\2192";
-  transition: transform var(--cg-duration) var(--cg-ease);
-}
-
-.cg-action[data-emphasis="primary"] {
-  color: var(--cg-accent);
-  border-block-end-color: var(--cg-accent);
-}
-
-.cg-action[data-emphasis="secondary"] {
-  color: var(--cg-ink);
-  border-block-end-color: var(--cg-rule-heavy);
-}
-
-.cg-action:hover {
-  color: var(--cg-accent-hover);
-  border-block-end-color: var(--cg-accent-hover);
-}
-
-.cg-action:hover::after {
-  transform: translateX(0.2em);
-}
-
-/* --------------------------------------------------------------------------
-   Search, forms, comments — public utility pages and post-content furniture.
-   `/search`, `/forms/{name}` and the comment thread appended after an entry
-   page all render real markup with fixed `cg-*` classes from
-   `@cogenta/theme-kit`; this theme styles them to the same measure the page
-   title uses, rather than leaving them to run edge to edge unstyled.
+   Search, forms and comments: the utility pages, in the same register.
    -------------------------------------------------------------------------- */
 
 .cg-search__form,
@@ -857,9 +949,8 @@ img {
 .cg-search__empty,
 .cg-search__error,
 .cg-form,
-.cg-form__confirmation,
-.cg-comments {
-  max-inline-size: var(--cg-page);
+.cg-form__confirmation {
+  max-inline-size: calc(var(--cg-measure) + var(--cg-gutter) * 2);
   margin-inline: auto;
   padding-inline: var(--cg-gutter);
 }
@@ -869,45 +960,56 @@ img {
   flex-wrap: wrap;
   align-items: end;
   gap: var(--cg-s3);
-  margin-block-end: var(--cg-s8);
+  margin-block: var(--cg-s10);
 }
 
 .cg-search__form label,
 .cg-form__field label,
 .cg-comment__form label {
   display: block;
-  font-family: var(--cogenta-font-sans);
-  font-size: var(--cg-text-sm);
-  font-weight: var(--cg-weight-semibold);
   margin-block-end: var(--cg-s2);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-bold);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
+  color: var(--cg-ink-muted);
 }
 
 .cg-search__form input[type="search"] {
-  flex: 1 1 16rem;
+  flex: 1 1 18rem;
 }
 
 .cg-search__results {
-  margin: 0 auto;
   display: grid;
-  gap: var(--cg-s5);
+  gap: 0;
+  margin-block: 0 var(--cg-section);
+  list-style: none;
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-size-story);
+}
+
+.cg-search__results > * {
   padding-block: var(--cg-s5);
-  border-block-start: 1px solid var(--cg-rule);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
 }
 
 .cg-search__empty,
 .cg-comments__empty,
-.cg-comments__closed {
-  color: var(--cg-ink-faint);
-  font-family: var(--cogenta-font-sans);
+.cg-comments__closed,
+.cg-form__help {
+  color: var(--cg-ink-muted);
 }
 
 .cg-search__error,
 .cg-form__error,
 .cg-form__field-error {
   color: var(--cg-ink);
-  font-weight: var(--cg-weight-bold);
+  font-weight: var(--cg-weight-semibold);
 }
 
+/* Fields are a baseline, not a box: a rule under the words, darkening to ink
+   on focus. */
 .cg-search__form input,
 .cg-form__field input,
 .cg-form__field select,
@@ -915,55 +1017,78 @@ img {
 .cg-comment__form input,
 .cg-comment__form textarea {
   inline-size: 100%;
-  padding: var(--cg-s3) var(--cg-s4);
-  border: 1px solid var(--cg-rule);
-  border-radius: var(--cg-radius-sm);
-  background: var(--cg-paper);
+  min-block-size: 44px;
+  padding: var(--cg-s2) 0;
+  border: 0;
+  border-block-end: var(--cg-rule) solid var(--cg-line-strong);
+  border-radius: 0;
+  background: transparent;
   color: var(--cg-ink);
-  font: inherit;
-  font-family: var(--cogenta-font-sans);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-snug);
+  transition: border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-form__field textarea,
+.cg-comment__form textarea {
+  padding: var(--cg-s3);
+  border: var(--cg-rule) solid var(--cg-line-strong);
+  border-radius: var(--cg-radius);
+  resize: vertical;
+}
+
+.cg-search__form input:focus-visible,
+.cg-form__field :is(input, select, textarea):focus-visible,
+.cg-comment__form :is(input, textarea):focus-visible {
+  outline: none;
+  border-color: var(--cg-ink);
+  box-shadow: inset 0 calc(var(--cg-rule) * -1) 0 var(--cg-ink);
 }
 
 .cg-form__field input[aria-invalid="true"],
 .cg-form__field select[aria-invalid="true"],
 .cg-form__field textarea[aria-invalid="true"] {
-  border-width: 2px;
-  border-color: var(--cg-rule-heavy);
+  border-color: var(--cg-ink);
+  border-block-end-width: var(--cg-rule-strong);
 }
 
 .cg-search__form button,
 .cg-form button[type="submit"],
 .cg-comment__form button[type="submit"] {
+  min-block-size: 44px;
   padding: var(--cg-s3) var(--cg-s6);
-  border: 0;
-  border-block-end: 2px solid var(--cg-accent-ink);
-  background: var(--cg-accent);
-  color: var(--cg-accent-ink);
-  font-family: var(--cogenta-font-sans);
-  font-weight: var(--cg-weight-bold);
-  letter-spacing: var(--cg-tracking-wide);
-  text-transform: uppercase;
+  border: var(--cg-rule) solid var(--cg-action);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-ui);
+  font-weight: var(--cg-weight-semibold);
   cursor: pointer;
-  transition: background-color var(--cg-duration) var(--cg-ease);
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease);
 }
 
 .cg-search__form button:hover,
 .cg-form button[type="submit"]:hover,
 .cg-comment__form button[type="submit"]:hover {
-  background: var(--cg-accent-hover);
+  background: var(--cg-action-hover);
+  border-color: var(--cg-action-hover);
+  color: var(--cg-action-hover-fg);
 }
 
-.cg-form__field,
-.cg-comment__form p {
+.cg-form__field {
   display: block;
-  margin-block-end: var(--cg-s5);
+  margin-block-end: var(--cg-s6);
 }
 
 .cg-form__help {
   margin: var(--cg-s2) 0 0;
-  font-family: var(--cogenta-font-sans);
+  font-family: var(--cg-font-ui);
   font-size: var(--cg-text-sm);
-  color: var(--cg-ink-faint);
 }
 
 .cg-form__choice {
@@ -971,7 +1096,7 @@ img {
   align-items: center;
   gap: var(--cg-s2);
   margin-inline-end: var(--cg-s4);
-  font-weight: normal;
+  font-weight: var(--cg-weight-regular);
 }
 
 .cg-form__honeypot,
@@ -983,17 +1108,34 @@ img {
   inset-inline-start: -9999px;
 }
 
+/* Comments: letters under the article, on the same twelve columns and the
+   same reading column (3 to 9) as the text above them. */
 .cg-comments {
-  margin-block-start: var(--cg-section-y);
-  padding-block-start: var(--cg-s8);
-  padding-block-end: var(--cg-section-y);
-  border-block-start: 3px double var(--cg-rule-heavy);
-  font-family: var(--cogenta-font-sans);
+  display: grid;
+  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  column-gap: var(--cg-col-gap);
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin: 0 auto var(--cg-section);
+  padding: var(--cg-s5) var(--cg-gutter) 0;
+}
+
+.cg-comments > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+@media (min-width: 64rem) {
+  .cg-comments > * {
+    grid-column: 3 / span 7;
+  }
 }
 
 .cg-comments > h2 {
+  padding-block-start: var(--cg-s3);
+  border-block-start: var(--cg-rule-heavy) solid var(--cg-line-ink);
+  margin-block-end: var(--cg-s5);
   font-size: var(--cg-text-xl);
-  margin-block-end: var(--cg-s6);
+  font-weight: var(--cg-weight-bold);
 }
 
 .cg-comments__list,
@@ -1005,33 +1147,52 @@ img {
 
 .cg-comment {
   padding-block: var(--cg-s5);
-  border-block-end: 1px solid var(--cg-rule-soft);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
 }
 
 .cg-comment__replies {
-  padding-block-start: var(--cg-s5);
-}
-
-.cg-comment__replies .cg-comment {
+  margin-block-start: var(--cg-s4);
   padding-inline-start: var(--cg-s6);
-  border-inline-start: 2px solid var(--cg-rule-soft);
-  border-block-end: 0;
+  border-inline-start: var(--cg-rule) solid var(--cg-line);
 }
 
 .cg-comment__meta {
   display: flex;
-  gap: var(--cg-s3);
-  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--cg-s1) var(--cg-s3);
+  margin: 0 0 var(--cg-s2);
+  font-family: var(--cg-font-ui);
   font-size: var(--cg-text-sm);
-  color: var(--cg-ink-faint);
-  margin-block-end: var(--cg-s2);
 }
 
 .cg-comment__author {
-  font-weight: var(--cg-weight-semibold);
   color: var(--cg-ink);
+  font-weight: var(--cg-weight-bold);
 }
 
-.cg-comment__body {
+.cg-comment__date {
+  color: var(--cg-ink-muted);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-comment__body p {
   margin: 0;
+}
+
+.cg-comment__body p + p {
+  margin-block-start: var(--cg-s3);
+}
+
+.cg-comment__form {
+  display: grid;
+  gap: var(--cg-s3);
+  margin-block-start: var(--cg-s6);
+}
+
+.cg-comment__form > * {
+  margin: 0;
+}
+
+.cg-comment__form button[type="submit"] {
+  justify-self: start;
 }

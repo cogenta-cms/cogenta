@@ -1,0 +1,235 @@
+/*
+ * The article page: the header (kicker, headline, standfirst, byline and
+ * date between hairlines, lead photograph), the reading column, the pull
+ * quote hanging to its left, the drop cap, and the foot.
+ *
+ * On a wide screen the page sits on the twelve columns this way:
+ *
+ *   columns 3 to 11   kicker, headline, standfirst, byline
+ *   columns 2 to 11   the lead photograph and any wide figure
+ *   columns 3 to 9    the reading column, about 66 characters
+ *   columns 2 to 7    a pull quote, hanging one column to the left
+ */
+
+/* --------------------------------------------------------------------------
+   Header
+   -------------------------------------------------------------------------- */
+
+.cg-article-head {
+  padding-block: calc(var(--cg-section) * 0.6) 0;
+}
+
+.cg-article-head__inner {
+  row-gap: 0;
+}
+
+.cg-article-head__kicker {
+  margin: 0 0 var(--cg-s4);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-bold);
+  line-height: 1.2;
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
+}
+
+.cg-article-head__kicker-link {
+  display: inline-block;
+  padding-block-start: var(--cg-s2);
+  border-block-start: var(--cg-rule-heavy) solid var(--cg-accent);
+  color: var(--cg-accent);
+  text-decoration: none;
+}
+
+a.cg-article-head__kicker-link:hover {
+  color: var(--cg-accent-hover);
+  border-color: var(--cg-accent-hover);
+}
+
+.cg-article-head__title {
+  font-size: var(--cg-size-headline);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
+}
+
+.cg-article-head__standfirst {
+  margin: var(--cg-s5) 0 0;
+  max-inline-size: 58ch;
+  color: var(--cg-ink);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-size-standfirst);
+  font-style: italic;
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-article-head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cg-s2) var(--cg-s6);
+  margin-block-start: var(--cg-s6);
+  padding-block: var(--cg-s3);
+  border-block: var(--cg-rule) solid var(--cg-line);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-ui);
+}
+
+/* A byline is a list of names; the separators are drawn here, so no word of
+   any language is written into the markup. */
+.cg-byline {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-bold);
+}
+
+.cg-byline__name + .cg-byline__name::before {
+  content: ",\00a0";
+}
+
+.cg-byline__name:last-child:not(:first-child)::before {
+  content: "\00a0&\00a0";
+  font-weight: var(--cg-weight-regular);
+}
+
+.cg-byline__link {
+  color: var(--cg-ink);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.22em;
+}
+
+.cg-byline__link:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+.cg-article-head__dateline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s1) var(--cg-s4);
+  margin: 0;
+  color: var(--cg-ink-muted);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-article-head__cover {
+  margin: var(--cg-s8) 0 0;
+}
+
+.cg-article-head__image {
+  inline-size: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+
+@media (min-width: 64rem) {
+  .cg-article-head__kicker,
+  .cg-article-head__title,
+  .cg-article-head__standfirst,
+  .cg-article-head__meta {
+    grid-column: 3 / span 8;
+  }
+
+  .cg-article-head__title {
+    grid-column: 3 / span 9;
+  }
+
+  .cg-article-head__cover {
+    grid-column: 2 / span 10;
+  }
+}
+
+/* The lead photograph an article opens its body with (a `mediaFigure`)
+   follows the header with less space than two blocks usually keep. */
+.cg-article > .cg-article-head + .cg-figure {
+  padding-block-start: var(--cg-s8);
+}
+
+/* --------------------------------------------------------------------------
+   The reading column
+   -------------------------------------------------------------------------- */
+
+.cg-article > .cg-prose {
+  padding-block: var(--cg-s4);
+}
+
+.cg-article > .cg-article-head + .cg-prose {
+  padding-block-start: var(--cg-s10);
+}
+
+/* The reading column itself (columns 3 to 9) is every page's, in
+   `blocks.css`; an article only hangs its pull quotes further left. */
+@media (min-width: 64rem) {
+  .cg-article .cg-pullquote__quote,
+  .cg-article .cg-pullquote__attribution {
+    grid-column: 2 / span 6;
+  }
+}
+
+/* A pull quote inside an article keeps close to the paragraphs around it. */
+.cg-article > .cg-pullquote {
+  padding-block: var(--cg-s8);
+}
+
+/* The drop cap: the first letter of the first paragraph, two lines deep,
+   set only where the browser can set a true initial letter. A float-based
+   imitation drifts off the baseline grid, so there is none. Two lines, not
+   three: an opening paragraph of two lines is common in news writing, and a
+   three-line cap would push into the paragraph after it. */
+@supports (initial-letter: 2) or (-webkit-initial-letter: 2) {
+  .cg-article [data-opening] .cg-prose__body > p:first-child::first-letter {
+    -webkit-initial-letter: 2;
+    initial-letter: 2;
+    margin-inline-end: 0.12em;
+    color: var(--cg-ink);
+    font-family: var(--cg-font-display);
+    font-weight: var(--cg-weight-semibold);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The foot: terms that are neither the section nor a byline.
+   -------------------------------------------------------------------------- */
+
+.cg-article-foot {
+  padding-block: var(--cg-s6) 0;
+}
+
+.cg-article-foot__terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s2) var(--cg-s5);
+  margin: 0;
+  padding-block-start: var(--cg-s4);
+  padding-inline: 0;
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+  list-style: none;
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-bold);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
+}
+
+.cg-article-foot__link {
+  color: var(--cg-ink);
+  text-decoration-color: transparent;
+}
+
+a.cg-article-foot__link:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+@media (min-width: 64rem) {
+  .cg-article-foot__terms {
+    grid-column: 3 / span 7;
+  }
+}

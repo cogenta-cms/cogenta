@@ -1,25 +1,29 @@
 import type { QuoteBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * The pull quote — the one typographic gesture a magazine spread always
- * makes. Set large in the display serif, indented from a heavy left rule
- * rather than centred under a giant glyph, with the attribution trailing it
- * on its own line, joined by a typographic em-rule instead of a comma the
- * markup does not carry.
+ * A pull quote: a short red rule, the words in the display face at a large
+ * italic size, and the speaker in small capitals with their role after them.
+ * In an article it hangs to the left of the reading column; on any other page
+ * it takes the same columns as the text around it.
  *
- * `<figure><blockquote>…</blockquote><figcaption>` is the attribution
- * pattern the HTML spec itself prescribes — the author's name sitting
- * outside the `<blockquote>` is what stops it from being claimed as part of
- * what was said.
+ * The avatar is decorative (the name is beside it in text), so it keeps the
+ * media library's own empty `alt`.
  */
 export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement {
-  const hasAttribution =
-    block.author !== undefined || block.role !== undefined || block.avatar !== undefined
-  return h(
+  const hasAttribution = block.author !== undefined || block.role !== undefined
+  return section(
+    'div',
+    'quote',
+    'cg-pullquote',
+    {},
     'figure',
-    { class: 'cg-block cg-pullquote', 'data-block': 'quote' },
-    h('blockquote', { class: 'cg-pullquote__text' }, h('p', { 'data-field': 'text' }, block.text)),
+    h(
+      'blockquote',
+      { class: 'cg-pullquote__quote' },
+      h('p', { class: 'cg-pullquote__text', 'data-field': 'text' }, block.text),
+    ),
     hasAttribution
       ? h(
           'figcaption',
@@ -30,16 +34,12 @@ export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement 
                 className: 'cg-pullquote__avatar',
                 variant: { width: 96, height: 96, fit: 'cover' },
               }),
-          h(
-            'span',
-            { class: 'cg-pullquote__names' },
-            block.author === undefined
-              ? null
-              : h('span', { class: 'cg-pullquote__author', 'data-field': 'author' }, block.author),
-            block.role === undefined
-              ? null
-              : h('span', { class: 'cg-pullquote__role', 'data-field': 'role' }, block.role),
-          ),
+          block.author === undefined
+            ? null
+            : h('span', { class: 'cg-pullquote__author', 'data-field': 'author' }, block.author),
+          block.role === undefined
+            ? null
+            : h('span', { class: 'cg-pullquote__role', 'data-field': 'role' }, block.role),
         )
       : null,
   )

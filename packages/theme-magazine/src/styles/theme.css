@@ -1,18 +1,35 @@
 /*
- * The magazine theme's stylesheet — the entry point, and nothing else.
+ * `@cogenta/theme-magazine`'s stylesheet: the entry point, and nothing else.
  *
- *   tokens.css  the design system (and the Google Fonts `@import`),
- *               derived entirely from the skin's `--cogenta-*` properties
- *   base.css    document, accessibility floor, masthead/colophon, actions
- *   blocks.css  the twelve vocabulary blocks
+ *   tokens.css   the design system, derived from the skin's `--cogenta-*`
+ *                custom properties (contract D)
+ *   base.css     document, accessibility floor, grid, actions, masthead,
+ *                colophon, search, forms and comments
+ *   stories.css  the story unit and the listings: the front, rails, the
+ *                strip, the ranked list
+ *   article.css  the article page
+ *   blocks.css   the other vocabulary blocks
+ *   archive.css  the taxonomy-term archive, set as a section front
  *
- * Not one colour, font, radius, duration or shadow is written literally in
- * any of the three: every value comes from a `--cogenta-<group>-<name>`
- * property produced from the skin's tokens, or from a `--cg-*` property
- * composed from those.
+ * Not one colour is written literally in any of them: every value comes from
+ * a skin token or from a `--cg-*` property composed from those.
+ *
+ * The one thing this file adds on its own is the Google Fonts request for the
+ * three families this theme sets: Fraunces (the nameplate and every headline,
+ * with its optical-size axis across its whole range, roman only: its italic
+ * is too playful for a daily), Source Serif 4 (the text, with its optical
+ * sizes and its italic for standfirsts and letters) and Libre Franklin (kickers,
+ * bylines, dates, navigation, captions). A skin only names a family; it never
+ * fetches one. All three fall back to real system stacks if Google Fonts is
+ * unreachable, and `display=swap` keeps text visible while they load.
+ * `cogenta serve` hoists this `@import` above the skin's rules.
  */
+
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Libre+Franklin:wght@400..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..600&display=swap");
 
 @import "./tokens.css";
 @import "./base.css";
+@import "./stories.css";
+@import "./article.css";
 @import "./blocks.css";
 @import "./archive.css";

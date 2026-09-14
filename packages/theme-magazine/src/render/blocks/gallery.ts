@@ -1,40 +1,46 @@
 import type { GalleryBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * A contact sheet: numbered frames (a CSS counter, drawn in the negative
- * space of the print corner) in a tight grid with hairline gutters, rather
- * than the reference theme's rounded, shadowed tiles.
+ * A picture page, square-cornered, with a constant gutter:
  *
- * The carousel layout ships **no JavaScript** — a scroll-snapping, focusable,
- * labelled region gives keyboard, touch and trackpad scrolling for free
- * (WCAG 2.4.3/4.1.2), with none of a scripted carousel's failure modes.
+ * - `grid`: the first photograph across eight columns, the next two stacked
+ *   beside it, then rows of three at 3:2, the rhythm of a picture spread.
+ * - `masonry`: three columns at each picture's own ratio.
+ * - `carousel`: one row that scrolls and snaps, focusable and labelled; touch,
+ *   trackpad and arrow keys are all native. No script.
  */
 export function renderGallery(block: GalleryBlock, ctx: RenderContext): HtmlElement {
   const items = h(
     'ul',
-    { class: 'cg-contactsheet__items' },
-    block.items.map((item) =>
+    { class: 'cg-pictures__items', 'data-count': String(block.items.length) },
+    block.items.map((item, index) =>
       h(
         'li',
-        { class: 'cg-contactsheet__item' },
-        image(ctx, item.media, { sizes: '(min-width: 45rem) 18rem, 50vw' }),
+        { class: 'cg-pictures__item' },
+        image(ctx, item.media, {
+          className: 'cg-pictures__image',
+          sizes:
+            block.layout === 'grid' && index === 0
+              ? '(min-width: 64rem) 52rem, 100vw'
+              : '(min-width: 64rem) 26rem, (min-width: 40rem) 45vw, 90vw',
+        }),
       ),
     ),
   )
 
-  return h(
-    'section',
-    {
-      class: 'cg-block cg-contactsheet',
-      'data-block': 'gallery',
-      'data-layout': block.layout,
-    },
+  return section(
+    'div',
+    'gallery',
+    'cg-pictures',
+    { 'data-layout': block.layout },
+    'div',
     block.layout === 'carousel'
       ? h(
           'div',
           {
-            class: 'cg-contactsheet__viewport',
+            class: 'cg-pictures__viewport',
             role: 'region',
             'aria-label': ctx.t('gallery.carousel'),
             tabindex: '0',

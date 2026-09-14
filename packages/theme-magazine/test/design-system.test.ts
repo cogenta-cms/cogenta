@@ -4,21 +4,29 @@ import { contrast, evaluate, type Scheme, type Srgb, toOklch } from './css-color
 
 /**
  * The design system (`src/styles/tokens.css`) is the layer every block
- * inherits from, written entirely as functions of contract D's closed token
- * set. This resolves the real stylesheet against the real default skin and
- * computes the answers, in both schemes — the same technique
- * `theme-canonical` uses, reproduced here against this theme's own token
- * names (`--cg-paper`/`--cg-ink`/`--cg-rule`/…) and its own dark-mode
- * design decisions.
+ * inherits from, and it is written entirely as functions of contract D's
+ * closed token set. A misspelt skin variable (the theme silently loses that
+ * colour) and a derived colour that fails contrast (every value is a
+ * `color-mix` or a relative `oklch()`) both pass a snapshot, so this file
+ * resolves the real stylesheet against the real default skin and computes the
+ * answers, in both schemes.
  */
 
 const STYLE_DIR = new URL('../src/styles/', import.meta.url)
-const SHEETS = ['tokens.css', 'base.css', 'blocks.css'] as const
+const SHEETS = [
+  'tokens.css',
+  'base.css',
+  'stories.css',
+  'article.css',
+  'blocks.css',
+  'archive.css',
+] as const
 
 const SOURCES = new Map(
   SHEETS.map((name) => [name, readFileSync(new URL(name, STYLE_DIR), 'utf8')] as const),
 )
 const ALL_CSS = [...SOURCES.values()].join('\n')
+const CODE = ALL_CSS.replace(/\/\*[\s\S]*?\*\//g, '')
 
 const skin = JSON.parse(readFileSync(new URL('../tokens.json', import.meta.url), 'utf8')) as Record<
   string,
@@ -42,7 +50,9 @@ const EMITTED_SKIN_PROPERTIES: ReadonlySet<string> = new Set([
 function declarations(css: string): Map<string, string> {
   const found = new Map<string, string>()
   for (const match of css.matchAll(/(--cg-[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
-    found.set(match[1] as string, (match[2] as string).replace(/\s+/g, ' ').trim())
+    const name = match[1] as string
+    const value = (match[2] as string).replace(/\s+/g, ' ').trim()
+    if (!found.has(name) || value.includes('light-dark(')) found.set(name, value)
   }
   return found
 }
@@ -89,24 +99,27 @@ describe('the design system references only properties the skin emits', () => {
 })
 
 /**
- * Pairs this theme's own CSS invents on top of the skin — a soft ink on a
- * boxed note, a tinted accent, a lifted dark accent — none of which contract
- * D's skin validator ever checks.
+ * Contract D validates three pairs on the skin itself. These are the pairs
+ * the theme invents on top of it, every one of them used for text.
  */
 const TEXT_PAIRS: readonly (readonly [string, string])[] = [
-  ['--cg-ink', '--cg-paper'],
-  ['--cg-ink', '--cg-paper-raised'],
-  ['--cg-ink', '--cg-paper-panel'],
-  ['--cg-ink-soft', '--cg-paper'],
-  ['--cg-ink-soft', '--cg-paper-panel'],
-  ['--cg-ink-soft', '--cg-paper-raised'],
-  ['--cg-ink-faint', '--cg-paper'],
-  ['--cg-ink-faint', '--cg-paper-panel'],
-  ['--cg-accent-ink', '--cg-accent'],
-  ['--cg-accent-ink', '--cg-accent-hover'],
-  ['--cg-accent-tint-ink', '--cg-accent-tint'],
-  ['--cg-accent', '--cg-paper'],
-  ['--cg-accent', '--cg-paper-panel'],
+  ['--cg-ink', '--cg-canvas'],
+  ['--cg-ink', '--cg-surface'],
+  ['--cg-ink', '--cg-surface-raised'],
+  ['--cg-ink', '--cg-surface-sunken'],
+  ['--cg-ink-muted', '--cg-canvas'],
+  ['--cg-ink-muted', '--cg-surface-sunken'],
+  ['--cg-ink-muted', '--cg-surface-raised'],
+  ['--cg-ink-subtle', '--cg-canvas'],
+  ['--cg-ink-subtle', '--cg-surface-sunken'],
+  ['--cg-accent', '--cg-canvas'],
+  ['--cg-accent', '--cg-surface-sunken'],
+  ['--cg-accent-hover', '--cg-canvas'],
+  ['--cg-accent-fg', '--cg-accent'],
+  ['--cg-accent-fg', '--cg-accent-hover'],
+  ['--cg-action-fg', '--cg-action'],
+  ['--cg-action-hover-fg', '--cg-action-hover'],
+  ['--cg-line-ink', '--cg-canvas'],
 ]
 
 for (const scheme of ['light', 'dark'] as const) {
@@ -118,53 +131,151 @@ for (const scheme of ['light', 'dark'] as const) {
       })
     }
 
-    it('separates a heavy rule from the surface it sits on', () => {
-      // 3:1 is the non-text threshold (WCAG 1.4.11); a rule below it is
-      // decoration, not a boundary anyone can see.
-      const ratio = contrast(color('--cg-rule-heavy', scheme), color('--cg-paper-raised', scheme))
+    it('separates a strong line from the surface it sits on', () => {
+      const ratio = contrast(color('--cg-line-strong', scheme), color('--cg-surface', scheme))
       expect(ratio).toBeGreaterThanOrEqual(3)
+    })
+
+    it('keeps a hairline visible and quieter than the heavy rule', () => {
+      const hairline = contrast(color('--cg-line', scheme), color('--cg-canvas', scheme))
+      const heavy = contrast(color('--cg-line-ink', scheme), color('--cg-canvas', scheme))
+      expect(hairline).toBeGreaterThan(1.2)
+      expect(hairline).toBeLessThan(heavy)
+    })
+
+    it('keeps a link underline visible without competing with the words', () => {
+      const underline = contrast(color('--cg-accent-line', scheme), color('--cg-canvas', scheme))
+      const words = contrast(color('--cg-accent', scheme), color('--cg-canvas', scheme))
+      expect(underline).toBeGreaterThan(1.5)
+      expect(underline).toBeLessThan(words)
     })
   })
 }
 
-describe('the dark palette is designed for reading at night, not inverted', () => {
+describe('the dark palette is designed, not inverted', () => {
   const lightness = (property: string, scheme: Scheme): number => toOklch(color(property, scheme)).l
+  const chroma = (property: string, scheme: Scheme): number => toOklch(color(property, scheme)).c
+  const hue = (property: string, scheme: Scheme): number => toOklch(color(property, scheme)).h
 
-  it('lifts the accent instead of carrying the daylight value across', () => {
+  it('lifts the red by more than a mechanical brightening would, and keeps it red', () => {
     expect(lightness('--cg-accent', 'dark')).toBeGreaterThan(
-      lightness('--cg-accent', 'light') + 0.1,
+      lightness('--cg-accent', 'light') + 0.15,
+    )
+    expect(Math.abs(hue('--cg-accent', 'dark') - hue('--cg-accent', 'light'))).toBeLessThan(15)
+    expect(chroma('--cg-accent', 'dark')).toBeGreaterThan(0.1)
+  })
+
+  it('desaturates the lifted red rather than just brightening it', () => {
+    expect(chroma('--cg-accent', 'dark')).toBeLessThan(chroma('--cg-accent', 'light'))
+  })
+
+  it('flips the red foreground to ink, because the red it sits on is now light', () => {
+    expect(lightness('--cg-accent-fg', 'dark')).toBeLessThan(0.3)
+    expect(lightness('--cg-accent-fg', 'light')).toBeGreaterThan(0.7)
+  })
+
+  it('expresses elevation as a lightness step: sunken, then canvas, then raised', () => {
+    expect(lightness('--cg-canvas', 'dark')).toBeGreaterThan(
+      lightness('--cg-surface-sunken', 'dark'),
+    )
+    expect(lightness('--cg-surface-raised', 'dark')).toBeGreaterThan(
+      lightness('--cg-canvas', 'dark'),
     )
   })
 
-  it('flips the accent foreground to ink, because the accent it sits on is now light', () => {
-    expect(lightness('--cg-accent-ink', 'dark')).toBeLessThan(0.3)
-    expect(lightness('--cg-accent-ink', 'light')).toBeGreaterThan(0.7)
+  it('keeps the light page flat and white: raised surfaces are the paper itself, depth is a rule', () => {
+    expect(lightness('--cg-canvas', 'light')).toBeCloseTo(lightness('--cg-surface-raised', 'light'))
+    expect(lightness('--cg-canvas', 'light')).toBeGreaterThan(0.99)
+    expect(ALL_CSS).not.toMatch(/--cogenta-shadow-/)
   })
 
-  it('expresses elevation as lightness, panel through raised', () => {
-    const ladder = ['--cg-paper-panel', '--cg-paper', '--cg-paper-raised'].map((property) =>
-      lightness(property, 'dark'),
+  it('draws a rule as a step up in lightness on ink, and a step down on paper', () => {
+    expect(lightness('--cg-line', 'dark')).toBeGreaterThan(lightness('--cg-surface', 'dark'))
+    expect(lightness('--cg-line', 'light')).toBeLessThan(lightness('--cg-surface', 'light'))
+  })
+
+  it('sets off-white text on an ink ground, never pure white on pure black', () => {
+    expect(lightness('--cg-ink', 'dark')).toBeLessThan(0.97)
+    expect(lightness('--cg-ink', 'dark')).toBeGreaterThan(0.85)
+    expect(lightness('--cg-canvas', 'dark')).toBeGreaterThan(0.12)
+    expect(lightness('--cg-canvas', 'dark')).toBeLessThan(0.25)
+  })
+
+  it('dims photographs on ink with a brightness step, never a blur', () => {
+    const tokens = SOURCES.get('tokens.css') as string
+    expect(tokens).toMatch(/\[data-theme="dark"\]\)\s*\{\s*--cg-image-brightness:\s*0\.88/)
+    expect(SOURCES.get('base.css')).toMatch(/filter:\s*brightness\(var\(--cg-image-brightness\)\)/)
+  })
+})
+
+/**
+ * The studio charter (`docs/lots/L27`): motion is a colour or an underline
+ * changing, nothing lifts, nothing fades in on scroll, and a photograph never
+ * casts a shadow. Checked on the real stylesheets, comments stripped.
+ */
+describe('the motion and depth rules', () => {
+  it('caps every transition at 150 ms through the one duration token', () => {
+    expect(CG.get('--cg-duration')).toMatch(/min\(var\(--cogenta-motion-duration\), 150ms\)/)
+    const literal = [...CODE.matchAll(/transition[^;]*?(\d+(?:\.\d+)?)(ms|s)\b/g)].map((match) =>
+      match[2] === 's' ? Number(match[1]) * 1000 : Number(match[1]),
     )
-    for (let index = 1; index < ladder.length; index += 1) {
-      expect(ladder[index] as number).toBeGreaterThan(ladder[index - 1] as number)
+    expect(literal.every((ms) => ms <= 150)).toBe(true)
+  })
+
+  it('removes every transition under prefers-reduced-motion, through the same token', () => {
+    expect(CODE).toMatch(
+      /prefers-reduced-motion: reduce\)\s*\{\s*:root\s*\{\s*--cg-duration:\s*0ms;/,
+    )
+    const transitions = [...CODE.matchAll(/transition\s*:([^;]*);/g)].map((m) => m[1] as string)
+    expect(transitions.length).toBeGreaterThan(3)
+    for (const value of transitions) expect(value).toContain('var(--cg-duration)')
+  })
+
+  it('never moves or scales an element on hover', () => {
+    const hoverRules = [...CODE.matchAll(/:hover[^{]*\{([^}]*)\}/g)].map(
+      (match) => match[1] as string,
+    )
+    expect(hoverRules.length).toBeGreaterThan(10)
+    for (const body of hoverRules) {
+      expect(body).not.toMatch(/transform|translate|box-shadow|scale|rotate/)
     }
   })
 
-  it('inverts nothing in light mode, where elevation is a shadow instead', () => {
-    expect(lightness('--cg-paper', 'light')).toBeCloseTo(lightness('--cg-paper-raised', 'light'))
-    expect(CG.get('--cg-elevation-2')).toContain('--cg')
+  it('declares no keyframes, no entrance animation and no scroll-driven animation', () => {
+    expect(CODE).not.toMatch(
+      /@keyframes|animation\s*:|animation-name|animation-timeline|view-timeline|scroll-timeline/,
+    )
   })
 
-  it('draws rules as a step up in lightness, never down', () => {
-    expect(lightness('--cg-rule', 'dark')).toBeGreaterThan(lightness('--cg-paper', 'dark'))
-    expect(lightness('--cg-rule', 'light')).toBeLessThan(lightness('--cg-paper', 'light'))
+  it('casts no shadow at all, on a photograph or anywhere else', () => {
+    expect(CODE.replace(/box-shadow:\s*inset[^;]*;/g, '')).not.toMatch(/box-shadow|drop-shadow/)
   })
 
-  it('keeps text off pure white, and the canvas off pure black', () => {
-    expect(lightness('--cg-ink', 'dark')).toBeLessThan(0.98)
-    expect(lightness('--cg-ink', 'dark')).toBeGreaterThan(0.85)
-    expect(lightness('--cg-paper', 'dark')).toBeGreaterThan(0.1)
-    expect(lightness('--cg-paper', 'dark')).toBeLessThan(0.3)
+  it('keeps corners square: no pill and no large radius anywhere', () => {
+    const radii = [...CODE.matchAll(/border-radius:\s*([^;]+);/g)].map((m) =>
+      (m[1] as string).trim(),
+    )
+    expect(radii.length).toBeGreaterThan(3)
+    for (const value of radii) {
+      expect(['var(--cg-radius)', 'var(--cg-radius-control)', '0', '50%']).toContain(value)
+    }
+  })
+
+  it('draws a column rule as a one-pixel line, never as a coloured box around a story', () => {
+    expect(CODE).not.toMatch(/\.cg-story\s*\{[^}]*(background|border:)/)
+    expect(CODE).toMatch(/inline-size: var\(--cg-rule\);\s*background: var\(--cg-line\);/)
+  })
+
+  it('draws every arrow link as inline content, so its words carry one continuous underline', () => {
+    const rule = CODE.match(
+      /\.cg-action\[data-emphasis="secondary"\],\s*\.cg-arrow-link\s*\{([^}]*)\}/,
+    )?.[1]
+    expect(rule).toBeDefined()
+    expect(rule).toMatch(/display:\s*inline-block/)
+    expect(rule).not.toMatch(/display:\s*(inline-)?flex/)
+    expect(CODE).toMatch(
+      /\.cg-arrow-link::after\s*\{\s*content:\s*"\\2192" \/ "";\s*display:\s*inline-block/,
+    )
   })
 })
 
@@ -182,9 +293,88 @@ describe('the scheme switch', () => {
 
   it('guards the scheme-aware values behind a feature query with a light fallback', () => {
     expect(tokens).toMatch(/@supports \(color: light-dark\(/)
-    for (const property of ['--cg-paper', '--cg-ink', '--cg-accent']) {
-      const before = tokens.slice(0, tokens.indexOf('@supports (color:'))
+    const before = tokens.slice(0, tokens.indexOf('@supports (color:'))
+    for (const property of ['--cg-canvas', '--cg-ink', '--cg-accent']) {
       expect(before, `${property} needs a pre-@supports fallback`).toContain(`${property}:`)
     }
+  })
+
+  it('swaps the light and dark toggle icons in both directions', () => {
+    expect(CODE).toMatch(
+      /\[data-theme="dark"\]\)\s*\.cg-theme-toggle__icon--sun\s*\{\s*display:\s*none/,
+    )
+    expect(CODE).toMatch(
+      /prefers-color-scheme: dark\)[\s\S]*\.cg-theme-toggle__icon--moon\s*\{\s*display:\s*block/,
+    )
+  })
+})
+
+describe('the newspaper typography', () => {
+  it('holds the reading measure between 60 and 75 characters', () => {
+    const measure = Number(CG.get('--cg-measure')?.replace('ch', ''))
+    expect(measure).toBeGreaterThanOrEqual(60)
+    expect(measure).toBeLessThanOrEqual(75)
+  })
+
+  it('announces in the display face, reads in the text face and scans in the interface face', () => {
+    expect(CG.get('--cg-font-display')).toBe('var(--cogenta-font-serif)')
+    expect(CG.get('--cg-font-text')).toBe('"Source Serif 4", var(--cogenta-font-serif)')
+    expect(CG.get('--cg-font-ui')).toBe('var(--cogenta-font-sans)')
+    expect(CODE).toMatch(/body\s*\{[^}]*font-family:\s*var\(--cg-font-text\)/)
+    expect(CODE).toMatch(
+      /:where\(h1, h2, h3, h4, h5, h6\)\s*\{[^}]*font-family:\s*var\(--cg-font-display\)/,
+    )
+    expect(CODE).toMatch(/\.cg-story__kicker\s*\{[^}]*font-family:\s*var\(--cg-font-ui\)/)
+    expect(CODE).toMatch(/\.cg-masthead\s*\{[^}]*font-family:\s*var\(--cg-font-ui\)/)
+  })
+
+  it('sets kickers in spaced capitals in the one red', () => {
+    const kicker = CODE.match(/\.cg-story__kicker\s*\{([^}]*)\}/)?.[1] ?? ''
+    expect(kicker).toMatch(/color:\s*var\(--cg-accent\)/)
+    expect(kicker).toMatch(/text-transform:\s*uppercase/)
+    expect(kicker).toMatch(/letter-spacing:\s*var\(--cg-tracking-caps\)/)
+  })
+
+  it('balances headings and wraps paragraphs without orphans', () => {
+    expect(CODE).toMatch(/h1, h2, h3, h4, h5, h6\)\s*\{[^}]*text-wrap:\s*balance/)
+    expect(CODE).toMatch(/p, li, dd, figcaption, blockquote\)\s*\{[^}]*text-wrap:\s*pretty/)
+  })
+
+  it('hangs punctuation where the browser supports it', () => {
+    expect(CODE).toMatch(/hanging-punctuation:\s*first/)
+  })
+
+  it('sets figures in tabular lining numerals wherever numbers are compared', () => {
+    for (const selector of [
+      '.cg-figures__value {',
+      '.cg-rates__amount {',
+      '.cg-tally__value {',
+      '.cg-story__numeral {',
+      '.cg-masthead__date {',
+    ]) {
+      const at = CODE.indexOf(selector)
+      expect(at, selector).toBeGreaterThan(-1)
+      expect(CODE.slice(at, CODE.indexOf('}', at)), selector).toMatch(/tabular-nums/)
+    }
+  })
+
+  it('tightens the tracking of the display sizes, without letting letters touch', () => {
+    const tracking = Number.parseFloat(CG.get('--cg-tracking-display') ?? '0')
+    expect(tracking).toBeLessThan(0)
+    expect(tracking).toBeGreaterThan(-0.02)
+  })
+
+  it('sets a drop cap only with a true initial letter, two lines deep', () => {
+    expect(CODE).toMatch(/@supports \(initial-letter: 2\)/)
+    expect(CODE).toMatch(
+      /\[data-opening\] \.cg-prose__body > p:first-child::first-letter\s*\{[^}]*initial-letter:\s*2/,
+    )
+    expect(CODE).not.toMatch(/::first-letter\s*\{[^}]*float/)
+  })
+
+  it('never styles a photograph with anything but its crop and a brightness step', () => {
+    const imageRules = [...CODE.matchAll(/__image[^{]*\{([^}]*)\}/g)].map((m) => m[1] as string)
+    expect(imageRules.length).toBeGreaterThan(5)
+    for (const body of imageRules) expect(body).not.toMatch(/shadow|blur|opacity|transform/)
   })
 })

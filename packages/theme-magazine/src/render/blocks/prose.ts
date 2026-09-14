@@ -1,22 +1,22 @@
 import type { ProseBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, type RenderContext, renderRichText } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * `prose` declares `headingLevel: 'none'` — it contributes no heading of its
- * own, and `renderRichText` (shared, `@cogenta/theme-kit`) is what actually
- * turns the document into markup, including its embedded figures
- * (`.cg-prose__figure`, a class name that module already fixes — this file's
- * own container class has to match it).
- *
- * The drop cap and the pull-quote treatment on a nested `<blockquote>` are
- * both pure CSS, keyed off `.cg-prose > :first-child` and `.cg-prose
- * blockquote` in `blocks.css` — nothing here has to know which paragraph
- * came first.
+ * Running text, in the reading column: Source Serif at the reading size and
+ * a measure of about 66 characters, subheads in the display face, a
+ * blockquote set as a pull quote, figures captioned. On an article the first
+ * paragraph of the first `prose` block may open on a drop cap (`article.css`,
+ * keyed on `data-opening`), and only where the browser can set a real
+ * initial letter.
  */
 export function renderProse(block: ProseBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'div',
-    { class: 'cg-block cg-prose', 'data-block': 'prose' },
-    renderRichText(ctx, block.body),
+    'prose',
+    'cg-prose',
+    {},
+    'div',
+    h('div', { class: 'cg-prose__body' }, renderRichText(ctx, block.body)),
   )
 }

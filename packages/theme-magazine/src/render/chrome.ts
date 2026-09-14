@@ -11,42 +11,37 @@ import {
 } from '@cogenta/theme-kit'
 
 /**
- * The masthead. A magazine's front matter is a nameplate — the title set in
- * the display serif, centred, with a hairline rule above and below — and a
- * quiet rubric bar underneath it, the way a print contents strip reads. That
- * is a structurally different header from a left-aligned wordmark plus a
- * right-aligned menu (`theme-canonical`'s own layout): the nameplate gets
- * its own row so it can be set large without competing with the nav for
- * width, and the nav becomes a second, quieter row.
+ * The masthead and the colophon (`theme@1.4`), drawn the way a daily draws
+ * them.
  *
- * L25 pro pass (`theme@1.4`): the top strip now names today's date rather
- * than a static tagline (`Intl.DateTimeFormat(ctx.locale, { dateStyle:
- * 'full' })` on `new Date()` — legitimate here because every page renders
- * per request, `cogenta serve` never caches a rendered page across a day
- * boundary for an anonymous visitor beyond `security.pageMaxAge`, and this
- * theme's own masthead has never claimed to be static-generated — `theme.
- * config.ts` still declares `runtime: 'static'`, which describes what this
- * theme *needs* to render a page, not a promise that today's date is frozen
- * at build time); the rubric row now also carries `headerAction` as a filled
- * "Subscribe"-style button; and a CSS-only `<details>` disclosure collapses
- * the whole rubric row into a hamburger below the nameplate's own
- * breakpoint, exactly the technique `theme-blog`'s masthead already proved
- * against a real browser (a closed `<details>`'s non-summary content cannot
- * be forced open by CSS alone, so the collapsed and expanded nav are two
- * separate `<nav>`s, never one pushed into a state it was never opened
- * into — see that theme's own `chrome.ts` for the verified detail).
+ * Masthead, three rows:
  *
- * L26 D4 — the manual light/dark/system toggle (`renderThemeToggle`,
- * `@cogenta/theme-kit`) sits in the top strip, next to today's date, not in
- * the rubric row below: the top strip renders unconditionally on every
- * page, while the rubric (`hasRubric`) only renders when there is a nav or
- * a header action — a toggle placed there would vanish on a site with
- * neither, which is exactly the "dark mode looks unsupported" bug this
- * feature exists to fix.
+ * 1. A thin bar: today's date on the left, the `tagline` in the middle on a
+ *    wide screen, the `headerAction` and the light/dark control on the right.
+ *    The action lives here rather than in the navigation so it stays visible
+ *    on a phone with the menu closed.
+ * 2. The nameplate: the site's name in the display face, centred, or its
+ *    uploaded logo at nameplate scale.
+ * 3. The section navigation in spaced capitals between a double rule and a
+ *    hairline. Below the breakpoint it becomes a panel opened by a CSS-only
+ *    toggle, a visually hidden checkbox paired with a `<label>`, no
+ *    `<script>`. The checkbox and label are siblings placed before the
+ *    `<nav>` so the sibling combinator in `base.css` reaches it.
+ *
+ * The date is the date the page is rendered, which is what a masthead date
+ * means on a site rendered per request.
+ *
+ * Colophon: the name again on a double rule, then four columns (the tagline
+ * and `footerNote`, the footer navigation over two columns, the social
+ * profiles with their names), then the legal line: the copyright year and the
+ * site's name beside Cogenta's credit (`brandingHtml`, placed once, as
+ * received). No column carries a heading: a heading is a word, and a theme
+ * has no translation for it. Every `theme@1.4` field renders only when
+ * present, so a host that predates them still gets the name and navigation.
  */
 
-function renderNavItems(links: readonly ChromeNavLink[], className: string): string {
-  const items = links
+function navItems(links: readonly ChromeNavLink[]): string {
+  return links
     .filter((link) => link.href !== null || link.kind === 'submenu-placeholder')
     .map((link) => {
       const label = escapeText(link.label)
@@ -57,103 +52,119 @@ function renderNavItems(links: readonly ChromeNavLink[], className: string): str
       return `<li><a href="${href}"${target}${titleAttr}>${label}</a></li>`
     })
     .join('')
-  return items === '' ? '' : `<ul class="${className}">${items}</ul>`
 }
 
-/** The rubric row's own call-to-action link (`theme@1.4`) — a filled button, the masthead's one place of solid colour. */
-function renderHeaderAction(action: ChromeInput['headerAction']): string {
-  if (action === undefined) return ''
-  return (
-    `<a class="cg-action cg-masthead__action" data-emphasis="primary" ` +
-    `href="${escapeAttribute(action.href)}">${escapeText(action.label)}</a>`
-  )
+function isoDay(date: Date): string {
+  return date.toISOString().slice(0, 10)
 }
 
-/** A hamburger mark drawn from three stacked bars — no icon font, no glyph a font might not ship. */
-function menuGlyph(): string {
-  return '<span class="cg-masthead__bars" aria-hidden="true"></span>'
-}
-
-function todaysDate(locale: string): string {
+function formatToday(date: Date, locale: string, options: Intl.DateTimeFormatOptions): string {
   try {
-    return new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(new Date())
+    return new Intl.DateTimeFormat(locale, options).format(date)
   } catch {
-    return new Date().toISOString().slice(0, 10)
+    return new Intl.DateTimeFormat('en', options).format(date)
   }
+}
+
+/** `footerNote` as paragraphs: a blank line starts a new one. */
+function renderFooterNote(note: string): string {
+  const paragraphs = note
+    .replace(/\r\n?/g, '\n')
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s*\n\s*/g, ' ').trim())
+    .filter((paragraph) => paragraph !== '')
+  if (paragraphs.length === 0) return ''
+  return `<div class="cg-colophon__note">${paragraphs
+    .map((paragraph) => `<p>${escapeText(paragraph)}</p>`)
+    .join('')}</div>`
 }
 
 export function renderChrome(input: ChromeInput): ChromeResult {
   const siteNameText = escapeText(input.site.name)
-  const navItems = renderNavItems(input.headerNav, 'cg-masthead__menu')
-  const headerAction = renderHeaderAction(input.headerAction)
-  const footerNav = renderNavItems(input.footerNav, 'cg-colophon__menu')
   const homeHref = escapeAttribute(input.homeHref)
-  // A nameplate is the one place a masthead earns a logo: it replaces the
-  // wordmark on its own row. The colophon keeps the name in text, so the
-  // site is still named in a page whose images never load.
-  const nameplate = renderBrandMark(input.brand, { className: 'cg-masthead__logo' }) ?? siteNameText
-  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
-
-  const hasRubric = navItems !== '' || headerAction !== ''
-  // Two renderings of the same rubric row, never both visible at once (CSS,
-  // `min-width: 56rem`) — see the file-level comment for why this cannot be
-  // a single `<details open>` forced open at width.
-  const mobileRubric = !hasRubric
-    ? ''
-    : `<details class="cg-masthead__disclosure">` +
-      `<summary class="cg-masthead__toggle" aria-label="Menu">${menuGlyph()}</summary>` +
-      `<nav class="cg-masthead__panel" aria-label="Primary">${navItems}${headerAction}</nav>` +
-      `</details>`
-  const desktopRubric = !hasRubric
-    ? ''
-    : `<nav class="cg-masthead__nav" aria-label="Primary"><div class="cg-masthead__nav-inner">${navItems}${headerAction}</div></nav>`
-
-  const header =
-    `<header class="cg-masthead">` +
-    `<div class="cg-masthead__top">` +
-    `<span class="cg-masthead__date">${escapeText(todaysDate(input.locale))}</span>` +
-    `${themeToggle}` +
-    `</div>` +
-    `<div class="cg-masthead__nameplate">` +
-    `<a class="cg-masthead__wordmark" href="${homeHref}">${nameplate}</a>` +
-    `${mobileRubric}` +
-    `</div>` +
-    `${desktopRubric}` +
-    `</header>`
-
+  const sections = navItems(input.headerNav)
+  const today = new Date()
+  const longToday = escapeText(
+    formatToday(today, input.locale, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }),
+  )
+  const shortToday = escapeText(
+    formatToday(today, input.locale, { weekday: 'short', month: 'short', day: 'numeric' }),
+  )
+  const plate =
+    renderBrandMark(input.brand, { className: 'cg-masthead__logo' }) ??
+    `<span class="cg-masthead__name">${siteNameText}</span>`
+  const action =
+    input.headerAction === undefined
+      ? ''
+      : `<a class="cg-action cg-masthead__action" data-emphasis="masthead" href="${escapeAttribute(
+          input.headerAction.href,
+        )}">${escapeText(input.headerAction.label)}</a>`
+  const toggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
   const tagline =
     input.tagline === undefined
       ? ''
+      : `<p class="cg-masthead__tagline">${escapeText(input.tagline)}</p>`
+
+  const menu =
+    sections === ''
+      ? ''
+      : `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
+        `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">` +
+        `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
+        `</label>` +
+        `<nav class="cg-masthead__nav" id="cg-nav" aria-label="Primary">` +
+        `<ul class="cg-masthead__sections">${sections}</ul>` +
+        `</nav>`
+
+  const header =
+    `<header class="cg-masthead" data-nav="${sections === '' ? 'none' : 'sections'}">` +
+    `<div class="cg-masthead__bar"><div class="cg-masthead__bar-inner">` +
+    `<p class="cg-masthead__date"><time datetime="${isoDay(today)}">` +
+    `<span class="cg-masthead__date-long">${longToday}</span>` +
+    `<span class="cg-masthead__date-short" aria-hidden="true">${shortToday}</span>` +
+    `</time></p>` +
+    `${tagline}` +
+    `<div class="cg-masthead__tools">${action}${toggle}</div>` +
+    `</div></div>` +
+    `<div class="cg-masthead__plate">` +
+    `<a class="cg-masthead__home" href="${homeHref}">${plate}</a>` +
+    `</div>` +
+    `${menu}` +
+    `</header>`
+
+  const footerTagline =
+    input.tagline === undefined
+      ? ''
       : `<p class="cg-colophon__tagline" data-field="tagline">${escapeText(input.tagline)}</p>`
-  const social =
-    input.social === undefined
-      ? ''
-      : serialize(
-          renderSocialLinks(input.social, {
-            className: 'cg-colophon__social',
-            itemClassName: 'cg-colophon__social-item',
-          }) ?? { kind: 'text', value: '' },
-        )
-  const footerNote =
-    input.footerNote === undefined
-      ? ''
-      : `<p class="cg-colophon__note">${escapeText(input.footerNote)}</p>`
+  const note = input.footerNote === undefined ? '' : renderFooterNote(input.footerNote)
+  const footerLinks = navItems(input.footerNav)
+  const social = renderSocialLinks(input.social, {
+    className: 'cg-colophon__social',
+    itemClassName: 'cg-colophon__social-item',
+  })
+  const year = today.getFullYear()
 
   const footer =
-    `<footer class="cg-colophon"><div class="cg-colophon__grid">` +
-    `<div class="cg-colophon__about">` +
-    `<a class="cg-colophon__wordmark" href="${homeHref}">${siteNameText}</a>` +
-    `${tagline}</div>` +
-    `<div class="cg-colophon__sections">` +
-    `<p class="cg-colophon__heading">Sections</p>` +
-    `${footerNav === '' ? '' : `<nav aria-label="Footer">${footerNav}</nav>`}` +
+    `<footer class="cg-colophon"><div class="cg-colophon__inner">` +
+    `<div class="cg-colophon__plate">` +
+    `<a class="cg-colophon__name" href="${homeHref}">${siteNameText}</a>` +
     `</div>` +
-    `<div class="cg-colophon__follow">` +
-    `<p class="cg-colophon__heading">Follow</p>` +
-    `${social}` +
+    `<div class="cg-colophon__grid">` +
+    `${footerTagline === '' && note === '' ? '' : `<div class="cg-colophon__about">${footerTagline}${note}</div>`}` +
+    `${
+      footerLinks === ''
+        ? ''
+        : `<nav class="cg-colophon__nav" aria-label="Footer"><ul class="cg-colophon__links">${footerLinks}</ul></nav>`
+    }` +
+    `${social === null ? '' : `<div class="cg-colophon__follow">${serialize(social)}</div>`}` +
     `</div>` +
-    `<div class="cg-colophon__meta">` +
-    `${footerNote}` +
+    `<div class="cg-colophon__legal">` +
+    `<p class="cg-colophon__copyright">© ${year} ${siteNameText}</p>` +
     `<div class="cg-colophon__branding">${input.brandingHtml}</div>` +
     `</div>` +
     `</div></footer>`

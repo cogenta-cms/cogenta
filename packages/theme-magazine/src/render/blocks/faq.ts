@@ -7,52 +7,47 @@ import {
   type RenderContext,
   renderRichText,
 } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * A reader-mailbag column: numbered questions set in the display serif, the
- * answer running underneath once opened. `<details>`/`<summary>` still does
- * all the work — expand/collapse, keyboard operation and the announced
- * expanded state all come from the browser at zero bytes of JavaScript,
- * exactly as in the reference theme; only the typography and the numbering
- * are this theme's own.
+ * Questions and their answers, set open, the way a newspaper prints a
+ * reader's guide: the title in the left three columns, and down the right
+ * the questions in the display face with each answer under it, divided by
+ * hairlines. Nothing is hidden behind a disclosure: a short guide is read
+ * whole. (`accordion` is the collapsible form of the same content.)
  */
-function renderItem(item: FaqItem, ctx: RenderContext, index: number): HtmlElement {
+function renderItem(item: FaqItem, ctx: RenderContext, tag: 'h3' | 'h2'): HtmlElement {
   return h(
-    'li',
-    { class: 'cg-mailbag__item' },
-    h(
-      'details',
-      { class: 'cg-mailbag__details' },
-      h(
-        'summary',
-        { class: 'cg-mailbag__question' },
-        h(
-          'span',
-          { class: 'cg-mailbag__number', 'aria-hidden': 'true' },
-          String(index + 1).padStart(2, '0'),
-        ),
-        h('span', { class: 'cg-mailbag__question-text' }, item.question),
-      ),
-      h('div', { class: 'cg-mailbag__answer' }, renderRichText(ctx, item.answer)),
-    ),
+    'div',
+    { class: 'cg-guide__item' },
+    heading(tag, { class: 'cg-guide__question' }, item.question),
+    h('div', { class: 'cg-guide__answer' }, renderRichText(ctx, item.answer)),
   )
 }
 
 export function renderFaq(block: FaqBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  const titled = block.title !== undefined
+  return section(
     'section',
-    { class: 'cg-block cg-mailbag', 'data-block': 'faq' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('faq') ?? 'h2',
-          { class: 'cg-mailbag__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'faq',
+    'cg-guide',
+    { 'data-titled': titled ? 'true' : 'false' },
+    'div',
+    titled
+      ? h(
+          'div',
+          { class: 'cg-guide__head' },
+          heading(
+            blockHeadingTag('faq') ?? 'h2',
+            { class: 'cg-guide__title', 'data-field': 'title' },
+            block.title ?? '',
+          ),
+        )
+      : null,
     h(
-      'ul',
-      { class: 'cg-mailbag__items' },
-      block.items.map((item, index) => renderItem(item, ctx, index)),
+      'div',
+      { class: 'cg-guide__items' },
+      block.items.map((item) => renderItem(item, ctx, titled ? 'h3' : 'h2')),
     ),
   )
 }

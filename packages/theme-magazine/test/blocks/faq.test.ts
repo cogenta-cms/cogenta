@@ -4,35 +4,31 @@ import { renderFaq } from '../../src/render/blocks/faq.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderFaq(BLOCKS.faq, ctx))
 
-describe('renderFaq', () => {
-  it('renders each question inside <details>/<summary>, no scripted accordion', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('<details class="cg-mailbag__details">')
-    expect(html).toContain('<summary class="cg-mailbag__question">')
+describe("renderFaq, a reader's guide set open", () => {
+  it('sets the title in its own head column', () => {
+    expect(html).toContain(
+      '<div class="cg-guide__head"><h2 class="cg-guide__title" data-field="title">Reader\'s mailbag</h2></div>',
+    )
+    expect(html).toContain('data-titled="true"')
   })
 
-  it('numbers questions in order, hidden from assistive technology as decoration', () => {
-    const twoItems = {
-      ...BLOCKS.faq,
-      items: [
-        BLOCKS.faq.items[0] as (typeof BLOCKS.faq.items)[number],
-        { _key: 'q2', question: 'A second question?', answer: BLOCKS.faq.items[0]?.answer ?? [] },
-      ],
-    }
-    const html = serialize(renderFaq(twoItems, ctx))
-    expect(html).toContain('<span class="cg-mailbag__number" aria-hidden="true">01</span>')
-    expect(html).toContain('<span class="cg-mailbag__number" aria-hidden="true">02</span>')
+  it('sets every question as a heading one level below the title, with its answer under it', () => {
+    expect(html).toContain(
+      '<div class="cg-guide__item"><h3 class="cg-guide__question">Can I visit the shop floor?</h3><div class="cg-guide__answer"><p>',
+    )
   })
 
-  it('omits the block title when the field is absent', () => {
+  it('hides no answer behind a disclosure', () => {
+    expect(html).not.toContain('<details')
+  })
+
+  it('starts questions at h2 when the block has no title', () => {
     const { title: _title, ...untitled } = BLOCKS.faq
-    const html = serialize(renderFaq(untitled, ctx))
-    expect(html).not.toContain('cg-mailbag__title')
-  })
-
-  it('renders the answer through the shared rich-text renderer', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('Yes — by appointment, most Saturdays.')
+    const out = serialize(renderFaq(untitled, ctx))
+    expect(out).toContain('data-titled="false"')
+    expect(out).toContain('<h2 class="cg-guide__question">')
+    expect(out).not.toContain('cg-guide__head')
   })
 })

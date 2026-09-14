@@ -3,172 +3,182 @@ import { describe, expect, it } from 'vitest'
 import { renderChrome } from '../src/render/chrome.js'
 
 const BASE: ChromeInput = {
-  site: { name: 'The Composing Room' },
+  site: { name: 'The Meridian' },
   locale: 'en',
-  homeHref: '/en',
+  homeHref: '/',
   headerNav: [
-    {
-      label: 'Field notes',
-      href: '/en/field-notes',
-      openInNewTab: false,
-      kind: 'page',
-      title: null,
-    },
-    { label: 'Archive', href: '/en/archive', openInNewTab: false, kind: 'page', title: null },
+    { label: 'News', href: '/section/news', openInNewTab: false, kind: 'url', title: null },
+    { label: 'Culture', href: '/section/culture', openInNewTab: false, kind: 'url', title: null },
   ],
   footerNav: [
-    { label: 'About', href: '/en/about', openInNewTab: false, kind: 'page', title: null },
-    {
-      label: 'Masthead credits',
-      href: 'https://example.org/credits',
-      openInNewTab: true,
-      kind: 'external',
-      title: 'Opens in a new tab',
-    },
+    { label: 'About', href: '/about', openInNewTab: false, kind: 'url', title: null },
+    { label: 'Standards', href: '/standards', openInNewTab: false, kind: 'url', title: null },
   ],
-  brandingHtml:
-    '<div class="cg-site-footer__branding"><a href="https://cogenta.dev">Cogenta</a></div>',
+  brandingHtml: '<a href="https://cogenta.dev">Made with Cogenta</a>',
 }
 
-describe('renderChrome', () => {
-  it('renders the site name as the nameplate wordmark, linked home', () => {
+const FULL: ChromeInput = {
+  ...BASE,
+  tagline: 'Independent news and culture from Port Calder.',
+  footerNote: 'Published by the Harbor Press Cooperative.\n\nLetters go to the standards desk.',
+  social: [
+    { label: 'Bluesky', href: 'https://bsky.app/profile/example.bsky.social' },
+    { label: 'Instagram', href: 'https://instagram.com/example' },
+  ],
+  headerAction: { label: 'Subscribe', href: '/subscribe' },
+}
+
+describe('renderChrome, the masthead', () => {
+  it('sets the nameplate in the display face, linking home', () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('<a class="cg-masthead__wordmark" href="/en">The Composing Room</a>')
+    expect(header).toContain(
+      '<a class="cg-masthead__home" href="/"><span class="cg-masthead__name">The Meridian</span></a>',
+    )
   })
 
-  it('renders every header nav link, real hrefs, none invented', () => {
+  it("dates the bar with today's date in a time element, a long and a short form", () => {
     const { header } = renderChrome(BASE)
-    expect(header).toContain('href="/en/field-notes"')
-    expect(header).toContain('href="/en/archive"')
-    expect(header).not.toContain('href="/en/contact"')
+    const today = new Date().toISOString().slice(0, 10)
+    expect(header).toContain(`<time datetime="${today}">`)
+    expect(header).toContain('class="cg-masthead__date-long"')
+    expect(header).toContain('class="cg-masthead__date-short" aria-hidden="true"')
   })
 
-  it('opens an external link in a new tab with the right rel', () => {
-    const { footer } = renderChrome(BASE)
-    expect(footer).toContain('href="https://example.org/credits"')
-    expect(footer).toContain('target="_blank"')
-    expect(footer).toContain('rel="noopener"')
+  it('sets the sections in one navigation landmark', () => {
+    const { header } = renderChrome(BASE)
+    expect(header.match(/<nav /g)).toHaveLength(1)
+    expect(header).toContain(
+      '<nav class="cg-masthead__nav" id="cg-nav" aria-label="Primary"><ul class="cg-masthead__sections"><li><a href="/section/news">News</a></li>',
+    )
   })
 
-  it('carries a link title through as the HTML title attribute, not the label', () => {
-    const { footer } = renderChrome(BASE)
-    expect(footer).toContain('title="Opens in a new tab"')
-    expect(footer).toContain('>Masthead credits<')
+  it('opens the sections on a narrow screen with a CSS-only checkbox, placed before the navigation', () => {
+    const { header } = renderChrome(BASE)
+    expect(header).toContain(
+      '<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">',
+    )
+    expect(header).toContain(
+      '<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">',
+    )
+    expect(header.indexOf('cg-nav-toggle-label')).toBeLessThan(header.indexOf('cg-masthead__nav'))
+    expect(header).not.toMatch(/<script|\son[a-z]+="/i)
   })
 
-  it('never drops the branding fragment, and never rewrites it', () => {
-    const { footer } = renderChrome(BASE)
-    expect(footer).toContain(BASE.brandingHtml)
+  it('renders no toggle and no navigation when there are no sections', () => {
+    const { header } = renderChrome({ ...BASE, headerNav: [] })
+    expect(header).not.toContain('cg-nav-toggle')
+    expect(header).not.toContain('<nav')
+    expect(header).toContain('data-nav="none"')
   })
 
-  it('renders an unlinked submenu placeholder as text, not a dead anchor', () => {
-    const withPlaceholder: ChromeInput = {
+  it('keeps the header action in the bar, so it stays visible with the menu closed', () => {
+    const { header } = renderChrome(FULL)
+    const tools = header.slice(
+      header.indexOf('cg-masthead__tools'),
+      header.indexOf('cg-masthead__plate'),
+    )
+    expect(tools).toContain(
+      '<a class="cg-action cg-masthead__action" data-emphasis="masthead" href="/subscribe">Subscribe</a>',
+    )
+  })
+
+  it('places the theme toggle in the bar, which renders on every page', () => {
+    const { header } = renderChrome({ ...BASE, headerNav: [] })
+    expect(header).toContain('data-cg-theme-toggle')
+  })
+
+  it('sets the tagline in the bar only when there is one', () => {
+    expect(renderChrome(FULL).header).toContain(
+      '<p class="cg-masthead__tagline">Independent news and culture from Port Calder.</p>',
+    )
+    expect(renderChrome(BASE).header).not.toContain('cg-masthead__tagline')
+  })
+
+  it('renders a placeholder item as text and honours a link that opens a new tab', () => {
+    const { header } = renderChrome({
       ...BASE,
       headerNav: [
-        ...BASE.headerNav,
         {
-          label: 'More',
+          label: 'Sections',
           href: null,
           openInNewTab: false,
           kind: 'submenu-placeholder',
           title: null,
         },
+        {
+          label: 'Archive',
+          href: 'https://archive.example',
+          openInNewTab: true,
+          kind: 'url',
+          title: 'Old site',
+        },
+        { label: 'Gone', href: null, openInNewTab: false, kind: 'entry', title: null },
       ],
-    }
-    const { header } = renderChrome(withPlaceholder)
-    expect(header).toContain('<span>More</span>')
-    expect(header).not.toContain('<a href="null"')
-  })
-
-  it('drops a dead link entirely rather than rendering an empty href', () => {
-    const withDeadLink: ChromeInput = {
-      ...BASE,
-      headerNav: [{ label: 'Gone', href: null, openInNewTab: false, kind: 'page', title: null }],
-    }
-    const { header } = renderChrome(withDeadLink)
+    })
+    expect(header).toContain('<li><span>Sections</span></li>')
+    expect(header).toContain(
+      '<li><a href="https://archive.example" target="_blank" rel="noopener" title="Old site">Archive</a></li>',
+    )
     expect(header).not.toContain('Gone')
   })
 
-  it('renders no navigation markup at all when a slot is empty', () => {
-    const { header, footer } = renderChrome({ ...BASE, headerNav: [], footerNav: [] })
-    expect(header).not.toContain('cg-masthead__menu')
-    expect(footer).not.toContain('cg-colophon__menu')
-  })
-
-  it('escapes a site name that contains markup', () => {
-    const { header } = renderChrome({ ...BASE, site: { name: '<b>Evil</b> Gazette' } })
-    expect(header).not.toContain('<b>Evil</b>')
-    expect(header).toContain('&lt;b&gt;Evil&lt;/b&gt; Gazette')
-  })
-
-  it('emits no script tag and no inline handler', () => {
-    const { header, footer } = renderChrome(BASE)
-    expect(header + footer).not.toMatch(/<script/i)
-    expect(header + footer).not.toMatch(/\son[a-z]+="/i)
+  it('escapes every string it is given', () => {
+    const { header, footer } = renderChrome({ ...BASE, site: { name: '<b>Meridian</b>' } })
+    expect(header).toContain('&lt;b&gt;Meridian&lt;/b&gt;')
+    expect(footer).not.toContain('<b>')
   })
 })
 
-/** `theme@1.4`'s four optional fields — additive, each rendered only when present. */
-describe('renderChrome — theme@1.4', () => {
-  it("names today's date in the masthead's top strip, in the page's own locale", () => {
-    const { header } = renderChrome(BASE)
-    expect(header).toContain('cg-masthead__date')
-    // A real, formatted date — not the raw ISO the fallback would use.
-    expect(header).not.toMatch(/cg-masthead__date">\d{4}-\d{2}-\d{2}</)
+describe('renderChrome, the colophon', () => {
+  it('repeats the name as a link home', () => {
+    expect(renderChrome(BASE).footer).toContain(
+      '<a class="cg-colophon__name" href="/">The Meridian</a>',
+    )
   })
 
-  it('renders the header-action link as a filled button in both the desktop and mobile nav', () => {
-    const withAction = { ...BASE, headerAction: { label: 'Subscribe', href: '/en/subscribe' } }
-    const { header } = renderChrome(withAction)
-    const matches = [...header.matchAll(/cg-masthead__action/g)]
-    expect(matches.length).toBeGreaterThanOrEqual(2)
-    expect(header).toContain('href="/en/subscribe"')
-    expect(header).toContain('>Subscribe<')
+  it('sets the tagline and each paragraph of the footer note', () => {
+    const { footer } = renderChrome(FULL)
+    expect(footer).toContain(
+      'data-field="tagline">Independent news and culture from Port Calder.</p>',
+    )
+    expect(footer).toContain(
+      '<div class="cg-colophon__note"><p>Published by the Harbor Press Cooperative.</p><p>Letters go to the standards desk.</p></div>',
+    )
   })
 
-  it('renders a mobile disclosure even when there is only a header action and no nav', () => {
-    const onlyAction = {
-      ...BASE,
-      headerNav: [],
-      headerAction: { label: 'Subscribe', href: '/en/subscribe' },
-    }
-    const { header } = renderChrome(onlyAction)
-    expect(header).toContain('cg-masthead__disclosure')
-    expect(header).toContain('Subscribe')
+  it('lists the footer navigation in its own landmark', () => {
+    expect(renderChrome(BASE).footer).toContain(
+      '<nav class="cg-colophon__nav" aria-label="Footer"><ul class="cg-colophon__links">',
+    )
   })
 
-  it('renders no rubric row, desktop or mobile, when there is neither a nav nor a header action', () => {
-    const { header } = renderChrome({ ...BASE, headerNav: [] })
-    expect(header).not.toContain('cg-masthead__disclosure')
-    expect(header).not.toContain('cg-masthead__nav-inner')
+  it('lists the social profiles with real icons and their names', () => {
+    const { footer } = renderChrome(FULL)
+    expect(footer).toContain('class="cg-colophon__social"')
+    expect(footer.match(/<svg/g)).toHaveLength(2)
+    expect(footer).toContain('<span class="cg-visually-hidden">Bluesky</span>')
   })
 
-  it('places the tagline in the colophon, escaped, tagged for the page builder', () => {
-    const { footer } = renderChrome({ ...BASE, tagline: '<b>Evil</b> since 1990' })
-    expect(footer).toContain('data-field="tagline"')
-    expect(footer).toContain('&lt;b&gt;Evil&lt;/b&gt; since 1990')
-    expect(footer).not.toContain('<b>Evil</b>')
+  it('writes the legal line with the year and the name, beside the branding, placed once', () => {
+    const { footer } = renderChrome(BASE)
+    expect(footer).toContain(
+      `<p class="cg-colophon__copyright">© ${new Date().getFullYear()} The Meridian</p>`,
+    )
+    expect(footer.match(/Made with Cogenta/g)).toHaveLength(1)
   })
 
-  it('renders social links as icon links with a real accessible name, in the colophon', () => {
-    const { footer } = renderChrome({
-      ...BASE,
-      social: [{ label: 'Mastodon', href: 'https://mastodon.social/@example' }],
-    })
-    expect(footer).toContain('cg-colophon__social')
-    expect(footer).toContain('href="https://mastodon.social/@example"')
-    expect(footer).toContain('Mastodon')
+  it('writes no heading of its own: a heading is a word the theme cannot translate', () => {
+    const { footer } = renderChrome(FULL)
+    expect(footer).not.toMatch(/<h[1-6]/)
   })
 
-  it('renders the footer note as plain text in the colophon', () => {
-    const { footer } = renderChrome({ ...BASE, footerNote: 'Printed on recycled paper.' })
-    expect(footer).toContain('Printed on recycled paper.')
-  })
-
-  it('renders none of the four theme@1.4 fields when a site has never set them', () => {
-    const { header, footer } = renderChrome(BASE)
-    expect(header).not.toContain('cg-masthead__action')
-    expect(footer).not.toContain('data-field="tagline"')
-    expect(footer).not.toContain('cg-colophon__social')
+  it('renders the name and the navigation for a host that predates theme@1.4', () => {
+    const { footer } = renderChrome(BASE)
+    expect(footer).not.toContain('cg-colophon__tagline')
+    expect(footer).not.toContain('cg-colophon__note')
+    expect(footer).not.toContain('cg-colophon__follow')
+    // No empty about column either: the links move into its place.
+    expect(footer).not.toContain('cg-colophon__about')
+    expect(footer).toContain('<div class="cg-colophon__grid"><nav class="cg-colophon__nav"')
   })
 })

@@ -4,30 +4,27 @@ import { renderStats } from '../../src/render/blocks/stats.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderStats(BLOCKS.stats, ctx))
 
-describe('renderStats', () => {
-  it('renders a real description list, label then figure in reading order', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toMatch(/<dl class="cg-figures__items">/)
-    const dt = html.indexOf('<dt')
-    const dd = html.indexOf('<dd')
-    expect(dt).toBeGreaterThanOrEqual(0)
-    expect(dt).toBeLessThan(dd)
+describe('renderStats, figures in a row', () => {
+  it('uses a description list, each label announced with its value', () => {
+    expect(html).toContain(
+      '<div class="cg-figures__item"><dt class="cg-figures__label">Working machines</dt><dd class="cg-figures__value"><span class="cg-figures__number">4</span></dd></div>',
+    )
   })
 
-  it('renders the unit as its own span when present', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('<span class="cg-figures__unit">yrs</span>')
+  it('sets a unit beside its number, in its own element', () => {
+    expect(html).toContain(
+      '<span class="cg-figures__number">112</span><span class="cg-figures__unit">yrs</span>',
+    )
   })
 
-  it('omits the unit span when the field is absent', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('<dd class="cg-figures__value">4</dd>')
+  it('counts its figures for the stylesheet, capped at four columns', () => {
+    expect(html).toContain('data-count="2"')
   })
 
-  it('omits the block title when the field is absent', () => {
+  it('renders no head when the block has no title', () => {
     const { title: _title, ...untitled } = BLOCKS.stats
-    const html = serialize(renderStats(untitled, ctx))
-    expect(html).not.toContain('cg-figures__title')
+    expect(serialize(renderStats(untitled, ctx))).not.toContain('cg-head')
   })
 })

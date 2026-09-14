@@ -6,11 +6,11 @@ import {
   type PageContent,
   pageHasOwnHeading,
   type RenderContext,
-  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
 } from '@cogenta/theme-kit'
+import { isArticle, renderArticleFooter, renderArticleHeader, renderPageHeader } from './article.js'
 import { renderAccordion } from './blocks/accordion.js'
 import { renderCollectionList } from './blocks/collection-list.js'
 import { renderCta } from './blocks/cta.js'
@@ -29,23 +29,22 @@ import { renderStatCounter } from './blocks/stat-counter.js'
 import { renderStats } from './blocks/stats.js'
 import { renderTestimonial } from './blocks/testimonial.js'
 
+export type { FetchedEntries, PageContent }
+
 export function renderBlock(
   block: VocabularyBlock,
   ctx: RenderContext,
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement | null {
-  // `block`'s type says `VocabularyBlock`, but the value crossing this
-  // boundary from stored content is not always literally one of the shared
-  // vocabulary — resolving here is what turns an unimplemented theme-private
-  // block into its declared fallback instead of a silently blank slot.
+  // A stored block is not always literally one of the shared vocabulary:
+  // resolving here turns an unimplemented theme-private block into its
+  // declared fallback instead of a silently blank slot.
   const resolved = resolveBlockForRender(block, VOCABULARY_NAMES, registry)
   if (resolved === null) return null
   const known = resolved as unknown as VocabularyBlock
-  // `withBlockVariant` (blocks@2.0, RFC 0002) is applied once here, after
-  // dispatch, rather than inside each of the seventeen block renderers —
-  // `variant` is envelope data every block carries identically, exactly the
-  // same reasoning `withBlockKey` in `renderPage` already follows for `_key`.
+  // `variant` is envelope data every block carries identically, applied
+  // once here rather than by each of the seventeen renderers.
   return withBlockVariant(renderKnownBlock(known, ctx, entries), known.variant)
 }
 
@@ -90,11 +89,9 @@ function renderKnownBlock(
     case 'logoStrip':
       return renderLogoStrip(known, ctx)
     default: {
-      // Exhaustive over contract B's vocabulary: `known` is `never` here, so
-      // a block this package does not implement stops it compiling until it
-      // is. `null`, not a throw — a theme has no `@cogenta/core` error types
-      // to reach for (contract D refuses that import), and a fallback block
-      // is the render layer's decision, not the theme's.
+      // Exhaustive over contract B: `known` is `never` here, so a block this
+      // package does not implement stops it compiling until it is. `null`
+      // rather than a throw: choosing a fallback is the render layer's job.
       const unreachable: never = known
       void unreachable
       return null
@@ -102,21 +99,28 @@ function renderKnownBlock(
   }
 }
 
+/** Marks the first `prose` block of an article, the one paragraph a drop cap may open. */
+function withOpening(element: HtmlElement | null): HtmlElement | null {
+  if (element === null) return null
+  return { ...element, attrs: { ...element.attrs, 'data-opening': 'true' } }
+}
+
 /**
- * Wraps every block in `<main id="cg-main">` — the skip link's anchor — and
- * marks each rendered block with its own `_key` (`withBlockKey`, mandatory:
- * it is what lets the L16 page builder map a clicked element on the real
- * rendered page back to the block that produced it). A page whose blocks
- * already carry a heading (a `hero`) gets no second `<h1>`.
+ * `<main id="cg-main">` is mandatory: it is the skip link's target, written
+ * by `@cogenta/cli`'s `theme-render.ts` outside any theme's control.
  *
- * A page carrying `entry` (contract D `theme@1.4`) gets `renderEntryHeader`'s
- * furniture — classification eyebrow (styled in this masthead's own
- * journal-red accent, see `styles/base.css`'s `.cg-entry-header__terms`),
- * title, excerpt, date/author/reading-time meta and cover — instead of the
- * bare `<h1>` every other page falls back to; `renderEntryHeader` itself
- * returns `null` for a `blocks`-only page (e.g. `about`, which carries no
- * `entry`) or one that already draws its own heading, so the bare-title
- * fallback still applies there, exactly as before.
+ * Four openings, and exactly one `h1` in each:
+ *
+ * - a page whose blocks include a `hero` lets the hero carry the title;
+ * - an entry that carries what an article has (`isArticle`) gets the
+ *   article header, and its first `prose` block may open on a drop cap;
+ * - a page that opens on a listing is a front: the masthead above already
+ *   names it, so its title stays in the outline for assistive technology and
+ *   out of sight, and the first story sits directly under the navigation;
+ * - anything else gets its title set as a section title.
+ *
+ * `withBlockKey` stamps every rendered block with its contract-B `_key`, so
+ * the visual page builder (L16) can map a clicked element back to its block.
  */
 export function renderPage(
   page: PageContent,
@@ -125,13 +129,31 @@ export function renderPage(
   registry?: BlockRegistry,
 ): HtmlElement {
   const ownHeading = pageHasOwnHeading(page.blocks)
-  const entryHeader = ownHeading ? null : renderEntryHeader(page, ctx)
+  const article = !ownHeading && isArticle(page.entry) ? page.entry : undefined
+  const front = !ownHeading && article === undefined && page.blocks[0]?._type === 'collectionList'
+  const opening = ownHeading
+    ? null
+    : article !== undefined
+      ? renderArticleHeader(page, article, ctx)
+      : front
+        ? h('h1', { class: 'cg-visually-hidden' }, page.title)
+        : renderPageHeader(page)
+
+  const firstProse =
+    article === undefined ? undefined : page.blocks.find((block) => block._type === 'prose')
+
   return h(
     'main',
-    { class: 'cg-main', id: 'cg-main' },
-    ownHeading ? null : (entryHeader ?? h('h1', { class: 'cg-page__title' }, page.title)),
-    page.blocks.map((block) =>
-      withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
-    ),
+    {
+      class:
+        article !== undefined ? 'cg-main cg-article' : front ? 'cg-main cg-front-page' : 'cg-main',
+      id: 'cg-main',
+    },
+    opening,
+    page.blocks.map((block) => {
+      const rendered = renderBlock(block, ctx, entries, registry)
+      return withBlockKey(block === firstProse ? withOpening(rendered) : rendered, block._key)
+    }),
+    article === undefined ? null : renderArticleFooter(article),
   )
 }

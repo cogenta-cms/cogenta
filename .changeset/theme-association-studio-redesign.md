@@ -44,7 +44,10 @@ What changes on a site:
   its photograph. Any other entry with details or a picture (a programme)
   opens on its title, summary and details with the photograph beside or under
   them. Contacts that are email addresses or telephone numbers become links.
-  Times are written as stored, in UTC. A host older than `theme@1.5` gets a
+  Times are read in UTC, as stored, and written the way the charity's copy
+  writes them: "6pm to 7.30pm" for a locale whose clock is twelve-hour, "18:30"
+  for one whose clock is twenty-four-hour, chosen from the page locale through
+  `Intl`. A host older than `theme@1.5` gets a
   plain page header.
 - `stats` items are figures with their sentence of context; `stats` and
   `statCounter` items that are percentages adding up to a whole are drawn as a

@@ -29,7 +29,7 @@ describe('collectionList of events: a calendar', () => {
   })
 
   it('gives the hours as a range in the time of day the editor typed, and the place', () => {
-    expect(html).toContain('<span class="ca-events__hours">6:30 PM to 10:00 PM</span>')
+    expect(html).toContain('<span class="ca-events__hours">6.30pm to 10pm</span>')
     expect(html).toContain('<span class="ca-events__place">Ashworth Town Hall, Wardle Room</span>')
   })
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { eventTimeOf, factsOf, hoursOf } from '../src/render/details.js'
+import { eventTimeOf, factsOf, hoursOf, timeOf } from '../src/render/details.js'
 import { giftsOf, isBreakdown, shareOf } from '../src/render/figures.js'
 
 describe('reading an event’s time', () => {
@@ -24,8 +24,26 @@ describe('reading an event’s time', () => {
       date: '2026-10-22T18:30:00.000Z',
       endsAt: '2026-10-22T22:00:00.000Z',
     })
-    expect(time && hoursOf(time, 'en')).toBe('6:30 PM to 10:00 PM')
+    expect(time && hoursOf(time, 'en')).toBe('6.30pm to 10pm')
     expect(time && hoursOf(time, 'fr')).toBe('de 18:30 à 22:00')
+  })
+
+  it('writes a twelve-hour clock the way the copy does: lowercase, no :00, a dot for minutes', () => {
+    const at = (iso: string) => timeOf({ iso, date: new Date(iso), hasTime: true }, 'en')
+    expect(at('2026-10-22T10:00:00.000Z')).toBe('10am')
+    expect(at('2026-10-22T17:30:00.000Z')).toBe('5.30pm')
+    expect(at('2026-10-22T12:00:00.000Z')).toBe('12pm')
+    expect(at('2026-10-22T00:05:00.000Z')).toBe('12.05am')
+  })
+
+  it('keeps a twenty-four-hour clock for a locale that uses one, read from the locale itself', () => {
+    const time = eventTimeOf({
+      date: '2026-10-22T09:30:00.000Z',
+      endsAt: '2026-10-22T14:00:00.000Z',
+    })
+    expect(time && hoursOf(time, 'en-GB')).toBe('09:30 to 14:00')
+    expect(time && hoursOf(time, 'de')).toBe('09:30 to 14:00')
+    expect(time && hoursOf(time, 'en-US')).toBe('9.30am to 2pm')
   })
 
   it('writes no hours for a bare date', () => {

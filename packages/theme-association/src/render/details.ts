@@ -15,7 +15,7 @@ import { associationString } from './strings.js'
  *
  * Dates are written in UTC. Contract D carries no site time zone, and a
  * server's own zone is an accident of where it happens to run; a stored
- * `2026-10-15T18:00:00Z` therefore reads "6:00 PM" on every server, which is
+ * `2026-10-15T18:00:00Z` therefore reads "6pm" on every server, which is
  * what an editor who typed six o'clock meant.
  */
 
@@ -117,11 +117,32 @@ export function fullDateOf(moment: Moment, locale: string): string {
   })
 }
 
+/**
+ * A time of day the way a charity's own printed copy writes it. A locale
+ * whose clock is twelve-hour reads "6pm", "7.30pm", "10am": lowercase, no
+ * ":00", a dot before the minutes. A locale whose clock is twenty-four-hour
+ * keeps the platform's own form ("18:30"). Which clock a locale uses comes
+ * from `Intl`, never from a list of countries.
+ */
 export function timeOf(moment: Moment, locale: string): string {
-  return format(moment.date, locale, { hour: 'numeric', minute: '2-digit' })
+  let resolved: Intl.DateTimeFormat
+  try {
+    resolved = new Intl.DateTimeFormat(locale, { hour: 'numeric', timeZone: 'UTC' })
+  } catch {
+    resolved = new Intl.DateTimeFormat('en', { hour: 'numeric', timeZone: 'UTC' })
+  }
+  const cycle = resolved.resolvedOptions().hourCycle
+  if (cycle !== 'h12' && cycle !== 'h11') {
+    return format(moment.date, locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  }
+  const hours = moment.date.getUTCHours()
+  const minutes = moment.date.getUTCMinutes()
+  const hour = hours % 12 === 0 ? 12 : hours % 12
+  const suffix = hours < 12 ? 'am' : 'pm'
+  return minutes === 0 ? `${hour}${suffix}` : `${hour}.${String(minutes).padStart(2, '0')}${suffix}`
 }
 
-/** "6:00 PM to 7:30 PM", "6:00 PM", or `undefined` for an event with no hour. */
+/** "6pm to 7.30pm", "6pm", or `undefined` for an event with no hour. */
 export function hoursOf(time: EventTime, locale: string): string | undefined {
   if (!time.start.hasTime) return undefined
   const start = timeOf(time.start, locale)

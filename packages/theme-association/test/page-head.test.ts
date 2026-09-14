@@ -81,7 +81,7 @@ describe('an event’s own page', () => {
 
   it('writes the full date, the hours and the street address', () => {
     expect(html).toContain('Thursday, October 22, 2026')
-    expect(html).toContain('<span class="ca-facts-detail">6:30 PM to 10:00 PM</span>')
+    expect(html).toContain('<span class="ca-facts-detail">6.30pm to 10pm</span>')
     expect(html).toContain('<span class="ca-facts-detail">Market Square, Ashworth AW4 1AA</span>')
   })
 

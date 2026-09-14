@@ -157,11 +157,25 @@
 
 /* --- carousel: the grid as a row -------------------------------------------- */
 
+/* A little more than three entries across on a wide screen and a little more
+   than one on a phone: the one cut at the edge is what says the row scrolls. */
 .cg-collection[data-layout="carousel"] .cg-collection__items {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: min(78%, 22rem);
+  grid-auto-columns: 78%;
   gap: var(--cg-column-gap);
+}
+
+@media (min-width: 40rem) {
+  .cg-collection[data-layout="carousel"] .cg-collection__items {
+    grid-auto-columns: calc((100% - 2 * var(--cg-column-gap)) / 2.4);
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-collection[data-layout="carousel"] .cg-collection__items {
+    grid-auto-columns: calc((100% - 3 * var(--cg-column-gap)) / 3.4);
+  }
 }
 
 .cg-collection[data-layout="carousel"] .cg-entry {

@@ -620,6 +620,16 @@ describe('the grid, the rhythm and the chrome', () => {
     }
   })
 
+  it('cuts one entry of a carousel at the edge, so the row says it scrolls', () => {
+    expect(CODE).toMatch(
+      /grid-auto-columns:\s*calc\(\(100% - 3 \* var\(--cg-column-gap\)\) \/ 3\.4\)/,
+    )
+  })
+
+  it('gives a symbol it has no glyph for no room at all, never an empty square above a title', () => {
+    expect(rule('.cg-feature__icon:empty')).toMatch(/display:\s*none/)
+  })
+
   it('leaves no empty column at the end of a row of two, three or four', () => {
     expect(CODE).toMatch(/\.cg-feature:first-child:nth-last-child\(2\)/)
     expect(CODE).toMatch(/\.cg-stat:first-child:nth-last-child\(3\)/)

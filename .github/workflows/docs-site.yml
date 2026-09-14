@@ -47,7 +47,7 @@ jobs:
       # which a plain filter never selected. Not a full `pnpm build`.
       - run: pnpm --filter "@cogenta/render..." --filter "@cogenta/export..." --filter "@cogenta/blocks..." build
       - run: pnpm docs:site
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs-site/dist
 

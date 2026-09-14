@@ -42,9 +42,19 @@ export interface PageEntryMeta {
   readonly author?: PageEntryAuthor
   /** Every taxonomy field the collection declares, classified terms only. */
   readonly terms?: readonly PageEntryTerm[]
-  /** Computed by the host from the entry's `richText` field (~200 words/minute), rounded up. */
+  /** Computed by the host from the entry's `richText` field, or its prose blocks (~200 words/minute), rounded up. */
   readonly readingMinutes?: number
+  /**
+   * `theme@1.5`: the entry's own plain fields (text, slug, number, boolean,
+   * date, datetime, select, color), keyed by field name, so a product page can
+   * show its price and stock or a dish its price. Rich text, media, relations,
+   * blocks and JSON are never here: they reach a theme already resolved, or
+   * through the page's blocks. Absent before `1.5`.
+   */
+  readonly fields?: Readonly<Record<string, PageEntryFieldValue>>
 }
+
+export type PageEntryFieldValue = string | number | boolean | readonly string[]
 
 /** `Intl.DateTimeFormat`'s `dateStyle: 'long'`, in the page's own locale — the same formatting every other themed date on this page uses. */
 function formatDate(iso: string, locale: string): string {

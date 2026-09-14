@@ -34,6 +34,7 @@ import {
   type LinkTargetInput,
   type MediaReference,
   type PageContent,
+  type PageEntryFieldValue,
   type PageEntryMeta,
   type PageEntryTerm,
   type PublicComment,
@@ -1254,6 +1255,40 @@ function richTextWordCount(document: RichTextDocument): number {
   return words
 }
 
+const PLAIN_FIELD_KINDS: ReadonlySet<string> = new Set([
+  'text',
+  'slug',
+  'number',
+  'boolean',
+  'date',
+  'datetime',
+  'select',
+  'color',
+])
+
+/**
+ * `PageEntryMeta.fields` (contract D `theme@1.5`): the entry's own plain
+ * values, so a product page can show its price and stock. Only the kinds a
+ * theme can print as they are; an unset value is left out rather than sent
+ * as an empty string a theme would have to tell apart from a real one.
+ */
+export function entryFieldValues(
+  entry: Pick<ContentEntry, 'values'>,
+  collection: Pick<CollectionDefinition, 'fields'>,
+): Readonly<Record<string, PageEntryFieldValue>> | undefined {
+  const fields: Record<string, PageEntryFieldValue> = {}
+  for (const [name, field] of Object.entries(collection.fields)) {
+    if (!PLAIN_FIELD_KINDS.has(field.kind)) continue
+    const value = entry.values[name]
+    if (typeof value === 'string' || typeof value === 'boolean') fields[name] = value
+    else if (typeof value === 'number' && Number.isFinite(value)) fields[name] = value
+    else if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+      fields[name] = value as readonly string[]
+    }
+  }
+  return Object.keys(fields).length === 0 ? undefined : fields
+}
+
 function proseWordCount(blocks: readonly { readonly _type: string }[]): number {
   let words = 0
   for (const block of blocks) {
@@ -1330,6 +1365,7 @@ async function buildEntryMeta(
   const image = entryImage(themeEntry, themeContext)
   const excerpt = entryExcerpt(themeEntry)
   const terms = await entryTerms(entry, collection, options.resolveTerm)
+  const fields = entryFieldValues(entry, collection)
 
   return {
     collection: collection.name,
@@ -1340,6 +1376,7 @@ async function buildEntryMeta(
     ...(author === undefined ? {} : { author }),
     ...(terms === undefined ? {} : { terms }),
     ...(words === 0 ? {} : { readingMinutes: Math.ceil(words / 200) }),
+    ...(fields === undefined ? {} : { fields }),
   }
 }
 

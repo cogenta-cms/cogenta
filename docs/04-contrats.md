@@ -647,7 +647,8 @@ defineAgent({
 
 ## Contrat D — Thème
 
-> **Figé en `theme@1.3` le 2026-09-02, monté en `theme@1.4` le 2026-09-05 (L25 D2).**
+> **Figé en `theme@1.3` le 2026-09-02, monté en `theme@1.4` le 2026-09-05 (L25 D2), puis en
+> `theme@1.5` le 2026-09-14 (L27, `PageEntryMeta.fields`).**
 > Ajouter une entrée à `ctx` est mineur ; en modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
@@ -1031,7 +1032,10 @@ interface PageEntryMeta {
   readonly author?: { readonly name: string }
   readonly terms?: readonly { readonly taxonomy: string; readonly label: string; readonly href: string | null }[]
   readonly readingMinutes?: number
+  readonly fields?: Readonly<Record<string, PageEntryFieldValue>> // theme@1.5
 }
+
+type PageEntryFieldValue = string | number | boolean | readonly string[] // theme@1.5
 
 interface PageContent {
   readonly title: string
@@ -1044,9 +1048,17 @@ interface PageContent {
 à partir des champs système de l'entrée, de `entryImage`/`entryExcerpt`
 (`@cogenta/theme-kit`), de l'auteur (`entry.createdBy` résolu via le magasin d'utilisateurs)
 et des champs de taxonomie que la collection déclare — jamais deviné. `readingMinutes` est
-calculé par l'hôte sur le champ `richText` de la collection (~200 mots/minute, arrondi au
-supérieur). Absent quand l'hôte ne l'a jamais renseigné (page `blocks`-only, hôte
-pré-`1.4`) : le rendu redevient exactement celui d'avant.
+calculé par l'hôte sur le champ `richText` de la collection, ou à défaut sur les blocs
+`prose` de la page (~200 mots/minute, arrondi au supérieur). Absent quand il n'y a aucun
+texte ou que l'hôte ne l'a jamais renseigné (hôte pré-`1.4`) : le rendu redevient
+exactement celui d'avant.
+
+`fields` (`theme@1.5`) porte les valeurs simples de l'entrée — champs `text`, `slug`,
+`number`, `boolean`, `date`, `datetime`, `select`, `color` — indexées par nom de champ, pour
+qu'une fiche produit affiche son prix et sa disponibilité, ou un plat son prix. Jamais de
+texte riche, de média, de relation, de blocs ni de JSON : ceux-là atteignent déjà le thème
+résolus, ou par les blocs de la page. Une valeur non renseignée est omise, jamais envoyée
+vide ; `fields` est absent quand l'entrée n'a aucune valeur simple.
 
 `renderEntryHeader(page, ctx, options?)` (`@cogenta/theme-kit`, aide partagée, pas un
 point d'extension du contrat) est la façon commune de transformer `PageContent.entry` en
@@ -1083,6 +1095,12 @@ lui-même. Un thème `1.3` continue de valider et de rendre sans changement ; un
 ne renseigne aucun des nouveaux champs produit un rendu octet pour octet identique à
 `1.3` (test de non-régression : `packages/theme-canonical/test/chrome.test.ts`,
 `entry-header.test.ts`).
+
+**`theme@1.5` (L27, 2026-09-14)** — strictement additif : un champ optionnel
+`PageEntryMeta.fields`. Aucune signature existante n'est modifiée ; un thème `1.4`
+l'ignore et rend exactement comme avant. Motif : une fiche produit ou un plat de
+restaurant ne pouvait afficher ni son prix ni sa disponibilité (gap noté au rapport de
+clôture de L25). Test : `packages/cli/test/entry-field-values.test.ts`.
 
 ---
 

@@ -121,6 +121,7 @@ function router(overrides: {
   readonly fileExporter?: Parameters<typeof createThemeRouter>[0]['fileExporter']
   readonly progressJobs?: Parameters<typeof createThemeRouter>[0]['progressJobs']
   readonly availableThemes?: Parameters<typeof createThemeRouter>[0]['availableThemes']
+  readonly themeDefaultTokens?: Parameters<typeof createThemeRouter>[0]['themeDefaultTokens']
 }) {
   return createThemeRouter({
     store: overrides.store ?? memoryStore(),
@@ -133,6 +134,9 @@ function router(overrides: {
     ...(overrides.generator === undefined ? {} : { generator: overrides.generator }),
     ...(overrides.fileExporter === undefined ? {} : { fileExporter: overrides.fileExporter }),
     ...(overrides.progressJobs === undefined ? {} : { progressJobs: overrides.progressJobs }),
+    ...(overrides.themeDefaultTokens === undefined
+      ? {}
+      : { themeDefaultTokens: overrides.themeDefaultTokens }),
   })
 }
 
@@ -931,5 +935,114 @@ describe('POST /api/theme/refine/jobs', () => {
       EDITOR,
     )
     expect(response.status).toBe(403)
+  })
+})
+
+describe('createThemeRouter — POST /api/theme/activate (L27)', () => {
+  const THEME_SKIN = {
+    ...FILE_TOKENS,
+    color: { ...FILE_TOKENS.color, accent: '#0b6e4f', border: '#c9d3cf' },
+    font: { ...FILE_TOKENS.font, serif: "'Newsreader', ui-serif, Georgia, serif" },
+  }
+
+  it("switches the theme and takes on that theme's own skin when asked", async () => {
+    const store = memoryStore({
+      ...emptyOverrides(),
+      tokenOverrides: { color: { accent: '#ff0000' } },
+    })
+    const r = router({ store, themeDefaultTokens: async () => THEME_SKIN })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/activate',
+        query: {},
+        body: { theme: '@cogenta/theme-canonical', applySkin: true },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect((response.body as { data: { skinApplied: boolean } }).data.skinApplied).toBe(true)
+    expect(store.state.activeTheme).toBe('@cogenta/theme-canonical')
+    // The previous accent override is gone: the theme's skin replaces it whole.
+    expect(store.state.tokenOverrides).toEqual({
+      color: { accent: '#0b6e4f', border: '#c9d3cf' },
+      font: { serif: "'Newsreader', ui-serif, Georgia, serif" },
+    })
+  })
+
+  it("keeps the site's own skin when the admin chooses to", async () => {
+    const store = memoryStore({
+      ...emptyOverrides(),
+      tokenOverrides: { color: { accent: '#0a7d3c' } },
+    })
+    const r = router({ store, themeDefaultTokens: async () => THEME_SKIN })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/activate',
+        query: {},
+        body: { theme: '@cogenta/theme-canonical', applySkin: false },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBe(200)
+    expect((response.body as { data: { skinApplied: boolean } }).data.skinApplied).toBe(false)
+    expect(store.state.activeTheme).toBe('@cogenta/theme-canonical')
+    expect(store.state.tokenOverrides).toEqual({ color: { accent: '#0a7d3c' } })
+  })
+
+  it('switches without a skin when the theme ships none', async () => {
+    const store = memoryStore()
+    const r = router({ store, themeDefaultTokens: async () => undefined })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/activate',
+        query: {},
+        body: { theme: '@cogenta/theme-canonical', applySkin: true },
+      },
+      ADMIN,
+    )
+    expect((response.body as { data: { skinApplied: boolean } }).data.skinApplied).toBe(false)
+    expect(store.state.activeTheme).toBe('@cogenta/theme-canonical')
+  })
+
+  it('refuses a theme skin that breaks contract D and writes nothing', async () => {
+    const store = memoryStore()
+    const broken = { ...THEME_SKIN, color: { ...THEME_SKIN.color, fg: '#fefefe' } }
+    const r = router({ store, themeDefaultTokens: async () => broken })
+    const response = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/activate',
+        query: {},
+        body: { theme: '@cogenta/theme-canonical', applySkin: true },
+      },
+      ADMIN,
+    )
+    expect(response.status).toBeGreaterThanOrEqual(400)
+    expect(store.state.activeTheme).toBeNull()
+    expect(store.state.tokenOverrides).toBeNull()
+  })
+
+  it('refuses an unknown theme and a non-admin', async () => {
+    const store = memoryStore()
+    const r = router({ store, themeDefaultTokens: async () => THEME_SKIN })
+    const unknown = await r.handle(
+      { method: 'POST', path: '/api/theme/activate', query: {}, body: { theme: '@x/nope' } },
+      ADMIN,
+    )
+    expect(unknown.status).toBeGreaterThanOrEqual(400)
+    const editor = await r.handle(
+      {
+        method: 'POST',
+        path: '/api/theme/activate',
+        query: {},
+        body: { theme: '@cogenta/theme-canonical' },
+      },
+      EDITOR,
+    )
+    expect(editor.status).toBe(403)
+    expect(store.state.activeTheme).toBeNull()
   })
 })

@@ -423,6 +423,9 @@ export const themeRefineRequests: Record<string, unknown>[] = []
  * mock AGENTS.md forbids: the actual request/response wiring is exercised
  * end-to-end against a real server in `packages/cli/test/serve.test.ts`.
  */
+/** Every `POST /api/theme/activate` the mock received, in order (L27). */
+export const themeActivations: { theme: string; applySkin: boolean }[] = []
+
 export function installMockFetch(
   options: {
     readonly password?: string
@@ -8933,6 +8936,27 @@ export function installMockFetch(
 
         if (url.includes('/api/theme/skins') && method === 'GET') {
           return json(200, { data: options.theme?.skins ?? [] })
+        }
+
+        if (url.includes('/api/theme/activate') && method === 'POST') {
+          const input = body as { theme?: string; applySkin?: boolean }
+          if (!availableThemes.some((theme) => theme.name === input.theme)) {
+            return json(404, { error: { code: 'THEME_NOT_FOUND', message: 'No such theme.' } })
+          }
+          themeActivations.push({
+            theme: input.theme as string,
+            applySkin: input.applySkin === true,
+          })
+          themeOverrides = {
+            ...themeOverrides,
+            activeTheme: input.theme as string,
+            ...(input.applySkin === true
+              ? { tokenOverrides: { color: { accent: '#0b6e4f' } } }
+              : {}),
+            updatedAt: '2026-01-02T00:00:00.000Z',
+            updatedBy: user.id,
+          }
+          return json(200, { data: { ...themeOverrides, skinApplied: input.applySkin === true } })
         }
 
         if (url.includes('/api/theme/overrides') && method === 'PUT') {

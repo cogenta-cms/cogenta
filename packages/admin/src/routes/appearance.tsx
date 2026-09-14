@@ -17,6 +17,7 @@ import { ApiError } from '../api/client.js'
 import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import {
   type AvailableTheme,
+  activateTheme,
   applyGallerySkin,
   clearThemeOverrides,
   deleteTheme,
@@ -373,6 +374,7 @@ export function AppearanceRoute(): JSX.Element {
   const [switchingTheme, setSwitchingTheme] = useState<string | null>(null)
   const [switchThemeError, setSwitchThemeError] = useState<string | null>(null)
   const [deletingTheme, setDeletingTheme] = useState<AvailableTheme | null>(null)
+  const [selectingTheme, setSelectingTheme] = useState<AvailableTheme | null>(null)
   const [deleteThemeInProgress, setDeleteThemeInProgress] = useState(false)
   const [deleteThemeError, setDeleteThemeError] = useState<string | null>(null)
 
@@ -478,12 +480,17 @@ export function AppearanceRoute(): JSX.Element {
    * every request, so this takes effect on the very next page view, no
    * restart — unlike L19's site-plan applier, which genuinely does need one.
    */
-  async function switchTheme(name: string | null): Promise<void> {
+  async function switchTheme(name: string | null, applySkin = false): Promise<void> {
     if (token === null) return
     setSwitchingTheme(name ?? '')
     setSwitchThemeError(null)
     try {
-      await saveThemeOverrides(token, { activeTheme: name })
+      if (name === null) {
+        await saveThemeOverrides(token, { activeTheme: null })
+      } else {
+        await activateTheme(token, name, applySkin)
+      }
+      setSelectingTheme(null)
       await load()
     } catch (caught) {
       setSwitchThemeError(
@@ -737,7 +744,7 @@ export function AppearanceRoute(): JSX.Element {
                             variant={active ? 'secondary' : 'primary'}
                             size="sm"
                             disabled={active || switchingTheme !== null}
-                            onClick={() => void switchTheme(candidate.name)}
+                            onClick={() => setSelectingTheme(candidate)}
                           >
                             {switchingTheme === candidate.name
                               ? t('appearance.themeSwitching')
@@ -1124,6 +1131,48 @@ export function AppearanceRoute(): JSX.Element {
         </>
       )}
 
+      <Modal
+        open={selectingTheme !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectingTheme(null)
+            setSwitchThemeError(null)
+          }
+        }}
+        title={t('appearance.themeSelectConfirmTitle', { name: selectingTheme?.label ?? '' })}
+        closeLabel={t('appearance.close')}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                selectingTheme !== null && void switchTheme(selectingTheme.name, false)
+              }
+              disabled={switchingTheme !== null}
+            >
+              {t('appearance.themeSelectKeepSkin')}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => selectingTheme !== null && void switchTheme(selectingTheme.name, true)}
+              disabled={switchingTheme !== null}
+            >
+              {switchingTheme !== null
+                ? t('appearance.themeSwitching')
+                : t('appearance.themeSelectApplySkin')}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-foreground">{t('appearance.themeSelectExplanation')}</p>
+        {switchThemeError !== null && (
+          <Notice tone="danger" live="polite">
+            <p>{switchThemeError}</p>
+          </Notice>
+        )}
+      </Modal>
       <Modal
         open={deletingTheme !== null}
         onOpenChange={(open) => {

@@ -290,6 +290,14 @@ export interface ThemeRouterOptions {
    * restart needed" promise the appearance screen already makes for tokens.
    */
   readonly availableThemes: () => Promise<readonly AvailableThemeLike[]>
+  /**
+   * A theme's own default skin (its `tokens.json`), or `undefined` when it
+   * ships none. Backs `POST /api/theme/activate` with `applySkin: true`:
+   * switching to a theme and taking on the typography and colours it was
+   * designed with, in one human action. Absent: activation never applies a
+   * skin.
+   */
+  readonly themeDefaultTokens?: (themeName: string) => Promise<Record<string, unknown> | undefined>
   /** Fiche feedback — backs `POST/GET …/generate/jobs`. Omitted means those two routes answer `THEME_NO_PROVIDER`-shaped unavailability like `generate` itself does when there's no generator; the synchronous `POST …/generate` route is unaffected either way. */
   readonly progressJobs?: ThemeGenerateJobStoreLike
   readonly basePath?: string
@@ -664,6 +672,39 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
               availableThemes: await options.availableThemes(),
             },
           })
+        }
+
+        // POST /api/theme/activate — switch the site's theme, and optionally take
+        // on that theme's own skin in the same write (L27). Only ever the
+        // admin's explicit choice (R6): the appearance screen asks first.
+        if (first === 'activate' && second === undefined) {
+          if (method !== 'POST') return methodNotAllowed(['POST'])
+          const body = (request.body ?? {}) as { theme?: unknown; applySkin?: unknown }
+          const themeName = typeof body.theme === 'string' ? body.theme : ''
+          const available = await options.availableThemes()
+          if (!available.some((theme) => theme.name === themeName)) {
+            throw unknownTheme(themeName, available)
+          }
+          const own =
+            body.applySkin === true && options.themeDefaultTokens !== undefined
+              ? await options.themeDefaultTokens(themeName)
+              : undefined
+          if (own === undefined) {
+            const written = await options.store.set({ activeTheme: themeName, updatedBy: actor.id })
+            return jsonResponse(200, { data: { ...overridesPayload(written), skinApplied: false } })
+          }
+          // Same wholesale replacement as applying a gallery skin: a theme's
+          // skin is internally consistent, so it replaces every group rather
+          // than patching a few, and is validated before anything is written.
+          const validated = options.validateTokens(own)
+          const file = await options.loadFileTokens()
+          const overlay = file === null ? validated : diffTokens(file, validated)
+          const written = await options.store.set({
+            activeTheme: themeName,
+            tokenOverrides: overlay,
+            updatedBy: actor.id,
+          })
+          return jsonResponse(200, { data: { ...overridesPayload(written), skinApplied: true } })
         }
 
         // PUT /api/theme/overrides — the token editor, identity pickers and additional CSS.

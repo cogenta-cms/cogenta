@@ -30,7 +30,7 @@ import {
   ensureSiteSettingsTables,
   ensureThemeTable,
 } from '@cogenta/schema'
-import { availableThemes } from './theme-registry.js'
+import { availableThemes, loadThemeDefaultTokens } from './theme-registry.js'
 import { joinStyles } from './theme-render.js'
 import {
   deleteSandboxFile,
@@ -291,6 +291,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
     // is already running must show up on the very next request, not only
     // after a restart.
     availableThemes: () => availableThemes(),
+    themeDefaultTokens: (themeName) => loadThemeDefaultTokens(themeName),
     loadFileTokens,
     validateTokens: (candidate) => validateSkin(candidate) as unknown as Record<string, unknown>,
     mergeTokens: (base, overrides) =>

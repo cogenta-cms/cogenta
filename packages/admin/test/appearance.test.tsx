@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
-import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
+import { installMockFetch, themeActivations, VALID_TOKEN } from './helpers/mock-fetch.js'
 
 /**
  * "Apparence" (fiche 14, gallery/personalize split fiche 48): the screen the
@@ -385,7 +385,12 @@ describe('the appearance screen — theme picker (fiche L23)', () => {
 
     await screen.findByText('Portfolio')
     const portfolioCard = screen.getByText('Portfolio').closest('li') as HTMLElement
+    themeActivations.length = 0
     fireEvent.click(within(portfolioCard).getByRole('button', { name: 'Sélectionner' }))
+    // Selecting asks first whether to take on the theme's own colours and
+    // fonts (L27); keeping the site's skin is a layout-only switch.
+    const dialog = await screen.findByRole('dialog', { name: 'Utiliser « Portfolio »' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Garder mes couleurs et polices' }))
 
     await waitFor(() => {
       const refreshedCard = screen.getByText('Portfolio').closest('li') as HTMLElement
@@ -395,12 +400,41 @@ describe('the appearance screen — theme picker (fiche L23)', () => {
     // layout switch is not a colour override. The notice now lives in the
     // personalization screen (fiche 48), reached through the newly-active
     // card's "Personnaliser" action.
+    expect(themeActivations).toEqual([{ theme: '@cogenta/theme-portfolio', applySkin: false }])
     await personalize('Portfolio')
     expect(
       screen.getByText(
         "Chaque valeur affichée ici vient de theme.tokens.json — rien n'a encore été surchargé.",
       ),
     ).toBeDefined()
+  })
+
+  it("applies the chosen theme's own colours and fonts when the admin asks for the complete theme", async () => {
+    signedIn(['admin'], {
+      availableThemes: [
+        {
+          name: '@cogenta/theme-canonical',
+          label: 'Canonical',
+          description: 'The reference theme.',
+        },
+        { name: '@cogenta/theme-restaurant', label: 'Restaurant', description: 'A bistro.' },
+      ],
+    })
+    render(<App />)
+    await goToAppearance()
+
+    const card = (await screen.findByText('Restaurant')).closest('li') as HTMLElement
+    themeActivations.length = 0
+    fireEvent.click(within(card).getByRole('button', { name: 'Sélectionner' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Utiliser « Restaurant »' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Utiliser le thème complet' }))
+
+    await waitFor(() => {
+      const refreshed = screen.getByText('Restaurant').closest('li') as HTMLElement
+      expect(within(refreshed).queryByText('Actif')).not.toBeNull()
+    })
+    expect(themeActivations).toEqual([{ theme: '@cogenta/theme-restaurant', applySkin: true }])
+    expect(screen.queryByRole('dialog', { name: 'Utiliser « Restaurant »' })).toBeNull()
   })
 })
 

@@ -147,6 +147,23 @@ export function saveThemeOverrides(
   })
 }
 
+/**
+ * `POST /api/theme/activate` (L27) — switches the site's theme and, when
+ * `applySkin` is true, takes on that theme's own typography and colours in the
+ * same write. `skinApplied` is false when the theme ships no skin of its own.
+ */
+export function activateTheme(
+  token: string,
+  name: string,
+  applySkin: boolean,
+): Promise<ThemeOverrides & { readonly skinApplied: boolean }> {
+  return request<ThemeOverrides & { readonly skinApplied: boolean }>('/api/theme/activate', {
+    method: 'POST',
+    headers: { ...authHeader(token), 'content-type': 'application/json' },
+    body: JSON.stringify({ theme: name, applySkin }),
+  })
+}
+
 export function clearThemeOverrides(token: string): Promise<ThemeOverrides> {
   return request<ThemeOverrides>('/api/theme/overrides', {
     method: 'DELETE',

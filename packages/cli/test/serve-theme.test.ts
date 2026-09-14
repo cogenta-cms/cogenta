@@ -261,6 +261,49 @@ describe('GET /api/theme', () => {
   }, 60_000)
 })
 
+describe('POST /api/theme/activate — a theme with its own typography and colours (L27)', () => {
+  it("switches the theme and the public stylesheet carries that theme's own fonts", async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminSession(root, server.base)
+
+    const activated = await fetch(`${server.base}/api/theme/activate`, {
+      method: 'POST',
+      headers: auth(token),
+      body: JSON.stringify({ theme: '@cogenta/theme-restaurant', applySkin: true }),
+    })
+    expect(activated.status).toBe(200)
+    expect(((await activated.json()) as { data: { skinApplied: boolean } }).data.skinApplied).toBe(
+      true,
+    )
+
+    const css = await (await fetch(`${server.base}/_cogenta/styles.css`)).text()
+    expect(css).toContain("'Cormorant Garamond'")
+    expect(css).toContain('https://fonts.googleapis.com/css2?family=Cormorant+Garamond')
+
+    await server.stop()
+  }, 60_000)
+
+  it("keeps the site's own skin when the admin switches the layout only", async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminSession(root, server.base)
+
+    const activated = await fetch(`${server.base}/api/theme/activate`, {
+      method: 'POST',
+      headers: auth(token),
+      body: JSON.stringify({ theme: '@cogenta/theme-restaurant', applySkin: false }),
+    })
+    expect(activated.status).toBe(200)
+
+    const css = await (await fetch(`${server.base}/_cogenta/styles.css`)).text()
+    expect(css).toContain('#1d4ed8')
+    expect(css).not.toContain("'Cormorant Garamond'")
+
+    await server.stop()
+  }, 60_000)
+})
+
 describe('PUT /api/theme/overrides and its hot-swap into the served stylesheet', () => {
   it('saves an override and the public stylesheet reflects it on the very next request', async () => {
     const root = await project()

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createAgent } from '../src/api/agents-client.js'
 import { App } from '../src/app.js'
@@ -66,7 +66,7 @@ describe('the floating agent chat widget', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer' }))
 
     const progress = await within(dialog).findByTestId('agent-chat-progress', {}, { timeout: 3000 })
-    expect(progress.textContent).toBe('Mock progress.')
+    await waitFor(() => expect(progress.textContent).toBe('Mock progress.'), { timeout: 3000 })
     expect(
       await within(dialog).findByText('Mock reply to: Bonjour', {}, { timeout: 3000 }),
     ).toBeDefined()

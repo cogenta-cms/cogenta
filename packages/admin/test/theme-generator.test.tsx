@@ -281,8 +281,15 @@ describe('the theme generator workshop', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Générer' }))
 
     const progress = await screen.findByTestId('theme-generator-progress', {}, { timeout: 3000 })
-    expect(progress.textContent).toContain('Mock progress.')
-    expect(progress.textContent).toContain('En cours')
+    // The panel opens as soon as the job is created, before the first poll
+    // brings its first event: a slow runner reads it empty in between.
+    await waitFor(
+      () => {
+        expect(progress.textContent).toContain('Mock progress.')
+        expect(progress.textContent).toContain('En cours')
+      },
+      { timeout: 3000 },
+    )
   })
 
   // The single loudest complaint about this screen: the trace of what the

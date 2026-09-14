@@ -1,7 +1,7 @@
 {
   "name": "@cogenta/theme-association",
   "version": "0.3.3",
-  "description": "A warm, human theme for a nonprofit or association: dated event cards, an impact band, and a genuine dark mode, with zero client JavaScript.",
+  "description": "A Cogenta theme for a neighbourhood charity: a photograph of the people it works with, impact figures with their context, programmes, a dated events calendar with event pages, a donation ask in its own yellow, and a designed dark mode.",
   "license": "MPL-2.0",
   "type": "module",
   "sideEffects": false,

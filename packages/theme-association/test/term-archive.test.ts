@@ -6,16 +6,16 @@ import { renderTermArchive } from '../src/render/term-archive.js'
 const LABELS: TermArchiveInput['labels'] = {
   empty: 'Nothing classified here yet.',
   previous: 'Previous',
-  next: 'Next',
+  next: 'Next page',
   breadcrumb: 'Breadcrumb',
   pagination: 'Pagination',
-  subterms: 'Sub-categories',
+  subterms: 'Sub-topics',
 }
 
 function baseInput(overrides: Partial<TermArchiveInput> = {}): TermArchiveInput {
   return {
-    taxonomyName: 'programme',
-    term: { label: 'Food security', slug: 'food-security' },
+    taxonomyName: 'topic',
+    term: { label: 'Food', slug: 'food' },
     ancestors: [],
     children: [],
     entries: [],
@@ -26,132 +26,78 @@ function baseInput(overrides: Partial<TermArchiveInput> = {}): TermArchiveInput 
   }
 }
 
+const ENTRY = {
+  title: 'Harvest supper',
+  href: '/events/harvest-supper',
+  summary: 'Three courses cooked by volunteers.',
+  collection: 'event',
+  publishedAt: '2026-09-01T09:00:00.000Z',
+}
+
 describe('renderTermArchive', () => {
-  it('renders the term label as the page h1', () => {
+  it('renders the term as the page h1, inside the skip link’s target', () => {
     const html = serialize(renderTermArchive(baseInput()))
-    expect(html).toContain('<h1 class="cg-archive__title">Food security</h1>')
+    expect(html).toMatch(/^<main class="cg-main ca-main ca-archive" id="cg-main">/)
+    expect(html).toContain('<h1 class="ca-page-head__title">Food</h1>')
+    expect(html.match(/<h1[ >]/g)).toHaveLength(1)
   })
 
-  it('renders the empty state when the term classifies nothing published', () => {
+  it('shows the empty state when the term classifies nothing published', () => {
     const html = serialize(renderTermArchive(baseInput()))
-    expect(html).toContain('cg-archive__empty')
-    expect(html).toContain('Nothing classified here yet.')
+    expect(html).toContain('<p class="ca-empty">Nothing classified here yet.</p>')
   })
 
-  it('renders a dated card with a big day/month badge for an entry with a publication date', () => {
-    const html = serialize(
-      renderTermArchive(
-        baseInput({
-          entries: [
-            {
-              title: 'Community clean-up day',
-              href: '/events/community-clean-up-day',
-              summary: 'A morning of volunteering.',
-              collection: 'event',
-              publishedAt: '2026-11-14T09:00:00.000Z',
-            },
-          ],
-        }),
-      ),
+  it('lists entries as an index of titles, publication dates and summaries', () => {
+    const html = serialize(renderTermArchive(baseInput({ entries: [ENTRY] })))
+    expect(html).toContain(
+      '<h2 class="ca-index__title"><a class="ca-index__link" href="/events/harvest-supper">Harvest supper</a></h2>',
     )
-    expect(html).toContain('cg-archive-card')
-    expect(html).toContain('cg-archive-card__day')
-    expect(html).toContain('cg-archive-card__month')
-    expect(html).toContain('Community clean-up day')
-    expect(html).toContain('A morning of volunteering.')
+    expect(html).toContain('<time datetime="2026-09-01T09:00:00.000Z">September 1, 2026</time>')
+    expect(html).toContain('Three courses cooked by volunteers.')
   })
 
-  it('renders a card with no date badge for an entry with no publication instant', () => {
+  it('renders an unresolvable entry as plain text, never a dead link, and no empty date', () => {
     const html = serialize(
-      renderTermArchive(
-        baseInput({
-          entries: [
-            {
-              title: 'A page with no date',
-              href: '/pages/no-date',
-              summary: null,
-              collection: 'page',
-              publishedAt: null,
-            },
-          ],
-        }),
-      ),
+      renderTermArchive(baseInput({ entries: [{ ...ENTRY, href: null, publishedAt: null }] })),
     )
-    expect(html).toContain('A page with no date')
-    expect(html).not.toContain('cg-archive-card__day')
-  })
-
-  it('renders an unresolvable entry as plain text, never a dead link', () => {
-    const html = serialize(
-      renderTermArchive(
-        baseInput({
-          entries: [
-            {
-              title: 'Unreachable',
-              href: null,
-              summary: null,
-              collection: 'event',
-              publishedAt: null,
-            },
-          ],
-        }),
-      ),
-    )
-    expect(html).toContain('Unreachable')
+    expect(html).toContain('<h2 class="ca-index__title">Harvest supper</h2>')
     expect(html).not.toContain('<a')
+    expect(html).not.toContain('ca-index__date')
   })
 
   it('renders a breadcrumb only when there are ancestors', () => {
-    const withoutAncestors = serialize(renderTermArchive(baseInput()))
-    expect(withoutAncestors).not.toContain('cg-archive__breadcrumb')
-
+    expect(serialize(renderTermArchive(baseInput()))).not.toContain('ca-archive__breadcrumb')
     const withAncestors = serialize(
-      renderTermArchive(baseInput({ ancestors: [{ label: 'Programmes', href: '/programmes' }] })),
+      renderTermArchive(
+        baseInput({ ancestors: [{ label: 'Programmes', href: '/topic/programmes' }] }),
+      ),
     )
-    expect(withAncestors).toContain('cg-archive__breadcrumb')
-    expect(withAncestors).toContain('Programmes')
+    expect(withAncestors).toContain('<nav class="ca-archive__breadcrumb" aria-label="Breadcrumb">')
   })
 
   it('renders sub-terms as a labelled list when present', () => {
     const html = serialize(
       renderTermArchive(
-        baseInput({ children: [{ label: 'Emergency food', href: '/programmes/emergency-food' }] }),
+        baseInput({ children: [{ label: 'Food bank', href: '/topic/food-bank' }] }),
       ),
     )
-    expect(html).toContain('cg-archive__children')
-    expect(html).toContain('Emergency food')
+    expect(html).toContain('<ul class="ca-archive__terms" aria-label="Sub-topics">')
   })
 
-  it('renders a pager only when there is a previous or next page', () => {
-    const withoutPager = serialize(renderTermArchive(baseInput()))
-    expect(withoutPager).not.toContain('cg-archive__pager')
-
-    const withPager = serialize(
+  it('draws a pager of arrow links whose arrows ride on a word', () => {
+    const html = serialize(
       renderTermArchive(
         baseInput({ page: { current: 2, totalPages: 3, previousHref: '/p/1', nextHref: '/p/3' } }),
       ),
     )
-    expect(withPager).toContain('cg-archive__pager')
-    expect(withPager).toContain('rel="prev"')
-    expect(withPager).toContain('rel="next"')
+    expect(html).toContain('<nav class="ca-archive__pager" aria-label="Pagination">')
+    expect(html).toContain('<span class="ca-arrow-link__start">Previous</span></a>')
+    expect(html).toContain('Next <span class="ca-arrow-link__end">page</span></a>')
   })
 
-  it('emits no script tag anywhere', () => {
-    const html = serialize(
-      renderTermArchive(
-        baseInput({
-          entries: [
-            {
-              title: 'Community clean-up day',
-              href: '/events/community-clean-up-day',
-              summary: 'A morning of volunteering.',
-              collection: 'event',
-              publishedAt: '2026-11-14T09:00:00.000Z',
-            },
-          ],
-        }),
-      ),
-    )
+  it('renders no pager on a single page, and no script anywhere', () => {
+    const html = serialize(renderTermArchive(baseInput({ entries: [ENTRY] })))
+    expect(html).not.toContain('ca-archive__pager')
     expect(html).not.toMatch(/<script/i)
   })
 })

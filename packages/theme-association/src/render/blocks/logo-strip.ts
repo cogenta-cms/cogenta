@@ -1,31 +1,33 @@
-import type { LogoStripBlock, LogoStripItem } from '@cogenta/blocks'
+import type { LogoStripBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * `blocks@2.0` (RFC 0001). "Our partners" — the lighter-weight social-proof
- * row next to `logos`: no per-logo name or link, so no accessible-name field
- * to require — each image's own alt text (set once, in the media library)
- * names it.
+ * The lighter row of marks: the caption at the caption size above a rule,
+ * and the marks spread along one line under it, small and evenly spaced, in
+ * one ink. No links, by contract B; each mark is named by its own alt text
+ * from the media library.
  */
-function renderItem(item: LogoStripItem, ctx: RenderContext): HtmlElement {
-  return h(
-    'li',
-    { class: 'cg-logo-band__item' },
-    image(ctx, item.media, { className: 'cg-logo-band__image', variant: { fit: 'contain' } }),
-  )
-}
-
 export function renderLogoStrip(block: LogoStripBlock, ctx: RenderContext): HtmlElement {
-  return h(
-    'figure',
-    { class: 'cg-block cg-logo-band', 'data-block': 'logoStrip' },
-    h(
-      'ul',
-      { class: 'cg-logo-band__items' },
-      block.logos.map((item) => renderItem(item, ctx)),
-    ),
+  return section(
+    'div',
+    'logoStrip',
+    'ca-strip',
+    { 'data-captioned': String(block.caption !== undefined) },
+    'div',
     block.caption === undefined
       ? null
-      : h('figcaption', { class: 'cg-logo-band__caption', 'data-field': 'caption' }, block.caption),
+      : h('p', { class: 'ca-strip__caption', 'data-field': 'caption' }, block.caption),
+    h(
+      'ul',
+      { class: 'ca-strip__items' },
+      block.logos.map((logo) =>
+        h(
+          'li',
+          { class: 'ca-strip__item' },
+          image(ctx, logo.media, { className: 'ca-mark', sizes: '12rem' }),
+        ),
+      ),
+    ),
   )
 }

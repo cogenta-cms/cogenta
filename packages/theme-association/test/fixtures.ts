@@ -8,152 +8,134 @@ import type {
 } from '@cogenta/theme-kit'
 
 /**
- * A `RenderContext` that behaves like the real one and returns fixed
- * values, so a snapshot changes only when the markup changes.
- *
- * It exposes exactly what contract D lists — nothing here can stand in for
- * a database or a secret, because the interface has no room for one.
+ * A `RenderContext` that behaves like the real one and returns fixed values,
+ * so an assertion changes only when the markup changes. It exposes exactly
+ * what contract D lists: nothing here can stand in for a database or a
+ * secret, because the interface has no room for one.
  */
+
+function source(src: string, width: number, height: number, alt: string): ImageSource {
+  return { kind: 'image', src, srcset: `${src} ${width}w`, width, height, alt, focal: null }
+}
 
 const MEDIA: Readonly<Record<string, ImageSource>> = {
   'media-hero': {
-    kind: 'image',
-    src: '/img/hero-1200.avif',
-    srcset: '/img/hero-600.avif 600w, /img/hero-1200.avif 1200w',
-    width: 1200,
-    height: 900,
-    alt: 'Volunteers sorting donations at the community hall',
-    focal: { x: 0.5, y: 0.4 },
+    ...source('/img/hero-1600.avif', 1600, 543, 'Volunteers gathered outdoors, smiling'),
+    focal: { x: 0.5, y: 0.3 },
   },
-  'media-figure': {
-    kind: 'image',
-    src: '/img/figure-800.avif',
-    srcset: '/img/figure-800.avif 800w',
-    width: 800,
-    height: 600,
-    alt: 'The weekly food distribution table',
-    focal: null,
-  },
-  'media-gallery-1': {
-    kind: 'image',
-    src: '/img/g1-400.avif',
-    srcset: '',
-    width: 400,
-    height: 400,
-    alt: 'The clean-up crew at Riverside Park',
-    focal: null,
-  },
-  'media-gallery-2': {
-    kind: 'image',
-    src: '/img/g2-400.avif',
-    srcset: '',
-    width: 400,
-    height: 400,
-    alt: 'A thank-you card wall in the hall',
-    focal: null,
-  },
-  // Decorative: the author's name is right beside it in text.
-  'media-avatar': {
-    kind: 'image',
-    src: '/img/avatar-96.avif',
-    srcset: '',
-    width: 96,
-    height: 96,
-    alt: '',
-    focal: null,
-  },
-  'media-event-cover': {
-    kind: 'image',
-    src: '/img/event-320.avif',
-    srcset: '',
-    width: 320,
-    height: 320,
-    alt: 'The community hall decorated for the fundraising dinner',
-    focal: null,
-  },
-  // Deliberately has no alt text: proves the `logos` block's `altFrom` path
-  // writes the organisation's name rather than leaving the image unnamed.
-  'logo-foodbank': {
-    kind: 'image',
-    src: '/img/foodbank.svg',
-    srcset: '',
-    width: 160,
-    height: 40,
-    alt: '',
-    focal: null,
-  },
-  'logo-townhall': {
-    kind: 'image',
-    src: '/img/townhall.svg',
-    srcset: '',
-    width: 160,
-    height: 40,
-    alt: '',
-    focal: null,
-  },
-  'media-inline': {
-    kind: 'image',
-    src: '/img/inline-800.avif',
-    srcset: '',
-    width: 800,
-    height: 450,
-    alt: 'A photo from last year’s fundraising dinner',
-    focal: null,
-  },
+  'media-figure': source('/img/figure-1200.avif', 1200, 800, 'The food bank tables on a Thursday'),
+  'photo-food': source('/img/food-460.avif', 460, 575, 'Volunteers packing tins'),
+  'photo-homework': source('/img/homework-592.avif', 592, 740, 'Students around a table'),
+  'photo-garden': source('/img/garden-1152.avif', 1152, 896, 'Neighbours planting seedlings'),
+  'photo-supper': source('/img/supper-1152.avif', 1152, 646, 'Guests at the harvest supper'),
+  // Decorative: the name is right beside it in text.
+  'media-avatar': source('/img/avatar-320.avif', 320, 400, ''),
+  // Deliberately without alt text: the `logos` block names the mark itself.
+  'logo-college': source('/img/college.png', 484, 160, ''),
+  'logo-trust': source('/img/trust.png', 807, 160, ''),
+  'media-inline': source('/img/inline-800.avif', 800, 533, 'The reading room before homework club'),
 }
 
-const MISSING: ImageSource = {
-  kind: 'image',
-  src: '/img/missing.svg',
-  srcset: '',
-  width: 1,
-  height: 1,
-  alt: '',
-  focal: null,
-}
+const MISSING: ImageSource = source('/img/missing.png', 1, 1, '')
 
 /**
- * `event` entries carry `date`/`location` as raw schema fields — the exact
- * shape `collection-list.ts` reads directly rather than through `entryDate`
- * (which would read `publishedAt`, a different, system field). One entry
- * (`0000002`) deliberately carries neither, so the block's generic fallback
- * path (any other collection's list) is exercised too.
+ * Three events, deliberately out of date order (a calendar must sort them),
+ * one with an end time and a cost, one on a bare date with no hour, one with
+ * no place.
  */
-export const ENTRIES: readonly ContentEntry[] = [
+export const EVENTS: readonly ContentEntry[] = [
   {
-    id: '0192f0c2-0000-7000-8000-000000000001',
+    id: 'e-supper',
     collection: 'event',
     locale: 'en',
     status: 'published',
-    title: 'Community clean-up day',
-    date: '2026-11-14T09:00:00.000Z',
-    location: 'Riverside Park',
-    description: 'A morning of volunteering, open to everyone, no experience needed.',
-    coverImage: 'media-event-cover',
-    publishedAt: '2026-02-11T09:00:00.000Z',
+    title: 'Harvest supper',
+    date: '2026-10-22T18:30:00.000Z',
+    endsAt: '2026-10-22T22:00:00.000Z',
+    location: 'Ashworth Town Hall, Wardle Room',
+    address: 'Market Square, Ashworth AW4 1AA',
+    cost: '£25, or £12 for under-16s',
+    booking: 'Tickets from the hall',
+    description: 'Three courses cooked by volunteers from garden produce.',
+    coverImage: 'photo-supper',
+  },
+  {
+    id: 'e-orientation',
+    collection: 'event',
+    locale: 'en',
+    status: 'published',
+    title: 'Volunteer orientation evening',
+    date: '2026-09-20T18:00:00.000Z',
+    endsAt: '2026-09-20T19:30:00.000Z',
+    location: 'The Old Library, reading room',
+    cost: 'Free',
+    description: 'What each role involves and which shifts need people now.',
+  },
+  {
+    id: 'e-fair',
+    collection: 'event',
+    locale: 'en',
+    status: 'published',
+    title: 'Book fair',
+    date: '2026-10-01',
+  },
+]
+
+/** Programmes: a picture each, a schedule, a place and an audience. */
+export const PROGRAMMES: readonly ContentEntry[] = [
+  {
+    id: 'p-food',
+    collection: 'programme',
+    locale: 'en',
+    status: 'published',
+    title: 'Thursday food bank',
+    summary: 'A week of groceries for any household that asks.',
+    schedule: 'Thursdays, 5.30pm to 7.30pm',
+    location: 'The Old Library, main hall',
+    address: '220 Elm Street, Ashworth AW4 2LT',
+    audience: 'Any household in Ashworth',
+    coverImage: 'photo-food',
+  },
+  {
+    id: 'p-homework',
+    collection: 'programme',
+    locale: 'en',
+    status: 'published',
+    title: 'Homework club',
+    summary: 'Two quiet afternoons a week for children aged 10 to 14.',
+    schedule: 'Tuesdays and Thursdays, 3.30pm to 5.30pm',
+    coverImage: 'photo-homework',
+  },
+]
+
+/** Two plain entries: one with a title and an excerpt, one with neither. */
+export const ENTRIES: readonly ContentEntry[] = [
+  {
+    id: '0192f0c2-0000-7000-8000-000000000001',
+    collection: 'page',
+    locale: 'en',
+    status: 'published',
+    title: 'Annual report',
+    excerpt: 'The year to 31 March, independently examined.',
   },
   {
     id: '0192f0c2-0000-7000-8000-000000000002',
-    collection: 'article',
+    collection: 'page',
     locale: 'en',
     status: 'published',
-    // No title, no date, no location: `entryTitle`/the generic fallback
-    // path must still produce a real card, never `undefined` on the page.
-    excerpt: 'A short note with no date at all.',
-    publishedAt: '2026-01-05T09:00:00.000Z',
   },
 ]
 
 export function makeContext(overrides: Partial<RenderContext> = {}): RenderContext {
   const base: RenderContext = {
     site: {
-      name: 'Riverside Community Fund',
-      url: 'https://riverside.cogenta.dev',
+      name: 'Common Ground',
+      url: 'https://commonground.example',
       locales: ['en', 'fr'],
       defaultLocale: 'en',
     },
     locale: 'en',
-    url: new URL('https://riverside.cogenta.dev/en/events/community-clean-up-day'),
+    url: new URL('https://commonground.example/en/events/harvest-supper'),
     t: (key) => key,
     image: (media: MediaReference) => MEDIA[media] ?? MISSING,
     link: (target) => {
@@ -164,12 +146,22 @@ export function makeContext(overrides: Partial<RenderContext> = {}): RenderConte
       return `/en/${target.collection}/${target.id}`
     },
     content: {
-      entry: async () => ENTRIES[0] ?? null,
-      byPath: async () => ENTRIES[0] ?? null,
-      list: async (): Promise<Page<ContentEntry>> => ({ items: ENTRIES, nextCursor: null }),
+      entry: async () => EVENTS[0] ?? null,
+      byPath: async () => EVENTS[0] ?? null,
+      list: async (): Promise<Page<ContentEntry>> => ({ items: EVENTS, nextCursor: null }),
     },
   }
   return { ...base, ...overrides }
+}
+
+function paragraph(key: string, text: string): RichTextDocument[number] {
+  return {
+    _key: key,
+    _type: 'block',
+    style: 'normal',
+    children: [{ _key: `${key}-s`, _type: 'span', text, marks: [] }],
+    markDefs: [],
+  }
 }
 
 const PROSE_BODY: RichTextDocument = [
@@ -178,21 +170,19 @@ const PROSE_BODY: RichTextDocument = [
     _type: 'block',
     style: 'normal',
     children: [
-      { _key: 's1', _type: 'span', text: 'Every donation goes ', marks: [] },
-      { _key: 's2', _type: 'span', text: 'straight back into the community', marks: ['strong'] },
-      { _key: 's3', _type: 'span', text: ' — see ', marks: [] },
-      { _key: 's4', _type: 'span', text: 'our latest accounts', marks: ['m1'] },
-      { _key: 's5', _type: 'span', text: ' & the <winter shelter> report.', marks: [] },
+      { _key: 's1', _type: 'span', text: 'Every pound is spent ', marks: [] },
+      { _key: 's2', _type: 'span', text: 'in Ashworth', marks: ['strong'] },
+      { _key: 's3', _type: 'span', text: '; see ', marks: [] },
+      { _key: 's4', _type: 'span', text: 'our accounts', marks: ['m1'] },
+      { _key: 's5', _type: 'span', text: ' & the <winter> report.', marks: [] },
     ],
-    markDefs: [
-      { _key: 'm1', _type: 'link', href: 'https://example.org/accounts', rel: 'external' },
-    ],
+    markDefs: [{ _key: 'm1', _type: 'link', href: 'https://example.org/accounts' }],
   },
   {
     _key: 'h1',
     _type: 'block',
     style: 'h2',
-    children: [{ _key: 's6', _type: 'span', text: 'What a volunteer shift looks like', marks: [] }],
+    children: [{ _key: 's6', _type: 'span', text: 'A first shift', marks: [] }],
     markDefs: [],
   },
   {
@@ -207,26 +197,6 @@ const PROSE_BODY: RichTextDocument = [
     markDefs: [],
   },
   {
-    _key: 'l2',
-    _type: 'block',
-    style: 'normal',
-    listItem: 'bullet',
-    level: 2,
-    children: [{ _key: 's8', _type: 'span', text: 'and a partner for the first hour', marks: [] }],
-    markDefs: [],
-  },
-  {
-    _key: 'l3',
-    _type: 'block',
-    style: 'normal',
-    listItem: 'bullet',
-    level: 1,
-    children: [
-      { _key: 's9', _type: 'span', text: 'A named task for the whole session', marks: ['m2'] },
-    ],
-    markDefs: [{ _key: 'm2', _type: 'internalLink', collection: 'page', id: 'volunteer' }],
-  },
-  {
     _key: 'q1',
     _type: 'block',
     style: 'blockquote',
@@ -235,50 +205,7 @@ const PROSE_BODY: RichTextDocument = [
     ],
     markDefs: [],
   },
-  { _key: 'm3', _type: 'media', id: 'media-inline', caption: 'Last year’s fundraising dinner' },
-]
-
-const FAQ_ANSWER: RichTextDocument = [
-  {
-    _key: 'a1',
-    _type: 'block',
-    style: 'normal',
-    children: [
-      { _key: 'as1', _type: 'span', text: 'No — turn up any Thursday evening.', marks: [] },
-    ],
-    markDefs: [],
-  },
-]
-
-const TESTIMONIAL_QUOTE: RichTextDocument = [
-  {
-    _key: 't1',
-    _type: 'block',
-    style: 'normal',
-    children: [
-      { _key: 'ts1', _type: 'span', text: 'I came for one Saturday and ', marks: [] },
-      { _key: 'ts2', _type: 'span', text: 'stayed for three years', marks: ['strong'] },
-      { _key: 'ts3', _type: 'span', text: '. Nobody ever made it feel like a chore.', marks: [] },
-    ],
-    markDefs: [],
-  },
-]
-
-const ACCORDION_ANSWER: RichTextDocument = [
-  {
-    _key: 'p1',
-    _type: 'block',
-    style: 'normal',
-    children: [
-      {
-        _key: 'ps1',
-        _type: 'span',
-        text: 'Open Tuesday to Saturday, 9am to 5pm, and by appointment on Sundays.',
-        marks: [],
-      },
-    ],
-    markDefs: [],
-  },
+  { _key: 'm3', _type: 'media', id: 'media-inline', caption: 'The reading room' },
 ]
 
 const VERSION = '1.0.0'
@@ -291,13 +218,13 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-hero',
     _type: 'hero',
     _version: VERSION,
-    eyebrow: 'Riverside Community Fund',
-    title: 'Working together, close to home',
-    subtitle: 'Every gift and every hour goes straight back into this neighbourhood.',
+    eyebrow: 'A neighbourhood charity since 1994',
+    title: 'No one in Ashworth should go hungry or face winter alone',
+    subtitle: 'A food bank, a homework club, a garden and a coat bank.',
     media: 'media-hero',
     actions: [
       { label: 'Donate', target: { collection: 'page', id: 'donate' }, emphasis: 'primary' },
-      { label: 'Volunteer', target: { href: 'https://example.org/volunteer' } },
+      { label: 'Volunteer with us', target: { href: '/volunteer' } },
     ],
   },
   prose: { _key: 'b-prose', _type: 'prose', _version: VERSION, body: PROSE_BODY },
@@ -306,47 +233,37 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _type: 'mediaFigure',
     _version: VERSION,
     media: 'media-figure',
-    caption: 'Thursday evenings at the food distribution table',
-    credit: 'Riverside Community Fund',
-    ratio: '4:3',
+    caption: 'The food bank tables on a Thursday evening',
+    credit: 'Photograph: Colin Birch',
+    ratio: '3:2',
     align: 'wide',
   },
   featureGrid: {
     _key: 'b-features',
     _type: 'featureGrid',
     _version: VERSION,
-    title: 'What we do',
+    title: 'Where you could help',
     items: [
       {
         _key: 'f1',
         icon: 'heart',
-        title: 'Weekly food distribution',
-        text: 'Thursday evenings, from the hall — no paperwork, no means test.',
-        link: { collection: 'page', id: 'programmes' },
+        title: 'Food bank',
+        text: 'Thursdays, 5pm to 8pm.',
+        link: { collection: 'programme', id: 'food-bank' },
       },
-      {
-        _key: 'f2',
-        icon: 'book',
-        title: 'Homework club',
-        text: 'Two afternoons a week, run entirely by volunteers.',
-      },
-      {
-        _key: 'f3',
-        icon: 'leaf',
-        title: 'Community garden',
-        text: 'Beds anyone can plant in and harvest from.',
-      },
+      { _key: 'f2', icon: 'book', title: 'Homework club tutor', text: 'Tuesdays or Thursdays.' },
+      { _key: 'f3', icon: 'leaf', title: 'Garden', text: 'Saturday mornings.' },
     ],
   },
   cta: {
     _key: 'b-cta',
     _type: 'cta',
     _version: VERSION,
-    title: 'Every gift counts',
-    text: 'A one-off gift or a monthly one — both keep the hall open.',
+    title: 'A monthly gift keeps Thursday going',
+    text: 'We plan a month ahead. £5 a month buys the bread for one Thursday. £12 a month keeps one family in vegetables. Thank you.',
     actions: [
-      { label: 'Donate now', target: { href: '/donate' }, emphasis: 'primary' },
-      { label: 'Set up a monthly gift', target: { href: '/donate/monthly' } },
+      { label: 'Ways to give', target: { href: '/donate' }, emphasis: 'primary' },
+      { label: 'Read our accounts', target: { href: '/finances' } },
     ],
   },
   gallery: {
@@ -355,62 +272,77 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _version: VERSION,
     layout: 'grid',
     items: [
-      { _key: 'g1', media: 'media-gallery-1' },
-      { _key: 'g2', media: 'media-gallery-2' },
+      { _key: 'g1', media: 'photo-supper' },
+      { _key: 'g2', media: 'photo-garden' },
+      { _key: 'g3', media: 'photo-food' },
     ],
   },
   quote: {
     _key: 'b-quote',
     _type: 'quote',
     _version: VERSION,
-    text: 'This hall has fed my family through two hard winters. Nobody ever asked us to prove anything.',
-    author: 'A neighbour',
-    role: 'Weekly visitor',
+    text: 'We just could not stand the thought of a neighbour going without dinner.',
+    author: 'Margaret Heald',
+    role: 'One of the founders',
     avatar: 'media-avatar',
   },
   faq: {
     _key: 'b-faq',
     _type: 'faq',
     _version: VERSION,
-    title: 'How to help',
-    items: [{ _key: 'q1', question: 'Do I need to book a volunteer shift?', answer: FAQ_ANSWER }],
+    title: 'Questions people ask us',
+    items: [
+      {
+        _key: 'q1',
+        question: 'Do I need a referral?',
+        answer: [paragraph('a1', 'No. Come to the side door on a Thursday.')],
+      },
+      {
+        _key: 'q2',
+        question: 'Can I give food instead of money?',
+        answer: [paragraph('a2', 'Yes, at the hall on weekdays.')],
+      },
+    ],
   },
   stats: {
     _key: 'b-stats',
     _type: 'stats',
     _version: VERSION,
-    title: 'Our impact this year',
+    title: 'Last year, in numbers',
     items: [
-      { _key: 's1', value: '12,400', unit: 'meals', label: 'meals served' },
-      { _key: 's2', value: '380', label: 'volunteers' },
-      { _key: 's3', value: '27', label: 'partner schools' },
-      { _key: 's4', value: '€1.2M', label: 'raised' },
+      {
+        _key: 's1',
+        value: '7,280',
+        unit: 'parcels',
+        label: 'of food handed out on Thursday evenings.',
+      },
+      { _key: 's2', value: '312', label: 'volunteers gave 21,600 hours.' },
     ],
   },
   logos: {
     _key: 'b-logos',
     _type: 'logos',
     _version: VERSION,
-    title: 'In partnership with',
+    title: 'The organisations we work with',
     items: [
       {
         _key: 'l1',
-        media: 'logo-foodbank',
-        name: 'Regional Food Bank',
-        url: 'https://foodbank.example',
+        media: 'logo-college',
+        name: 'Ashworth College',
+        url: 'https://college.example',
       },
-      { _key: 'l2', media: 'logo-townhall', name: 'Town Hall' },
+      { _key: 'l2', media: 'logo-trust', name: 'The Linden Trust' },
     ],
   },
   collectionList: {
     _key: 'b-collection',
     _type: 'collectionList',
     _version: VERSION,
-    title: 'Upcoming events',
+    title: 'Coming up',
     collection: 'event',
-    sort: { field: 'createdAt', direction: 'asc' },
+    sort: { field: 'id', direction: 'asc' },
     limit: 6,
-    layout: 'grid',
+    layout: 'list',
   },
   embed: {
     _key: 'b-embed',
@@ -425,10 +357,13 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-testimonial',
     _type: 'testimonial',
     _version: VERSION,
-    quote: TESTIMONIAL_QUOTE,
+    quote: [
+      paragraph('t1', 'My son was falling behind in maths.'),
+      paragraph('t2', 'By the summer I was one of the people helping.'),
+    ],
     attribution: {
-      name: 'M. Alaoui',
-      role: 'Volunteer since 2023',
+      name: 'Joanne Pryce',
+      role: 'Homework club volunteer since 2019',
       avatar: 'media-avatar',
     },
   },
@@ -436,27 +371,22 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-pricing',
     _type: 'pricingTable',
     _version: VERSION,
-    title: 'Become a member',
+    title: 'Give every month',
     tiers: [
       {
         _key: 'p1',
-        name: 'Friend',
-        price: '€5',
-        interval: '/month',
-        features: ['Our quarterly newsletter', 'An invitation to the annual dinner'],
-        action: { label: 'Join as a Friend', target: { href: '/join' } },
+        name: 'Bread',
+        price: '£5',
+        interval: 'a month',
+        features: ['Buys the bread for one Thursday', 'With Gift Aid, worth £6.25'],
       },
       {
         _key: 'p2',
-        name: 'Sustainer',
-        price: '€20',
-        interval: '/month',
-        features: [
-          'Everything in Friend',
-          'A named seat at the AGM',
-          'Priority for the summer camp',
-        ],
-        action: { label: 'Become a Sustainer', target: { href: '/join' }, emphasis: 'primary' },
+        name: 'Vegetables',
+        price: '£12',
+        interval: 'a month',
+        features: ['Keeps one family in vegetables all year'],
+        action: { label: 'Ask the treasurer', target: { href: '/donate' }, emphasis: 'primary' },
         highlighted: true,
       },
     ],
@@ -465,17 +395,24 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _key: 'b-accordion',
     _type: 'accordion',
     _version: VERSION,
-    title: 'Hours & drop-in',
-    items: [{ _key: 'ac1', question: 'When is the hall open?', answer: ACCORDION_ANSWER }],
+    title: 'Before your first shift',
+    items: [
+      {
+        _key: 'ac1',
+        question: 'Is there a minimum age?',
+        answer: [paragraph('aa1', 'Sixteen for most roles.')],
+      },
+    ],
   },
   statCounter: {
     _key: 'b-counters',
     _type: 'statCounter',
     _version: VERSION,
-    title: 'Since 1994',
+    title: 'Where each pound goes',
     stats: [
-      { _key: 'c1', value: '32', label: 'years serving the community' },
-      { _key: 'c2', value: '4', label: 'programmes running today' },
+      { _key: 'c1', value: '38%', label: 'Food bought for the food bank' },
+      { _key: 'c2', value: '17%', label: 'Running the hall' },
+      { _key: 'c3', value: '45%', label: 'Everything else' },
     ],
   },
   logoStrip: {
@@ -483,10 +420,10 @@ export const BLOCKS: { readonly [T in VocabularyBlock['_type']]: BlockOfType<T> 
     _type: 'logoStrip',
     _version: VERSION,
     logos: [
-      { _key: 'ls1', media: 'logo-foodbank' },
-      { _key: 'ls2', media: 'logo-townhall' },
+      { _key: 'ls1', media: 'logo-college' },
+      { _key: 'ls2', media: 'logo-trust' },
     ],
-    caption: 'Our partners',
+    caption: 'Working alongside us',
   },
 }
 

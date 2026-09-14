@@ -1,35 +1,44 @@
 import type { TestimonialBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext, renderRichText } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * `blocks@2.0` (RFC 0001). A volunteer's own words — the same
- * `<figure><blockquote>…</blockquote><figcaption>` pattern `quote` uses, but
- * the quote itself is rich text and the attribution is the block's single
- * grouped `attribution` field. The avatar sits in a round frame, echoing the
- * hero's own rounded, friendly treatment.
+ * One person's own account of what the organisation meant to them, told
+ * with their photograph: the portrait cropped to 4:5 on the first four
+ * columns, the words in the display face on the last seven, starting on a
+ * hung quotation mark, and the name and what they do here beneath them.
+ * Without a portrait the words take the reading column alone; nothing stands
+ * in for the missing face.
  */
 export function renderTestimonial(block: TestimonialBlock, ctx: RenderContext): HtmlElement {
   const { attribution } = block
-  return h(
+  return section(
+    'div',
+    'testimonial',
+    'ca-story',
+    { 'data-portrait': String(attribution.avatar !== undefined) },
     'figure',
-    { class: 'cg-block cg-testimonial', 'data-block': 'testimonial' },
-    h('blockquote', { class: 'cg-testimonial__quote' }, renderRichText(ctx, block.quote)),
-    h(
-      'figcaption',
-      { class: 'cg-testimonial__attribution' },
-      attribution.avatar === undefined
-        ? null
-        : image(ctx, attribution.avatar, {
-            className: 'cg-testimonial__avatar',
-            variant: { width: 96, height: 96, fit: 'cover' },
+    attribution.avatar === undefined
+      ? null
+      : h(
+          'div',
+          { class: 'ca-story__portrait' },
+          image(ctx, attribution.avatar, {
+            className: 'ca-story__image',
+            sizes: '(min-width: 64rem) 26rem, 70vw',
           }),
+        ),
+    h(
+      'div',
+      { class: 'ca-story__words' },
+      h('blockquote', { class: 'ca-story__quote' }, renderRichText(ctx, block.quote)),
       h(
-        'span',
-        { class: 'cg-testimonial__who' },
-        h('span', { class: 'cg-testimonial__name' }, attribution.name),
+        'figcaption',
+        { class: 'ca-story__attribution' },
+        h('span', { class: 'ca-story__name' }, attribution.name),
         attribution.role === undefined
           ? null
-          : h('span', { class: 'cg-testimonial__role' }, attribution.role),
+          : h('span', { class: 'ca-story__role' }, attribution.role),
       ),
     ),
   )

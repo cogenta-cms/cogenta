@@ -1,0 +1,506 @@
+/*
+ * The header and the footer of a charity's site.
+ *
+ * Header: one row on the paper under a hairline. The organisation's name in
+ * the display face, the pages in plain words, and the one standing ask,
+ * "Donate", as the yellow button. Below the wide breakpoint the pages open
+ * in a panel from a button that says "Menu", with no script.
+ *
+ * Footer: the green band. Who the organisation is and how to reach it (the
+ * registered charity number, the address, the telephone and the email come
+ * from the site's footer note), the pages in headed columns, the profiles,
+ * and the legal line.
+ */
+
+/* --------------------------------------------------------------------------
+   Header
+   -------------------------------------------------------------------------- */
+
+.ca-header {
+  position: relative;
+  z-index: 30;
+  border-block-end: var(--ca-rule) solid var(--ca-line);
+  background: var(--ca-canvas);
+}
+
+.ca-header__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--ca-s2) var(--ca-s8);
+  min-block-size: var(--ca-header-height);
+  max-inline-size: calc(var(--ca-page) + var(--ca-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--ca-gutter);
+}
+
+.ca-header__brand {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-block-size: 44px;
+  min-inline-size: 0;
+  margin-inline-end: auto;
+  color: var(--ca-ink);
+  text-decoration: none;
+}
+
+.ca-header__brand:hover {
+  color: var(--ca-ink);
+}
+
+.ca-header__wordmark {
+  overflow: hidden;
+  font-family: var(--ca-font-display);
+  font-size: var(--ca-size-wordmark);
+  font-weight: var(--ca-weight-bold);
+  font-stretch: var(--ca-stretch-display);
+  line-height: 1;
+  letter-spacing: var(--ca-tracking-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ca-header__logo {
+  display: block;
+  block-size: 2.25rem;
+  inline-size: auto;
+  max-inline-size: min(14rem, 46vw);
+  object-fit: contain;
+  filter: none;
+}
+
+.ca-header__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--ca-s6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ca-header__item a,
+.ca-header__item span {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  color: var(--ca-ink);
+  font-size: var(--ca-text-md);
+  font-weight: var(--ca-weight-semibold);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--ca-rule-strong);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.45em;
+}
+
+.ca-header__item a:hover {
+  color: var(--ca-ink);
+  text-decoration-color: var(--ca-green);
+}
+
+.ca-header__action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-block-size: 44px;
+  padding: 0 var(--ca-s5);
+  border: var(--ca-rule) solid var(--ca-signal);
+  border-radius: var(--ca-radius-control);
+  font-size: var(--ca-text-md);
+  font-weight: var(--ca-weight-bold);
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--ca-duration) var(--ca-ease),
+    border-color var(--ca-duration) var(--ca-ease);
+}
+
+.cg-theme-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.75rem;
+  margin-inline-end: calc(var(--ca-s3) * -1);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ca-ink);
+  cursor: pointer;
+  transition: color var(--ca-duration) var(--ca-ease);
+}
+
+.cg-theme-toggle:hover {
+  color: var(--ca-green);
+}
+
+.cg-theme-toggle__icon {
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+}
+
+.cg-theme-toggle__icon--moon {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--sun {
+    display: none;
+  }
+
+  :where(:root:not([data-theme="light"])) .cg-theme-toggle__icon--moon {
+    display: block;
+  }
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--sun {
+  display: none;
+}
+
+:where(:root[data-theme="dark"]) .cg-theme-toggle__icon--moon {
+  display: block;
+}
+
+.ca-nav-toggle-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The menu button says what it does, in words. */
+.ca-nav-toggle-label {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  order: 4;
+  padding-inline: var(--ca-s1);
+  color: var(--ca-ink);
+  font-size: var(--ca-text-md);
+  font-weight: var(--ca-weight-semibold);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--ca-rule-strong);
+  text-decoration-color: var(--ca-green);
+  text-underline-offset: 0.3em;
+  cursor: pointer;
+}
+
+.ca-nav-toggle-input:focus-visible ~ .ca-nav-toggle-label {
+  outline: var(--ca-rule-strong) solid var(--ca-green);
+  outline-offset: 2px;
+}
+
+.ca-nav-toggle-close {
+  display: none;
+}
+
+.ca-nav-toggle-input:checked ~ .ca-nav-toggle-label .ca-nav-toggle-open {
+  display: none;
+}
+
+.ca-nav-toggle-input:checked ~ .ca-nav-toggle-label .ca-nav-toggle-close {
+  display: inline;
+}
+
+/* Below the wide breakpoint the pages are a panel of large links under the
+   header, down to the bottom of the screen; the donation ask and the
+   light/dark control stay in the header row. */
+@media (max-width: 63.99rem) {
+  .ca-header__inner {
+    gap: var(--ca-s2) var(--ca-s3);
+  }
+
+  .ca-header__action {
+    order: 2;
+    padding-inline: var(--ca-s4);
+  }
+
+  .cg-theme-toggle {
+    order: 3;
+    margin-inline-end: 0;
+  }
+
+  .ca-header__nav {
+    display: none;
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 100%;
+    z-index: 29;
+    min-block-size: calc(100svh - var(--ca-header-height));
+    overflow-y: auto;
+    padding: var(--ca-s2) var(--ca-gutter) var(--ca-s12);
+    border-block-start: var(--ca-rule) solid var(--ca-line);
+    background: var(--ca-canvas);
+  }
+
+  .ca-nav-toggle-input:checked ~ .ca-header__nav {
+    display: block;
+  }
+
+  .ca-header__links {
+    display: block;
+  }
+
+  .ca-header__item {
+    border-block-end: var(--ca-rule) solid var(--ca-line);
+  }
+
+  .ca-header__item a,
+  .ca-header__item span {
+    display: flex;
+    min-block-size: 0;
+    padding-block: var(--ca-s4);
+    font-family: var(--ca-font-display);
+    font-size: var(--ca-size-nav);
+    font-weight: var(--ca-weight-semibold);
+    font-stretch: var(--ca-stretch-display);
+    line-height: var(--ca-leading-heading);
+    letter-spacing: var(--ca-tracking-heading);
+  }
+
+  .ca-header__tagline {
+    margin: var(--ca-s8) 0 0;
+    max-inline-size: 32ch;
+    color: var(--ca-ink-muted);
+    font-size: var(--ca-text-md);
+  }
+}
+
+@media (max-width: 26rem) {
+  /* A long name takes two short lines rather than losing its end. */
+  .ca-header__wordmark {
+    font-size: var(--ca-text-lg);
+    line-height: 1.02;
+    white-space: normal;
+  }
+
+  .ca-header__action {
+    padding-inline: var(--ca-s3);
+  }
+}
+
+@media (min-width: 64rem) {
+  .ca-nav-toggle-label,
+  .ca-header__tagline {
+    display: none;
+  }
+
+  .ca-header__nav {
+    order: 1;
+  }
+
+  .ca-header__action {
+    order: 2;
+  }
+
+  .cg-theme-toggle {
+    order: 3;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Footer: the green band.
+   -------------------------------------------------------------------------- */
+
+.ca-footer {
+  padding-block: var(--ca-s20) var(--ca-s8);
+  background: var(--ca-footer);
+  color: var(--ca-footer-ink);
+  font-size: var(--ca-text-md);
+  line-height: var(--ca-leading-ui);
+}
+
+.ca-footer__inner {
+  display: grid;
+  grid-template-columns: repeat(var(--ca-columns), minmax(0, 1fr));
+  column-gap: var(--ca-col-gap);
+  row-gap: var(--ca-s12);
+  max-inline-size: calc(var(--ca-page) + var(--ca-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--ca-gutter);
+}
+
+.ca-footer__inner > * {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+.ca-footer :where(a) {
+  color: var(--ca-footer-ink);
+  text-decoration-color: var(--ca-footer-line);
+}
+
+.ca-footer :where(a:hover) {
+  color: var(--ca-footer-ink);
+  text-decoration-color: currentColor;
+}
+
+.ca-footer__name {
+  display: inline-block;
+  color: var(--ca-footer-ink);
+  font-family: var(--ca-font-display);
+  font-size: var(--ca-text-2xl);
+  font-weight: var(--ca-weight-bold);
+  font-stretch: var(--ca-stretch-display);
+  line-height: 1.05;
+  letter-spacing: var(--ca-tracking-display);
+  text-decoration: none;
+}
+
+.ca-footer__tagline {
+  margin: var(--ca-s3) 0 0;
+  max-inline-size: 34ch;
+  color: var(--ca-footer-ink);
+  font-size: var(--ca-text-lg);
+  line-height: var(--ca-leading-lead);
+}
+
+.ca-footer__note {
+  margin-block-start: var(--ca-s8);
+}
+
+.ca-footer__note p {
+  margin: 0;
+  max-inline-size: 46ch;
+  color: var(--ca-footer-ink);
+  line-height: 1.55;
+}
+
+.ca-footer__note p + p {
+  margin-block-start: var(--ca-s4);
+}
+
+.ca-footer__note p:last-child:not(:first-child) {
+  color: var(--ca-footer-muted);
+  font-size: var(--ca-text-caption);
+}
+
+.ca-footer__nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ca-s10) var(--ca-col-gap);
+  align-content: start;
+}
+
+.ca-footer__heading {
+  margin: 0 0 var(--ca-s3);
+  color: var(--ca-footer-muted);
+  font-size: var(--ca-text-caption);
+  font-weight: var(--ca-weight-semibold);
+}
+
+.ca-footer__links,
+.ca-footer__social {
+  display: grid;
+  gap: var(--ca-s1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ca-footer__social {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ca-s1) var(--ca-s6);
+  margin-block-start: var(--ca-s8);
+}
+
+.ca-footer__item a,
+.ca-footer__item span,
+.ca-footer__social-item a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ca-s2);
+  min-block-size: 2.25rem;
+  color: var(--ca-footer-ink);
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.3em;
+}
+
+.ca-footer__item a:hover,
+.ca-footer__social-item a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* The social profiles keep their names beside the icons. */
+.ca-footer__social .cg-visually-hidden {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+}
+
+.cg-social__icon {
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  flex: none;
+}
+
+.ca-footer__legal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ca-s3) var(--ca-s8);
+  padding-block-start: var(--ca-s6);
+  border-block-start: var(--ca-rule) solid var(--ca-footer-line);
+  color: var(--ca-footer-muted);
+  font-size: var(--ca-text-sm);
+}
+
+.ca-footer__copyright {
+  margin: 0;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.ca-footer__branding a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  color: var(--ca-footer-muted);
+  text-decoration: none;
+}
+
+.ca-footer__branding a:hover {
+  color: var(--ca-footer-ink);
+}
+
+.cg-site-footer__brand-logo {
+  display: block;
+  block-size: 18px;
+  inline-size: auto;
+}
+
+.cg-site-footer__version {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 48rem) {
+  .ca-footer__nav[data-columns="1"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ca-footer__nav[data-columns="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .ca-footer__about {
+    grid-column: 1 / span 5;
+  }
+
+  .ca-footer__nav {
+    grid-column: 7 / -1;
+  }
+
+  .ca-footer__legal {
+    grid-column: 1 / -1;
+  }
+}

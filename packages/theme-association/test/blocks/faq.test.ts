@@ -4,30 +4,26 @@ import { renderFaq } from '../../src/render/blocks/faq.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderFaq(BLOCKS.faq, ctx))
 
 describe('faq', () => {
-  it('renders the title, "How to help"', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('<h2 class="cg-faq__title" data-field="title">How to help</h2>')
+  it('prints every answer under its question, in the open', () => {
+    expect(html).not.toContain('<details')
+    expect(html).toContain('<h3 class="ca-faq__question">Do I need a referral?</h3>')
+    expect(html).toContain('<p>No. Come to the side door on a Thursday.</p>')
   })
 
-  it('renders each item as a <details>/<summary> disclosure, zero JavaScript', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('<details class="cg-faq__details">')
-    expect(html).toContain(
-      '<summary class="cg-faq__question">Do I need to book a volunteer shift?</summary>',
-    )
+  it('keeps each question and its answer together in one pair', () => {
+    expect(html.match(/<div class="ca-faq__item">/g)).toHaveLength(2)
   })
 
-  it('renders the answer as real rich text, not a heading inside the summary', () => {
-    const html = serialize(renderFaq(BLOCKS.faq, ctx))
-    expect(html).toContain('No — turn up any Thursday evening.')
-    expect(html).not.toMatch(/<summary[^>]*><h[1-6]/)
+  it('titles the block at h2 and the questions one level below', () => {
+    expect(html).toContain('<h2 class="ca-head__title" data-field="title">')
+    const { title: _t, ...untitled } = BLOCKS.faq
+    expect(serialize(renderFaq(untitled, ctx))).toContain('<h2 class="ca-faq__question">')
   })
 
-  it('omits the title heading entirely when the block has none', () => {
-    const { title: _title, ...noTitle } = BLOCKS.faq
-    const html = serialize(renderFaq(noTitle, ctx))
-    expect(html).not.toContain('cg-faq__title')
+  it('never writes a question mark glyph of its own or a toggle', () => {
+    expect(html).not.toMatch(/<button|summary/)
   })
 })

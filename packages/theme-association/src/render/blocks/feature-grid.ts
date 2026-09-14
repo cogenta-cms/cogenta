@@ -1,7 +1,5 @@
 import type { FeatureGridBlock, FeatureItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
-  type HeadingTag,
   type HtmlElement,
   h,
   heading,
@@ -10,58 +8,92 @@ import {
   type RenderContext,
   renderIcon,
 } from '@cogenta/theme-kit'
+import { arrowWords, section, sectionHead } from '../layout.js'
 
 /**
- * "What we do" — three (or more) programme cards, each a rounded, softly
- * shadowed tile with its icon in a round chip. The item's title carries the
- * link, so the link's accessible name is the programme's own name (WCAG
- * 2.4.4) — the block has no separate "learn more" field to write.
+ * Two readings of the same block, chosen by its content rather than by a
+ * setting:
  *
- * `icon` names a symbol, never markup: it is exposed as a data attribute for
- * the skin and, when the name is one `renderIcon` recognises, a real inline
- * glyph — `aria-hidden`, since the title already names the programme.
+ * - **Ways in**, when an item names an icon this theme can draw: ruled
+ *   columns, each with a small line icon in the organisation's green, the
+ *   name, its sentence, and the name as an arrow link when it leads somewhere.
+ *   Never a tinted tile behind an icon, never a card.
+ * - **Steps**, when no item names an icon: an ordered list, each step under a
+ *   rule with its number set large in the display face, because a list of
+ *   things without pictures on a charity's site is almost always "how it
+ *   works": how to sign up, what happens after you give, the first evening.
  */
-function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
-  const title =
-    item.link === undefined
-      ? heading(tag, { class: 'cg-feature__title' }, item.title)
-      : heading(
-          tag,
-          { class: 'cg-feature__title' },
-          h('a', { class: 'cg-feature__link', href: href(ctx, item.link) }, item.title),
-        )
+function hasIcons(block: FeatureGridBlock): boolean {
+  return block.items.some((item) => item.icon !== undefined)
+}
+
+/**
+ * How many columns a wide screen gets: as many as there are items up to
+ * four, then three when the count divides by three, so six items make two
+ * full rows of three rather than a row of four and a row of two.
+ */
+export function columnsFor(count: number): number {
+  if (count <= 4) return count
+  return count % 3 === 0 ? 3 : 4
+}
+
+function name(item: FeatureItem, ctx: RenderContext): HtmlElement | string {
+  return item.link === undefined
+    ? item.title
+    : h('a', { class: 'ca-arrow-link', href: href(ctx, item.link) }, arrowWords(item.title))
+}
+
+function column(item: FeatureItem, ctx: RenderContext, titled: boolean): HtmlElement {
+  const icon =
+    item.icon === undefined ? null : renderIcon(item.icon, { className: 'ca-ways__icon', size: 28 })
   return h(
     'li',
-    { class: 'cg-feature' },
-    item.icon === undefined
-      ? null
-      : h(
-          'span',
-          { class: 'cg-feature__icon', 'data-icon': item.icon, 'aria-hidden': 'true' },
-          renderIcon(item.icon),
-        ),
-    title,
-    item.text === undefined ? null : h('p', { class: 'cg-feature__text' }, item.text),
+    { class: 'ca-ways__item' },
+    icon,
+    heading(nestedHeadingTag('featureGrid', titled), { class: 'ca-ways__name' }, name(item, ctx)),
+    item.text === undefined ? null : h('p', { class: 'ca-ways__text' }, item.text),
+  )
+}
+
+function step(item: FeatureItem, ctx: RenderContext, titled: boolean, index: number): HtmlElement {
+  return h(
+    'li',
+    { class: 'ca-steps__item' },
+    h('span', { class: 'ca-steps__number', 'aria-hidden': 'true' }, String(index + 1)),
+    heading(nestedHeadingTag('featureGrid', titled), { class: 'ca-steps__name' }, name(item, ctx)),
+    item.text === undefined ? null : h('p', { class: 'ca-steps__text' }, item.text),
   )
 }
 
 export function renderFeatureGrid(block: FeatureGridBlock, ctx: RenderContext): HtmlElement {
-  const hasTitle = block.title !== undefined
-  const itemTag = nestedHeadingTag('featureGrid', hasTitle)
-  return h(
+  const titled = block.title !== undefined
+  const count = String(columnsFor(block.items.length))
+  if (!hasIcons(block)) {
+    return section(
+      'section',
+      'featureGrid',
+      'ca-steps',
+      { 'data-titled': String(titled), 'data-count': count },
+      'div',
+      sectionHead('featureGrid', block.title),
+      h(
+        'ol',
+        { class: 'ca-steps__items' },
+        block.items.map((item, index) => step(item, ctx, titled, index)),
+      ),
+    )
+  }
+  return section(
     'section',
-    { class: 'cg-block cg-features', 'data-block': 'featureGrid' },
-    hasTitle
-      ? heading(
-          blockHeadingTag('featureGrid') ?? 'h2',
-          { class: 'cg-features__title', 'data-field': 'title' },
-          block.title ?? '',
-        )
-      : null,
+    'featureGrid',
+    'ca-ways',
+    { 'data-titled': String(titled), 'data-count': count },
+    'div',
+    sectionHead('featureGrid', block.title),
     h(
       'ul',
-      { class: 'cg-features__items' },
-      block.items.map((item) => renderItem(item, ctx, itemTag)),
+      { class: 'ca-ways__items' },
+      block.items.map((item) => column(item, ctx, titled)),
     ),
   )
 }

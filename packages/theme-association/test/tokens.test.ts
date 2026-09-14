@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs'
 import type { SkinTokens } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
+import { contrast, parseHex, toOklch } from './css-color.js'
 
 /**
  * Contract D fixes a **closed and complete** token set: a skin that omits a
  * token is refused, and this theme's default skin is the first one that has
- * to pass. The refusal itself belongs to the skin validator; this asserts
- * the shipped tokens would survive it.
+ * to pass. The refusal belongs to the skin validator; this asserts the
+ * shipped tokens would survive it, and that they carry this theme's identity.
  */
 const tokens = JSON.parse(
   readFileSync(new URL('../tokens.json', import.meta.url), 'utf8'),
@@ -21,25 +22,11 @@ const EXPECTED: Readonly<Record<string, readonly string[]>> = {
   shadow: ['sm', 'md'],
 }
 
-function luminance(hex: string): number {
-  const value = hex.replace('#', '')
-  const channels = [0, 2, 4].map(
-    (offset) => Number.parseInt(value.slice(offset, offset + 2), 16) / 255,
-  )
-  const linear = channels.map((channel) =>
-    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
-  )
-  return (
-    0.2126 * (linear[0] as number) + 0.7152 * (linear[1] as number) + 0.0722 * (linear[2] as number)
-  )
+function primary(stack: string): string {
+  return stack.split(',')[0]?.replace(/['"]/g, '').trim() ?? ''
 }
 
-function contrast(foreground: string, background: string): number {
-  const a = luminance(foreground)
-  const b = luminance(background)
-  const [light, dark] = a > b ? [a, b] : [b, a]
-  return ((light as number) + 0.05) / ((dark as number) + 0.05)
-}
+const oklch = (hex: string) => toOklch(parseHex(hex))
 
 describe('the default skin', () => {
   it('declares every token group the contract fixes, and no other', () => {
@@ -53,54 +40,103 @@ describe('the default skin', () => {
   }
 
   it('reaches AA contrast on every text pair the contract names', () => {
-    expect(contrast(tokens.color.fg, tokens.color.bg)).toBeGreaterThanOrEqual(4.5)
-    expect(contrast(tokens.color.accentFg, tokens.color.accent)).toBeGreaterThanOrEqual(4.5)
-    expect(contrast(tokens.color.mutedFg, tokens.color.muted)).toBeGreaterThanOrEqual(4.5)
+    const { fg, bg, accent, accentFg, muted, mutedFg } = tokens.color
+    expect(contrast(parseHex(fg), parseHex(bg))).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(parseHex(accentFg), parseHex(accent))).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(parseHex(mutedFg), parseHex(muted))).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('picks a deep, warm green rather than a generic "eco" bright green', () => {
-    // A recorded, real assertion so a future edit that quietly swaps in a
-    // saturated, high-lightness green (the generic "recycling" green) is
-    // caught: this palette's green is deliberately deep and desaturated.
-    const hex = tokens.color.accent.replace('#', '')
-    const g = Number.parseInt(hex.slice(2, 4), 16)
-    expect(g).toBeLessThan(180)
+  it('grounds the page on warm paper, never a cold white or grey', () => {
+    const { l, c, h } = oklch(tokens.color.bg)
+    expect(l).toBeGreaterThan(0.94)
+    expect(l).toBeLessThan(0.99)
+    expect(c).toBeGreaterThan(0.006)
+    expect(h).toBeGreaterThan(60)
+    expect(h).toBeLessThan(100)
   })
 
-  it('sets a warm, light ground rather than a cold white or grey', () => {
-    const hex = tokens.color.bg.replace('#', '')
-    const r = Number.parseInt(hex.slice(0, 2), 16)
-    const b = Number.parseInt(hex.slice(4, 6), 16)
-    // A warm ivory has more red than blue; a cold white/grey does not.
-    expect(r).toBeGreaterThan(b)
+  it('sets a green-black ink, never pure black', () => {
+    const { l, h } = oklch(tokens.color.fg)
+    expect(l).toBeGreaterThan(0.15)
+    expect(l).toBeLessThan(0.3)
+    expect(h).toBeGreaterThan(120)
+    expect(h).toBeLessThan(180)
   })
 
-  it('names the two Google Fonts families this theme actually loads, with a real system fallback', () => {
-    expect(tokens.font.sans).toContain('Source Sans 3')
-    expect(tokens.font.sans).toMatch(/sans-serif/)
-    expect(tokens.font.serif).toContain('Nunito')
+  it('makes the organisation’s colour a deep green: never an eco lime, an indigo or a violet', () => {
+    const { l, c, h } = oklch(tokens.color.accent)
+    expect(h).toBeGreaterThan(140)
+    expect(h).toBeLessThan(175)
+    expect(l).toBeLessThan(0.5)
+    expect(c).toBeLessThan(0.12)
   })
 
-  it('uses a typographic scale that increases monotonically', () => {
-    expect(tokens.font.scale).toBeGreaterThan(1)
+  it('holds the green as link text on the paper', () => {
+    expect(contrast(parseHex(tokens.color.accent), parseHex(tokens.color.bg))).toBeGreaterThan(7)
   })
 
-  it('allows motion to be removed under prefers-reduced-motion', () => {
+  it('names Bricolage Grotesque for display and Source Sans 3 for text, each with a real fallback', () => {
+    expect(primary(tokens.font.serif)).toBe('Bricolage Grotesque')
+    expect(primary(tokens.font.sans)).toBe('Source Sans 3')
+    expect(tokens.font.sans).toMatch(/sans-serif$/)
+    expect(tokens.font.serif).toMatch(/sans-serif$/)
+    expect(tokens.font.mono).toMatch(/^ui-monospace/)
+  })
+
+  it('names none of the typefaces generated templates reach for first, nor one another theme owns', () => {
+    for (const stack of [tokens.font.sans, tokens.font.serif, tokens.font.mono]) {
+      for (const reserved of [
+        'Inter',
+        'Roboto',
+        'Poppins',
+        'Plus Jakarta Sans',
+        'Space Grotesk',
+        'DM Sans',
+        'Manrope',
+        'Outfit',
+        'Sora',
+        'Nunito',
+        'Archivo',
+        'Albert Sans',
+        'Fraunces',
+        'Libre Franklin',
+        'Source Serif 4',
+        'Literata',
+        'Figtree',
+        'Newsreader',
+        'Hanken Grotesk',
+        'Cormorant Garamond',
+        'Karla',
+        'Geist',
+        'Geist Mono',
+        'IBM Plex Sans',
+        'IBM Plex Mono',
+        'Instrument Sans',
+        'Instrument Serif',
+      ]) {
+        expect(primary(stack)).not.toBe(reserved)
+      }
+    }
+  })
+
+  it('uses a typographic ratio that still increases, and a base size a reader can read', () => {
+    expect(tokens.font.scale).toBeGreaterThan(1.1)
+    expect(tokens.font.scale).toBeLessThanOrEqual(1.25)
+    expect(Number.parseFloat(tokens.font.baseSize)).toBeGreaterThanOrEqual(1)
+  })
+
+  it('allows motion to be removed under prefers-reduced-motion, and keeps it short', () => {
     expect(tokens.motion.reduced).toBe(true)
+    expect(Number.parseFloat(tokens.motion.duration)).toBeLessThanOrEqual(150)
   })
 
   it('uses a density the contract allows', () => {
     expect(['compact', 'comfortable', 'spacious']).toContain(tokens.space.density)
   })
 
-  it("rounds cards generously — the brief's own 14px, not a sharp corporate corner", () => {
-    const asPx = (value: string): number => Number.parseFloat(value) * 16
-    expect(asPx(tokens.radius.md)).toBeCloseTo(14, 0)
-    expect(asPx(tokens.radius.lg)).toBeGreaterThan(asPx(tokens.radius.md))
-  })
-
-  it('uses soft, visible shadows rather than a hairline-only elevation system', () => {
-    expect(tokens.shadow.sm).toMatch(/rgba?\(/)
-    expect(tokens.shadow.md).toMatch(/rgba?\(/)
+  it('softens corners by a hair, never into pills or rounded cards', () => {
+    for (const value of Object.values(tokens.radius)) {
+      expect(Number.parseFloat(value) * 16).toBeLessThanOrEqual(6)
+    }
   })
 })

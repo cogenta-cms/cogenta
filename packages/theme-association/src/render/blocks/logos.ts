@@ -1,52 +1,45 @@
-import type { LogoItem, LogosBlock } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  image,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import type { LogosBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * Contract B says the organisation's name **is** the accessible name of the
- * link. So the logo image carries it as alt text when the media entity has
- * none, and no visually hidden duplicate is added.
+ * The organisations that work alongside this one: the title on the first
+ * four columns, and their marks on the last eight in a grid of cells divided
+ * by hairlines, each mark set small and in one ink so no partner shouts
+ * louder than another. A mark drawn in ink is inverted in the dark scheme.
+ *
+ * The organisation's name is the mark's accessible name when the media
+ * library has no alt text for it, and the link's own name when it links out.
  */
-function renderItem(item: LogoItem, ctx: RenderContext): HtmlElement {
-  const logo = image(ctx, item.media, {
-    className: 'cg-logo__image',
-    altFrom: item.name,
-    variant: { fit: 'contain' },
-  })
-  return h(
-    'li',
-    { class: 'cg-logo' },
-    item.url === undefined
-      ? logo
-      : h(
-          'a',
-          { class: 'cg-logo__link', href: ctx.link(item.url), rel: 'noopener noreferrer' },
-          logo,
-        ),
-  )
-}
-
 export function renderLogos(block: LogosBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  return section(
     'section',
-    { class: 'cg-block cg-logos', 'data-block': 'logos' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('logos') ?? 'h2',
-          { class: 'cg-logos__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'logos',
+    'ca-partners',
+    { 'data-titled': String(block.title !== undefined) },
+    'div',
+    sectionHead('logos', block.title),
     h(
       'ul',
-      { class: 'cg-logos__items' },
-      block.items.map((item) => renderItem(item, ctx)),
+      { class: 'ca-partners__items' },
+      block.items.map((item) => {
+        const mark = image(ctx, item.media, {
+          className: 'ca-mark',
+          altFrom: item.name,
+          sizes: '12rem',
+        })
+        return h(
+          'li',
+          { class: 'ca-partners__item' },
+          item.url === undefined
+            ? h('span', { class: 'ca-partners__cell' }, mark)
+            : h(
+                'a',
+                { class: 'ca-partners__cell', href: item.url, rel: 'noopener noreferrer' },
+                mark,
+              ),
+        )
+      }),
     ),
   )
 }

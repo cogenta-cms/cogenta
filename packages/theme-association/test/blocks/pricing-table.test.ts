@@ -4,41 +4,35 @@ import { renderPricingTable } from '../../src/render/blocks/pricing-table.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
 
-describe('pricingTable — "Become a member"', () => {
-  it('renders the title', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('Become a member')
+describe('pricingTable, levels of giving', () => {
+  it('names each level at h3 under the block’s h2', () => {
+    expect(html).toContain('<h2 class="ca-head__title" data-field="title">Give every month</h2>')
+    expect(html).toContain('<h3 class="ca-levels__name">Bread</h3>')
   })
 
-  it('renders every tier with its price and interval', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('Friend')
-    expect(html).toContain('€5')
-    expect(html).toContain('Sustainer')
-    expect(html).toContain('€20')
-    expect(html).toContain('/month')
+  it('sets the amount apart from what it covers', () => {
+    expect(html).toContain(
+      '<p class="ca-levels__price"><span class="ca-levels__amount">£5</span><span class="ca-levels__interval">a month</span></p>',
+    )
   })
 
-  it('marks the highlighted tier with data-highlighted and aria-current', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toMatch(/data-highlighted="true"[^>]*aria-current="true"[^>]*>[\s\S]*?Sustainer/)
+  it('lists what a level includes, one line each', () => {
+    expect(html.match(/<li class="ca-levels__line">/g)).toHaveLength(3)
   })
 
-  it('does not mark the non-highlighted tier', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toMatch(/<li class="cg-pricing__tier">[\s\S]*?Friend/)
+  it('marks the highlighted level as data, never with a ribbon or a badge', () => {
+    expect(html).toContain('data-highlighted="true"')
+    expect(html).not.toMatch(/ribbon|badge|popular/i)
   })
 
-  it('renders the feature list for a tier', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('Our quarterly newsletter')
-    expect(html).toContain('A named seat at the AGM')
+  it('renders an action only for a level that has one', () => {
+    expect(html.match(/ca-levels__action/g)).toHaveLength(1)
+    expect(html).toContain('Ask the treasurer')
   })
 
-  it('renders an action link when the tier declares one', () => {
-    const html = serialize(renderPricingTable(BLOCKS.pricingTable, ctx))
-    expect(html).toContain('Join as a Friend')
-    expect(html).toContain('Become a Sustainer')
+  it('stamps the number of levels the stylesheet lays out', () => {
+    expect(html).toContain('data-count="2"')
   })
 })

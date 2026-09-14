@@ -6,27 +6,26 @@ import { BLOCKS, makeContext } from '../fixtures.js'
 const ctx = makeContext()
 
 describe('quote', () => {
-  it('renders the quote text inside a <blockquote>', () => {
+  it('is a figure with the words in a blockquote and the speaker in its caption', () => {
     const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toContain('<blockquote')
-    expect(html).toContain('This hall has fed my family')
+    expect(html).toContain('<figure class="ca-container ca-quote__inner"><blockquote')
+    expect(html).toContain('<figcaption class="ca-quote__attribution">')
   })
 
-  it('renders the attribution in a <figcaption>, outside the blockquote', () => {
+  it('writes no quotation marks into the text: the stylesheet draws real ones', () => {
     const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toContain('<figcaption')
-    expect(html).toContain('A neighbour')
-    expect(html).toContain('Weekly visitor')
+    expect(html).toContain('data-field="text">We just could not stand')
+    expect(html).not.toMatch(/[“”"]We just/)
   })
 
-  it('omits the figcaption entirely when there is no attribution at all', () => {
-    const { author: _a, role: _r, avatar: _av, ...bare } = BLOCKS.quote
-    const html = serialize(renderQuote(bare, ctx))
-    expect(html).not.toContain('<figcaption')
+  it('names the speaker and the role as editable fields', () => {
+    const html = serialize(renderQuote(BLOCKS.quote, ctx))
+    expect(html).toContain('data-field="author">Margaret Heald</span>')
+    expect(html).toContain('data-field="role">One of the founders</span>')
   })
 
-  it('always writes an alt attribute on the avatar, even when decorative', () => {
-    const html = serialize(renderQuote(BLOCKS.quote, ctx))
-    expect(html).toMatch(/<img[^>]*\salt="/)
+  it('renders no caption when there is neither author nor role', () => {
+    const { author: _a, role: _r, ...anonymous } = BLOCKS.quote
+    expect(serialize(renderQuote(anonymous, ctx))).not.toContain('figcaption')
   })
 })

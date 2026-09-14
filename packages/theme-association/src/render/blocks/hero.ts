@@ -1,60 +1,73 @@
 import type { HeroBlock } from '@cogenta/blocks'
-import {
-  actionList,
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  image,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import { actionList, type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { optionalText } from '../layout.js'
 
 /**
- * The hero carries the page's `h1` (contract B: `headingLevel: 'h1'`), so
- * `renderPage` relies on it to avoid emitting a second one.
+ * The opening of a page: a photograph of the people the organisation works
+ * with, across the whole width of the window, and the statement of the cause
+ * set large on a sheet of the page's own paper that starts at the window's
+ * left edge and rises into the bottom of the photograph.
  *
- * The warm, community read this theme opens with: a rounded "eyebrow" pill
- * (the cause, not a generic label), a big friendly title in the display
- * face, and — when there is one — the media sitting in its own big rounded
- * card with a soft halo glow behind it (`cg-hero__halo`, purely decorative,
- * `aria-hidden`), rather than a hard-edged frame. Centred copy on mobile,
- * two columns from `md` up.
+ * On a wide screen the sheet holds the eyebrow and the statement on the first
+ * seven columns; the subtitle and the actions sit under the photograph on
+ * the last four, starting where the photograph ends, so the two halves of the
+ * opening read as one composition rather than a box with a hole beside it.
+ *
+ * The words are never laid over the picture. A headline floated in the middle
+ * of a dimmed photograph needs a veil to stay legible on every picture an
+ * editor may choose, and that veil is the look of every generated charity
+ * template; on the paper the statement is legible in both schemes whatever
+ * the photograph, and the faces keep their own light.
+ *
+ * The first action is the donation ask, drawn in the signal yellow; the
+ * others are underlined words. An eyebrow, when there is one, is a short line
+ * in the organisation's green, never a badge. Without media the block is the
+ * sheet alone.
+ *
+ * The image is the only one on a page loaded eagerly: it is above the fold
+ * by construction.
  */
 export function renderHero(block: HeroBlock, ctx: RenderContext): HtmlElement {
-  const tag = blockHeadingTag('hero') ?? 'h1'
+  const hasMedia = block.media !== undefined
+  const actions = actionList(ctx, block.actions, ctx.t('hero.actions'))
+  const hasAside = block.subtitle !== undefined || actions !== null
   return h(
     'section',
-    { class: 'cg-block cg-hero', 'data-block': 'hero' },
-    h(
-      'div',
-      { class: 'cg-hero__copy' },
-      block.eyebrow === undefined
-        ? null
-        : h(
-            'p',
-            { class: 'cg-hero__eyebrow', 'data-field': 'eyebrow' },
-            h('span', { class: 'cg-pill' }, block.eyebrow),
-          ),
-      heading(tag, { class: 'cg-hero__title', 'data-field': 'title' }, block.title),
-      block.subtitle === undefined
-        ? null
-        : h('p', { class: 'cg-hero__subtitle', 'data-field': 'subtitle' }, block.subtitle),
-      actionList(ctx, block.actions, ctx.t('hero.actions')),
-    ),
+    {
+      class: 'ca-section ca-hero ca-ask',
+      'data-block': 'hero',
+      'data-media': String(hasMedia),
+    },
     block.media === undefined
       ? null
       : h(
-          'div',
-          { class: 'cg-hero__frame' },
-          h('span', { class: 'cg-hero__halo', 'aria-hidden': 'true' }),
-          // The only image above the fold by construction, so the only one
-          // that must not be lazy — a lazy-loaded LCP element is a measured
-          // Lighthouse regression, not a theoretical one.
+          'figure',
+          { class: 'ca-hero__media' },
           image(ctx, block.media, {
-            className: 'cg-hero__media',
+            className: 'ca-hero__image',
             loading: 'eager',
-            sizes: '(min-width: 60rem) 44vw, 100vw',
+            sizes: '100vw',
           }),
         ),
+    h(
+      'div',
+      { class: 'ca-container ca-hero__inner' },
+      h(
+        'div',
+        { class: 'ca-hero__panel' },
+        optionalText('p', 'ca-kicker ca-hero__eyebrow', block.eyebrow, {
+          'data-field': 'eyebrow',
+        }),
+        h('h1', { class: 'ca-hero__title', 'data-field': 'title' }, block.title),
+      ),
+      hasAside
+        ? h(
+            'div',
+            { class: 'ca-hero__aside' },
+            optionalText('p', 'ca-hero__subtitle', block.subtitle, { 'data-field': 'subtitle' }),
+            actions,
+          )
+        : null,
+    ),
   )
 }

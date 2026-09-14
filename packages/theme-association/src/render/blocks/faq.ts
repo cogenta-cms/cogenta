@@ -1,52 +1,43 @@
 import type { FaqBlock, FaqItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
   type HtmlElement,
   h,
   heading,
+  nestedHeadingTag,
   type RenderContext,
   renderRichText,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * `<details>`/`<summary>` rather than a scripted accordion: expanding,
- * keyboard operation, the expanded state announced to assistive technology
- * and in-page search all come from the browser, at zero bytes of
- * JavaScript — the same mechanism this theme's own mobile nav toggle uses.
- *
- * The question is plain text inside `<summary>`, not a heading: a heading
- * nested in a summary is rendered inconsistently across screen readers, and
- * the questions are already reachable as a list under the block's own
- * heading.
+ * The questions people ask before they give an hour or a pound, answered in
+ * the open: every answer is printed under its question, two columns of them
+ * on a wide screen, each pair under a hairline. A charity's answers are short
+ * and they are the point; hiding them behind a click makes a visitor work for
+ * reassurance. (The `accordion` block is the collapsible one.)
  */
-function renderItem(item: FaqItem, ctx: RenderContext): HtmlElement {
+function pair(item: FaqItem, ctx: RenderContext, titled: boolean): HtmlElement {
   return h(
-    'li',
-    { class: 'cg-faq__item' },
-    h(
-      'details',
-      { class: 'cg-faq__details' },
-      h('summary', { class: 'cg-faq__question' }, item.question),
-      h('div', { class: 'cg-faq__answer' }, renderRichText(ctx, item.answer)),
-    ),
+    'div',
+    { class: 'ca-faq__item' },
+    heading(nestedHeadingTag('faq', titled), { class: 'ca-faq__question' }, item.question),
+    h('div', { class: 'ca-faq__answer' }, renderRichText(ctx, item.answer)),
   )
 }
 
 export function renderFaq(block: FaqBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  const titled = block.title !== undefined
+  return section(
     'section',
-    { class: 'cg-block cg-faq', 'data-block': 'faq' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('faq') ?? 'h2',
-          { class: 'cg-faq__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'faq',
+    'ca-faq',
+    { 'data-titled': String(titled) },
+    'div',
+    sectionHead('faq', block.title),
     h(
-      'ul',
-      { class: 'cg-faq__items' },
-      block.items.map((item) => renderItem(item, ctx)),
+      'div',
+      { class: 'ca-faq__items' },
+      block.items.map((item) => pair(item, ctx, titled)),
     ),
   )
 }

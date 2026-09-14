@@ -4,26 +4,25 @@ import { renderLogos } from '../../src/render/blocks/logos.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderLogos(BLOCKS.logos, ctx))
 
 describe('logos', () => {
-  it('renders the title, "In partnership with"', () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    expect(html).toContain('In partnership with')
+  it('names a mark with no alt text by its organisation', () => {
+    expect(html).toContain('alt="Ashworth College"')
+    expect(html).toContain('alt="The Linden Trust"')
   })
 
-  it('links a logo that declares a url', () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    expect(html).toMatch(/<a class="cg-logo__link" href="https:\/\/foodbank\.example"/)
+  it('links a partner that has a site, with the external-link protection', () => {
+    expect(html).toContain(
+      '<a class="ca-partners__cell" href="https://college.example" rel="noopener noreferrer">',
+    )
   })
 
-  it('renders an unlinked logo as a bare image', () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    // Town Hall has no url — its alt text still names it.
-    expect(html).toContain('alt="Town Hall"')
+  it('keeps a partner without a site as an unlinked cell', () => {
+    expect(html).toContain('<span class="ca-partners__cell"><img class="ca-mark"')
   })
 
-  it("writes the organisation's name as alt text when the media entity has none", () => {
-    const html = serialize(renderLogos(BLOCKS.logos, ctx))
-    expect(html).toContain('alt="Regional Food Bank"')
+  it('titles the block at h2', () => {
+    expect(html).toContain('<h2 class="ca-head__title" data-field="title">')
   })
 })

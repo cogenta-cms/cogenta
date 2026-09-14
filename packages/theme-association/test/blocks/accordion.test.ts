@@ -4,28 +4,25 @@ import { renderAccordion } from '../../src/render/blocks/accordion.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderAccordion(BLOCKS.accordion, ctx))
 
-describe('accordion — "Hours & drop-in"', () => {
-  it('renders the title', () => {
-    const html = serialize(renderAccordion(BLOCKS.accordion, ctx))
-    // Escaped, correctly — the fixture's own title contains a literal "&".
-    expect(html).toContain('Hours &amp; drop-in')
+describe('accordion', () => {
+  it('opens each note with a native details element, no script', () => {
+    expect(html).toContain('<details class="ca-notes__details"><summary class="ca-notes__summary">')
+    expect(html).not.toMatch(/<script|onclick/)
   })
 
-  it('renders each item as a <details>/<summary> disclosure, zero JavaScript', () => {
-    const html = serialize(renderAccordion(BLOCKS.accordion, ctx))
-    expect(html).toContain('<details class="cg-accordion__details">')
-    expect(html).toContain('When is the hall open?')
+  it('keeps the question a real heading inside the summary', () => {
+    expect(html).toContain('<h3 class="ca-notes__question">Is there a minimum age?</h3>')
   })
 
-  it('renders the answer as real rich text', () => {
-    const html = serialize(renderAccordion(BLOCKS.accordion, ctx))
-    expect(html).toContain('9am to 5pm')
+  it('draws the open and closed mark with the stylesheet, hidden from assistive technology', () => {
+    expect(html).toContain('<span class="ca-notes__mark" aria-hidden="true"></span>')
   })
 
-  it('omits the title heading entirely when the block has none', () => {
-    const { title: _title, ...noTitle } = BLOCKS.accordion
-    const html = serialize(renderAccordion(noTitle, ctx))
-    expect(html).not.toContain('cg-accordion__title')
+  it('says whether it has a title, so the stylesheet can set the rows beside it', () => {
+    expect(html).toContain('data-titled="true"')
+    const { title: _t, ...untitled } = BLOCKS.accordion
+    expect(serialize(renderAccordion(untitled, ctx))).toContain('data-titled="false"')
   })
 })

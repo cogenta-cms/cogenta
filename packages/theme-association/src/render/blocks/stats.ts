@@ -1,45 +1,53 @@
-import type { StatItem, StatsBlock } from '@cogenta/blocks'
-import {
-  blockHeadingTag,
-  type HtmlElement,
-  h,
-  heading,
-  type RenderContext,
-} from '@cogenta/theme-kit'
+import type { StatsBlock } from '@cogenta/blocks'
+import { type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import { isBreakdown } from '../figures.js'
+import { section, sectionHead } from '../layout.js'
+import { renderBreakdown } from './breakdown.js'
 
 /**
- * The impact band — "12,400 meals served", "380 volunteers" — rendered as a
- * description list so each big figure stays the description of its label
- * (WCAG 1.3.2). Reading order is label then figure, exactly as the markup
- * says; the stylesheet paints the figure first with `column-reverse` (see
- * `blocks.css`'s own comment on `.cg-impact-stat`) — the paint order changes,
- * the DOM order a screen reader follows does not.
+ * What a year of work added up to, with the sentence that makes each number
+ * mean something: the title on the first four columns, and the figures on the
+ * last eight in two columns, each under a rule. The number in the display
+ * face, narrow and large, in the organisation's green with lining tabular
+ * figures and its unit a step smaller; under it the sentence of context in
+ * the text face. No box, no tint, nothing counts up.
+ *
+ * Figures that are all percentages of one whole are drawn as a breakdown
+ * instead (`renderBreakdown`).
  */
-function renderItem(item: StatItem): HtmlElement {
-  return h(
-    'div',
-    { class: 'cg-impact-stat' },
-    h('dt', { class: 'cg-impact-stat__label' }, item.label),
-    h(
-      'dd',
-      { class: 'cg-impact-stat__value' },
-      item.value,
-      item.unit === undefined ? null : h('span', { class: 'cg-impact-stat__unit' }, item.unit),
-    ),
-  )
-}
-
-export function renderStats(block: StatsBlock, _ctx: RenderContext): HtmlElement {
-  return h(
+export function renderStats(block: StatsBlock, ctx: RenderContext): HtmlElement {
+  const breakdown = isBreakdown(block.items)
+  return section(
     'section',
-    { class: 'cg-block cg-impact', 'data-block': 'stats' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('stats') ?? 'h2',
-          { class: 'cg-impact__title', 'data-field': 'title' },
-          block.title,
+    'stats',
+    'ca-figures',
+    {
+      'data-shape': breakdown ? 'breakdown' : 'figures',
+      'data-count': String(Math.min(block.items.length, 4)),
+      'data-titled': String(block.title !== undefined),
+    },
+    'div',
+    sectionHead('stats', block.title),
+    breakdown
+      ? renderBreakdown(block.items, ctx)
+      : h(
+          'dl',
+          { class: 'ca-figures__items' },
+          block.items.map((item) =>
+            h(
+              'div',
+              { class: 'ca-figures__item' },
+              h('dt', { class: 'ca-figures__label' }, item.label),
+              h(
+                'dd',
+                { class: 'ca-figures__value' },
+                item.value,
+                item.unit === undefined
+                  ? null
+                  : h('span', { class: 'ca-figures__unit' }, item.unit),
+              ),
+            ),
+          ),
         ),
-    h('dl', { class: 'cg-impact__items' }, block.items.map(renderItem)),
   )
 }

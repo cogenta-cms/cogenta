@@ -1,47 +1,53 @@
 import type { AccordionBlock, AccordionItem } from '@cogenta/blocks'
 import {
-  blockHeadingTag,
   type HtmlElement,
   h,
-  heading,
+  nestedHeadingTag,
   type RenderContext,
   renderRichText,
 } from '@cogenta/theme-kit'
+import { section, sectionHead } from '../layout.js'
 
 /**
- * `blocks@2.0` (RFC 0001). Shares `faq`'s `<details>`/`<summary>` mechanics —
- * the same zero-JavaScript disclosure this theme's own mobile nav toggle
- * uses — but is its own block, since "accordion" and "frequently asked
- * question" are different editorial intents even when the shape coincides.
+ * Notes a visitor opens when they need them: what to bring, parking, the
+ * safeguarding check. The title on the first four columns and the rows on the
+ * last eight, each row a `<details>` under a hairline. It opens without a
+ * script and is found by the browser's own search. The question sits in a
+ * real heading inside the summary, so a screen reader's heading list still
+ * reaches every one. The plus that becomes a minus is two bars drawn by the
+ * stylesheet, not a glyph.
  */
-function renderItem(item: AccordionItem, ctx: RenderContext): HtmlElement {
+function row(item: AccordionItem, ctx: RenderContext, titled: boolean): HtmlElement {
   return h(
     'li',
-    { class: 'cg-accordion__item' },
+    { class: 'ca-notes__item' },
     h(
       'details',
-      { class: 'cg-accordion__details' },
-      h('summary', { class: 'cg-accordion__question' }, item.question),
-      h('div', { class: 'cg-accordion__answer' }, renderRichText(ctx, item.answer)),
+      { class: 'ca-notes__details' },
+      h(
+        'summary',
+        { class: 'ca-notes__summary' },
+        h(nestedHeadingTag('accordion', titled), { class: 'ca-notes__question' }, item.question),
+        h('span', { class: 'ca-notes__mark', 'aria-hidden': 'true' }),
+      ),
+      h('div', { class: 'ca-notes__answer' }, renderRichText(ctx, item.answer)),
     ),
   )
 }
 
 export function renderAccordion(block: AccordionBlock, ctx: RenderContext): HtmlElement {
-  return h(
+  const titled = block.title !== undefined
+  return section(
     'section',
-    { class: 'cg-block cg-accordion', 'data-block': 'accordion' },
-    block.title === undefined
-      ? null
-      : heading(
-          blockHeadingTag('accordion') ?? 'h2',
-          { class: 'cg-accordion__title', 'data-field': 'title' },
-          block.title,
-        ),
+    'accordion',
+    'ca-notes',
+    { 'data-titled': String(titled) },
+    'div',
+    sectionHead('accordion', block.title),
     h(
       'ul',
-      { class: 'cg-accordion__items' },
-      block.items.map((item) => renderItem(item, ctx)),
+      { class: 'ca-notes__items' },
+      block.items.map((item) => row(item, ctx, titled)),
     ),
   )
 }

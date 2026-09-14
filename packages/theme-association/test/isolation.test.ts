@@ -87,6 +87,8 @@ describe('theme isolation', () => {
       'styles/archive.css',
       'styles/base.css',
       'styles/blocks.css',
+      'styles/chrome.css',
+      'styles/listings.css',
       'styles/theme.css',
       'styles/tokens.css',
     ])
@@ -104,9 +106,9 @@ describe('theme isolation', () => {
   /**
    * D5 (`docs/lots/L25-templates-pro.md`): a gradient reads as the generic
    * "AI-generated" look. This theme is built entirely from flat colour
-   * fields, hairlines and shadows instead — locked in here so a later
-   * change cannot quietly reintroduce one, in a stylesheet or in an inline
-   * style string built by the renderer.
+   * fields and rules instead, locked in here so a later change cannot
+   * quietly reintroduce one, in a stylesheet or in an inline style string
+   * built by the renderer.
    */
   const RAW_STYLESHEETS = FILES.filter(({ path }) => path.endsWith('.css')).map(
     ({ path, source }) => ({

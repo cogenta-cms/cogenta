@@ -9,126 +9,175 @@ import {
   renderThemeToggle,
   serialize,
 } from '@cogenta/theme-kit'
+import { associationString } from './strings.js'
 
 /**
- * This theme's own header and footer — a warm, community-notice-board read
- * rather than a corporate one: a sticky header with a pill-shaped nav and a
- * rounded, filled action button, and a four-column footer (brand+tagline,
- * navigation, social, a short note) on a tinted band, closing with Cogenta's
- * own credit.
+ * The header and footer of a charity's site (`theme@1.4`).
  *
- * The mobile nav is a `<details>`/`<summary>` disclosure — the same
- * zero-JavaScript mechanism `faq`/`accordion` already use — rather than a
- * scripted hamburger: expanding, keyboard operation and the open state
- * announced to assistive technology all come from the browser. The same
- * links are rendered twice (once inside the disclosure, once as a plain
- * inline row) and `src/styles/base.css` shows exactly one of the two at any
- * given width via `display:none` — which also removes the hidden copy from
- * the accessibility tree, so nothing is ever announced twice.
+ * Header: one row on the paper under a hairline. The organisation's name in
+ * the display face (or its uploaded logo), the pages in plain words, then the
+ * `headerAction` as the yellow button, the one standing ask of a charity's
+ * site, and the light/dark control. The action sits outside the navigation
+ * list on purpose: on a phone it stays in the header row beside the menu
+ * button.
  *
- * `theme@1.4` (L25 D2) fields — `headerAction`, `tagline`, `social`,
- * `footerNote` — are each rendered only when present; a render with none of
- * them set still produces a complete header/footer, exactly the additive
- * guarantee the contract promises.
+ * Below the wide breakpoint the pages become a panel of large links under the
+ * header, opened by a CSS-only toggle: a visually hidden checkbox paired with
+ * a `<label>` that says "Menu" (and "Close" once open), placed before the
+ * `<nav>` so the sibling combinator reaches it. One `<nav>` in the markup,
+ * retiled by CSS. The panel repeats the `tagline` under the links.
  *
- * The manual light/dark toggle (`renderThemeToggle`, `@cogenta/theme-kit`,
- * L26) is unconditional — it sits between the desktop nav and the header
- * action, outside the `<details>` mobile disclosure so it stays reachable at
- * every width rather than one tap deep inside the hamburger menu.
+ * Footer: the green band. The name, the `tagline`, the `footerNote` (a blank
+ * line starts a new paragraph, a line break stays a line break, so the
+ * registered charity number, the address and the contact lines keep their
+ * shape), the social profiles with their names; then the footer navigation in
+ * columns: a `submenu-placeholder` (an unlinked item such as "Get involved")
+ * starts a column and names it, the links after it fill it. Under a hairline,
+ * the legal line: the copyright year and the name, beside the host's
+ * `brandingHtml`, placed once, as received. Every `theme@1.4` field renders
+ * only when present.
  */
 
-function navItems(links: readonly ChromeNavLink[]): string {
-  return links
-    .filter((link) => link.href !== null || link.kind === 'submenu-placeholder')
-    .map((link) => {
-      const label = escapeText(link.label)
-      const titleAttr = link.title === null ? '' : ` title="${escapeAttribute(link.title)}"`
-      if (link.href === null) return `<li><span${titleAttr}>${label}</span></li>`
-      const href = escapeAttribute(link.href)
-      const target = link.openInNewTab ? ' target="_blank" rel="noopener"' : ''
-      return `<li><a href="${href}"${target}${titleAttr}>${label}</a></li>`
-    })
-    .join('')
+interface FooterGroup {
+  readonly heading: string | null
+  readonly links: readonly ChromeNavLink[]
 }
 
-function renderNav(links: readonly ChromeNavLink[], className: string, label: string): string {
-  const items = navItems(links)
-  if (items === '') return ''
-  return `<nav class="${className}" aria-label="${escapeAttribute(label)}"><ul class="cg-nav__items">${items}</ul></nav>`
+function usable(links: readonly ChromeNavLink[]): readonly ChromeNavLink[] {
+  return links.filter((link) => link.href !== null || link.kind === 'submenu-placeholder')
 }
 
-/** The header's own call-to-action link (`theme@1.4`) — a filled, rounded button, the "Donate"/"Volunteer" treatment. */
-function renderHeaderAction(action: ChromeInput['headerAction']): string {
-  if (action === undefined) return ''
-  return (
-    `<a class="cg-action cg-site-header__action" data-emphasis="primary" ` +
-    `href="${escapeAttribute(action.href)}">${escapeText(action.label)}</a>`
-  )
+function linkItem(link: ChromeNavLink, className: string): string {
+  const label = escapeText(link.label)
+  const titleAttr = link.title === null ? '' : ` title="${escapeAttribute(link.title)}"`
+  if (link.href === null) return `<li class="${className}"><span${titleAttr}>${label}</span></li>`
+  const target = link.openInNewTab ? ' target="_blank" rel="noopener"' : ''
+  return `<li class="${className}"><a href="${escapeAttribute(link.href)}"${target}${titleAttr}>${label}</a></li>`
 }
 
-/** A plain hamburger glyph — three bars, drawn as `<path>`s so nothing here needs the icon set's closed vocabulary. */
-const MENU_GLYPH =
-  '<svg class="cg-nav-toggle__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
-  '<path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
-  '</svg>'
+/** The footer menu, split into columns at each unlinked heading. */
+export function footerGroups(links: readonly ChromeNavLink[]): readonly FooterGroup[] {
+  const groups: { heading: string | null; links: ChromeNavLink[] }[] = []
+  for (const link of usable(links)) {
+    if (link.kind === 'submenu-placeholder' && link.href === null) {
+      groups.push({ heading: link.label, links: [] })
+      continue
+    }
+    const current = groups[groups.length - 1]
+    if (current === undefined) groups.push({ heading: null, links: [link] })
+    else current.links.push(link)
+  }
+  return groups.filter((group) => group.links.length > 0)
+}
+
+/** `footerNote` as paragraphs at blank lines, each keeping its own line breaks. */
+function renderFooterNote(note: string): string {
+  const paragraphs = note
+    .replace(/\r\n?/g, '\n')
+    .split(/\n\s*\n/)
+    .map((paragraph) =>
+      paragraph
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== ''),
+    )
+    .filter((lines) => lines.length > 0)
+  if (paragraphs.length === 0) return ''
+  return `<div class="ca-footer__note">${paragraphs
+    .map((lines) => `<p>${lines.map((line) => escapeText(line)).join('<br>')}</p>`)
+    .join('')}</div>`
+}
 
 export function renderChrome(input: ChromeInput): ChromeResult {
-  const siteNameText = escapeText(input.site.name)
-  const headerNavDesktop = renderNav(input.headerNav, 'cg-nav cg-nav--desktop', 'Primary')
-  const headerNavMobile = navItems(input.headerNav)
-  const footerNav = renderNav(input.footerNav, 'cg-site-footer__nav', 'Footer')
-  const mark = renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ?? siteNameText
-  const headerAction = renderHeaderAction(input.headerAction)
-  const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
-
-  const mobileToggle =
-    headerNavMobile === ''
+  const siteName = escapeText(input.site.name)
+  const home = escapeAttribute(input.homeHref)
+  const links = usable(input.headerNav)
+    .map((link) => linkItem(link, 'ca-header__item'))
+    .join('')
+  const action =
+    input.headerAction === undefined
       ? ''
-      : `<details class="cg-nav-toggle">` +
-        `<summary class="cg-nav-toggle__button" aria-label="Menu">${MENU_GLYPH}</summary>` +
-        `<nav class="cg-nav cg-nav--mobile" aria-label="Primary"><ul class="cg-nav__items">${headerNavMobile}</ul></nav>` +
-        `</details>`
+      : `<a class="ca-header__action" href="${escapeAttribute(input.headerAction.href)}">${escapeText(
+          input.headerAction.label,
+        )}</a>`
+  const toggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
+  const logo = renderBrandMark(input.brand, { className: 'ca-header__logo' })
+  const mark = logo ?? `<span class="ca-header__wordmark">${siteName}</span>`
+  const panelTagline =
+    input.tagline === undefined
+      ? ''
+      : `<p class="ca-header__tagline">${escapeText(input.tagline)}</p>`
+
+  const menu =
+    links === ''
+      ? ''
+      : `<input type="checkbox" id="ca-nav-toggle" class="ca-nav-toggle-input" aria-label="${escapeAttribute(
+          associationString(input.locale, 'menu'),
+        )}">` +
+        `<label for="ca-nav-toggle" class="ca-nav-toggle-label" aria-hidden="true">` +
+        `<span class="ca-nav-toggle-open">${escapeText(associationString(input.locale, 'menu'))}</span>` +
+        `<span class="ca-nav-toggle-close">${escapeText(associationString(input.locale, 'close'))}</span>` +
+        `</label>` +
+        `<nav class="ca-header__nav" id="ca-nav" aria-label="${escapeAttribute(
+          associationString(input.locale, 'primaryNav'),
+        )}">` +
+        `<ul class="ca-header__links">${links}</ul>` +
+        `${panelTagline}` +
+        `</nav>`
 
   const header =
-    `<header class="cg-site-header"><div class="cg-site-header__inner">` +
-    `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
-    `${headerNavDesktop}` +
-    `${themeToggle}` +
-    `${headerAction}` +
-    `${mobileToggle}` +
+    `<header class="ca-header" data-nav="${links === '' ? 'none' : 'links'}" data-action="${
+      action === '' ? 'none' : 'link'
+    }">` +
+    `<div class="ca-header__inner">` +
+    `<a class="ca-header__brand" href="${home}">${mark}</a>` +
+    `${menu}` +
+    `${action}` +
+    `${toggle}` +
     `</div></header>`
 
   const tagline =
     input.tagline === undefined
       ? ''
-      : `<p class="cg-site-footer__tagline">${escapeText(input.tagline)}</p>`
-  const social =
-    input.social === undefined
+      : `<p class="ca-footer__tagline" data-field="tagline">${escapeText(input.tagline)}</p>`
+  const note = input.footerNote === undefined ? '' : renderFooterNote(input.footerNote)
+  const social = renderSocialLinks(input.social, {
+    className: 'ca-footer__social',
+    itemClassName: 'ca-footer__social-item',
+  })
+  const groups = footerGroups(input.footerNav)
+  const nav =
+    groups.length === 0
       ? ''
-      : serialize(
-          renderSocialLinks(input.social, {
-            className: 'cg-site-footer__social',
-            itemClassName: 'cg-site-footer__social-item',
-          }) ?? { kind: 'text', value: '' },
-        )
-  const footerNote =
-    input.footerNote === undefined
-      ? ''
-      : `<p class="cg-site-footer__note">${escapeText(input.footerNote)}</p>`
+      : `<nav class="ca-footer__nav" aria-label="${escapeAttribute(
+          associationString(input.locale, 'footerNav'),
+        )}" data-columns="${Math.min(groups.length, 3)}">${groups
+          .map(
+            (group) =>
+              `<div class="ca-footer__group">${
+                group.heading === null
+                  ? ''
+                  : `<p class="ca-footer__heading">${escapeText(group.heading)}</p>`
+              }<ul class="ca-footer__links">${group.links
+                .map((link) => linkItem(link, 'ca-footer__item'))
+                .join('')}</ul></div>`,
+          )
+          .join('')}</nav>`
+  const year = new Date().getFullYear()
 
   const footer =
-    `<footer class="cg-site-footer">` +
-    `<div class="cg-site-footer__grid">` +
-    `<div class="cg-site-footer__brand">` +
-    `<a class="cg-site-footer__brand-link" href="${escapeAttribute(input.homeHref)}">${siteNameText}</a>` +
-    `${tagline}` +
+    `<footer class="ca-footer"><div class="ca-footer__inner">` +
+    `<div class="ca-footer__about">` +
+    `<a class="ca-footer__name" href="${home}">${siteName}</a>` +
+    `${tagline}${note}` +
+    `${social === null ? '' : serialize(social)}` +
     `</div>` +
-    `<div class="cg-site-footer__col">${footerNav}</div>` +
-    `<div class="cg-site-footer__col">${social}</div>` +
-    `<div class="cg-site-footer__col">${footerNote}</div>` +
+    `${nav}` +
+    `<div class="ca-footer__legal">` +
+    `<p class="ca-footer__copyright">© ${year} ${siteName}</p>` +
+    `${input.brandingHtml === '' ? '' : `<div class="ca-footer__branding">${input.brandingHtml}</div>`}` +
     `</div>` +
-    `<div class="cg-site-footer__bottom"><span>${siteNameText}</span>${input.brandingHtml}</div>` +
-    `</footer>`
+    `</div></footer>`
 
   return { header, footer }
 }

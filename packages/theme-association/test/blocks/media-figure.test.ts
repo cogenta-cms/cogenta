@@ -6,38 +6,38 @@ import { BLOCKS, makeContext } from '../fixtures.js'
 const ctx = makeContext()
 
 describe('mediaFigure', () => {
-  it('renders the media inside a <figure>', () => {
+  it('renders a figure whose caption is its direct child', () => {
     const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('<figure')
-    expect(html).toContain('cg-figure__media')
+    expect(html).toContain('<figure class="ca-container ca-figure__inner">')
+    expect(html).toMatch(/<\/div><figcaption class="ca-figure__caption">/)
   })
 
-  it('renders the caption and credit inside a <figcaption>', () => {
+  it('keeps the caption and the credit as two editable fields', () => {
     const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('<figcaption')
-    expect(html).toContain('Thursday evenings at the food distribution table')
-    expect(html).toContain('Riverside Community Fund')
+    expect(html).toContain('data-field="caption">The food bank tables on a Thursday evening</span>')
+    expect(html).toContain('data-field="credit">Photograph: Colin Birch</span>')
   })
 
-  it('omits the figcaption entirely when there is neither caption nor credit', () => {
-    const { caption: _c, credit: _cr, ...bare } = BLOCKS.mediaFigure
-    const html = serialize(renderMediaFigure(bare, ctx))
-    expect(html).not.toContain('<figcaption')
-  })
-
-  it('carries the align value as a data attribute, never a class the block chose', () => {
+  it('crops to the editor’s ratio on the frame, as an aspect-ratio', () => {
     const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toContain('data-align="wide"')
+    expect(html).toContain('style="aspect-ratio:3 / 2"')
   })
 
-  it('defaults to a centred align when none is set', () => {
-    const { align: _align, ...noAlign } = BLOCKS.mediaFigure
-    const html = serialize(renderMediaFigure(noAlign, ctx))
-    expect(html).toContain('data-align="center"')
+  it('keeps the photograph’s own proportions when the ratio is original', () => {
+    const html = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, ratio: 'original' }, ctx))
+    expect(html).not.toContain('aspect-ratio')
   })
 
-  it('always writes an alt attribute on the image', () => {
-    const html = serialize(renderMediaFigure(BLOCKS.mediaFigure, ctx))
-    expect(html).toMatch(/<img[^>]*\salt="/)
+  it('reads start and end as a split, and the other alignments as one column', () => {
+    const start = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, align: 'start' }, ctx))
+    const full = serialize(renderMediaFigure({ ...BLOCKS.mediaFigure, align: 'full' }, ctx))
+    expect(start).toContain('data-align="start" data-layout="split"')
+    expect(full).toContain('data-align="full" data-layout="single"')
+    expect(full).toContain('sizes="100vw"')
+  })
+
+  it('renders no caption element when there is neither caption nor credit', () => {
+    const { caption: _c, credit: _r, ...bare } = BLOCKS.mediaFigure
+    expect(serialize(renderMediaFigure(bare, ctx))).not.toContain('figcaption')
   })
 })

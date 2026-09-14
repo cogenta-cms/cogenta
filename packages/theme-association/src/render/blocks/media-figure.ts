@@ -1,38 +1,63 @@
 import type { MediaFigureBlock } from '@cogenta/blocks'
 import { aspectRatio, type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * `<figure>`/`<figcaption>` rather than a div and a paragraph: the
- * association between the picture and its caption is then in the markup.
+ * A photograph and its caption, the caption always under the picture's own
+ * left edge, in the text face, with the credit after it.
  *
- * The media sits in a big rounded card (`cg-figure__media`, `--cg-radius-lg`)
- * with a soft shadow, matching the hero's own frame treatment rather than a
- * hard-edged photo.
+ * `align` is an editorial intent, read as a layout:
+ *
+ * - `start` / `end`: seven columns on that side, the caption beside it on the
+ *   other four, set against the bottom of the picture.
+ * - `center`: eight columns, set in from the second.
+ * - `wide` (and no value): the whole container.
+ * - `full`: the whole window, edge to edge.
+ *
+ * The ratio crops from the middle, or from the media's own focal point; the
+ * corners stay square and the picture casts no shadow.
  */
 export function renderMediaFigure(block: MediaFigureBlock, ctx: RenderContext): HtmlElement {
+  const align = block.align ?? 'wide'
+  const split = align === 'start' || align === 'end'
   const ratio = aspectRatio(block.ratio)
-  const hasCaption = block.caption !== undefined || block.credit !== undefined
-  return h(
-    'figure',
-    {
-      class: 'cg-block cg-figure',
-      'data-block': 'mediaFigure',
-      'data-align': block.align ?? 'center',
-      style: ratio === undefined ? undefined : `--cg-ratio:${ratio}`,
-    },
-    image(ctx, block.media, {
-      className: 'cg-figure__media',
-      sizes: '(min-width: 45rem) 40rem, 100vw',
-    }),
-    hasCaption
-      ? h(
+
+  const caption =
+    block.caption === undefined && block.credit === undefined
+      ? null
+      : h(
           'figcaption',
-          { class: 'cg-figure__caption' },
-          block.caption,
+          { class: 'ca-figure__caption' },
+          block.caption === undefined
+            ? null
+            : h('span', { class: 'ca-figure__text', 'data-field': 'caption' }, block.caption),
           block.credit === undefined
             ? null
-            : h('span', { class: 'cg-figure__credit', 'data-field': 'credit' }, block.credit),
+            : h('span', { class: 'ca-figure__credit', 'data-field': 'credit' }, block.credit),
         )
-      : null,
+
+  return section(
+    'div',
+    'mediaFigure',
+    'ca-figure',
+    { 'data-align': align, 'data-layout': split ? 'split' : 'single' },
+    'figure',
+    h(
+      'div',
+      {
+        class: 'ca-figure__frame',
+        style: ratio === undefined ? undefined : `aspect-ratio:${ratio}`,
+      },
+      image(ctx, block.media, {
+        className: 'ca-figure__image',
+        sizes:
+          align === 'full'
+            ? '100vw'
+            : split
+              ? '(min-width: 64rem) 55vw, 100vw'
+              : '(min-width: 82rem) 78rem, 100vw',
+      }),
+    ),
+    caption,
   )
 }

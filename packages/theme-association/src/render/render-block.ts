@@ -6,7 +6,6 @@ import {
   type PageContent,
   pageHasOwnHeading,
   type RenderContext,
-  renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
   withBlockVariant,
@@ -28,9 +27,9 @@ import { renderQuote } from './blocks/quote.js'
 import { renderStatCounter } from './blocks/stat-counter.js'
 import { renderStats } from './blocks/stats.js'
 import { renderTestimonial } from './blocks/testimonial.js'
+import { renderPageHead } from './page-head.js'
 
 export type { FetchedEntries, PageContent }
-export { pageHasOwnHeading, renderEntryHeader, withBlockKey }
 
 export function renderBlock(
   block: VocabularyBlock,
@@ -38,16 +37,14 @@ export function renderBlock(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement | null {
-  // `block`'s type says `VocabularyBlock`, but the value crossing this
-  // boundary from stored content is not always literally one of the shared
-  // vocabulary — resolving here is what turns an unimplemented theme-private
-  // block into its declared fallback instead of a silently blank slot.
+  // A stored block is not always literally one of the shared vocabulary:
+  // resolving here turns an unimplemented theme-private block into its
+  // declared fallback instead of a silently blank slot.
   const resolved = resolveBlockForRender(block, VOCABULARY_NAMES, registry)
   if (resolved === null) return null
   const known = resolved as unknown as VocabularyBlock
-  // `withBlockVariant` (blocks@2.0, RFC 0002) is applied once here, after
-  // dispatch, rather than inside each of the seventeen block renderers —
-  // `variant` is envelope data every block carries identically.
+  // `variant` is envelope data every block carries identically, applied once
+  // here rather than by each of the seventeen renderers.
   return withBlockVariant(renderKnownBlock(known, ctx, entries), known.variant)
 }
 
@@ -92,12 +89,9 @@ function renderKnownBlock(
     case 'logoStrip':
       return renderLogoStrip(known, ctx)
     default: {
-      // Exhaustive over contract B's vocabulary: `known` is `never` here, so
-      // a block this package does not implement stops it compiling until it
-      // is. Returning null rather than throwing is deliberate — a theme has
-      // no access to `@cogenta/core`'s error types (contract D refuses the
-      // import), and choosing a fallback block is the render layer's job,
-      // not the theme's.
+      // Exhaustive over contract B: `known` is `never` here, so a block this
+      // package does not implement stops it compiling until it is. `null`
+      // rather than a throw: choosing a fallback is the render layer's job.
       const unreachable: never = known
       void unreachable
       return null
@@ -106,18 +100,26 @@ function renderKnownBlock(
 }
 
 /**
- * `<main id="cg-main">` is mandatory: it is the skip-link's target, written
- * once by `@cogenta/cli`'s `theme-render.ts` outside any theme's control.
+ * A real `id` beside `withBlockKey`'s `data-block-key`, so a link to
+ * `/donate#<key>` has somewhere to land. Contract B's `_key` is unique within
+ * one page's block list, so it can never collide on a page this theme
+ * rendered.
+ */
+function withAnchorId(element: HtmlElement | null, key: string): HtmlElement | null {
+  if (element === null) return null
+  return { ...element, attrs: { ...element.attrs, id: key } }
+}
+
+/**
+ * `<main id="cg-main">` is mandatory: it is the skip link's target, written
+ * by the host outside any theme's control.
  *
- * `theme@1.4` (L25 D2): `renderEntryHeader` returns `null` both for a page
- * with no `entry` meta and for one whose blocks already draw their own
- * heading (a `hero`) — the bare `<h1 class="cg-page__title">` fallback below
- * is the right markup in both of those cases and only those, so the page
- * always carries exactly one `<h1>`.
+ * A page whose blocks include a `hero` lets the hero carry the title; any
+ * other page opens on `renderPageHead` (an event, an entry with details, or
+ * a plain title), so every page has exactly one `h1`.
  *
- * `withBlockKey` stamps every rendered block with its contract-B `_key` —
- * required so the visual page builder (L16) can map a clicked element in the
- * rendered iframe back to the block that produced it.
+ * `withBlockKey` stamps every rendered block with its contract-B `_key`, so
+ * the visual page builder (L16) can map a clicked element back to its block.
  */
 export function renderPage(
   page: PageContent,
@@ -125,16 +127,21 @@ export function renderPage(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement {
-  const entryHeader = renderEntryHeader(page, ctx)
+  const head = pageHasOwnHeading(page.blocks) ? null : renderPageHead(page, ctx)
+
   return h(
     'main',
-    { class: 'cg-main', id: 'cg-main' },
-    entryHeader,
-    entryHeader === null && !pageHasOwnHeading(page.blocks)
-      ? h('h1', { class: 'cg-page__title' }, page.title)
-      : null,
+    {
+      class: 'cg-main ca-main',
+      id: 'cg-main',
+      'data-opening': head === null ? 'hero' : head.kind,
+    },
+    head?.node ?? null,
     page.blocks.map((block) =>
-      withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
+      withAnchorId(
+        withBlockKey(renderBlock(block, ctx, entries, registry), block._key),
+        block._key,
+      ),
     ),
   )
 }

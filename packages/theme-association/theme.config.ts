@@ -1,7 +1,7 @@
 import { defineTheme } from '@cogenta/render'
 
 /**
- * Contract D — Thème, `theme@1.4`.
+ * Contract D — Thème, `theme@1.5`.
  *
  * `implements` lists the seventeen blocks of contract B (`blocks@2.0`, RFC
  * 0001) in the order the contract lists them — installation refuses an
@@ -16,7 +16,7 @@ export default defineTheme({
   name: 'association',
   version: '1.0.0',
   description:
-    'A warm, human theme for a nonprofit or community group: dated event cards, an impact band, and a genuine dark mode.',
+    'A neighbourhood charity: a photograph of the people it works with, impact figures with their context, programmes, a dated events calendar with event pages, and a donation ask in its own yellow.',
   author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',
@@ -39,7 +39,7 @@ export default defineTheme({
     'statCounter',
     'logoStrip',
   ],
-  collections: ['event', 'page'],
+  collections: ['event', 'programme', 'page'],
   runtime: 'static',
   tokens: './tokens.json',
   a11y: { verified: 'WCAG-2.2-AA' },

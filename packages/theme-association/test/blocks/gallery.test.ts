@@ -6,35 +6,34 @@ import { BLOCKS, makeContext } from '../fixtures.js'
 const ctx = makeContext()
 
 describe('gallery', () => {
-  it('renders every item as an image inside the grid', () => {
+  it('lists every photograph, each with its alt text', () => {
     const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    // `/"g` avoids matching the wrapping `cg-gallery__items` (plural) class.
-    expect(html.match(/cg-gallery__item"/g)?.length).toBe(2)
-    expect(html.match(/<img/g)?.length).toBe(2)
+    expect(html.match(/<li class="ca-gallery__item">/g)).toHaveLength(3)
+    expect(html).toContain('alt="Guests at the harvest supper"')
   })
 
-  it('carries the layout as a data attribute', () => {
+  it('stamps the layout and the count the stylesheet composes', () => {
     const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    expect(html).toContain('data-layout="grid"')
+    expect(html).toContain('data-layout="grid" data-count="3"')
   })
 
-  it('wraps a carousel layout in a labelled, focusable scroll region', () => {
-    const carousel = { ...BLOCKS.gallery, layout: 'carousel' as const }
-    const html = serialize(renderGallery(carousel, ctx))
-    expect(html).toContain('role="region"')
-    expect(html).toContain('tabindex="0"')
-    expect(html).toMatch(/aria-label="[^"]+"/)
-  })
-
-  it('renders no viewport wrapper for a grid layout', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    expect(html).not.toContain('cg-gallery__viewport')
-  })
-
-  it('always writes an alt attribute on every image', () => {
-    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
-    for (const tag of [...html.matchAll(/<img\b[^>]*>/g)].map((m) => m[0])) {
-      expect(tag).toMatch(/\salt="/)
+  it('reads five photographs and more as rows of three', () => {
+    const many = {
+      ...BLOCKS.gallery,
+      items: [1, 2, 3, 4, 5, 6].map((n) => ({ _key: `g${n}`, media: 'photo-garden' })),
     }
+    expect(serialize(renderGallery(many, ctx))).toContain('data-count="many"')
+  })
+
+  it('makes a carousel a labelled, focusable region that scrolls without a script', () => {
+    const html = serialize(renderGallery({ ...BLOCKS.gallery, layout: 'carousel' }, ctx))
+    expect(html).toContain(
+      '<div class="ca-gallery__viewport" role="region" aria-label="gallery.carousel" tabindex="0">',
+    )
+  })
+
+  it('lazy-loads every photograph', () => {
+    const html = serialize(renderGallery(BLOCKS.gallery, ctx))
+    expect(html).not.toContain('loading="eager"')
   })
 })

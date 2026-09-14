@@ -1,49 +1,75 @@
 import { serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
-import { renderFeatureGrid } from '../../src/render/blocks/feature-grid.js'
+import { columnsFor, renderFeatureGrid } from '../../src/render/blocks/feature-grid.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
 
-describe('featureGrid', () => {
-  it('renders the title as the block heading', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<h2 class="cg-features__title" data-field="title">What we do</h2>')
+const STEPS = {
+  ...BLOCKS.featureGrid,
+  title: 'How to start',
+  items: BLOCKS.featureGrid.items.map(({ icon: _icon, ...item }) => item),
+}
+
+describe('featureGrid, with icons: ways in', () => {
+  const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
+
+  it('draws each icon as a real line icon, never a tile behind it', () => {
+    expect(html).toContain('<svg class="ca-ways__icon"')
+    expect(html).not.toMatch(/tile|card/)
   })
 
-  it('renders every item, including the three programmes', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('Weekly food distribution')
-    expect(html).toContain('Homework club')
-    expect(html).toContain('Community garden')
+  it('names each way in at h3, under the block’s h2', () => {
+    expect(html).toContain(
+      '<h2 class="ca-head__title" data-field="title">Where you could help</h2>',
+    )
+    expect(html).toContain('<h3 class="ca-ways__name">Homework club tutor</h3>')
   })
 
-  it('renders a real inline glyph for a recognised icon name, aria-hidden', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('data-icon="heart"')
-    expect(html).toContain('data-icon="book"')
-    expect(html).toContain('data-icon="leaf"')
-    expect(html).toMatch(/cg-feature__icon"[^>]*data-icon="heart"[^>]*aria-hidden="true"[^>]*><svg/)
+  it('makes a linked name an arrow link whose last word carries the arrow', () => {
+    expect(html).toContain(
+      '<a class="ca-arrow-link" href="/en/programme/food-bank">Food <span class="ca-arrow-link__end">bank</span></a>',
+    )
+    expect(html.replace(/<[^>]+>/g, '')).not.toMatch(/[←-⇿]/)
   })
 
-  it('links the item title when the item declares a link', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toMatch(/<a class="cg-feature__link"[^>]*>Weekly food distribution<\/a>/)
+  it('keeps an unlinked name as plain words', () => {
+    expect(html).toContain('<h3 class="ca-ways__name">Garden</h3>')
   })
 
-  it('renders no link at all for an item with none', () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toMatch(/<h3 class="cg-feature__title">Homework club<\/h3>/)
+  it('starts the names at h2 when the block has no title of its own', () => {
+    const { title: _t, ...untitled } = BLOCKS.featureGrid
+    expect(serialize(renderFeatureGrid(untitled, ctx))).toContain('<h2 class="ca-ways__name">')
+  })
+})
+
+describe('featureGrid, without icons: steps', () => {
+  const html = serialize(renderFeatureGrid(STEPS, ctx))
+
+  it('reads as an ordered list of steps, numbered for the eye only', () => {
+    expect(html).toContain('<ol class="ca-steps__items">')
+    expect(html).toContain('<span class="ca-steps__number" aria-hidden="true">1</span>')
+    expect(html).toContain('<span class="ca-steps__number" aria-hidden="true">3</span>')
   })
 
-  it("never skips a heading level: item titles are h3 under the block's own h2", () => {
-    const html = serialize(renderFeatureGrid(BLOCKS.featureGrid, ctx))
-    expect(html).toContain('<h3 class="cg-feature__title"')
+  it('draws no icon at all', () => {
+    expect(html).not.toContain('<svg')
+  })
+})
+
+describe('the number of columns', () => {
+  it('fills whole rows: up to four across, then three for a count that divides by three', () => {
+    expect([1, 2, 3, 4, 5, 6, 8, 9].map(columnsFor)).toEqual([1, 2, 3, 4, 4, 3, 4, 3])
   })
 
-  it('promotes item titles to h2 when the block itself has no title', () => {
-    const { title: _title, ...noTitle } = BLOCKS.featureGrid
-    const html = serialize(renderFeatureGrid(noTitle, ctx))
-    expect(html).toContain('<h2 class="cg-feature__title"')
+  it('stamps the count the stylesheet lays out', () => {
+    const six = {
+      ...BLOCKS.featureGrid,
+      items: [...BLOCKS.featureGrid.items, ...BLOCKS.featureGrid.items].map((item, index) => ({
+        ...item,
+        _key: `k${index}`,
+      })),
+    }
+    expect(serialize(renderFeatureGrid(six, ctx))).toContain('data-count="3"')
   })
 })

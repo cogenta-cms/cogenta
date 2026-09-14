@@ -4,39 +4,32 @@ import { renderProse } from '../../src/render/blocks/prose.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderProse(BLOCKS.prose, ctx))
 
 describe('prose', () => {
-  it('renders the rich text document as real markup', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('Every donation goes')
-    expect(html).toContain('<strong>')
+  it('sets the rich text in the reading column of a section', () => {
+    expect(html).toMatch(/^<div class="ca-section ca-prose" data-block="prose">/)
+    expect(html).toContain('<div class="ca-prose__body">')
   })
 
-  it('renders a heading from the document starting at h2, never h1', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<h2>')
+  it('adds no heading of its own and keeps the document’s h2', () => {
     expect(html).not.toContain('<h1')
+    expect(html).toContain('<h2>A first shift</h2>')
   })
 
-  it('renders a nested list as real <ul>/<li> markup', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('<ul>')
-    expect(html.match(/<ul>/g)?.length).toBeGreaterThanOrEqual(1)
+  it('escapes text that looks like markup, rather than rendering it', () => {
+    expect(html).toContain('&amp; the &lt;winter&gt; report.')
+    expect(html).not.toContain('<winter>')
   })
 
-  it('renders an inline media node as a captioned figure', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('cg-prose__figure')
-    expect(html).toContain('Last year')
+  it('renders links, lists, quotations and figures from the document', () => {
+    expect(html).toContain('href="https://example.org/accounts"')
+    expect(html).toContain('<ul><li>A short welcome and safety briefing</li></ul>')
+    expect(html).toContain('<blockquote>')
+    expect(html).toContain('<figcaption>The reading room</figcaption>')
   })
 
-  it('escapes a hostile character sequence inside a span rather than treating it as markup', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('&lt;winter shelter&gt;')
-  })
-
-  it('is marked with data-block="prose"', () => {
-    const html = serialize(renderProse(BLOCKS.prose, ctx))
-    expect(html).toContain('data-block="prose"')
+  it('writes an alt attribute on an inline image', () => {
+    expect(html).toMatch(/<img[^>]*alt="The reading room before homework club"/)
   })
 })

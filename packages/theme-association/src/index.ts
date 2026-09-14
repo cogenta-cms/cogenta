@@ -1,4 +1,9 @@
+// The shared contract D primitives every theme package implements against —
+// re-exported so a consumer of this package never has to know they live in
+// `@cogenta/theme-kit` to use them alongside this theme's own blocks.
+export * from '@cogenta/theme-kit'
 export * from './render/blocks/accordion.js'
+export * from './render/blocks/breakdown.js'
 export * from './render/blocks/collection-list.js'
 export * from './render/blocks/cta.js'
 export * from './render/blocks/embed.js'
@@ -16,5 +21,8 @@ export * from './render/blocks/stat-counter.js'
 export * from './render/blocks/stats.js'
 export * from './render/blocks/testimonial.js'
 export * from './render/chrome.js'
+export * from './render/details.js'
+export * from './render/figures.js'
+export * from './render/page-head.js'
 export * from './render/render-block.js'
 export * from './render/term-archive.js'

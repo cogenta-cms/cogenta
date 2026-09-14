@@ -1,39 +1,46 @@
 import type { QuoteBlock } from '@cogenta/blocks'
 import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-kit'
+import { section } from '../layout.js'
 
 /**
- * `<figure><blockquote>…</blockquote><figcaption>` is the attribution
- * pattern the HTML spec prescribes: putting the author inside the
- * `<blockquote>` would claim the author's name is part of what was said.
- *
- * The avatar is decorative here — the name is right beside it in text — so
- * its media entity's alt text is expected to be empty. `image` still writes
- * the attribute either way.
+ * A few words someone said, set large: the text in the display face across
+ * nine columns, with a real opening quotation mark hung in the margin by the
+ * stylesheet, and the speaker's name and role small beneath it. A portrait,
+ * when there is one, is a small square crop beside the name.
  */
 export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement {
-  const hasAttribution =
-    block.author !== undefined || block.role !== undefined || block.avatar !== undefined
-  return h(
-    'figure',
-    { class: 'cg-block cg-quote', 'data-block': 'quote' },
-    h('blockquote', { class: 'cg-quote__text' }, h('p', { 'data-field': 'text' }, block.text)),
-    hasAttribution
-      ? h(
+  const who =
+    block.author === undefined && block.role === undefined
+      ? null
+      : h(
           'figcaption',
-          { class: 'cg-quote__attribution' },
+          { class: 'ca-quote__attribution' },
           block.avatar === undefined
             ? null
-            : image(ctx, block.avatar, {
-                className: 'cg-quote__avatar',
-                variant: { width: 96, height: 96, fit: 'cover' },
-              }),
-          block.author === undefined
-            ? null
-            : h('span', { class: 'cg-quote__author', 'data-field': 'author' }, block.author),
-          block.role === undefined
-            ? null
-            : h('span', { class: 'cg-quote__role', 'data-field': 'role' }, block.role),
+            : image(ctx, block.avatar, { className: 'ca-quote__avatar', sizes: '3.5rem' }),
+          h(
+            'span',
+            { class: 'ca-quote__who' },
+            block.author === undefined
+              ? null
+              : h('span', { class: 'ca-quote__author', 'data-field': 'author' }, block.author),
+            block.role === undefined
+              ? null
+              : h('span', { class: 'ca-quote__role', 'data-field': 'role' }, block.role),
+          ),
         )
-      : null,
+
+  return section(
+    'div',
+    'quote',
+    'ca-quote',
+    {},
+    'figure',
+    h(
+      'blockquote',
+      { class: 'ca-quote__quote' },
+      h('p', { class: 'ca-quote__text', 'data-field': 'text' }, block.text),
+    ),
+    who,
   )
 }

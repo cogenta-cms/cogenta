@@ -4,46 +4,53 @@ import { renderStats } from '../../src/render/blocks/stats.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
+const html = serialize(renderStats(BLOCKS.stats, ctx))
 
-describe('stats — the impact band', () => {
-  it('renders as a description list', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('<dl class="cg-impact__items">')
+describe('stats, figures with their context', () => {
+  it('renders a description list, the sentence of context before the figure in reading order', () => {
+    expect(html).toContain('<dl class="ca-figures__items">')
+    expect(html.indexOf('<dt')).toBeLessThan(html.indexOf('<dd'))
   })
 
-  it('renders the label before the figure in the markup — reading order, not paint order', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    const dtIndex = html.indexOf('<dt')
-    const ddIndex = html.indexOf('<dd')
-    expect(dtIndex).toBeGreaterThanOrEqual(0)
-    expect(dtIndex).toBeLessThan(ddIndex)
+  it('sets the unit apart from the figure, and no unit where there is none', () => {
+    expect(html).toContain(
+      '<dd class="ca-figures__value">7,280<span class="ca-figures__unit">parcels</span></dd>',
+    )
+    expect(html).toContain('<dd class="ca-figures__value">312</dd>')
   })
 
-  it('renders every impact figure and its label', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('12,400')
-    expect(html).toContain('meals served')
-    expect(html).toContain('380')
-    expect(html).toContain('volunteers')
-    expect(html).toContain('27')
-    expect(html).toContain('partner schools')
-    expect(html).toContain('€1.2M')
-    expect(html).toContain('raised')
+  it('keeps the whole sentence of context as the label', () => {
+    expect(html).toContain(
+      '<dt class="ca-figures__label">of food handed out on Thursday evenings.</dt>',
+    )
   })
 
-  it('renders the unit as its own span beside the value', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).toContain('<span class="cg-impact-stat__unit">meals</span>')
+  it('draws percentages that make a whole as shares of it, with a bar each', () => {
+    const shares = serialize(
+      renderStats(
+        {
+          ...BLOCKS.stats,
+          items: [
+            { _key: 'a', value: '62', unit: '%', label: 'Food' },
+            { _key: 'b', value: '38%', label: 'Everything else' },
+          ],
+        },
+        ctx,
+      ),
+    )
+    expect(shares).toContain('data-shape="breakdown"')
+    expect(shares).toContain('<data value="62">62%</data>')
+    expect(shares).toContain('style="inline-size:38%"')
   })
 
-  it('omits the unit span for an item with none', () => {
-    const html = serialize(renderStats(BLOCKS.stats, ctx))
-    expect(html).not.toMatch(/380<span class="cg-impact-stat__unit">/)
+  it('keeps figures that are not shares of one whole as figures', () => {
+    expect(html).toContain('data-shape="figures"')
   })
 
-  it('omits the title heading entirely when the block has none', () => {
+  it('omits the title entirely when the block has none', () => {
     const { title: _title, ...noTitle } = BLOCKS.stats
-    const html = serialize(renderStats(noTitle, ctx))
-    expect(html).not.toContain('cg-impact__title')
+    const bare = serialize(renderStats(noTitle, ctx))
+    expect(bare).not.toContain('ca-head')
+    expect(bare).toContain('data-titled="false"')
   })
 })

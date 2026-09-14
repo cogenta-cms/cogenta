@@ -202,12 +202,33 @@
   border: 0;
 }
 
+/* A column is too narrow for the date beside the words: the date runs along
+   the top of the card instead, day first. */
 .ca-list[data-layout="grid"] .ca-events__item,
 .ca-list__viewport .ca-events__item {
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   padding-block: var(--ca-s5) 0;
   border-block-start: var(--ca-rule-strong) solid var(--ca-line-ink);
   border-block-end: 0;
+}
+
+.ca-list[data-layout="grid"] .ca-date,
+.ca-list__viewport .ca-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--ca-s2);
+}
+
+.ca-list[data-layout="grid"] .ca-date-day,
+.ca-list__viewport .ca-date-day {
+  order: -1;
+}
+
+.ca-list[data-layout="grid"] .ca-events__cost,
+.ca-list__viewport .ca-events__cost {
+  grid-column: 1;
 }
 
 @media (min-width: 40rem) {

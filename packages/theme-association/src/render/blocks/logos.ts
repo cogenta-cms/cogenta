@@ -11,12 +11,24 @@ import { section, sectionHead } from '../layout.js'
  * The organisation's name is the mark's accessible name when the media
  * library has no alt text for it, and the link's own name when it links out.
  */
+/**
+ * Columns on a wide screen that leave no empty cell in the grid: three when
+ * the count divides by three, two when it divides by two, otherwise three.
+ */
+export function logoColumnsFor(count: number): number {
+  if (count % 3 === 0) return 3
+  return count % 2 === 0 ? 2 : 3
+}
+
 export function renderLogos(block: LogosBlock, ctx: RenderContext): HtmlElement {
   return section(
     'section',
     'logos',
     'ca-partners',
-    { 'data-titled': String(block.title !== undefined) },
+    {
+      'data-titled': String(block.title !== undefined),
+      'data-columns': String(logoColumnsFor(block.items.length)),
+    },
     'div',
     sectionHead('logos', block.title),
     h(

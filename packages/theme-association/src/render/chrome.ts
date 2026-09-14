@@ -84,8 +84,23 @@ function renderFooterNote(note: string): string {
     .filter((lines) => lines.length > 0)
   if (paragraphs.length === 0) return ''
   return `<div class="ca-footer__note">${paragraphs
-    .map((lines) => `<p>${lines.map((line) => escapeText(line)).join('<br>')}</p>`)
+    .map((lines) => `<p>${lines.map(noteLine).join('<br>')}</p>`)
     .join('')}</div>`
+}
+
+/**
+ * A line of the footer note that is nothing but an email address or a
+ * telephone number is what a visitor taps to reach the organisation, so it
+ * becomes a link; every other line stays text.
+ */
+function noteLine(line: string): string {
+  const text = escapeText(line)
+  if (/^[^\s@<>"']+@[^\s@<>"']+\.[a-z]{2,}$/i.test(line)) {
+    return `<a href="mailto:${escapeAttribute(line)}">${text}</a>`
+  }
+  const digits = line.replace(/[\s().-]/g, '')
+  if (/^\+?\d{7,15}$/.test(digits)) return `<a href="tel:${digits}">${text}</a>`
+  return text
 }
 
 export function renderChrome(input: ChromeInput): ChromeResult {

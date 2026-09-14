@@ -169,8 +169,29 @@ describe('the footer', () => {
       footerNote: 'Registered charity no. 1299418\nThe Old Library\n\n01632 960418',
     })
     expect(footer).toContain(
-      '<div class="ca-footer__note"><p>Registered charity no. 1299418<br>The Old Library</p><p>01632 960418</p></div>',
+      '<div class="ca-footer__note"><p>Registered charity no. 1299418<br>The Old Library</p><p><a href="tel:01632960418">01632 960418</a></p></div>',
     )
+  })
+
+  it('links a note line that is only an email address or a telephone number, and no other line', () => {
+    const { footer } = renderChrome({
+      ...BASE,
+      footerNote: 'hello@commonground.org.uk\n+44 1632 960418\nOpen until 4pm on 12 days',
+    })
+    expect(footer).toContain(
+      '<a href="mailto:hello@commonground.org.uk">hello@commonground.org.uk</a>',
+    )
+    expect(footer).toContain('<a href="tel:+441632960418">+44 1632 960418</a>')
+    expect(footer).toContain('<br>Open until 4pm on 12 days</p>')
+  })
+
+  it('never turns a note line into a link that could carry markup or a script', () => {
+    const { footer } = renderChrome({
+      ...BASE,
+      footerNote: 'a"onmouseover=x@y.zz\njavascript:1234567',
+    })
+    expect(footer).not.toMatch(/href="(mailto:a|javascript:)/)
+    expect(footer).not.toMatch(/<a [^>]*onmouseover/)
   })
 
   it('reads Windows line endings as line endings, and escapes markup in the note', () => {

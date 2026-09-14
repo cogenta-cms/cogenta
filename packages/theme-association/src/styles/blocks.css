@@ -1085,15 +1085,15 @@
     grid-column: 4 / -1;
   }
 
-  .ca-partners__items {
+  .ca-partners[data-columns="3"] .ca-partners__items {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .ca-partners__item:nth-child(odd) {
+  .ca-partners[data-columns="3"] .ca-partners__item:nth-child(odd) {
     border-inline-end: 0;
   }
 
-  .ca-partners__item:not(:nth-child(3n)) {
+  .ca-partners[data-columns="3"] .ca-partners__item:not(:nth-child(3n)) {
     border-inline-end: var(--ca-rule) solid var(--ca-line);
   }
 

@@ -1,6 +1,6 @@
 import { serialize } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
-import { renderLogos } from '../../src/render/blocks/logos.js'
+import { logoColumnsFor, renderLogos } from '../../src/render/blocks/logos.js'
 import { BLOCKS, makeContext } from '../fixtures.js'
 
 const ctx = makeContext()
@@ -20,6 +20,11 @@ describe('logos', () => {
 
   it('keeps a partner without a site as an unlinked cell', () => {
     expect(html).toContain('<span class="ca-partners__cell"><img class="ca-mark"')
+  })
+
+  it('chooses a number of columns that leaves no empty cell', () => {
+    expect([2, 3, 4, 5, 6, 8, 9].map(logoColumnsFor)).toEqual([2, 3, 2, 3, 3, 2, 3])
+    expect(html).toContain('data-columns="2"')
   })
 
   it('titles the block at h2', () => {

@@ -695,6 +695,9 @@ importers:
       '@cogenta/schema':
         specifier: workspace:*
         version: link:../schema
+      '@cogenta/starters':
+        specifier: workspace:*
+        version: link:../starters
       '@cogenta/theme-canonical':
         specifier: workspace:*
         version: link:../theme-canonical
@@ -944,6 +947,34 @@ importers:
         specifier: workspace:*
         version: link:../schema
     devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(jsdom@27.4.0)(vite@8.2.1(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0))
+
+  packages/starters:
+    dependencies:
+      '@cogenta/api':
+        specifier: workspace:*
+        version: link:../api
+      '@cogenta/blocks':
+        specifier: workspace:*
+        version: link:../blocks
+      '@cogenta/core':
+        specifier: workspace:*
+        version: link:../core
+      '@cogenta/render':
+        specifier: workspace:*
+        version: link:../render
+      '@cogenta/schema':
+        specifier: workspace:*
+        version: link:../schema
+    devDependencies:
+      '@cogenta/theme-canonical':
+        specifier: workspace:*
+        version: link:../theme-canonical
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

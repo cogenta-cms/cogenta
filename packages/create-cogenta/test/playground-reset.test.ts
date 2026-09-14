@@ -5,7 +5,7 @@ import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
 import { createContentStore, createSearchIndex } from '@cogenta/schema'
 import { afterEach, describe, expect, it } from 'vitest'
-import { post } from '../src/blueprints/blog.js'
+import { post } from '../../starters/src/blueprints/blog.js'
 import { resetPlaygroundData } from '../src/playground-reset.js'
 
 describe('resetPlaygroundData', () => {

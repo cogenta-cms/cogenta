@@ -5,7 +5,7 @@ import { type ArtLayer, type ArtSpec, type ColorRGB, mulberry32, type Vec2 } fro
 /**
  * Ready-made compositions for `demo-art` (D1/D5, `docs/lots/L25-templates-pro.md`).
  * Each preset takes a `palette` — the same shape as `SkinTokens.color`
- * (`packages/create-cogenta/src/blueprints/starting-skins.ts`), so any
+ * (`packages/starters/src/blueprints/starting-skins.ts`), so any
  * blueprint's starting skin is a valid palette with no translation step —
  * and returns an {@link ArtSpec} `render.ts` can turn into a PNG.
  *

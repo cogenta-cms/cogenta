@@ -1,11 +1,11 @@
 import type { ExtractedDocument, SitePlanDraft } from '@cogenta/agents'
 import type { Output } from '@cogenta/cli'
+import { BLUEPRINT_CONTENT_PACKS } from '@cogenta/starters'
 import {
   blueprintSettings,
   inferBlueprint,
   resolveBlueprintSettings,
 } from './blueprint-defaults.js'
-import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
 import { BLUEPRINTS, resolveBlueprint } from './blueprints/registry.js'
 import { loadConfigFile } from './config-file.js'
 import { collectDocuments, readDocuments } from './document-step.js'

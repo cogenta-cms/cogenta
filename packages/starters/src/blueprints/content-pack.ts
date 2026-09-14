@@ -74,7 +74,7 @@ export type SeedDemoContent = (ctx: SeedContext) => Promise<void>
  * `f.blocks()`) through the real `ContentStore`.
  *
  * L25 task A0b adds four optional fields, all additive: `defaultTheme` (an
- * npm package name — `scaffold.ts` writes it to `cogenta_theme.active_theme`
+ * npm package name — `create-cogenta`'s `scaffold.ts` writes it to `cogenta_theme.active_theme`
  * and to the generated site's `package.json`), `menus`/`siteSettings` (seeded
  * before `seedDemoContent` runs), and (unchanged) `taxonomies`. A blueprint
  * that declares none of them behaves exactly as it did before this task.

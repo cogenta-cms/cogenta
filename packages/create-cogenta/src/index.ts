@@ -4,12 +4,15 @@ import { createOutput, shouldUseColour, type Writer } from '@cogenta/cli'
 import { createDefaultsPrompter, createInteractivePrompter } from './prompts.js'
 import { runWizard } from './wizard.js'
 
+// The content packs live in `@cogenta/starters` since L28 (so `@cogenta/cli`
+// can import them without depending on this installer); re-exported here
+// unchanged, so no caller of this package has to change an import.
 export type {
   BlueprintContentPack,
   RecommendedAgentHint,
   SeedDemoContent,
-} from './blueprints/content-pack.js'
-export { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
+} from '@cogenta/starters'
+export { BLUEPRINT_CONTENT_PACKS } from '@cogenta/starters'
 export type { Blueprint, ResolvedBlueprint } from './blueprints/registry.js'
 export { BLUEPRINTS, DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
 export { ConfigFileError, loadConfigFile } from './config-file.js'

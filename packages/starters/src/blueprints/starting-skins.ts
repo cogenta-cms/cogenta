@@ -11,7 +11,7 @@ import type { SkinTokens } from '@cogenta/render'
  * `validateSkin` in `test/starting-skins.test.ts` — the same contrast/
  * structure gate an AI-generated skin has to clear (contract D). Keyed by
  * `Blueprint.id`; a blueprint absent from this map falls back to
- * `@cogenta/theme-canonical`'s own default (`scaffold.ts`'s
+ * `@cogenta/theme-canonical`'s own default (`create-cogenta`'s `scaffold.ts`'s
  * `canonicalTokensJson`), exactly as every blueprint behaved before this
  * task — this is additive, not a change to the seven blueprints not listed
  * here.

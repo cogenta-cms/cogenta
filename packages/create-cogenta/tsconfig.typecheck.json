@@ -2,7 +2,12 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "."
+    // `../..`, not `.`: the scaffold tests read a blueprint's own demo data
+    // (its dishes, its pages, its menus) straight from
+    // `@cogenta/starters`' sources, which are not part of that package's
+    // public API. Nothing is emitted here, so the wider root only lets those
+    // files into the program.
+    "rootDir": "../.."
   },
   "include": ["src", "test", "*.config.ts"]
 }

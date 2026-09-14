@@ -30,6 +30,7 @@ export default {
         'agents',
         'mcp',
         'create',
+        'starters',
         'import',
         'channels',
         'plugins',

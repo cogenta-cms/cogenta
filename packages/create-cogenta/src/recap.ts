@@ -1,5 +1,5 @@
 import type { Output } from '@cogenta/cli'
-import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
+import { BLUEPRINT_CONTENT_PACKS } from '@cogenta/starters'
 import type { ResolvedBlueprint } from './blueprints/registry.js'
 import type { EnvironmentReport } from './environment.js'
 import type { ValidateKeyResult } from './llm-setup.js'

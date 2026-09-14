@@ -28,12 +28,14 @@ import {
   type TaxonomyDefinition,
   validateCollectionSet,
 } from '@cogenta/schema'
-import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
-import { seedDemoMedia } from './blueprints/demo-media.js'
-import { seedBlueprintMenus } from './blueprints/menus.js'
+import {
+  BLUEPRINT_CONTENT_PACKS,
+  STARTING_SKINS,
+  seedBlueprintMenus,
+  seedDemoMedia,
+  seedSiteSettings,
+} from '@cogenta/starters'
 import { DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
-import { seedSiteSettings } from './blueprints/site-settings-seed.js'
-import { STARTING_SKINS } from './blueprints/starting-skins.js'
 
 /** The collection `definePageCollection` builds in every blueprint — template pages, never discussion threads. */
 const PAGE_COLLECTION_NAME = 'page'
@@ -91,7 +93,7 @@ export interface ScaffoldResult {
    * Present only when a blueprint wrote `theme.tokens.json` — says which
    * skin ended up there: `'generated'` (AI, L9 task 7 / approved plan),
    * `'preset'` (this blueprint's own starting skin, L22 task 10 —
-   * `./blueprints/starting-skins.js`) or `'default'`
+   * `@cogenta/starters`) or `'default'`
    * (`@cogenta/theme-canonical`'s own tokens, copied verbatim — the only
    * option for a blueprint with no preset of its own).
    */
@@ -283,7 +285,7 @@ async function canonicalTokensJson(): Promise<string> {
  * rather than re-implemented, so a scaffolded site is provably the same
  * thing those commands would produce by hand afterwards.
  *
- * A blueprint with a real `BlueprintContentPack` (`./blueprints/content-packs.js`)
+ * A blueprint with a real `BlueprintContentPack` (`@cogenta/starters`)
  * additionally materialises its tables, seeds real demo content, applies a
  * skin and records which agents it recommends. `blank` (and any blueprint
  * without a pack yet) takes none of those branches — but the content schema

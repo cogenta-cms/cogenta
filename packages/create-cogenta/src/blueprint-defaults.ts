@@ -1,4 +1,4 @@
-import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
+import { BLUEPRINT_CONTENT_PACKS } from '@cogenta/starters'
 import { BLUEPRINTS } from './blueprints/registry.js'
 
 /**

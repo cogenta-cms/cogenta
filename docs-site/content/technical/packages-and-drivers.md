@@ -33,6 +33,7 @@ shows, never rewritten by hand for this page.
 | `analytics` | Self-hosted, cookie-free, privacy-respecting page-view analytics. |
 | `fleet` | Multi-site fleet control plane — pairing, telemetry, inventory, rollouts, reporting. |
 | `cli` | The Cogenta command line: diagnose an install, run migrations, inspect drivers. |
+| `starters` | The starter content packs Cogenta seeds a new site with: collections, taxonomies, demo entries, menus, site settings and demo media per site type. |
 | `create-cogenta` | The Cogenta installer wizard — `npm create cogenta`. |
 | `admin` | The admin SPA — private, not published to npm. |
 

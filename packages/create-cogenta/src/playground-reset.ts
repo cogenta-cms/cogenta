@@ -7,7 +7,7 @@ import {
   dropSchemaTables,
   reindexAll,
 } from '@cogenta/schema'
-import { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
+import { BLUEPRINT_CONTENT_PACKS } from '@cogenta/starters'
 
 export interface ResetPlaygroundDataOptions {
   readonly db: DatabaseHandle

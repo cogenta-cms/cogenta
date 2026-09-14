@@ -49,6 +49,10 @@ c'est à confirmer page par page.
 - [ ] @cogenta/seo
 - [ ] @cogenta/theme-canonical
 
+## Jamais publiés : le lien (et, si npm l'exige, une première publication à la main) reste à faire (1)
+
+- [ ] @cogenta/starters (L28, packs de contenu sortis de `create-cogenta`)
+
 ## Déjà configurés d'après les notes du projet (2)
 
 - [x] create-cogenta

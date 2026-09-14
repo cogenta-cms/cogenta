@@ -11,7 +11,8 @@ import { vitrineContentPack } from './vitrine.js'
 
 /**
  * Every blueprint beyond `blank` that has a real content pack, keyed by its
- * `Blueprint.id` (`./registry.js`). Every blueprint listed in `BLUEPRINTS`
+ * `Blueprint.id` (`create-cogenta`'s `src/blueprints/registry.ts`, which
+ * stays with the installer's menu). Every blueprint listed in `BLUEPRINTS`
  * now has one (L9 task 8, batch B, plus `store` in L22 task 10) — `blank`
  * remains the only one without, which is honest: it is the empty schema by
  * design, never `resolveBlueprint` handing out an `available: false`

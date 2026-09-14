@@ -10,7 +10,7 @@ import { scaffoldSite } from '../src/scaffold.js'
  * L20 audit, point 2, proven end to end: a freshly scaffolded site's own
  * public `/api/search` must find its own seeded demo content.
  *
- * `seedBlogDemoContent` (`blueprints/blog.ts`) writes through a plain
+ * `seedBlogDemoContent` (`@cogenta/starters`, `blueprints/blog.ts`) writes through a plain
  * `createContentStore`, never through the `withSearchIndexing`-wrapped store
  * `cogenta serve` builds at startup (`serve.ts`) — so before this fix, the
  * seeded posts existed in the content tables but the search index table was

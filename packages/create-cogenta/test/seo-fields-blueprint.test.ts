@@ -5,7 +5,7 @@ import { createOutput, runServe } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import { createContentStore } from '@cogenta/schema'
 import { afterEach, describe, expect, it } from 'vitest'
-import { post } from '../src/blueprints/blog.js'
+import { post } from '../../starters/src/blueprints/blog.js'
 import { scaffoldSite } from '../src/scaffold.js'
 
 /**

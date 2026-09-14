@@ -2,9 +2,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SkinTokens } from '@cogenta/render'
-import { validateSkin } from '@cogenta/render'
+import { STARTING_SKINS } from '@cogenta/starters'
 import { afterEach, describe, expect, it } from 'vitest'
-import { STARTING_SKINS } from '../src/blueprints/starting-skins.js'
 import { scaffoldSite } from '../src/scaffold.js'
 
 function requiredSkin(blueprintId: string): SkinTokens {
@@ -19,33 +18,6 @@ function requiredSkin(blueprintId: string): SkinTokens {
  * exact same gate a generated skin does (contract D) — the same discipline
  * `skin-validation-corpus.test.ts` holds an AI-produced skin to.
  */
-describe('per-blueprint starting skins', () => {
-  it('every starting skin passes the real contract-D validation gate', () => {
-    for (const [blueprintId, tokens] of Object.entries(STARTING_SKINS)) {
-      expect(() => validateSkin(tokens), blueprintId).not.toThrow()
-    }
-  })
-
-  it('offers one for each site type that has claimed a starting skin so far', () => {
-    expect(Object.keys(STARTING_SKINS).sort()).toEqual([
-      'association',
-      'blog',
-      'documentation',
-      'magazine',
-      'portfolio',
-      'restaurant',
-      'saas',
-      'store',
-      'vitrine',
-    ])
-  })
-
-  it('gives each starting skin a distinct accent colour, not three copies of one palette', () => {
-    const accents = new Set(Object.values(STARTING_SKINS).map((tokens) => tokens.color.accent))
-    expect(accents.size).toBe(Object.keys(STARTING_SKINS).length)
-  })
-})
-
 describe('scaffoldSite — starting skin selection', () => {
   const dirs: string[] = []
 
@@ -94,7 +66,7 @@ describe('scaffoldSite — starting skin selection', () => {
   // Every blueprint with a real content pack now has its own starting skin
   // (`vitrine` was the last one without, until this pass — L25) — `blank`
   // is genuinely the only remaining case: it has no `BlueprintContentPack`
-  // at all (`content-packs.ts`), so `scaffoldSite` never writes a
+  // at all (`@cogenta/starters` `content-packs.ts`), so `scaffoldSite` never writes a
   // `theme.tokens.json` for it in the first place, not merely a "default"
   // one. That absence, not a `skinSource: 'default'`, is what "no starting
   // skin of its own" looks like for the one blueprint left without one.

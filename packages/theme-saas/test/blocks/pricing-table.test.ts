@@ -69,6 +69,27 @@ describe('pricingTable, as a comparison', () => {
     expect(html).toContain('<caption class="cg-visually-hidden">Plans</caption>')
   })
 
+  it('lays the plans and every row of the table on the same columns, in the same order', () => {
+    const plans = [...html.matchAll(/<h3 class="cs-plan__name">([^<]+)<\/h3>/g)].map((m) => m[1])
+    const heads = [
+      ...html.matchAll(/<th scope="col" class="cs-compare__tier"[^>]*>([^<]+)<\/th>/g),
+    ].map((m) => m[1])
+    const colgroup = /<colgroup>(.*?)<\/colgroup>/.exec(html)?.[1] ?? ''
+    const columns = [...colgroup.matchAll(/data-column="(label|plan)"/g)].map((m) => m[1])
+    expect(plans).toEqual(TIERS.map((t) => t.name))
+    expect(heads).toEqual(plans)
+    // One label column, then exactly one column per plan shown above.
+    expect(columns).toEqual(['label', ...plans.map(() => 'plan')])
+    const body = /<tbody>(.*)<\/tbody>/.exec(html)?.[1] ?? ''
+    const rows = body.split('</tr>').filter((row) => row.includes('<tr'))
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(row.match(/<t[hd][ >]/g)).toHaveLength(columns.length)
+    }
+    // The column definition comes before any row, so no cell decides a width.
+    expect(html.indexOf('<colgroup>')).toBeLessThan(html.indexOf('<thead>'))
+  })
+
   it('heads each column with its plan and each row with its line', () => {
     expect(html).toContain(
       '<th scope="col" class="cs-compare__tier" data-highlighted="true">Business</th>',

@@ -2,10 +2,12 @@
  * pricingTable: plans compared in a ruled table.
  *
  * On a wide screen the plans across the top and the comparison table under
- * them share one set of columns: a label column (which holds the section
- * title above the table) and one equal column per plan. Neither grid has a
- * column gap; cells are padded instead, so a price sits exactly over its
- * column of values.
+ * them are laid on one column definition: a label column of
+ * `--cs-label-column` (which holds the section title above the table) and the
+ * rest shared equally between the plans. The plans read it as grid tracks,
+ * the table as the widths of its `<col>` elements, never from the width of a
+ * cell. Neither has a column gap; cells are padded instead, so every vertical
+ * rule runs from a plan's name down to the last row without a jog.
  */
 
 .cs-pricing {
@@ -157,9 +159,12 @@
   line-height: var(--cs-leading-ui);
 }
 
+.cs-compare__col[data-column="label"] {
+  inline-size: 11rem;
+}
+
 .cs-compare .cs-compare__corner,
 .cs-compare .cs-compare__label {
-  inline-size: 11rem;
   text-align: start;
 }
 
@@ -303,8 +308,9 @@
     white-space: nowrap;
   }
 
-  .cs-compare .cs-compare__corner,
-  .cs-compare .cs-compare__label {
+  /* The same label column as the plans' grid above; the plan columns take
+     equal shares of the rest, as the plans' tracks do. */
+  .cs-compare__col[data-column="label"] {
     inline-size: var(--cs-label-column);
   }
 

@@ -28,8 +28,10 @@ import { word } from '../strings.js'
  * covers, the action) and one semantic `<table>` under them, a row header per
  * line, hairlines between rows, figures in tabular numerals, check marks
  * drawn by the stylesheet with the words "Included" and "Not included" kept
- * for assistive technology. The plan columns above and the table columns
- * below share one grid, so a price sits exactly over its column.
+ * for assistive technology. The plans above and the table below are laid on
+ * one column definition (`--cs-label-column`, then equal plan columns): the
+ * plans' grid tracks and the table's `<col>` widths are both read from it, so
+ * each plan's rules run on into its column of values without a jog.
  *
  * Otherwise (plans with nothing in common, more than four plans) each plan
  * becomes a ruled column with its own list, which is the honest reading of
@@ -165,6 +167,16 @@ export function renderPricingTable(block: PricingTableBlock, ctx: RenderContext)
               'caption',
               { class: 'cg-visually-hidden' },
               block.title ?? word(ctx.locale, 'compare'),
+            ),
+            // The table's columns are declared here, not guessed from its
+            // first row: the label column takes the width the plans above
+            // leave to the section title, and the plan columns share the rest
+            // equally, exactly as the plans do.
+            h(
+              'colgroup',
+              {},
+              h('col', { class: 'cs-compare__col', 'data-column': 'label' }),
+              block.tiers.map(() => h('col', { class: 'cs-compare__col', 'data-column': 'plan' })),
             ),
             h(
               'thead',

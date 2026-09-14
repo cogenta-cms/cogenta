@@ -510,6 +510,26 @@ describe('the grid, the chrome and the pricing table', () => {
     expect(rule('.cs-compare')).toMatch(/position:\s*relative/)
   })
 
+  it('reads the plans’ grid and the table’s columns from one label-column width, never from a cell', () => {
+    const wide = CODE.slice(CODE.indexOf('@media (min-width: 64rem)'))
+    expect(wide).toMatch(
+      /\.cs-pricing\[data-shape="compare"\] \.cs-pricing__top\s*\{[^}]*grid-template-columns:\s*var\(--cs-label-column\) minmax\(0, 1fr\)/,
+    )
+    expect(wide).toMatch(
+      /\.cs-pricing\[data-shape="compare"\] \.cs-pricing__plans\s*\{[^}]*grid-template-columns:\s*repeat\(var\(--cs-plan-columns, 3\), minmax\(0, 1fr\)\)/,
+    )
+    expect(wide).toMatch(
+      /\.cs-compare__col\[data-column="label"\]\s*\{\s*inline-size:\s*var\(--cs-label-column\)/,
+    )
+    // A width on a cell would compete with the columns and let the rows drift
+    // away from the plans above them.
+    for (const { selector, body } of blocks()) {
+      if (/cs-compare__(corner|label|tier|cell)/.test(selector)) {
+        expect(body, selector).not.toMatch(/(^|[;\s])(inline-size|width):/)
+      }
+    }
+  })
+
   it('marks the recommended plan with a rule in ink, never a tinted card', () => {
     expect(rule('.cs-plan[data-highlighted="true"]')).toMatch(
       /border-block-start:\s*var\(--cs-rule-strong\) solid var\(--cs-line-ink\)/,

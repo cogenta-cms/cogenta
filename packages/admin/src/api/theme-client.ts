@@ -83,6 +83,12 @@ export interface SampleDataPreview {
     readonly outcome: 'fill' | 'merge' | 'keep' | 'replace'
     readonly items: number
   }[]
+  /** Widget areas the demo places widgets in (L30): an area the site already fills is kept. */
+  readonly widgets: readonly {
+    readonly area: string
+    readonly outcome: 'fill' | 'keep' | 'replace'
+    readonly count: number
+  }[]
   readonly settings: readonly {
     readonly key: string
     readonly outcome: 'fill' | 'keep' | 'replace'
@@ -94,6 +100,7 @@ export interface SampleDataPreview {
     readonly media: number
     readonly menus: number
     readonly redirects: number
+    readonly widgets: number
     readonly collections: readonly string[]
   } | null
   readonly warnings: readonly SampleDataWarning[]

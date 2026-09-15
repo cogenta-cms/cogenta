@@ -65,6 +65,7 @@ import { TranslationsRoute } from './routes/translations.js'
 import { TrashRoute } from './routes/trash.js'
 import { UpdatesRoute } from './routes/updates.js'
 import { UsersRoute } from './routes/users.js'
+import { WidgetsRoute } from './routes/widgets.js'
 import { SchemaProvider } from './schema/schema-context.js'
 import { SiteSettingsProvider } from './settings/site-settings-context.js'
 import { AppShell } from './shell/app-shell.js'
@@ -134,6 +135,7 @@ export function App(): JSX.Element {
                 <Route path="commerce/shipping" element={<CommerceShippingRoute />} />
                 <Route path="commerce/payment" element={<CommercePaymentRoute />} />
                 <Route path="appearance" element={<AppearanceRoute />} />
+                <Route path="widgets" element={<WidgetsRoute />} />
                 <Route path="theme-generator" element={<ThemeGeneratorRoute />} />
                 <Route path="theme-sandbox" element={<ThemeSandboxRoute />} />
                 <Route path="admin-appearance" element={<AdminAppearanceRoute />} />

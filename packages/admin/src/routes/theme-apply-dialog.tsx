@@ -461,6 +461,7 @@ function useReadableWarnings(preview: SampleDataPreview): readonly SampleDataWar
     t(`settings.field.${key}.label`, { defaultValue: key })
   const out: SampleDataWarning[] = []
   const menus: string[] = []
+  const areas: string[] = []
   const settings: string[] = []
   for (const warning of preview.warnings) {
     if (warning.code === 'menu-merged') {
@@ -468,6 +469,14 @@ function useReadableWarnings(preview: SampleDataPreview): readonly SampleDataWar
         code: warning.code,
         params: { ...warning.params, location: locationLabel(String(warning.params.location)) },
       })
+      continue
+    }
+    if (warning.code === 'widgets-kept') {
+      areas.push(
+        t(`widgets.areas.${String(warning.params['area'])}`, {
+          defaultValue: String(warning.params['area']),
+        }),
+      )
       continue
     }
     if (warning.code === 'menu-kept') menus.push(locationLabel(String(warning.params['location'])))
@@ -483,6 +492,7 @@ function useReadableWarnings(preview: SampleDataPreview): readonly SampleDataWar
     } else out.push(warning)
   }
   if (menus.length > 0) out.push({ code: 'menu-kept', params: { names: menus.join(', ') } })
+  if (areas.length > 0) out.push({ code: 'widgets-kept', params: { names: areas.join(', ') } })
   if (settings.length > 0)
     out.push({ code: 'setting-kept', params: { names: settings.join(', ') } })
   return out
@@ -560,6 +570,21 @@ function Summary({ preview }: { readonly preview: SampleDataPreview }): JSX.Elem
               <span className="text-muted-foreground">
                 {t(`appearance.sampleData.menuOutcome.${menu.outcome}`)}
               </span>
+            </span>
+          </li>
+        ))}
+        {preview.widgets.map((area) => (
+          <li key={`widgets-${area.area}`} className="flex justify-between gap-3">
+            <span>
+              {t('appearance.sampleData.widgetsLabel', {
+                area: t(`widgets.areas.${area.area}`, { defaultValue: area.area }),
+              })}{' '}
+              <span className="text-muted-foreground">
+                {t(`appearance.sampleData.menuOutcome.${area.outcome}`)}
+              </span>
+            </span>
+            <span className="tabular-nums text-muted-foreground">
+              {t('widgets.count', { count: area.count })}
             </span>
           </li>
         ))}

@@ -423,6 +423,24 @@ export const themeRefineRequests: Record<string, unknown>[] = []
  * mock AGENTS.md forbids: the actual request/response wiring is exercised
  * end-to-end against a real server in `packages/cli/test/serve.test.ts`.
  */
+/** The widgets the `/api/widgets` mock holds, reset by each test that uses them (L30). */
+export const mockWidgets: {
+  id: string
+  area: string
+  position: number
+  type: string
+  title: string | null
+  settings: Record<string, unknown>
+  visibility: unknown
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+  updatedBy: string | null
+}[] = []
+
+/** Every write the `/api/widgets` mock received, in order. */
+export const widgetWrites: { method: string; id: string; area?: string }[] = []
+
 /** Every `POST /api/theme/sample-data/apply` the mock received, in order (L28). */
 export const sampleDataApplications: { theme: string; mode: string; confirmation?: string }[] = []
 
@@ -8977,6 +8995,7 @@ export function installMockFetch(
             ],
             taxonomies: [],
             menus: [{ location: 'primary', outcome: reset ? 'replace' : 'keep', items: 5 }],
+            widgets: [{ area: 'sidebar', outcome: reset ? 'replace' : 'fill', count: 3 }],
             settings: [],
             media: 18,
             removals: reset
@@ -8986,6 +9005,7 @@ export function installMockFetch(
                   media: 4,
                   menus: 2,
                   redirects: 0,
+                  widgets: 0,
                   collections: ['page', 'post'],
                 }
               : null,
@@ -9700,6 +9720,133 @@ export function installMockFetch(
           }
           if (method === 'DELETE') {
             pageBuilderPatterns = pageBuilderPatterns.filter((p) => p.id !== id)
+            return new Response(null, { status: 204 })
+          }
+        }
+      }
+
+      // `/api/widgets` (L30) — a stateful stand-in for the widget router:
+      // admin-only, positions kept contiguous, a quote with no text refused
+      // with the vocabulary's own code so the editor's error path is real.
+      if (url.includes('/api/widgets')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may manage widgets.' },
+          })
+        }
+        const reindex = (area: string): void => {
+          mockWidgets
+            .filter((widget) => widget.area === area)
+            .sort((a, b) => a.position - b.position)
+            .forEach((widget, index) => {
+              widget.position = index
+            })
+        }
+        const moveMatch = /\/api\/widgets\/([^/?]+)\/(move|duplicate)$/u.exec(url)
+        const idMatch = /\/api\/widgets\/([^/?]+)$/u.exec(url)
+        if (/\/api\/widgets(?:\?.*)?$/u.test(url)) {
+          if (method === 'GET') {
+            return json(200, {
+              data: {
+                areas: [
+                  { id: 'sidebar', label: 'Sidebar' },
+                  { id: 'content-before', label: 'Before the content' },
+                  { id: 'content-after', label: 'After the content' },
+                  { id: 'footer-1', label: 'Footer, column 1' },
+                  { id: 'footer-2', label: 'Footer, column 2' },
+                ],
+                widgets: mockWidgets,
+                types: ['text', 'quote', 'search', 'links', 'recentEntries'],
+              },
+            })
+          }
+          if (method === 'POST') {
+            const input = body as {
+              area: string
+              type: string
+              title?: string | null
+              settings?: Record<string, unknown>
+              visibility?: unknown
+              enabled?: boolean
+              position?: number
+            }
+            if (input.type === 'quote' && (input.settings?.['text'] ?? '') === '') {
+              return json(422, {
+                error: {
+                  code: 'WIDGET_INVALID',
+                  message: 'The quote widget\'s settings are not valid at "text".',
+                  hint: 'Write the quotation.',
+                },
+              })
+            }
+            const created = {
+              id: `w${mockWidgets.length + 1}`,
+              area: input.area,
+              position: input.position ?? mockWidgets.filter((w) => w.area === input.area).length,
+              type: input.type,
+              title: input.title ?? null,
+              settings: input.settings ?? {},
+              visibility: input.visibility ?? {
+                pages: { mode: 'all', targets: [] },
+                audience: 'everyone',
+                devices: { desktop: true, tablet: true, mobile: true },
+                from: null,
+                until: null,
+                locales: [],
+              },
+              enabled: input.enabled ?? true,
+              createdAt: '2026-09-15T00:00:00.000Z',
+              updatedAt: '2026-09-15T00:00:00.000Z',
+              updatedBy: user.id,
+            }
+            mockWidgets.push(created)
+            reindex(created.area)
+            widgetWrites.push({ method: 'POST', id: created.id })
+            return json(201, { data: created })
+          }
+        }
+        if (moveMatch !== null && method === 'POST') {
+          const widget = mockWidgets.find((w) => w.id === moveMatch[1])
+          if (widget === undefined)
+            return json(404, { error: { code: 'WIDGET_NOT_FOUND', message: 'No widget.' } })
+          if (moveMatch[2] === 'duplicate') {
+            const copy = {
+              ...widget,
+              id: `w${mockWidgets.length + 1}`,
+              enabled: false,
+              position: widget.position + 1,
+            }
+            mockWidgets.push(copy)
+            widgetWrites.push({ method: 'DUPLICATE', id: widget.id })
+            return json(201, { data: copy })
+          }
+          const target = body as { area: string; position: number }
+          const from = widget.area
+          const siblings = mockWidgets
+            .filter((w) => w.area === target.area && w !== widget)
+            .sort((a, b) => a.position - b.position)
+          siblings.splice(Math.min(target.position, siblings.length), 0, widget)
+          widget.area = target.area
+          siblings.forEach((w, index) => {
+            w.position = index
+          })
+          reindex(from)
+          widgetWrites.push({ method: 'MOVE', id: widget.id, area: target.area })
+          return json(200, { data: widget })
+        }
+        if (idMatch !== null) {
+          const widget = mockWidgets.find((w) => w.id === idMatch[1])
+          if (widget === undefined)
+            return json(404, { error: { code: 'WIDGET_NOT_FOUND', message: 'No widget.' } })
+          if (method === 'PATCH') {
+            Object.assign(widget, body as object)
+            widgetWrites.push({ method: 'PATCH', id: widget.id })
+            return json(200, { data: widget })
+          }
+          if (method === 'DELETE') {
+            mockWidgets.splice(mockWidgets.indexOf(widget), 1)
+            reindex(widget.area)
+            widgetWrites.push({ method: 'DELETE', id: widget.id })
             return new Response(null, { status: 204 })
           }
         }

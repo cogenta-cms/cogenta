@@ -109,6 +109,7 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/form-submissions': FormSubmissionsIcon,
   '/media': MediaIcon,
   '/appearance': EditIcon,
+  '/widgets': EditIcon,
   '/admin-appearance': EditIcon,
   '/seo': SeoIcon,
   '/commerce/products': CommerceProductsIcon,

@@ -273,7 +273,8 @@
       "settings": "Settings",
       "help": "Help"
     },
-    "commerceCustomers": "Customers"
+    "commerceCustomers": "Customers",
+    "widgets": "Widgets"
   },
   "breadcrumb": {
     "newEntry": "New",
@@ -2178,6 +2179,7 @@
       "mediaCount_one": "{{count}} image added",
       "mediaCount_other": "{{count}} images added",
       "menuLabel": "“{{location}}” menu",
+      "widgetsLabel": "Widgets “{{area}}”",
       "outcome": {
         "add": "new",
         "import": "existing, added to",
@@ -2207,14 +2209,15 @@
         "menu-kept": "Menus that already have links, kept as they are: {{names}}.",
         "setting-kept": "Settings already filled in, your values are kept: {{names}}.",
         "schema-rewrite": "The site's schema file will be rewritten (remember to commit it) and the development server will restart.",
-        "reset-deletes": "To be deleted: {{entries}} entries, {{terms}} terms, {{media}} media, {{menus}} menus and {{redirects}} redirects.",
+        "reset-deletes": "To be deleted: {{entries}} entries, {{terms}} terms, {{media}} media, {{menus}} menus, {{widgets}} widgets and {{redirects}} redirects.",
         "reset-backup": "A full backup is created and verified before anything is deleted; without it, nothing is deleted.",
         "collection-removed": "The “{{collection}}” collection ({{entries}} entries) will leave the schema. Its data stays in the backup.",
         "settings-replaced": "These identity settings will be replaced by the demo's and are not part of the backup: {{keys}}.",
         "media-files-kept": "Media files stay on disk, so restoring the backup gives the media library back intact.",
         "schema-not-serialisable": "The current schema holds functions that rewriting it would lose ({{fields}}). Choose reset, or add the collections by hand.",
         "entries-failed": "{{count}} entries could not be imported.",
-        "menu-merged": "The “{{location}}” menu already exists: {{count}} demo links are added after yours, and nothing is removed."
+        "menu-merged": "The “{{location}}” menu already exists: {{count}} demo links are added after yours, and nothing is removed.",
+        "widgets-kept": "Widget areas that already hold widgets, kept as they are: {{names}}."
       },
       "locationHeaderAction": "Header button",
       "activeAction": "Sample data",
@@ -4505,5 +4508,268 @@
     "anonymizeConfirm": "This erases the customer’s email and name. Their orders keep their own copy. This cannot be undone.",
     "anonymizeError": "Could not anonymise this customer.",
     "anonymized": "This customer record has been anonymised."
+  },
+  "widgets": {
+    "heading": "Widgets",
+    "description": "Place reusable blocks in your theme's areas: the sidebar, bands before and after the content, the footer columns. Each theme shows them in its own way.",
+    "viewSite": "View the site",
+    "adminOnly": "Only an administrator can manage widgets.",
+    "loadError": "The widgets could not be loaded.",
+    "actionError": "The action could not be completed.",
+    "close": "Close",
+    "library": "Add a widget",
+    "addTo": "Destination area",
+    "searchLibrary": "Search widgets",
+    "addType": "Add the {{type}} widget",
+    "noHtml": "No “Custom HTML” widget: a widget never stores code, which keeps the site safe and true to its theme.",
+    "groups": {
+      "content": "Content",
+      "dynamic": "Automatic content",
+      "navigation": "Navigation"
+    },
+    "unavailable": {
+      "noCollection": "The site needs a published collection.",
+      "noTaxonomy": "The site needs a taxonomy.",
+      "noMenu": "Create a menu first.",
+      "noForm": "Create a form first."
+    },
+    "areas": {
+      "sidebar": "Sidebar",
+      "content-before": "Before the content",
+      "content-after": "After the content",
+      "footer-1": "Footer, column 1",
+      "footer-2": "Footer, column 2",
+      "footer-3": "Footer, column 3",
+      "footer-4": "Footer, column 4"
+    },
+    "inactive": "Inactive widgets",
+    "inactiveHelp": "Their area does not exist in the active theme. They are kept: move them to an area or delete them.",
+    "count_one": "{{count}} widget",
+    "count_other": "{{count}} widgets",
+    "emptyArea": "No widget. Drag one here from the list, or choose this area and click a widget.",
+    "hidden": "Hidden",
+    "summary": {
+      "onlySome": "Some pages",
+      "exceptSome": "All but some pages",
+      "members": "Signed in",
+      "visitors": "Visitors",
+      "someDevices": "Some screens",
+      "scheduled": "Scheduled"
+    },
+    "actions": {
+      "edit": "Edit",
+      "up": "Up",
+      "down": "Down",
+      "upNamed": "Move {{name}} up",
+      "downNamed": "Move {{name}} down",
+      "moveTo": "Move {{name}} to another area",
+      "moveToPrompt": "Move to…",
+      "duplicate": "Duplicate",
+      "hide": "Hide",
+      "show": "Show",
+      "delete": "Delete",
+      "remove": "Remove"
+    },
+    "status": {
+      "added": "Widget added.",
+      "saved": "Widget saved.",
+      "moved": "Widget moved.",
+      "duplicated": "Widget duplicated, hidden for now.",
+      "hidden": "Widget hidden.",
+      "shown": "Widget shown.",
+      "deleted": "Widget deleted."
+    },
+    "deleteTitle": "Delete “{{name}}”?",
+    "deleteHelp": "The widget and its settings are deleted. To take it off the site without losing its settings, hide it instead.",
+    "samples": {
+      "text": "Write a few lines here.",
+      "heading": "A heading",
+      "link": "Learn more"
+    },
+    "editor": {
+      "createTitle": "Add “{{type}}” to {{area}}",
+      "editTitle": "Edit “{{type}}”",
+      "title": "Title",
+      "titleHelp": "Shown above the widget. Leave empty for none.",
+      "settings": "Settings",
+      "visibility": "Visibility: where, for whom and when",
+      "enabled": "Show this widget on the site",
+      "save": "Save",
+      "saving": "Saving…"
+    },
+    "settings": {
+      "body": "Text",
+      "alt": "Alternative text",
+      "caption": "Caption",
+      "imageHref": "Image link (optional)",
+      "columns": "Columns",
+      "embedUrl": "Address of the video or content",
+      "quote": "Quote",
+      "attribution": "Author",
+      "role": "Role or source",
+      "heading": "Heading",
+      "bodyText": "Text",
+      "buttonLabel": "Button text",
+      "buttonHref": "Button link",
+      "links": "Links",
+      "linkLabel": "Label",
+      "linkHref": "Address",
+      "newTab": "New tab",
+      "addLink": "Add a link",
+      "address": "Address",
+      "phone": "Phone",
+      "email": "E-mail",
+      "hours": "Opening hours",
+      "hoursLabel": "Day",
+      "hoursValue": "Hours",
+      "addHours": "Add a row",
+      "collection": "Collection",
+      "anyCollection": "Every collection",
+      "count": "Number of items",
+      "showDate": "Show the date",
+      "showExcerpt": "Show the summary",
+      "showImage": "Show the thumbnail",
+      "relatedHelp": "Only shows on an entry's page: it lists the entries sharing its categories or tags.",
+      "period": "Period",
+      "days_one": "{{count}} day",
+      "days_other": "Last {{count}} days",
+      "taxonomy": "Taxonomy",
+      "display": "Display",
+      "displayList": "List",
+      "displayDropdown": "Dropdown",
+      "showCounts": "Show the number of entries",
+      "hierarchical": "Keep the hierarchy",
+      "hideEmpty": "Hide empty terms",
+      "maxTerms": "Maximum number of terms",
+      "granularity": "Group",
+      "byMonth": "By month",
+      "byYear": "By year",
+      "limit": "Maximum number of periods",
+      "placeholder": "Field placeholder",
+      "menu": "Menu",
+      "socialHelp": "With no link added here, the widget uses the social links of the site settings.",
+      "form": "Form",
+      "formHelp": "A multi-step form, or one with a file or a captcha, shows as a link to its page.",
+      "maxDepth": "Subheading depth",
+      "tocHelp": "Only shows on an entry with at least two subheadings."
+    },
+    "visibility": {
+      "pages": "Pages",
+      "modeAll": "On every page",
+      "modeOnly": "Only on…",
+      "modeExcept": "Everywhere except…",
+      "targetKind": "Kind of page",
+      "targets": {
+        "home": "The home page",
+        "collection": "The entries of a collection",
+        "taxonomy": "The archives of a taxonomy",
+        "dateArchive": "Date archives",
+        "search": "Search results",
+        "path": "An address"
+      },
+      "addTarget": "Add a condition",
+      "pathHelp": "End an address with /* to include everything below it, for example /guides/*.",
+      "audience": "Audience",
+      "everyone": "Everyone",
+      "visitors": "Visitors who are not signed in",
+      "members": "People who are signed in",
+      "devices": "Screens",
+      "desktop": "Desktop",
+      "tablet": "Tablet",
+      "mobile": "Phone",
+      "from": "Show from",
+      "until": "Hide from",
+      "locales": "Languages"
+    },
+    "types": {
+      "text": {
+        "label": "Text",
+        "description": "Formatted text, with links."
+      },
+      "image": {
+        "label": "Image",
+        "description": "An image from the media library, with caption and link."
+      },
+      "gallery": {
+        "label": "Gallery",
+        "description": "Several images in a grid."
+      },
+      "embed": {
+        "label": "Video or embed",
+        "description": "A YouTube or Vimeo video, a Spotify podcast."
+      },
+      "quote": {
+        "label": "Quote",
+        "description": "A quotation and its source."
+      },
+      "cta": {
+        "label": "Call to action",
+        "description": "A heading, a line of text and a button."
+      },
+      "links": {
+        "label": "Link list",
+        "description": "Links picked by hand."
+      },
+      "contact": {
+        "label": "Contact details",
+        "description": "Address, phone, e-mail and opening hours."
+      },
+      "about": {
+        "label": "About",
+        "description": "A photo, a heading and a few lines."
+      },
+      "recentEntries": {
+        "label": "Recent posts",
+        "description": "The newest entries of a collection."
+      },
+      "relatedEntries": {
+        "label": "Related posts",
+        "description": "Entries sharing the terms of the one being read."
+      },
+      "popularEntries": {
+        "label": "Most read",
+        "description": "The most viewed pages, from the site's analytics."
+      },
+      "terms": {
+        "label": "Categories",
+        "description": "The terms of a taxonomy, as a list or a dropdown."
+      },
+      "tagCloud": {
+        "label": "Tag cloud",
+        "description": "The most used terms, sized by use."
+      },
+      "archives": {
+        "label": "Archives",
+        "description": "Posts by month or by year."
+      },
+      "recentComments": {
+        "label": "Recent comments",
+        "description": "The newest approved comments."
+      },
+      "search": {
+        "label": "Search",
+        "description": "A search field for the site."
+      },
+      "menu": {
+        "label": "Menu",
+        "description": "An existing navigation menu."
+      },
+      "social": {
+        "label": "Social links",
+        "description": "Links to your social profiles, with their icons."
+      },
+      "form": {
+        "label": "Form",
+        "description": "One of the site's forms, such as a newsletter sign-up."
+      },
+      "toc": {
+        "label": "Table of contents",
+        "description": "The subheadings of the entry being read."
+      },
+      "calendar": {
+        "label": "Calendar",
+        "description": "The current month, with the days something was published."
+      }
+    }
   }
 }

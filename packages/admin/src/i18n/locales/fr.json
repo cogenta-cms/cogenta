@@ -273,7 +273,8 @@
       "settings": "Réglages",
       "help": "Aide"
     },
-    "commerceCustomers": "Clients"
+    "commerceCustomers": "Clients",
+    "widgets": "Widgets"
   },
   "breadcrumb": {
     "newEntry": "Nouveau",
@@ -2178,6 +2179,7 @@
       "mediaCount_one": "{{count}} image ajoutée",
       "mediaCount_other": "{{count}} images ajoutées",
       "menuLabel": "Menu « {{location}} »",
+      "widgetsLabel": "Widgets « {{area}} »",
       "outcome": {
         "add": "nouvelle",
         "import": "existante, compléter",
@@ -2207,14 +2209,15 @@
         "menu-kept": "Menus déjà remplis, conservés tels quels : {{names}}.",
         "setting-kept": "Réglages déjà renseignés, vos valeurs sont conservées : {{names}}.",
         "schema-rewrite": "Le fichier de schéma du site sera réécrit (pensez à le commiter) et le serveur de développement redémarrera.",
-        "reset-deletes": "Seront supprimés : {{entries}} entrées, {{terms}} termes, {{media}} médias, {{menus}} menus et {{redirects}} redirections.",
+        "reset-deletes": "Seront supprimés : {{entries}} entrées, {{terms}} termes, {{media}} médias, {{menus}} menus, {{widgets}} widgets et {{redirects}} redirections.",
         "reset-backup": "Une sauvegarde complète est créée et vérifiée avant toute suppression ; sans elle, rien n'est supprimé.",
         "collection-removed": "La collection « {{collection}} » ({{entries}} entrées) disparaîtra du schéma. Ses données restent dans la sauvegarde.",
         "settings-replaced": "Les réglages d'identité suivants seront remplacés par ceux de la démo et ne font pas partie de la sauvegarde : {{keys}}.",
         "media-files-kept": "Les fichiers des médias restent sur le disque, afin que la restauration de la sauvegarde rende la médiathèque intacte.",
         "schema-not-serialisable": "Le schéma actuel contient des fonctions qui seraient perdues en le réécrivant ({{fields}}). Choisissez la réinitialisation ou ajoutez les collections à la main.",
         "entries-failed": "{{count}} entrée(s) n'ont pas pu être importées.",
-        "menu-merged": "Le menu « {{location}} » existe déjà : {{count}} lien(s) de la démo y sont ajoutés après les vôtres, sans rien retirer."
+        "menu-merged": "Le menu « {{location}} » existe déjà : {{count}} lien(s) de la démo y sont ajoutés après les vôtres, sans rien retirer.",
+        "widgets-kept": "Zones de widgets déjà remplies, conservées telles quelles : {{names}}."
       },
       "locationHeaderAction": "Bouton d'en-tête",
       "activeAction": "Données d'exemple",
@@ -4505,5 +4508,268 @@
     "anonymizeConfirm": "Ceci efface l’e-mail et le nom du client. Ses commandes gardent leur propre copie. Cette action est irréversible.",
     "anonymizeError": "Impossible d'anonymiser ce client.",
     "anonymized": "La fiche de ce client a été anonymisée."
+  },
+  "widgets": {
+    "heading": "Widgets",
+    "description": "Placez des blocs réutilisables dans les zones de votre thème : barre latérale, bandeaux avant et après le contenu, colonnes du pied de page. Chaque thème les affiche à sa manière.",
+    "viewSite": "Voir le site",
+    "adminOnly": "Seul un administrateur peut gérer les widgets.",
+    "loadError": "Les widgets n'ont pas pu être chargés.",
+    "actionError": "L'action n'a pas pu être effectuée.",
+    "close": "Fermer",
+    "library": "Ajouter un widget",
+    "addTo": "Zone de destination",
+    "searchLibrary": "Rechercher un widget",
+    "addType": "Ajouter le widget {{type}}",
+    "noHtml": "Pas de widget « HTML personnalisé » : un widget ne stocke jamais de code, ce qui garde le site sûr et fidèle à son thème.",
+    "groups": {
+      "content": "Contenu",
+      "dynamic": "Contenu automatique",
+      "navigation": "Navigation"
+    },
+    "unavailable": {
+      "noCollection": "Il faut une collection publiée sur le site.",
+      "noTaxonomy": "Il faut une taxonomie.",
+      "noMenu": "Créez d'abord un menu.",
+      "noForm": "Créez d'abord un formulaire."
+    },
+    "areas": {
+      "sidebar": "Barre latérale",
+      "content-before": "Avant le contenu",
+      "content-after": "Après le contenu",
+      "footer-1": "Pied de page, colonne 1",
+      "footer-2": "Pied de page, colonne 2",
+      "footer-3": "Pied de page, colonne 3",
+      "footer-4": "Pied de page, colonne 4"
+    },
+    "inactive": "Widgets inactifs",
+    "inactiveHelp": "Leur zone n'existe pas dans le thème actif. Ils sont conservés : déplacez-les vers une zone ou supprimez-les.",
+    "count_one": "{{count}} widget",
+    "count_other": "{{count}} widgets",
+    "emptyArea": "Aucun widget. Glissez-en un ici depuis la liste, ou choisissez cette zone puis cliquez sur un widget.",
+    "hidden": "Masqué",
+    "summary": {
+      "onlySome": "Certaines pages",
+      "exceptSome": "Sauf certaines pages",
+      "members": "Connectés",
+      "visitors": "Visiteurs",
+      "someDevices": "Certains écrans",
+      "scheduled": "Programmé"
+    },
+    "actions": {
+      "edit": "Modifier",
+      "up": "Monter",
+      "down": "Descendre",
+      "upNamed": "Monter {{name}}",
+      "downNamed": "Descendre {{name}}",
+      "moveTo": "Déplacer {{name}} vers une autre zone",
+      "moveToPrompt": "Déplacer vers…",
+      "duplicate": "Dupliquer",
+      "hide": "Masquer",
+      "show": "Afficher",
+      "delete": "Supprimer",
+      "remove": "Retirer"
+    },
+    "status": {
+      "added": "Widget ajouté.",
+      "saved": "Widget enregistré.",
+      "moved": "Widget déplacé.",
+      "duplicated": "Widget dupliqué, masqué en attendant.",
+      "hidden": "Widget masqué.",
+      "shown": "Widget affiché.",
+      "deleted": "Widget supprimé."
+    },
+    "deleteTitle": "Supprimer « {{name}} » ?",
+    "deleteHelp": "Le widget et ses réglages sont supprimés. Pour le retirer du site sans perdre ses réglages, masquez-le plutôt.",
+    "samples": {
+      "text": "Écrivez ici quelques lignes.",
+      "heading": "Un titre",
+      "link": "En savoir plus"
+    },
+    "editor": {
+      "createTitle": "Ajouter « {{type}} » à {{area}}",
+      "editTitle": "Modifier « {{type}} »",
+      "title": "Titre",
+      "titleHelp": "Affiché au-dessus du widget. Laissez vide pour n'en mettre aucun.",
+      "settings": "Réglages",
+      "visibility": "Visibilité : où, pour qui et quand",
+      "enabled": "Afficher ce widget sur le site",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…"
+    },
+    "settings": {
+      "body": "Texte",
+      "alt": "Texte alternatif",
+      "caption": "Légende",
+      "imageHref": "Lien de l'image (facultatif)",
+      "columns": "Colonnes",
+      "embedUrl": "Adresse de la vidéo ou du contenu",
+      "quote": "Citation",
+      "attribution": "Auteur",
+      "role": "Fonction ou source",
+      "heading": "Titre",
+      "bodyText": "Texte",
+      "buttonLabel": "Texte du bouton",
+      "buttonHref": "Lien du bouton",
+      "links": "Liens",
+      "linkLabel": "Libellé",
+      "linkHref": "Adresse",
+      "newTab": "Nouvel onglet",
+      "addLink": "Ajouter un lien",
+      "address": "Adresse",
+      "phone": "Téléphone",
+      "email": "E-mail",
+      "hours": "Horaires",
+      "hoursLabel": "Jour",
+      "hoursValue": "Heures",
+      "addHours": "Ajouter une ligne",
+      "collection": "Collection",
+      "anyCollection": "Toutes les collections",
+      "count": "Nombre d'éléments",
+      "showDate": "Afficher la date",
+      "showExcerpt": "Afficher le chapô",
+      "showImage": "Afficher la vignette",
+      "relatedHelp": "Ne s'affiche que sur la page d'une entrée : il montre celles qui partagent ses catégories ou ses étiquettes.",
+      "period": "Période",
+      "days_one": "{{count}} jour",
+      "days_other": "{{count}} derniers jours",
+      "taxonomy": "Taxonomie",
+      "display": "Affichage",
+      "displayList": "Liste",
+      "displayDropdown": "Menu déroulant",
+      "showCounts": "Afficher le nombre d'entrées",
+      "hierarchical": "Respecter la hiérarchie",
+      "hideEmpty": "Masquer les termes vides",
+      "maxTerms": "Nombre de termes au maximum",
+      "granularity": "Regrouper",
+      "byMonth": "Par mois",
+      "byYear": "Par année",
+      "limit": "Nombre de périodes au maximum",
+      "placeholder": "Texte d'exemple du champ",
+      "menu": "Menu",
+      "socialHelp": "Sans lien ajouté ici, le widget reprend les réseaux sociaux des réglages du site.",
+      "form": "Formulaire",
+      "formHelp": "Un formulaire en plusieurs étapes, avec fichier ou captcha s'affiche comme un lien vers sa page.",
+      "maxDepth": "Profondeur des intertitres",
+      "tocHelp": "Ne s'affiche que sur une entrée qui a au moins deux intertitres."
+    },
+    "visibility": {
+      "pages": "Pages",
+      "modeAll": "Sur toutes les pages",
+      "modeOnly": "Seulement sur…",
+      "modeExcept": "Partout sauf sur…",
+      "targetKind": "Type de page",
+      "targets": {
+        "home": "L'accueil",
+        "collection": "Les entrées d'une collection",
+        "taxonomy": "Les archives d'une taxonomie",
+        "dateArchive": "Les archives par date",
+        "search": "Les résultats de recherche",
+        "path": "Une adresse"
+      },
+      "addTarget": "Ajouter une condition",
+      "pathHelp": "Une adresse se termine par /* pour inclure tout ce qui est dessous, par exemple /guides/*.",
+      "audience": "Public",
+      "everyone": "Tout le monde",
+      "visitors": "Visiteurs non connectés",
+      "members": "Personnes connectées",
+      "devices": "Écrans",
+      "desktop": "Ordinateur",
+      "tablet": "Tablette",
+      "mobile": "Téléphone",
+      "from": "Afficher à partir du",
+      "until": "Masquer à partir du",
+      "locales": "Langues"
+    },
+    "types": {
+      "text": {
+        "label": "Texte",
+        "description": "Du texte mis en forme, avec des liens."
+      },
+      "image": {
+        "label": "Image",
+        "description": "Une image de la médiathèque, avec légende et lien."
+      },
+      "gallery": {
+        "label": "Galerie",
+        "description": "Plusieurs images en grille."
+      },
+      "embed": {
+        "label": "Vidéo ou intégration",
+        "description": "Une vidéo YouTube ou Vimeo, un podcast Spotify."
+      },
+      "quote": {
+        "label": "Citation",
+        "description": "Une citation et sa source."
+      },
+      "cta": {
+        "label": "Appel à l'action",
+        "description": "Un titre, un texte et un bouton."
+      },
+      "links": {
+        "label": "Liste de liens",
+        "description": "Des liens choisis à la main."
+      },
+      "contact": {
+        "label": "Coordonnées",
+        "description": "Adresse, téléphone, e-mail et horaires."
+      },
+      "about": {
+        "label": "Présentation",
+        "description": "Une photo, un titre et quelques lignes."
+      },
+      "recentEntries": {
+        "label": "Dernières publications",
+        "description": "Les entrées les plus récentes d'une collection."
+      },
+      "relatedEntries": {
+        "label": "Articles liés",
+        "description": "Les entrées qui partagent les termes de celle affichée."
+      },
+      "popularEntries": {
+        "label": "Les plus lus",
+        "description": "Les pages les plus vues, d'après les statistiques du site."
+      },
+      "terms": {
+        "label": "Catégories",
+        "description": "Les termes d'une taxonomie, en liste ou en menu déroulant."
+      },
+      "tagCloud": {
+        "label": "Nuage d'étiquettes",
+        "description": "Les termes les plus utilisés, en tailles proportionnelles."
+      },
+      "archives": {
+        "label": "Archives",
+        "description": "Les publications par mois ou par année."
+      },
+      "recentComments": {
+        "label": "Derniers commentaires",
+        "description": "Les commentaires approuvés les plus récents."
+      },
+      "search": {
+        "label": "Recherche",
+        "description": "Un champ de recherche sur le site."
+      },
+      "menu": {
+        "label": "Menu",
+        "description": "Un menu de navigation existant."
+      },
+      "social": {
+        "label": "Réseaux sociaux",
+        "description": "Les liens vers vos réseaux, avec leurs icônes."
+      },
+      "form": {
+        "label": "Formulaire",
+        "description": "Un formulaire du site, comme une inscription à la newsletter."
+      },
+      "toc": {
+        "label": "Table des matières",
+        "description": "Les intertitres de l'entrée affichée."
+      },
+      "calendar": {
+        "label": "Calendrier",
+        "description": "Le mois en cours, avec les jours de publication."
+      }
+    }
   }
 }

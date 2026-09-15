@@ -178,6 +178,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    to: '/widgets',
+    labelKey: 'nav.widgets',
+    group: 'appearance',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
     to: '/admin-appearance',
     labelKey: 'nav.adminAppearance',
     group: 'appearance',

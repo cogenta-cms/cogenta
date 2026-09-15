@@ -9,6 +9,8 @@
  *   shop.css     the product grid, tiles and index lists, the product page
  *   blocks.css   the other vocabulary blocks
  *   archive.css  the taxonomy-term archive
+ *   widgets.css  the widget areas: the side column, the bands, the footer
+ *                columns
  *
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--ce-*` property composed from those.
@@ -28,3 +30,4 @@
 @import "./shop.css";
 @import "./blocks.css";
 @import "./archive.css";
+@import "./widgets.css";

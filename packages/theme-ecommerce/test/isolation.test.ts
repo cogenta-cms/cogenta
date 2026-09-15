@@ -96,6 +96,7 @@ describe('theme isolation', () => {
       'styles/shop.css',
       'styles/theme.css',
       'styles/tokens.css',
+      'styles/widgets.css',
     ])
   })
 

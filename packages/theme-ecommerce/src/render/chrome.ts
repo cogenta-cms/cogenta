@@ -5,6 +5,7 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderFooterWidgets,
   renderSocialLinks,
   renderThemeToggle,
   serialize,
@@ -28,7 +29,8 @@ import {
  *
  * Footer: the shop's name with its `tagline` and `footerNote` (the company,
  * its registration and its address, paragraph by paragraph), the footer
- * navigation, the social profiles with their names; then the legal line, the
+ * navigation, the social profiles with their names; the footer widget
+ * columns (`theme@1.6`), when a site has placed any; then the legal line, the
  * copyright year and the shop's name beside the host's `brandingHtml`,
  * placed once, as received. Every `theme@1.4` field renders only when
  * present.
@@ -107,6 +109,13 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     itemClassName: 'ce-footer__social-item',
   })
   const year = new Date().getFullYear()
+  // The footer widget columns (`theme@1.6`): a tier of their own under the
+  // shop's name, its pages and its profiles, above the legal line, each
+  // column starting on a column of the row above.
+  const footerWidgets = renderFooterWidgets(input.widgets, {
+    className: 'ce-footer__widgets',
+    headingLevel: 'h2',
+  })
 
   const footer =
     `<footer class="ce-footer"><div class="ce-footer__inner">` +
@@ -120,6 +129,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
         : `<nav class="ce-footer__nav" aria-label="Footer"><ul class="ce-footer__links">${footerLinks}</ul></nav>`
     }` +
     `${social === null ? '' : `<div class="ce-footer__follow">${serialize(social)}</div>`}` +
+    `${footerWidgets === null ? '' : serialize(footerWidgets)}` +
     `<div class="ce-footer__legal">` +
     `<p class="ce-footer__copyright">© ${year} ${siteName}</p>` +
     `${input.brandingHtml === '' ? '' : `<div class="ce-footer__branding">${input.brandingHtml}</div>`}` +

@@ -19,6 +19,7 @@ import {
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
+import type { BlueprintWidget } from './widgets.js'
 
 /**
  * The `store` blueprint (L27, `@cogenta/theme-ecommerce`): a small brand of
@@ -702,6 +703,7 @@ export function buildStoreDemoPages(options: StoreDemoOptions = {}): readonly St
   const hello = shopEmail(siteName)
   const orders = shopEmail(siteName, 'orders')
   const repairs = shopEmail(siteName, 'repairs')
+  const letters = shopEmail(siteName, 'letters')
 
   return [
     { title: 'Home', slug: 'home', blocks: buildStoreHomeBlocks({ siteName, media }) },
@@ -887,7 +889,7 @@ export function buildStoreDemoPages(options: StoreDemoOptions = {}): readonly St
           'Rua da Boavista 84, 1200-066 Lisboa, Portugal. Five minutes on foot from Cais do Sodré station and the 28 tram.',
           'Tuesday to Saturday, 11:00 to 19:00. Closed on Sundays, Mondays and public holidays.',
           '## Writing to us',
-          `For orders, [${orders}](mailto:${orders}). For repairs, [${repairs}](mailto:${repairs}). For anything else, including workshops that would like to work with us, [${hello}](mailto:${hello}).`,
+          `For orders, [${orders}](mailto:${orders}). For repairs, [${repairs}](mailto:${repairs}). For our letters from the workshop, four a year, [${letters}](mailto:${letters}). For anything else, including workshops that would like to work with us, [${hello}](mailto:${hello}).`,
           'Telephone +351 213 460 218, Tuesday to Saturday during opening hours.',
         ]),
       ],
@@ -1008,6 +1010,117 @@ export const STORE_MENUS: BlueprintMenus = {
   headerAction: { label: 'How to order', url: '/how-to-order' },
 }
 
+/**
+ * The widgets a shop's site places, and where.
+ *
+ * A product page stays a product page: its photograph and its sheet, then
+ * the story of the piece and a grid of more from its category, which the
+ * product's own blocks already draw. So no side column beside a product and
+ * no "you may also like" strip under it; the same for a category (a grid of
+ * goods across the page), the shop, the home page and "About", which lay
+ * their photographs across the whole grid.
+ *
+ * Beside the pages a customer reads before and after an order (how to order,
+ * delivery and returns, repairs, contact, terms): the customer care pages as
+ * a ruled list with the page being read marked, and, on every one of them
+ * except the contact page itself, a line pointing to that page. Beside search
+ * results: the newest pieces with their photographs, so a search that finds
+ * nothing still leads somewhere, then the same customer care pages.
+ *
+ * In the footer, what its three columns do not already say: the shop's
+ * telephone (the footer note gives the address and the opening hours, never
+ * the number), and the letters from the workshop, which only the home page
+ * mentions. Neither shows on the page that already says the same: the contact
+ * page for both, the home page for the letters.
+ *
+ * No widget names an e-mail address: the pages derive every address from the
+ * site's name, and a widget's settings cannot, so it would contradict them on
+ * any shop not called Atelier Goods.
+ */
+type StorePageTarget =
+  | { readonly kind: 'home' }
+  | { readonly kind: 'search' }
+  | { readonly kind: 'path'; readonly path: string }
+
+const HOME: StorePageTarget = { kind: 'home' }
+const SEARCH_RESULTS: StorePageTarget = { kind: 'search' }
+const pagePath = (path: string): StorePageTarget => ({ kind: 'path', path })
+
+const CUSTOMER_CARE_PAGES = [
+  { label: 'How to order', href: '/how-to-order' },
+  { label: 'Delivery and returns', href: '/delivery-and-returns' },
+  { label: 'Repairs', href: '/repairs' },
+  { label: 'Contact', href: '/contact' },
+  { label: 'Terms and privacy', href: '/terms' },
+] as const
+
+function shownOn(
+  mode: 'only' | 'except',
+  ...targets: readonly StorePageTarget[]
+): Readonly<Record<string, unknown>> {
+  return { pages: { mode, targets } }
+}
+
+export const STORE_WIDGETS: readonly BlueprintWidget[] = [
+  {
+    area: 'sidebar',
+    type: 'recentEntries',
+    title: 'New in the shop',
+    settings: { collection: 'product', count: 4, showDate: false, showImage: true },
+    visibility: shownOn('only', SEARCH_RESULTS),
+  },
+  {
+    area: 'sidebar',
+    type: 'links',
+    title: 'Customer care',
+    settings: { items: CUSTOMER_CARE_PAGES.map((item) => ({ ...item })) },
+    visibility: shownOn(
+      'only',
+      ...CUSTOMER_CARE_PAGES.map((item) => pagePath(item.href)),
+      SEARCH_RESULTS,
+    ),
+  },
+  {
+    area: 'sidebar',
+    type: 'cta',
+    title: 'Before you order',
+    settings: {
+      heading: 'A question about a size or a delivery',
+      body: 'Write to us or call the shop. We reply within one working day, Tuesday to Saturday, and nothing is charged until you confirm.',
+      label: 'Contact the shop',
+      href: '/contact',
+    },
+    visibility: shownOn(
+      'only',
+      ...CUSTOMER_CARE_PAGES.filter((item) => item.href !== '/contact').map((item) =>
+        pagePath(item.href),
+      ),
+    ),
+  },
+  {
+    area: 'footer-1',
+    type: 'contact',
+    title: 'Call the shop',
+    settings: {
+      phone: '+351 213 460 218',
+      hours: [{ label: 'Answered', value: 'Tuesday to Saturday, during opening hours' }],
+    },
+    visibility: shownOn('except', pagePath('/contact')),
+  },
+  {
+    area: 'footer-2',
+    type: 'cta',
+    title: 'Letters from the workshop',
+    settings: {
+      heading: 'Four letters a year',
+      body: 'New batches, repairs and the people who make our goods, written from the bench in Lisbon.',
+      label: 'How to ask for them',
+      href: '/contact',
+    },
+    visibility: shownOn('except', HOME, pagePath('/contact')),
+  },
+]
+
 export const STORE_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
   'general.tagline': 'Everyday goods, made to last and to be mended.',
   'general.socialLinks': [
@@ -1110,6 +1223,7 @@ export const storeContentPack: BlueprintContentPack = {
   seedDemoContent: seedStoreDemoContent,
   defaultTheme: '@cogenta/theme-ecommerce',
   menus: STORE_MENUS,
+  widgets: STORE_WIDGETS,
   siteSettings: STORE_SITE_SETTINGS,
   mediaSpecs: STORE_MEDIA_SPECS,
 }

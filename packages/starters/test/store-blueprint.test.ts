@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
 import { matchPath } from '@cogenta/schema'
+import { validateWidgetSettings, validateWidgetVisibility } from '@cogenta/widgets'
 import { describe, expect, it } from 'vitest'
 import { bundledImageType, loadPhotoAsset } from '../src/blueprints/photo-assets.js'
 import { STARTING_SKINS } from '../src/blueprints/starting-skins.js'
@@ -20,6 +21,7 @@ import {
   STORE_MEDIA_SPECS,
   STORE_MENUS,
   STORE_SITE_SETTINGS,
+  STORE_WIDGETS,
   shopEmail,
   storeCategoryBlocks,
   storeContentPack,
@@ -402,6 +404,107 @@ describe('store blueprint, content model and catalogue', () => {
       if (/^(mailto|tel|https):/.test(href)) continue
       expect(routes.has(href), href).toBe(true)
     }
+  })
+
+  it('places customer care beside the pages read around an order, never beside a product, and in the footer only what it lacks', () => {
+    expect(storeContentPack.widgets).toBe(STORE_WIDGETS)
+    const routes = new Set([
+      '/',
+      ...buildStoreDemoPages().map((demo) => `/${demo.slug}`),
+      ...STORE_DEMO_CATEGORIES.map((demo) => `/category/${demo.slug}`),
+      ...STORE_DEMO_PRODUCTS.map((demo) => `/shop/${demo.slug}`),
+    ])
+    const collections = new Set(STORE_COLLECTIONS.map((collection) => collection.name))
+    const note = String(STORE_SITE_SETTINGS['general.footerNote'])
+    const careRoutes = new Set(
+      ['/how-to-order', '/delivery-and-returns', '/repairs', '/contact', '/terms'].filter((path) =>
+        routes.has(path),
+      ),
+    )
+    expect(careRoutes.size).toBe(5)
+
+    for (const widget of STORE_WIDGETS) {
+      const settings = validateWidgetSettings(widget.type, widget.settings)
+      const { pages } = validateWidgetVisibility(widget.visibility)
+      const hrefs = (JSON.stringify(settings).match(/"href":"[^"]+"/g) ?? []).map((match) =>
+        match.slice(8, -1),
+      )
+      for (const href of hrefs) expect(routes.has(href), href).toBe(true)
+      if (typeof settings.collection === 'string') {
+        expect(collections.has(settings.collection)).toBe(true)
+      }
+      for (const target of pages.targets) {
+        if (target.kind === 'path') expect(routes.has(target.path), target.path).toBe(true)
+        // A product and a category keep the whole grid: never a target, never a collection rule.
+        expect(target.kind).not.toBe('collection')
+      }
+      // Every address is derived from the site's name; a widget's settings cannot follow it.
+      expect(JSON.stringify(settings)).not.toMatch(/@/)
+      for (const text of textsOfValue(settings)) {
+        expect(text, text).not.toContain('!')
+        expect(text, text).not.toMatch(/cogenta|demo|lorem|placeholder/i)
+      }
+
+      if (widget.area === 'sidebar') {
+        expect(pages.mode, widget.type).toBe('only')
+        for (const target of pages.targets) {
+          if (target.kind === 'path') expect(careRoutes.has(target.path), target.path).toBe(true)
+          else expect(target.kind, widget.type).toBe('search')
+        }
+        // A link never points at the page it is shown beside, unless it is the list marking it.
+        if (widget.type !== 'links') {
+          for (const href of hrefs) {
+            expect(pages.targets).not.toContainEqual({ kind: 'path', path: href })
+          }
+        }
+      } else {
+        expect(['footer-1', 'footer-2', 'footer-3', 'footer-4']).toContain(widget.area)
+        expect(pages.mode, widget.type).toBe('except')
+        expect(pages.targets).toContainEqual({ kind: 'path', path: '/contact' })
+        // Nothing the footer already prints: its address, hours and pages.
+        expect(JSON.stringify(settings)).not.toMatch(/Rua da Boavista|11:00|19:00|NIPC/)
+        for (const line of note.split('\n').filter((part) => part.trim() !== '')) {
+          expect(JSON.stringify(settings)).not.toContain(line)
+        }
+        for (const item of STORE_MENUS.footer) {
+          expect(JSON.stringify(settings)).not.toContain(`"label":"${item.label}"`)
+        }
+      }
+    }
+
+    const byType = (type: string) => STORE_WIDGETS.filter((widget) => widget.type === type)
+    // Search results get the newest pieces with their photographs, and only there.
+    const recent = byType('recentEntries')
+    expect(recent).toHaveLength(1)
+    expect(validateWidgetSettings('recentEntries', recent[0]?.settings)).toMatchObject({
+      collection: 'product',
+      showImage: true,
+      showDate: false,
+    })
+    expect(validateWidgetVisibility(recent[0]?.visibility).pages.targets).toEqual([
+      { kind: 'search' },
+    ])
+    // The customer care list covers every care page and shows beside each of them.
+    const care = byType('links')[0]
+    const careItems = validateWidgetSettings('links', care?.settings).items as { href: string }[]
+    expect(new Set(careItems.map((item) => item.href))).toEqual(careRoutes)
+    for (const path of careRoutes) {
+      expect(validateWidgetVisibility(care?.visibility).pages.targets).toContainEqual({
+        kind: 'path',
+        path,
+      })
+    }
+    // The letters are on the home page already; the phone is on the contact page already.
+    const letters = STORE_WIDGETS.find((widget) => widget.area === 'footer-2')
+    expect(validateWidgetVisibility(letters?.visibility).pages.targets).toContainEqual({
+      kind: 'home',
+    })
+    // Every fact a widget states is one the site's own pages state.
+    const pages = JSON.stringify(buildStoreDemoPages({ siteName: 'Maison Brun' }))
+    expect(pages).toContain('+351 213 460 218')
+    expect(pages).toContain('We reply within one working day, Tuesday to Saturday')
+    expect(pages).toContain('letters from the workshop, four a year')
+    expect(pages).toContain('letters@maisonbrun.com')
   })
 
   it('closes comments on the catalogue, and carries a footer note a real company would write', () => {

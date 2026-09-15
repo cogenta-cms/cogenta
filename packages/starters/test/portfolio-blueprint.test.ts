@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
 import { matchPath } from '@cogenta/schema'
+import { validateWidgetSettings, validateWidgetVisibility } from '@cogenta/widgets'
 import { describe, expect, it } from 'vitest'
 import { bundledImageType, loadPhotoAsset } from '../src/blueprints/photo-assets.js'
 import {
@@ -18,6 +19,7 @@ import {
   PORTFOLIO_MENUS,
   PORTFOLIO_SITE_SETTINGS,
   PORTFOLIO_TAXONOMIES,
+  PORTFOLIO_WIDGETS,
   page,
   portfolioContentPack,
   portfolioProjectBlocks,
@@ -371,6 +373,72 @@ describe('portfolio blueprint, content model and the studio’s work', () => {
     const note = String(PORTFOLIO_SITE_SETTINGS['general.footerNote'])
     expect(note).toMatch(/Hatherley Mews/)
     expect(note).not.toMatch(/create-cogenta|scaffold/i)
+  })
+
+  it('shows more work after a project and the other terms beside an index, never a column beside the work', () => {
+    expect(portfolioContentPack.widgets).toBe(PORTFOLIO_WIDGETS)
+    const taxonomies = new Set(PORTFOLIO_TAXONOMIES.map((taxonomy) => taxonomy.name))
+    const routes = new Set([
+      ...buildPortfolioDemoPages().map((demo) => `/${demo.slug}`),
+      ...PORTFOLIO_DEMO_PROJECTS.map((demo) => `/work/${demo.slug}`),
+    ])
+    const pages = JSON.stringify(buildPortfolioDemoPages({ siteName: 'Maple & Oak' }))
+    for (const widget of PORTFOLIO_WIDGETS) {
+      const settings = validateWidgetSettings(widget.type, widget.settings)
+      const { pages: shown } = validateWidgetVisibility(widget.visibility)
+      const text = JSON.stringify(settings)
+      // The e-mail address is derived from the site's name; a widget cannot follow it.
+      expect(text).not.toMatch(/@/)
+      expect(text).not.toMatch(/Studio Hale/)
+      for (const href of (text.match(/"href":"[^"]+"/g) ?? []).map((match) => match.slice(8, -1))) {
+        expect(routes.has(href), href).toBe(true)
+      }
+      for (const target of shown.targets) {
+        if (target.kind === 'path') expect(routes.has(target.path), target.path).toBe(true)
+        if (target.kind === 'taxonomy') expect(taxonomies.has(target.taxonomy)).toBe(true)
+        if (target.kind === 'collection') expect(target.collection).toBe(project.name)
+      }
+      if (widget.area === 'sidebar') {
+        // Beside an index of work or search results, never beside a project or a page.
+        expect(shown.mode, widget.type).toBe('only')
+        for (const target of shown.targets) expect(['taxonomy', 'search']).toContain(target.kind)
+        // The terms of the taxonomy whose index it stands beside.
+        expect(widget.type).toBe('terms')
+        for (const target of shown.targets) {
+          if (target.kind === 'taxonomy') expect(settings.taxonomy).toBe(target.taxonomy)
+        }
+      } else if (widget.area === 'content-after') {
+        expect(widget.type).toBe('relatedEntries')
+        expect(settings).toMatchObject({ showImage: true })
+        expect(shown).toEqual({
+          mode: 'only',
+          targets: [{ kind: 'collection', collection: 'project' }],
+        })
+      } else {
+        expect(widget.area).toBe('footer-1')
+        // Everywhere but the pages that already end on the same invitation.
+        expect(shown.mode).toBe('except')
+        expect(shown.targets).toContainEqual({ kind: 'home' })
+        expect(shown.targets).toContainEqual({ kind: 'path', path: '/contact' })
+      }
+    }
+    expect(PORTFOLIO_WIDGETS.map((widget) => widget.area)).not.toContain('content-before')
+    // Every archive has its own taxonomy's terms beside it, and only one list.
+    for (const taxonomy of taxonomies) {
+      const beside = PORTFOLIO_WIDGETS.filter((widget) =>
+        validateWidgetVisibility(widget.visibility).pages.targets.some(
+          (target) => target.kind === 'taxonomy' && target.taxonomy === taxonomy,
+        ),
+      )
+      expect(beside, taxonomy).toHaveLength(1)
+    }
+    // The invitation states only what the site's own pages state.
+    const cta = PORTFOLIO_WIDGETS.find((widget) => widget.type === 'cta')
+    expect(pages).toContain('replies to every enquiry within two working days')
+    expect(pages).toContain('Tell us what you are making')
+    expect(String(validateWidgetSettings('cta', cta?.settings).body)).toContain(
+      'Mara Lindgren replies to every enquiry within two working days',
+    )
   })
 
   it("matches the theme's own palette and typeface in its starting skin", async () => {

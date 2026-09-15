@@ -89,6 +89,7 @@ describe('theme isolation', () => {
       'styles/blocks.css',
       'styles/theme.css',
       'styles/tokens.css',
+      'styles/widgets.css',
       'styles/work.css',
     ])
   })
@@ -127,6 +128,7 @@ describe('theme isolation', () => {
       './work.css',
       './blocks.css',
       './archive.css',
+      './widgets.css',
     ])
   })
 

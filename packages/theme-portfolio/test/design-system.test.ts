@@ -13,7 +13,14 @@ import { contrast, evaluate, type Scheme, type Srgb, toOklch } from './css-color
  */
 
 const STYLE_DIR = new URL('../src/styles/', import.meta.url)
-const SHEETS = ['tokens.css', 'base.css', 'work.css', 'blocks.css', 'archive.css'] as const
+const SHEETS = [
+  'tokens.css',
+  'base.css',
+  'work.css',
+  'blocks.css',
+  'archive.css',
+  'widgets.css',
+] as const
 
 const SOURCES = new Map(
   SHEETS.map((name) => [name, readFileSync(new URL(name, STYLE_DIR), 'utf8')] as const),

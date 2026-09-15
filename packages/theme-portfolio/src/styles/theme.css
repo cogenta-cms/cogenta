@@ -8,6 +8,8 @@
  *   work.css     the work grid, the index, the strip, the project page
  *   blocks.css   the other vocabulary blocks
  *   archive.css  the taxonomy-term archive, set as the studio's index
+ *   widgets.css  the widget areas: the column beside an index, the bands
+ *                before and after the work, the footer columns
  *
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--cg-*` property composed from those.
@@ -27,3 +29,4 @@
 @import "./work.css";
 @import "./blocks.css";
 @import "./archive.css";
+@import "./widgets.css";

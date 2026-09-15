@@ -5,6 +5,7 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderFooterWidgets,
   renderSocialLinks,
   renderThemeToggle,
   serialize,
@@ -24,11 +25,15 @@ import {
  *
  * Footer, a hairline and three columns: the name, the tagline and the
  * `footerNote`; the footer navigation; the social profiles with their names.
- * Then the legal line: the copyright year and the studio's name beside
- * Cogenta's credit (`brandingHtml`, placed once, as received). No column
- * carries a heading: a heading is a word, and a theme has no translation for
- * it. Every `theme@1.4` field renders only when present, so a host that
- * predates them still gets the name and the navigation.
+ * Before them, the footer widget columns (`theme@1.6`) when a site has placed
+ * any: a tier of their own right under the footer's hairline, on the same
+ * twelve columns, so an invitation to get in touch opens the footer the way a
+ * studio's own does. Then the legal line: the copyright year and the studio's
+ * name beside Cogenta's credit (`brandingHtml`, placed once, as received). No
+ * column carries a heading of the theme's own: a heading is a word, and a
+ * theme has no translation for it (a widget's title is the site's own words).
+ * Every `theme@1.4` field renders only when present, so a host that predates
+ * them still gets the name and the navigation.
  */
 
 function navItems(links: readonly ChromeNavLink[], className: string): string {
@@ -109,9 +114,16 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     itemClassName: 'cg-colophon__social-item',
   })
   const year = new Date().getFullYear()
+  // The footer widget columns (`theme@1.6`): a tier above the name, the pages
+  // and the profiles, under the footer's hairline, on the footer's own grid.
+  const footerWidgets = renderFooterWidgets(input.widgets, {
+    className: 'cg-colophon__widgets',
+    headingLevel: 'h2',
+  })
 
   const footer =
     `<footer class="cg-colophon"><div class="cg-colophon__inner">` +
+    `${footerWidgets === null ? '' : serialize(footerWidgets)}` +
     `<div class="cg-colophon__about">` +
     `<a class="cg-colophon__name" href="${home}">${siteName}</a>` +
     `${footerTagline}${note}` +

@@ -23,6 +23,7 @@ import {
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
+import type { BlueprintWidget } from './widgets.js'
 
 /**
  * The `portfolio` blueprint: an independent design studio in London (L9 task
@@ -1336,6 +1337,93 @@ export const PORTFOLIO_MENUS: BlueprintMenus = {
   ],
 }
 
+/**
+ * The widgets a studio's site places, and where.
+ *
+ * A project page is the work, shown large across the whole grid: nothing
+ * stands beside it. After it, the three projects that share the most
+ * disciplines, clients and people with it, each at its cover, so a visitor
+ * who reaches the end of a case study has somewhere to go next.
+ *
+ * Beside the index of one discipline, client or member of the team, the
+ * other terms of that same taxonomy, so a visitor can move from wayfinding
+ * to identity without going back to the work page; beside search results,
+ * the disciplines, the one way into the work a query does not give.
+ *
+ * In the footer, the studio's invitation to new work, on every page that
+ * does not already end on one: the home page closes on its own "New work"
+ * section and the contact page is that invitation.
+ *
+ * No widget names the studio's e-mail address: the pages derive it from the
+ * site's name, and a widget's settings cannot, so it would contradict them
+ * on any site not called Studio Hale.
+ */
+type PortfolioPageTarget =
+  | { readonly kind: 'home' }
+  | { readonly kind: 'collection'; readonly collection: 'project' }
+  | { readonly kind: 'taxonomy'; readonly taxonomy: 'client' | 'disciplines' | 'team' }
+  | { readonly kind: 'search' }
+  | { readonly kind: 'path'; readonly path: string }
+
+const PROJECT_PAGE: PortfolioPageTarget = { kind: 'collection', collection: 'project' }
+const SEARCH_RESULTS: PortfolioPageTarget = { kind: 'search' }
+const HOME: PortfolioPageTarget = { kind: 'home' }
+const archiveOf = (taxonomy: 'client' | 'disciplines' | 'team'): PortfolioPageTarget => ({
+  kind: 'taxonomy',
+  taxonomy,
+})
+const pagePath = (path: string): PortfolioPageTarget => ({ kind: 'path', path })
+
+function shownOn(
+  mode: 'only' | 'except',
+  ...targets: readonly PortfolioPageTarget[]
+): Readonly<Record<string, unknown>> {
+  return { pages: { mode, targets } }
+}
+
+export const PORTFOLIO_WIDGETS: readonly BlueprintWidget[] = [
+  {
+    area: 'sidebar',
+    type: 'terms',
+    title: 'Disciplines',
+    settings: { taxonomy: 'disciplines', showCounts: true, hierarchical: false },
+    visibility: shownOn('only', archiveOf('disciplines'), SEARCH_RESULTS),
+  },
+  {
+    area: 'sidebar',
+    type: 'terms',
+    title: 'Clients',
+    settings: { taxonomy: 'client', showCounts: false, hierarchical: false },
+    visibility: shownOn('only', archiveOf('client')),
+  },
+  {
+    area: 'sidebar',
+    type: 'terms',
+    title: 'The studio',
+    settings: { taxonomy: 'team', showCounts: true, hierarchical: false },
+    visibility: shownOn('only', archiveOf('team')),
+  },
+  {
+    area: 'content-after',
+    type: 'relatedEntries',
+    title: 'More work',
+    settings: { count: 3, showImage: true, showDate: false },
+    visibility: shownOn('only', PROJECT_PAGE),
+  },
+  {
+    area: 'footer-1',
+    type: 'cta',
+    title: 'New work',
+    settings: {
+      heading: 'Tell us what you are making.',
+      body: 'When it has to be ready and who it is for: Mara Lindgren replies to every enquiry within two working days.',
+      label: 'Start a project',
+      href: '/contact',
+    },
+    visibility: shownOn('except', HOME, pagePath('/contact')),
+  },
+]
+
 export const PORTFOLIO_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
   'general.tagline': 'Identity, print, wayfinding and exhibitions.',
   'general.socialLinks': [
@@ -1454,6 +1542,7 @@ export const portfolioContentPack: BlueprintContentPack = {
   seedDemoContent: seedPortfolioDemoContent,
   defaultTheme: '@cogenta/theme-portfolio',
   menus: PORTFOLIO_MENUS,
+  widgets: PORTFOLIO_WIDGETS,
   siteSettings: PORTFOLIO_SITE_SETTINGS,
   mediaSpecs: PORTFOLIO_MEDIA_SPECS,
 }

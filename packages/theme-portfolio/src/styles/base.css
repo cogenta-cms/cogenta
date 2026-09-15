@@ -182,7 +182,7 @@ img {
   padding-block: calc(var(--cg-section) / 2);
 }
 
-.cg-main > .cg-section:first-child {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-section:first-child {
   padding-block-start: calc(var(--cg-section) * 0.4);
 }
 
@@ -811,10 +811,6 @@ img {
    Search, forms and comments: the utility pages, in the same register.
    -------------------------------------------------------------------------- */
 
-.cg-search__form,
-.cg-search__results,
-.cg-search__empty,
-.cg-search__error,
 .cg-form,
 .cg-form__confirmation {
   max-inline-size: calc(var(--cg-measure) + var(--cg-gutter) * 2);
@@ -822,12 +818,58 @@ img {
   padding-inline: var(--cg-gutter);
 }
 
+/* The search page is set on the page's edges, like an archive: its title
+   large on the grid, the form under it, the results as the index of work.
+   The host draws it in a bare `<main class="cg-main">`; the list keeps the
+   gutters as its padding, so every rule of a row stays inside them. */
+:is(.cg-main, .cg-sidebar-layout__content)
+> :is(
+  .cg-page__title,
+  .cg-search__form,
+  .cg-search__results,
+  .cg-search__empty,
+  .cg-search__error
+) {
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+}
+
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-page__title {
+  margin-block: 0;
+  padding-block: calc(var(--cg-section) * 0.45) calc(var(--cg-section) * 0.15);
+  font-size: var(--cg-size-title);
+  font-stretch: var(--cg-width-display);
+  font-weight: var(--cg-weight-medium);
+  line-height: var(--cg-leading-title);
+  letter-spacing: var(--cg-tracking-display);
+}
+
+/* The count sits under the title in the caption size, like the archive's
+   kicker sits above it. */
+.cg-page__title .cg-search__count {
+  display: block;
+  margin-block-start: var(--cg-s4);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-caption);
+  font-stretch: var(--cg-width-text);
+  font-weight: var(--cg-weight-medium);
+  line-height: var(--cg-leading-ui);
+  letter-spacing: var(--cg-tracking-caption);
+}
+
 .cg-search__form {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: var(--cg-s3);
-  margin-block: var(--cg-s10);
+  gap: var(--cg-s3) var(--cg-s4);
+  margin-block: var(--cg-s6) var(--cg-s12);
+}
+
+.cg-search__form label {
+  flex-basis: 100%;
 }
 
 .cg-search__form label,
@@ -842,19 +884,77 @@ img {
 
 .cg-search__form input[type="search"] {
   flex: 1 1 18rem;
+  max-inline-size: 40rem;
 }
 
 .cg-search__results {
   display: grid;
   gap: 0;
-  margin-block: 0 var(--cg-section);
+  margin-block: 0 calc(var(--cg-section) / 2);
   list-style: none;
   font-size: var(--cg-size-work);
+  line-height: var(--cg-leading-ui);
 }
 
-.cg-search__results > * {
-  padding-block: var(--cg-s5);
-  border-block-start: var(--cg-rule) solid var(--cg-line);
+/* One ruled row per result, the title, the statement and the date in the
+   columns the index of work gives them. */
+.cg-search__hit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--cg-col-gap);
+  row-gap: var(--cg-s1);
+  align-items: baseline;
+  padding-block: var(--cg-s4);
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-search__hit:first-child {
+  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+}
+
+.cg-search__title {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-medium);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.25em;
+}
+
+.cg-search__hit:hover a.cg-search__title,
+a.cg-search__title:focus-visible {
+  text-decoration-color: currentColor;
+}
+
+.cg-search__excerpt,
+.cg-search__meta {
+  margin: 0;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-caption);
+  line-height: var(--cg-leading-ui);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-search__excerpt {
+  max-inline-size: var(--cg-measure-short);
+}
+
+@media (min-width: 48rem) {
+  .cg-search__hit {
+    grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+    grid-template-rows: auto 1fr;
+    align-items: start;
+  }
+
+  /* The date under the title, as a caption; the statement beside them. */
+  .cg-search__title,
+  .cg-search__meta {
+    grid-column: 1 / span 5;
+  }
+
+  .cg-search__excerpt {
+    grid-column: 6 / -1;
+    grid-row: 1 / span 2;
+    font-size: inherit;
+  }
 }
 
 .cg-search__empty,
@@ -878,7 +978,10 @@ img {
 .cg-form__field select,
 .cg-form__field textarea,
 .cg-comment__form input,
-.cg-comment__form textarea {
+.cg-comment__form textarea,
+.cg-widget__search-input,
+.cg-widget__jump select,
+.cg-widget__form :is(input:not([type="checkbox"]), select, textarea) {
   inline-size: 100%;
   min-block-size: 44px;
   padding: var(--cg-s2) 0;
@@ -894,7 +997,8 @@ img {
 }
 
 .cg-form__field textarea,
-.cg-comment__form textarea {
+.cg-comment__form textarea,
+.cg-widget__form textarea {
   padding: var(--cg-s3);
   border: var(--cg-rule) solid var(--cg-line-strong);
   border-radius: var(--cg-radius);
@@ -903,7 +1007,10 @@ img {
 
 .cg-search__form input:focus-visible,
 .cg-form__field :is(input, select, textarea):focus-visible,
-.cg-comment__form :is(input, textarea):focus-visible {
+.cg-comment__form :is(input, textarea):focus-visible,
+.cg-widget__search-input:focus-visible,
+.cg-widget__jump select:focus-visible,
+.cg-widget__form :is(input, select, textarea):focus-visible {
   outline: none;
   border-color: var(--cg-ink);
   box-shadow: inset 0 calc(var(--cg-rule) * -1) 0 var(--cg-ink);
@@ -918,7 +1025,10 @@ img {
 
 .cg-search__form button,
 .cg-form button[type="submit"],
-.cg-comment__form button[type="submit"] {
+.cg-comment__form button[type="submit"],
+.cg-widget__search-button,
+.cg-widget__jump-button,
+.cg-widget__form-submit {
   min-block-size: 44px;
   padding: var(--cg-s3) var(--cg-s6);
   border: var(--cg-rule) solid var(--cg-action);
@@ -937,7 +1047,10 @@ img {
 
 .cg-search__form button:hover,
 .cg-form button[type="submit"]:hover,
-.cg-comment__form button[type="submit"]:hover {
+.cg-comment__form button[type="submit"]:hover,
+.cg-widget__search-button:hover,
+.cg-widget__jump-button:hover,
+.cg-widget__form-submit:hover {
   background: var(--cg-action-hover);
   border-color: var(--cg-action-hover);
   color: var(--cg-action-hover-fg);

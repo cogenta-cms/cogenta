@@ -5,6 +5,7 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderFooterWidgets,
   renderSocialLinks,
   renderThemeToggle,
   serialize,
@@ -34,6 +35,11 @@ import { word } from './strings.js'
  * the menu screen; a menu without one is a single column. Under a hairline,
  * the legal line: the year and the site's name, then the host's
  * `brandingHtml`, placed once and as received.
+ *
+ * **Footer widgets** (`theme@1.6`). The footer columns an editor fills in the
+ * widgets screen (`footer-1`..`footer-4`) are one row of their own, under the
+ * identity and the menu and above the legal line, on the same grid. A footer
+ * with no widget renders exactly as it did before.
  *
  * Every optional field renders only when present: a site that sets none of
  * them gets no empty wrapper for any of them (`test/chrome.test.ts`).
@@ -164,12 +170,17 @@ function renderFooter(input: ChromeInput): string {
               }<ul class="cg-menu">${group.links.map(linkItem).join('')}</ul></div>`,
           )
           .join('')}</nav>`
+  const widgets = renderFooterWidgets(input.widgets, {
+    className: 'cg-site-footer__widgets',
+    headingLevel: 'h2',
+  })
   const year = new Date().getFullYear()
 
   return (
     `<footer class="cg-site-footer"><div class="cg-site-footer__inner">` +
     `<div class="cg-site-footer__identity"><p class="cg-site-footer__name">${siteName}</p>${tagline}${note}${social}</div>` +
     nav +
+    (widgets === null ? '' : serialize(widgets)) +
     `<div class="cg-site-footer__legal"><p class="cg-site-footer__copyright">© ${year} ${siteName}</p>${input.brandingHtml}</div>` +
     `</div></footer>`
   )

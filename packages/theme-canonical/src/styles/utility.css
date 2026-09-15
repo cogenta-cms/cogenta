@@ -101,7 +101,7 @@
 .cg-search__error,
 .cg-form,
 .cg-form__confirmation,
-.cg-main > .cg-form__error,
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-form__error,
 .cg-comments {
   padding-inline: var(--cg-inset);
 }
@@ -145,6 +145,31 @@
 .cg-search__results a:hover {
   color: var(--cg-accent);
   text-decoration-color: currentColor;
+}
+
+/* A result's summary and date, and the count beside the page title: in the
+   text face and the theme's muted ink, which the host's own floor (a raw skin
+   colour) does not follow into the dark scheme. */
+.cg-search__count {
+  color: var(--cg-ink-muted);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-search__excerpt {
+  max-inline-size: var(--cg-measure);
+  margin-block-start: var(--cg-s2);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-md);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-search__meta {
+  margin-block-start: var(--cg-s2);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-regular);
 }
 
 .cg-search__empty,
@@ -194,7 +219,7 @@
   font-size: var(--cg-text-lg);
 }
 
-.cg-main > .cg-form__error {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-form__error {
   margin-block: var(--cg-s4);
 }
 

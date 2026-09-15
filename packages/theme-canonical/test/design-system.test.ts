@@ -22,6 +22,7 @@ const SHEETS = [
   'listings.css',
   'archive.css',
   'utility.css',
+  'widgets.css',
 ] as const
 
 const SOURCES = new Map(

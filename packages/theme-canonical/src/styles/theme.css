@@ -10,6 +10,8 @@
  *   listings.css  lists of entries: the collection list and its index
  *   archive.css   the taxonomy-term archive
  *   utility.css   the search page, a public form, the comment thread
+ *   widgets.css   the widget areas: the sidebar of a reading page, the bands
+ *                 before and after the content, the footer's widget row
  *
  * Not one colour is written literally in any of them: every value comes from
  * a `--cogenta-*` property or from a `--cg-*` property composed from those.
@@ -35,3 +37,4 @@
 @import "./listings.css";
 @import "./archive.css";
 @import "./utility.css";
+@import "./widgets.css";

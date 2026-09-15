@@ -1,0 +1,1064 @@
+/*
+ * Widget areas (contract D `theme@1.6`): the sidebar beside a reading page,
+ * the bands before and after the content, and the footer's widget row.
+ *
+ * The host draws one markup for every theme (`cg-sidebar-layout`,
+ * `cg-widget-area`, `cg-widget`, see `renderWidgetArea` in
+ * `@cogenta/theme-kit`); this sheet only sets it in this theme's register, the
+ * same one its blocks use: every widget opens under a rule in ink like a
+ * section title, lists run between hairlines, dates and counts are tabular
+ * and muted, links are set in ink and turn to the accent on hover, a quotation
+ * is in the display face, and the one filled control is in ink. No card, no
+ * shadow, no tint of the accent.
+ *
+ * It comes last in `theme.css`, after `utility.css`, so the few rules that
+ * reset a block for the narrower content column win without a heavier
+ * selector. The host's zero-weight floor (`WIDGET_FLOOR_CSS`) sits under all
+ * of it: every property it sets that this theme reads differently is set
+ * again here.
+ */
+
+/* --------------------------------------------------------------------------
+   The layout of a reading page
+   --------------------------------------------------------------------------
+
+   The layout is as wide as the page and holds the page's own inset, so the
+   content column starts on the header's left edge. On a wide screen it is
+   the twelve-column grid: the content takes the first eight columns, the
+   sidebar the last four, pushed off the text by one more column gap, a double
+   gutter that keeps a cover photograph from touching the widgets.
+
+   Inside the content column every block, title and form already pads itself
+   with `--cg-inset`; setting that to zero there is what puts them on the
+   column's edges instead of the page's, in one declaration rather than one
+   reset per block.
+   -------------------------------------------------------------------------- */
+
+.cg-sidebar-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--cg-column-gap);
+  row-gap: 0;
+  inline-size: auto;
+  margin-inline: 0;
+  padding-block: 0;
+  padding-inline: var(--cg-inset);
+}
+
+.cg-sidebar-layout__content {
+  --cg-inset: 0px;
+  min-inline-size: 0;
+}
+
+.cg-sidebar-layout__aside {
+  align-self: start;
+  padding-block: calc(var(--cg-section) / 4) calc(var(--cg-section) / 2);
+  border-block-start: 0;
+}
+
+@media (min-width: 40rem) and (max-width: 63.99rem) {
+  /* Under the content, the sidebar takes as many columns as the width holds. */
+  .cg-sidebar-layout__aside {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+    column-gap: var(--cg-column-gap);
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-sidebar-layout {
+    grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
+  }
+
+  .cg-sidebar-layout__content {
+    grid-column: 1 / span 8;
+  }
+
+  /* The first widget's rule sits level with the first line of the page:
+     the entry header, the archive head and the page title all open with the
+     same padding. */
+  .cg-sidebar-layout__aside {
+    grid-column: 9 / -1;
+    padding-block-start: calc(var(--cg-section) * 0.6);
+    padding-inline-start: var(--cg-column-gap);
+  }
+
+  /* The blocks that keep to the reading columns of a full page (eight or ten
+     of twelve) take the whole column instead: it is already a reading width. */
+  .cg-sidebar-layout__content
+  :is(
+    .cg-entry-header__title,
+    .cg-entry-header__excerpt,
+    .cg-hero__body,
+    .cg-quote__text,
+    .cg-embed > *,
+    .cg-testimonial > *,
+    .cg-accordion > *,
+    .cg-faq__items:first-child,
+    .cg-figure[data-align="center"] > *,
+    .cg-figure[data-align="wide"] .cg-figure__caption,
+    .cg-collection__empty
+  ) {
+    grid-column: 1 / -1;
+  }
+
+  /* A page title keeps to ten twelfths of the page; the column is narrower
+     than that already. */
+  .cg-sidebar-layout__content .cg-page__title {
+    padding-inline-end: 0;
+  }
+}
+
+/* A block with a band of its own (a call to action, a muted variant) keeps
+   its words off the band's edges once the band stops at the column. */
+.cg-sidebar-layout__content :is(.cg-cta, [data-block][data-variant-background]) {
+  padding-inline: var(--cg-s6);
+}
+
+/* --------------------------------------------------------------------------
+   Areas
+   -------------------------------------------------------------------------- */
+
+.cg-widget-area {
+  display: grid;
+  gap: var(--cg-s12);
+  align-content: start;
+}
+
+/* A band the host places around the page's own content (`content-before`,
+   `content-after`, and the sidebar of a home page or a page opening on a
+   hero): on the page width and the section rhythm, its widgets side by side
+   in as many columns as the width holds. Inside the content column the inset
+   is already zero, so the same rule puts it on the column. */
+.cg-widget-area--placed {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--cg-s12) var(--cg-column-gap);
+  inline-size: auto;
+  margin-inline: 0;
+  padding-block: calc(var(--cg-section) / 2);
+  padding-inline: var(--cg-inset);
+  border-block-start: 0;
+}
+
+.cg-widget-area--placed[data-area="sidebar"] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  border-block-start: 0;
+}
+
+/* The band before the content opens where a page's first line opens, level
+   with the sidebar's first rule, and leaves the space under it to the page
+   title that follows. */
+.cg-widget-area--placed[data-area="content-before"] {
+  padding-block: calc(var(--cg-section) * 0.6) 0;
+}
+
+/* Two bands in a row are one section apart, not two. */
+.cg-widget-area--placed + .cg-widget-area--placed {
+  padding-block-start: 0;
+}
+
+/* --------------------------------------------------------------------------
+   A widget
+   -------------------------------------------------------------------------- */
+
+.cg-widget {
+  min-inline-size: 0;
+  color: var(--cg-ink);
+}
+
+/* The heading of a widget is the heading of a section at the sidebar's
+   scale: in the text face, under a rule in ink. */
+.cg-widget__title {
+  margin: 0 0 var(--cg-s5);
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-ink);
+  color: var(--cg-ink);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-md);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-heading);
+  letter-spacing: var(--cg-tracking-heading);
+  text-transform: none;
+}
+
+.cg-widget__body {
+  font-size: var(--cg-text-md);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-widget__body :is(ul, ol) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A link in a list is set in ink, like the menus; it turns to the accent,
+   underlined, under the pointer. */
+.cg-widget
+:is(
+  .cg-widget__link,
+  .cg-widget__entry-title,
+  .cg-widget__comment-entry,
+  .cg-widget__terms-label,
+  .cg-widget__archives-label,
+  .cg-widget__toc a,
+  .cg-widget__contact a
+) {
+  color: var(--cg-ink);
+  text-decoration-line: none;
+}
+
+.cg-widget
+  :is(
+    .cg-widget__link,
+    .cg-widget__entry-title,
+    .cg-widget__comment-entry,
+    .cg-widget__terms-label,
+    .cg-widget__archives-label,
+    .cg-widget__toc a,
+    .cg-widget__contact a
+  ):hover {
+  color: var(--cg-accent);
+  text-decoration-line: underline;
+}
+
+.cg-widget__empty {
+  color: var(--cg-ink-muted);
+}
+
+/* A widget without a title (a quotation, most often) still opens under the
+   rule in ink, so it starts on the same line as its titled neighbours. A call
+   to action is the exception: its band already sets it apart. */
+.cg-widget > .cg-widget__body:first-child:not(:has(> .cg-widget__cta)) {
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-ink);
+}
+
+/* Dates, counts and captions: the smallest text the theme sets, muted, in
+   tabular figures so a column of them lines up. */
+.cg-widget
+:is(
+  .cg-widget__entry-date,
+  .cg-widget__comment-date,
+  .cg-widget__terms-count,
+  .cg-widget__archives-count,
+  .cg-widget__cloud-count,
+  .cg-widget__caption,
+  .cg-widget__quote-role
+) {
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-label);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--cg-leading-snug);
+}
+
+/* --------------------------------------------------------------------------
+   Rows between hairlines: links, terms, archives
+   -------------------------------------------------------------------------- */
+
+.cg-widget__links,
+.cg-widget__terms,
+.cg-widget__archives,
+.cg-widget__entries,
+.cg-widget__comments {
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-widget
+  :is(
+    .cg-widget__links-item,
+    .cg-widget__terms-item,
+    .cg-widget__archives-item,
+    .cg-widget__entry,
+    .cg-widget__comment
+  ) {
+  padding-block: 0;
+  border-block-end: 0;
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+/* Under the title's own rule in ink, the first row needs no hairline. */
+.cg-widget__title + .cg-widget__body > :is(ul, ol) > li:first-child {
+  border-block-start: 0;
+}
+
+.cg-widget__link {
+  display: block;
+  padding-block: var(--cg-s3);
+}
+
+.cg-widget__terms-item,
+.cg-widget__archives-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cg-s4);
+}
+
+.cg-widget__terms-label,
+.cg-widget__archives-label {
+  padding-block: var(--cg-s3);
+}
+
+.cg-widget__terms-item[data-depth="1"],
+.cg-widget__archives-item[data-depth="1"] {
+  padding-inline-start: var(--cg-s5);
+}
+
+.cg-widget__terms-item[data-depth="2"],
+.cg-widget__archives-item[data-depth="2"] {
+  padding-inline-start: var(--cg-s10);
+}
+
+/* --------------------------------------------------------------------------
+   Entries and comments: an index at the sidebar's scale
+   -------------------------------------------------------------------------- */
+
+.cg-widget__entry {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  column-gap: var(--cg-s4);
+  align-items: start;
+  padding-block: var(--cg-s4);
+}
+
+.cg-widget .cg-widget__entry {
+  padding-block: var(--cg-s4);
+}
+
+.cg-widget__entry[data-image="none"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.cg-widget__entry-image {
+  inline-size: 100%;
+  aspect-ratio: 1;
+}
+
+/* The markup reads title, date, summary; the paint puts the date first, as
+   every list of entries in this theme does, so a reader scans by date and a
+   screen reader still hears the title first. */
+.cg-widget__entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s1);
+}
+
+.cg-widget__entry-date {
+  order: -1;
+}
+
+.cg-widget__entry-title {
+  font-weight: var(--cg-weight-medium);
+  line-height: var(--cg-leading-heading);
+  text-wrap: balance;
+}
+
+.cg-widget__entry-excerpt {
+  margin-block-start: var(--cg-s1);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-widget .cg-widget__comment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s1);
+  padding-block: var(--cg-s4);
+}
+
+.cg-widget__comment-author {
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-label);
+}
+
+.cg-widget__comment-entry {
+  font-weight: var(--cg-weight-medium);
+  line-height: var(--cg-leading-heading);
+}
+
+.cg-widget__comment-excerpt {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* In a band rather than a sidebar, the entries sit side by side, each under
+   its own hairline, the way the collection list's grid sets them. */
+.cg-widget-area--placed .cg-widget__entries {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  column-gap: var(--cg-column-gap);
+  border-block-end: 0;
+}
+
+.cg-widget-area--placed
+  .cg-widget__title
+  + .cg-widget__body
+  > .cg-widget__entries
+  > li:first-child {
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-widget-area--placed .cg-widget__entry {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--cg-s4);
+  align-content: start;
+}
+
+.cg-widget-area--placed .cg-widget__entry-image {
+  aspect-ratio: 3 / 2;
+}
+
+.cg-widget-area--placed .cg-widget__entry-title {
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-semibold);
+}
+
+/* --------------------------------------------------------------------------
+   Words: text, about, quote, call to action, contact
+   -------------------------------------------------------------------------- */
+
+.cg-widget__text {
+  max-inline-size: var(--cg-measure);
+  line-height: var(--cg-leading-body);
+}
+
+.cg-widget__text > * + * {
+  margin-block-start: var(--cg-s3);
+}
+
+.cg-widget__text :is(ul, ol) {
+  padding-inline-start: 1.25em;
+  list-style: revert;
+}
+
+.cg-widget__about,
+.cg-widget__cta {
+  display: grid;
+  justify-items: start;
+  gap: var(--cg-s3);
+  max-inline-size: var(--cg-measure);
+}
+
+.cg-widget__about-image {
+  inline-size: 100%;
+  aspect-ratio: 3 / 2;
+  margin-block-end: var(--cg-s2);
+}
+
+.cg-widget__about-heading,
+.cg-widget__cta-heading {
+  margin: 0;
+  color: var(--cg-ink);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-heading);
+  letter-spacing: var(--cg-tracking-heading);
+}
+
+.cg-widget__about-body,
+.cg-widget__cta-body {
+  color: var(--cg-ink-muted);
+  line-height: var(--cg-leading-body);
+}
+
+/* The about link reads as every arrow link in the theme: words in ink under
+   one underline, the arrow after them, never alone on a line. */
+.cg-widget__about-link {
+  display: inline-block;
+  padding-block: var(--cg-s1);
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+  text-decoration-line: underline;
+  text-decoration-color: var(--cg-underline);
+  white-space: nowrap;
+}
+
+.cg-widget__about-link::after {
+  content: "\2192" / "";
+  display: inline-block;
+  margin-inline-start: 0.35em;
+}
+
+.cg-widget__about-link:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+/* A quotation in the display face, its opening mark hung outside the text. */
+.cg-widget__quote {
+  margin: 0;
+}
+
+.cg-widget__quote-text {
+  margin: 0;
+  quotes: "\201C" "\201D";
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-text-xl);
+  font-weight: var(--cg-weight-regular);
+  line-height: var(--cg-leading-snug);
+  letter-spacing: var(--cg-tracking-display);
+}
+
+.cg-widget__quote-text p {
+  text-indent: -0.42em;
+  text-wrap: pretty;
+}
+
+.cg-widget__quote-text p::before {
+  content: open-quote;
+}
+
+.cg-widget__quote-text p::after {
+  content: close-quote;
+}
+
+.cg-widget__quote-source {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-block-start: var(--cg-s5);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-widget__quote-name {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+}
+
+/* The one widget that asks for something, on a band a step off the page like
+   the call-to-action block, its action the one filled control. */
+.cg-widget__cta {
+  max-inline-size: none;
+  padding: var(--cg-s6);
+  background: var(--cg-band);
+}
+
+.cg-widget__cta-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 2.75rem;
+  margin-block-start: var(--cg-s2);
+  padding: var(--cg-s2) var(--cg-s5);
+  border: var(--cg-rule) solid var(--cg-action);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-heading);
+  text-decoration: none;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-widget__cta-action:hover {
+  border-color: var(--cg-action-hover);
+  background: var(--cg-action-hover);
+  color: var(--cg-action-fg);
+}
+
+.cg-widget__contact {
+  display: grid;
+  gap: var(--cg-s3);
+}
+
+.cg-widget__contact-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--cg-s3);
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.cg-widget__icon {
+  flex: none;
+  margin-block-start: 0.2em;
+  color: var(--cg-ink-muted);
+}
+
+/* Opening hours as a ledger: the day, then the hours at the end of the row. */
+.cg-widget__hours {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0;
+  margin: var(--cg-s3) 0 0;
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-widget__hours-label,
+.cg-widget__hours-value {
+  margin: 0;
+  padding-block: var(--cg-s2);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-widget__hours-value {
+  padding-inline-start: var(--cg-s4);
+  color: var(--cg-ink-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* --------------------------------------------------------------------------
+   Pictures: image, gallery, embed
+   -------------------------------------------------------------------------- */
+
+.cg-widget__figure {
+  display: grid;
+  gap: var(--cg-s3);
+}
+
+.cg-widget__image {
+  inline-size: 100%;
+}
+
+.cg-widget__gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--cg-s2);
+}
+
+.cg-widget__gallery[data-columns="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cg-widget__gallery[data-columns="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cg-widget__gallery-item {
+  min-inline-size: 0;
+}
+
+.cg-widget__gallery-image {
+  inline-size: 100%;
+  aspect-ratio: 1;
+}
+
+.cg-widget__embed {
+  display: grid;
+  gap: var(--cg-s3);
+}
+
+.cg-widget__frame {
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Words to follow: tag cloud, table of contents, social profiles
+   -------------------------------------------------------------------------- */
+
+/* A tag cloud is words, not pills: each at a step of the type scale, in ink,
+   underlined only under the pointer so the sizes do the talking. */
+.cg-widget__cloud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--cg-s1) var(--cg-s4);
+}
+
+.cg-widget__cloud-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--cg-s1);
+  line-height: var(--cg-leading-heading);
+}
+
+.cg-widget__cloud-item a {
+  color: var(--cg-ink);
+  text-decoration-line: none;
+}
+
+.cg-widget__cloud-item a:hover {
+  color: var(--cg-accent);
+  text-decoration-line: underline;
+}
+
+.cg-widget__cloud-item[data-weight="1"] {
+  font-size: var(--cg-text-label);
+}
+
+.cg-widget__cloud-item[data-weight="2"] {
+  font-size: var(--cg-text-sm);
+}
+
+.cg-widget__cloud-item[data-weight="3"] {
+  font-size: var(--cg-text-md);
+}
+
+.cg-widget__cloud-item[data-weight="4"] {
+  font-size: var(--cg-text-lg);
+  font-weight: var(--cg-weight-medium);
+}
+
+.cg-widget__cloud-item[data-weight="5"] {
+  font-size: var(--cg-text-xl);
+  font-weight: var(--cg-weight-medium);
+}
+
+.cg-widget__cloud-item .cg-widget__cloud-count {
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-regular);
+}
+
+/* The page's outline hangs off one hairline, each level a step in. */
+.cg-widget__toc {
+  border-inline-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-widget .cg-widget__toc-item {
+  padding-block: 0;
+  padding-inline-start: var(--cg-s4);
+  border-block-end: 0;
+}
+
+.cg-widget__toc-item a {
+  display: block;
+  padding-block: var(--cg-s1);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-widget .cg-widget__toc-item[data-depth="1"] {
+  padding-inline-start: var(--cg-s8);
+}
+
+.cg-widget .cg-widget__toc-item[data-depth="2"] {
+  padding-inline-start: var(--cg-s12);
+}
+
+.cg-widget__social {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s2);
+}
+
+.cg-widget__social-item a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border: var(--cg-rule) solid var(--cg-line-strong);
+  border-radius: var(--cg-radius-control);
+  color: var(--cg-ink);
+  transition:
+    color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-widget__social-item a:hover {
+  border-color: var(--cg-ink);
+  color: var(--cg-accent);
+}
+
+/* --------------------------------------------------------------------------
+   Controls: search, a jump list, a form, the calendar
+   -------------------------------------------------------------------------- */
+
+.cg-widget__search,
+.cg-widget__jump {
+  display: flex;
+  gap: var(--cg-s2);
+}
+
+.cg-widget__search-input,
+.cg-widget__jump select,
+.cg-widget__form :is(input:not([type="checkbox"], [type="radio"]), select, textarea) {
+  flex: 1 1 auto;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 2.75rem;
+  padding: var(--cg-s2) var(--cg-s3);
+  border: var(--cg-rule) solid var(--cg-line-strong);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-canvas);
+  color: var(--cg-ink);
+  font: inherit;
+  transition: border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-widget__search-input:hover,
+.cg-widget__jump select:hover,
+.cg-widget__form :is(input, select, textarea):hover {
+  border-color: var(--cg-ink);
+}
+
+.cg-widget__search-input::placeholder {
+  color: var(--cg-ink-muted);
+}
+
+.cg-widget__search-button,
+.cg-widget__jump-button {
+  flex: none;
+  min-block-size: 2.75rem;
+  padding: var(--cg-s2) var(--cg-s4);
+  border: var(--cg-rule) solid var(--cg-action);
+  border-radius: var(--cg-radius-control);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+  font: inherit;
+  font-weight: var(--cg-weight-semibold);
+  cursor: pointer;
+  transition:
+    background-color var(--cg-duration) var(--cg-ease),
+    border-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-widget__search-button:hover,
+.cg-widget__jump-button:hover {
+  border-color: var(--cg-action-hover);
+  background: var(--cg-action-hover);
+}
+
+/* A form in a widget is the site's public form at the sidebar's width: the
+   page frame's inset and margins belong to the form page, not to this. */
+.cg-widget__form {
+  display: grid;
+  gap: var(--cg-s4);
+  margin: 0;
+  padding-inline: 0;
+}
+
+.cg-widget__form .cg-form__field {
+  margin: 0;
+}
+
+.cg-widget__form label {
+  display: block;
+  margin-block-end: var(--cg-s1);
+  font-size: var(--cg-text-sm);
+  font-weight: var(--cg-weight-semibold);
+}
+
+.cg-widget__form .cg-form__field[data-kind="checkbox"] label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cg-s2);
+  font-weight: var(--cg-weight-regular);
+}
+
+.cg-widget__form-submit {
+  justify-self: start;
+}
+
+.cg-widget__form-link {
+  font-weight: var(--cg-weight-semibold);
+}
+
+/* A month as a table of figures: the month's name first, the days on seven
+   even columns, a day with writing in ink and underlined. */
+.cg-widget__calendar {
+  min-inline-size: 0;
+}
+
+.cg-widget__calendar-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.cg-widget__calendar-table caption {
+  padding-block-end: var(--cg-s3);
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+  text-align: start;
+}
+
+.cg-widget__calendar-table th {
+  padding-block: var(--cg-s2);
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-medium);
+}
+
+.cg-widget__calendar-table td,
+.cg-widget__calendar-pad {
+  block-size: 2.25rem;
+  padding: 0;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-widget__calendar-table td[data-posts] a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 2.25rem;
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+  text-decoration-color: var(--cg-underline);
+}
+
+.cg-widget__calendar-table td[data-posts] a:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+.cg-widget__calendar-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cg-s4);
+  margin: var(--cg-s3) 0 0;
+  padding-block-start: var(--cg-s3);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+  font-size: var(--cg-text-sm);
+}
+
+.cg-widget__calendar-nav a {
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-underline);
+}
+
+.cg-widget__calendar-nav a:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+/* The months either side read as the theme's arrow links: the arrow outside
+   the words, on their side. */
+.cg-widget__calendar-previous::before {
+  content: "\2190" / "";
+  display: inline-block;
+  margin-inline-end: 0.35em;
+}
+
+.cg-widget__calendar-next {
+  margin-inline-start: auto;
+}
+
+.cg-widget__calendar-next::after {
+  content: "\2192" / "";
+  display: inline-block;
+  margin-inline-start: 0.35em;
+}
+
+/* The page being shown, in any list of a widget: in ink and heavier. Last, so
+   it holds over every list's own link colour. */
+.cg-widget [aria-current="page"],
+.cg-widget [aria-current="page"] > a {
+  color: var(--cg-ink);
+  font-weight: var(--cg-weight-semibold);
+}
+
+/* --------------------------------------------------------------------------
+   The footer's widget row (`renderChrome`)
+   --------------------------------------------------------------------------
+
+   One row of its own on the footer grid, under the identity and the menu and
+   above the legal line, in the footer's small type. A column's heading reads
+   as a footer menu heading does, without the rule a page's sidebar opens
+   with: the footer band already sets these apart.
+   -------------------------------------------------------------------------- */
+
+.cg-site-footer__widgets {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--cg-s10) var(--cg-column-gap);
+  padding-block-start: var(--cg-s10);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+@media (min-width: 40rem) {
+  .cg-site-footer__widgets:not([data-columns="1"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-site-footer__widgets[data-columns="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cg-site-footer__widgets[data-columns="4"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.cg-footer-widgets__column {
+  gap: var(--cg-s8);
+}
+
+.cg-site-footer .cg-widget {
+  color: var(--cg-ink-muted);
+}
+
+.cg-site-footer .cg-widget > .cg-widget__body:first-child {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
+.cg-site-footer .cg-widget__title {
+  margin-block-end: var(--cg-s3);
+  padding-block-start: 0;
+  border-block-start: 0;
+  font-size: var(--cg-text-sm);
+}
+
+.cg-site-footer .cg-widget__body {
+  font-size: var(--cg-text-sm);
+}
+
+.cg-site-footer
+  :is(
+    .cg-widget__links,
+    .cg-widget__terms,
+    .cg-widget__archives,
+    .cg-widget__entries,
+    .cg-widget__comments
+  ) {
+  border-block-end: 0;
+}
+
+.cg-site-footer
+  .cg-widget
+  :is(
+    .cg-widget__links-item,
+    .cg-widget__terms-item,
+    .cg-widget__archives-item,
+    .cg-widget__entry,
+    .cg-widget__comment
+  ) {
+  border-block-start: 0;
+}
+
+.cg-site-footer :is(.cg-widget__link, .cg-widget__terms-label, .cg-widget__archives-label) {
+  padding-block: var(--cg-s1);
+}
+
+.cg-site-footer .cg-widget .cg-widget__entry,
+.cg-site-footer .cg-widget .cg-widget__comment {
+  padding-block: var(--cg-s2);
+}
+
+.cg-site-footer .cg-widget__quote-text {
+  color: var(--cg-ink);
+  font-size: var(--cg-text-lg);
+}
+
+/* On the footer band a call to action takes the page's ground, the one step
+   that still sets it apart there in both schemes. */
+.cg-site-footer .cg-widget__cta {
+  padding: var(--cg-s5);
+  background: var(--cg-canvas);
+}
+
+.cg-site-footer .cg-widget__about-heading,
+.cg-site-footer .cg-widget__cta-heading {
+  font-size: var(--cg-text-md);
+}
+
+.cg-site-footer .cg-widget__hours-label {
+  color: var(--cg-ink);
+}

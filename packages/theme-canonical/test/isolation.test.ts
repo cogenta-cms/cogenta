@@ -94,6 +94,7 @@ describe('theme isolation', () => {
       'styles/theme.css',
       'styles/tokens.css',
       'styles/utility.css',
+      'styles/widgets.css',
     ])
   })
 
@@ -108,6 +109,7 @@ describe('theme isolation', () => {
       'listings.css',
       'archive.css',
       'utility.css',
+      'widgets.css',
     ])
   })
 

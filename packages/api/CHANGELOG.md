@@ -1,5 +1,34 @@
 # @cogenta/api
 
+## 2.5.0
+
+### Minor Changes
+
+- [`78989f1`](https://github.com/cogenta-cms/cogenta/commit/78989f11702f3c4e9dfdd0328fc50099fceabd64) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Choosing a theme can now bring its own look with it.** `POST /api/theme/activate`
+  switches the site's theme and, when `applySkin` is true, applies that theme's
+  own typography and colours in the same write (validated against contract D
+  first). The appearance screen asks before selecting a theme: use the complete
+  theme, or keep the site's current colours and fonts and change only the layout.
+  Before, selecting a theme always kept the site's skin, so a newly chosen theme
+  never showed the fonts and palette it was designed with.
+
+- [`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Apply a theme together with its starter's sample data (L28). `POST /api/theme/sample-data/preview` computes, without writing, what importing the sample data would do — collections added or found incompatible, slugs the site already owns, menus and settings filled or kept, media added, and for a reset exactly what is deleted — as coded warnings. `POST /api/theme/sample-data/apply` recomputes that plan and applies it: `keep` is strictly additive, `reset` takes and verifies a backup first and requires the site name typed as confirmation. Both rewrite the schema, so applying is limited to `cogenta dev`. `GET /api/theme` gains `sampleData: { themes, writable }`. New error codes `THEME_SAMPLE_DATA_UNAVAILABLE` and `THEME_SAMPLE_DATA_CONFIRMATION_INVALID`.
+
+### Patch Changes
+
+- [`7711371`](https://github.com/cogenta-cms/cogenta/commit/77113713a5be32d462995565474b0fa546653147) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Importing sample data while keeping the site now adds the sample's missing links after the site's own in a header or footer menu that already exists, instead of leaving the imported sections unreachable. Nothing of the site's menu is removed or reordered; a header button stays as it is. The preview reports it as a `merge` outcome with a `menu-merged` warning.
+- Updated dependencies [[`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0)]:
+  - @cogenta/core@0.10.0
+  - @cogenta/channels@0.3.6
+  - @cogenta/mcp@0.3.5
+  - @cogenta/analytics@0.3.5
+  - @cogenta/auth@0.5.4
+  - @cogenta/blocks@1.0.5
+  - @cogenta/export@0.2.5
+  - @cogenta/forms@0.2.6
+  - @cogenta/schema@0.5.3
+  - @cogenta/seo@0.3.5
+
 ## 2.4.0
 
 ### Minor Changes

@@ -1,5 +1,28 @@
 # @cogenta/theme-kit
 
+## 0.4.0
+
+### Minor Changes
+
+- [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Contract D `theme@1.5`: an entry page can show the entry's own fields.**
+  `PageEntryMeta` gains an optional `fields` record carrying the entry's plain
+  values (text, slug, number, boolean, date, datetime, select, color), so a
+  product page can finally print its price and whether it is in stock, and a
+  dish its price. Rich text, media, relations and blocks are never included.
+  Strictly additive: a `theme@1.4` theme ignores the field and renders exactly
+  as before.
+
+### Patch Changes
+
+- [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The GitHub, Mastodon, Bluesky, TikTok, Threads and Pinterest icons in
+  `renderSocialLinks` are now the platforms' real silhouettes (Simple Icons,
+  CC0-1.0) instead of shapes built from circles and rectangles, which read as a
+  blob, a speech bubble or a stray letter in every theme's footer. Markup is
+  unchanged apart from the icon paths.
+- Updated dependencies [[`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37)]:
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+
 ## 0.3.3
 
 ### Patch Changes

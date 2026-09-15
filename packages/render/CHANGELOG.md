@@ -1,5 +1,17 @@
 # @cogenta/render
 
+## 0.3.0
+
+### Minor Changes
+
+- [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A typeface a skin names now loads. `@cogenta/render` gains `WEB_FONTS`, a closed catalogue of Google Fonts families whose `css2` requests were each verified, and `renderSkinCss` opens with an `@import` for every catalogue family a skin's `font.sans`/`font.serif`/`font.mono` stacks lead with. `cogenta serve` drops such an import when the theme already loads the same family. The skin generator is told which families load, so a personalisation no longer falls back to Georgia or Times.
+
+### Patch Changes
+
+- Updated dependencies [[`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0)]:
+  - @cogenta/core@0.10.0
+  - @cogenta/blocks@1.0.5
+
 ## 0.2.4
 
 ### Patch Changes

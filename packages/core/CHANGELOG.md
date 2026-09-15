@@ -1,5 +1,11 @@
 # @cogenta/core
 
+## 0.10.0
+
+### Minor Changes
+
+- [`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Apply a theme together with its starter's sample data (L28). `POST /api/theme/sample-data/preview` computes, without writing, what importing the sample data would do — collections added or found incompatible, slugs the site already owns, menus and settings filled or kept, media added, and for a reset exactly what is deleted — as coded warnings. `POST /api/theme/sample-data/apply` recomputes that plan and applies it: `keep` is strictly additive, `reset` takes and verifies a backup first and requires the site name typed as confirmation. Both rewrite the schema, so applying is limited to `cogenta dev`. `GET /api/theme` gains `sampleData: { themes, writable }`. New error codes `THEME_SAMPLE_DATA_UNAVAILABLE` and `THEME_SAMPLE_DATA_CONFIRMATION_INVALID`.
+
 ## 0.9.0
 
 ### Minor Changes

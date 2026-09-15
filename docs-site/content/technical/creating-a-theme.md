@@ -129,6 +129,34 @@ var(--cg-page); margin-inline: auto; padding-inline: var(--cg-gutter) }`), and r
 desktop navigation as a real `<nav>` shown by media query — a closed `<details>` never lays
 out its content in Chrome, whatever `display` you set on it.
 
+## Widget areas (`theme@1.6`, L30)
+
+Widgets placed from the admin reach every theme through one markup the host draws, so a
+theme styles them rather than placing them. On a reading page (an entry that is not the
+home page and does not open on a `hero`, an archive, search results, a form) whose sidebar
+has widgets, the host wraps the children of your `<main>`:
+
+```html
+<main class="…yours…">
+  <div class="cg-sidebar-layout">
+    <div class="cg-sidebar-layout__content">content-before · your page · content-after · comments</div>
+    <aside class="cg-widget-area cg-sidebar-layout__aside" data-area="sidebar">…</aside>
+  </div>
+</main>
+```
+
+Elsewhere the areas are `<aside class="cg-widget-area cg-widget-area--placed">` bands, first
+and last in `<main>`. Every widget is `<section class="cg-widget cg-widget--<type>">` with a
+`cg-widget__title` and a `cg-widget__body`, rendered by `renderWidgetArea`; a widget hidden on
+a device carries `data-hide-desktop|tablet|mobile`. The host emits a zero-specificity floor
+(`:where()`, skin tokens only) after your stylesheet, so a theme that knows nothing about
+widgets still shows them legibly. Two things are worth doing in a real theme: style
+`.cg-sidebar-layout` and `.cg-widget*` in your own register (and check that no `.cg-main > …`
+child selector of yours stops matching inside the wrapper), and export `widgetAreas` from your
+module — declaring it tells the host you place the footer columns yourself, from
+`ChromeInput.widgets`, with `renderFooterWidgets`. `PageContent.widgets` carries any extra
+area you declare. `@cogenta/theme-magazine`'s `styles/widgets.css` is the reference.
+
 ## Going further
 
 The theme starter documents, in its own `README.md`, what it deliberately

@@ -44,10 +44,11 @@ de démo d'un thème WordPress :
 2. **Le thème et ses données d'exemple, en conservant le contenu** — strictement additif :
    les collections manquantes sont ajoutées, une collection existante de structure
    différente est ignorée, une entrée dont l'adresse existe déjà (dont la page d'accueil)
-   est ignorée, un menu déjà rempli ou un réglage déjà renseigné est conservé.
+   est ignorée, un menu déjà rempli, une zone de widgets déjà remplie ou un réglage déjà
+   renseigné est conservé.
 3. **Le thème et ses données d'exemple, en réinitialisant le site** — une sauvegarde
-   complète est créée et vérifiée, puis le contenu, les termes, les menus, les médias et les
-   redirections sont remplacés par la démo. Il faut saisir le nom du site pour confirmer.
+   complète est créée et vérifiée, puis le contenu, les termes, les menus, les widgets, les
+   médias et les redirections sont remplacés par la démo. Il faut saisir le nom du site pour confirmer.
    Comptes, clés d'API, journal d'audit, fournisseurs et agents sont conservés.
 
 Les deux derniers choix passent d'abord par un aperçu qui chiffre tout (entrées importées
@@ -64,6 +65,43 @@ actif ne font pas partie de la sauvegarde.
 Les visuels de démonstration semés à l'installation sont générés par Cogenta lui-même
 (compositions abstraites, en PNG), jamais des photos tierces : ils se remplacent en un
 clic depuis la médiathèque.
+
+## Les widgets : barre latérale, bandeaux et pied de page
+
+`/widgets` (menu Apparence, réservé aux administrateurs) place des contenus répétés sur tout le
+site, comme les widgets de WordPress, **quel que soit le thème actif** :
+
+- **Barre latérale** — à côté du contenu sur les pages de lecture (article, archive d'une
+  catégorie ou d'un mois, résultats de recherche, formulaire). Sur la page d'accueil et sur une
+  page qui s'ouvre sur un grand bandeau, elle passe sous le contenu, en pleine largeur, pour ne
+  jamais écraser une mise en page conçue. Sur mobile, elle s'empile sous le contenu.
+- **Avant le contenu** et **Après le contenu** — un bandeau en tête, et la suite d'un article
+  (articles liés, appel à l'action) placée avant les commentaires.
+- **Pied de page, colonnes 1 à 4** — dans le pied de page du thème.
+
+La bibliothèque propose : texte, image, galerie, vidéo ou contenu intégré, citation, appel à
+l'action, présentation, coordonnées et horaires, liens, dernières entrées, entrées liées, les
+plus lues, commentaires récents, archives par mois ou par année, calendrier des publications,
+table des matières, formulaire, recherche, menu, catégories (liste ou menu déroulant), nuage de
+termes et réseaux sociaux. Un widget « HTML personnalisé » n'existe pas : Cogenta ne stocke
+jamais de HTML.
+
+Chaque widget se glisse dans une zone ou d'une zone à l'autre, ou se déplace avec les boutons
+**Monter**, **Descendre** et **Déplacer vers…** ; il se **duplique** (la copie reste masquée
+jusqu'à ce que vous l'affichiez), se **masque** sans être supprimé, et se supprime après
+confirmation. Sa section **Visibilité** décide où, pour qui et quand il s'affiche :
+
+- sur toutes les pages, **seulement** sur ou **sauf** sur l'accueil, les entrées d'une
+  collection, les archives d'une taxonomie, les archives par date, la recherche, ou des adresses
+  (`/guides/*` couvre toute une rubrique) ;
+- pour tout le monde, les visiteurs seulement, ou les personnes connectées seulement ;
+- sur ordinateur, tablette et/ou mobile ;
+- à partir d'une date, jusqu'à une date ;
+- dans certaines langues d'un site multilingue.
+
+Un widget posé dans une zone que le nouveau thème n'a plus apparaît dans **Widgets inactifs** :
+rien n'est perdu en changeant de thème. Les données d'exemple d'un thème remplissent les zones
+vides et laissent intacte une zone que le site remplit déjà ; une réinitialisation les remplace.
 
 ## Le skin : couleurs, typographie, densité, sans reconstruction
 

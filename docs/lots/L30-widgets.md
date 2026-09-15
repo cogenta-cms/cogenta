@@ -32,13 +32,20 @@ Trusted Publisher OIDC à configurer par l'humain.
 | `content-after` | après le contenu d'un article ou d'une page |
 
 Un thème peut en déclarer d'autres (export `widgetAreas` de son module). **Peu importe le thème,
-ça s'adapte** : l'hôte résout les widgets, les passe au thème sous forme de modèles de vue déjà
-calculés (`PageContent.widgets`, `ChromeInput.widgets`, contrat D `theme@1.6`, additif), et
-`@cogenta/theme-kit` fournit le rendu par défaut (`renderWidgetArea`). Un thème qui déclare ses
-zones les place lui-même ; un thème qui n'en déclare aucune (thème local, thème généré) les reçoit
-placées par l'hôte : bandeaux avant et après le contenu, colonnes au-dessus du pied, barre latérale
-empilée après le contenu — jamais une mise en page cassée. Une feuille plancher de poids nul
-(`:where()`, jetons du skin uniquement) donne une présentation lisible à un thème qui ne stylise pas.
+ça s'adapte** : l'hôte résout les widgets en modèles de vue déjà calculés (contrat D `theme@1.6`,
+additif) et `@cogenta/theme-kit` fournit le rendu partagé (`renderWidgetArea`).
+
+**Révisé pendant l'étape 6 (captures réelles à l'appui)** : les trois zones de page standard sont
+**toujours placées par l'hôte**, dans un balisage unique que chaque thème stylise
+(`cg-sidebar-layout` : la barre latérale à côté du contenu d'une page de lecture — article,
+archive, recherche, formulaire —, les commentaires dans la colonne du contenu ; la page d'accueil
+et une page ouverte par un `hero` gardent leur pleine largeur et reçoivent la barre en bandeau).
+Laisser chaque thème recomposer sa page aurait produit dix balisages et dix façons de rater une
+page de lecture ; un seul balisage garantit qu'un widget tombe au même endroit dans tout thème,
+y compris un thème local ou généré. Un thème qui déclare ses zones place les colonnes de pied dans
+son propre pied (`ChromeInput.widgets`) ; `PageContent.widgets` ne porte que ses zones en plus.
+Une feuille plancher de poids nul (`:where()`, jetons du skin uniquement) suffit à un thème qui ne
+stylise pas.
 
 ### D3 — Le vocabulaire, le plus complet possible sans HTML libre
 
@@ -99,10 +106,10 @@ en page.
 | Étape | État | Notes |
 |---|---|---|
 | Conception | fait | 2026-09-15 |
-| 1. Paquet `@cogenta/widgets` | à faire | |
-| 2. Contrat D `theme@1.6` | à faire | |
-| 3. API | à faire | |
-| 4. Résolution hôte | à faire | |
-| 5. Écran admin | à faire | |
-| 6. Thèmes | à faire | |
-| 7. Données, sauvegarde, vérification | à faire | |
+| 1. Paquet `@cogenta/widgets` | fait | vocabulaire (22 types), visibilité, zones, store ; contrat de store joué sur SQLite, Postgres, MySQL et MariaDB (21 tests chacun) |
+| 2. Contrat D `theme@1.6` | fait | `ResolvedWidget`, `renderWidgetArea`, `renderFooterWidgets` ; ancres `id` sur h2-h4 pour la table des matières |
+| 3. API | fait | `/api/widgets` (liste, création, édition, déplacement, réordonnancement, duplication, suppression), admin seul |
+| 4. Résolution hôte | fait | visibilité par requête, archives par date `/archive/:collection/:year/:month?`, `/_cogenta/go` (menus déroulants), sauvegarde ; test de bout en bout réel |
+| 5. Écran admin | fait | `/widgets` : bibliothèque, glisser-déposer et boutons nommés, réglages par type, visibilité, masquer, dupliquer, supprimer, widgets inactifs ; 7 tests d'écran |
+| 6. Thèmes | en cours | mise en page commune `cg-sidebar-layout` (hôte) ; Magazine fait et vérifié en captures ; les neuf autres par lots d'agents en worktrees |
+| 7. Données, sauvegarde, vérification | en cours | `BlueprintWidget`, semis à l'installation, import conserver/réinitialiser, avertissement `widgets-kept` ; Magazine semé ; les autres blueprints avec leur thème |

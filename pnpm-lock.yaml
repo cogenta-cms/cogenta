@@ -980,6 +980,9 @@ importers:
       '@cogenta/schema':
         specifier: workspace:*
         version: link:../schema
+      '@cogenta/widgets':
+        specifier: workspace:*
+        version: link:../widgets
     devDependencies:
       '@cogenta/theme-canonical':
         specifier: workspace:*

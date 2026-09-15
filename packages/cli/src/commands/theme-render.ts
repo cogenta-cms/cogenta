@@ -38,6 +38,7 @@ import {
   type PageEntryMeta,
   type PageEntryTerm,
   type PublicComment,
+  pageHasOwnHeading,
   type RenderContext,
   renderCommentsSection,
   serialize,
@@ -55,8 +56,10 @@ import { DEFAULT_THEME_NAME, resolveTheme, type ThemeModule } from './theme-regi
 import {
   footerWidgetsHtml,
   hasAnyWidget,
+  partitionPageAreas,
   placeWidgetsInMain,
   splitWidgetAreas,
+  usesSidebarLayout,
   WIDGET_FLOOR_CSS,
 } from './widget-placement.js'
 import type { WidgetRenderRequest } from './widget-resolve.js'
@@ -1046,8 +1049,9 @@ export async function renderPageChrome(
     ...chromeExtras,
     ...(placesFooter && hasAnyWidget(footerWidgets) ? { widgets: footerWidgets } : {}),
   })
-  // The host draws this page's `<main>`, so it places the page's areas itself.
-  const bodyHtml = placeWidgetsInMain(options.bodyHtml, pageWidgets)
+  // The host draws this page's `<main>` (an archive, search results, a form),
+  // so it places the page's areas itself, the sidebar beside the content.
+  const bodyHtml = placeWidgetsInMain(options.bodyHtml, pageWidgets, { aside: true })
   const verificationTags = siteVerificationMetaTags(
     options.seo === undefined ? null : await options.seo(),
   )
@@ -1624,11 +1628,12 @@ async function renderEntryPage(
         })
   const placesWidgets = theme.widgetAreas !== undefined
   const { page: pageWidgets, footer: footerWidgets } = splitWidgetAreas(widgetAreas)
+  const { host: hostWidgets, theme: themeWidgets } = partitionPageAreas(pageWidgets)
   const pageContent: PageContent = {
     title: entryTitle(entry),
     blocks,
     entry: entryMeta,
-    ...(placesWidgets && hasAnyWidget(pageWidgets) ? { widgets: pageWidgets } : {}),
+    ...(placesWidgets && hasAnyWidget(themeWidgets) ? { widgets: themeWidgets } : {}),
   }
   const node = theme.renderPage(
     pageContent,
@@ -1636,10 +1641,6 @@ async function renderEntryPage(
     fetchedEntries as FetchedEntries,
     options.blocks,
   )
-  const bodyHtml = placesWidgets
-    ? serialize(node)
-    : placeWidgetsInMain(serialize(node), pageWidgets)
-
   // The comment thread and form (fiche 15 task 6) — a property of the route,
   // not of the page's own blocks, so it is appended after `<main>` rather
   // than folded into `renderPage`'s tree (see `ThemeRenderOptions.comments`'s
@@ -1671,6 +1672,17 @@ async function renderEntryPage(
         }),
       )
   }
+
+  // A reading page takes the sidebar beside it, its comments inside the same
+  // column as the article; the home page and a page opening on its own hero
+  // keep their full width and take the sidebar as a band.
+  const placement = {
+    aside: pathname !== '/' && !pageHasOwnHeading(blocks),
+    contentTail: commentsHtml,
+  }
+  const placedWidgets = placesWidgets ? hostWidgets : pageWidgets
+  const bodyHtml = placeWidgetsInMain(serialize(node), placedWidgets, placement)
+  if (usesSidebarLayout(placedWidgets, placement)) commentsHtml = ''
 
   // The head is `@cogenta/seo`'s, not this file's: title, description,
   // canonical, hreflang, Open Graph, Twitter Card and JSON-LD, all derived

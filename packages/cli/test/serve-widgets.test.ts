@@ -225,9 +225,11 @@ describe('widget areas on the public site (L30)', () => {
       })
 
       const page = await (await fetch(`${server.base}/blog/bread-at-home`)).text()
-      // Placed inside <main> by the host, since the theme places no area itself.
+      // Placed inside <main> by the host, beside the article: one markup for every theme.
       const main = page.slice(page.indexOf('<main'), page.indexOf('</main>'))
-      expect(main).toContain('data-area="sidebar"')
+      expect(main).toMatch(
+        /<div class="cg-sidebar-layout"><div class="cg-sidebar-layout__content">[\s\S]*<\/div><aside class="cg-widget-area cg-sidebar-layout__aside" data-area="sidebar"/u,
+      )
       expect(main).toContain('data-area="content-after"')
       expect(main).toContain('Get the letter')
       expect(page).toContain('<h2 class="cg-widget__title">Find a story</h2>')
@@ -261,7 +263,7 @@ describe('widget areas on the public site (L30)', () => {
 
       // A term archive: the sidebar is there, the article-only call to action is not.
       const archive = await (await fetch(`${server.base}/topic/cooking`)).text()
-      expect(archive).toContain('data-area="sidebar"')
+      expect(archive).toContain('cg-sidebar-layout__aside" data-area="sidebar"')
       expect(archive).not.toContain('Get the letter')
       expect(archive).toContain('aria-current="page"')
 

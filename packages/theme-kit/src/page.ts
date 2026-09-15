@@ -26,10 +26,12 @@ export interface PageContent {
    */
   readonly entry?: PageEntryMeta
   /**
-   * The widget areas resolved for this page (contract D `theme@1.6`, L30),
-   * by area id: `sidebar`, `content-before`, `content-after`, and any area
-   * the theme declares. Absent from a host that predates 1.6, or a page with
-   * no widget to show. Render with `renderWidgetArea`.
+   * The widget areas resolved for this page that the theme declares itself
+   * (contract D `theme@1.6`, L30), by area id. The standard `sidebar`,
+   * `content-before` and `content-after` areas never arrive here: the host
+   * places them in one markup every theme styles (`cg-sidebar-layout`).
+   * Absent from a host that predates 1.6, or a page with no such widget.
+   * Render with `renderWidgetArea`.
    */
   readonly widgets?: WidgetAreas
 }

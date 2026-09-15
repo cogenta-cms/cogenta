@@ -32,26 +32,95 @@ export function hasAnyWidget(areas: WidgetAreas): boolean {
   return Object.values(areas).some((area) => area.widgets.length > 0)
 }
 
-/** Inserts the page's areas into a serialised `<main>` the host did not draw them into. */
-export function placeWidgetsInMain(html: string, page: WidgetAreas): string {
+/** The page areas the host always places itself, whatever the theme (L30 D2). */
+export const HOST_PLACED_AREAS: readonly string[] = ['content-before', 'content-after', 'sidebar']
+
+/**
+ * A theme that declares `widgetAreas` places the areas it adds on its own;
+ * the standard page areas stay the host's, so their markup is the same in
+ * every theme.
+ */
+export function partitionPageAreas(page: WidgetAreas): {
+  readonly host: WidgetAreas
+  readonly theme: WidgetAreas
+} {
+  const host: Record<string, WidgetAreas[string]> = {}
+  const theme: Record<string, WidgetAreas[string]> = {}
+  for (const [id, area] of Object.entries(page)) {
+    if (HOST_PLACED_AREAS.includes(id)) host[id] = area
+    else theme[id] = area
+  }
+  return { host, theme }
+}
+
+export interface PlaceWidgetsOptions {
+  /**
+   * The page reads as a column of text (an article, an archive, search
+   * results): the sidebar sits beside it on a wide screen. Otherwise (the
+   * home page, a landing page opening on a hero) the sidebar is a band after
+   * the content, so it never squeezes a full-bleed section.
+   */
+  readonly aside: boolean
+  /**
+   * Markup that belongs at the end of the content column when the sidebar
+   * layout is drawn (an entry's comment thread). Ignored otherwise: the
+   * caller keeps it where it was.
+   */
+  readonly contentTail?: string
+}
+
+/** Whether `placeWidgetsInMain` draws the two-column layout for these areas. */
+export function usesSidebarLayout(page: WidgetAreas, options: PlaceWidgetsOptions): boolean {
+  const sidebar = page['sidebar']
+  return options.aside && sidebar !== undefined && sidebar.widgets.length > 0
+}
+
+/**
+ * Inserts the page's areas into a serialised `<main>`, in the one markup every
+ * theme styles:
+ *
+ * ```html
+ * <main …>
+ *   <div class="cg-sidebar-layout">
+ *     <div class="cg-sidebar-layout__content">content-before · page · content-after</div>
+ *     <aside class="cg-widget-area cg-sidebar-layout__aside" data-area="sidebar">…</aside>
+ *   </div>
+ * </main>
+ * ```
+ *
+ * The wrapper exists only on a reading page whose sidebar has a widget to
+ * show; any other page keeps the theme's own `<main>` children untouched,
+ * with `content-before` first, then `content-after`, the sidebar band and any
+ * other area last.
+ */
+export function placeWidgetsInMain(
+  html: string,
+  page: WidgetAreas,
+  options: PlaceWidgetsOptions = { aside: false },
+): string {
   if (!hasAnyWidget(page)) return html
-  const node = (id: string): string => {
-    const rendered = renderWidgetArea(page[id], { className: `cg-widget-area--placed` })
+  const node = (id: string, className = 'cg-widget-area--placed'): string => {
+    const rendered = renderWidgetArea(page[id], { className })
     return rendered === null ? '' : serialize(rendered)
   }
+  const others = Object.keys(page)
+    .filter((id) => !HOST_PLACED_AREAS.includes(id))
+    .map((id) => node(id))
+    .join('')
   const before = node('content-before')
-  const after = [
-    node('content-after'),
-    node('sidebar'),
-    ...Object.keys(page)
-      .filter((id) => !['content-before', 'content-after', 'sidebar'].includes(id))
-      .map(node),
-  ].join('')
   const open = html.search(/<main\b[^>]*>/u)
   const close = html.lastIndexOf('</main>')
-  if (open === -1 || close === -1) return `${before}${html}${after}`
-  const openEnd = html.indexOf('>', open) + 1
-  return `${html.slice(0, openEnd)}${before}${html.slice(openEnd, close)}${after}${html.slice(close)}`
+  const openEnd = open === -1 ? 0 : html.indexOf('>', open) + 1
+  const head = open === -1 || close === -1 ? '' : html.slice(0, openEnd)
+  const inner = open === -1 || close === -1 ? html : html.slice(openEnd, close)
+  const tail = open === -1 || close === -1 ? '' : html.slice(close)
+
+  if (usesSidebarLayout(page, options)) {
+    const content = `${before}${inner}${node('content-after')}${others}${options.contentTail ?? ''}`
+    const aside = node('sidebar', 'cg-sidebar-layout__aside')
+    return `${head}<div class="cg-sidebar-layout"><div class="cg-sidebar-layout__content">${content}</div>${aside}</div>${tail}`
+  }
+  return `${head}${before}${inner}${node('content-after')}${node('sidebar')}${others}${tail}`
 }
 
 export function footerWidgetsHtml(footer: WidgetAreas): string {
@@ -71,6 +140,11 @@ export const WIDGET_FLOOR_CSS = [
   ':where(.cg-footer-widgets--placed){display:grid;gap:2rem;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr));border-block-start:1px solid var(--cogenta-color-border)}',
   ':where(.cg-footer-widgets--placed) > :where(.cg-widget-area){inline-size:auto;margin:0;padding:0}',
   ':where(.cg-widget-area){display:grid;gap:2rem;align-content:start}',
+  ':where(.cg-sidebar-layout){box-sizing:border-box;display:grid;gap:3rem;inline-size:min(100% - 2.5rem, 80rem);margin-inline:auto;padding-block-end:3rem}',
+  '@media (min-width:64rem){:where(.cg-sidebar-layout){grid-template-columns:minmax(0,1fr) 19rem;gap:4rem}}',
+  ':where(.cg-sidebar-layout__content){min-inline-size:0}',
+  ':where(.cg-sidebar-layout__aside){padding-block-start:2rem}',
+  '@media (max-width:63.99rem){:where(.cg-sidebar-layout__aside){border-block-start:1px solid var(--cogenta-color-border)}}',
   ':where(.cg-widget-area--placed[data-area="sidebar"]){grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));border-block-start:1px solid var(--cogenta-color-border)}',
   ':where(.cg-widget){min-inline-size:0}',
   ':where(.cg-widget__title){margin:0 0 .75rem;font-family:var(--cogenta-font-sans);font-size:.8125rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--cogenta-color-fg)}',

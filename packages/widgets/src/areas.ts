@@ -1,10 +1,11 @@
 /**
  * The widget areas every theme receives (L30 D2).
  *
- * A theme places them in its own layout, and may declare more of its own.
- * A theme that declares none still gets them: the host places them where
- * they can never break a layout (bands before and after the content, columns
- * above the footer, the sidebar stacked after the content).
+ * The host places the page areas in one markup every theme styles: on a
+ * reading page the sidebar beside the content, elsewhere bands before and
+ * after it. A theme that declares areas places the footer columns in its own
+ * footer, and any area of its own wherever it wants; a theme that declares
+ * none still gets every standard area, the footer columns above its footer.
  */
 
 export interface WidgetAreaDeclaration {

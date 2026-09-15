@@ -1093,12 +1093,35 @@ interface ResolvedWidgetArea {
   readonly widgets: readonly ResolvedWidget[]
 }
 
-interface PageContent { /* … */ readonly widgets?: WidgetAreas }  // sidebar, content-before, content-after
+interface PageContent { /* … */ readonly widgets?: WidgetAreas }  // les zones propres au thème
 interface ChromeInput { /* … */ readonly widgets?: WidgetAreas }  // footer-1 à footer-4
 
-// Module du thème, optionnel : les zones qu'il place lui-même, et leurs libellés.
+// Module du thème, optionnel : déclarer ses zones, c'est placer le pied de page soi-même.
 export const widgetAreas: readonly { id: string; label: string; description?: string }[]
 ```
+
+**Qui place quoi.** Les trois zones de page standard (`content-before`, `content-after`,
+`sidebar`) sont **toujours placées par l'hôte**, dans un balisage unique que chaque thème
+stylise, pour qu'un widget posé dans l'admin tombe au même endroit quel que soit le thème :
+
+```html
+<main …>
+  <div class="cg-sidebar-layout">
+    <div class="cg-sidebar-layout__content">content-before · page · content-after</div>
+    <aside class="cg-widget-area cg-sidebar-layout__aside" data-area="sidebar">…</aside>
+  </div>
+</main>
+```
+
+L'enveloppe n'existe que sur une page de lecture (article, archive, recherche, formulaire)
+dont la barre latérale a quelque chose à montrer. La page d'accueil et une page qui ouvre sur
+son propre `hero` gardent leur pleine largeur : `content-before` en premier enfant de `<main>`,
+puis `content-after` et la barre latérale en bande (`cg-widget-area--placed`) en derniers.
+Un thème qui exporte `widgetAreas` reçoit `ChromeInput.widgets` et place les colonnes de pied
+de page dans son propre pied ; sinon l'hôte les pose juste au-dessus (`cg-footer-widgets--placed`).
+`PageContent.widgets` ne porte que les zones supplémentaires qu'un thème déclare. L'hôte émet
+après la feuille du thème un plancher de styles à poids nul (`:where()`), qui suffit à un thème
+tiers qui ne sait rien des widgets.
 
 `ResolvedWidget` est une union fermée de modèles de vue **déjà calculés par l'hôte**
 (visibilité décidée, entrées et termes lus, dates formatées, liens résolus, libellés dans la

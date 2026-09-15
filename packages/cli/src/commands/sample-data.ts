@@ -49,10 +49,11 @@ import {
   type BlueprintMenus,
   type MenuItemSpec,
   seedBlueprintMenus,
+  seedBlueprintWidgets,
   seedDemoMedia,
   seedSiteSettings,
 } from '@cogenta/starters'
-import { createWidgetStore, ensureWidgetTables } from '@cogenta/widgets'
+import { createWidgetStore, ensureWidgetTables, WIDGETS_TABLE } from '@cogenta/widgets'
 import { createSiteBackup } from './backup.js'
 import { findSchemaFile, loadSchemaModule } from './serve.js'
 
@@ -472,6 +473,27 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
       }
     }
 
+    // Widgets (L30): an area the site already fills is the site's own layout
+    // and is kept as it is; an empty one takes the demo's widgets.
+    await ensureWidgetTables(db)
+    const siteWidgets = await createWidgetStore({ db }).list()
+    const widgets: SampleDataPreview['widgets'][number][] = []
+    for (const widget of pack.widgets ?? []) {
+      const known = widgets.find((item) => item.area === widget.area)
+      if (known !== undefined) {
+        widgets[widgets.indexOf(known)] = { ...known, count: known.count + 1 }
+        continue
+      }
+      const outcome =
+        mode === 'reset'
+          ? ('replace' as const)
+          : siteWidgets.some((item) => item.area === widget.area)
+            ? ('keep' as const)
+            : ('fill' as const)
+      widgets.push({ area: widget.area, outcome, count: 1 })
+      if (outcome === 'keep') warnings.push({ code: 'widgets-kept', params: { area: widget.area } })
+    }
+
     await ensureSiteSettingsTables(db)
     const settingsStore = createSiteSettingsStore({ db })
     const settings: SampleDataPreview['settings'][number][] = []
@@ -518,6 +540,7 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
         media: await countRows(db, MEDIA_TABLE),
         menus: await countRows(db, MENU_TABLES.menus),
         redirects: await countRows(db, REDIRECTS_TABLE),
+        widgets: await countRows(db, WIDGETS_TABLE),
         collections: site.collections.map((collection) => collection.name),
       }
       warnings.unshift(
@@ -529,6 +552,7 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
             media: removals.media,
             menus: removals.menus,
             redirects: removals.redirects,
+            widgets: removals.widgets,
           },
         },
         { code: 'reset-backup', params: {} },
@@ -569,6 +593,7 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
         collections,
         taxonomies,
         menus,
+        widgets,
         settings,
         media: pack.mediaSpecs?.length ?? 0,
         removals,
@@ -814,6 +839,17 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
             })
           }
         }
+      }
+
+      if (pack.widgets !== undefined) {
+        const placed = new Set(
+          preview.widgets.filter((item) => item.outcome !== 'keep').map((item) => item.area),
+        )
+        await seedBlueprintWidgets(
+          db,
+          pack.widgets.filter((widget) => placed.has(widget.area)),
+          media,
+        )
       }
 
       const settings = Object.fromEntries(

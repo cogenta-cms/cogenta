@@ -8,6 +8,7 @@ import {
 } from '@cogenta/schema'
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus } from './menus.js'
+import type { BlueprintWidget } from './widgets.js'
 
 /**
  * One paragraph, as the structured rich-text document contract A stores (never
@@ -89,6 +90,8 @@ export interface BlueprintContentPack {
   readonly defaultTheme?: string
   /** Header/footer/header-action navigation, seeded through the real `MenuStore`. Absent: no menus seeded. */
   readonly menus?: BlueprintMenus
+  /** Widgets placed in the theme's areas (L30), seeded through the real `WidgetStore` after demo media. Absent: none seeded. */
+  readonly widgets?: readonly BlueprintWidget[]
   /** Site settings this blueprint seeds (`general.tagline`, `general.socialLinks`, …), keyed by their registry key. Absent: none seeded. */
   readonly siteSettings?: Readonly<Record<string, unknown>>
   /**

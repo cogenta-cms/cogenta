@@ -23,6 +23,7 @@ import {
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
+import type { BlueprintWidget } from './widgets.js'
 
 /**
  * The `magazine` blueprint: an independent news and culture magazine for a
@@ -1638,6 +1639,70 @@ export const MAGAZINE_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
     'Published by the Harbor Press Cooperative, 212 Harbor Road, Port Calder. Letters to the editor and corrections go to the standards desk at the same address.',
 }
 
+/**
+ * The rail a reader of a daily expects beside a story, an archive and search
+ * results: the search box, the latest stories, the sections with their
+ * counts, and the subscription pitch. Never on the front page, which already
+ * lists everything, nor on the About and Standards pages. Under the story,
+ * the related stories carry the reader on.
+ */
+const MAGAZINE_READING_PAGES = {
+  pages: {
+    mode: 'only',
+    targets: [
+      { kind: 'collection', collection: 'article' },
+      { kind: 'taxonomy', taxonomy: 'section' },
+      { kind: 'taxonomy', taxonomy: 'author' },
+      { kind: 'dateArchive' },
+      { kind: 'search' },
+    ],
+  },
+} as const
+
+export const MAGAZINE_WIDGETS: readonly BlueprintWidget[] = [
+  {
+    area: 'sidebar',
+    type: 'search',
+    title: 'Search the archive',
+    settings: { placeholder: 'Stories, people, places' },
+    visibility: MAGAZINE_READING_PAGES,
+  },
+  {
+    area: 'sidebar',
+    type: 'recentEntries',
+    title: 'Latest',
+    settings: { collection: 'article', count: 5, showDate: true },
+    visibility: MAGAZINE_READING_PAGES,
+  },
+  {
+    area: 'sidebar',
+    type: 'terms',
+    title: 'Sections',
+    settings: { taxonomy: 'section', showCounts: true, hierarchical: false, hideEmpty: true },
+    visibility: MAGAZINE_READING_PAGES,
+  },
+  {
+    area: 'sidebar',
+    type: 'cta',
+    settings: {
+      heading: 'Local reporting, paid for by readers',
+      body: 'No paywall and no billionaire owner. Members keep the newsroom open for everyone.',
+      label: 'Become a member',
+      href: '/subscribe',
+    },
+    visibility: MAGAZINE_READING_PAGES,
+  },
+  {
+    area: 'content-after',
+    type: 'relatedEntries',
+    title: 'More stories',
+    settings: { count: 3, showDate: true, showImage: false },
+    visibility: {
+      pages: { mode: 'only', targets: [{ kind: 'collection', collection: 'article' }] },
+    },
+  },
+]
+
 export const MAGAZINE_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
   {
     name: 'contentAgent',
@@ -1728,6 +1793,7 @@ export const magazineContentPack: BlueprintContentPack = {
   seedDemoContent: seedMagazineDemoContent,
   defaultTheme: '@cogenta/theme-magazine',
   menus: MAGAZINE_MENUS,
+  widgets: MAGAZINE_WIDGETS,
   siteSettings: MAGAZINE_SITE_SETTINGS,
   mediaSpecs: MAGAZINE_MEDIA_SPECS,
 }

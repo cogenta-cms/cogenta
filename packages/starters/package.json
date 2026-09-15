@@ -41,7 +41,8 @@
     "@cogenta/blocks": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/render": "workspace:*",
-    "@cogenta/schema": "workspace:*"
+    "@cogenta/schema": "workspace:*",
+    "@cogenta/widgets": "workspace:*"
   },
   "devDependencies": {
     "@cogenta/theme-canonical": "workspace:*",

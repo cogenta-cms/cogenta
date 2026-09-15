@@ -32,6 +32,7 @@ import {
   BLUEPRINT_CONTENT_PACKS,
   STARTING_SKINS,
   seedBlueprintMenus,
+  seedBlueprintWidgets,
   seedDemoMedia,
   seedSiteSettings,
 } from '@cogenta/starters'
@@ -115,6 +116,8 @@ export interface ScaffoldResult {
   readonly mediaSeeded: number
   /** How many navigation items (header + footer + header-action) were seeded. `0` when the blueprint declares no `menus`. */
   readonly menusSeeded: number
+  /** Widgets the blueprint placed in its theme's areas (L30). */
+  readonly widgetsSeeded: number
   /** How many site settings (`general.tagline`, …) were written. `0` when the blueprint declares none, or every key it named was unknown to the registry. */
   readonly siteSettingsSeeded: number
 }
@@ -439,6 +442,7 @@ export async function scaffoldSite(
   let activeTheme: string | undefined
   let mediaSeeded = 0
   let menusSeeded = 0
+  let widgetsSeeded = 0
   let siteSettingsSeeded = 0
   const needsDatabaseWork = merged.all.length > 0
   if (needsDatabaseWork && migrateExitCode === 0 && usersExitCode === 0) {
@@ -539,6 +543,12 @@ export async function scaffoldSite(
         })
       }
 
+      // (e) widgets, after demo media so a picture widget can name one; site
+      // setup like menus, so seeded with or without demo content.
+      if (pack?.widgets !== undefined) {
+        widgetsSeeded = await seedBlueprintWidgets(selection.instance, pack.widgets, media)
+      }
+
       approvedEntriesSeeded = await seedApprovedEntries({
         db: selection.instance,
         collections: merged.added,
@@ -588,6 +598,7 @@ export async function scaffoldSite(
     ...(activeTheme === undefined ? {} : { activeTheme }),
     mediaSeeded,
     menusSeeded,
+    widgetsSeeded,
     siteSettingsSeeded,
   }
 }

@@ -968,7 +968,6 @@ img {
    a reading width. The host renders it in a bare `<main class="cg-main">`. */
 .cg-main > .cg-page__title,
 .cg-search__form,
-.cg-search__count,
 .cg-search__results,
 .cg-search__empty,
 .cg-search__error {
@@ -1035,9 +1034,11 @@ img {
   flex: 1 1 18rem;
 }
 
+/* The host sets the count inside the title. */
 .cg-search__count {
-  margin-block: 0;
-  padding-block-end: var(--cg-s3);
+  display: block;
+  margin-block: var(--cg-s4) 0;
+  line-height: 1.2;
   color: var(--cg-ink-muted);
   font-family: var(--cg-font-ui);
   font-size: var(--cg-text-label);

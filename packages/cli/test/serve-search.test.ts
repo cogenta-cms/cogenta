@@ -284,7 +284,10 @@ describe('cogenta serve — GET /api/search (L10 task 3)', () => {
       // so a reader can tell results apart without opening each one.
       expect(html).toContain('The west rose is back in its frame after eleven years.')
       expect(html).toMatch(/<p class="cg-search__meta"><time datetime="[^"]+">/u)
-      expect(html).toContain('1 result</p>')
+      expect(html).toContain('<span class="cg-search__count">1 result</span></h1>')
+      // A floor that weighs nothing, for the themes that do not style these.
+      expect(html).toContain('<main class="cg-main cg-search-page" id="cg-main">')
+      expect(html).toContain(':where(.cg-search__excerpt)')
       // A search results page is exactly what a crawler must not index.
       expect(html).toContain('<meta name="robots" content="noindex, follow" />')
       expect(html).toContain('class="cg-site-header"')

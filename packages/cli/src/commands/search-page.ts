@@ -132,6 +132,22 @@ async function resolveHits(
   return resolved
 }
 
+/**
+ * A floor under the results page, not a design, emitted after the theme's
+ * stylesheet so it outranks a theme's own zero-weight resets. Every rule is wrapped in
+ * `:where()`, so it weighs nothing: any theme that styles these elements wins
+ * outright, and a theme that does not (most of them, for the summary and
+ * date added in L29) still gets a readable page on its content width instead
+ * of a title glued to the window's edge and a date set like body text. Only
+ * skin tokens are used, so it follows a personalisation.
+ */
+const SEARCH_PAGE_FLOOR_CSS = `:where(.cg-search-page) > :where(*){box-sizing:border-box;inline-size:min(100% - 2.5rem, 48rem);margin-inline:auto}
+:where(.cg-search-page) > :where(.cg-page__title){margin-block:2.5rem 1.5rem}
+:where(.cg-search__count){display:block;margin-block-start:.5rem;color:var(--cogenta-color-muted-fg);font-family:var(--cogenta-font-sans);font-size:.875rem;font-weight:400;letter-spacing:0;line-height:1.4}
+:where(.cg-search__hit){padding-block:1rem}
+:where(.cg-search__excerpt){margin:.375rem 0 0;color:var(--cogenta-color-muted-fg);font-size:.9375rem;line-height:1.5}
+:where(.cg-search__meta){margin:.375rem 0 0;color:var(--cogenta-color-muted-fg);font-family:var(--cogenta-font-sans);font-size:.8125rem}`
+
 /** The form on its own, so an empty query still gets a usable page. */
 function searchForm(query: string): string {
   return `<form class="cg-search__form" action="/search" method="get" role="search">
@@ -144,8 +160,7 @@ function searchForm(query: string): string {
 function resultList(results: readonly ResolvedHit[], locale: string): string {
   if (results.length === 0) return `<p class="cg-search__empty">Nothing matched that search.</p>`
   const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: 'long' })
-  return `<p class="cg-search__count">${results.length} ${results.length === 1 ? 'result' : 'results'}</p>
-<ol class="cg-search__results">
+  return `<ol class="cg-search__results">
 ${results
   .map((result) => {
     const title =
@@ -200,6 +215,12 @@ export async function renderSearchPage(
   const heading =
     trimmed.length === 0 ? 'Search' : `Search results for “${escapeHtmlText(trimmed)}”`
 
+  // The count rides in the title, so it sits wherever a theme puts the title.
+  const count =
+    trimmed.length === 0 || failure !== null
+      ? ''
+      : ` <span class="cg-search__count">${results.length} ${results.length === 1 ? 'result' : 'results'}</span>`
+
   const main =
     failure !== null
       ? `<p class="cg-search__error" role="alert">${escapeHtmlText(failure)}</p>`
@@ -220,11 +241,12 @@ export async function renderSearchPage(
       styles: options.styles,
       headHtml: `<title>${heading} — ${escapeHtmlText(options.site.name)}</title>
 <meta name="robots" content="noindex, follow" />`,
-      bodyHtml: `<main class="cg-main" id="cg-main">
-<h1 class="cg-page__title">${heading}</h1>
+      bodyHtml: `<main class="cg-main cg-search-page" id="cg-main">
+<h1 class="cg-page__title">${heading}${count}</h1>
 ${searchForm(trimmed)}
 ${main}
-</main>`,
+</main>
+<style>${SEARCH_PAGE_FLOOR_CSS}</style>`,
       ...(options.menus === undefined ? {} : { menus: options.menus }),
       ...(options.branding === undefined ? {} : { branding: options.branding }),
       ...(options.activeTheme === undefined ? {} : { activeTheme: options.activeTheme }),

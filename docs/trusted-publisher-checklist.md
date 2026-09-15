@@ -52,6 +52,7 @@ c'est à confirmer page par page.
 ## Jamais publiés : le lien (et, si npm l'exige, une première publication à la main) reste à faire (1)
 
 - [ ] @cogenta/starters (L28, packs de contenu sortis de `create-cogenta`)
+- [ ] @cogenta/widgets (L30, zones de widgets)
 
 ## Déjà configurés d'après les notes du projet (2)
 

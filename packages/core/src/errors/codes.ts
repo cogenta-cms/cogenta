@@ -528,6 +528,11 @@ export const ERROR_CODES = [
   'THEME_SAMPLE_DATA_UNAVAILABLE',
   'THEME_SAMPLE_DATA_CONFIRMATION_INVALID',
 
+  // L30 — widget areas: a widget whose type or settings the vocabulary
+  // refuses, and a widget id that does not exist.
+  'WIDGET_INVALID',
+  'WIDGET_NOT_FOUND',
+
   // Comments — contract F, visitor comments (fiche 15, ADR-0025)
   'COMMENT_NOT_FOUND',
   'COMMENT_BODY_INVALID',

@@ -426,6 +426,9 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // typed site name does not match is a well-formed request refused on its content.
   THEME_SAMPLE_DATA_UNAVAILABLE: 404,
   THEME_SAMPLE_DATA_CONFIRMATION_INVALID: 422,
+  // L30: a widget the vocabulary refuses is a well-formed request refused on its content.
+  WIDGET_INVALID: 422,
+  WIDGET_NOT_FOUND: 404,
 
   // Import (fiche 25): preview/apply/undo, CSV, RSS/Atom.
   IMPORT_RUN_NOT_FOUND: 404,

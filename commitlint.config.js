@@ -31,6 +31,7 @@ export default {
         'mcp',
         'create',
         'starters',
+        'widgets',
         'import',
         'channels',
         'plugins',

@@ -5,6 +5,7 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderFooterWidgets,
   renderSocialLinks,
   renderThemeToggle,
   serialize,
@@ -147,6 +148,12 @@ export function renderChrome(input: ChromeInput): ChromeResult {
           )
           .join('')}</nav>`
   const year = new Date().getFullYear()
+  // The footer widget columns (`theme@1.6`) are a row of their own under the
+  // company and the pages, on the same twelve columns, above the legal line.
+  const footerWidgets = renderFooterWidgets(input.widgets, {
+    className: 'cs-footer__widgets',
+    headingLevel: 'h2',
+  })
 
   const footer =
     `<footer class="cs-footer"><div class="cs-footer__inner">` +
@@ -156,6 +163,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `${social === null ? '' : serialize(social)}` +
     `</div>` +
     `${nav}` +
+    `${footerWidgets === null ? '' : serialize(footerWidgets)}` +
     `<div class="cs-footer__legal">` +
     `<p class="cs-footer__copyright">© ${year} ${siteName}</p>` +
     `${input.brandingHtml === '' ? '' : `<div class="cs-footer__branding">${input.brandingHtml}</div>`}` +

@@ -357,7 +357,8 @@ img {
   list-style: none;
 }
 
-.cg-action {
+.cg-action,
+.cg-widget__cta-action {
   font-family: var(--cs-font-sans);
   font-size: var(--cs-text-ui);
   font-weight: var(--cs-weight-medium);
@@ -371,7 +372,9 @@ img {
     text-decoration-color var(--cs-duration) var(--cs-ease);
 }
 
-.cg-action[data-emphasis="primary"] {
+/* A widget's call to action (`widgets.css`) is this same primary button. */
+.cg-action[data-emphasis="primary"],
+.cg-widget__cta-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -383,7 +386,8 @@ img {
   white-space: nowrap;
 }
 
-.cg-action[data-emphasis="primary"]:hover {
+.cg-action[data-emphasis="primary"]:hover,
+.cg-widget__cta-action:hover {
   border-color: var(--cs-accent-hover);
   background: var(--cs-accent-hover);
   color: var(--cs-accent-fg);
@@ -439,7 +443,7 @@ img {
    same register. The host sets them in a bare `<main class="cg-main">`.
    -------------------------------------------------------------------------- */
 
-.cg-main > .cg-page__title,
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-page__title,
 .cg-search__form,
 .cg-search__results,
 .cg-search__empty,
@@ -452,7 +456,7 @@ img {
   padding-inline: var(--cs-gutter);
 }
 
-.cg-main > .cg-page__title {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-page__title {
   padding-block: calc(var(--cs-section) * 0.55) var(--cs-s8);
   font-size: var(--cs-size-title);
   line-height: var(--cs-leading-display);
@@ -525,7 +529,9 @@ img {
 .cg-form__field select,
 .cg-form__field textarea,
 .cg-comment__form input,
-.cg-comment__form textarea {
+.cg-comment__form textarea,
+.cg-widget__search-input,
+.cg-widget__jump select {
   inline-size: 100%;
   min-block-size: 44px;
   padding: var(--cs-s2) var(--cs-s3);
@@ -546,7 +552,9 @@ img {
 
 .cg-search__form input:focus-visible,
 .cg-form__field :is(input, select, textarea):focus-visible,
-.cg-comment__form :is(input, textarea):focus-visible {
+.cg-comment__form :is(input, textarea):focus-visible,
+.cg-widget__search-input:focus-visible,
+.cg-widget__jump select:focus-visible {
   border-color: var(--cs-accent);
   outline: var(--cs-rule) solid var(--cs-accent);
   outline-offset: 0;

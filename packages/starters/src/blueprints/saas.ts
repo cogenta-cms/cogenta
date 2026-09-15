@@ -22,6 +22,7 @@ import {
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus, MenuItemSpec } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
+import type { BlueprintWidget } from './widgets.js'
 
 /**
  * The `saas` blueprint: the marketing site of a B2B software product for
@@ -1335,6 +1336,82 @@ export function buildSaasDemoPages(
   ]
 }
 
+/**
+ * The side column a software company's site has beside the pages people read
+ * rather than land on: a changelog entry, a month of the changelog, a feature
+ * page (which opens on its screenshot, not on a hero) and search results.
+ * Never on the home page, the pricing page or the other landing pages, which
+ * open on a hero and carry their own calls to action.
+ *
+ * Nothing repeats what the page already shows: a changelog entry lists the
+ * next updates under its text, so its column offers the months of the
+ * changelog instead of the latest releases; a feature page lists the other
+ * features under its text, so its column says what shipped recently; search
+ * results already open on a search form, so the search box stays off them.
+ */
+type SaasPageTarget =
+  | { readonly kind: 'collection'; readonly collection: 'changelog' | 'feature' }
+  | { readonly kind: 'dateArchive' }
+  | { readonly kind: 'search' }
+
+const CHANGELOG_ENTRY: SaasPageTarget = { kind: 'collection', collection: 'changelog' }
+const CHANGELOG_MONTH: SaasPageTarget = { kind: 'dateArchive' }
+const FEATURE_PAGE: SaasPageTarget = { kind: 'collection', collection: 'feature' }
+const SEARCH_RESULTS: SaasPageTarget = { kind: 'search' }
+
+function onlyOn(...targets: readonly SaasPageTarget[]): Readonly<Record<string, unknown>> {
+  return { pages: { mode: 'only', targets } }
+}
+
+export const SAAS_WIDGETS: readonly BlueprintWidget[] = [
+  {
+    area: 'sidebar',
+    type: 'search',
+    settings: { placeholder: 'Features, releases' },
+    visibility: onlyOn(CHANGELOG_ENTRY, CHANGELOG_MONTH, FEATURE_PAGE),
+  },
+  {
+    area: 'sidebar',
+    type: 'archives',
+    title: 'Changelog by month',
+    settings: { collection: 'changelog', granularity: 'month', showCounts: true, limit: 12 },
+    visibility: onlyOn(CHANGELOG_ENTRY, CHANGELOG_MONTH, SEARCH_RESULTS),
+  },
+  {
+    area: 'sidebar',
+    type: 'recentEntries',
+    title: 'Recently shipped',
+    settings: { collection: 'changelog', count: 3, showDate: true },
+    visibility: onlyOn(FEATURE_PAGE, SEARCH_RESULTS),
+  },
+  {
+    area: 'sidebar',
+    type: 'links',
+    title: 'Resources',
+    settings: {
+      items: [
+        { label: 'Product overview', href: '/product' },
+        { label: 'API and webhooks', href: '/features/api-and-webhooks' },
+        { label: 'ERP sync', href: '/features/erp-sync' },
+        { label: 'Security and compliance', href: '/security' },
+        { label: 'Pricing', href: '/pricing' },
+      ],
+    },
+    visibility: onlyOn(CHANGELOG_ENTRY, CHANGELOG_MONTH, FEATURE_PAGE, SEARCH_RESULTS),
+  },
+  {
+    area: 'sidebar',
+    type: 'cta',
+    settings: {
+      heading: 'See it on your own approval policy',
+      body: 'A 30-minute call with a solutions engineer, then a trial workspace set up with your policy.',
+      label: 'Book a demo',
+      href: '/demo',
+    },
+    visibility: onlyOn(CHANGELOG_ENTRY, CHANGELOG_MONTH, FEATURE_PAGE, SEARCH_RESULTS),
+  },
+]
+
 export const SAAS_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
   {
     name: 'performanceAgent',
@@ -1589,6 +1666,7 @@ export const saasContentPack: BlueprintContentPack = {
   seedDemoContent: seedSaasDemoContent,
   defaultTheme: '@cogenta/theme-saas',
   menus: SAAS_MENUS,
+  widgets: SAAS_WIDGETS,
   siteSettings: SAAS_SITE_SETTINGS,
   mediaSpecs: SAAS_MEDIA_SPECS,
 }

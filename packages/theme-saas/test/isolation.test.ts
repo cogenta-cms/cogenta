@@ -97,6 +97,7 @@ describe('theme isolation', () => {
       'styles/pricing.css',
       'styles/theme.css',
       'styles/tokens.css',
+      'styles/widgets.css',
     ])
   })
 

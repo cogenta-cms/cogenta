@@ -4,6 +4,7 @@ import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
 import { matchPath } from '@cogenta/schema'
 import { ICON_NAMES } from '@cogenta/theme-canonical'
+import { validateWidgetSettings, validateWidgetVisibility } from '@cogenta/widgets'
 import { describe, expect, it } from 'vitest'
 import { bundledImageType, loadPhotoAsset } from '../src/blueprints/photo-assets.js'
 import {
@@ -20,6 +21,7 @@ import {
   SAAS_MENUS,
   SAAS_PHONE,
   SAAS_SITE_SETTINGS,
+  SAAS_WIDGETS,
   saasContentPack,
   saasEmail,
   saasFeatureBlocks,
@@ -433,6 +435,36 @@ describe('saas blueprint, pages, actions and navigation', () => {
       if (/^(mailto|tel|https):/.test(href)) continue
       expect(ROUTES.has(href), href).toBe(true)
     }
+  })
+
+  it('places a side column only beside what is read, with real links and nothing the page already lists', () => {
+    expect(saasContentPack.widgets).toBe(SAAS_WIDGETS)
+    const collections = new Set(SAAS_COLLECTIONS.map((collection) => collection.name))
+    for (const widget of SAAS_WIDGETS) {
+      expect(widget.area).toBe('sidebar')
+      const settings = validateWidgetSettings(widget.type, widget.settings)
+      const visibility = validateWidgetVisibility(widget.visibility)
+      expect(visibility.pages.mode, widget.type).toBe('only')
+      for (const target of visibility.pages.targets) {
+        expect(['collection', 'dateArchive', 'search'], widget.type).toContain(target.kind)
+        if (target.kind === 'collection') expect(collections.has(target.collection)).toBe(true)
+      }
+      if (typeof settings.collection === 'string') {
+        expect(collections.has(settings.collection)).toBe(true)
+      }
+      const hrefs = JSON.stringify(settings).match(/"href":"[^"]+"/g) ?? []
+      for (const match of hrefs) expect(ROUTES.has(match.slice(8, -1)), match).toBe(true)
+    }
+    const shownOn = (type: string) =>
+      SAAS_WIDGETS.filter((widget) => widget.type === type).flatMap((widget) =>
+        validateWidgetVisibility(widget.visibility).pages.targets.map((target) =>
+          target.kind === 'collection' ? target.collection : target.kind,
+        ),
+      )
+    // A changelog entry already lists the next updates, search results already open on a form.
+    expect(shownOn('recentEntries')).not.toContain('changelog')
+    expect(shownOn('search')).not.toContain('search')
+    expect(shownOn('cta')).toEqual(['changelog', 'dateArchive', 'feature', 'search'])
   })
 
   it('groups the footer in four headed columns of real links', () => {

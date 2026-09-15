@@ -10,6 +10,8 @@
  *   blocks.css   the vocabulary blocks
  *   pricing.css  the plan comparison
  *   archive.css  the taxonomy-term archive and dated indexes
+ *   widgets.css  the widget areas: the side column, the bands, the footer
+ *                columns
  *
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--cs-*` property composed from those.
@@ -30,3 +32,4 @@
 @import "./blocks.css";
 @import "./pricing.css";
 @import "./archive.css";
+@import "./widgets.css";

@@ -23,6 +23,7 @@ import {
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
+import type { BlueprintWidget } from './widgets.js'
 
 /**
  * The `blog` blueprint: a personal publication of essays and letters about
@@ -1329,6 +1330,84 @@ export const BLOG_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
     'Written in Leeds and on the train to York. Quote freely, with a link back to the original.',
 }
 
+/**
+ * The sidebar a reader of a personal blog expects beside an essay, a subject
+ * or tag archive and search results: who writes it, a way to search, the
+ * latest pieces, the four subjects with their counts, the tags, and the years.
+ * Never on the home page, which already opens on a featured essay and the
+ * index, nor on About, Archive and the letter page, which say the same things
+ * at length. Under an essay, the related pieces carry the reader on.
+ */
+const BLOG_READING_PAGES = {
+  pages: {
+    mode: 'only',
+    targets: [
+      { kind: 'collection', collection: 'post' },
+      { kind: 'taxonomy', taxonomy: 'category' },
+      { kind: 'taxonomy', taxonomy: 'tag' },
+      { kind: 'dateArchive' },
+      { kind: 'search' },
+    ],
+  },
+} as const
+
+export const BLOG_WIDGETS: readonly BlueprintWidget[] = [
+  {
+    area: 'sidebar',
+    type: 'about',
+    title: 'About',
+    settings: {
+      body: 'Essays and letters by a copy editor who lives in Leeds and writes most mornings, often on the train to York. One essay a month, a letter every other Sunday.',
+      link: { label: 'More about me', href: '/about' },
+    },
+    visibility: BLOG_READING_PAGES,
+  },
+  {
+    area: 'sidebar',
+    type: 'search',
+    title: 'Search',
+    settings: { placeholder: 'Essays and letters' },
+    visibility: BLOG_READING_PAGES,
+  },
+  {
+    area: 'sidebar',
+    type: 'recentEntries',
+    title: 'Recently',
+    settings: { collection: 'post', count: 4, showDate: true },
+    visibility: BLOG_READING_PAGES,
+  },
+  {
+    area: 'sidebar',
+    type: 'terms',
+    title: 'Subjects',
+    settings: { taxonomy: 'category', showCounts: true, hierarchical: false, hideEmpty: true },
+    visibility: BLOG_READING_PAGES,
+  },
+  {
+    area: 'sidebar',
+    type: 'tagCloud',
+    title: 'Tags',
+    settings: { taxonomy: 'tag', maxTerms: 20, showCounts: false },
+    visibility: BLOG_READING_PAGES,
+  },
+  {
+    area: 'sidebar',
+    type: 'archives',
+    title: 'By year',
+    settings: { collection: 'post', granularity: 'year', showCounts: true },
+    visibility: BLOG_READING_PAGES,
+  },
+  {
+    area: 'content-after',
+    type: 'relatedEntries',
+    title: 'Further reading',
+    settings: { count: 3, showDate: true, showImage: false },
+    visibility: {
+      pages: { mode: 'only', targets: [{ kind: 'collection', collection: 'post' }] },
+    },
+  },
+]
+
 export const BLOG_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
   {
     name: 'seoAgent',
@@ -1416,6 +1495,7 @@ export const blogContentPack: BlueprintContentPack = {
   seedDemoContent: seedBlogDemoContent,
   defaultTheme: '@cogenta/theme-blog',
   menus: BLOG_MENUS,
+  widgets: BLOG_WIDGETS,
   siteSettings: BLOG_SITE_SETTINGS,
   mediaSpecs: BLOG_MEDIA_SPECS,
 }

@@ -89,6 +89,7 @@ describe('theme isolation', () => {
       'styles/blocks.css',
       'styles/theme.css',
       'styles/tokens.css',
+      'styles/widgets.css',
     ])
   })
 

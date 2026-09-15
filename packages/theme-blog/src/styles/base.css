@@ -185,7 +185,7 @@ img {
   padding-block: calc(var(--cg-section) / 2);
 }
 
-.cg-main > .cg-section:first-child {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-section:first-child {
   padding-block-start: calc(var(--cg-section) * 0.45);
 }
 

@@ -5,6 +5,7 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderFooterWidgets,
   renderSocialLinks,
   renderThemeToggle,
   serialize,
@@ -29,7 +30,8 @@ import {
  * navigation, the social profiles with real icons (`renderSocialLinks`),
  * then a legal line under a hairline: the copyright year and the site's
  * name, beside Cogenta's credit (`brandingHtml`, placed exactly once, as
- * received). Every `theme@1.4` field renders only when present, so a host
+ * received). Footer widget columns (`theme@1.6`), when the site placed any,
+ * sit between the two. Every `theme@1.4` field renders only when present, so a host
  * that predates them gets the name and the navigation, nothing broken.
  */
 
@@ -114,6 +116,12 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   // The copyright year is the year the page is rendered, which is what a
   // legal line on a live site means.
   const year = new Date().getFullYear()
+  // The footer widget columns (`theme@1.6`) sit under the colophon's name and
+  // navigation, above the legal line, on the same hairline rhythm.
+  const footerWidgets = renderFooterWidgets(input.widgets, {
+    className: 'cg-site-footer__widgets',
+    headingLevel: 'h2',
+  })
 
   const footer =
     `<footer class="cg-site-footer"><div class="cg-site-footer__inner">` +
@@ -129,6 +137,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     }` +
     `${social === null ? '' : `<div class="cg-site-footer__social-col">${serialize(social)}</div>`}` +
     `</div>` +
+    `${footerWidgets === null ? '' : serialize(footerWidgets)}` +
     `<div class="cg-site-footer__bottom">` +
     `<p class="cg-site-footer__legal">© ${year} ${siteNameText}</p>` +
     `<div class="cg-site-footer__branding">${input.brandingHtml}</div>` +

@@ -24,6 +24,7 @@ import {
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
+import type { BlueprintWidget } from './widgets.js'
 
 /**
  * The `vitrine` blueprint: the website of a management consultancy (L9 task
@@ -1037,6 +1038,88 @@ export const VITRINE_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
 }
 
 /**
+ * The side column a consultancy's reader expects beside the work: on a case
+ * study, the sectors with their counts, the other published engagements and
+ * the one call to discuss a mandate; on a practice, the other practices and
+ * the partners' switchboard, with selected work under the text; on a sector
+ * archive and on search results, the sectors and the same call, plus a
+ * search box on the archive (a results page already opens on its own). Never
+ * on the home page or on the Practices, Case studies, About and Contact
+ * pages, which already carry their own lists and calls to action.
+ */
+const VITRINE_CASE_STUDY = { kind: 'collection', collection: 'case_study' } as const
+const VITRINE_SERVICE = { kind: 'collection', collection: 'service' } as const
+const VITRINE_SECTOR = { kind: 'taxonomy', taxonomy: 'sector' } as const
+const VITRINE_SEARCH = { kind: 'search' } as const
+
+function onlyOn(
+  ...targets: readonly { readonly kind: string }[]
+): Readonly<Record<string, unknown>> {
+  return { pages: { mode: 'only', targets } }
+}
+
+export const VITRINE_WIDGETS: readonly BlueprintWidget[] = [
+  {
+    area: 'sidebar',
+    type: 'search',
+    title: 'Search the site',
+    settings: { placeholder: 'A client or a sector' },
+    visibility: onlyOn(VITRINE_SECTOR),
+  },
+  {
+    area: 'sidebar',
+    type: 'terms',
+    title: 'Sectors',
+    settings: { taxonomy: 'sector', showCounts: true, hierarchical: false, hideEmpty: true },
+    visibility: onlyOn(VITRINE_CASE_STUDY, VITRINE_SECTOR, VITRINE_SEARCH),
+  },
+  {
+    area: 'sidebar',
+    type: 'recentEntries',
+    title: 'More case studies',
+    settings: { collection: 'case_study', count: 3, showDate: false },
+    visibility: onlyOn(VITRINE_CASE_STUDY),
+  },
+  {
+    area: 'sidebar',
+    type: 'recentEntries',
+    title: 'Other practices',
+    settings: { collection: 'service', count: 6, showDate: false },
+    visibility: onlyOn(VITRINE_SERVICE),
+  },
+  {
+    area: 'sidebar',
+    type: 'contact',
+    title: 'Speak to a partner',
+    settings: {
+      address: '12 Hanover Square, London W1S 1JB',
+      phone: '+44 20 7946 0321',
+      email: 'hello@example.com',
+      hours: [{ label: 'Monday to Friday', value: '8:30 to 18:30' }],
+    },
+    visibility: onlyOn(VITRINE_SERVICE),
+  },
+  {
+    area: 'sidebar',
+    type: 'cta',
+    settings: {
+      heading: 'Facing a similar decision?',
+      body: 'Describe it in a few lines. A partner will reply within two working days, at no charge.',
+      label: 'Discuss a mandate',
+      href: '/contact',
+    },
+    visibility: onlyOn(VITRINE_CASE_STUDY, VITRINE_SECTOR, VITRINE_SEARCH),
+  },
+  {
+    area: 'content-after',
+    type: 'recentEntries',
+    title: 'Selected work',
+    settings: { collection: 'case_study', count: 3, showDate: false, showImage: true },
+    visibility: onlyOn(VITRINE_SERVICE),
+  },
+]
+
+/**
  * Inserts the demo content through the real `ContentStore` and taxonomy store
  * (never mocked, house rule). Sectors first, then practices and case studies,
  * whose ids the home page's links and lists need; everything is published,
@@ -1124,6 +1207,7 @@ export const vitrineContentPack: BlueprintContentPack = {
   seedDemoContent: seedVitrineDemoContent,
   defaultTheme: '@cogenta/theme-entreprise',
   menus: VITRINE_MENUS,
+  widgets: VITRINE_WIDGETS,
   siteSettings: VITRINE_SITE_SETTINGS,
   mediaSpecs: VITRINE_MEDIA_SPECS,
 }

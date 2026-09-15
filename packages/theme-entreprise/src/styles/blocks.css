@@ -1006,7 +1006,7 @@ details[open] > summary .cg-toggle-mark::after {
   color: var(--cg-band-ink);
 }
 
-.cg-main > .cg-cta:last-child {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-cta:last-child {
   margin-block-end: calc(var(--cg-section) / -2);
 }
 

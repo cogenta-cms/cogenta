@@ -183,7 +183,7 @@ img {
 }
 
 /* The first block under the header sits closer to it than to a sibling. */
-.cg-main > .cg-section:first-child {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-section:first-child {
   padding-block-start: calc(var(--cg-section) * 0.4);
 }
 
@@ -796,6 +796,12 @@ img {
   color: var(--cg-ink);
 }
 
+/* The label sits on its own line above the field, as in every other form. */
+.cg-search__form label {
+  flex-basis: 100%;
+  margin-block-end: calc(var(--cg-s1) * -1);
+}
+
 .cg-search__form input[type="search"] {
   flex: 1 1 18rem;
 }
@@ -807,11 +813,43 @@ img {
   list-style: none;
   font-family: var(--cg-font-display);
   font-size: var(--cg-text-xl);
+  line-height: 1.25;
 }
 
 .cg-search__results > * {
   padding-block: var(--cg-s5);
   border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+/* A result reads like a row of the sector index: the title in ink, the
+   summary in the text face under it. */
+a.cg-search__title {
+  color: var(--cg-ink);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.18em;
+}
+
+a.cg-search__title:hover {
+  color: var(--cg-accent);
+  text-decoration-color: currentColor;
+}
+
+.cg-search__excerpt,
+.cg-search__meta,
+.cg-search__count {
+  font-family: var(--cg-font-text);
+}
+
+.cg-search__count {
+  color: var(--cg-ink-muted);
+}
+
+.cg-search__excerpt {
+  margin: var(--cg-s2) 0 0;
+  max-inline-size: 60ch;
+  font-size: var(--cg-text-md);
+  line-height: 1.55;
+  color: var(--cg-ink-muted);
 }
 
 .cg-search__empty,

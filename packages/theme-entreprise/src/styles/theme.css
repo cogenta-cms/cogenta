@@ -7,6 +7,7 @@
  *   base.css     document, accessibility floor, grid, chrome, actions
  *   blocks.css   the seventeen vocabulary blocks and the entry header
  *   archive.css  the taxonomy-term archive
+ *   widgets.css  the widget areas: the side column, the bands, the footer row
  *
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--cg-*` property composed from those.
@@ -26,3 +27,4 @@
 @import "./base.css";
 @import "./blocks.css";
 @import "./archive.css";
+@import "./widgets.css";

@@ -1,5 +1,11 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { matchPath } from '@cogenta/schema'
+import {
+  isWidgetAreaId,
+  isWidgetVisible,
+  validateWidgetSettings,
+  validateWidgetVisibility,
+} from '@cogenta/widgets'
 import { describe, expect, it } from 'vitest'
 import { bundledImageType, loadPhotoAsset } from '../src/blueprints/photo-assets.js'
 import {
@@ -16,6 +22,7 @@ import {
   VITRINE_MENUS,
   VITRINE_SITE_SETTINGS,
   VITRINE_TAXONOMIES,
+  VITRINE_WIDGETS,
 } from '../src/blueprints/vitrine.js'
 
 /** Every piece of visitor-facing text a demo page or entry carries, flattened. */
@@ -140,5 +147,82 @@ describe('vitrine blueprint — content model and demo copy', () => {
     for (const item of [...VITRINE_MENUS.header, ...VITRINE_MENUS.footer]) {
       expect(slugs.has(item.url as string), item.url).toBe(true)
     }
+  })
+
+  describe('widgets', () => {
+    const context = (
+      kind: 'home' | 'entry' | 'taxonomy' | 'search',
+      path: string,
+      extra: { readonly collection?: string; readonly taxonomy?: string } = {},
+    ) => ({ kind, path, signedIn: false, locale: 'en', now: new Date(), ...extra })
+    const shownOn = (ctx: ReturnType<typeof context>) =>
+      VITRINE_WIDGETS.filter((widget) =>
+        isWidgetVisible(
+          { enabled: true, visibility: validateWidgetVisibility(widget.visibility) },
+          ctx,
+        ),
+      ).map((widget) => `${widget.area}:${widget.type}`)
+
+    it('seeds only widgets the widget vocabulary accepts, in areas that exist', () => {
+      for (const widget of VITRINE_WIDGETS) {
+        expect(isWidgetAreaId(widget.area), widget.area).toBe(true)
+        const settings =
+          typeof widget.settings === 'function' ? widget.settings({}) : widget.settings
+        expect(() => validateWidgetSettings(widget.type, settings)).not.toThrow()
+        expect(() => validateWidgetVisibility(widget.visibility)).not.toThrow()
+      }
+    })
+
+    it('reads only collections and taxonomies the blueprint declares', () => {
+      const collections = new Set(VITRINE_COLLECTIONS.map((collection) => collection.name))
+      const taxonomies = new Set(VITRINE_TAXONOMIES.map((taxonomy) => taxonomy.name))
+      for (const widget of VITRINE_WIDGETS) {
+        const { collection, taxonomy, href } = (
+          typeof widget.settings === 'function' ? widget.settings({}) : widget.settings
+        ) as { readonly collection?: unknown; readonly taxonomy?: unknown; readonly href?: unknown }
+        if (typeof collection === 'string') {
+          expect(collections.has(collection), widget.title).toBe(true)
+        }
+        if (typeof taxonomy === 'string') {
+          expect(taxonomies.has(taxonomy), widget.title).toBe(true)
+        }
+        if (typeof href === 'string' && href.startsWith('/')) {
+          expect(buildVitrineDemoPages({}).some((demo) => `/${demo.slug}` === href)).toBe(true)
+        }
+      }
+    })
+
+    it('keeps the home page and the site pages free of a side column', () => {
+      expect(shownOn(context('home', '/'))).toEqual([])
+      for (const demo of buildVitrineDemoPages({})) {
+        expect(
+          shownOn(context('entry', `/${demo.slug}`, { collection: 'page' })),
+          demo.slug,
+        ).toEqual([])
+      }
+    })
+
+    it('sets a case study beside the sectors, the other case studies and the call to discuss a mandate', () => {
+      expect(shownOn(context('entry', '/case-studies/x', { collection: 'case_study' }))).toEqual([
+        'sidebar:terms',
+        'sidebar:recentEntries',
+        'sidebar:cta',
+      ])
+    })
+
+    it("sets a practice beside the other practices and the partners' switchboard, with work under it", () => {
+      expect(shownOn(context('entry', '/services/x', { collection: 'service' }))).toEqual([
+        'sidebar:recentEntries',
+        'sidebar:contact',
+        'content-after:recentEntries',
+      ])
+    })
+
+    it('never repeats the search form a results page already opens on', () => {
+      expect(shownOn(context('search', '/search'))).not.toContain('sidebar:search')
+      expect(shownOn(context('taxonomy', '/sector/transport', { taxonomy: 'sector' }))).toContain(
+        'sidebar:search',
+      )
+    })
   })
 })

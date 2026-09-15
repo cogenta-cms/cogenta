@@ -2213,7 +2213,8 @@
         "settings-replaced": "These identity settings will be replaced by the demo's and are not part of the backup: {{keys}}.",
         "media-files-kept": "Media files stay on disk, so restoring the backup gives the media library back intact.",
         "schema-not-serialisable": "The current schema holds functions that rewriting it would lose ({{fields}}). Choose reset, or add the collections by hand.",
-        "entries-failed": "{{count}} entries could not be imported."
+        "entries-failed": "{{count}} entries could not be imported.",
+        "menu-merged": "The “{{location}}” menu already exists: {{count}} demo links are added after yours, and nothing is removed."
       },
       "locationHeaderAction": "Header button",
       "activeAction": "Sample data",
@@ -2226,7 +2227,8 @@
       "menuOutcome": {
         "fill": "filled",
         "keep": "kept",
-        "replace": "replaced"
+        "replace": "replaced",
+        "merge": "added to"
       },
       "cardBadge": "Demo site included"
     }

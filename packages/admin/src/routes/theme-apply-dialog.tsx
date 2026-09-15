@@ -463,6 +463,13 @@ function useReadableWarnings(preview: SampleDataPreview): readonly SampleDataWar
   const menus: string[] = []
   const settings: string[] = []
   for (const warning of preview.warnings) {
+    if (warning.code === 'menu-merged') {
+      out.push({
+        code: warning.code,
+        params: { ...warning.params, location: locationLabel(String(warning.params.location)) },
+      })
+      continue
+    }
     if (warning.code === 'menu-kept') menus.push(locationLabel(String(warning.params['location'])))
     else if (warning.code === 'setting-kept')
       settings.push(settingLabel(String(warning.params['key'])))

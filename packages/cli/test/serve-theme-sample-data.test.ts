@@ -186,10 +186,11 @@ describe('applying a theme with its sample data (L28)', () => {
       const pages = plan.collections.find((c) => c.name === 'page')
       expect(pages?.outcome).toBe('import')
       expect(pages?.conflictingSlugs).toEqual(['home'])
-      expect(plan.menus.find((m) => m.location === 'primary')?.outcome).toBe('keep')
+      // The site's own header menu is added to, never rewritten.
+      expect(plan.menus.find((m) => m.location === 'primary')?.outcome).toBe('merge')
       const codes = plan.warnings.map((w) => w.code)
       expect(codes).toEqual(
-        expect.arrayContaining(['slug-conflict', 'menu-kept', 'schema-rewrite']),
+        expect.arrayContaining(['slug-conflict', 'menu-merged', 'schema-rewrite']),
       )
 
       const applied = await call(server.base, token, '/api/theme/sample-data/apply', {
@@ -234,8 +235,13 @@ describe('applying a theme with its sample data (L28)', () => {
         })
         expect(home.items).toHaveLength(1)
         expect(home.items[0]?.values['title']).toBe('Our own home')
-        const primary = await createMenuStore({ db }).byLocation('primary', 'en')
+        const menus = createMenuStore({ db })
+        const primary = await menus.byLocation('primary', 'en')
         expect(primary?.name).toBe('ours')
+        const links = await menus.listItems(primary?.id as string)
+        expect(links[0]?.label).toBe('Home')
+        expect(links.length).toBeGreaterThan(1)
+        expect(links.filter((link) => link.kind === 'home')).toHaveLength(1)
         await ensureThemeTable(db)
         expect((await createThemeStore({ db }).get()).activeTheme).toBe(RESTAURANT)
       })

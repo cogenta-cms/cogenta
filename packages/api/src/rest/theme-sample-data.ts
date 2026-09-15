@@ -16,6 +16,7 @@ export interface SampleDataWarning {
     | 'collection-incompatible'
     | 'slug-conflict'
     | 'menu-kept'
+    | 'menu-merged'
     | 'setting-kept'
     | 'schema-rewrite'
     | 'reset-deletes'
@@ -56,7 +57,7 @@ export interface SampleDataPreview {
   }[]
   readonly menus: readonly {
     readonly location: string
-    readonly outcome: 'fill' | 'keep' | 'replace'
+    readonly outcome: 'fill' | 'merge' | 'keep' | 'replace'
     readonly items: number
   }[]
   readonly settings: readonly {

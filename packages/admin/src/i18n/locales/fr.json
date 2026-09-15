@@ -2213,7 +2213,8 @@
         "settings-replaced": "Les réglages d'identité suivants seront remplacés par ceux de la démo et ne font pas partie de la sauvegarde : {{keys}}.",
         "media-files-kept": "Les fichiers des médias restent sur le disque, afin que la restauration de la sauvegarde rende la médiathèque intacte.",
         "schema-not-serialisable": "Le schéma actuel contient des fonctions qui seraient perdues en le réécrivant ({{fields}}). Choisissez la réinitialisation ou ajoutez les collections à la main.",
-        "entries-failed": "{{count}} entrée(s) n'ont pas pu être importées."
+        "entries-failed": "{{count}} entrée(s) n'ont pas pu être importées.",
+        "menu-merged": "Le menu « {{location}} » existe déjà : {{count}} lien(s) de la démo y sont ajoutés après les vôtres, sans rien retirer."
       },
       "locationHeaderAction": "Bouton d'en-tête",
       "activeAction": "Données d'exemple",
@@ -2226,7 +2227,8 @@
       "menuOutcome": {
         "fill": "rempli",
         "keep": "conservé",
-        "replace": "remplacé"
+        "replace": "remplacé",
+        "merge": "complété"
       },
       "cardBadge": "Site de démonstration inclus"
     }

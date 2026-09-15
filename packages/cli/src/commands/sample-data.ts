@@ -47,6 +47,7 @@ import {
   BLUEPRINT_CONTENT_PACKS,
   type BlueprintContentPack,
   type BlueprintMenus,
+  type MenuItemSpec,
   seedBlueprintMenus,
   seedDemoMedia,
   seedSiteSettings,
@@ -121,6 +122,8 @@ interface Plan {
   readonly site: SiteModel
   /** Per collection, the slugs this import leaves to the site's own entry, with that entry's id. */
   readonly conflicts: ReadonlyMap<string, ReadonlyMap<string, string>>
+  /** Per menu location the site already fills, the sample links it lacks. */
+  readonly menuAdditions: ReadonlyMap<string, { menuId: string; items: readonly MenuItemSpec[] }>
 }
 
 /** The starter whose pack activates this theme, read off the packs rather than a table kept by hand. */
@@ -425,23 +428,46 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
     const menuStore = createMenuStore({ db })
     const menus: SampleDataPreview['menus'][number][] = []
     const packMenus = pack.menus
+    const menuAdditions = new Map<string, { menuId: string; items: readonly MenuItemSpec[] }>()
     if (packMenus !== undefined) {
-      const wanted: [string, number][] = [
-        [MENU_LOCATIONS.header, packMenus.header.length],
-        [MENU_LOCATIONS.footer, packMenus.footer.length],
+      const wanted: [string, readonly MenuItemSpec[]][] = [
+        [MENU_LOCATIONS.header, packMenus.header],
+        [MENU_LOCATIONS.footer, packMenus.footer],
         ...(packMenus.headerAction === undefined
           ? []
-          : [[MENU_LOCATIONS.headerAction, 1] as [string, number]]),
+          : [[MENU_LOCATIONS.headerAction, [packMenus.headerAction]] as [string, MenuItemSpec[]]]),
       ]
       for (const [location, items] of wanted) {
-        if (items === 0) continue
+        if (items.length === 0) continue
         if (mode === 'reset') {
-          menus.push({ location, outcome: 'replace', items })
+          menus.push({ location, outcome: 'replace', items: items.length })
           continue
         }
-        const taken = (await menuStore.byLocation(location, defaultLocale)) !== null
-        menus.push({ location, outcome: taken ? 'keep' : 'fill', items })
-        if (taken) warnings.push({ code: 'menu-kept', params: { location } })
+        const existing = await menuStore.byLocation(location, defaultLocale)
+        if (existing === null) {
+          menus.push({ location, outcome: 'fill', items: items.length })
+          continue
+        }
+        // A navigation the site already has is added to, never rewritten: the
+        // sample's links it lacks go after its own, so the sections the sample
+        // brings are reachable. A header button is one button, so it is kept.
+        const own = await menuStore.listItems(existing.id)
+        const missing =
+          location === MENU_LOCATIONS.headerAction
+            ? []
+            : items.filter((item) =>
+                item.url === undefined
+                  ? !own.some((link) => link.kind === 'home')
+                  : !own.some((link) => link.url === item.url),
+              )
+        if (missing.length === 0) {
+          menus.push({ location, outcome: 'keep', items: items.length })
+          warnings.push({ code: 'menu-kept', params: { location } })
+          continue
+        }
+        menuAdditions.set(location, { menuId: existing.id, items: missing })
+        menus.push({ location, outcome: 'merge', items: missing.length })
+        warnings.push({ code: 'menu-merged', params: { location, count: missing.length } })
       }
     }
 
@@ -532,6 +558,7 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
       staged,
       site,
       conflicts,
+      menuAdditions,
       preview: {
         theme,
         starter: starter.id,
@@ -590,7 +617,7 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
         })
       }
 
-      const { preview, starter, staged, site, conflicts } = await plan(theme, mode)
+      const { preview, starter, staged, site, conflicts, menuAdditions } = await plan(theme, mode)
       const { pack } = starter
       if (preview.warnings.some((warning) => warning.code === 'schema-not-serialisable')) {
         throw new CogentaError({
@@ -760,7 +787,10 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
 
       if (pack.menus !== undefined) {
         const fill = (location: string): boolean =>
-          preview.menus.some((menu) => menu.location === location && menu.outcome !== 'keep')
+          preview.menus.some(
+            (menu) =>
+              menu.location === location && (menu.outcome === 'fill' || menu.outcome === 'replace'),
+          )
         const menus: BlueprintMenus = {
           header: fill(MENU_LOCATIONS.header) ? pack.menus.header : [],
           footer: fill(MENU_LOCATIONS.footer) ? pack.menus.footer : [],
@@ -769,6 +799,17 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
             : {}),
         }
         await seedBlueprintMenus(db, defaultLocale, menus)
+        const menuStore = createMenuStore({ db })
+        for (const { menuId, items } of menuAdditions.values()) {
+          for (const item of items) {
+            await menuStore.createItem(menuId, {
+              label: item.label,
+              kind: item.url === undefined ? 'home' : 'url',
+              ...(item.url === undefined ? {} : { url: item.url }),
+              ...(item.openInNewTab === undefined ? {} : { openInNewTab: item.openInNewTab }),
+            })
+          }
+        }
       }
 
       const settings = Object.fromEntries(

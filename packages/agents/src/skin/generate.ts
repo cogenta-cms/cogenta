@@ -6,6 +6,7 @@ import {
   TOKEN_GROUPS,
   TOKEN_SPECS,
   validateSkin,
+  WEB_FONTS,
 } from '@cogenta/render'
 import { assembleContext, type DataItem } from '../identity/context.js'
 import type {
@@ -74,6 +75,15 @@ function describeTokenSchema(): string {
     'Hard requirements, checked automatically before this skin is accepted:',
     ...contrastLines.map((line) => `- ${line}`),
     '- font.scale must be greater than 1, so each step of the type scale is strictly larger than the one before it.',
+    '',
+    'Typefaces. A font stack only looks the way you intend if its first family actually loads, and only these families are loaded for the site. Start font.serif, font.sans and font.mono each with one family from the matching list, quoted, and end the stack with a generic fallback (serif, sans-serif or monospace):',
+    ...(['serif', 'sans', 'mono'] as const).map(
+      (role) =>
+        `- ${role}: ${WEB_FONTS.filter((font) => font.role === role)
+          .map((font) => font.family)
+          .join(', ')}`,
+    ),
+    'Pair with intent: a display or text serif for headlines, a quiet sans for navigation and labels. Never lead a stack with a family outside these lists.',
     '- motion.reduced must be true.',
     '- Every key listed above must be present, with no extra key added.',
   ].join('\n')

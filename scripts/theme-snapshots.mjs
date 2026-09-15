@@ -9,6 +9,7 @@
 //
 //   node scripts/theme-snapshots.mjs --blueprint saas --out /tmp/shots [--reuse]
 //        [--pages /pricing,/blog] [--site-name "Ledgerline"] [--port 4711]
+//        [--skin tokens.json]   applies a skin first, the way a personalisation does
 //
 // Build first: pnpm turbo run build --filter=create-cogenta... --filter=@cogenta/cli...
 // Uses Playwright's bundled Chromium, or CHROME_PATH when set.
@@ -28,6 +29,7 @@ const { values } = parseArgs({
     reuse: { type: 'boolean', default: false },
     pages: { type: 'string', default: '' },
     'site-name': { type: 'string' },
+    skin: { type: 'string' },
     port: { type: 'string' },
     band: { type: 'string', default: '1100' },
     'sites-dir': { type: 'string', default: join(tmpdir(), 'cogenta-theme-sites') },
@@ -96,6 +98,16 @@ if (!values.reuse || !existsSync(site)) {
   await run('node', [join(repo, 'packages/create-cogenta/dist/bin.js'), site, '--config', config], {
     env: { ...process.env, CI: 'true' },
   })
+}
+
+if (values.skin) {
+  await run(
+    'node',
+    [join(repo, 'packages/cli/dist/bin.js'), 'skin', 'apply', resolve(values.skin)],
+    {
+      cwd: site,
+    },
+  )
 }
 
 const server = spawn(

@@ -44,3 +44,11 @@ export {
   TYPE_SCALE_STEPS,
 } from './tokens.js'
 export { computeTypeScale, validateSkin } from './validate.js'
+export type { WebFont, WebFontRole } from './web-fonts.js'
+export {
+  findWebFont,
+  primaryFamily,
+  WEB_FONTS,
+  webFontImports,
+  webFontUrl,
+} from './web-fonts.js'

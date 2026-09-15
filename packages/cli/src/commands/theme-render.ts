@@ -1841,7 +1841,35 @@ export function joinStyles(skinCss: string | null, themeCss: string | null): str
       return ''
     })
     .trim()
-  return imports.length === 0 ? body : `${imports.join('\n')}\n${body}`
+  const kept = withoutRedundantFontImports(imports)
+  return kept.length === 0 ? body : `${kept.join('\n')}\n${body}`
+}
+
+/** The `family=` names a Google Fonts request asks for. */
+function requestedFamilies(statement: string): readonly string[] {
+  return [...statement.matchAll(/family=([^:&"')]+)/gu)].map((match) =>
+    decodeURIComponent((match[1] ?? '').replaceAll('+', ' ')),
+  )
+}
+
+/**
+ * The skin imports each web font it names on its own (`@cogenta/render`'s
+ * `webFontImports`), and a theme often already loads that very family with the
+ * axes it was drawn with. The theme's request wins: a single-family import is
+ * dropped when another import already asks for the same family, so a page
+ * never downloads one face twice.
+ */
+function withoutRedundantFontImports(imports: readonly string[]): string[] {
+  return imports.filter((statement, index) => {
+    const families = requestedFamilies(statement)
+    if (families.length !== 1) return true
+    return !imports.some(
+      (other, otherIndex) =>
+        otherIndex !== index &&
+        requestedFamilies(other).length > 1 &&
+        requestedFamilies(other).includes(families[0] as string),
+    )
+  })
 }
 
 const IMPORT_STATEMENT = /@import\s+(?:url\(\s*(["'])[^"']*\1\s*\)|(["'])[^"']*\2)[^;{}]*;/g

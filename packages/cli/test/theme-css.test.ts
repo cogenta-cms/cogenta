@@ -143,6 +143,19 @@ describe('joinStyles', () => {
     )
   })
 
+  it("drops a skin's font import the theme already loads, and keeps one it does not", () => {
+    const skin =
+      '@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..800&display=swap");' +
+      '@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900&display=swap");' +
+      ':root{--a: 1}'
+    const theme =
+      '@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..800&family=Libre+Franklin:wght@400..800&display=swap");.b{color: red}'
+    const joined = joinStyles(skin, theme) as string
+    expect(joined.match(/family=Fraunces/g)).toHaveLength(1)
+    expect(joined).toContain('family=Playfair+Display')
+    expect(joined).toContain('family=Libre+Franklin')
+  })
+
   it('leaves a sheet without imports untouched', () => {
     expect(joinStyles(':root{--a: 1}', '.b{color: red}')).toBe(':root{--a: 1}\n.b{color: red}')
     expect(joinStyles(null, null)).toBeNull()

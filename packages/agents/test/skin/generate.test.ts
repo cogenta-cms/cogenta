@@ -248,6 +248,23 @@ describe('adjusting an existing skin rather than designing a new one', () => {
     expect(ask).toContain('rends-le un peu plus sombre')
   })
 
+  it('names the typefaces that will actually load, so a chosen font is the font a reader sees', async () => {
+    const client = capturingClient(JSON.stringify(VALID_TOKENS))
+
+    await generateSkin({
+      client,
+      model: 'fake-model',
+      description: 'editorial',
+      blueprintLabel: 'Acme',
+    })
+
+    const ask = client.asks[0] ?? ''
+    expect(ask).toContain('only these families are loaded for the site')
+    expect(ask).toMatch(/- serif: .*Playfair Display/u)
+    expect(ask).toMatch(/- sans: .*Inter/u)
+    expect(ask).toMatch(/- mono: .*JetBrains Mono/u)
+  })
+
   it('still designs from the brief alone when there is nothing to adjust yet', async () => {
     const client = capturingClient(JSON.stringify(VALID_TOKENS))
 

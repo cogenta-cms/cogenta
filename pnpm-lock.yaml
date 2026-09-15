@@ -414,6 +414,9 @@ importers:
       '@cogenta/seo':
         specifier: workspace:*
         version: link:../seo
+      '@cogenta/widgets':
+        specifier: workspace:*
+        version: link:../widgets
       '@simplewebauthn/server':
         specifier: 'catalog:'
         version: 13.3.2

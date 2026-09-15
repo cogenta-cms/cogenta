@@ -282,3 +282,5 @@ export type {
 export { createUpdateRouter } from './update-router.js'
 export type { InvitedUserEvent, UsersRouter, UsersRouterOptions } from './users-router.js'
 export { createUsersRouter } from './users-router.js'
+export type { WidgetRouter, WidgetRouterOptions } from './widget-router.js'
+export { createWidgetRouter } from './widget-router.js'

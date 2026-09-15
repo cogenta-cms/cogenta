@@ -35,14 +35,15 @@
   "dependencies": {
     "@cogenta/analytics": "workspace:*",
     "@cogenta/auth": "workspace:*",
+    "@cogenta/blocks": "workspace:*",
     "@cogenta/channels": "workspace:*",
     "@cogenta/core": "workspace:*",
     "@cogenta/export": "workspace:*",
     "@cogenta/forms": "workspace:*",
     "@cogenta/mcp": "workspace:*",
     "@cogenta/schema": "workspace:*",
-    "@cogenta/blocks": "workspace:*",
     "@cogenta/seo": "workspace:*",
+    "@cogenta/widgets": "workspace:*",
     "@simplewebauthn/server": "catalog:",
     "graphql": "catalog:",
     "zod": "catalog:"

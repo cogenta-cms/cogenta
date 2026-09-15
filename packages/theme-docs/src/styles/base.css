@@ -445,7 +445,7 @@ img {
 
 /* Left-aligned on the page edge the wordmark starts from, like every other
    page of the site, and held to a reading width. */
-.cg-main > .cg-page__title,
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-page__title,
 .cg-search__form,
 .cg-search__results,
 .cg-search__empty,
@@ -458,7 +458,7 @@ img {
   padding-inline: var(--cd-edge) max(var(--cd-gutter), calc(100% - var(--cd-edge) - 52rem));
 }
 
-.cg-main > .cg-page__title {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-page__title {
   padding-block: calc(var(--cd-section) * 0.5) var(--cd-s6);
   font-size: var(--cd-size-title);
   line-height: var(--cd-leading-display);
@@ -508,6 +508,20 @@ img {
 
 .cg-search__results > li:last-child {
   border-block-end: var(--cd-rule) solid var(--cd-line);
+}
+
+/* The summary under a result and the count beside the title: the host's
+   floor reads the raw skin grey, which is too faint on the dark ground, so
+   both take this theme's own muted ink. */
+.cg-search__count {
+  color: var(--cd-ink-muted);
+}
+
+.cg-search__excerpt {
+  color: var(--cd-ink-muted);
+  font-size: var(--cd-text-ui);
+  font-weight: var(--cd-weight-regular);
+  line-height: var(--cd-leading-ui);
 }
 
 .cg-search__results a {

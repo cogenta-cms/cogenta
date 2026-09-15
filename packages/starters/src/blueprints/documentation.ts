@@ -21,6 +21,7 @@ import {
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus, MenuItemSpec } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
+import type { BlueprintWidget } from './widgets.js'
 
 /**
  * The `documentation` blueprint: the documentation site of a developer tool,
@@ -1420,6 +1421,74 @@ export const DOCUMENTATION_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
   'discussion.enabled': false,
 }
 
+/**
+ * The widgets a documentation site really carries, placed by `@cogenta/theme-docs`
+ * in the page rail: under "On this page", level with the end of the page.
+ *
+ * Nothing that repeats what the theme already draws on a doc page: no table
+ * of contents (the theme builds "On this page" from the same headings), no
+ * related or recent pages (the sidebar and previous/next are the reading
+ * order, and a list sorted by creation date would contradict it), no search
+ * field (the header holds one on every page). What is left is what a reader
+ * who reached the end of a page needs: where to get help, and the upgrade
+ * note of the current release, except on the release notes themselves.
+ * Beside search results, a short list of the pages most readers come for,
+ * useful above all when a search found nothing.
+ */
+const DOC_PAGES_ONLY = {
+  pages: { mode: 'only', targets: [{ kind: 'collection', collection: 'doc_page' }] },
+} as const
+
+export const DOCUMENTATION_WIDGETS: readonly BlueprintWidget[] = [
+  {
+    area: 'sidebar',
+    type: 'links',
+    title: 'Need help?',
+    settings: {
+      items: [
+        { label: 'Troubleshooting', href: '/docs/troubleshooting' },
+        { label: 'Configuration reference', href: '/docs/configuration-reference' },
+        { label: 'Report a problem on GitHub', href: 'https://github.com/example', newTab: true },
+      ],
+    },
+    visibility: DOC_PAGES_ONLY,
+  },
+  {
+    area: 'sidebar',
+    type: 'cta',
+    settings: {
+      heading: 'Upgrading from 2.3?',
+      body: 'Run the migration before starting 2.4. It adds one index and takes under a minute on ten million deliveries.',
+      label: 'Read the release notes',
+      href: '/docs/whats-new',
+    },
+    visibility: {
+      pages: {
+        mode: 'only',
+        targets: PAGES.filter((draft) => draft.slug !== 'whats-new').map((draft) => ({
+          kind: 'path',
+          path: `/docs/${draft.slug}`,
+        })),
+      },
+    },
+  },
+  {
+    area: 'sidebar',
+    type: 'links',
+    title: 'Popular pages',
+    settings: {
+      items: [
+        { label: 'Quickstart', href: '/docs/quickstart' },
+        { label: 'Verifying signatures', href: '/docs/verifying-signatures' },
+        { label: 'Retries and replay', href: '/docs/retries-and-replay' },
+        { label: 'HTTP API', href: '/docs/http-api' },
+        { label: 'CLI reference', href: '/docs/cli-reference' },
+      ],
+    },
+    visibility: { pages: { mode: 'only', targets: [{ kind: 'search' }] } },
+  },
+]
+
 export const DOCUMENTATION_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
   {
     name: 'contentAgent',
@@ -1517,6 +1586,7 @@ export const documentationContentPack: BlueprintContentPack = {
   seedDemoContent: seedDocumentationDemoContent,
   defaultTheme: '@cogenta/theme-docs',
   menus: DOCUMENTATION_MENUS,
+  widgets: DOCUMENTATION_WIDGETS,
   siteSettings: DOCUMENTATION_SITE_SETTINGS,
   mediaSpecs: DOCUMENTATION_MEDIA_SPECS,
 }

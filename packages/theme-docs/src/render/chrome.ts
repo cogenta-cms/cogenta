@@ -5,6 +5,7 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderFooterWidgets,
   renderIcon,
   renderSocialLinks,
   renderThemeToggle,
@@ -35,6 +36,11 @@ import { splitSiteName, word } from './strings.js'
  * unlinked heading (`submenu-placeholder`) an editor adds in the menu screen.
  * Under a hairline, the copyright year and the product's name, beside the
  * host's `brandingHtml`, placed once, as received.
+ *
+ * Footer widget columns (`theme@1.6`), when the site placed any, sit between
+ * the two, under their own hairline: a row of columns set like the footer
+ * navigation's, so a support address or a status link reads as part of the
+ * same footer rather than a band added above it.
  */
 
 interface FooterGroup {
@@ -181,6 +187,10 @@ export function renderChrome(input: ChromeInput): ChromeResult {
           .join('')}</nav>`
   const year = new Date().getFullYear()
   const owner = escapeText(splitSiteName(input.site.name).product)
+  const footerWidgets = renderFooterWidgets(input.widgets, {
+    className: 'cd-footer__widgets',
+    headingLevel: 'h2',
+  })
 
   const footer =
     `<footer class="cd-footer"><div class="cd-footer__inner">` +
@@ -190,6 +200,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `${social === null ? '' : serialize(social)}` +
     `</div>` +
     `${footerNav}` +
+    `${footerWidgets === null ? '' : serialize(footerWidgets)}` +
     `<div class="cd-footer__legal">` +
     `<p class="cd-footer__copyright">© ${year} ${owner}</p>` +
     `${input.brandingHtml === '' ? '' : `<div class="cd-footer__branding">${input.brandingHtml}</div>`}` +

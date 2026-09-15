@@ -13,6 +13,8 @@
  *                tables, keys
  *   blocks.css   the vocabulary blocks
  *   archive.css  the taxonomy-term archive
+ *   widgets.css  the widget areas: the page rail, the bands, the footer
+ *                columns
  *
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--cd-*` property composed from those.
@@ -34,3 +36,4 @@
 @import "./rich.css";
 @import "./blocks.css";
 @import "./archive.css";
+@import "./widgets.css";

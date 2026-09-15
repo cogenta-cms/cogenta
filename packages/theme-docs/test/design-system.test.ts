@@ -20,6 +20,7 @@ const SHEETS = [
   'rich.css',
   'blocks.css',
   'archive.css',
+  'widgets.css',
 ] as const
 
 const SOURCES = new Map(
@@ -362,8 +363,9 @@ describe('the motion, depth and colour rules of the charter', () => {
         selector,
       ).toContain(property)
       if (property === 'background') expect(selector).toMatch(/primary|::selection|button|submit/)
+      // A call widget is set as the theme's note, so it takes a note's rule.
       if (property === 'border-inline-start-color')
-        expect(selector).toMatch(/aria-current|data-kind="note"/)
+        expect(selector).toMatch(/aria-current|data-kind="note"|cg-widget__cta/)
     }
   })
 

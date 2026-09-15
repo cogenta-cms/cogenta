@@ -92,6 +92,7 @@ describe('theme isolation', () => {
       'styles/rich.css',
       'styles/theme.css',
       'styles/tokens.css',
+      'styles/widgets.css',
     ])
   })
 

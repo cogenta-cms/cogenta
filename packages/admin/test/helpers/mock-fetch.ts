@@ -9013,7 +9013,7 @@ export function installMockFetch(
               ? [
                   {
                     code: 'reset-deletes',
-                    params: { entries: 12, terms: 3, media: 4, menus: 2, redirects: 0 },
+                    params: { entries: 12, terms: 3, media: 4, menus: 2, widgets: 5, redirects: 0 },
                   },
                   { code: 'reset-backup', params: {} },
                 ]

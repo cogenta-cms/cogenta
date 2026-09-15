@@ -530,7 +530,7 @@ describe('the appearance screen — a theme with its sample data (L28)', () => {
     })
     expect(
       await within(preview).findByText(
-        'Seront supprimés : 12 entrées, 3 termes, 4 médias, 2 menus et 0 redirections.',
+        'Seront supprimés : 12 entrées, 3 termes, 4 médias, 2 menus, 5 widgets et 0 redirections.',
       ),
     ).toBeDefined()
     const confirm = within(preview).getByRole('button', {

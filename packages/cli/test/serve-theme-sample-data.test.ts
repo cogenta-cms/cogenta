@@ -12,7 +12,8 @@ import {
   ensureMenuTables,
   ensureThemeTable,
 } from '@cogenta/schema'
-import { RESTAURANT_COLLECTIONS } from '@cogenta/starters/blueprints/restaurant'
+import { RESTAURANT_COLLECTIONS, RESTAURANT_WIDGETS } from '@cogenta/starters/blueprints/restaurant'
+import { createWidgetStore, ensureWidgetTables } from '@cogenta/widgets'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createUser, loginWithMfaSetup, startServer } from './helpers/serve-harness.js'
 
@@ -164,6 +165,16 @@ describe('applying a theme with its sample data (L28)', () => {
     const server = await startServer(root, { registry: activeServers, development: true })
     try {
       const token = await admin(server.base, root)
+      // The site already fills one footer column: keeping the site keeps it as it is.
+      await withDb(root, async (db) => {
+        await ensureWidgetTables(db)
+        await createWidgetStore({ db }).create({
+          area: 'footer-1',
+          type: 'quote',
+          title: 'Ours',
+          settings: { text: 'Our own words.' },
+        })
+      })
 
       const preview = await call(server.base, token, '/api/theme/sample-data/preview', {
         theme: RESTAURANT,
@@ -171,6 +182,7 @@ describe('applying a theme with its sample data (L28)', () => {
       })
       expect(preview.status).toBe(200)
       const plan = preview.json.data as unknown as {
+        widgets: { area: string; outcome: string; count: number }[]
         collections: {
           name: string
           outcome: string
@@ -190,8 +202,10 @@ describe('applying a theme with its sample data (L28)', () => {
       expect(plan.menus.find((m) => m.location === 'primary')?.outcome).toBe('merge')
       const codes = plan.warnings.map((w) => w.code)
       expect(codes).toEqual(
-        expect.arrayContaining(['slug-conflict', 'menu-merged', 'schema-rewrite']),
+        expect.arrayContaining(['slug-conflict', 'menu-merged', 'schema-rewrite', 'widgets-kept']),
       )
+      expect(plan.widgets.find((w) => w.area === 'footer-1')?.outcome).toBe('keep')
+      expect(plan.widgets.find((w) => w.area === 'sidebar')?.outcome).toBe('fill')
 
       const applied = await call(server.base, token, '/api/theme/sample-data/apply', {
         theme: RESTAURANT,
@@ -244,6 +258,10 @@ describe('applying a theme with its sample data (L28)', () => {
         expect(links.filter((link) => link.kind === 'home')).toHaveLength(1)
         await ensureThemeTable(db)
         expect((await createThemeStore({ db }).get()).activeTheme).toBe(RESTAURANT)
+        const widgets = await createWidgetStore({ db }).list()
+        expect(widgets.filter((w) => w.area === 'footer-1').map((w) => w.title)).toEqual(['Ours'])
+        const seeded = RESTAURANT_WIDGETS.filter((w) => w.area !== 'footer-1').length
+        expect(widgets.filter((w) => w.area !== 'footer-1')).toHaveLength(seeded)
       })
     } finally {
       await server.stop()

@@ -31,6 +31,7 @@ import {
   REDIRECTS_TABLE,
   type TaxonomyDefinition,
 } from '@cogenta/schema'
+import { ensureWidgetTables, WIDGETS_TABLE } from '@cogenta/widgets'
 import type { Output, Writer } from '../output.js'
 import { loadSchemaModule } from './serve.js'
 
@@ -128,7 +129,7 @@ async function tablesFor(cwd: string): Promise<readonly string[]> {
     collections,
     taxonomies,
     before: [...Object.values(AUTH_TABLES), MEDIA_TABLE],
-    after: [MENU_TABLES.menus, MENU_TABLES.items, REDIRECTS_TABLE, PATTERN_TABLE],
+    after: [MENU_TABLES.menus, MENU_TABLES.items, REDIRECTS_TABLE, PATTERN_TABLE, WIDGETS_TABLE],
   })
 }
 
@@ -149,6 +150,7 @@ async function ensureAllTables(
   await ensureAuthTables(db)
   await ensureMenuTables(db)
   await ensurePatternTables(db)
+  await ensureWidgetTables(db)
   await createRedirectStore({ db }).ensureTable()
   // The media store creates its table lazily on first call; `list()` is the
   // cheapest one that does so without writing anything.

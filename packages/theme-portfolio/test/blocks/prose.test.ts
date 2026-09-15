@@ -16,8 +16,8 @@ describe('renderProse, running text on the studio grid', () => {
   it('moves an opening subhead into the label and leaves the rest in the body', () => {
     const html = serialize(renderProse(longProse('b', 20), ctx))
     expect(html).toContain('data-label="true"')
-    expect(html).toContain('<div class="cg-prose__label"><h2>The brief</h2></div>')
-    expect(html.match(/<h2>/g)).toHaveLength(1)
+    expect(html).toContain('<div class="cg-prose__label"><h2 id="the-brief">The brief</h2></div>')
+    expect(html.match(/<h2[ >]/g)).toHaveLength(1)
   })
 
   it('counts the words of the body to decide between one and two columns', () => {

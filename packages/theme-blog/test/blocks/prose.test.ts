@@ -15,7 +15,7 @@ describe('prose, the reading column', () => {
   })
 
   it('renders the rich-text document, including a nested list and a blockquote', () => {
-    expect(html).toContain('<h2>What actually changed</h2>')
+    expect(html).toContain('<h2 id="what-actually-changed">What actually changed</h2>')
     expect(html).toContain('<ul>')
     expect(html).toContain('<blockquote><p>Write it plain, edit it later.</p></blockquote>')
   })

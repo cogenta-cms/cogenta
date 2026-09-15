@@ -45,12 +45,21 @@ import {
   type ContentEntry as ThemeContentEntry,
   type Page as ThemePage,
   type QueryRequest as ThemeQueryRequest,
+  type WidgetAreas,
 } from '@cogenta/theme-kit'
 import { DEFAULT_LOGO_PATH } from './default-logo.js'
 import type { SeoRenderDefaults } from './seo.js'
 import { alternatesForEntry, renderSeoHead, seoSiteFor, siteVerificationMetaTags } from './seo.js'
 import { minifyCss } from './theme-css.js'
 import { DEFAULT_THEME_NAME, resolveTheme, type ThemeModule } from './theme-registry.js'
+import {
+  footerWidgetsHtml,
+  hasAnyWidget,
+  placeWidgetsInMain,
+  splitWidgetAreas,
+  WIDGET_FLOOR_CSS,
+} from './widget-placement.js'
+import type { WidgetRenderRequest } from './widget-resolve.js'
 
 /**
  * The theme's own `ContentEntry`/`QueryRequest` (`theme-contract.ts`) are a
@@ -119,6 +128,11 @@ async function listAsTheme(
 export const DEFAULT_IMAGE_ENDPOINT = '/_image'
 
 export interface ThemeRenderOptions {
+  /**
+   * The widget areas of the page being rendered (L30), resolved by the host
+   * (`widget-resolve.ts`). Absent: no widget anywhere, as before widgets.
+   */
+  readonly widgets?: (request: WidgetRenderRequest) => Promise<WidgetAreas>
   readonly collections: readonly CollectionDefinition[]
   readonly gateway: ContentGateway
   readonly site: {
@@ -845,6 +859,27 @@ async function fetchMenuLinksFromPath(
   }))
 }
 
+/** Looks a menu up by its id, for a menu widget (L30). */
+export async function fetchMenuLinksById(
+  menuId: string,
+  locale: string,
+  options: { readonly menuRouter?: MenuRouter },
+  context: AccessContext,
+): Promise<
+  readonly { readonly label: string; readonly href: string; readonly newTab: boolean }[] | null
+> {
+  const links = await fetchMenuLinksFromPath(
+    `/api/menus/${encodeURIComponent(menuId)}`,
+    locale,
+    options,
+    context,
+  )
+  if (links === null) return null
+  return links
+    .filter((link): link is typeof link & { href: string } => typeof link.href === 'string')
+    .map((link) => ({ label: link.label, href: link.href, newTab: link.openInNewTab === true }))
+}
+
 /** Looks a menu up by its `location` (fiche 09, task 3) — the generic, theme-agnostic resolution. */
 function fetchMenuLinksByLocation(
   location: string,
@@ -910,6 +945,8 @@ export interface PageChromeMenus {
 }
 
 export interface PageChromeOptions {
+  /** Widget areas already resolved for this host-rendered page (search, form, archive). */
+  readonly widgets?: WidgetAreas
   readonly site: { readonly name: string }
   readonly locale: string
   /** The joined skin+theme stylesheet (`STYLESHEET_PATH`). `null` renders unstyled rather than refused. */
@@ -992,6 +1029,9 @@ export async function renderPageChrome(
     options.menus,
     context,
   )
+  const widgetAreas = options.widgets ?? {}
+  const { page: pageWidgets, footer: footerWidgets } = splitWidgetAreas(widgetAreas)
+  const placesFooter = theme.widgetAreas !== undefined
   const chrome = theme.renderChrome({
     site: options.site,
     locale: options.locale,
@@ -1004,7 +1044,10 @@ export async function renderPageChrome(
     brandingHtml,
     brand: identity.brand,
     ...chromeExtras,
+    ...(placesFooter && hasAnyWidget(footerWidgets) ? { widgets: footerWidgets } : {}),
   })
+  // The host draws this page's `<main>`, so it places the page's areas itself.
+  const bodyHtml = placeWidgetsInMain(options.bodyHtml, pageWidgets)
   const verificationTags = siteVerificationMetaTags(
     options.seo === undefined ? null : await options.seo(),
   )
@@ -1025,8 +1068,9 @@ ${verificationTags === '' ? '' : `${verificationTags}\n`}${options.styles === nu
 <body>
 <a class="cg-skip-link" href="#cg-main">Skip to content</a>
 ${chrome.header}
-${options.bodyHtml}
-${chrome.footer}
+${bodyHtml}
+${placesFooter ? '' : footerWidgetsHtml(footerWidgets)}${chrome.footer}
+${hasAnyWidget(widgetAreas) ? `<style>${WIDGET_FLOOR_CSS}</style>` : ''}
 </body>
 </html>
 `
@@ -1562,15 +1606,39 @@ async function renderEntryPage(
     options,
     blocks,
   )
-  const pageContent: PageContent = { title: entryTitle(entry), blocks, entry: entryMeta }
   const theme = await themeFor(options.activeTheme)
+  // Widget areas (L30): resolved for this very page, then handed to a theme
+  // that places them itself, or placed around its output when it does not.
+  const widgetAreas =
+    options.widgets === undefined
+      ? {}
+      : await options.widgets({
+          context: {
+            path: pathname,
+            kind: pathname === '/' ? 'home' : 'entry',
+            collection: collection.name,
+            entryId: entry.id,
+            locale: entry.locale,
+          },
+          entry: { collection, entry, blocks },
+        })
+  const placesWidgets = theme.widgetAreas !== undefined
+  const { page: pageWidgets, footer: footerWidgets } = splitWidgetAreas(widgetAreas)
+  const pageContent: PageContent = {
+    title: entryTitle(entry),
+    blocks,
+    entry: entryMeta,
+    ...(placesWidgets && hasAnyWidget(pageWidgets) ? { widgets: pageWidgets } : {}),
+  }
   const node = theme.renderPage(
     pageContent,
     themeContext,
     fetchedEntries as FetchedEntries,
     options.blocks,
   )
-  const bodyHtml = serialize(node)
+  const bodyHtml = placesWidgets
+    ? serialize(node)
+    : placeWidgetsInMain(serialize(node), pageWidgets)
 
   // The comment thread and form (fiche 15 task 6) — a property of the route,
   // not of the page's own blocks, so it is appended after `<main>` rather
@@ -1732,7 +1800,10 @@ async function renderEntryPage(
     brandingHtml,
     brand: identity.brand,
     ...chromeExtras,
+    ...(placesWidgets && hasAnyWidget(footerWidgets) ? { widgets: footerWidgets } : {}),
   })
+  const placedFooterWidgets = placesWidgets ? '' : footerWidgetsHtml(footerWidgets)
+  const widgetFloor = hasAnyWidget(widgetAreas) ? `<style>${WIDGET_FLOOR_CSS}</style>\n` : ''
 
   // The same frame `Base.astro` builds for a real Astro build: a skip link
   // first, the site's own chrome, the content, a footer. Rendering the
@@ -1758,8 +1829,8 @@ ${adminBar}
 ${chrome.header}
 ${bodyHtml}
 ${commentsHtml}
-${chrome.footer}
-${analyticsBeaconTag(pathname, options.analyticsBeacon)}
+${placedFooterWidgets}${chrome.footer}
+${widgetFloor}${analyticsBeaconTag(pathname, options.analyticsBeacon)}
 </body>
 </html>
 `

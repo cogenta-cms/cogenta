@@ -2,6 +2,7 @@ import type { AccessContext, ContentGateway } from '@cogenta/api'
 import type { MediaAsset } from '@cogenta/render'
 import { buildPath, type CollectionDefinition, type ContentEntry } from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
+import type { WidgetAreas } from '@cogenta/theme-kit'
 import {
   type HtmlElement,
   h,
@@ -46,6 +47,10 @@ export const ARCHIVE_PAGE_SIZE = 12
 /** What the host resolved out of the taxonomy store before any rendering happened. */
 export interface TermArchiveResolution {
   readonly taxonomyName: string
+  /** The term's id, for the widgets whose visibility names terms (L30). Absent for a date archive. */
+  readonly termId?: string
+  /** A date archive's own base path (`/archive/article/2026`), where a term archive links `/{taxonomy}/{slug}`. */
+  readonly basePath?: string
   readonly term: { readonly slug: string; readonly label: string }
   /** Root-most first, down to the direct parent. */
   readonly ancestors: readonly { readonly slug: string; readonly label: string }[]
@@ -79,6 +84,8 @@ export interface TermArchivePageOptions {
   readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, MediaAsset>>
   /** `general.tagline`/`general.socialLinks`/`general.footerNote`, the same live read an entry page's chrome gets. */
   readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
+  /** Widget areas already resolved for this page (L30). */
+  readonly widgets?: WidgetAreas
 }
 
 const LABELS: Record<string, TermArchiveLabels> = {
@@ -186,7 +193,9 @@ function fallbackArchive(input: TermArchiveInput): HtmlElement {
 function headFor(input: TermArchiveInput, options: TermArchivePageOptions, page: number): string {
   const title = `${input.term.label} — ${options.site.name}`
   const canonical = new URL(
-    archiveHref(input.taxonomyName, input.term.slug, page),
+    input.term.slug.startsWith('/')
+      ? `${input.term.slug}${page <= 1 ? '' : `?page=${page}`}`
+      : archiveHref(input.taxonomyName, input.term.slug, page),
     options.site.url,
   ).toString()
   // Page 2 and beyond are `noindex, follow`: they are the same set of entries
@@ -247,23 +256,29 @@ export async function renderTermArchivePage(
 
   const locale = options.site.defaultLocale
   const taxonomy = resolution.taxonomyName
+  // A date archive (L30) names its pages by path rather than by term slug.
+  const hrefFor = (slug: string, target: number): string => {
+    if (resolution.basePath === undefined) return archiveHref(taxonomy, slug, target)
+    const path = slug.startsWith('/') ? slug : resolution.basePath
+    return target <= 1 ? path : `${path}?page=${target}`
+  }
   const input: TermArchiveInput = {
     taxonomyName: taxonomy,
     term: resolution.term,
     ancestors: resolution.ancestors.map((ancestor) => ({
       label: ancestor.label,
-      href: archiveHref(taxonomy, ancestor.slug, 1),
+      href: hrefFor(ancestor.slug, 1),
     })),
     children: resolution.children.map((child) => ({
       label: child.label,
-      href: archiveHref(taxonomy, child.slug, 1),
+      href: hrefFor(child.slug, 1),
     })),
     entries,
     page: {
       current: page,
       totalPages,
-      previousHref: page > 1 ? archiveHref(taxonomy, resolution.term.slug, page - 1) : null,
-      nextHref: page < totalPages ? archiveHref(taxonomy, resolution.term.slug, page + 1) : null,
+      previousHref: page > 1 ? hrefFor(resolution.term.slug, page - 1) : null,
+      nextHref: page < totalPages ? hrefFor(resolution.term.slug, page + 1) : null,
     },
     locale,
     labels: archiveLabels(locale),
@@ -290,6 +305,7 @@ export async function renderTermArchivePage(
       ...(options.identity === undefined ? {} : { identity: options.identity }),
       ...(options.loadMedia === undefined ? {} : { loadMedia: options.loadMedia }),
       ...(options.chromeExtras === undefined ? {} : { chromeExtras: options.chromeExtras }),
+      ...(options.widgets === undefined ? {} : { widgets: options.widgets }),
     },
     context,
   )

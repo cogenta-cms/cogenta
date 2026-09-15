@@ -13,7 +13,7 @@ describe('renderProse, the reading column', () => {
   })
 
   it('keeps subheads at h2, never h1', () => {
-    expect(html).toContain('<h2>What survives a closure</h2>')
+    expect(html).toContain('<h2 id="what-survives-a-closure">What survives a closure</h2>')
     expect(html).not.toContain('<h1')
   })
 

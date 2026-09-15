@@ -3,6 +3,7 @@ import type { FormDefinition, FormFieldDefinition } from '@cogenta/forms'
 import { HONEYPOT_FIELD, isFormFileValue, TIMESTAMP_FIELD } from '@cogenta/forms'
 import type { MediaAsset } from '@cogenta/render'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
+import type { WidgetAreas } from '@cogenta/theme-kit'
 import type { SeoRenderDefaults } from './seo.js'
 import {
   type BrandingSettings,
@@ -63,6 +64,8 @@ export interface FormPageOptions {
   readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, MediaAsset>>
   /** The tagline, social links and footer note every other public page carries (contract D `theme@1.4`). Absent renders the chrome without them. */
   readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
+  /** Widget areas already resolved for this page (L30). */
+  readonly widgets?: WidgetAreas
 }
 
 export interface FormPageState {
@@ -238,6 +241,7 @@ ${body}
       ...(options.identity === undefined ? {} : { identity: options.identity }),
       ...(options.loadMedia === undefined ? {} : { loadMedia: options.loadMedia }),
       ...(options.chromeExtras === undefined ? {} : { chromeExtras: options.chromeExtras }),
+      ...(options.widgets === undefined ? {} : { widgets: options.widgets }),
     },
     context,
   )

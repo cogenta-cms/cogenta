@@ -22,7 +22,7 @@ describe('prose', () => {
   })
 
   it('keeps headings, nested lists, quotations and links from the rich text', () => {
-    expect(html).toContain('<h2>Encryption</h2>')
+    expect(html).toContain('<h2 id="encryption">Encryption</h2>')
     expect(html).toMatch(
       /<ul><li>TLS 1\.3 in transit<ul><li>HSTS preloaded<\/li><\/ul><\/li><\/ul>/,
     )

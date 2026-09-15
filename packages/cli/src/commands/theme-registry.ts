@@ -13,6 +13,7 @@ import type {
   RenderContext,
   TermArchiveInput,
 } from '@cogenta/theme-kit'
+import type { WidgetAreaDeclaration } from '@cogenta/widgets'
 
 /**
  * The theme registry — what makes more than one theme package installable at
@@ -52,6 +53,13 @@ export interface ThemeModule {
    * every theme package on the day it shipped.
    */
   readonly renderTermArchive?: (input: TermArchiveInput) => HtmlElement
+  /**
+   * The widget areas this theme places itself (contract D `theme@1.6`, L30),
+   * reading `PageContent.widgets` and `ChromeInput.widgets`. **Optional**:
+   * a theme without it still shows every widget, placed by the host around
+   * its output (`widget-placement.ts`).
+   */
+  readonly widgetAreas?: readonly WidgetAreaDeclaration[]
 }
 
 export interface BuiltinTheme {

@@ -209,7 +209,7 @@ describe('the project page', () => {
   it('moves an opening subhead into the label column of its text', () => {
     const html = project([longProse('b-long', 140)])
     expect(html).toContain(
-      '<div class="cg-prose__label"><h2>The brief</h2></div><div class="cg-prose__body"><p>',
+      '<div class="cg-prose__label"><h2 id="the-brief">The brief</h2></div><div class="cg-prose__body"><p>',
     )
   })
 })

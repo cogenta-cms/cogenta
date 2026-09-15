@@ -2,6 +2,7 @@ import type { AccessContext, ContentGateway, SearchRouter } from '@cogenta/api'
 import type { MediaAsset } from '@cogenta/render'
 import { buildPath, type CollectionDefinition, type SearchHit } from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
+import type { WidgetAreas } from '@cogenta/theme-kit'
 import type { SeoRenderDefaults } from './seo.js'
 import {
   type BrandingSettings,
@@ -57,6 +58,8 @@ export interface SearchPageOptions {
   readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, MediaAsset>>
   /** The tagline, social links and footer note every other public page carries (contract D `theme@1.4`). Absent renders the chrome without them. */
   readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
+  /** Widget areas already resolved for this page (L30). */
+  readonly widgets?: WidgetAreas
 }
 
 interface ResolvedHit {
@@ -254,6 +257,7 @@ ${main}
       ...(options.identity === undefined ? {} : { identity: options.identity }),
       ...(options.loadMedia === undefined ? {} : { loadMedia: options.loadMedia }),
       ...(options.chromeExtras === undefined ? {} : { chromeExtras: options.chromeExtras }),
+      ...(options.widgets === undefined ? {} : { widgets: options.widgets }),
     },
     context,
   )

@@ -14,7 +14,7 @@ describe('prose', () => {
 
   it('adds no heading of its own and keeps the document’s h2', () => {
     expect(html).not.toContain('<h1')
-    expect(html).toContain('<h2>A first shift</h2>')
+    expect(html).toContain('<h2 id="a-first-shift">A first shift</h2>')
   })
 
   it('escapes text that looks like markup, rather than rendering it', () => {

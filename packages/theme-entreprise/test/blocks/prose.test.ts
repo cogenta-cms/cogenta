@@ -14,7 +14,7 @@ describe('prose', () => {
   })
 
   it('starts rich text headings at h2, never at h1 — the vocabulary starts there', () => {
-    expect(html).toContain('<h2>')
+    expect(html).toContain('<h2 id="')
     expect(html).not.toContain('<h1')
   })
 

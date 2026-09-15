@@ -592,6 +592,9 @@ importers:
       '@cogenta/theme-saas':
         specifier: workspace:*
         version: link:../theme-saas
+      '@cogenta/widgets':
+        specifier: workspace:*
+        version: link:../widgets
       graphql:
         specifier: 'catalog:'
         version: 17.0.2

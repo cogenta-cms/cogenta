@@ -52,6 +52,7 @@ import {
   seedDemoMedia,
   seedSiteSettings,
 } from '@cogenta/starters'
+import { createWidgetStore, ensureWidgetTables } from '@cogenta/widgets'
 import { createSiteBackup } from './backup.js'
 import { findSchemaFile, loadSchemaModule } from './serve.js'
 
@@ -589,6 +590,9 @@ export function createSampleDataEngine(options: SampleDataEngineOptions): Sample
     // Rows only: the files stay on disk, so restoring the backup (which holds
     // the rows, not the files) gives the media library back intact.
     await deleteRows(db, MEDIA_TABLE)
+    // Widgets point at collections, menus and media the reset replaces (L30).
+    await ensureWidgetTables(db)
+    await createWidgetStore({ db }).clear()
   }
 
   return {

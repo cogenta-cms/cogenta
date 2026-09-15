@@ -15,7 +15,7 @@ describe('prose', () => {
 
   it('renders real paragraphs and headings, and never a second h1', () => {
     expect(html).toContain('<p>')
-    expect(html).toContain('<h2>The kitchen</h2>')
+    expect(html).toContain('<h2 id="the-kitchen">The kitchen</h2>')
     expect(html).not.toContain('<h1')
   })
 

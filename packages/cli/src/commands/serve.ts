@@ -89,6 +89,7 @@ import {
   createToolsRouter,
   createUpdateRouter,
   createUsersRouter,
+  createWidgetRouter,
   errorResponse,
   executeGraphQL,
   type ForgotPasswordEvent,
@@ -139,6 +140,7 @@ import {
   type UpdateRouter,
   type UsersRouter,
   variantKeyFor,
+  type WidgetRouter,
 } from '@cogenta/api'
 import { type AuditLog, type AuthStore, createAuditLog, createAuthStore } from '@cogenta/auth'
 import {
@@ -262,6 +264,7 @@ import {
   type ContentLifecycleEvent,
   type ContentStore,
   columnFor,
+  countTaxonomyUsage,
   createAdminThemeStore,
   createContentStore,
   createMaintenanceStore,
@@ -305,6 +308,7 @@ import {
   type SiteSettingsStore,
   type TaxonomyDefinition,
   type TaxonomyStore,
+  type TaxonomyTerm,
   withLifecycleEvents,
   withReadOnlyStore,
   withRedirectTracking,
@@ -323,7 +327,14 @@ import {
   type SitemapUrl,
 } from '@cogenta/seo'
 import type { PublicComment } from '@cogenta/theme-canonical'
-import type { ChromeLink } from '@cogenta/theme-kit'
+import type { ChromeLink, WidgetAreas } from '@cogenta/theme-kit'
+import {
+  createWidgetStore,
+  ensureWidgetTables,
+  type Widget,
+  type WidgetStore,
+  widgetAreasFor,
+} from '@cogenta/widgets'
 import type { GraphQLSchema } from 'graphql'
 import { sendInviteMail } from '../invite-mail.js'
 import type { Output, Writer } from '../output.js'
@@ -380,6 +391,7 @@ import {
   configureThemeRegistry,
   DEFAULT_THEME_NAME,
   loadThemeDefaultTokens,
+  resolveTheme,
 } from './theme-registry.js'
 import {
   type BrandingSettings,
@@ -387,6 +399,7 @@ import {
   DEFAULT_IMAGE_ENDPOINT,
   EMPTY_SITE_IDENTITY,
   entryTitle,
+  fetchMenuLinksById,
   joinStyles,
   loadSkinCss,
   renderDraftPage,
@@ -417,6 +430,7 @@ import {
   createThemeWiring,
 } from './theme-wiring.js'
 import { buildToolBodies, createToolRunner, TOOL_DEFINITIONS } from './tools.js'
+import { resolveWidgetAreas, type WidgetRenderRequest } from './widget-resolve.js'
 
 /** `/sitemap.xml` and the `/sitemap-N.xml` chunks a large site splits into. */
 const SITEMAP_PATH = /^\/sitemap(?:-\d+)?\.xml$/u
@@ -669,6 +683,17 @@ interface Site {
   readonly commentsSettingsStore: CommentSettingsStore
   /** `/api/redirects` — admin-only management of the redirect table `cogenta serve` already applies to every public GET (audit follow-up to L10 task 2; extended by fiche 12 with editing, search, patterns and CSV import/export). */
   readonly redirectRouter: RedirectRouter
+  /** `/api/widgets` (L30): admin-only management of the widget areas. */
+  readonly widgetRouter: WidgetRouter
+  readonly widgetStore: WidgetStore
+  /** The stored widgets, kept for a few seconds and dropped on every admin write. */
+  readonly cachedWidgets: () => Promise<readonly Widget[]>
+  /** Every published entry filed under one term, as `(collection, id)` pairs. */
+  readonly entriesForTerm: (
+    taxonomy: string,
+    termId: string,
+  ) => Promise<readonly { readonly collection: string; readonly id: string }[]>
+  readonly taxonomyTerms: (taxonomy: TaxonomyDefinition) => Promise<readonly TaxonomyTerm[]>
   /**
    * Prefix redirects (`/blog/*` to `/actualites/*`, fiche 12 task 4) — a
    * second, deliberately simpler table beside `redirects`, checked only when
@@ -2232,6 +2257,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
 
     return {
       taxonomyName: taxonomy.name,
+      termId: term.id,
       term: { slug: term.slug, label: termLabel(term) },
       ancestors: lineage
         .filter((ancestor) => ancestor.id !== term.id)
@@ -2265,6 +2291,25 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     }
     return urls
   }
+
+  // Widget areas (L30): one fixed table, and the stored widgets kept for a
+  // few seconds so a busy page does not read them on every request. An
+  // admin write drops the copy at once; another replica sees it within the
+  // same few seconds.
+  await ensureWidgetTables(db)
+  const widgetStore = createWidgetStore({ db })
+  const WIDGET_CACHE_MS = 5_000
+  let widgetCache: { readonly at: number; readonly widgets: readonly Widget[] } | null = null
+  const cachedWidgets = async (): Promise<readonly Widget[]> => {
+    if (widgetCache !== null && Date.now() - widgetCache.at < WIDGET_CACHE_MS) {
+      return widgetCache.widgets
+    }
+    const widgets = await widgetStore.list()
+    widgetCache = { at: Date.now(), widgets }
+    return widgets
+  }
+  const readActiveThemeName = async (): Promise<string | null> =>
+    options.theme === undefined ? null : (await options.theme.store.get()).activeTheme
 
   // Contract E (ADR-0024): a whole separate domain, wired the same way the
   // taxonomy tables are — created idempotently, once, here, so a site that
@@ -2556,6 +2601,18 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     commentsStore,
     commentsSettingsStore,
     redirectRouter: createRedirectRouter({ store: redirects, patterns: redirectPatterns }),
+    widgetRouter: createWidgetRouter({
+      store: widgetStore,
+      areas: async () =>
+        widgetAreasFor((await resolveTheme(await readActiveThemeName())).widgetAreas),
+      onChange: () => {
+        widgetCache = null
+      },
+    }),
+    widgetStore,
+    cachedWidgets,
+    entriesForTerm,
+    taxonomyTerms: (taxonomy) => taxonomyStoreFor(taxonomy).list(),
     redirectPatterns,
     rolePermissionStore,
     rolePermissionRouter: createRolePermissionRouter({
@@ -3189,6 +3246,79 @@ function isStoredSocialLinkList(value: unknown): value is readonly StoredSocialL
  * `general.tagline` always has been; `socialLinks` is site-scoped, since a
  * social handle does not change per locale.
  */
+/**
+ * The widget areas of one page (L30), resolved against this site's own
+ * stores. Every read goes through the same permission-checked gateway the
+ * page itself uses, with the visitor's own access context.
+ */
+async function widgetsForSite(
+  site: Site,
+  request: WidgetRenderRequest,
+  context: AccessContext,
+): Promise<WidgetAreas> {
+  return resolveWidgetAreas(
+    {
+      widgets: site.cachedWidgets,
+      areas: async () =>
+        widgetAreasFor((await resolveTheme(await activeThemeForSite(site))).widgetAreas),
+      site: site.site,
+      collections: site.collections,
+      taxonomies: site.taxonomies,
+      gateway: site.gateway,
+      terms: site.taxonomyTerms,
+      termUsage: (taxonomy, terms, access) => {
+        const byName = new Map(site.collections.map((collection) => [collection.name, collection]))
+        return countTaxonomyUsage({
+          db: site.db,
+          taxonomy,
+          terms,
+          collections: site.collections,
+          readable: (name) => {
+            const collection = byName.get(name)
+            return (
+              collection !== undefined && site.permissions.can('read', collection, access).allowed
+            )
+          },
+          includeDrafts: () => false,
+        })
+      },
+      entriesForTerm: site.entriesForTerm,
+      loadMedia: (ids) => loadRenderMedia(site, ids),
+      imageEndpoint: DEFAULT_IMAGE_ENDPOINT,
+      menuLinks: (menuId, locale, access) =>
+        fetchMenuLinksById(menuId, locale, { menuRouter: site.menuRouter }, access),
+      recentComments: async (limit) =>
+        (await site.commentsStore.list({ status: 'approved', limit })).items,
+      popularPaths: async (since, limit) =>
+        (await site.analyticsStore.getSummary({ since, limit })).topPages,
+      form: async (name) => {
+        const definition = await site.formStore.definitions.readByName(name)
+        if (definition === null) return null
+        return {
+          name: definition.name,
+          label: definition.label,
+          active: definition.active,
+          multiStep: definition.steps.length > 1,
+          captcha: definition.captcha.enabled,
+          fields: definition.fields.map((field) => ({
+            name: field.name,
+            label: field.label,
+            kind: field.kind,
+            required: field.required,
+            conditional: field.showIf !== undefined,
+            ...(field.help === undefined ? {} : { help: field.help }),
+            ...(field.choices === undefined ? {} : { choices: field.choices }),
+            ...(field.consentText === undefined ? {} : { consentText: field.consentText }),
+          })),
+        }
+      },
+      social: async (locale) => (await chromeExtrasForSite(site, locale)).social,
+    },
+    request,
+    context,
+  )
+}
+
 async function chromeExtrasForSite(site: Site, locale: string): Promise<ChromeExtras> {
   const [taglineRow, socialRow, footerNoteRow] = await Promise.all([
     site.siteSettingsStore.get('general.tagline', locale),
@@ -4700,6 +4830,15 @@ export function createRequestListener(
       // (audit follow-up to L10 task 2), extended by fiche 12 with prefix
       // patterns and CSV import/export under the same prefix — all
       // admin-only, checked by the router itself.
+      // Widget areas (L30): admin-only, checked by the router itself.
+      if (url.pathname === '/api/widgets' || url.pathname.startsWith('/api/widgets/')) {
+        const body =
+          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.widgetRouter.handle(request, context))
+        return
+      }
+
       if (url.pathname.startsWith('/api/redirects')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
@@ -4800,6 +4939,11 @@ export function createRequestListener(
               activeTheme: () => activeThemeForSite(site),
               identity: () => identityForSite(site),
               chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
+              widgets: await widgetsForSite(
+                site,
+                { context: { path: url.pathname, kind: 'other', locale: site.site.defaultLocale } },
+                context,
+              ),
               loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
               seo: () => readSeoRenderDefaults(site.siteSettingsStore),
             }
@@ -4833,6 +4977,11 @@ export function createRequestListener(
             activeTheme: () => activeThemeForSite(site),
             identity: () => identityForSite(site),
             chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
+            widgets: await widgetsForSite(
+              site,
+              { context: { path: url.pathname, kind: 'other', locale: site.site.defaultLocale } },
+              context,
+            ),
             loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
@@ -5205,6 +5354,7 @@ export function createRequestListener(
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
             identity: () => identityForSite(site),
             chromeExtras: (locale) => chromeExtrasForSite(site, locale),
+            widgets: (request: WidgetRenderRequest) => widgetsForSite(site, request, context),
             authorFor: (userId) => authorForSite(site, userId),
             resolveTerm: site.resolveTaxonomyTerm,
           },
@@ -5799,6 +5949,7 @@ export function createRequestListener(
               // page's byte for byte, and `PageContent.entry` (contract D
               // `theme@1.4`) is part of that body now.
               chromeExtras: (locale) => chromeExtrasForSite(site, locale),
+              widgets: (request: WidgetRenderRequest) => widgetsForSite(site, request, context),
               authorFor: (userId) => authorForSite(site, userId),
               resolveTerm: site.resolveTaxonomyTerm,
             },
@@ -6006,6 +6157,17 @@ export function createRequestListener(
       // list, served through the same permission-checked search router the
       // API uses. Deliberately a route rather than a contract B block — see
       // `search-page.ts` for why.
+      // A widget's dropdown (terms, archives) navigates without any script by
+      // submitting its choice here. Only a path on this site is followed: an
+      // absolute or protocol-relative URL would make this an open redirect.
+      if (url.pathname === '/_cogenta/go' && req.method === 'GET') {
+        const target = url.searchParams.get('to') ?? '/'
+        const safe = target.startsWith('/') && !target.startsWith('//') && !target.includes('\\')
+        res.writeHead(303, { location: safe ? target : '/', 'cache-control': 'no-store' })
+        res.end()
+        return
+      }
+
       if (url.pathname === '/search' && req.method === 'GET') {
         const html = await renderSearchPage(
           url.searchParams.get('q') ?? '',
@@ -6020,6 +6182,11 @@ export function createRequestListener(
             activeTheme: () => activeThemeForSite(site),
             identity: () => identityForSite(site),
             chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
+            widgets: await widgetsForSite(
+              site,
+              { context: { path: url.pathname, kind: 'search', locale: site.site.defaultLocale } },
+              context,
+            ),
             loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           },
@@ -6050,6 +6217,11 @@ export function createRequestListener(
             activeTheme: () => activeThemeForSite(site),
             identity: () => identityForSite(site),
             chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
+            widgets: await widgetsForSite(
+              site,
+              { context: { path: url.pathname, kind: 'other', locale: site.site.defaultLocale } },
+              context,
+            ),
             loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
@@ -6118,6 +6290,7 @@ export function createRequestListener(
           // terms/author (`PageContent.entry`, same contract bump) — read
           // fresh, same "no restart" contract as `homePath`/`seo` above.
           chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
+          widgets: (request: WidgetRenderRequest) => widgetsForSite(site, request, context),
           authorFor: (userId: string) => authorForSite(site, userId),
           resolveTerm: site.resolveTaxonomyTerm,
           // Fiche 35 task 6's admin bar. Its renderer was written, and this
@@ -6174,6 +6347,19 @@ export function createRequestListener(
                   identity: () => identityForSite(site),
                   loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
                   chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
+                  widgets: await widgetsForSite(
+                    site,
+                    {
+                      context: {
+                        path: url.pathname,
+                        kind: 'taxonomy',
+                        locale: site.site.defaultLocale,
+                        taxonomy: resolution.taxonomyName,
+                        ...(resolution.termId === undefined ? {} : { termId: resolution.termId }),
+                      },
+                    },
+                    context,
+                  ),
                 },
                 context,
               )
@@ -6186,6 +6372,108 @@ export function createRequestListener(
                 res.end(archive)
                 return
               }
+            }
+          }
+        }
+
+        // Date archives (L30), `/archive/{collection}/{year}` and
+        // `/archive/{collection}/{year}/{month}` — what an archives or
+        // calendar widget links to. Same rendering as a term archive, same
+        // permission-checked read of every entry it lists.
+        {
+          const dateMatch = /^\/archive\/([^/]+)\/(\d{4})(?:\/(\d{2}))?$/u.exec(url.pathname)
+          const dateCollection =
+            dateMatch === null
+              ? undefined
+              : site.collections.find(
+                  (candidate) => candidate.name === decodeURIComponent(dateMatch[1] as string),
+                )
+          if (
+            dateMatch !== null &&
+            dateCollection !== undefined &&
+            dateCollection.routing !== undefined
+          ) {
+            const year = dateMatch[2] as string
+            const month = dateMatch[3]
+            const prefix = month === undefined ? year : `${year}-${month}`
+            const entries: { collection: string; id: string }[] = []
+            let cursor: string | undefined
+            for (let pages = 0; pages < 20; pages += 1) {
+              const page = await site.gateway.list(
+                {
+                  collection: dateCollection.name,
+                  limit: 100,
+                  sort: [{ field: 'createdAt', direction: 'desc' }],
+                  ...(cursor === undefined ? {} : { cursor }),
+                },
+                context,
+              )
+              for (const item of page.items) {
+                if ((item.publishedAt ?? item.createdAt).startsWith(prefix)) {
+                  entries.push({ collection: dateCollection.name, id: item.id })
+                }
+              }
+              if (page.nextCursor === null || page.nextCursor === undefined) break
+              cursor = page.nextCursor
+            }
+            const basePath = `/archive/${encodeURIComponent(dateCollection.name)}/${year}${month === undefined ? '' : `/${month}`}`
+            const label =
+              month === undefined
+                ? year
+                : new Intl.DateTimeFormat(site.site.defaultLocale, {
+                    month: 'long',
+                    year: 'numeric',
+                    timeZone: 'UTC',
+                  }).format(new Date(`${year}-${month}-01T00:00:00Z`))
+            const requested = Number.parseInt(url.searchParams.get('page') ?? '1', 10)
+            const archive = await renderTermArchivePage(
+              {
+                taxonomyName: dateCollection.labels.plural,
+                basePath,
+                term: { slug: basePath, label },
+                ancestors:
+                  month === undefined
+                    ? []
+                    : [
+                        {
+                          slug: `/archive/${encodeURIComponent(dateCollection.name)}/${year}`,
+                          label: year,
+                        },
+                      ],
+                children: [],
+                entries,
+              },
+              Number.isFinite(requested) ? requested : 0,
+              {
+                collections: site.collections,
+                gateway: site.gateway,
+                site: site.site,
+                styles: await site.resolveStyles(),
+                menus: { menuRouter: site.menuRouter },
+                branding: () => brandingForSite(site),
+                activeTheme: () => activeThemeForSite(site),
+                seo: () => readSeoRenderDefaults(site.siteSettingsStore),
+                identity: () => identityForSite(site),
+                loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
+                chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
+                widgets: await widgetsForSite(
+                  site,
+                  {
+                    context: {
+                      path: url.pathname,
+                      kind: 'dateArchive',
+                      locale: site.site.defaultLocale,
+                    },
+                  },
+                  context,
+                ),
+              },
+              context,
+            )
+            if (archive !== null) {
+              res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+              res.end(archive)
+              return
             }
           }
         }

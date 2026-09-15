@@ -118,10 +118,37 @@ function buildList(
   return { node: h(kind === 'number' ? 'ol' : 'ul', {}, items), next: index }
 }
 
-function renderTextBlock(ctx: RenderContext, block: TextBlock): HtmlNode {
+/**
+ * The anchor a heading of running text gets (L30): its text, lower-cased,
+ * accents dropped, every other run of characters a dash. Shared with the host
+ * so a table of contents widget points at exactly the ids rendered here.
+ */
+export function headingAnchor(text: string): string {
+  const slug = text
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
+  return slug === '' ? 'section' : slug.slice(0, 80)
+}
+
+const ANCHORED_HEADINGS: ReadonlySet<string> = new Set(['h2', 'h3', 'h4'])
+
+function renderTextBlock(
+  ctx: RenderContext,
+  block: TextBlock,
+  anchors: Map<string, number>,
+): HtmlNode {
   const children = renderChildren(ctx, block)
   if (block.style === 'blockquote') return h('blockquote', {}, h('p', {}, ...children))
   if (block.style === 'normal') return h('p', {}, ...children)
+  if (ANCHORED_HEADINGS.has(block.style)) {
+    const base = headingAnchor(block.children.map((child) => child.text).join(''))
+    const seen = anchors.get(base) ?? 0
+    anchors.set(base, seen + 1)
+    return h(block.style, { id: seen === 0 ? base : `${base}-${seen + 1}` }, ...children)
+  }
   return h(block.style, {}, ...children)
 }
 
@@ -130,6 +157,7 @@ export function renderRichText(
   document: RichTextDocument,
 ): readonly HtmlNode[] {
   const out: HtmlNode[] = []
+  const anchors = new Map<string, number>()
   let index = 0
 
   while (index < document.length) {
@@ -165,7 +193,7 @@ export function renderRichText(
       continue
     }
 
-    out.push(renderTextBlock(ctx, node))
+    out.push(renderTextBlock(ctx, node, anchors))
     index += 1
   }
 

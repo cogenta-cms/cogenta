@@ -18,7 +18,7 @@ describe('prose', () => {
   })
 
   it('adds no heading of its own and starts rich text headings at h2', () => {
-    expect(html).toContain('<h2>What we mend</h2>')
+    expect(html).toContain('<h2 id="what-we-mend">What we mend</h2>')
     expect(html).not.toContain('<h1')
   })
 

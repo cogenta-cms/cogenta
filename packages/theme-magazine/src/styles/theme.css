@@ -10,6 +10,7 @@
  *   article.css  the article page
  *   blocks.css   the other vocabulary blocks
  *   archive.css  the taxonomy-term archive, set as a section front
+ *   widgets.css  the widget areas: the rail, the bands, the footer columns
  *
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--cg-*` property composed from those.
@@ -33,3 +34,4 @@
 @import "./article.css";
 @import "./blocks.css";
 @import "./archive.css";
+@import "./widgets.css";

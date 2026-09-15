@@ -184,7 +184,7 @@ img {
   padding-block: calc(var(--cg-section) / 2);
 }
 
-.cg-main > .cg-section:first-child {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-section:first-child {
   padding-block-start: calc(var(--cg-section) * 0.5);
 }
 
@@ -966,7 +966,7 @@ img {
 /* The results page is set like a section front: the query very large on the
    page's own left edge, a heavy rule, then the results in one column held to
    a reading width. The host renders it in a bare `<main class="cg-main">`. */
-.cg-main > .cg-page__title,
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-page__title,
 .cg-search__form,
 .cg-search__results,
 .cg-search__empty,
@@ -985,7 +985,7 @@ img {
   padding-inline: var(--cg-gutter);
 }
 
-.cg-main > .cg-page__title {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-page__title {
   margin-block: calc(var(--cg-section) * 0.55) 0;
   padding-block-end: var(--cg-s5);
   font-size: var(--cg-size-headline);
@@ -996,7 +996,7 @@ img {
 }
 
 /* The rule runs the page's width even though the title is held narrower. */
-.cg-main > .cg-page__title::after {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-page__title::after {
   content: "";
   position: absolute;
   inset-inline: var(--cg-gutter);

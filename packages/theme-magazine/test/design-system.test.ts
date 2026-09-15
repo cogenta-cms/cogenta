@@ -20,6 +20,7 @@ const SHEETS = [
   'article.css',
   'blocks.css',
   'archive.css',
+  'widgets.css',
 ] as const
 
 const SOURCES = new Map(

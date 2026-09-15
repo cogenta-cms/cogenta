@@ -88,6 +88,7 @@ describe('theme isolation', () => {
       'styles/stories.css',
       'styles/theme.css',
       'styles/tokens.css',
+      'styles/widgets.css',
     ])
   })
 
@@ -120,6 +121,7 @@ describe('theme isolation', () => {
       './article.css',
       './blocks.css',
       './archive.css',
+      './widgets.css',
     ])
   })
 

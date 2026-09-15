@@ -150,7 +150,7 @@ a.cg-article-head__kicker-link:hover {
 
 /* The lead photograph an article opens its body with (a `mediaFigure`)
    follows the header with less space than two blocks usually keep. */
-.cg-article > .cg-article-head + .cg-figure {
+:is(.cg-article, .cg-article :where(.cg-sidebar-layout__content)) > .cg-article-head + .cg-figure {
   padding-block-start: var(--cg-s8);
 }
 
@@ -158,11 +158,11 @@ a.cg-article-head__kicker-link:hover {
    The reading column
    -------------------------------------------------------------------------- */
 
-.cg-article > .cg-prose {
+:is(.cg-article, .cg-article :where(.cg-sidebar-layout__content)) > .cg-prose {
   padding-block: var(--cg-s4);
 }
 
-.cg-article > .cg-article-head + .cg-prose {
+:is(.cg-article, .cg-article :where(.cg-sidebar-layout__content)) > .cg-article-head + .cg-prose {
   padding-block-start: var(--cg-s10);
 }
 
@@ -176,7 +176,7 @@ a.cg-article-head__kicker-link:hover {
 }
 
 /* A pull quote inside an article keeps close to the paragraphs around it. */
-.cg-article > .cg-pullquote {
+:is(.cg-article, .cg-article :where(.cg-sidebar-layout__content)) > .cg-pullquote {
   padding-block: var(--cg-s8);
 }
 

@@ -5,6 +5,7 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderFooterWidgets,
   renderSocialLinks,
   renderThemeToggle,
   serialize,
@@ -148,12 +149,19 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     itemClassName: 'cg-colophon__social-item',
   })
   const year = today.getFullYear()
+  // The footer widget columns (`theme@1.6`) sit under the name, above the
+  // colophon's own columns, set in the same register.
+  const footerWidgets = renderFooterWidgets(input.widgets, {
+    className: 'cg-colophon__widgets',
+    headingLevel: 'h2',
+  })
 
   const footer =
     `<footer class="cg-colophon"><div class="cg-colophon__inner">` +
     `<div class="cg-colophon__plate">` +
     `<a class="cg-colophon__name" href="${homeHref}">${siteNameText}</a>` +
     `</div>` +
+    `${footerWidgets === null ? '' : serialize(footerWidgets)}` +
     `<div class="cg-colophon__grid">` +
     `${footerTagline === '' && note === '' ? '' : `<div class="cg-colophon__about">${footerTagline}${note}</div>`}` +
     `${

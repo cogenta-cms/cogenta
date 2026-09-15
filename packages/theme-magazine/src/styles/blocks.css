@@ -69,8 +69,14 @@
     grid-column: 6 / -1;
   }
 
+  /* Without a picture the cover takes the whole width, so its rule runs the
+     page's width like every other rule; the headline keeps its own measure. */
   .cg-cover[data-media="none"] .cg-cover__copy {
-    grid-column: 1 / span 10;
+    grid-column: 1 / -1;
+  }
+
+  .cg-cover[data-media="none"] .cg-cover__title {
+    max-inline-size: 24ch;
   }
 }
 

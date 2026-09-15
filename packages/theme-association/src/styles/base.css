@@ -466,7 +466,7 @@ img {
    same register. The host sets them in a bare `<main class="cg-main">`.
    -------------------------------------------------------------------------- */
 
-.cg-main > .cg-page__title,
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-page__title,
 .cg-search__form,
 .cg-search__results,
 .cg-search__empty,
@@ -479,7 +479,7 @@ img {
   padding-inline: var(--ca-gutter);
 }
 
-.cg-main > .cg-page__title {
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-page__title {
   padding-block: calc(var(--ca-section) * 0.55) var(--ca-s8);
   font-size: var(--ca-size-title);
   font-weight: var(--ca-weight-bold);
@@ -496,7 +496,8 @@ img {
 .cg-search__form {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
+  /* The field and its button share one height on their line. */
+  align-items: stretch;
   gap: var(--ca-s3) var(--ca-s4);
   margin-block: 0 var(--ca-s10);
 }
@@ -532,6 +533,64 @@ img {
 .cg-search__results > * {
   padding-block: var(--ca-s5);
   border-block-start: var(--ca-rule) solid var(--ca-line);
+}
+
+/* A result reads like a row of the calendar: the title in the display face,
+   the green underline on hover, the summary in the text face under it. */
+.cg-search__results > :first-child {
+  border-block-start: var(--ca-rule-strong) solid var(--ca-line-ink);
+}
+
+.cg-search__hit {
+  line-height: var(--ca-leading-heading);
+}
+
+.cg-search__title {
+  font-stretch: var(--ca-stretch-display);
+  letter-spacing: var(--ca-tracking-heading);
+}
+
+a.cg-search__title {
+  color: var(--ca-ink);
+  text-decoration-thickness: var(--ca-rule-strong);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.16em;
+}
+
+a.cg-search__title:hover {
+  color: var(--ca-ink);
+  text-decoration-color: var(--ca-green);
+}
+
+.cg-search__excerpt,
+.cg-search__meta,
+.cg-search__count {
+  font-family: var(--ca-font-text);
+  font-weight: var(--ca-weight-regular);
+  letter-spacing: 0;
+}
+
+.cg-search__excerpt {
+  margin: var(--ca-s2) 0 0;
+  max-inline-size: 64ch;
+  color: var(--ca-ink-muted);
+  font-size: var(--ca-text-md);
+  line-height: var(--ca-leading-text);
+}
+
+.cg-search__meta {
+  margin: var(--ca-s2) 0 0;
+  color: var(--ca-green);
+  font-size: var(--ca-text-caption);
+  font-weight: var(--ca-weight-semibold);
+}
+
+.cg-search__count {
+  display: block;
+  margin-block-start: var(--ca-s3);
+  color: var(--ca-ink-muted);
+  font-size: var(--ca-text-md);
+  line-height: var(--ca-leading-ui);
 }
 
 .cg-search__empty,

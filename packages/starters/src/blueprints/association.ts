@@ -25,6 +25,7 @@ import {
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus, MenuItemSpec } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
+import type { BlueprintWidget } from './widgets.js'
 
 /**
  * The `association` blueprint (L27, `@cogenta/theme-association`): a
@@ -1354,6 +1355,85 @@ export const ASSOCIATION_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
 }
 
 /**
+ * The side column a neighbour expects beside the charity's own pages. On a
+ * programme, the ask to keep it free and where else the hall can help (the
+ * advice sessions the What we do page names); on an event, the four weekly
+ * programmes with their photographs and the call to lend a hand on the day;
+ * on search results, the programmes and the same ask to give.
+ *
+ * What the pages already show is never repeated: an event already ends on
+ * the other dates at the hall, in date order, and a programme on the other
+ * programmes, so neither gets a second list of its own kind. The home page
+ * opens on its hero and keeps its full width, and every site page (What we
+ * do, Events, Volunteer, Ways to give, finances, Our story, Contact,
+ * Privacy) already carries its own lists and asks. No contact widget: the
+ * footer note on every page already gives the hall's address, telephone,
+ * email and opening hours. No widget names the charity, so none goes stale
+ * when the site is called something else.
+ */
+const ASSOCIATION_EVENT = { kind: 'collection', collection: 'event' } as const
+const ASSOCIATION_PROGRAMME = { kind: 'collection', collection: 'programme' } as const
+const ASSOCIATION_SEARCH = { kind: 'search' } as const
+
+function onlyOn(
+  ...targets: readonly { readonly kind: string }[]
+): Readonly<Record<string, unknown>> {
+  return { pages: { mode: 'only', targets } }
+}
+
+export const ASSOCIATION_WIDGETS: readonly BlueprintWidget[] = [
+  {
+    area: 'sidebar',
+    type: 'cta',
+    settings: {
+      heading: 'Keep it free for everyone',
+      body: 'Nobody pays for a food parcel, a place at homework club or a winter coat. £12 a month keeps one family in fresh vegetables all year.',
+      label: 'Ways to give',
+      href: '/donate',
+    },
+    visibility: onlyOn(ASSOCIATION_PROGRAMME, ASSOCIATION_SEARCH),
+  },
+  {
+    area: 'sidebar',
+    type: 'text',
+    title: 'Help with something else',
+    settings: {
+      body: [
+        textBlock(
+          'widget-advice-0',
+          'normal',
+          'Debt advice, housing, benefits and the council’s support fund all hold sessions at the hall.',
+        ),
+        textBlock(
+          'widget-advice-1',
+          'normal',
+          `Ring [${ASSOCIATION_PHONE}](${PHONE_LINK}) on a weekday and we will tell you when the next one is.`,
+        ),
+      ],
+    },
+    visibility: onlyOn(ASSOCIATION_PROGRAMME),
+  },
+  {
+    area: 'sidebar',
+    type: 'recentEntries',
+    title: 'Every week at the hall',
+    settings: { collection: 'programme', count: 4, showDate: false, showImage: true },
+    visibility: onlyOn(ASSOCIATION_EVENT, ASSOCIATION_SEARCH),
+  },
+  {
+    area: 'sidebar',
+    type: 'cta',
+    settings: {
+      heading: 'Lend a hand on the day',
+      body: 'Collections, garden mornings and the supper all run on volunteers. Come for two hours or stay all day; nobody needs experience.',
+      label: 'Volunteer with us',
+      href: '/volunteer',
+    },
+    visibility: onlyOn(ASSOCIATION_EVENT),
+  },
+]
+
+/**
  * Bundled photographs (`assets/photos/association/`), every one looked at
  * full size: lettering printed on aprons, T-shirts, caps, boxes and signs was
  * retouched or cropped out, and a picture with too much of it (a river
@@ -1558,6 +1638,7 @@ export const associationContentPack: BlueprintContentPack = {
   seedDemoContent: seedAssociationDemoContent,
   defaultTheme: '@cogenta/theme-association',
   menus: ASSOCIATION_MENUS,
+  widgets: ASSOCIATION_WIDGETS,
   siteSettings: ASSOCIATION_SITE_SETTINGS,
   mediaSpecs: ASSOCIATION_MEDIA_SPECS,
 }

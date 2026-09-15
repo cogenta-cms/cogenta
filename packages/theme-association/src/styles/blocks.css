@@ -189,7 +189,9 @@
 }
 
 /* The first paragraph under a page's title opens the page a step larger. */
-:where(.ca-main > .ca-page-head + .ca-prose) .ca-prose__body > p:first-child {
+:where(:is(.ca-main, .cg-sidebar-layout__content) > .ca-page-head + .ca-prose)
+  .ca-prose__body
+  > p:first-child {
   font-size: var(--ca-size-lead);
   line-height: var(--ca-leading-lead);
 }

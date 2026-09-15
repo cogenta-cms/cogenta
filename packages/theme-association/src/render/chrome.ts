@@ -5,6 +5,7 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderFooterWidgets,
   renderSocialLinks,
   renderThemeToggle,
   serialize,
@@ -36,6 +37,10 @@ import { associationString } from './strings.js'
  * the legal line: the copyright year and the name, beside the host's
  * `brandingHtml`, placed once, as received. Every `theme@1.4` field renders
  * only when present.
+ *
+ * Footer widget columns (`theme@1.6`) are one row under the name and the
+ * menu, above the legal line, in the band's own small type; with none, the
+ * footer is exactly what it was before widgets existed.
  */
 
 interface FooterGroup {
@@ -179,6 +184,10 @@ export function renderChrome(input: ChromeInput): ChromeResult {
           )
           .join('')}</nav>`
   const year = new Date().getFullYear()
+  const widgets = renderFooterWidgets(input.widgets, {
+    className: 'ca-footer__widgets',
+    headingLevel: 'h2',
+  })
 
   const footer =
     `<footer class="ca-footer"><div class="ca-footer__inner">` +
@@ -188,6 +197,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `${social === null ? '' : serialize(social)}` +
     `</div>` +
     `${nav}` +
+    `${widgets === null ? '' : serialize(widgets)}` +
     `<div class="ca-footer__legal">` +
     `<p class="ca-footer__copyright">© ${year} ${siteName}</p>` +
     `${input.brandingHtml === '' ? '' : `<div class="ca-footer__branding">${input.brandingHtml}</div>`}` +

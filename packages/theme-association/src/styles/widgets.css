@@ -1,0 +1,1059 @@
+/* --------------------------------------------------------------------------
+   Widgets (contract D `theme@1.6`): the side column beside an event, a
+   programme or search results, the bands before and after the content, and
+   the footer's widget row.
+
+   The host draws one markup for every theme (`cg-sidebar-layout`); this file
+   sets it in this theme's register, the noticeboard in the hall: every
+   widget opens on the same heavy ink rule as the calendar, its name in the
+   display face, lists between hairlines, photographs cropped square, and an
+   ask on the paper band with the organisation's green button. The yellow
+   stays the header's donation ask. No shadow, no rounded panel, no tint
+   beyond the band the page already uses.
+   -------------------------------------------------------------------------- */
+
+/* --- the layout ------------------------------------------------------------ */
+
+.cg-sidebar-layout {
+  display: grid;
+  row-gap: var(--ca-s16);
+  inline-size: 100%;
+  max-inline-size: calc(var(--ca-page) + var(--ca-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--ca-gutter);
+}
+
+.cg-sidebar-layout__content {
+  min-inline-size: 0;
+  /* A column narrower than the page carries a title a step smaller. */
+  --ca-size-title: clamp(var(--ca-text-2xl), calc(1rem + 2.4vw), var(--ca-text-3xl));
+  --ca-size-day-large: clamp(var(--ca-text-4xl), calc(1rem + 3.6vw), var(--ca-text-5xl));
+}
+
+/* Inside the content column the layout holds the gutters and the width. */
+.cg-sidebar-layout__content
+:is(
+  .ca-container,
+  .cg-page__title,
+  .cg-search__form,
+  .cg-search__results,
+  .cg-search__empty,
+  .cg-search__error,
+  .cg-form,
+  .cg-form__confirmation,
+  .cg-comments
+) {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
+.cg-sidebar-layout__content .ca-figure[data-align="full"] .ca-figure__caption {
+  padding-inline: 0;
+}
+
+/* A band inside the column is a panel: its words keep off its edges. */
+.cg-sidebar-layout__content :is(.ca-cta, [data-block][data-variant-background]) > .ca-container {
+  padding-inline: clamp(var(--ca-s5), 3vw, var(--ca-s10));
+}
+
+/* The results or the thread end the column; the widgets or the footer bring
+   the rest of the space. */
+.cg-sidebar-layout__content > :is(.cg-search__results, .cg-comments):last-child {
+  margin-block-end: calc(var(--ca-section) / 2);
+}
+
+.cg-sidebar-layout__aside {
+  align-self: start;
+  padding-block-end: calc(var(--ca-section) / 2);
+}
+
+/* Stacked under the content on the page's own gutters, in as many columns as
+   the width holds. */
+@media (max-width: 63.99rem) {
+  .cg-sidebar-layout {
+    row-gap: 0;
+  }
+
+  /* The page's last section already ends on its half step; each widget's
+     own rule or panel is the only separation, never a second hairline. */
+  .cg-sidebar-layout__aside {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+    column-gap: calc(var(--ca-col-gap) * 1.5);
+    align-items: start;
+    border: 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-sidebar-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+    column-gap: clamp(var(--ca-s10), 4vw, var(--ca-s20));
+    row-gap: 0;
+  }
+
+  /* The column starts where the page's own opening starts under the header. */
+  .cg-sidebar-layout__aside {
+    padding-block-start: calc(var(--ca-section) * 0.55);
+  }
+
+  /* An event's date, title and details share a narrower column: the date
+     keeps its three columns, the words take every other one. */
+  .cg-sidebar-layout__content .ca-event__heading {
+    grid-column: 4 / -1;
+  }
+
+  .cg-sidebar-layout__content .ca-entry__heading,
+  .cg-sidebar-layout__content .ca-page-head__title,
+  .cg-sidebar-layout__content .ca-page-head__meta,
+  .cg-sidebar-layout__content .ca-page-head__terms {
+    grid-column: 1 / -1;
+  }
+
+  /* A programme's portrait keeps its place beside the words. */
+  .cg-sidebar-layout__content .ca-entry[data-cover="portrait"] .ca-entry__heading {
+    grid-column: 1 / span 7;
+  }
+
+  .cg-sidebar-layout__content .ca-entry[data-cover="portrait"] .ca-entry__cover {
+    grid-column: 8 / -1;
+  }
+
+  .cg-sidebar-layout__content .ca-page-head__lead {
+    grid-column: 1 / span 10;
+  }
+
+  /* The reading text takes the column, up to its measure. */
+  .cg-sidebar-layout__content .ca-prose__body,
+  .cg-sidebar-layout__content .cg-comments > * {
+    grid-column: 1 / -1;
+  }
+
+  /* A calendar row in a narrower column: the date on two columns, the words
+     on the rest, the cost under the place rather than beside the title. */
+  .cg-sidebar-layout__content .ca-list[data-layout="list"] .ca-date {
+    grid-column: 1 / span 2;
+  }
+
+  .cg-sidebar-layout__content .ca-list[data-layout="list"] .ca-events__body {
+    grid-column: 3 / -1;
+  }
+
+  .cg-sidebar-layout__content .ca-list[data-layout="list"] .ca-events__cost {
+    grid-column: 3 / -1;
+    grid-row: auto;
+    justify-self: start;
+    padding-block-start: 0;
+    text-align: start;
+  }
+
+  /* Cards in a narrower column: as many to a row as keep a card readable,
+     so three programmes still share one row rather than leaving one alone. */
+  .cg-sidebar-layout__content .ca-list[data-layout="grid"] :is(.ca-photos, .ca-events) {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12.5rem), 1fr));
+  }
+
+  .cg-sidebar-layout__content .ca-rows__media,
+  .cg-sidebar-layout__content .ca-rows__item:nth-child(even) .ca-rows__media {
+    grid-column: 1 / span 5;
+  }
+
+  .cg-sidebar-layout__content .ca-rows__body,
+  .cg-sidebar-layout__content .ca-rows__item:nth-child(even) .ca-rows__body {
+    grid-column: 6 / -1;
+  }
+
+  .cg-sidebar-layout__content .ca-list[data-shape="index"] .ca-index {
+    grid-column: 1 / -1;
+  }
+}
+
+/* A band the host places outside the layout (the home page, a page opening
+   on its own hero): on the page's own width and gutters. */
+.cg-widget-area--placed {
+  inline-size: 100%;
+  max-inline-size: calc(var(--ca-page) + var(--ca-gutter) * 2);
+  margin-inline: auto;
+  padding: calc(var(--ca-section) / 2) var(--ca-gutter);
+}
+
+.cg-sidebar-layout__content .cg-widget-area--placed {
+  max-inline-size: none;
+  padding-inline: 0;
+}
+
+.cg-widget-area--placed[data-area="sidebar"] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  column-gap: calc(var(--ca-col-gap) * 1.5);
+  border: 0;
+}
+
+/* --- a widget -------------------------------------------------------------- */
+
+.cg-widget-area {
+  display: grid;
+  gap: var(--ca-s12);
+  align-content: start;
+}
+
+.cg-widget {
+  min-inline-size: 0;
+  color: var(--ca-ink);
+}
+
+/* The heavy ink rule the calendar and the index open on, the name under it. */
+.cg-widget__title {
+  margin: 0 0 var(--ca-s4);
+  padding-block-start: var(--ca-s4);
+  border-block-start: var(--ca-rule-strong) solid var(--ca-line-ink);
+  color: var(--ca-ink);
+  font-family: var(--ca-font-display);
+  font-size: var(--ca-text-lg);
+  font-weight: var(--ca-weight-semibold);
+  font-stretch: var(--ca-stretch-display);
+  line-height: var(--ca-leading-heading);
+  letter-spacing: var(--ca-tracking-heading);
+  text-transform: none;
+  text-wrap: balance;
+}
+
+.cg-widget__body {
+  font-family: var(--ca-font-text);
+  font-size: var(--ca-text-md);
+  line-height: var(--ca-leading-text);
+}
+
+.cg-widget__body :is(ul, ol) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-widget__body p {
+  margin: 0;
+}
+
+.cg-widget a {
+  color: var(--ca-ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--ca-rule-strong);
+  text-decoration-color: var(--ca-green);
+  text-underline-offset: 0.22em;
+}
+
+.cg-widget a:hover {
+  color: var(--ca-green);
+}
+
+.cg-widget [aria-current="page"],
+.cg-widget [aria-current="page"] > a {
+  color: var(--ca-green);
+  font-weight: var(--ca-weight-semibold);
+}
+
+.cg-widget__empty {
+  color: var(--ca-ink-muted);
+}
+
+/* A widget that has no name of its own opens on the rule alone. */
+.cg-widget:not(:has(> .cg-widget__title)):not(
+  .cg-widget--cta,
+  .cg-widget--image,
+  .cg-widget--gallery,
+  .cg-widget--embed
+) {
+  padding-block-start: var(--ca-s4);
+  border-block-start: var(--ca-rule-strong) solid var(--ca-line-ink);
+}
+
+/* --- entries, comments, terms, links: rows between hairlines --------------- */
+
+.cg-widget__entry,
+.cg-widget__comment,
+:is(.cg-widget__terms, .cg-widget__archives, .cg-widget__links, .cg-widget__toc) > li {
+  padding-block: var(--ca-s3);
+  border-block: 0;
+  border-block-start: var(--ca-rule) solid var(--ca-line);
+}
+
+.cg-widget__entry:first-child,
+.cg-widget__comment:first-child,
+:is(.cg-widget__terms, .cg-widget__archives, .cg-widget__links, .cg-widget__toc) > li:first-child {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
+.cg-widget__entry:last-child,
+.cg-widget__comment:last-child,
+:is(.cg-widget__terms, .cg-widget__archives, .cg-widget__links, .cg-widget__toc) > li:last-child {
+  padding-block-end: 0;
+}
+
+.cg-widget__entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--ca-s4);
+  align-items: center;
+  padding-block: var(--ca-s4);
+}
+
+.cg-widget__entry[data-image="image"] {
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+}
+
+.cg-widget__entry-image {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: var(--ca-band);
+}
+
+.cg-widget__entry-text {
+  display: grid;
+  gap: var(--ca-s1);
+  min-inline-size: 0;
+}
+
+/* The title is the link, with the green underline on hover. */
+.cg-widget a.cg-widget__entry-title,
+.cg-widget__entry-title {
+  color: var(--ca-ink);
+  font-family: var(--ca-font-display);
+  font-size: var(--ca-text-md);
+  font-weight: var(--ca-weight-semibold);
+  line-height: var(--ca-leading-heading);
+  letter-spacing: var(--ca-tracking-heading);
+  text-wrap: pretty;
+}
+
+.cg-widget a.cg-widget__entry-title {
+  text-decoration-color: transparent;
+  text-underline-offset: 0.16em;
+}
+
+.cg-widget a.cg-widget__entry-title:hover {
+  color: var(--ca-ink);
+  text-decoration-color: var(--ca-green);
+}
+
+.cg-widget__entry-excerpt,
+.cg-widget__comment-excerpt {
+  color: var(--ca-ink-muted);
+  font-size: var(--ca-text-caption);
+  line-height: var(--ca-leading-ui);
+}
+
+.cg-widget__entry-date,
+.cg-widget__comment-date {
+  color: var(--ca-green);
+  font-size: var(--ca-text-caption);
+  font-weight: var(--ca-weight-semibold);
+  line-height: var(--ca-leading-ui);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-widget__comment {
+  display: grid;
+  gap: var(--ca-s1);
+  line-height: var(--ca-leading-ui);
+}
+
+.cg-widget__comment-author {
+  font-weight: var(--ca-weight-semibold);
+}
+
+.cg-widget a.cg-widget__comment-entry {
+  text-decoration-color: transparent;
+}
+
+.cg-widget a.cg-widget__comment-entry:hover {
+  text-decoration-color: var(--ca-green);
+}
+
+/* Terms and archives: the label on the left, the count on the right. */
+:is(.cg-widget__terms, .cg-widget__archives) > li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--ca-s1) var(--ca-s4);
+}
+
+:is(.cg-widget__terms, .cg-widget__archives, .cg-widget__links, .cg-widget__toc) a {
+  font-weight: var(--ca-weight-semibold);
+  text-decoration-color: transparent;
+}
+
+:is(.cg-widget__terms, .cg-widget__archives, .cg-widget__links, .cg-widget__toc) a:hover {
+  color: var(--ca-ink);
+  text-decoration-color: var(--ca-green);
+}
+
+.cg-widget__terms-item[data-depth="1"],
+.cg-widget__toc-item[data-depth="1"] {
+  padding-inline-start: var(--ca-s5);
+}
+
+.cg-widget__terms-item[data-depth="2"],
+.cg-widget__toc-item[data-depth="2"] {
+  padding-inline-start: var(--ca-s10);
+}
+
+.cg-widget__terms-count,
+.cg-widget__archives-count,
+.cg-widget__cloud-count {
+  color: var(--ca-ink-muted);
+  font-size: var(--ca-text-caption);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* A link list ends each label on the theme's arrow. */
+.cg-widget__links a::after {
+  content: "\2192" / "";
+  display: inline-block;
+  margin-inline-start: 0.35em;
+  color: var(--ca-green);
+}
+
+.cg-widget__cloud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--ca-s2) var(--ca-s5);
+}
+
+.cg-widget__cloud-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--ca-s1);
+  font-weight: var(--ca-weight-semibold);
+}
+
+.cg-widget__cloud-item a {
+  text-decoration-color: transparent;
+}
+
+.cg-widget__cloud-item[data-weight="1"] {
+  font-size: var(--ca-text-sm);
+}
+.cg-widget__cloud-item[data-weight="2"] {
+  font-size: var(--ca-text-caption);
+}
+.cg-widget__cloud-item[data-weight="3"] {
+  font-size: var(--ca-text-md);
+}
+.cg-widget__cloud-item[data-weight="4"] {
+  font-size: var(--ca-text-lg);
+}
+.cg-widget__cloud-item[data-weight="5"] {
+  font-size: var(--ca-text-xl);
+}
+
+/* --- search, a jump menu, a form: the theme's own fields ------------------- */
+
+.cg-widget__search,
+.cg-widget__jump {
+  display: flex;
+  align-items: stretch;
+  gap: var(--ca-s2);
+}
+
+.cg-widget__search-input,
+.cg-widget__jump select,
+.cg-widget__form :is(input:not([type="checkbox"]), select, textarea) {
+  flex: 1;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 44px;
+  padding: var(--ca-s2) var(--ca-s3);
+  border: var(--ca-rule) solid var(--ca-line-strong);
+  border-radius: var(--ca-radius-control);
+  background: var(--ca-canvas);
+  color: var(--ca-ink);
+  font-family: var(--ca-font-text);
+  font-size: var(--ca-text-md);
+  line-height: var(--ca-leading-ui);
+  transition: border-color var(--ca-duration) var(--ca-ease);
+}
+
+.cg-widget__search-input::placeholder {
+  color: var(--ca-ink-subtle);
+}
+
+.cg-widget__search-input:focus-visible,
+.cg-widget__jump select:focus-visible,
+.cg-widget__form :is(input, select, textarea):focus-visible {
+  outline: var(--ca-rule-strong) solid var(--ca-green);
+  outline-offset: 1px;
+  border-color: var(--ca-green);
+}
+
+.cg-widget__search-button,
+.cg-widget__jump-button,
+.cg-widget__form-submit,
+.cg-widget a.cg-widget__cta-action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 44px;
+  padding: var(--ca-s2) var(--ca-s5);
+  border: var(--ca-rule) solid var(--ca-action);
+  border-radius: var(--ca-radius-control);
+  background: var(--ca-action);
+  color: var(--ca-action-fg);
+  font-family: var(--ca-font-text);
+  font-size: var(--ca-text-md);
+  font-weight: var(--ca-weight-semibold);
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--ca-duration) var(--ca-ease),
+    border-color var(--ca-duration) var(--ca-ease),
+    color var(--ca-duration) var(--ca-ease);
+}
+
+:is(.cg-widget__search-button, .cg-widget__jump-button, .cg-widget__form-submit):hover,
+.cg-widget a.cg-widget__cta-action:hover {
+  border-color: var(--ca-action-hover);
+  background: var(--ca-action-hover);
+  color: var(--ca-action-hover-fg);
+}
+
+.cg-widget__form {
+  display: grid;
+  gap: var(--ca-s4);
+}
+
+.cg-widget__form .cg-form__field {
+  margin: 0;
+}
+
+.cg-widget__form label {
+  display: block;
+  margin-block-end: var(--ca-s2);
+  color: var(--ca-ink);
+  font-size: var(--ca-text-caption);
+  font-weight: var(--ca-weight-semibold);
+}
+
+.cg-widget__form-submit {
+  justify-self: start;
+}
+
+.cg-widget a.cg-widget__form-link,
+.cg-widget a.cg-widget__about-link,
+.cg-widget__calendar-nav a {
+  font-weight: var(--ca-weight-semibold);
+}
+
+.cg-widget a.cg-widget__form-link::after,
+.cg-widget a.cg-widget__about-link::after {
+  content: "\2192" / "";
+  display: inline-block;
+  margin-inline-start: 0.35em;
+}
+
+/* --- words and pictures ---------------------------------------------------- */
+
+.cg-widget__figure,
+.cg-widget__embed,
+.cg-widget__quote {
+  margin: 0;
+}
+
+:is(.cg-widget__image, .cg-widget__about-image, .cg-widget__gallery-image) {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  background: var(--ca-band);
+}
+
+.cg-widget__gallery-image {
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.cg-widget__caption {
+  margin-block-start: var(--ca-s3);
+  color: var(--ca-ink-muted);
+  font-size: var(--ca-text-caption);
+  line-height: var(--ca-leading-ui);
+}
+
+.cg-widget__frame {
+  display: block;
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  background: var(--ca-band);
+}
+
+.cg-widget__gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ca-s2);
+}
+
+.cg-widget__gallery[data-columns="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.cg-widget__gallery[data-columns="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.cg-widget__text :is(p, ul, ol, h2, h3, h4) + :is(p, ul, ol, h2, h3, h4) {
+  margin-block-start: var(--ca-s3);
+}
+
+.cg-widget__text :is(h2, h3, h4) {
+  font-size: var(--ca-text-lg);
+}
+
+.cg-widget__text :is(ul, ol) {
+  padding-inline-start: 1.25em;
+  list-style: disc;
+}
+
+.cg-widget__text li::marker {
+  color: var(--ca-green);
+}
+
+/* A quotation as the prose sets one: the green bar, the display face. */
+.cg-widget__quote {
+  padding-inline-start: var(--ca-s5);
+  border-inline-start: 3px solid var(--ca-green);
+}
+
+.cg-widget__quote-text {
+  margin: 0;
+  font-family: var(--ca-font-display);
+  font-size: var(--ca-text-lg);
+  font-weight: var(--ca-weight-medium);
+  line-height: var(--ca-leading-lead);
+  quotes: "\201C" "\201D" "\2018" "\2019";
+}
+
+.cg-widget__quote-text p::before {
+  content: open-quote;
+}
+
+.cg-widget__quote-text p::after {
+  content: close-quote;
+}
+
+.cg-widget__quote-source {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-block-start: var(--ca-s4);
+  font-size: var(--ca-text-caption);
+  line-height: var(--ca-leading-ui);
+}
+
+.cg-widget__quote-name {
+  font-weight: var(--ca-weight-semibold);
+}
+
+.cg-widget__quote-role {
+  color: var(--ca-ink-muted);
+}
+
+.cg-widget__about {
+  display: grid;
+  gap: var(--ca-s3);
+  justify-items: start;
+}
+
+.cg-widget__about-image {
+  margin-block-end: var(--ca-s2);
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.cg-widget__about-heading {
+  font-family: var(--ca-font-display);
+  font-size: var(--ca-text-xl);
+  font-weight: var(--ca-weight-bold);
+  font-stretch: var(--ca-stretch-display);
+  line-height: var(--ca-leading-heading);
+  letter-spacing: var(--ca-tracking-display);
+  text-wrap: balance;
+}
+
+.cg-widget__about-body {
+  color: var(--ca-ink-muted);
+}
+
+/* --- an ask: the paper band, the green button ------------------------------ */
+
+.cg-widget--cta {
+  padding: var(--ca-s6) var(--ca-s6) var(--ca-s6);
+  background: var(--ca-band);
+}
+
+.cg-widget--cta .cg-widget__title {
+  margin-block-end: var(--ca-s3);
+  padding-block-start: 0;
+  border-block-start: 0;
+  color: var(--ca-green);
+  font-family: var(--ca-font-text);
+  font-size: var(--ca-text-caption);
+  font-stretch: normal;
+  letter-spacing: 0;
+}
+
+.cg-widget__cta {
+  display: grid;
+  gap: var(--ca-s3);
+  justify-items: start;
+}
+
+.cg-widget__cta-heading {
+  color: var(--ca-ink);
+  font-family: var(--ca-font-display);
+  font-size: var(--ca-text-xl);
+  font-weight: var(--ca-weight-bold);
+  font-stretch: var(--ca-stretch-display);
+  line-height: var(--ca-leading-heading);
+  letter-spacing: var(--ca-tracking-display);
+  text-wrap: balance;
+}
+
+.cg-widget__cta-body {
+  color: var(--ca-ink-muted);
+  line-height: var(--ca-leading-lead);
+}
+
+.cg-widget a.cg-widget__cta-action {
+  margin-block-start: var(--ca-s3);
+}
+
+/* --- the hall: address, lines, hours --------------------------------------- */
+
+.cg-widget__contact {
+  display: grid;
+  gap: var(--ca-s2);
+  line-height: var(--ca-leading-ui);
+}
+
+.cg-widget__contact-line {
+  display: flex;
+  gap: var(--ca-s3);
+  align-items: start;
+}
+
+.cg-widget__icon {
+  flex: none;
+  margin-block-start: 0.2em;
+  color: var(--ca-green);
+}
+
+.cg-widget__contact-line a {
+  font-variant-numeric: lining-nums tabular-nums;
+  text-decoration-color: transparent;
+}
+
+.cg-widget__contact-line a:hover {
+  color: var(--ca-ink);
+  text-decoration-color: var(--ca-green);
+}
+
+.cg-widget__hours {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--ca-s1) var(--ca-s4);
+  margin: var(--ca-s3) 0 0;
+  padding-block-start: var(--ca-s3);
+  border-block-start: var(--ca-rule) solid var(--ca-line);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-widget__hours dt {
+  color: var(--ca-ink-muted);
+}
+
+.cg-widget__hours dd {
+  margin: 0;
+  justify-self: end;
+  font-weight: var(--ca-weight-semibold);
+  text-align: end;
+}
+
+.cg-widget__social {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ca-s1) var(--ca-s5);
+}
+
+.cg-widget__social-item a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ca-s2);
+  min-block-size: 2.5rem;
+  text-decoration-color: transparent;
+}
+
+/* The profiles keep their names beside the icons, as in the footer. */
+.cg-widget__social .cg-visually-hidden {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+}
+
+/* --- a calendar: the noticeboard's dates ----------------------------------- */
+
+.cg-widget__calendar-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--ca-text-caption);
+  font-variant-numeric: lining-nums tabular-nums;
+  text-align: center;
+}
+
+.cg-widget__calendar-table caption {
+  padding-block-end: var(--ca-s3);
+  color: var(--ca-green);
+  font-weight: var(--ca-weight-semibold);
+  text-align: start;
+}
+
+.cg-widget__calendar-table th {
+  padding-block: var(--ca-s2);
+  border-block-end: var(--ca-rule) solid var(--ca-line);
+  color: var(--ca-ink-muted);
+  font-weight: var(--ca-weight-semibold);
+}
+
+.cg-widget__calendar-table td {
+  padding-block: var(--ca-s2);
+}
+
+.cg-widget__calendar-table td[data-posts] a {
+  font-weight: var(--ca-weight-bold);
+}
+
+.cg-widget__calendar-nav {
+  display: flex;
+  justify-content: space-between;
+  margin-block-start: var(--ca-s3);
+  font-size: var(--ca-text-caption);
+}
+
+/* --- before and after the content: photographs in a row ------------------- */
+
+.cg-widget-area:is([data-area="content-after"], [data-area="content-before"]) {
+  padding-block: calc(var(--ca-section) / 2);
+}
+
+.cg-sidebar-layout__content > .cg-widget-area[data-area="content-after"] {
+  padding-block-end: 0;
+}
+
+.cg-widget-area:is([data-area="content-after"], [data-area="content-before"]) .cg-widget__title {
+  margin-block-end: var(--ca-s8);
+  padding-block-start: var(--ca-s5);
+  font-size: var(--ca-size-section);
+  font-weight: var(--ca-weight-semibold);
+  line-height: var(--ca-leading-heading);
+  letter-spacing: var(--ca-tracking-display);
+}
+
+@media (min-width: 40rem) {
+  .cg-widget-area:is([data-area="content-after"], [data-area="content-before"])
+    .cg-widget__entries {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: var(--ca-s10) var(--ca-col-gap);
+  }
+
+  .cg-widget-area:is([data-area="content-after"], [data-area="content-before"]) .cg-widget__entry,
+  .cg-widget-area:is([data-area="content-after"], [data-area="content-before"])
+    .cg-widget__entry[data-image="image"] {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    align-items: start;
+    row-gap: var(--ca-s4);
+    padding-block: 0;
+    border-block-start: 0;
+  }
+
+  .cg-widget-area:is([data-area="content-after"], [data-area="content-before"])
+    .cg-widget__entry-image {
+    aspect-ratio: 4 / 3;
+  }
+
+  .cg-widget-area:is([data-area="content-after"], [data-area="content-before"])
+    .cg-widget__entry-text {
+    gap: var(--ca-s3);
+  }
+
+  .cg-widget-area:is([data-area="content-after"], [data-area="content-before"])
+    a.cg-widget__entry-title {
+    font-size: var(--ca-text-xl);
+  }
+
+  .cg-widget-area:is([data-area="content-after"], [data-area="content-before"])
+    .cg-widget__entry-excerpt {
+    font-size: var(--ca-text-md);
+    line-height: var(--ca-leading-text);
+  }
+}
+
+/* --- the footer's widget row: on the green band ---------------------------- */
+
+.ca-footer__widgets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--ca-s10) var(--ca-col-gap);
+  padding-block-start: var(--ca-s10);
+  border-block-start: var(--ca-rule) solid var(--ca-footer-line);
+}
+
+.ca-footer__widgets .cg-widget-area {
+  gap: var(--ca-s8);
+}
+
+.ca-footer__widgets .cg-widget,
+.ca-footer__widgets .cg-widget a,
+.ca-footer__widgets .cg-widget__entry-title {
+  color: var(--ca-footer-ink);
+}
+
+/* Links read like the footer menu's: plain words, underlined on hover. */
+.ca-footer__widgets .cg-widget a {
+  font-weight: var(--ca-weight-regular);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.3em;
+}
+
+.ca-footer__widgets .cg-widget__links a::after {
+  content: none;
+}
+
+.ca-footer__widgets .cg-widget a:hover {
+  color: var(--ca-footer-ink);
+  text-decoration-color: currentColor;
+}
+
+.ca-footer__widgets .cg-widget:not(:has(> .cg-widget__title)) {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
+.ca-footer__widgets .cg-widget__title {
+  margin-block-end: var(--ca-s3);
+  padding-block-start: 0;
+  border-block-start: 0;
+  color: var(--ca-footer-muted);
+  font-family: var(--ca-font-text);
+  font-size: var(--ca-text-caption);
+  font-stretch: normal;
+  letter-spacing: 0;
+}
+
+.ca-footer__widgets .cg-widget__body {
+  line-height: var(--ca-leading-ui);
+}
+
+.ca-footer__widgets
+  :is(
+    .cg-widget__entry,
+    .cg-widget__comment,
+    .cg-widget__terms > li,
+    .cg-widget__archives > li,
+    .cg-widget__links > li,
+    .cg-widget__toc > li
+  ) {
+  padding-block: var(--ca-s1);
+  border-block-start: 0;
+}
+
+.ca-footer__widgets
+  :is(
+    .cg-widget__entry-date,
+    .cg-widget__entry-excerpt,
+    .cg-widget__comment-date,
+    .cg-widget__comment-excerpt,
+    .cg-widget__terms-count,
+    .cg-widget__archives-count,
+    .cg-widget__cloud-count,
+    .cg-widget__caption,
+    .cg-widget__cta-body,
+    .cg-widget__about-body,
+    .cg-widget__quote-role,
+    .cg-widget__hours dt,
+    .cg-widget__calendar-table th,
+    .cg-widget__calendar-table caption
+  ) {
+  color: var(--ca-footer-muted);
+}
+
+.ca-footer__widgets .cg-widget__icon {
+  color: var(--ca-footer-muted);
+}
+
+.ca-footer__widgets :is(.cg-widget__hours, .cg-widget__calendar-table th) {
+  border-color: var(--ca-footer-line);
+}
+
+.ca-footer__widgets .cg-widget__quote {
+  border-inline-start-color: var(--ca-footer-ink);
+}
+
+.ca-footer__widgets .cg-widget--cta {
+  padding: 0;
+  background: transparent;
+}
+
+.ca-footer__widgets .cg-widget__cta-heading {
+  color: var(--ca-footer-ink);
+  font-size: var(--ca-text-lg);
+}
+
+/* On the band a button is its outline in the band's own ink: the green
+   filled button would vanish into the green. */
+.ca-footer__widgets .cg-widget a.cg-widget__cta-action,
+.ca-footer__widgets
+  :is(.cg-widget__search-button, .cg-widget__jump-button, .cg-widget__form-submit) {
+  border-color: var(--ca-footer-ink);
+  background: transparent;
+  color: var(--ca-footer-ink);
+}
+
+.ca-footer__widgets .cg-widget a.cg-widget__cta-action:hover,
+.ca-footer__widgets
+  :is(.cg-widget__search-button, .cg-widget__jump-button, .cg-widget__form-submit):hover {
+  border-color: var(--ca-footer-ink);
+  background: transparent;
+  color: var(--ca-footer-ink);
+  text-decoration-line: underline;
+  text-decoration-color: currentColor;
+}
+
+.ca-footer__widgets
+  :is(
+    .cg-widget__search-input,
+    .cg-widget__jump select,
+    .cg-widget__form input:not([type="checkbox"]),
+    .cg-widget__form select,
+    .cg-widget__form textarea
+  ) {
+  border-color: var(--ca-footer-muted);
+  background: var(--ca-footer);
+  color: var(--ca-footer-ink);
+}
+
+.ca-footer__widgets .cg-widget__search-input::placeholder {
+  color: var(--ca-footer-muted);
+}
+
+.ca-footer__widgets .cg-widget :focus-visible {
+  outline-color: var(--ca-footer-ink);
+}

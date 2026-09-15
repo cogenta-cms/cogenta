@@ -12,6 +12,7 @@
  *   listings.css  the events calendar, programme rows, photo cards, indexes,
  *                 and the openings of an event page and a programme page
  *   archive.css   the taxonomy-term archive
+ *   widgets.css   the widget areas: the side column, the bands, the footer row
  *
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--ca-*` property composed from those.
@@ -33,3 +34,4 @@
 @import "./blocks.css";
 @import "./listings.css";
 @import "./archive.css";
+@import "./widgets.css";

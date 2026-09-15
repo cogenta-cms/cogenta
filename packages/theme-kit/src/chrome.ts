@@ -13,6 +13,7 @@
 
 import type { ImageSource } from './contract.js'
 import { escapeAttribute, type HtmlElement, h } from './html.js'
+import type { WidgetAreas } from './widgets.js'
 
 /**
  * The site's own visual identity, as the appearance screen already stores it
@@ -118,6 +119,12 @@ export interface ChromeInput {
    * "Contact"); a theme that ignores it loses nothing a pre-1.4 site had.
    */
   readonly headerAction?: ChromeLink
+  /**
+   * The footer's widget columns, `footer-1` to `footer-4`, resolved for this
+   * page (contract D `theme@1.6`, L30). A theme places them above its footer
+   * with `renderFooterWidgets`; absent means none to show.
+   */
+  readonly widgets?: WidgetAreas
 }
 
 export interface ChromeResult {

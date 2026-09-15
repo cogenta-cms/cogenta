@@ -648,7 +648,8 @@ defineAgent({
 ## Contrat D — Thème
 
 > **Figé en `theme@1.3` le 2026-09-02, monté en `theme@1.4` le 2026-09-05 (L25 D2), puis en
-> `theme@1.5` le 2026-09-14 (L27, `PageEntryMeta.fields`).**
+> `theme@1.5` le 2026-09-14 (L27, `PageEntryMeta.fields`), puis en `theme@1.6` le 2026-09-15
+> (L30, zones de widgets).**
 > Ajouter une entrée à `ctx` est mineur ; en modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
@@ -1077,6 +1078,41 @@ toujours, mais jusqu'ici aucun thème natif n'en dessinait le glyphe. Un jeu fer
 cinquantaine de noms usuels (`check`, `star`, `shield`, `rocket`, …), chacun un `<svg>`
 simple tracé pour ce paquet (aucune bibliothèque, R9/R10) ; un nom hors de cet ensemble
 rend `null`, et un thème garde alors son repli d'avant (le `data-icon` nu).
+
+### Zones de widgets — `PageContent.widgets`, `ChromeInput.widgets` — theme@1.6
+
+Ajouté en L30, **optionnel et additif** : un thème qui ignore ces champs rend exactement ce
+qu'il rendait en `theme@1.5`, et l'hôte place alors lui-même les zones autour de sa sortie.
+
+```ts
+type WidgetAreas = Readonly<Record<string, ResolvedWidgetArea>>
+
+interface ResolvedWidgetArea {
+  readonly id: string        // sidebar, content-before, content-after, footer-1..4, ou une zone du thème
+  readonly label: string
+  readonly widgets: readonly ResolvedWidget[]
+}
+
+interface PageContent { /* … */ readonly widgets?: WidgetAreas }  // sidebar, content-before, content-after
+interface ChromeInput { /* … */ readonly widgets?: WidgetAreas }  // footer-1 à footer-4
+
+// Module du thème, optionnel : les zones qu'il place lui-même, et leurs libellés.
+export const widgetAreas: readonly { id: string; label: string; description?: string }[]
+```
+
+`ResolvedWidget` est une union fermée de modèles de vue **déjà calculés par l'hôte**
+(visibilité décidée, entrées et termes lus, dates formatées, liens résolus, libellés dans la
+langue de la page) : `text`, `image`, `gallery`, `embed`, `quote`, `cta`, `links`, `contact`,
+`about`, `entries` (récentes, liées, les plus lues), `terms`, `tagCloud`, `archives`,
+`comments`, `search`, `social`, `form`, `toc`, `calendar`. Un thème n'interroge jamais rien
+pour dessiner un widget (R5).
+
+`renderWidgetArea(area, options?)` et `renderFooterWidgets(areas, options?)`
+(`@cogenta/theme-kit`) sont le rendu partagé : même balisage sémantique pour tous les thèmes
+(`cg-widget-area`, `cg-widget`, `cg-widget--<type>`, `cg-widget__title`, `cg-widget__body`),
+seule la feuille de style change. Ils rendent `null` quand une zone n'a rien à montrer, pour
+qu'un thème décide de sa mise en page sur la valeur de retour. Les appareils masqués arrivent en
+attributs (`data-hide-desktop|tablet|mobile`) : une même page en cache sert tous les écrans.
 
 ### Versionnement
 

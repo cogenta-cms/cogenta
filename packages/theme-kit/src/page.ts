@@ -10,6 +10,7 @@ import {
 import type { ContentEntry, QueryRequest } from './contract.js'
 import type { PageEntryMeta } from './entry-header.js'
 import type { HtmlElement } from './html.js'
+import type { WidgetAreas } from './widgets.js'
 
 export interface PageContent {
   /** The entry's title. Rendered as the `h1` unless a hero already carries one. */
@@ -24,6 +25,13 @@ export interface PageContent {
    * markup.
    */
   readonly entry?: PageEntryMeta
+  /**
+   * The widget areas resolved for this page (contract D `theme@1.6`, L30),
+   * by area id: `sidebar`, `content-before`, `content-after`, and any area
+   * the theme declares. Absent from a host that predates 1.6, or a page with
+   * no widget to show. Render with `renderWidgetArea`.
+   */
+  readonly widgets?: WidgetAreas
 }
 
 /**

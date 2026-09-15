@@ -60,8 +60,9 @@ const MIN_READING_MINUTES_SHOWN = 2
 
 /**
  * A page is set as an article when its entry carries anything an article has
- * (a date, a standfirst, a picture, a classification, a reading time). A
- * plain page with only an update time keeps its plain title.
+ * (a date, a standfirst, a picture, a classification). A reading time alone
+ * does not count: every page with a few paragraphs has one, and an About page
+ * set with a byline rule, "2 min read" and a drop cap reads as a news story.
  */
 export function isArticle(entry: PageEntryMeta | undefined): entry is PageEntryMeta {
   if (entry === undefined) return false
@@ -69,8 +70,7 @@ export function isArticle(entry: PageEntryMeta | undefined): entry is PageEntryM
     entry.publishedAt !== undefined ||
     entry.excerpt !== undefined ||
     entry.image !== undefined ||
-    (entry.terms ?? []).length > 0 ||
-    (entry.readingMinutes ?? 0) >= MIN_READING_MINUTES_SHOWN
+    (entry.terms ?? []).length > 0
   )
 }
 
@@ -219,11 +219,17 @@ export function renderArticleFooter(entry: PageEntryMeta): HtmlElement | null {
   )
 }
 
-/** The title of a page that is not an article, set as a section title on a heavy rule. */
+/**
+ * The title of a page that is not an article. A page that opens on running
+ * text (About, Standards) takes the title over its reading column, the way an
+ * article does, without an article's furniture; any other page (a pricing
+ * page, a landing page) sets its title as a section title on a heavy rule.
+ */
 export function renderPageHeader(page: PageContent): HtmlElement {
+  const text = page.blocks[0]?._type === 'prose'
   return h(
     'header',
-    { class: 'cg-page-head' },
+    { class: 'cg-page-head', 'data-layout': text ? 'text' : 'section' },
     h(
       'div',
       { class: 'cg-container cg-page-head__inner' },

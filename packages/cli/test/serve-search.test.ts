@@ -24,6 +24,8 @@ const COLLECTIONS: readonly CollectionDefinition[] = [
     fields: {
       title: { kind: 'text', required: true, options: { max: 200 } },
       slug: { kind: 'slug', required: true, options: { from: 'title' } },
+      summary: { kind: 'text', options: { max: 300 } },
+      publishedAt: { kind: 'datetime', options: {} },
     },
     permissions: {
       read: ['public'],
@@ -210,6 +212,36 @@ describe('cogenta serve — GET /api/search (L10 task 3)', () => {
     }
   })
 
+  it("carries the site's tagline and footer note, like every other public page", async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+      for (const [key, value] of [
+        ['general.tagline', 'Independent news from Port Calder'],
+        ['general.footerNote', 'Published by the Harbor Press Cooperative.'],
+      ] as const) {
+        const written = await fetch(`${server.base}/api/settings`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+          body: JSON.stringify({ key, value, locale: 'en' }),
+        })
+        expect(written.status).toBe(200)
+      }
+
+      const html = await (await fetch(`${server.base}/search?q=anything`)).text()
+      expect(html).toContain('Independent news from Port Calder')
+      expect(html).toContain('Published by the Harbor Press Cooperative.')
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('serves a public search page with a working form and real links', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })
@@ -223,6 +255,7 @@ describe('cogenta serve — GET /api/search (L10 task 3)', () => {
       const id = await create(server.base, token, 'page', {
         title: 'Cathedral windows',
         slug: 'cathedral-windows',
+        summary: 'The west rose is back in its frame after eleven years.',
       })
       await publish(server.base, token, 'page', id)
 
@@ -247,6 +280,11 @@ describe('cogenta serve — GET /api/search (L10 task 3)', () => {
       const html = await results.text()
       expect(html).toContain('href="/cathedral-windows"')
       expect(html).toContain('Cathedral windows')
+      // Each result carries what an archive shows — its summary and its date —
+      // so a reader can tell results apart without opening each one.
+      expect(html).toContain('The west rose is back in its frame after eleven years.')
+      expect(html).toMatch(/<p class="cg-search__meta"><time datetime="[^"]+">/u)
+      expect(html).toContain('1 result</p>')
       // A search results page is exactly what a crawler must not index.
       expect(html).toContain('<meta name="robots" content="noindex, follow" />')
       expect(html).toContain('class="cg-site-header"')

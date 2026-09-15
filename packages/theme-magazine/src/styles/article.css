@@ -5,10 +5,13 @@
  *
  * On a wide screen the page sits on the twelve columns this way:
  *
- *   columns 3 to 11   kicker, headline, standfirst, byline
+ *   columns 4 to 9    kicker, standfirst, byline, and the reading column
+ *   columns 4 to 10   the headline, one column wider on the right
  *   columns 2 to 11   the lead photograph and any wide figure
- *   columns 3 to 9    the reading column, about 66 characters
- *   columns 2 to 7    a pull quote, hanging one column to the left
+ *   columns 3 to 8    a pull quote, hanging one column to the left
+
+ * The axis is centred, so the page balances on the screen however long the
+ * article runs.
  */
 
 /* --------------------------------------------------------------------------
@@ -131,18 +134,17 @@ a.cg-article-head__kicker-link:hover {
 
 @media (min-width: 64rem) {
   .cg-article-head__kicker,
-  .cg-article-head__title,
   .cg-article-head__standfirst,
   .cg-article-head__meta {
-    grid-column: 3 / span 8;
+    grid-column: var(--cg-col-reading);
   }
 
   .cg-article-head__title {
-    grid-column: 3 / span 9;
+    grid-column: var(--cg-col-headline);
   }
 
   .cg-article-head__cover {
-    grid-column: 2 / span 10;
+    grid-column: var(--cg-col-wide);
   }
 }
 
@@ -169,7 +171,7 @@ a.cg-article-head__kicker-link:hover {
 @media (min-width: 64rem) {
   .cg-article .cg-pullquote__quote,
   .cg-article .cg-pullquote__attribution {
-    grid-column: 2 / span 6;
+    grid-column: var(--cg-col-hang);
   }
 }
 
@@ -230,6 +232,6 @@ a.cg-article-foot__link:hover {
 
 @media (min-width: 64rem) {
   .cg-article-foot__terms {
-    grid-column: 3 / span 7;
+    grid-column: var(--cg-col-reading);
   }
 }

@@ -70,6 +70,16 @@
 
   --cg-measure: 66ch;
   --cg-measure-short: 48ch;
+
+  /* Where text sits on the twelve columns of a wide screen. The reading
+     column is centred (columns 4 to 9): a page that reads down one column
+     should not leave a third of the screen empty on one side only. A
+     headline reaches one column further right, a pull quote hangs one column
+     further left, and a wide figure takes columns 2 to 11. */
+  --cg-col-reading: 4 / span 6;
+  --cg-col-headline: 4 / span 7;
+  --cg-col-hang: 3 / span 6;
+  --cg-col-wide: 2 / span 10;
 }
 
 :where([data-density="compact"]) {

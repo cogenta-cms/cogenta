@@ -5,6 +5,7 @@ import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
 import type { SeoRenderDefaults } from './seo.js'
 import {
   type BrandingSettings,
+  type ChromeExtras,
   type PageChromeMenus,
   renderPageChrome,
   type SiteIdentityMedia,
@@ -54,12 +55,20 @@ export interface SearchPageOptions {
   readonly identity?: () => Promise<SiteIdentityMedia>
   /** Same batch media loader (`theme-render.ts`). Needed only to resolve the identity above; absent means the site name in text. */
   readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, MediaAsset>>
+  /** The tagline, social links and footer note every other public page carries (contract D `theme@1.4`). Absent renders the chrome without them. */
+  readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
 }
 
 interface ResolvedHit {
   readonly title: string
   readonly href: string | null
+  /** The entry's own summary (`excerpt`, `summary` or `description`), when it has one. */
+  readonly excerpt?: string
+  /** ISO 8601: when it was published, for an entry that has been. */
+  readonly publishedAt?: string
 }
+
+const EXCERPT_FIELDS = ['excerpt', 'summary', 'description'] as const
 
 /**
  * Turns hits into links.
@@ -83,8 +92,10 @@ async function resolveHits(
     if (collection === undefined) continue
 
     let href: string | null = null
+    // Read for every hit, routed or not: a result a reader can judge carries
+    // the summary and the date an archive page would show, not a bare title.
+    const entry = await options.gateway.read(hit.collection, hit.id, context)
     if (collection.routing !== undefined) {
-      const entry = await options.gateway.read(hit.collection, hit.id, context)
       if (entry !== null) {
         const params = Object.fromEntries(
           Object.entries(entry.values).filter(
@@ -105,7 +116,17 @@ async function resolveHits(
       }
     }
 
-    resolved.push({ title: hit.title.length > 0 ? hit.title : hit.id, href })
+    const excerpt = EXCERPT_FIELDS.map((field) => entry?.values[field]).find(
+      (value): value is string => typeof value === 'string' && value.trim().length > 0,
+    )
+    resolved.push({
+      title: hit.title.length > 0 ? hit.title : hit.id,
+      href,
+      ...(excerpt === undefined ? {} : { excerpt }),
+      ...(entry?.publishedAt === null || entry?.publishedAt === undefined
+        ? {}
+        : { publishedAt: entry.publishedAt }),
+    })
   }
 
   return resolved
@@ -120,15 +141,27 @@ function searchForm(query: string): string {
 </form>`
 }
 
-function resultList(results: readonly ResolvedHit[]): string {
+function resultList(results: readonly ResolvedHit[], locale: string): string {
   if (results.length === 0) return `<p class="cg-search__empty">Nothing matched that search.</p>`
-  return `<ol class="cg-search__results">
+  const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: 'long' })
+  return `<p class="cg-search__count">${results.length} ${results.length === 1 ? 'result' : 'results'}</p>
+<ol class="cg-search__results">
 ${results
-  .map((result) =>
-    result.href === null
-      ? `<li>${escapeHtmlText(result.title)}</li>`
-      : `<li><a href="${escapeHtmlAttribute(result.href)}">${escapeHtmlText(result.title)}</a></li>`,
-  )
+  .map((result) => {
+    const title =
+      result.href === null
+        ? `<span class="cg-search__title">${escapeHtmlText(result.title)}</span>`
+        : `<a class="cg-search__title" href="${escapeHtmlAttribute(result.href)}">${escapeHtmlText(result.title)}</a>`
+    const excerpt =
+      result.excerpt === undefined
+        ? ''
+        : `<p class="cg-search__excerpt">${escapeHtmlText(result.excerpt)}</p>`
+    const date =
+      result.publishedAt === undefined
+        ? ''
+        : `<p class="cg-search__meta"><time datetime="${escapeHtmlAttribute(result.publishedAt)}">${escapeHtmlText(dateFormat.format(new Date(result.publishedAt)))}</time></p>`
+    return `<li class="cg-search__hit">${title}${excerpt}${date}</li>`
+  })
   .join('\n')}
 </ol>`
 }
@@ -172,7 +205,7 @@ export async function renderSearchPage(
       ? `<p class="cg-search__error" role="alert">${escapeHtmlText(failure)}</p>`
       : trimmed.length === 0
         ? ''
-        : resultList(results)
+        : resultList(results, options.site.defaultLocale)
 
   // The real site chrome (`renderPageChrome`, `theme-render.ts`) — the same
   // skip link, header and footer every collection page renders, not a
@@ -198,6 +231,7 @@ ${main}
       ...(options.seo === undefined ? {} : { seo: options.seo }),
       ...(options.identity === undefined ? {} : { identity: options.identity }),
       ...(options.loadMedia === undefined ? {} : { loadMedia: options.loadMedia }),
+      ...(options.chromeExtras === undefined ? {} : { chromeExtras: options.chromeExtras }),
     },
     context,
   )

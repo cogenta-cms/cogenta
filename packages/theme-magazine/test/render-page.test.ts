@@ -206,14 +206,22 @@ describe('the article page', () => {
     expect(isArticle(undefined)).toBe(false)
     expect(isArticle({ collection: 'page', updatedAt: '2026-01-01T00:00:00.000Z' })).toBe(false)
     expect(isArticle({ collection: 'article', excerpt: 'A standfirst.' })).toBe(true)
+    // A long About page has a reading time and is still a page, not a story.
+    expect(isArticle({ collection: 'page', readingMinutes: 4 })).toBe(false)
   })
 })
 
 describe('the other openings', () => {
-  it('sets the title of a plain page as a section title', () => {
+  it('sets the title of a page of running text over its reading column', () => {
     const html = serialize(renderPage({ title: 'About', blocks: [BLOCKS.prose] }, ctx))
+    expect(html).toContain('<header class="cg-page-head" data-layout="text">')
     expect(html).toContain('<h1 class="cg-page-head__title">About</h1>')
     expect(html).not.toContain('cg-article-head')
+  })
+
+  it('sets the title of any other plain page as a section title', () => {
+    const html = serialize(renderPage({ title: 'Plans', blocks: [BLOCKS.cta] }, ctx))
+    expect(html).toContain('<header class="cg-page-head" data-layout="section">')
   })
 
   it('opens a page that starts on a listing as a front: the title in the outline, out of sight', () => {

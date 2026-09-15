@@ -4799,6 +4799,7 @@ export function createRequestListener(
               branding: () => brandingForSite(site),
               activeTheme: () => activeThemeForSite(site),
               identity: () => identityForSite(site),
+              chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
               loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
               seo: () => readSeoRenderDefaults(site.siteSettingsStore),
             }
@@ -4831,6 +4832,7 @@ export function createRequestListener(
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
             identity: () => identityForSite(site),
+            chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
             loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }
@@ -6017,6 +6019,7 @@ export function createRequestListener(
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
             identity: () => identityForSite(site),
+            chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
             loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           },
@@ -6046,6 +6049,7 @@ export function createRequestListener(
             branding: () => brandingForSite(site),
             activeTheme: () => activeThemeForSite(site),
             identity: () => identityForSite(site),
+            chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
             loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
             seo: () => readSeoRenderDefaults(site.siteSettingsStore),
           }

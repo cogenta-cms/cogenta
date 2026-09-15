@@ -6,6 +6,7 @@ import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
 import type { SeoRenderDefaults } from './seo.js'
 import {
   type BrandingSettings,
+  type ChromeExtras,
   type PageChromeMenus,
   renderPageChrome,
   type SiteIdentityMedia,
@@ -60,6 +61,8 @@ export interface FormPageOptions {
   readonly identity?: () => Promise<SiteIdentityMedia>
   /** Same batch media loader (`theme-render.ts`). Needed only to resolve the identity above; absent means the site name in text. */
   readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, MediaAsset>>
+  /** The tagline, social links and footer note every other public page carries (contract D `theme@1.4`). Absent renders the chrome without them. */
+  readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
 }
 
 export interface FormPageState {
@@ -234,6 +237,7 @@ ${body}
       ...(options.seo === undefined ? {} : { seo: options.seo }),
       ...(options.identity === undefined ? {} : { identity: options.identity }),
       ...(options.loadMedia === undefined ? {} : { loadMedia: options.loadMedia }),
+      ...(options.chromeExtras === undefined ? {} : { chromeExtras: options.chromeExtras }),
     },
     context,
   )

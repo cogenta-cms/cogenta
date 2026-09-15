@@ -86,7 +86,7 @@
 
 @media (min-width: 64rem) {
   .cg-prose__body {
-    grid-column: 3 / span 7;
+    grid-column: var(--cg-col-reading);
   }
 }
 
@@ -232,12 +232,12 @@
 @media (min-width: 64rem) {
   .cg-figure[data-align="center"] .cg-figure__frame,
   .cg-figure[data-align="center"] .cg-figure__caption {
-    grid-column: 3 / span 7;
+    grid-column: var(--cg-col-reading);
   }
 
   .cg-figure[data-align="wide"] .cg-figure__frame,
   .cg-figure[data-align="wide"] .cg-figure__caption {
-    grid-column: 2 / span 10;
+    grid-column: var(--cg-col-wide);
   }
 
   .cg-figure[data-align="start"] .cg-figure__frame,
@@ -584,7 +584,7 @@
 @media (min-width: 64rem) {
   .cg-pullquote__quote,
   .cg-pullquote__attribution {
-    grid-column: 2 / span 8;
+    grid-column: 3 / span 8;
   }
 }
 
@@ -651,7 +651,7 @@
   }
 
   .cg-guide[data-titled="false"] .cg-guide__items {
-    grid-column: 3 / span 7;
+    grid-column: var(--cg-col-reading);
   }
 }
 
@@ -742,7 +742,7 @@
    untitled, they take the reading column. */
 @media (min-width: 64rem) {
   .cg-notes__items {
-    grid-column: 3 / span 7;
+    grid-column: var(--cg-col-reading);
   }
 
   .cg-notes__inner > .cg-head {
@@ -1108,7 +1108,7 @@
 
 @media (min-width: 64rem) {
   .cg-embed__frame {
-    grid-column: 3 / span 7;
+    grid-column: var(--cg-col-reading);
   }
 }
 
@@ -1176,7 +1176,7 @@
 @media (min-width: 64rem) {
   .cg-letter__quote,
   .cg-letter__attribution {
-    grid-column: 3 / span 7;
+    grid-column: var(--cg-col-reading);
   }
 }
 

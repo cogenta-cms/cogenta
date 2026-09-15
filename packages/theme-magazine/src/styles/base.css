@@ -266,6 +266,25 @@ img {
   letter-spacing: var(--cg-tracking-display);
 }
 
+/* A page of running text: the title over the reading column, a hairline
+   under it, and the text straight after. */
+.cg-page-head[data-layout="text"] .cg-page-head__title {
+  padding-block: 0 var(--cg-s6);
+  border-block-start: 0;
+  font-size: var(--cg-size-headline);
+  font-weight: var(--cg-weight-semibold);
+}
+
+@media (min-width: 64rem) {
+  .cg-page-head[data-layout="text"] .cg-page-head__title {
+    grid-column: var(--cg-col-headline);
+  }
+}
+
+.cg-page-head[data-layout="text"] + .cg-prose {
+  padding-block-start: var(--cg-s8);
+}
+
 /* --------------------------------------------------------------------------
    Actions: a filled rectangle in ink for the primary intent, and for the rest
    the words underlined with an arrow after them. Square corners, no lift, no
@@ -944,10 +963,22 @@ img {
    Search, forms and comments: the utility pages, in the same register.
    -------------------------------------------------------------------------- */
 
+/* The results page is set like a section front: the query very large on the
+   page's own left edge, a heavy rule, then the results in one column held to
+   a reading width. The host renders it in a bare `<main class="cg-main">`. */
+.cg-main > .cg-page__title,
 .cg-search__form,
+.cg-search__count,
 .cg-search__results,
 .cg-search__empty,
-.cg-search__error,
+.cg-search__error {
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter) max(var(--cg-gutter), calc(100% - var(--cg-gutter) - 46rem));
+}
+
 .cg-form,
 .cg-form__confirmation {
   max-inline-size: calc(var(--cg-measure) + var(--cg-gutter) * 2);
@@ -955,12 +986,31 @@ img {
   padding-inline: var(--cg-gutter);
 }
 
+.cg-main > .cg-page__title {
+  margin-block: calc(var(--cg-section) * 0.55) 0;
+  padding-block-end: var(--cg-s5);
+  font-size: var(--cg-size-headline);
+  font-weight: var(--cg-weight-bold);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
+  position: relative;
+}
+
+/* The rule runs the page's width even though the title is held narrower. */
+.cg-main > .cg-page__title::after {
+  content: "";
+  position: absolute;
+  inset-inline: var(--cg-gutter);
+  inset-block-end: 0;
+  border-block-end: var(--cg-rule-heavy) solid var(--cg-line-ink);
+}
+
 .cg-search__form {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: var(--cg-s3);
-  margin-block: var(--cg-s10);
+  gap: var(--cg-s3) var(--cg-s4);
+  margin-block: var(--cg-s8) var(--cg-s10);
 }
 
 .cg-search__form label,
@@ -976,8 +1026,24 @@ img {
   color: var(--cg-ink-muted);
 }
 
+.cg-search__form label {
+  flex-basis: 100%;
+  margin-block-end: 0;
+}
+
 .cg-search__form input[type="search"] {
   flex: 1 1 18rem;
+}
+
+.cg-search__count {
+  margin-block: 0;
+  padding-block-end: var(--cg-s3);
+  color: var(--cg-ink-muted);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-bold);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
 }
 
 .cg-search__results {
@@ -985,13 +1051,42 @@ img {
   gap: 0;
   margin-block: 0 var(--cg-section);
   list-style: none;
-  font-family: var(--cg-font-display);
-  font-size: var(--cg-size-story);
 }
 
-.cg-search__results > * {
+.cg-search__hit {
   padding-block: var(--cg-s5);
   border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-search__title {
+  color: var(--cg-ink);
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-size-story);
+  font-weight: var(--cg-weight-semibold);
+  line-height: var(--cg-leading-heading);
+  text-decoration-color: transparent;
+  text-wrap: balance;
+}
+
+a.cg-search__title:hover {
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-accent);
+}
+
+.cg-search__excerpt {
+  margin: var(--cg-s2) 0 0;
+  color: var(--cg-ink-muted);
+  font-family: var(--cg-font-text);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-search__meta {
+  margin: var(--cg-s2) 0 0;
+  color: var(--cg-ink-muted);
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-xs);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .cg-search__empty,
@@ -1109,7 +1204,7 @@ img {
 }
 
 /* Comments: letters under the article, on the same twelve columns and the
-   same reading column (3 to 9) as the text above them. */
+   same centred reading column as the text above them. */
 .cg-comments {
   display: grid;
   grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
@@ -1126,7 +1221,7 @@ img {
 
 @media (min-width: 64rem) {
   .cg-comments > * {
-    grid-column: 3 / span 7;
+    grid-column: var(--cg-col-reading);
   }
 }
 

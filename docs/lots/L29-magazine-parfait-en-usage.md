@@ -49,8 +49,18 @@ mobile, clair et sombre) :
 | Étape | État | Notes |
 |---|---|---|
 | Captures de référence et constats | fait | 2026-09-15 |
-| D1 polices du skin | à faire | |
-| D2 catalogue dans le générateur | à faire | |
-| D3 recherche enrichie | à faire | |
-| D4 Magazine | à faire | |
-| Vérification des cinq situations | à faire | |
+| D1 polices du skin | fait | `WEB_FONTS` (65 familles, URL `css2` vérifiées une par une), `@import` en tête de la feuille du skin, dédoublonnage avec les imports du thème dans `joinStyles` |
+| D2 catalogue dans le générateur | fait | `generateSkin` liste les familles chargeables par rôle |
+| D3 recherche enrichie | fait | chapô, date, nombre de résultats ; les pages recherche et formulaire reçoivent enfin accroche, réseaux et note de pied |
+| D4 Magazine | fait (première passe) | axe de lecture centré (article, page de texte, commentaires), page de texte distincte d'un article, recherche en une de rubrique, couverture sans image pleine largeur |
+| Import « conserver » | fait | les liens manquants de la démo s'ajoutent au menu existant (C8, trouvé en capturant un blog importé) |
+| Vérification des cinq situations | en cours | démo, blog importé (conserver, réinitialiser), trois skins IA, nom de site réel, aperçu de galerie : capturés et relus |
+
+## Constats ajoutés pendant la vérification
+
+| # | Situation | Défaut | Suite |
+|---|---|---|---|
+| C8 | Import « conserver » sur un blog | Menus du blog gardés tels quels : les rubriques importées étaient inaccessibles. | Corrigé (ajout des liens manquants). |
+| C9 | Aperçu de galerie | Couverture sans image : filet arrêté à la colonne 10. | Corrigé. |
+| C10 | Pages recherche et formulaire | Accroche absente de la barre du haut. | Corrigé (hôte). |
+| C11 | Déploiement du site de documentation | La construction passe désormais ; le déploiement échoue en 404 parce que GitHub Pages n'est pas activé sur le dépôt. | Réglage humain du dépôt. |

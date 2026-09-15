@@ -3,6 +3,9 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     name: 'auth',
+    // These suites open real SQLite files; a Windows CI runner takes several
+    // times longer than the 5s/10s defaults to do it (seen on schema).
+    hookTimeout: 30_000,
     include: ['test/**/*.test.ts'],
     exclude: ['test/integration/**'],
     // The recovery-code tests hash ten codes and then compare a wrong one

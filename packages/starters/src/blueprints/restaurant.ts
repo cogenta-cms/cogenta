@@ -19,6 +19,7 @@ import {
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
+import type { BlueprintWidget } from './widgets.js'
 
 /**
  * The `restaurant` blueprint (L27, `@cogenta/theme-restaurant`): a
@@ -1101,6 +1102,94 @@ export const RESTAURANT_MENUS: BlueprintMenus = {
   headerAction: { label: 'Reserve', url: '/reservations' },
 }
 
+/**
+ * The widgets a restaurant's site places, and where.
+ *
+ * Beside a dish (which opens on its own photograph and words, not a hero) and
+ * beside search results: the way to book, in the house's words, then a
+ * critic's line about the kitchen. Never beside the menu, the set menus or
+ * the room upstairs: those pages lay out their prices across the whole grid.
+ *
+ * In the footer, under the address card it already prints (street,
+ * telephone, lunch and dinner hours), a second tier with what that card
+ * leaves out: the days the restaurant is closed, the counter kept for guests
+ * without a booking and the hours the telephone is answered; then the room
+ * upstairs. Neither shows on a page that already says the same thing: the home
+ * page (its own hours table and its private dining band), the hours page, the
+ * reservations page and the private dining page.
+ *
+ * No widget names the restaurant's e-mail address: the pages derive it from
+ * the site's name, and a widget's settings cannot, so it would contradict them
+ * on any site not called Laurier.
+ */
+type RestaurantPageTarget =
+  | { readonly kind: 'home' }
+  | { readonly kind: 'collection'; readonly collection: 'menu_item' }
+  | { readonly kind: 'search' }
+  | { readonly kind: 'path'; readonly path: string }
+
+const DISH_PAGE: RestaurantPageTarget = { kind: 'collection', collection: 'menu_item' }
+const SEARCH_RESULTS: RestaurantPageTarget = { kind: 'search' }
+const HOME: RestaurantPageTarget = { kind: 'home' }
+const pagePath = (path: string): RestaurantPageTarget => ({ kind: 'path', path })
+
+function shownOn(
+  mode: 'only' | 'except',
+  ...targets: readonly RestaurantPageTarget[]
+): Readonly<Record<string, unknown>> {
+  return { pages: { mode, targets } }
+}
+
+export const RESTAURANT_WIDGETS: readonly BlueprintWidget[] = [
+  {
+    area: 'sidebar',
+    type: 'cta',
+    title: 'Reservations',
+    settings: {
+      heading: 'Book a table',
+      body: 'Every table is booked by one of us, by telephone or by email, up to eight weeks ahead, so we can ask about allergies or a birthday while we do it.',
+      label: 'How to book',
+      href: '/reservations',
+    },
+    visibility: shownOn('only', DISH_PAGE, SEARCH_RESULTS),
+  },
+  {
+    area: 'sidebar',
+    type: 'quote',
+    settings: {
+      text: 'Élise Marchand cooks the way the room looks: there is nothing on the plate that is there for show, and nothing missing either.',
+      attribution: 'Hélène Vasseur',
+      role: 'Tablées, autumn guide 2026',
+    },
+    visibility: shownOn('only', DISH_PAGE),
+  },
+  {
+    area: 'footer-1',
+    type: 'contact',
+    title: 'Good to know',
+    settings: {
+      hours: [
+        { label: 'Closed', value: 'Sunday and Monday, three weeks in August and Christmas week' },
+        { label: 'The counter', value: 'Six seats at dinner, kept for guests without a booking' },
+        { label: 'Bookings', value: 'By telephone, Tuesday to Saturday, 10:00 to 18:00' },
+      ],
+    },
+    visibility: shownOn('except', HOME, pagePath('/visit'), pagePath('/reservations')),
+  },
+  {
+    area: 'footer-2',
+    type: 'cta',
+    title: 'Private dining',
+    settings: {
+      heading: 'The room upstairs, for fourteen',
+      body: 'Lunch or dinner at one oak table, with a menu written for the occasion and wines chosen with you.',
+      label: 'Plan a meal upstairs',
+      href: '/private-dining',
+    },
+    visibility: shownOn('except', HOME, pagePath('/private-dining')),
+  },
+]
+
 export const RESTAURANT_SITE_SETTINGS: Readonly<Record<string, unknown>> = {
   'general.tagline': 'Seasonal cooking on the slopes of the Croix-Rousse.',
   'general.socialLinks': [
@@ -1177,6 +1266,7 @@ export const restaurantContentPack: BlueprintContentPack = {
   seedDemoContent: seedRestaurantDemoContent,
   defaultTheme: '@cogenta/theme-restaurant',
   menus: RESTAURANT_MENUS,
+  widgets: RESTAURANT_WIDGETS,
   siteSettings: RESTAURANT_SITE_SETTINGS,
   mediaSpecs: RESTAURANT_MEDIA_SPECS,
 }

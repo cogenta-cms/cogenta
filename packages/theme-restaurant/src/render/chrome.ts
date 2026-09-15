@@ -5,6 +5,7 @@ import {
   escapeAttribute,
   escapeText,
   renderBrandMark,
+  renderFooterWidgets,
   renderSocialLinks,
   renderThemeToggle,
   serialize,
@@ -32,7 +33,8 @@ import {
  * the restaurant's address card (a blank line starts a new paragraph, a line
  * break stays a line break, so an address and a set of opening hours keep
  * their shape); the footer navigation; the social profiles with their names;
- * then the legal line, with the copyright year and the name beside the host's
+ * the footer widget columns (`theme@1.6`), when a site has placed any, as a
+ * second tier under a hairline; then the legal line, with the copyright year and the name beside the host's
  * `brandingHtml`, placed once, as received. Every `theme@1.4` field renders
  * only when present.
  */
@@ -125,6 +127,13 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     itemClassName: 'cr-footer__social-item',
   })
   const year = new Date().getFullYear()
+  // The footer widget columns (`theme@1.6`): a row of their own under the
+  // name, the address card, the pages and the profiles, above the legal
+  // line, on the footer's own twelve columns.
+  const footerWidgets = renderFooterWidgets(input.widgets, {
+    className: 'cr-footer__widgets',
+    headingLevel: 'h2',
+  })
 
   const footer =
     `<footer class="cr-footer"><div class="cr-footer__inner">` +
@@ -139,6 +148,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
         : `<nav class="cr-footer__nav" aria-label="Footer"><ul class="cr-footer__links">${footerLinks}</ul></nav>`
     }` +
     `${social === null ? '' : `<div class="cr-footer__follow">${serialize(social)}</div>`}` +
+    `${footerWidgets === null ? '' : serialize(footerWidgets)}` +
     `<div class="cr-footer__legal">` +
     `<p class="cr-footer__copyright">© ${year} ${siteName}</p>` +
     `${input.brandingHtml === '' ? '' : `<div class="cr-footer__branding">${input.brandingHtml}</div>`}` +

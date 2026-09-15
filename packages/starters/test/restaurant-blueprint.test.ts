@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
 import { matchPath } from '@cogenta/schema'
+import { validateWidgetSettings, validateWidgetVisibility } from '@cogenta/widgets'
 import { describe, expect, it } from 'vitest'
 import { bundledImageType, loadPhotoAsset } from '../src/blueprints/photo-assets.js'
 import {
@@ -17,6 +18,7 @@ import {
   RESTAURANT_MEDIA_SPECS,
   RESTAURANT_MENUS,
   RESTAURANT_SITE_SETTINGS,
+  RESTAURANT_WIDGETS,
   restaurantContentPack,
   restaurantDishBlocks,
   restaurantEmail,
@@ -431,6 +433,69 @@ describe('restaurant blueprint, pages, reservations and navigation', () => {
     expect(note).toMatch(/8 rue Burdeau\n69001 Lyon\n\+33 4 78 28 16 42/)
     expect(note).toMatch(/Dinner Tuesday to Saturday/)
     expect(note).not.toMatch(/create-cogenta|scaffold|demo/i)
+  })
+
+  it('places the way to book beside a dish, and in the footer only what the address card leaves out', () => {
+    expect(restaurantContentPack.widgets).toBe(RESTAURANT_WIDGETS)
+    const collections = new Set(RESTAURANT_COLLECTIONS.map((collection) => collection.name))
+    const routes = new Set([
+      '/',
+      ...buildRestaurantDemoPages().map((demo) => `/${demo.slug}`),
+      ...RESTAURANT_DEMO_DISHES.map((dish) => `/menu/${dish.slug}`),
+    ])
+    const note = String(RESTAURANT_SITE_SETTINGS['general.footerNote'])
+    for (const widget of RESTAURANT_WIDGETS) {
+      const settings = validateWidgetSettings(widget.type, widget.settings)
+      const { pages } = validateWidgetVisibility(widget.visibility)
+      const hrefs = (JSON.stringify(settings).match(/"href":"[^"]+"/g) ?? []).map((match) =>
+        match.slice(8, -1),
+      )
+      for (const href of hrefs) expect(routes.has(href), href).toBe(true)
+      for (const target of pages.targets) {
+        if (target.kind === 'collection') expect(collections.has(target.collection)).toBe(true)
+        if (target.kind === 'path') expect(routes.has(target.path), target.path).toBe(true)
+      }
+      // The e-mail address is derived from the site's name; a widget cannot follow it.
+      expect(JSON.stringify(settings)).not.toMatch(/@/)
+      if (widget.area === 'sidebar') {
+        // Beside a dish and search results; never beside the menu or a landing page.
+        expect(pages.mode, widget.type).toBe('only')
+        for (const target of pages.targets) {
+          expect(['collection', 'search'], widget.type).toContain(target.kind)
+        }
+      } else {
+        expect(['footer-1', 'footer-2', 'footer-3', 'footer-4']).toContain(widget.area)
+        // Everywhere but the pages that already say the same, the home page first.
+        expect(pages.mode, widget.type).toBe('except')
+        expect(pages.targets).toContainEqual({ kind: 'home' })
+        for (const href of hrefs) expect(pages.targets).toContainEqual({ kind: 'path', path: href })
+        // Nothing the footer's own address card already prints.
+        for (const line of note.split('\n').filter((part) => part.trim() !== '')) {
+          expect(JSON.stringify(settings)).not.toContain(line.replace(/\.$/, ''))
+        }
+        expect(JSON.stringify(settings)).not.toMatch(/rue Burdeau|\+33|19:30|12:00/)
+      }
+    }
+    // Every fact a widget states is one the site's own pages state.
+    const pages = JSON.stringify(buildRestaurantDemoPages({ siteName: 'Maison Verte' }))
+    const contact = RESTAURANT_WIDGETS.find((widget) => widget.type === 'contact')
+    const hours = validateWidgetSettings('contact', contact?.settings).hours as {
+      label: string
+      value: string
+    }[]
+    expect(hours.map((row) => row.label)).toEqual(['Closed', 'The counter', 'Bookings'])
+    expect(pages).toContain('Sunday and Monday, three weeks in August and Christmas week')
+    expect(pages).toContain('Tuesday to Saturday, 10:00 to 18:00')
+    expect(pages).toContain('six seats at the counter are kept for guests who walk in at dinner')
+    const quote = RESTAURANT_WIDGETS.find((widget) => widget.type === 'quote')
+    expect(pages).toContain(String(validateWidgetSettings('quote', quote?.settings).text))
+    expect(
+      contact?.visibility && validateWidgetVisibility(contact.visibility).pages.targets,
+    ).toEqual([
+      { kind: 'home' },
+      { kind: 'path', path: '/visit' },
+      { kind: 'path', path: '/reservations' },
+    ])
   })
 
   it("matches the theme's own palette and typefaces in its starting skin", async () => {

@@ -111,5 +111,34 @@ en page.
 | 3. API | fait | `/api/widgets` (liste, création, édition, déplacement, réordonnancement, duplication, suppression), admin seul |
 | 4. Résolution hôte | fait | visibilité par requête, archives par date `/archive/:collection/:year/:month?`, `/_cogenta/go` (menus déroulants), sauvegarde ; test de bout en bout réel |
 | 5. Écran admin | fait | `/widgets` : bibliothèque, glisser-déposer et boutons nommés, réglages par type, visibilité, masquer, dupliquer, supprimer, widgets inactifs ; 7 tests d'écran |
-| 6. Thèmes | en cours | mise en page commune `cg-sidebar-layout` (hôte) ; Magazine fait et vérifié en captures ; les neuf autres par lots d'agents en worktrees |
-| 7. Données, sauvegarde, vérification | en cours | `BlueprintWidget`, semis à l'installation, import conserver/réinitialiser, avertissement `widgets-kept` ; Magazine semé ; les autres blueprints avec leur thème |
+| 6. Thèmes | fait | mise en page commune `cg-sidebar-layout` (hôte) ; les dix thèmes stylisent zones, widgets et colonnes de pied dans leur propre registre, chacun vérifié en captures réelles (bureau, 1100 px, mobile, clair, sombre) par la session principale avant fusion |
+| 7. Données, sauvegarde, vérification | fait | neuf blueprints sèment des widgets adaptés à leur type de site, avec des règles de visibilité (jamais sur une page d'accueil conçue ni à côté d'un contenu déjà présent) ; tests de starters par blueprint ; import conserver/réinitialiser prouvé de bout en bout |
+
+## Rapport de clôture (2026-09-16)
+
+**Ce qui marche.** Un widget posé dans `/widgets` s'affiche sur le site public quel que soit le
+thème actif : à côté du contenu sur une page de lecture, en bandeau ailleurs, dans le pied du
+thème. Masquer, dupliquer, déplacer, planifier, cibler un public, des appareils, des pages ou des
+langues : tout est pris en compte à chaque requête. Les démos arrivent avec des widgets choisis
+pour leur type de site, et un changement de thème ne perd rien (zone « Widgets inactifs »).
+
+**Décisions prises en route.**
+- Les trois zones de page standard sont placées par l'hôte dans un balisage unique (voir D2
+  révisé) ; les thèmes les stylisent. Le pied de page reste placé par chaque thème.
+- Pas de barre latérale là où elle nuirait : fiche produit, projet de portfolio, pages de
+  présentation ouvertes par un `hero`. Les blueprints le traduisent en règles de visibilité ; le
+  propriétaire du site reste libre d'en ajouter une, et chaque thème a été vérifié dans ce cas.
+- Aucune adresse e-mail dans un widget de démo : les pages de démo la dérivent du nom du site,
+  un réglage de widget ne le peut pas.
+
+**Limites connues, à reprendre.**
+1. « Dernières entrées », archives et calendrier trient et datent par date de création : une
+   collection d'événements ne peut pas lister ses prochaines dates (repéré par le thème
+   Association, qui a renoncé au widget).
+2. Le formulaire de recherche de l'hôte passe le bouton sous le champ sur mobile dans plusieurs
+   thèmes.
+3. La recherche publique inclut des pages sans résumé (« Home »).
+4. Les pages d'expertise du blueprint vitrine ouvrent les commentaires (antérieur à L30).
+5. Écran admin vérifié par ses tests d'écran ; pas de parcours réel dans un navigateur connecté
+   (extension Chrome indisponible, identifiants du playground non détenus).
+6. `@cogenta/widgets` et `@cogenta/starters` attendent leur Trusted Publisher OIDC.

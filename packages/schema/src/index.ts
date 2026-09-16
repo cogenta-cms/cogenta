@@ -44,6 +44,7 @@ export type {
   MediaUsageScanOptions,
 } from './media-usage.js'
 export { findMediaUsage } from './media-usage.js'
+export * from './replace.js'
 export type {
   RichTextBlock,
   RichTextDecorator,

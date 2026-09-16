@@ -383,7 +383,12 @@ import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
 import { DEFAULT_LOGO_CONTENT_TYPE, DEFAULT_LOGO_PATH, defaultLogoBytes } from './default-logo.js'
 import { runDoctor } from './doctor.js'
-import { parseCookies, UNLOCK_PATH } from './entry-lock.js'
+import {
+  parseCookies,
+  UNLOCK_ATTEMPTS_PER_WINDOW,
+  UNLOCK_PATH,
+  UNLOCK_WINDOW_MS,
+} from './entry-lock.js'
 import { renderFormNotFoundPage, renderFormPage } from './forms-page.js'
 import { applySecurity, isSecure, type SecurityConfig } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
@@ -6775,6 +6780,29 @@ export function createRequestListener(
         // form field is an open redirect waiting to happen.
         const back = /^\/(?!\/)[^\s]*$/u.test(next) ? next : '/'
 
+        // The ceiling, before the check and regardless of whether the entry
+        // exists: an answer that came faster for an unknown id would say
+        // which ids are real. Keyed by address *and* entry, so an attacker
+        // spends only their own budget on the page they are attacking rather
+        // than locking every reader out of every protected page.
+        const quota = site.requestQuota
+        if (quota !== undefined) {
+          const attempt = await quota.consume(`unlock:${clientIpOf(req)}:${entryId}`, {
+            limit: UNLOCK_ATTEMPTS_PER_WINDOW,
+            windowMs: UNLOCK_WINDOW_MS,
+          })
+          if (!attempt.allowed) {
+            logger.warn('unlock attempts throttled', { path: back })
+            res.writeHead(303, {
+              location: `${back}${back.includes('?') ? '&' : '?'}unlock=slow`,
+              'cache-control': 'no-store',
+              'retry-after': String(Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000))),
+            })
+            res.end()
+            return
+          }
+        }
+
         const opened = await unlockEntry(site, entryId, password)
         if (!opened) {
           // The same answer whatever went wrong — wrong password, unknown
@@ -6787,6 +6815,13 @@ export function createRequestListener(
           res.end()
           return
         }
+
+        // Answering correctly clears the counter: someone who mistyped twice
+        // and then got it right should not carry those two attempts into
+        // their next visit.
+        await site.requestQuota
+          ?.reset(`unlock:${clientIpOf(req)}:${entryId}`, UNLOCK_WINDOW_MS)
+          .catch(() => undefined)
 
         const token = extras.unlockTokens.issue(entryId)
         res.writeHead(303, {
@@ -7029,6 +7064,7 @@ export function createRequestListener(
                     parseCookies(req.headers.cookie).get(extras.unlockTokens.cookieName(entryId)),
                   ) === true,
                 unlockFailed: url.searchParams.get('unlock') === 'failed',
+                unlockThrottled: url.searchParams.get('unlock') === 'slow',
               }),
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)

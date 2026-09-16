@@ -145,10 +145,17 @@ refusée et sitemap propre) et le parcours complet dans un navigateur sur
 
 ### Reste ouvert
 
-- **Pas de limitation de débit sur `/_cogenta/unlock`.** Un mot de passe de page
-  est court par nature ; rien n'empêche aujourd'hui de l'essayer en boucle. Le
-  pilote de limitation existe déjà dans le projet (`rateLimit`, dégradé en
-  mémoire) : l'y brancher est un petit lot à part, pas une retouche à glisser ici.
+- ~~Pas de limitation de débit sur `/_cogenta/unlock`~~ — **fait juste après la
+  clôture** : dix essais par adresse **et par entrée**, sur dix minutes, par le
+  pilote `rateLimit` déjà présent (Redis quand il est configuré, compteur en
+  mémoire sinon). Compté **avant** la vérification et quelle que soit
+  l'existence de l'entrée — une réponse plus rapide pour un identifiant inconnu
+  dirait lesquels sont réels. Par adresse *et* par entrée, pour qu'un attaquant
+  n'épuise que son propre budget sur la page qu'il attaque au lieu de verrouiller
+  tous les lecteurs de toutes les pages protégées ; une bonne réponse remet le
+  compteur à zéro, pour que deux fautes de frappe suivies d'un succès ne suivent
+  pas le lecteur à sa prochaine visite. Le formulaire distingue « mot de passe
+  faux » de « trop d'essais », et la réponse porte un `Retry-After`.
 - **Pas de partage de déverrouillage entre appareils** : le cookie est celui de
   ce navigateur, ce qui est le comportement de WordPress et le seul honnête sans
   compte.

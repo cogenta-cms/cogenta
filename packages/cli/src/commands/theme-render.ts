@@ -258,6 +258,8 @@ export interface ThemeRenderOptions {
   readonly unlocked?: (entryId: string) => boolean
   /** True when this render follows a wrong password, so the form says so. */
   readonly unlockFailed?: boolean
+  /** True when the attempts ran out — a different thing to tell a reader. */
+  readonly unlockThrottled?: boolean
   /**
    * The path served at `/` (fiche 23 task 4) — a real, honest replacement
    * for the `/home` fallback this file used to hardcode.
@@ -1796,6 +1798,7 @@ async function renderEntryPage(
             path: pathname,
             locale: entry.locale,
             failed: options.unlockFailed === true,
+            ...(options.unlockThrottled === true ? { throttled: true } : {}),
           }),
         ],
       }

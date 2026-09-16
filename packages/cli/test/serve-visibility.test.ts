@@ -229,4 +229,50 @@ describe('a page that is not simply public', () => {
       await server.stop()
     }
   }, 120_000)
+
+  it('stops a script guessing the password, without locking the page for others', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      const id = await publish(server.base, token, 'Dossier de presse', 'dossier')
+      const other = await publish(server.base, token, 'Autre dossier', 'autre')
+      for (const entry of [id, other]) {
+        await fetch(`${server.base}/api/content/page/${entry}/visibility`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ visibility: 'password', password: 'sésame' }),
+        })
+      }
+
+      const attempt = (entry: string, password: string): Promise<Response> =>
+        fetch(`${server.base}/_cogenta/unlock`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ entry, password, next: '/dossier' }),
+          redirect: 'manual',
+        })
+
+      let throttled: Response | null = null
+      for (let tries = 0; tries < 12; tries += 1) {
+        const response = await attempt(id, `guess-${tries}`)
+        if (response.headers.get('location')?.includes('unlock=slow') === true) {
+          throttled = response
+          break
+        }
+      }
+
+      expect(throttled).not.toBeNull()
+      expect(throttled?.headers.get('retry-after')).not.toBeNull()
+
+      // The ceiling is per page, not per site: hammering one protected page
+      // must not lock a reader out of another.
+      const elsewhere = await attempt(other, 'sésame')
+      expect(elsewhere.headers.get('location')).not.toContain('unlock=slow')
+      expect(elsewhere.headers.get('set-cookie')).not.toBeNull()
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
 })

@@ -20,12 +20,26 @@ import { type HtmlElement, h } from '@cogenta/theme-kit'
 /** Where the form posts. Under the reserved namespace no collection route can claim. */
 export const UNLOCK_PATH = '/_cogenta/unlock'
 
+/**
+ * How many password attempts one address gets on one entry, and over how long.
+ *
+ * A page password is short by nature — it is read out in a meeting, written in
+ * an email — so without a ceiling it is a few thousand requests away from
+ * anyone patient. Ten is more than a person mistypes and far less than a script
+ * needs. The window is per address **and** per entry, so an attacker spends
+ * only their own budget on the page they are attacking, and cannot lock every
+ * reader out of every protected page by hammering one.
+ */
+export const UNLOCK_ATTEMPTS_PER_WINDOW = 10
+export const UNLOCK_WINDOW_MS = 10 * 60 * 1000
+
 export interface PasswordFormStrings {
   readonly heading: string
   readonly explanation: string
   readonly label: string
   readonly submit: string
   readonly wrong: string
+  readonly tooMany: string
 }
 
 const FRENCH: PasswordFormStrings = {
@@ -34,6 +48,7 @@ const FRENCH: PasswordFormStrings = {
   label: 'Mot de passe',
   submit: 'Afficher la page',
   wrong: 'Ce mot de passe ne correspond pas. Réessayez.',
+  tooMany: 'Trop d’essais. Patientez quelques minutes avant de réessayer.',
 }
 
 const ENGLISH: PasswordFormStrings = {
@@ -42,6 +57,7 @@ const ENGLISH: PasswordFormStrings = {
   label: 'Password',
   submit: 'Show the page',
   wrong: 'That password does not match. Try again.',
+  tooMany: 'Too many attempts. Wait a few minutes before trying again.',
 }
 
 export function passwordFormStrings(locale: string): PasswordFormStrings {
@@ -55,6 +71,8 @@ export interface PasswordFormOptions {
   readonly locale: string
   /** True when this render follows a wrong answer, so the form says so. */
   readonly failed: boolean
+  /** True when the attempts ran out, which is a different thing to say. */
+  readonly throttled?: boolean
 }
 
 export function renderPasswordForm(options: PasswordFormOptions): HtmlElement {
@@ -66,7 +84,11 @@ export function renderPasswordForm(options: PasswordFormOptions): HtmlElement {
     { class: 'cg-block cg-unlock' },
     h('h2', { class: 'cg-unlock__title' }, words.heading),
     h('p', { class: 'cg-unlock__explanation' }, words.explanation),
-    options.failed ? h('p', { class: 'cg-unlock__error', role: 'alert' }, words.wrong) : null,
+    options.throttled === true
+      ? h('p', { class: 'cg-unlock__error', role: 'alert' }, words.tooMany)
+      : options.failed
+        ? h('p', { class: 'cg-unlock__error', role: 'alert' }, words.wrong)
+        : null,
     h(
       'form',
       { class: 'cg-unlock__form', method: 'post', action: UNLOCK_PATH },

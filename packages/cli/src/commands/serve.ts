@@ -390,6 +390,11 @@ import {
   UNLOCK_PATH,
   UNLOCK_WINDOW_MS,
 } from './entry-lock.js'
+import {
+  type FallbackPageOptions,
+  renderFallbackNotFoundPage,
+  renderWelcomePage,
+} from './fallback-pages.js'
 import { renderFormNotFoundPage, renderFormPage } from './forms-page.js'
 import { applySecurity, isSecure, type SecurityConfig } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
@@ -3328,6 +3333,26 @@ async function commentsForEntry(
  * `homePath` above is not: turning Cogenta's credit off has to show up on
  * the very next page view, not the next restart.
  */
+/**
+ * The chrome of a page the host writes itself when nothing on the site
+ * answers (L36) — the same live reads `/search` makes, so an error page
+ * carries the site's own header, footer, logo and theme.
+ */
+async function fallbackPageOptions(site: Site): Promise<FallbackPageOptions> {
+  return {
+    site: site.site,
+    locale: site.site.defaultLocale,
+    styles: await site.resolveStyles(),
+    menus: { menuRouter: site.menuRouter },
+    branding: () => brandingForSite(site),
+    activeTheme: () => activeThemeForSite(site),
+    identity: () => identityForSite(site),
+    chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
+    loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
+    seo: () => readSeoRenderDefaults(site.siteSettingsStore),
+  }
+}
+
 async function brandingForSite(site: Site): Promise<BrandingSettings> {
   const [showSetting, logoSetting] = await Promise.all([
     site.siteSettingsStore.get('branding.showCogentaBranding', SITE_SETTINGS_SITE_SCOPE),
@@ -7289,6 +7314,21 @@ export function createRequestListener(
           }
         }
 
+        // `/` with nothing behind it (L36): the site works, it just has no
+        // home page yet. Answered before the 404 log below, because a site
+        // being set up is not a broken link, and before the site's own 404
+        // page, because "not found" is the wrong thing to say about the
+        // front door of a site that was installed a minute ago.
+        if (url.pathname === '/') {
+          const html = await renderWelcomePage(await fallbackPageOptions(site), context)
+          res.writeHead(200, {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+          })
+          res.end(html)
+          return
+        }
+
         // The 404 log (fiche 12 task 1): every public GET that matched no
         // route, recorded by path — never by IP or user agent — so the ten
         // URLs most requested and never found are visible without anyone
@@ -7323,6 +7363,22 @@ export function createRequestListener(
             res.end(notFound)
             return
           }
+        }
+
+        // No 404 entry on this site (L36): the host's own not-found page, in
+        // the active theme's chrome, rather than the API's JSON error. That
+        // JSON was what every dead link of every site showed a visitor until
+        // someone happened to create a page at `notFoundPath`. An unmatched
+        // `/api/*` call still gets JSON below — a wrong API call is not a
+        // page a person is reading.
+        if (!url.pathname.startsWith('/api/')) {
+          const html = await renderFallbackNotFoundPage(await fallbackPageOptions(site), context)
+          res.writeHead(404, {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+          })
+          res.end(html)
+          return
         }
       }
 

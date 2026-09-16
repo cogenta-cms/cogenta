@@ -110,16 +110,53 @@ describe('a site 404 page', () => {
     await server.stop()
   })
 
-  it('falls back to the plain refusal when the site wrote no 404 page', async () => {
+  it('shows a page in the site own chrome when the site wrote no 404 page', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })
 
     const response = await fetch(`${server.base}/no-such-page`)
 
+    // L36: this used to be the API's JSON error, for every dead link of every
+    // site that had not created a page at `notFoundPath`.
     expect(response.status).toBe(404)
-    expect(response.headers.get('content-type')).toContain('application/json')
-    const body = (await response.json()) as { error: { code: string } }
-    expect(body.error.code).toBe('CONTENT_NOT_FOUND')
+    expect(response.headers.get('content-type')).toContain('text/html')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const html = await response.text()
+    expect(html).toContain('<!doctype html>')
+    expect(html).toContain('This page could not be found')
+    expect(html).toContain('class="cg-site-header')
+    expect(html).toContain('action="/search"')
+    expect(html).toContain('<meta name="robots" content="noindex, follow" />')
+    expect(html).not.toContain('CONTENT_NOT_FOUND')
+
+    await server.stop()
+  })
+
+  it('welcomes a visitor at the root of a site that has no home page yet', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+
+    const response = await fetch(`${server.base}/`)
+
+    expect(response.status).toBe(200)
+    const html = await response.text()
+    expect(html).toContain('Your site is up and running')
+    expect(html).toContain('href="/admin"')
+    expect(html).toContain('<meta name="robots" content="noindex, follow" />')
+
+    await server.stop()
+  })
+
+  it('stops welcoming once the site has a home page', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await editorToken(root, server.base)
+    await publishPage(server.base, token, 'Our real front page', 'home')
+
+    const html = await (await fetch(`${server.base}/`)).text()
+
+    expect(html).toContain('Our real front page')
+    expect(html).not.toContain('Your site is up and running')
 
     await server.stop()
   })
@@ -171,8 +208,10 @@ describe('a site 404 page', () => {
 
     const response = await fetch(`${server.base}/no-such-page`)
 
-    expect(response.headers.get('content-type')).toContain('application/json')
-    expect(await response.text()).not.toContain('Draft only')
+    expect(response.status).toBe(404)
+    const html = await response.text()
+    expect(html).not.toContain('Draft only')
+    expect(html).toContain('This page could not be found')
 
     await server.stop()
   })

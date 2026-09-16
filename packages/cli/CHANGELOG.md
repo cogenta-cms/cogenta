@@ -1,5 +1,48 @@
 # @cogenta/cli
 
+## 0.15.2
+
+### Patch Changes
+
+- A schedule pushed back no longer publishes at its old date
+  
+  Rescheduling an entry never cancelled the job queued by the earlier save, and
+  the job that came due only checked that the entry was still `scheduled`. An
+  entry scheduled for Monday and moved to Friday therefore went out on Monday.
+  
+  `@cogenta/schema` gains `isPublicationDue(entry, now?)`: the entry's current
+  `publishedAt` decides, not the job's. `cogenta serve` publishes only when it
+  is true, so the stale job does nothing and the later one publishes on time.
+- Updated dependencies [`3bb1d5c`, `cf981a0`]:
+  - @cogenta/api@2.8.0
+  - @cogenta/schema@0.7.1
+  - @cogenta/starters@0.1.5
+  - @cogenta/agents@0.8.4
+  - @cogenta/auth@0.5.8
+  - @cogenta/blocks@1.1.3
+  - @cogenta/export@0.2.9
+  - @cogenta/import@0.2.10
+  - @cogenta/plugins@0.8.3
+  - @cogenta/seo@0.3.9
+  - @cogenta/widgets@0.2.3
+  - @cogenta/agents-builtin@0.6.4
+  - @cogenta/channels@0.3.11
+  - @cogenta/mcp@0.3.10
+  - @cogenta/render@0.3.5
+  - @cogenta/theme-association@0.5.3
+  - @cogenta/theme-blog@0.5.3
+  - @cogenta/theme-canonical@1.3.3
+  - @cogenta/theme-docs@0.5.3
+  - @cogenta/theme-ecommerce@1.3.3
+  - @cogenta/theme-entreprise@1.3.3
+  - @cogenta/theme-kit@0.5.3
+  - @cogenta/theme-magazine@1.3.3
+  - @cogenta/theme-portfolio@1.3.3
+  - @cogenta/theme-restaurant@0.5.3
+  - @cogenta/theme-saas@0.5.3
+  - @cogenta/commerce@0.5.6
+  - @cogenta/forms@0.2.11
+
 ## 0.15.1
 
 ### Patch Changes

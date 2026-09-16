@@ -1,5 +1,13 @@
 # @cogenta/theme-kit
 
+## 0.5.3
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/blocks@1.1.3
+  - @cogenta/render@0.3.5
+
 ## 0.5.2
 
 ### Patch Changes

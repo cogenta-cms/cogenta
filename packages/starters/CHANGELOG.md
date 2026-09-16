@@ -1,5 +1,16 @@
 # @cogenta/starters
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [`3bb1d5c`, `cf981a0`]:
+  - @cogenta/api@2.8.0
+  - @cogenta/schema@0.7.1
+  - @cogenta/blocks@1.1.3
+  - @cogenta/widgets@0.2.3
+  - @cogenta/render@0.3.5
+
 ## 0.1.4
 
 ### Patch Changes

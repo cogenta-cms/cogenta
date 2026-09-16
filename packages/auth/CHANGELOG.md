@@ -1,5 +1,12 @@
 # @cogenta/auth
 
+## 0.5.8
+
+### Patch Changes
+
+- Updated dependencies [`cf981a0`]:
+  - @cogenta/schema@0.7.1
+
 ## 0.5.7
 
 ### Patch Changes

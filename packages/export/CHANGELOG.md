@@ -1,5 +1,13 @@
 # @cogenta/export
 
+## 0.2.9
+
+### Patch Changes
+
+- Updated dependencies [`cf981a0`]:
+  - @cogenta/schema@0.7.1
+  - @cogenta/auth@0.5.8
+
 ## 0.2.8
 
 ### Patch Changes

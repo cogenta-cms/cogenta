@@ -1,5 +1,31 @@
 # @cogenta/api
 
+## 2.8.0
+
+### Minor Changes
+
+- An editorial calendar read: `GET /api/content/-/calendar?from=&to=`
+  
+  Returns the published and scheduled entries whose `publishedAt` falls in the
+  window, earliest first, and the drafts that could still be scheduled — across
+  every collection that declares `publishedAt` and whose unpublished entries the
+  actor may read, through the same draft and visibility gates as a list. Each
+  entry says whether the actor may move it (`publish`). The window is at most 93
+  days, and the walk is bounded and says when it stopped.
+
+### Patch Changes
+
+- Updated dependencies [`cf981a0`]:
+  - @cogenta/schema@0.7.1
+  - @cogenta/auth@0.5.8
+  - @cogenta/blocks@1.1.3
+  - @cogenta/export@0.2.9
+  - @cogenta/seo@0.3.9
+  - @cogenta/widgets@0.2.3
+  - @cogenta/channels@0.3.11
+  - @cogenta/mcp@0.3.10
+  - @cogenta/forms@0.2.11
+
 ## 2.7.0
 
 ### Minor Changes

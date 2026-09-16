@@ -273,9 +273,16 @@ export function PluginsRoute(): JSX.Element {
           <p>{error}</p>
         </Notice>
       )}
-      <p className="sr-only" aria-live="polite">
-        {status}
-      </p>
+      {/*
+        Seen as well as announced: the screen's own acts (create, install,
+        grant) land far enough down the page that a confirmation only a screen
+        reader received looked, to everyone else, like nothing had happened.
+      */}
+      {status !== null && (
+        <Notice tone="success" live="polite">
+          <p>{status}</p>
+        </Notice>
+      )}
 
       <section aria-labelledby="plugins-installed" className="flex flex-col gap-3">
         <h2 id="plugins-installed" className="m-0 text-base font-semibold">

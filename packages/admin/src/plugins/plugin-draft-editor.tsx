@@ -1,4 +1,4 @@
-import { type JSX, useCallback, useEffect, useState } from 'react'
+import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   deleteSandbox,
@@ -53,6 +53,7 @@ export function PluginDraftEditor({
   // asks before it does, in place, rather than opening a dialog that a reflex
   // dismisses.
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const panel = useRef<HTMLElement | null>(null)
 
   const act = useCallback(
     async (run: () => Promise<void>): Promise<void> => {
@@ -97,6 +98,17 @@ export function PluginDraftEditor({
     }
   }, [token, draft.id, open, onError])
 
+  // A draft opens below a list that may be long: without this, "create" and
+  // "edit" both looked like they had done nothing at all.
+  useEffect(() => {
+    const element = panel.current
+    // Guarded rather than called: jsdom has no `scrollIntoView`, and a screen
+    // that throws under test to scroll a little is a bad trade.
+    if (element !== null && typeof element.scrollIntoView === 'function') {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [])
+
   const refresh = async (): Promise<void> => {
     setState(await getSandbox(token, draft.id))
   }
@@ -105,6 +117,7 @@ export function PluginDraftEditor({
 
   return (
     <section
+      ref={panel}
       aria-label={t('plugins.draft.editing', { name: draft.title ?? draft.name })}
       className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4"
     >

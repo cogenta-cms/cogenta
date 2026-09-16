@@ -22,6 +22,8 @@ import type { HtmlElement, HtmlNode } from '@cogenta/theme-kit'
 
 /** The handler a plugin exposes to render one of its blocks. */
 export const PLUGIN_BLOCK_HANDLER = 'onRenderBlock'
+/** And the one it exposes to render one of its widgets (L32 step 4). */
+export const PLUGIN_WIDGET_HANDLER = 'onRenderWidget'
 
 /**
  * What a plugin block may emit. Structural elements and text; no form
@@ -228,6 +230,14 @@ export interface PluginBlockRenderer {
 
 export interface PluginBlockRendererOptions {
   readonly plugins: readonly ResolvedPlugin[]
+  /**
+   * Which of a manifest's provisions this renderer answers for, and which
+   * handler it calls. Blocks and widgets differ in exactly these two values
+   * and in nothing else — the process, the allowlist, the cache and the
+   * failure policy are one implementation on purpose, so a hole closed for
+   * one cannot stay open for the other.
+   */
+  readonly kind?: 'blocks' | 'widgets'
   /** Runs a plugin handler. Injected so this file spawns nothing itself. */
   readonly invoke: (
     plugin: string,
@@ -266,9 +276,15 @@ function cacheKey(plugin: ResolvedPlugin, request: PluginBlockRenderRequest): st
 export function createPluginBlockRenderer(
   options: PluginBlockRendererOptions,
 ): PluginBlockRenderer {
+  const kind = options.kind ?? 'blocks'
+  const handler = kind === 'blocks' ? PLUGIN_BLOCK_HANDLER : PLUGIN_WIDGET_HANDLER
   const provisions = new Map<string, { plugin: ResolvedPlugin; provision: PluginBlockProvision }>()
   for (const plugin of options.plugins) {
-    for (const provision of plugin.manifest.provides.blocks ?? []) {
+    const declared =
+      kind === 'blocks'
+        ? (plugin.manifest.provides.blocks ?? [])
+        : ((plugin.manifest.provides.widgets ?? []) as readonly PluginBlockProvision[])
+    for (const provision of declared) {
       if (!provisions.has(provision.name)) provisions.set(provision.name, { plugin, provision })
     }
   }
@@ -304,7 +320,7 @@ export function createPluginBlockRenderer(
           continue
         }
 
-        const result = await options.invoke(owner.plugin.manifest.name, PLUGIN_BLOCK_HANDLER, {
+        const result = await options.invoke(owner.plugin.manifest.name, handler, {
           type: request.type,
           values: request.values,
           locale: request.locale,

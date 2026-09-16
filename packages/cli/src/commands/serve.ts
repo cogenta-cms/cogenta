@@ -333,7 +333,9 @@ import type { PublicComment } from '@cogenta/theme-canonical'
 import type { ChromeLink, WidgetAreas } from '@cogenta/theme-kit'
 import {
   createWidgetStore,
+  type ExtraWidgetTypes,
   ensureWidgetTables,
+  WIDGET_TYPES,
   type Widget,
   type WidgetStore,
   widgetAreasFor,
@@ -377,6 +379,7 @@ import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
 import { createPluginBlockRenderer, type PluginBlockRenderer } from './plugin-block-render.js'
 import {
   collectPluginBlocks,
+  collectPluginWidgets,
   describePluginBlocks,
   type PluginBlockDescription,
 } from './plugin-blocks.js'
@@ -715,6 +718,14 @@ interface Site {
   /** `/api/widgets` (L30): admin-only management of the widget areas. */
   readonly widgetRouter: WidgetRouter
   readonly widgetStore: WidgetStore
+  /**
+   * Renders the widget types this site's plugins provide (L32 step 4). Held
+   * on the site rather than threaded through `widgetsForSite`'s seven call
+   * sites: a widget area is resolved the same way from a page, a preview, a
+   * 404 and a form page, and one of them silently missing plugin widgets
+   * would be a bug nobody would look for.
+   */
+  readonly pluginWidgets?: PluginBlockRenderer
   /** The stored widgets, kept for a few seconds and dropped on every admin write. */
   readonly cachedWidgets: () => Promise<readonly Widget[]>
   /** Every published entry filed under one term, as `(collection, id)` pairs. */
@@ -1107,6 +1118,10 @@ interface AssembleSiteOptions {
    * site that has no plugin block.
    */
   readonly blocks?: BlockRegistry
+  /** Settings schemas for the widget types this site's plugins provide (L32 step 4). */
+  readonly pluginWidgetTypes?: ExtraWidgetTypes
+  /** And what renders them. */
+  readonly pluginWidgets?: PluginBlockRenderer
   readonly signingKey: string
   readonly site: {
     readonly name: string
@@ -2362,7 +2377,14 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // admin write drops the copy at once; another replica sees it within the
   // same few seconds.
   await ensureWidgetTables(db)
-  const widgetStore = createWidgetStore({ db })
+  const widgetStore = createWidgetStore({
+    db,
+    // L32 step 4 — a widget type one of this site's plugins provides is
+    // validated against the schema that plugin declared. Without this the
+    // store would refuse to store it at all, which is the right refusal for a
+    // type nothing can render and the wrong one for a type a plugin brings.
+    ...(options.pluginWidgetTypes === undefined ? {} : { extraTypes: options.pluginWidgetTypes }),
+  })
   const WIDGET_CACHE_MS = 5_000
   let widgetCache: { readonly at: number; readonly widgets: readonly Widget[] } | null = null
   const cachedWidgets = async (): Promise<readonly Widget[]> => {
@@ -2552,6 +2574,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     db,
     auth,
     cogentaVersion,
+    ...(options.pluginWidgets === undefined ? {} : { pluginWidgets: options.pluginWidgets }),
     restRouter: createRestRouter({ service, siteUrl: site.url }),
     authRouter: createAuthRouter({
       auth,
@@ -3352,6 +3375,7 @@ async function widgetsForSite(
       collections: site.collections,
       taxonomies: site.taxonomies,
       gateway: site.gateway,
+      ...(site.pluginWidgets === undefined ? {} : { pluginWidgets: site.pluginWidgets }),
       terms: site.taxonomyTerms,
       termUsage: (taxonomy, terms, access) => {
         const byName = new Map(site.collections.map((collection) => [collection.name, collection]))
@@ -4409,6 +4433,9 @@ export interface RuntimeExtras {
   readonly pluginBlockRenderer?: PluginBlockRenderer
   /** The same blocks, described the way the admin's block table wants them (L32 step 3). */
   readonly pluginBlockDescriptions?: readonly PluginBlockDescription[]
+  /** The widget types plugins provide, and the renderer that draws them (L32 step 4). */
+  readonly pluginWidgetRenderer?: PluginBlockRenderer
+  readonly pluginWidgetDescriptions?: readonly PluginBlockDescription[]
   /** Where this site keeps its plugins (`plugins.dir`), for the workshop routes. */
   readonly pluginsDir?: string
   /**
@@ -5622,12 +5649,22 @@ export function createRequestListener(
         // it holds — the same kind of thing `/api/schema` already tells any
         // signed-in actor — and nothing about a plugin's code, grants or
         // state.
-        if (url.pathname === '/api/plugins/blocks' && req.method === 'GET') {
+        if (
+          (url.pathname === '/api/plugins/blocks' || url.pathname === '/api/plugins/widgets') &&
+          req.method === 'GET'
+        ) {
+          const widgets = url.pathname.endsWith('/widgets')
           res.writeHead(200, {
             'content-type': 'application/json; charset=utf-8',
             'cache-control': 'no-store',
           })
-          res.end(JSON.stringify({ data: { blocks: extras.pluginBlockDescriptions ?? [] } }))
+          res.end(
+            JSON.stringify({
+              data: widgets
+                ? { widgets: extras.pluginWidgetDescriptions ?? [] }
+                : { blocks: extras.pluginBlockDescriptions ?? [] },
+            }),
+          )
           return
         }
         if (!context.actor.roles.includes('admin')) {
@@ -7531,6 +7568,30 @@ export async function runServe(options: ServeOptions): Promise<number> {
           onProblem: (problem) => logger.warn('plugin block did not render', problem),
         })
 
+  // The same, for the widget types plugins provide (L32 step 4). `WIDGET_TYPES`
+  // is as closed as the block vocabulary, so a plugin's type is registered
+  // beside it rather than among it.
+  const pluginWidgets =
+    pluginRuntime === null
+      ? null
+      : collectPluginWidgets(pluginRuntime.plugins, { taken: WIDGET_TYPES })
+  for (const conflict of pluginWidgets?.conflicts ?? []) {
+    logger.warn('plugin widget refused', {
+      plugin: conflict.plugin,
+      widget: conflict.block,
+      reason: conflict.reason,
+    })
+  }
+  const pluginWidgetRenderer =
+    pluginRuntime === null || (pluginWidgets?.schemas.size ?? 0) === 0
+      ? null
+      : createPluginBlockRenderer({
+          kind: 'widgets',
+          plugins: pluginRuntime.plugins,
+          invoke: (plugin, handler, input) => pluginRuntime.invokeHandler(plugin, handler, input),
+          onProblem: (problem) => logger.warn('plugin widget did not render', problem),
+        })
+
   // Both sinks see the same event, and neither can stop the other: a webhook
   // endpoint that is down must not cost a plugin its notification, and a
   // plugin that throws must not cost the webhook its delivery.
@@ -7740,6 +7801,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // L32: the writers validate a stored block against the same registry the
     // renderer resolves one through.
     ...((pluginBlocks?.definitions.length ?? 0) === 0 ? {} : { blocks: siteBlockRegistry }),
+    ...(pluginWidgets === null || pluginWidgets.schemas.size === 0
+      ? {}
+      : { pluginWidgetTypes: pluginWidgets.schemas }),
+    ...(pluginWidgetRenderer === null ? {} : { pluginWidgets: pluginWidgetRenderer }),
     signingKey: loaded.config.auth.signingKey,
     site: loaded.config.site,
     storage: storageSelection.instance,
@@ -8305,6 +8370,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
           ? {}
           : { blockRegistry: siteBlockRegistry }),
         ...(pluginBlockRenderer === null ? {} : { pluginBlockRenderer }),
+        ...(pluginWidgetRenderer === null ? {} : { pluginWidgetRenderer }),
+        ...(pluginWidgets === null || pluginWidgets.descriptions.length === 0
+          ? {}
+          : { pluginWidgetDescriptions: pluginWidgets.descriptions }),
         ...(pluginBlocks === null || pluginBlocks.definitions.length === 0
           ? {}
           : {

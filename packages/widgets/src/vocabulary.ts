@@ -161,6 +161,16 @@ export function isWidgetType(value: unknown): value is WidgetType {
   return typeof value === 'string' && Object.hasOwn(WIDGET_SETTINGS, value)
 }
 
+/**
+ * Widget types a site's plugins add to the closed vocabulary above (L32 step
+ * 4), as `type` → the schema its settings must satisfy.
+ *
+ * Passed in rather than registered globally: this package validates, it does
+ * not discover. The host loads the plugins, builds the schemas, and hands the
+ * map to the store — the same direction the block registry already runs in.
+ */
+export type ExtraWidgetTypes = ReadonlyMap<string, z.ZodType<Record<string, unknown>>>
+
 function invalid(message: string, details: Record<string, unknown>): CogentaError {
   return new CogentaError({
     code: 'WIDGET_INVALID',
@@ -175,11 +185,31 @@ function invalid(message: string, details: Record<string, unknown>): CogentaErro
  * keys refused. The one gate every write goes through, so a stored widget
  * always renders.
  */
-export function validateWidgetSettings(type: unknown, settings: unknown): Record<string, unknown> {
+export function validateWidgetSettings(
+  type: unknown,
+  settings: unknown,
+  extra?: ExtraWidgetTypes,
+): Record<string, unknown> {
   if (!isWidgetType(type)) {
+    // A type one of this site's plugins provides: validated against the
+    // schema that plugin declared, and refused the same way as anything else
+    // when the plugin is not installed — a widget nothing can render must not
+    // be storable.
+    const provided = typeof type === 'string' ? extra?.get(type) : undefined
+    if (provided !== undefined) {
+      const result = provided.safeParse(settings ?? {})
+      if (result.success) return result.data
+      const problem = result.error.issues[0]
+      throw invalid(
+        `The ${type} widget's settings are not valid${
+          problem?.path.length ? ` at "${problem.path.join('.')}"` : ''
+        }: ${problem?.message ?? 'unknown problem'}.`,
+        { type, issues: result.error.issues.map((item) => item.message) },
+      )
+    }
     throw invalid(`"${String(type)}" is not a widget type.`, {
       type,
-      known: WIDGET_TYPES,
+      known: [...WIDGET_TYPES, ...(extra === undefined ? [] : [...extra.keys()])],
     })
   }
   const parsed = WIDGET_SETTINGS[type].safeParse(settings ?? {})

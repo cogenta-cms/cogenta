@@ -118,3 +118,23 @@ export function blockSchemaFromDeclaration(
   }
   return schema
 }
+
+/**
+ * A declared field map as one strict object schema.
+ *
+ * Where `blockSchemaFromDeclaration` builds what `defineBlock` wants, this
+ * builds what anything else validating a plain settings object wants — a
+ * plugin's widget settings, in L32 step 4. Strict, so a stored setting the
+ * declaration never mentioned is refused rather than kept and rendered later.
+ */
+export function declaredObjectSchema(
+  fields: DeclaredBlockSchema | undefined,
+  path: string,
+): z.ZodType<Record<string, unknown>> {
+  const shape: Record<string, z.ZodType> = {}
+  for (const [name, declaration] of Object.entries(fields ?? {})) {
+    const built = blockFieldFromDeclaration(declaration, `${path}.${name}`)
+    shape[name] = declaration.required === true ? built.zod : built.zod.optional()
+  }
+  return z.strictObject(shape) as unknown as z.ZodType<Record<string, unknown>>
+}

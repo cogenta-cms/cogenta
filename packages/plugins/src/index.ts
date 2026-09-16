@@ -53,6 +53,7 @@ export type {
   PluginProvides,
   PluginRuntime,
   PluginSchedule,
+  PluginWidgetProvision,
 } from './manifest.js'
 export {
   DEFAULT_PLUGIN_MAIN,

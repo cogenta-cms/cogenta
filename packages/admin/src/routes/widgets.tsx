@@ -22,9 +22,10 @@ import { Badge, Button, Field, Input, Modal, Notice, PageHeader, Select } from '
 import { VisibilityEditor } from '../widgets/visibility-editor.js'
 import {
   defaultSettings,
+  pluginWidgetType,
   unavailableReason,
-  WIDGET_GROUPS,
   type WidgetSources,
+  widgetGroups,
 } from '../widgets/widget-catalog.js'
 import { loadPreviewTargets, type PreviewTarget, WidgetPreview } from '../widgets/widget-preview.js'
 import { WidgetSettingsForm } from '../widgets/widget-settings-form.js'
@@ -141,7 +142,16 @@ export function WidgetsRoute(): JSX.Element {
     (state?.widgets ?? [])
       .filter((widget) => (area === INACTIVE ? !areaIds.has(widget.area) : widget.area === area))
       .sort((a, b) => a.position - b.position)
-  const typeLabel = (type: WidgetType): string => t(`widgets.types.${type}.label`)
+  // A type a plugin provides has no translation in this bundle — it carries
+  // its own label, written by whoever wrote the plugin.
+  const typeLabel = (type: WidgetType): string =>
+    pluginWidgetType(type)?.label ?? t(`widgets.types.${type}.label`)
+  const typeDescription = (type: WidgetType): string => {
+    const provided = pluginWidgetType(type)
+    return provided === undefined
+      ? t(`widgets.types.${type}.description`)
+      : t('widgets.fromPlugin', { plugin: provided.plugin })
+  }
 
   async function act(run: () => Promise<unknown>, done: string): Promise<void> {
     setActionError(null)
@@ -341,12 +351,12 @@ export function WidgetsRoute(): JSX.Element {
                 />
               )}
             </Field>
-            {WIDGET_GROUPS.map((group) => {
+            {widgetGroups().map((group) => {
               const types = group.types.filter(
                 (type) =>
                   lowered === '' ||
                   typeLabel(type).toLowerCase().includes(lowered) ||
-                  t(`widgets.types.${type}.description`).toLowerCase().includes(lowered),
+                  typeDescription(type).toLowerCase().includes(lowered),
               )
               if (types.length === 0) return null
               return (
@@ -376,7 +386,7 @@ export function WidgetsRoute(): JSX.Element {
                             <span className="text-sm font-medium">{typeLabel(type)}</span>
                             <span className="text-xs text-muted-foreground">
                               {reason === null
-                                ? t(`widgets.types.${type}.description`)
+                                ? typeDescription(type)
                                 : t(`widgets.unavailable.${reason}`)}
                             </span>
                           </button>

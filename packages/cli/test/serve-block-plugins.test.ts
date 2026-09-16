@@ -37,6 +37,15 @@ const MANIFEST = `${JSON.stringify(
           fallbackFrom: { text: 'message' },
         },
       ],
+      widgets: [
+        {
+          name: 'openingHours',
+          label: 'Horaires',
+          fields: {
+            note: { kind: 'text', required: true, label: 'Note' },
+          },
+        },
+      ],
     },
     runtime: 'server',
     isolated: true,
@@ -56,6 +65,22 @@ const CODE = `({
         { kind: 'text', value: input.values.message },
       ] },
     ],
+  }),
+})`
+
+/** A plugin that provides both a block and a widget type. */
+const CODE_WITH_WIDGET = `({
+  onRenderBlock: (input) => ({
+    kind: 'element',
+    tag: 'aside',
+    attrs: { class: 'cg-callout' },
+    children: [{ kind: 'text', value: input.values.message }],
+  }),
+  onRenderWidget: (input) => ({
+    kind: 'element',
+    tag: 'p',
+    attrs: { class: 'cg-hours' },
+    children: [{ kind: 'text', value: 'Ouvert : ' + input.values.note }],
   }),
 })`
 
@@ -266,6 +291,68 @@ describe('a block a plugin provides, on a real page', () => {
       expect(html).not.toContain('/api/auth/session')
       expect(html).not.toContain('<script>fetch')
       expect(html).toContain('La billetterie ouvre lundi.')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+})
+
+describe('a widget type a plugin provides', () => {
+  it('is offered, stored, and drawn in the area a person put it in', async () => {
+    const root = await project(CODE_WITH_WIDGET)
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+
+      // The editor is told the type exists, with the fields it holds.
+      const described = (await (
+        await fetch(`${server.base}/api/plugins/widgets`, {
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).json()) as { data: { widgets: { name: string; label: string; plugin: string }[] } }
+      expect(described.data.widgets).toMatchObject([
+        { name: 'openingHours', label: 'Horaires', plugin: 'Encadrés' },
+      ])
+
+      // Stored: the widget vocabulary has never heard of this type, and the
+      // store accepts it because the plugin declared its settings schema.
+      const created = await fetch(`${server.base}/api/widgets`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          area: 'sidebar',
+          type: 'openingHours',
+          title: 'Horaires',
+          settings: { note: 'du mardi au samedi' },
+        }),
+      })
+      expect(created.status).toBe(201)
+
+      // Settings the declaration does not allow are refused, exactly as they
+      // would be for a vocabulary widget.
+      const refused = await fetch(`${server.base}/api/widgets`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          area: 'sidebar',
+          type: 'openingHours',
+          settings: { note: 'ok', colour: 'red' },
+        }),
+      })
+      expect(refused.status).toBe(422)
+
+      await publishPage(server.base, token, {
+        key: 'c1',
+        type: 'callout',
+        data: { message: 'Bonjour.' },
+      })
+      const html = await (await fetch(`${server.base}/une-page`)).text()
+
+      // The plugin's own markup, in the sidebar, under the class a theme can
+      // style — the plugin's type name, never the literal "plugin".
+      expect(html).toContain('cg-widget--openingHours')
+      expect(html).toContain('Ouvert : du mardi au samedi')
     } finally {
       await server.stop()
     }

@@ -12,6 +12,7 @@ import {
 } from '@cogenta/schema'
 import {
   type ChromeLink,
+  type HtmlElement,
   headingAnchor,
   type ImageSource,
   type ResolvedWidget,
@@ -118,6 +119,23 @@ export interface WidgetResolverDeps {
   ) => Promise<readonly { readonly path: string; readonly views: number }[]>
   readonly form: (name: string) => Promise<FormSummary | null>
   readonly social: (locale: string) => Promise<readonly ChromeLink[]>
+  /**
+   * Renders a widget type one of this site's plugins provides (L32 step 4).
+   * Absent — no plugin widget, or a context that deliberately runs none —
+   * such a widget is simply not drawn: a widget is chrome, and a sidebar
+   * missing one is not a broken page.
+   */
+  readonly pluginWidgets?: {
+    provisionOf(type: string): unknown
+    render(
+      requests: readonly {
+        readonly type: string
+        readonly key: string
+        readonly values: Readonly<Record<string, unknown>>
+        readonly locale: string
+      }[],
+    ): Promise<{ readonly nodes: Record<string, HtmlElement>; readonly degrade: readonly string[] }>
+  }
   readonly now?: () => Date
 }
 
@@ -354,6 +372,20 @@ export async function resolveWidgetAreas(
       devices: widget.visibility.devices,
     }
     const settings = widget.settings as Record<string, unknown>
+
+    // A type this site's plugins provide is rendered before the switch: the
+    // vocabulary below has never heard of it, and the plugin's own markup is
+    // what a theme places.
+    const plugins = deps.pluginWidgets
+    if (plugins !== undefined && plugins.provisionOf(widget.type) !== undefined) {
+      const rendered = await plugins.render([
+        { type: widget.type, key: widget.id, values: settings, locale },
+      ])
+      const node = rendered.nodes[widget.id]
+      if (node === undefined) return null
+      return () => ({ ...base, type: 'plugin', widgetType: widget.type, node })
+    }
+
     switch (widget.type) {
       case 'text':
         // A text widget carries words and links; its media nodes are left out

@@ -110,6 +110,21 @@ export interface PluginBlockProvision {
 }
 
 /**
+ * A widget type a plugin provides (L32 step 4).
+ *
+ * Deliberately without a fallback, unlike a block: a widget is chrome, not
+ * content. A block holds words someone wrote, so losing it would lose them;
+ * a widget that cannot render simply is not drawn, its settings stay in the
+ * database, and reinstalling the plugin brings it back exactly as it was.
+ */
+export interface PluginWidgetProvision {
+  readonly name: string
+  /** What an editor calls it. Falls back to the name when absent. */
+  readonly label?: string
+  readonly fields?: Readonly<Record<string, PluginBlockFieldDeclaration>>
+}
+
+/**
  * What a plugin brings, per "## Ce qu'un plugin peut apporter"
  * (docs/lots/L7-extensibilite.md, lines 38-46). The manifest example in the
  * lot doc only shows `tools`/`blocks`/`fields`/`channels`, but the
@@ -140,6 +155,8 @@ export interface PluginProvides {
    */
   readonly schedules?: readonly PluginSchedule[]
   readonly blocks?: readonly PluginBlockProvision[]
+  /** Widget types it adds to the areas a theme declares (L32 step 4). */
+  readonly widgets?: readonly PluginWidgetProvision[]
   readonly fields?: readonly string[]
   readonly channels?: readonly string[]
   readonly drivers?: readonly string[]
@@ -527,6 +544,34 @@ function checkProvidesBlocks(
   })
 }
 
+function checkProvidesWidgets(
+  widgets: readonly PluginWidgetProvision[] | undefined,
+  issues: PluginManifestIssue[],
+): void {
+  if (widgets === undefined) return
+  const seen = new Set<string>()
+  widgets.forEach((widget, index) => {
+    const path = `provides.widgets[${index}]`
+    if (typeof widget.name !== 'string' || !BLOCK_NAME_PATTERN.test(widget.name)) {
+      issues.push({
+        path: `${path}.name`,
+        message: 'must be a camelCase widget type, such as "openingHours"',
+      })
+    } else if (seen.has(widget.name)) {
+      issues.push({ path: `${path}.name`, message: 'is declared twice by this plugin' })
+    } else {
+      seen.add(widget.name)
+    }
+    if (
+      widget.label !== undefined &&
+      (typeof widget.label !== 'string' || widget.label.length > 80)
+    ) {
+      issues.push({ path: `${path}.label`, message: 'must be a short name, at most 80 characters' })
+    }
+    checkBlockFields(widget.fields, `${path}.fields`, issues, false)
+  })
+}
+
 function collectIssues(input: PluginManifest): PluginManifestIssue[] {
   const issues: PluginManifestIssue[] = []
 
@@ -614,6 +659,7 @@ function collectIssues(input: PluginManifest): PluginManifestIssue[] {
     })
   } else {
     checkProvidesBlocks(input.provides.blocks, issues)
+    checkProvidesWidgets(input.provides.widgets, issues)
   }
 
   return issues

@@ -206,6 +206,30 @@ export function revokeCapability(token: string, plugin: string, capability: stri
  * it, a plugin's block on the page being edited would have no label and no
  * fields.
  */
+export interface PluginProvidedType {
+  readonly name: string
+  readonly label: string
+  readonly fields: readonly {
+    readonly name: string
+    readonly kind: string
+    readonly required: boolean
+    readonly localized: boolean
+    readonly unique: false
+    readonly hasCustomValidation: false
+    readonly options: Readonly<Record<string, unknown>>
+    readonly admin?: { readonly label?: string; readonly help?: string }
+  }[]
+  readonly plugin: string
+  readonly fallback: string
+}
+
+/** The widget types this site's plugins provide (L32 step 4). */
+export function getPluginWidgets(
+  token: string,
+): Promise<{ readonly widgets: readonly PluginProvidedType[] }> {
+  return request('/api/plugins/widgets', { headers: authHeader(token) })
+}
+
 export function getPluginBlocks(token: string): Promise<{
   readonly blocks: readonly {
     readonly name: string

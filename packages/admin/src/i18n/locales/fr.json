@@ -4643,7 +4643,8 @@
     "groups": {
       "content": "Contenu",
       "dynamic": "Contenu automatique",
-      "navigation": "Navigation"
+      "navigation": "Navigation",
+      "plugins": "Extensions"
     },
     "unavailable": {
       "noCollection": "Il faut une collection publiée sur le site.",
@@ -4902,6 +4903,7 @@
         "label": "Calendrier",
         "description": "Le mois en cours, avec les jours de publication."
       }
-    }
+    },
+    "fromPlugin": "Fourni par l’extension « {{plugin}} »"
   }
 }

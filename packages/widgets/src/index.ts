@@ -22,7 +22,7 @@ export {
   validateWidgetVisibility,
   widgetVisibilitySchema,
 } from './visibility.js'
-export type { WidgetSettings, WidgetType } from './vocabulary.js'
+export type { ExtraWidgetTypes, WidgetSettings, WidgetType } from './vocabulary.js'
 export {
   DYNAMIC_WIDGET_TYPES,
   ENTRY_WIDGET_TYPES,

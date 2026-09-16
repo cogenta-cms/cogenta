@@ -4643,7 +4643,8 @@
     "groups": {
       "content": "Content",
       "dynamic": "Automatic content",
-      "navigation": "Navigation"
+      "navigation": "Navigation",
+      "plugins": "Plugins"
     },
     "unavailable": {
       "noCollection": "The site needs a published collection.",
@@ -4902,6 +4903,7 @@
         "label": "Calendar",
         "description": "The current month, with the days something was published."
       }
-    }
+    },
+    "fromPlugin": "Provided by the “{{plugin}}” plugin"
   }
 }

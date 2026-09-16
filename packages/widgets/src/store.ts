@@ -9,7 +9,7 @@ import {
 import { jsonColumn, textColumn, timestampColumn, uuidColumn } from '@cogenta/schema'
 import { isWidgetAreaId } from './areas.js'
 import { validateWidgetVisibility, type WidgetVisibility } from './visibility.js'
-import { validateWidgetSettings, type WidgetType } from './vocabulary.js'
+import { type ExtraWidgetTypes, validateWidgetSettings, type WidgetType } from './vocabulary.js'
 
 /**
  * The widgets of a site: one fixed table (`cogenta_widgets`), created and
@@ -93,6 +93,8 @@ export interface WidgetStoreOptions {
   readonly db: DatabaseHandle
   readonly now?: () => Date
   readonly newId?: () => string
+  /** Widget types this site's plugins provide (L32 step 4), by type name. */
+  readonly extraTypes?: ExtraWidgetTypes
 }
 
 export async function ensureWidgetTables(db: DatabaseHandle): Promise<void> {
@@ -244,7 +246,7 @@ export function createWidgetStore(options: WidgetStoreOptions): WidgetStore {
       db.transaction(
         async (tx) => {
           if (!isWidgetAreaId(input.area)) throw areaInvalid(input.area)
-          const settings = validateWidgetSettings(input.type, input.settings)
+          const settings = validateWidgetSettings(input.type, input.settings, options.extraTypes)
           const visibility = validateWidgetVisibility(input.visibility)
           const widgetId = input.id ?? mintId()
           if (!UUID.test(widgetId)) {
@@ -288,7 +290,7 @@ export function createWidgetStore(options: WidgetStoreOptions): WidgetStore {
           const settings =
             input.settings === undefined
               ? current.settings
-              : validateWidgetSettings(current.type, input.settings)
+              : validateWidgetSettings(current.type, input.settings, options.extraTypes)
           const visibility =
             input.visibility === undefined
               ? current.visibility

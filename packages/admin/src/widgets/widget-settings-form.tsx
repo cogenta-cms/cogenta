@@ -1,11 +1,13 @@
 import type { JSX } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { WidgetType } from '../api/widgets-client.js'
+import { FieldInput } from '../fields/field-input.js'
 import { MediaPicker } from '../fields/media-picker.js'
 import type { RichTextDocument } from '../rich-text/portable-text.js'
 import { RichTextEditor } from '../rich-text/rich-text-editor.js'
+import type { SchemaField } from '../schema/types.js'
 import { Button, Field, Input, Select } from '../ui/index.js'
-import type { WidgetSources } from './widget-catalog.js'
+import { type PluginWidgetType, pluginWidgetType, type WidgetSources } from './widget-catalog.js'
 
 /**
  * The settings of one widget, one form per type (L30). Every control writes
@@ -32,7 +34,57 @@ interface LinkValue {
   readonly newTab: boolean
 }
 
-export function WidgetSettingsForm({
+export function WidgetSettingsForm(props: WidgetSettingsFormProps): JSX.Element {
+  // A type one of this site's plugins provides has no hand-written form here
+  // — it cannot: this bundle has never heard of it. Its declared fields are
+  // rendered by the same generic field components a collection's form uses.
+  const provided = pluginWidgetType(props.type)
+  if (provided !== undefined) return <PluginWidgetSettingsForm {...props} type={provided} />
+  return <VocabularyWidgetSettingsForm {...props} />
+}
+
+/**
+ * The settings of a widget a plugin provides: one generic control per
+ * declared field, exactly as the blocks field renders a plugin's block.
+ */
+function PluginWidgetSettingsForm({
+  idPrefix,
+  settings,
+  type,
+  onChange,
+}: Omit<WidgetSettingsFormProps, 'type'> & { readonly type: PluginWidgetType }): JSX.Element {
+  return (
+    <div className="flex flex-col gap-3">
+      {type.fields.map((field) => (
+        <FieldInput
+          key={field.name}
+          id={`${idPrefix}-${field.name}`}
+          field={
+            {
+              name: field.name,
+              kind: field.kind,
+              required: field.required,
+              localized: field.localized,
+              unique: false,
+              hasCustomValidation: false,
+              options: field.options,
+              ...(field.admin === undefined ? {} : { admin: field.admin }),
+            } as SchemaField
+          }
+          value={settings[field.name]}
+          onChange={(value) => {
+            const next: Record<string, unknown> = { ...settings }
+            if (value === undefined) delete next[field.name]
+            else next[field.name] = value
+            onChange(next)
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function VocabularyWidgetSettingsForm({
   idPrefix,
   token,
   type,

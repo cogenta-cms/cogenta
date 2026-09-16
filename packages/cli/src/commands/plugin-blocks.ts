@@ -2,6 +2,7 @@ import {
   type AnyBlockDefinition,
   type BlockRegistry,
   blockSchemaFromDeclaration,
+  declaredObjectSchema,
   defineBlock,
 } from '@cogenta/blocks'
 import type { PluginBlockProvision, PluginManifest, ResolvedPlugin } from '@cogenta/plugins'
@@ -261,4 +262,81 @@ export function describePluginBlocks(
     }
   }
   return described
+}
+
+/**
+ * The settings schema a declared widget compiles to. Named through the
+ * builder's own return type rather than through `zod`: this package validates
+ * nothing itself and has no reason to take the dependency.
+ */
+type DeclaredSettingsSchema = ReturnType<typeof declaredObjectSchema>
+
+export interface PluginWidgetSet {
+  /** Settings schemas by widget type — what the store validates a write against. */
+  readonly schemas: ReadonlyMap<string, DeclaredSettingsSchema>
+  readonly owners: ReadonlyMap<string, string>
+  readonly descriptions: readonly PluginBlockDescription[]
+  readonly conflicts: readonly PluginBlockConflict[]
+}
+
+/**
+ * Every installed plugin's widget types, ready for the widget store and the
+ * admin. Same rules as the blocks above: a name the vocabulary owns is
+ * refused, a second plugin claiming a name is reported rather than silently
+ * overwriting the first, and a broken declaration costs that one widget, not
+ * the site.
+ */
+export function collectPluginWidgets(
+  plugins: readonly ResolvedPlugin[],
+  options: { readonly taken?: Iterable<string> } = {},
+): PluginWidgetSet {
+  const schemas = new Map<string, DeclaredSettingsSchema>()
+  const owners = new Map<string, string>()
+  const descriptions: PluginBlockDescription[] = []
+  const conflicts: PluginBlockConflict[] = []
+  const taken = new Set(options.taken ?? [])
+
+  for (const plugin of plugins) {
+    for (const provision of plugin.manifest.provides.widgets ?? []) {
+      if (taken.has(provision.name)) {
+        const owner = owners.get(provision.name)
+        conflicts.push({
+          plugin: plugin.manifest.name,
+          block: provision.name,
+          reason:
+            owner === undefined
+              ? `"${provision.name}" is already a widget type of this site.`
+              : `"${provision.name}" is already provided by the plugin "${owner}".`,
+        })
+        continue
+      }
+      try {
+        schemas.set(
+          provision.name,
+          declaredObjectSchema(provision.fields, `${plugin.manifest.name}.${provision.name}`),
+        )
+        taken.add(provision.name)
+        owners.set(provision.name, plugin.manifest.name)
+        descriptions.push({
+          name: provision.name,
+          label: provision.label ?? provision.name,
+          fields: Object.entries(provision.fields ?? {}).map(([name, declaration]) =>
+            describeField(name, declaration),
+          ),
+          plugin: plugin.manifest.title ?? plugin.manifest.name,
+          // A widget has no fallback, on purpose: chrome that cannot render is
+          // simply not drawn, and its settings wait in the database.
+          fallback: '',
+        })
+      } catch (error) {
+        conflicts.push({
+          plugin: plugin.manifest.name,
+          block: provision.name,
+          reason: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+  }
+
+  return { schemas, owners, descriptions, conflicts }
 }

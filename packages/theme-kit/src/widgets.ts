@@ -85,7 +85,14 @@ interface WidgetBase {
 }
 
 export type ResolvedWidget = WidgetBase &
+  /**
+   * A widget type one of the site's plugins provides (L32 step 4, contract
+   * D `theme@1.7`). The host ran the plugin in a process of its own and
+   * checked the markup it returned; a theme places it exactly like any
+   * other widget and needs to know nothing more.
+   */
   (
+    | { readonly type: 'plugin'; readonly widgetType: string; readonly node: HtmlElement }
     | { readonly type: 'text'; readonly body: RichTextDocument }
     | {
         readonly type: 'image'
@@ -307,6 +314,8 @@ function dropdown(
 
 function body(widget: ResolvedWidget, ctx: RenderContext): Child {
   switch (widget.type) {
+    case 'plugin':
+      return widget.node
     case 'text':
       return h('div', { class: 'cg-widget__text' }, renderRichText(ctx, widget.body))
     case 'image': {
@@ -698,7 +707,9 @@ export function renderWidgetArea(
       h(
         'section',
         {
-          class: `cg-widget cg-widget--${widget.type}`,
+          // The plugin's own type name, not the literal `plugin`: a theme
+          // styles `cg-widget--openingHours` the way it styles any other.
+          class: `cg-widget cg-widget--${widget.type === 'plugin' ? widget.widgetType : widget.type}`,
           'data-widget-id': widget.id,
           ...(widget.devices.desktop ? {} : { 'data-hide-desktop': 'true' }),
           ...(widget.devices.tablet ? {} : { 'data-hide-tablet': 'true' }),

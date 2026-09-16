@@ -7,7 +7,7 @@ import type { WidgetType } from '../api/widgets-client.js'
  * is shown as text.
  */
 
-export type WidgetGroup = 'content' | 'dynamic' | 'navigation'
+export type WidgetGroup = 'content' | 'dynamic' | 'navigation' | 'plugins'
 
 export interface WidgetSources {
   readonly collections: readonly {
@@ -18,6 +18,41 @@ export interface WidgetSources {
   readonly taxonomies: readonly { readonly name: string; readonly label: string }[]
   readonly menus: readonly { readonly id: string; readonly label: string }[]
   readonly forms: readonly { readonly name: string; readonly label: string }[]
+}
+
+/**
+ * The widget types this site's plugins provide (L32 step 4), fetched once at
+ * start-up like the plugin blocks are and for the same reason: the closed
+ * vocabulary is baked into this bundle, what a plugin adds depends on the
+ * site.
+ */
+export interface PluginWidgetType {
+  readonly name: string
+  readonly label: string
+  readonly fields: readonly {
+    readonly name: string
+    readonly kind: string
+    readonly required: boolean
+    readonly localized: boolean
+    readonly options: Readonly<Record<string, unknown>>
+    readonly admin?: { readonly label?: string; readonly help?: string }
+  }[]
+  /** Which plugin brings it — shown so a person knows what to uninstall. */
+  readonly plugin: string
+}
+
+let pluginWidgets: readonly PluginWidgetType[] = []
+
+export function registerPluginWidgets(types: readonly PluginWidgetType[]): void {
+  pluginWidgets = types
+}
+
+export function pluginWidgetTypes(): readonly PluginWidgetType[] {
+  return pluginWidgets
+}
+
+export function pluginWidgetType(type: string): PluginWidgetType | undefined {
+  return pluginWidgets.find((candidate) => candidate.name === type)
 }
 
 export const WIDGET_GROUPS: readonly {
@@ -152,4 +187,20 @@ export function defaultSettings(
     case 'calendar':
       return { collection: firstCollection }
   }
+}
+
+/**
+ * The library's real groups: the three of the vocabulary, then one holding
+ * whatever this site's plugins provide. A function rather than a constant
+ * because plugin widgets arrive after the bundle loads.
+ */
+export function widgetGroups(): readonly {
+  readonly id: WidgetGroup
+  readonly types: readonly WidgetType[]
+}[] {
+  if (pluginWidgets.length === 0) return WIDGET_GROUPS
+  return [
+    ...WIDGET_GROUPS,
+    { id: 'plugins', types: pluginWidgets.map((type) => type.name as WidgetType) },
+  ]
 }

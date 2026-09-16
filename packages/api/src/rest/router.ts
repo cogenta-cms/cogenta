@@ -26,7 +26,13 @@ import {
   type RestRequest,
   type RestResponse,
 } from './http.js'
-import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './query.js'
+import {
+  parseCalendarWindow,
+  parseListQuery,
+  parsePositiveInteger,
+  parseReadQuery,
+  single,
+} from './query.js'
 
 /**
  * The REST transport.
@@ -45,6 +51,7 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './
  *   POST   /{collection}/{id}/untrash      take it back out
  *   POST   /{collection}/{id}/visibility   public, private or password-protected
  *   POST   /-/replace                     find a phrase everywhere, then replace it
+ *   GET    /-/calendar?from=&to=          what comes out when, across collections
  *   POST   /{collection}/{id}/purge        delete it for good
  *   POST   /{collection}/{id}/publish      publish
  *   POST   /{collection}/{id}/unpublish    back to draft or archived
@@ -290,6 +297,15 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
       if (method !== 'POST') return methodNotAllowed(['POST'])
       return jsonResponse(200, {
         data: await service.replace(context, parseReplaceBody(request.body)),
+      })
+    }
+
+    // The editorial calendar (L35): a window of dates, across collections.
+    if (name === 'calendar') {
+      if (extra !== undefined) throw noRoute()
+      if (method !== 'GET') return methodNotAllowed(['GET'])
+      return jsonResponse(200, {
+        data: await service.calendar(context, parseCalendarWindow(request.query)),
       })
     }
 

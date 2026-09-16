@@ -18,6 +18,7 @@ import {
   type RouteMatch,
   resolveUrl,
   type SortOrder,
+  titleOf,
   type UpdateInput,
   type VersionSummary,
 } from '@cogenta/schema'
@@ -119,6 +120,39 @@ export interface ReplaceReport {
   readonly skipped?: readonly { readonly entryId: string; readonly reason: string }[]
 }
 
+/** A window of the editorial calendar (L35): `[from, to)`, as instants. */
+export interface CalendarRequest {
+  readonly from: Date
+  readonly to: Date
+}
+
+/** One entry as the editorial calendar shows it. */
+export interface CalendarItem {
+  readonly collection: string
+  readonly entryId: string
+  /** Empty when the collection has no text field to take one from. */
+  readonly title: string
+  readonly status: ContentStatus
+  readonly locale: string
+  readonly publishedAt: string | null
+  /** Whether this actor may move it: scheduling is a publication decision, gated by `publish`. */
+  readonly canSchedule: boolean
+}
+
+export interface CalendarReport {
+  /** Published and scheduled entries whose date falls in the window, earliest first. */
+  readonly items: readonly CalendarItem[]
+  /** Drafts that could be scheduled, most recently edited first. */
+  readonly unscheduled: readonly CalendarItem[]
+  /** True when the walk stopped on its budget before seeing every entry. */
+  readonly truncated: boolean
+}
+
+/** Rows one calendar read may look at across every collection, before it says it stopped. */
+const CALENDAR_SCAN_BUDGET = 5000
+/** How many drafts the "to schedule" list offers. */
+const CALENDAR_UNSCHEDULED_LIMIT = 50
+
 /** How many matching entries one preview plans for, and the ceiling a caller may raise it to. */
 const DEFAULT_REPLACE_LIMIT = 50
 const MAX_REPLACE_LIMIT = 500
@@ -209,6 +243,12 @@ export interface ContentService {
    * thing that gets written.
    */
   replace(context: AccessContext, input: ReplaceRequest): Promise<ReplaceReport>
+  /**
+   * The editorial calendar (L35): what comes out when, across every
+   * collection that can be scheduled — those declaring `publishedAt` — and
+   * whose unpublished entries this actor may read.
+   */
+  calendar(context: AccessContext, input: CalendarRequest): Promise<CalendarReport>
   /** The real delete: nothing is kept, and nothing comes back. */
   purge(context: AccessContext, name: string, id: string): Promise<void>
   /**
@@ -736,6 +776,74 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       }
 
       return { applied: true, scanned, truncated, entries: applied, skipped }
+    },
+
+    calendar: async (context, input) => {
+      // A planning tool shows what has not come out yet, so a collection
+      // counts only where this actor may read its unpublished entries — the
+      // same permission `state=working` asks for. And only where there is a
+      // date to plan against: scheduling needs a declared `publishedAt`.
+      const targets = options.collections.filter(
+        (candidate) =>
+          candidate.fields['publishedAt'] !== undefined &&
+          permissions.canReadUnpublished(candidate, context).allowed,
+      )
+      const from = input.from.getTime()
+      const to = input.to.getTime()
+
+      const items: CalendarItem[] = []
+      const drafts: { readonly item: CalendarItem; readonly updatedAt: string }[] = []
+      let scanned = 0
+      let truncated = false
+
+      for (const target of targets) {
+        const gate = draftGate(target, context, 'working')
+        const canSchedule = permissions.can('publish', target, context).allowed
+        let cursor: string | undefined
+        for (;;) {
+          const page = await store(target).list({
+            state: 'working',
+            limit: REPLACE_SCAN_PAGE,
+            ...(cursor === undefined ? {} : { cursor }),
+          })
+          for (const entry of page.items) {
+            if (scanned >= CALENDAR_SCAN_BUDGET) {
+              truncated = true
+              break
+            }
+            scanned += 1
+            if (!gate(entry)) continue
+            const item: CalendarItem = {
+              collection: target.name,
+              entryId: entry.id,
+              title: titleOf(target, entry),
+              status: entry.status,
+              locale: entry.locale,
+              publishedAt: entry.publishedAt,
+              canSchedule,
+            }
+            if (entry.status === 'draft') {
+              drafts.push({ item, updatedAt: entry.updatedAt })
+              continue
+            }
+            if (entry.status !== 'published' && entry.status !== 'scheduled') continue
+            const at = entry.publishedAt === null ? Number.NaN : Date.parse(entry.publishedAt)
+            if (Number.isFinite(at) && at >= from && at < to) items.push(item)
+          }
+          const next = page.nextCursor
+          if (truncated || next === null || next === undefined) break
+          cursor = next
+        }
+        if (truncated) break
+      }
+
+      items.sort((a, b) => Date.parse(a.publishedAt ?? '') - Date.parse(b.publishedAt ?? ''))
+      const unscheduled = drafts
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .slice(0, CALENDAR_UNSCHEDULED_LIMIT)
+        .map((draft) => draft.item)
+
+      return { items, unscheduled, truncated }
     },
 
     summary: async (context) => {

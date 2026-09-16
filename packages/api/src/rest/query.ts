@@ -197,3 +197,33 @@ function parseStatus(query: QueryInput): ContentStatus | undefined {
   if ((CONTENT_STATUSES as readonly string[]).includes(raw)) return raw as ContentStatus
   throw queryError('status', 'is not a status', `Use one of: ${CONTENT_STATUSES.join(', ')}.`)
 }
+
+/** The widest window one calendar read covers: a month grid is six weeks, a quarter is the ceiling. */
+export const MAX_CALENDAR_DAYS = 93
+
+/**
+ * `from`/`to` of the editorial calendar (L35), as instants. The browser sends
+ * the edges of the grid it draws in its own time zone, already converted to
+ * ISO 8601 — the server never guesses which day is "Monday" for its reader.
+ */
+export function parseCalendarWindow(query: QueryInput): { readonly from: Date; readonly to: Date } {
+  const instant = (key: string): Date => {
+    const raw = single(query, key)
+    const parsed = raw === undefined ? Number.NaN : Date.parse(raw)
+    if (!Number.isFinite(parsed)) {
+      throw queryError(key, 'is missing or is not a date', `Pass "${key}" as an ISO 8601 instant.`)
+    }
+    return new Date(parsed)
+  }
+  const from = instant('from')
+  const to = instant('to')
+  const span = to.getTime() - from.getTime()
+  if (span <= 0 || span > MAX_CALENDAR_DAYS * 86_400_000) {
+    throw queryError(
+      'to',
+      `must come after "from", at most ${MAX_CALENDAR_DAYS} days later`,
+      'Ask for one month grid at a time.',
+    )
+  }
+  return { from, to }
+}

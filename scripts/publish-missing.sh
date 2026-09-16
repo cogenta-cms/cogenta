@@ -37,9 +37,25 @@ cd "$(dirname "$0")/.." || exit 1
 #
 # `--provenance=false` because every package.json asks for provenance, and
 # provenance needs the OIDC token only CI has. The trade is deliberate and
-# narrow: these sixteen first versions carry no attestation, every release
-# after them does.
+# narrow: these first versions carry no attestation, every release after
+# them does.
 PUBLISH_FLAGS="--provenance=false --no-git-checks --access public"
+
+# The project's own pnpm, when the shell has none: `pnpm install` puts it in
+# node_modules/.bin, but that directory is not on an ordinary PATH, and a
+# missing `pnpm` used to fail inside the loop below, where the explanation
+# printed was about 2FA and 404s — nothing to do with it.
+if ! command -v pnpm >/dev/null 2>&1; then
+  if [ -x node_modules/.bin/pnpm ]; then
+    PATH="$PWD/node_modules/.bin:$PATH"
+    export PATH
+  else
+    echo "pnpm is not installed, and this project has no local copy of it."
+    echo "Run 'corepack enable' (or 'npm install -g pnpm'), then 'pnpm install'."
+    exit 1
+  fi
+fi
+echo "Using pnpm $(pnpm --version)"
 
 PACKAGES="
 packages/widgets|@cogenta/widgets|0.2.3

@@ -249,6 +249,7 @@ import {
   createMarketplaceInstaller,
   createPluginDisableStore,
   createPluginGrantStore,
+  createPluginProvisionStore,
   createPluginUsageStore,
   describeCapability,
   ensureMarketplaceTables,
@@ -256,6 +257,8 @@ import {
   isCapabilityImplemented,
   loadInstalledPlugins,
   type MarketplaceCatalogEntry,
+  type PluginBlockProvision,
+  type PluginWidgetProvision,
 } from '@cogenta/plugins'
 import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
@@ -403,6 +406,7 @@ import {
   uninstallPlugin,
   writePluginSandboxFile,
 } from './plugin-sandbox.js'
+import { loadPluginStylesheets, pluginStylesheetPath } from './plugin-styles.js'
 import { createSampleDataEngine } from './sample-data.js'
 import { renderSearchPage } from './search-page.js'
 import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
@@ -4436,6 +4440,12 @@ export interface RuntimeExtras {
   /** The widget types plugins provide, and the renderer that draws them (L32 step 4). */
   readonly pluginWidgetRenderer?: PluginBlockRenderer
   readonly pluginWidgetDescriptions?: readonly PluginBlockDescription[]
+  /** Stylesheets plugins ship, by plugin name, and the hrefs a page links (L32). */
+  readonly pluginStyleSheets?: ReadonlyMap<
+    string,
+    { readonly css: string; readonly digest: string }
+  >
+  readonly pluginStyleHrefs?: readonly string[]
   /** Where this site keeps its plugins (`plugins.dir`), for the workshop routes. */
   readonly pluginsDir?: string
   /**
@@ -6475,6 +6485,9 @@ export function createRequestListener(
               ...(extras?.pluginBlockRenderer === undefined
                 ? {}
                 : { pluginBlocks: extras.pluginBlockRenderer }),
+              ...(extras?.pluginStyleHrefs === undefined
+                ? {}
+                : { pluginStyleHrefs: extras.pluginStyleHrefs }),
             },
             context,
           )
@@ -6688,6 +6701,27 @@ export function createRequestListener(
       // plugin. The plugin picks a status, one content type from a known
       // list, and a body — never a header, so it cannot set a cookie on this
       // origin or turn its answer into a download.
+      // A plugin's stylesheet (L32), before its routes so a plugin cannot
+      // declare a route that shadows its own stylesheet. Static text, read
+      // and checked at boot; served with `nosniff` and immutable caching,
+      // since the URL carries the content's digest.
+      const styleMatch = /^\/_cogenta\/plugins\/([^/]+)\/styles\.css$/u.exec(url.pathname)
+      if (styleMatch !== null) {
+        const sheet = extras?.pluginStyleSheets?.get(decodeURIComponent(styleMatch[1] as string))
+        if (sheet === undefined) {
+          res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found')
+          return
+        }
+        res.writeHead(200, {
+          'content-type': 'text/css; charset=utf-8',
+          'x-content-type-options': 'nosniff',
+          'cache-control': 'public, max-age=31536000, immutable',
+          etag: `"${sheet.digest.slice(0, 32)}"`,
+        })
+        res.end(sheet.css)
+        return
+      }
+
       const pluginRuntime = extras?.pluginRuntime
       if (pluginRuntime !== undefined && url.pathname.startsWith(PLUGIN_ROUTE_PREFIX)) {
         if (req.method !== 'GET' && req.method !== 'POST') {
@@ -6875,6 +6909,9 @@ export function createRequestListener(
           ...(extras?.pluginBlockRenderer === undefined
             ? {}
             : { pluginBlocks: extras.pluginBlockRenderer }),
+          ...(extras?.pluginStyleHrefs === undefined
+            ? {}
+            : { pluginStyleHrefs: extras.pluginStyleHrefs }),
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {
@@ -7546,10 +7583,75 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // whole site: the REST and GraphQL writers validate a stored block against
   // it, and the renderer resolves a fallback through it, so a page can never
   // be saved with a block the renderer would not recognise.
+  //
+  // What a plugin declared is also *remembered*, so that removing the plugin
+  // degrades the pages that used it instead of emptying them: the block stays
+  // known, its data still validates, and the renderer still knows what to
+  // fall back on.
+  const provisionStore = createPluginProvisionStore(selection.instance)
+  if (pluginRuntime !== null) {
+    await provisionStore.remember([
+      ...pluginRuntime.plugins.flatMap((plugin) =>
+        (plugin.manifest.provides.blocks ?? []).map((provision) => ({
+          kind: 'block' as const,
+          name: provision.name,
+          pluginName: plugin.manifest.name,
+          declaration: provision,
+        })),
+      ),
+      ...pluginRuntime.plugins.flatMap((plugin) =>
+        (plugin.manifest.provides.widgets ?? []).map((provision) => ({
+          kind: 'widget' as const,
+          name: provision.name,
+          pluginName: plugin.manifest.name,
+          declaration: provision,
+        })),
+      ),
+    ])
+  }
+  // Read only when this site runs plugins at all: turning `plugins.enabled`
+  // off turns off what plugins added, and a site that never had one should
+  // not grow a table for it.
+  const remembered = pluginRuntime === null ? [] : await provisionStore.list().catch(() => [])
+  const installedBlockNames = new Set(
+    (pluginRuntime?.plugins ?? []).flatMap((plugin) =>
+      (plugin.manifest.provides.blocks ?? []).map((provision) => provision.name),
+    ),
+  )
+  const installedWidgetNames = new Set(
+    (pluginRuntime?.plugins ?? []).flatMap((plugin) =>
+      (plugin.manifest.provides.widgets ?? []).map((provision) => provision.name),
+    ),
+  )
+  /** Types this site holds content for, whose plugin is no longer installed. */
+  const orphanBlocks = remembered
+    .filter((record) => record.kind === 'block' && !installedBlockNames.has(record.name))
+    .map((record) => ({
+      plugin: record.pluginName,
+      provision: record.declaration as PluginBlockProvision,
+    }))
+  const orphanWidgets = remembered
+    .filter((record) => record.kind === 'widget' && !installedWidgetNames.has(record.name))
+    .map((record) => ({
+      plugin: record.pluginName,
+      provision: record.declaration as PluginWidgetProvision,
+    }))
+  if (orphanBlocks.length > 0 || orphanWidgets.length > 0) {
+    logger.info('plugin types kept for content that still uses them', {
+      blocks: orphanBlocks.map((orphan) => orphan.provision.name),
+      widgets: orphanWidgets.map((orphan) => orphan.provision.name),
+    })
+  }
   const pluginBlocks =
-    pluginRuntime === null
+    pluginRuntime === null && orphanBlocks.length === 0
       ? null
-      : collectPluginBlocks(pluginRuntime.plugins, { taken: VOCABULARY_NAMES })
+      : collectPluginBlocks(pluginRuntime?.plugins ?? [], {
+          taken: VOCABULARY_NAMES,
+          // Content that still names an uninstalled plugin's block must keep
+          // validating, and the renderer must keep finding the fallback its
+          // manifest declared. Only the code that drew it is gone.
+          remembered: orphanBlocks,
+        })
   const siteBlockRegistry = createBlockRegistry()
   for (const definition of pluginBlocks?.definitions ?? []) siteBlockRegistry.register(definition)
   for (const conflict of pluginBlocks?.conflicts ?? []) {
@@ -7559,12 +7661,30 @@ export async function runServe(options: ServeOptions): Promise<number> {
       reason: conflict.reason,
     })
   }
+  // A plugin's own stylesheet (L32): read once, checked, and served from the
+  // site's origin under the plugin's own reserved namespace.
+  const pluginStyles =
+    pluginRuntime === null
+      ? { sheets: [], problems: [] }
+      : await loadPluginStylesheets(pluginRuntime.plugins)
+  for (const problem of pluginStyles.problems) {
+    logger.warn('plugin stylesheet refused', { plugin: problem.plugin, reason: problem.reason })
+  }
+  const pluginStyleSheets = new Map(pluginStyles.sheets.map((sheet) => [sheet.plugin, sheet]))
+  const pluginStyleHrefs = pluginStyles.sheets.map((sheet) =>
+    pluginStylesheetPath(sheet.plugin, sheet.digest),
+  )
+
   const pluginBlockRenderer =
-    pluginRuntime === null || (pluginBlocks?.definitions.length ?? 0) === 0
+    (pluginBlocks?.definitions.length ?? 0) === 0
       ? null
       : createPluginBlockRenderer({
-          plugins: pluginRuntime.plugins,
-          invoke: (plugin, handler, input) => pluginRuntime.invokeHandler(plugin, handler, input),
+          plugins: pluginRuntime?.plugins ?? [],
+          orphans: orphanBlocks,
+          invoke: async (plugin, handler, input) =>
+            pluginRuntime === null
+              ? { ok: false, error: 'plugins are disabled on this site' }
+              : pluginRuntime.invokeHandler(plugin, handler, input),
           onProblem: (problem) => logger.warn('plugin block did not render', problem),
         })
 
@@ -7572,9 +7692,15 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // is as closed as the block vocabulary, so a plugin's type is registered
   // beside it rather than among it.
   const pluginWidgets =
-    pluginRuntime === null
+    pluginRuntime === null && orphanWidgets.length === 0
       ? null
-      : collectPluginWidgets(pluginRuntime.plugins, { taken: WIDGET_TYPES })
+      : collectPluginWidgets(pluginRuntime?.plugins ?? [], {
+          taken: WIDGET_TYPES,
+          // Same reasoning as the orphan blocks: a widget whose plugin is gone
+          // is not drawn, but its settings must still validate so the screen
+          // holding it can still be saved.
+          remembered: orphanWidgets,
+        })
   for (const conflict of pluginWidgets?.conflicts ?? []) {
     logger.warn('plugin widget refused', {
       plugin: conflict.plugin,
@@ -7583,12 +7709,16 @@ export async function runServe(options: ServeOptions): Promise<number> {
     })
   }
   const pluginWidgetRenderer =
-    pluginRuntime === null || (pluginWidgets?.schemas.size ?? 0) === 0
+    (pluginWidgets?.schemas.size ?? 0) === 0
       ? null
       : createPluginBlockRenderer({
           kind: 'widgets',
-          plugins: pluginRuntime.plugins,
-          invoke: (plugin, handler, input) => pluginRuntime.invokeHandler(plugin, handler, input),
+          plugins: pluginRuntime?.plugins ?? [],
+          orphans: orphanWidgets,
+          invoke: async (plugin, handler, input) =>
+            pluginRuntime === null
+              ? { ok: false, error: 'plugins are disabled on this site' }
+              : pluginRuntime.invokeHandler(plugin, handler, input),
           onProblem: (problem) => logger.warn('plugin widget did not render', problem),
         })
 
@@ -8371,6 +8501,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
           : { blockRegistry: siteBlockRegistry }),
         ...(pluginBlockRenderer === null ? {} : { pluginBlockRenderer }),
         ...(pluginWidgetRenderer === null ? {} : { pluginWidgetRenderer }),
+        ...(pluginStyleSheets.size === 0 ? {} : { pluginStyleSheets, pluginStyleHrefs }),
         ...(pluginWidgets === null || pluginWidgets.descriptions.length === 0
           ? {}
           : { pluginWidgetDescriptions: pluginWidgets.descriptions }),

@@ -157,6 +157,17 @@ export interface PluginProvides {
   readonly blocks?: readonly PluginBlockProvision[]
   /** Widget types it adds to the areas a theme declares (L32 step 4). */
   readonly widgets?: readonly PluginWidgetProvision[]
+  /**
+   * A stylesheet shipped in the package, for the blocks and widgets this
+   * plugin provides — a relative `.css` path such as `styles.css`.
+   *
+   * Static text from the package, never generated per request: the host reads
+   * it once, refuses `@import` and any `url()` that is not an inline image,
+   * and serves it from the site's own origin. A plugin that could point a
+   * stylesheet at a remote host could use a selector to report what a page
+   * contains; one that cannot fetch anything cannot.
+   */
+  readonly styles?: string
   readonly fields?: readonly string[]
   readonly channels?: readonly string[]
   readonly drivers?: readonly string[]
@@ -660,6 +671,18 @@ function collectIssues(input: PluginManifest): PluginManifestIssue[] {
   } else {
     checkProvidesBlocks(input.provides.blocks, issues)
     checkProvidesWidgets(input.provides.widgets, issues)
+    const styles = input.provides.styles
+    if (
+      styles !== undefined &&
+      (typeof styles !== 'string' ||
+        !/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*\.css$/.test(styles) ||
+        styles.split('/').includes('..'))
+    ) {
+      issues.push({
+        path: 'provides.styles',
+        message: 'must be a relative .css file inside the package, such as "styles.css"',
+      })
+    }
   }
 
   return issues

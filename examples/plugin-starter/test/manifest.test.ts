@@ -1,6 +1,7 @@
+import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { loadPlugin } from '@cogenta/plugins'
+import { checkPluginStylesheet, loadPlugin } from '@cogenta/plugins'
 import { describe, expect, it } from 'vitest'
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -21,6 +22,29 @@ describe('the plugin-starter manifest', () => {
       'storage.read:plugins/plugin-starter',
       'storage.write:plugins/plugin-starter',
     ])
+  })
+
+  it('declares the block, the widget and the stylesheet this example documents', async () => {
+    const resolved = await loadPlugin(packageRoot)
+    const provides = resolved.manifest.provides
+
+    expect(provides.blocks?.map((block) => block.name)).toEqual(['callout'])
+    // The fallback and where its fields come from: what keeps a page readable
+    // once this plugin is uninstalled.
+    expect(provides.blocks?.[0]).toMatchObject({
+      fallback: 'quote',
+      fallbackFrom: { text: 'message' },
+    })
+    expect(provides.widgets?.map((widget) => widget.name)).toEqual(['keyFigure'])
+    expect(provides.styles).toBe('styles.css')
+  })
+
+  it('ships a stylesheet the host really accepts', async () => {
+    const css = await readFile(join(packageRoot, 'styles.css'), 'utf8')
+
+    // The host's own function, not a copy of its rules: this example cannot
+    // drift into showing CSS a real site would refuse to serve.
+    expect(checkPluginStylesheet(css)).toEqual({ ok: true })
   })
 
   it('resolves manifestPath to the real plugin.manifest.json on disk', async () => {

@@ -11,6 +11,7 @@ export const PERMISSION_TABLES = {
   grants: 'cogenta_plugin_grants',
   disabled: 'cogenta_plugin_disabled',
   usage: 'cogenta_plugin_usage',
+  provisions: 'cogenta_plugin_provisions',
 } as const
 
 function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
@@ -60,6 +61,8 @@ export async function ensurePluginTables(db: DatabaseHandle): Promise<void> {
     )`)
 
   // Fiche 29 task 3 — one accumulated row per plugin (`../permissions/usage.js`).
+  await ensurePluginProvisionTable(db)
+
   const usage = identifier(PERMISSION_TABLES.usage, d)
   const tInt = unsafeRaw(d === 'sqlite' ? 'integer' : 'bigint')
   await db.query(sql`
@@ -75,6 +78,37 @@ export async function ensurePluginTables(db: DatabaseHandle): Promise<void> {
       last_duration_ms ${tInt} not null,
       last_outcome ${t255} not null,
       last_error ${t512}
+    )`)
+}
+
+/**
+ * What a plugin adds to this site's block and widget vocabularies, remembered
+ * so that **removing the plugin degrades a page instead of emptying it**
+ * (L32).
+ *
+ * Without this row the promise would be empty: the stored entry keeps the
+ * block's data, but nothing would know what the block was, what to fall back
+ * on, or where the fallback's fields take their values from — so the block
+ * would silently disappear from the page along with the words someone wrote
+ * in it. Verified by a test that installs a plugin, removes it, and asks for
+ * the page.
+ *
+ * In the database rather than on disk because a site can run as several
+ * replicas sharing one database and no filesystem, exactly like every other
+ * fact about a plugin this package stores.
+ */
+export async function ensurePluginProvisionTable(db: DatabaseHandle): Promise<void> {
+  const d = db.dialect
+  const table = identifier(PERMISSION_TABLES.provisions, d)
+  const t255 = textColumn(d, 255)
+  await db.query(sql`
+    create table if not exists ${table} (
+      kind ${t255} not null,
+      name ${t255} not null,
+      plugin_name ${t255} not null,
+      declaration text not null,
+      recorded_at ${t255} not null,
+      primary key (kind, name)
     )`)
 }
 

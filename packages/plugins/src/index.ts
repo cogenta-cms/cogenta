@@ -93,7 +93,11 @@ export {
   listGrantedCapabilities,
   revokeCapability,
 } from './permissions/review.js'
-export { ensurePluginTables, PERMISSION_TABLES } from './permissions/tables.js'
+export {
+  ensurePluginProvisionTable,
+  ensurePluginTables,
+  PERMISSION_TABLES,
+} from './permissions/tables.js'
 export type {
   PluginRunObservation,
   PluginRunOutcome,
@@ -101,6 +105,12 @@ export type {
   PluginUsageStore,
 } from './permissions/usage.js'
 export { createPluginUsageStore } from './permissions/usage.js'
+export type {
+  PluginProvisionKind,
+  PluginProvisionRecord,
+  PluginProvisionStore,
+} from './provisions.js'
+export { createPluginProvisionStore } from './provisions.js'
 export type {
   MarketplaceCatalog,
   MarketplaceCatalogEntry,
@@ -170,3 +180,10 @@ export {
   verifyManifestSignature,
   verifyPluginSignature,
 } from './signing/verify.js'
+export type { PluginStylesheetCheck } from './styles.js'
+export {
+  checkPluginStylesheet,
+  MAX_PLUGIN_STYLESHEET_BYTES,
+  stripCssComments,
+  stylesheetUrls,
+} from './styles.js'

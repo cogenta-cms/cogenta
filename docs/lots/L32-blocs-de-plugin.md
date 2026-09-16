@@ -141,6 +141,47 @@ le guide désigne — fournit maintenant un bloc et un widget, et **son propre t
 les exécute vraiment** dans le bac à sable et compare l'arbre rendu, donc
 l'exemple ne peut pas pourrir en silence.
 
+## Trois correctifs après coup (2026-09-16, sur demande « s'il y a des limitations à corriger, corrige »)
+
+**1. La promesse « désinstaller dégrade au lieu de vider » était fausse.** Écrite
+dans le rapport, contredite par le code : une fois le plugin parti, plus rien ne
+savait ce qu'était le bloc, ni sur quoi le replier — il disparaissait avec les
+mots que quelqu'un avait écrits dedans. Un test l'a prouvé avant correction
+(installer, retirer le dossier du plugin, redemander la page). Le site **retient**
+désormais ce que chaque plugin déclare, dans une table
+(`cogenta_plugin_provisions`, jamais purgée : une ligne survivante coûte quelques
+centaines d'octets, une ligne supprimée trop tôt coûte une page). Au démarrage,
+les types dont aucun plugin installé ne répond plus sont enregistrés quand même :
+le contenu valide toujours, l'éditeur peut toujours enregistrer la page, et le
+rendu retombe sur le repli déclaré. En base plutôt que sur disque, parce qu'un
+site peut tourner en plusieurs répliques partageant une base et aucun système de
+fichiers.
+
+**2. Les blocs d'une page étaient rendus l'un après l'autre.** Une page à cinq
+blocs de plugin payait cinq démarrages de processus à la file sur un cache froid.
+Ils se recouvrent maintenant, bornés à quatre — délibérément sous le plafond de
+huit du runtime, pour qu'une page ne dépense pas le budget du site entier et ne
+pousse pas son propre dernier bloc dans « trop d'exécutions en vol », ce qui se
+serait vu comme un bloc qui se dégrade sur une page chargée et nulle part
+ailleurs.
+
+**3. Un bloc de plugin ne pouvait pas être stylé** — c'était la limite la plus
+visible : le tableau comparatif s'affichait en tableau brut. Un plugin déclare
+maintenant `provides.styles`, du CSS **statique de son paquet**, lu une fois,
+contrôlé, et servi depuis l'origine du site sous son propre espace réservé, mis
+en cache sous l'empreinte du fichier. Ce que le contrôle refuse — en entier,
+jamais en réparant : `@import`, **tout `url()` qui n'est pas une image en ligne**
+(y compris un chemin du même site : une URL dans un sélecteur est la façon dont
+du CSS devient un canal d'exfiltration), `expression(`, `behavior:`,
+`-moz-binding`, `javascript:`, et du markup. Les commentaires sont retirés avant
+l'analyse — trouvé en refusant mon propre exemple, qui *documentait* en
+commentaire qu'il n'utilise pas `@import`. `checkPluginStylesheet` vit dans
+`@cogenta/plugins` pour qu'un auteur de plugin teste avec **la fonction de
+l'hôte** plutôt qu'avec une copie de ses règles.
+
+**Vérifié dans le navigateur** : le tableau comparatif est enfin stylé au milieu
+des blocs natifs, et le widget « Chiffre clé » dans la barre latérale publique.
+
 ### Reste à faire, et limites assumées
 
 - **ADR-0033 rédigée, non insérée** (`docs/03-decisions.md` est protégé en
@@ -149,10 +190,11 @@ l'exemple ne peut pas pourrir en silence.
   de plugin sur une page très visitée paie un `fork` au premier affichage après
   chaque redémarrage. Un cache durable serait un vrai choix d'infrastructure
   (R1), pas une retouche.
-- **Un bloc de plugin ne fournit pas son propre CSS.** Il émet des classes ; les
-  styler reste au thème ou à la personnalisation d'apparence. Donner à un plugin
-  une feuille de style servie sur l'origine du site est une décision de sécurité
-  à prendre séparément, pas un oubli.
+- **La feuille de style d'un plugin est liée sur toutes les pages du thème**, pas
+  seulement sur celles qui placent un de ses blocs : un site a une poignée de
+  plugins, chaque feuille est petite et mise en cache sous son empreinte, et
+  calculer par page ce qu'une zone de widgets a fini par dessiner coûterait plus
+  en mauvaises réponses que ça ne rapporte.
 - **L'édition en place du page builder** (double-clic sur un texte) ne couvre pas
   les champs d'un bloc de plugin : elle reconnaît les champs texte simples que le
   *type de bloc* déclare au thème, et un bloc de plugin est rendu par le plugin,

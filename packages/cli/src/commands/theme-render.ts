@@ -241,6 +241,14 @@ export interface ThemeRenderOptions {
    */
   readonly pluginBlocks?: PluginBlockRenderer
   /**
+   * Stylesheets the site's plugins ship, as hrefs (L32). Linked on every
+   * themed page rather than only on the ones that place a plugin's block: a
+   * site has a handful of plugins, each sheet is small, checked and cached
+   * under its own digest, and working out per page which of them a widget
+   * area happened to draw would buy less than it costs in wrong answers.
+   */
+  readonly pluginStyleHrefs?: readonly string[]
+  /**
    * The path served at `/` (fiche 23 task 4) — a real, honest replacement
    * for the `/home` fallback this file used to hardcode.
    *
@@ -697,6 +705,17 @@ export const DEFAULT_FOOTER_MENU_LOCATION = 'footer'
  * ever claim, since every route pattern starts from a collection's own path.
  */
 export const STYLESHEET_PATH = '/_cogenta/styles.css'
+
+/**
+ * The `<link>` tags for the stylesheets this site's plugins ship — after the
+ * theme's own, so a plugin styles its blocks without being able to restyle
+ * the page around them by accident of ordering.
+ */
+function pluginStyleTags(hrefs: readonly string[] | undefined): string {
+  return (hrefs ?? [])
+    .map((href) => `<link rel="stylesheet" href="${escapeAttribute(href)}">`)
+    .join('\n')
+}
 
 function fieldOfKind(collection: CollectionDefinition, kind: string): string | undefined {
   return Object.entries(collection.fields).find(([, field]) => field.kind === kind)?.[0]
@@ -1898,6 +1917,7 @@ ${feedLinkTags(options.site.name)}
 ${fontPreconnectTags()}
 ${head}
 ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
+${pluginStyleTags(options.pluginStyleHrefs)}
 </head>
 <body>
 <a class="cg-skip-link" href="#cg-main">Skip to content</a>

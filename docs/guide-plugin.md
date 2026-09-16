@@ -480,6 +480,41 @@ its version, the block's stored values and the locale. Editing the block changes
 key, so a stale render cannot survive an edit; a busy page does not fork a process per
 visit.
 
+### Styling it
+
+A block nobody can style is half a feature, so a plugin may ship a stylesheet:
+
+```json
+"provides": { "styles": "styles.css" }
+```
+
+Static CSS from your package, read once, checked, and served from the site's own origin at
+`/_cogenta/plugins/<your-name>/styles.css` — linked from every themed page, cached under
+the file's own digest. Style **your own classes**, and take colours from the theme's custom
+properties rather than hard-coding them, so the same block looks at home in a light theme,
+a dark one, and whatever palette the site's owner picked.
+
+What the host refuses, whole rather than edited — a refused stylesheet is not served and
+your markup renders unstyled:
+
+- `@import`: a stylesheet that pulls in another is one the host never read;
+- **any `url()` that is not an inline `data:image/`** — including a same-site path. A remote
+  URL in a selector is how CSS becomes an exfiltration channel ("if this attribute is
+  present, fetch this"); a stylesheet that cannot fetch cannot do it;
+- `expression(`, `behavior:`, `-moz-binding`, `javascript:`, or markup.
+
+Comments are stripped before any of that is looked for, so a stylesheet may *document* the
+rules it follows. `checkPluginStylesheet` is exported from `@cogenta/plugins`: run the
+host's own function in your plugin's test rather than a copy of its rules.
+
+### What happens when your plugin is uninstalled
+
+The site remembers what each plugin declared. Remove the plugin and the pages that used its
+blocks **degrade rather than empty**: the block still validates, an editor can still save
+the page, and the fallback you named is drawn with the fields `fallbackFrom` maps. Reinstall
+and the real block comes back with its data untouched. A widget, having no fallback, simply
+stops being drawn until then.
+
 ### And in the admin
 
 Nothing to do. `GET /api/plugins/blocks` and `/api/plugins/widgets` tell the admin what you

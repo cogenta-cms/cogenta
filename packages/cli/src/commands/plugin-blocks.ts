@@ -5,7 +5,12 @@ import {
   declaredObjectSchema,
   defineBlock,
 } from '@cogenta/blocks'
-import type { PluginBlockProvision, PluginManifest, ResolvedPlugin } from '@cogenta/plugins'
+import type {
+  PluginBlockProvision,
+  PluginManifest,
+  PluginWidgetProvision,
+  ResolvedPlugin,
+} from '@cogenta/plugins'
 
 /**
  * L32 step 1 — a block a plugin declares becomes a real block of this site's
@@ -116,7 +121,20 @@ export function pluginBlockFallback(
  */
 export function collectPluginBlocks(
   plugins: readonly ResolvedPlugin[],
-  options: { readonly taken?: Iterable<string> } = {},
+  options: {
+    readonly taken?: Iterable<string>
+    /**
+     * Blocks this site remembers from a plugin it no longer has (L32). They
+     * are registered exactly like an installed plugin's — content that names
+     * them must keep validating, and the renderer must keep finding the
+     * fallback their manifest declared — the only thing gone is the code that
+     * drew them.
+     */
+    readonly remembered?: readonly {
+      readonly plugin: string
+      readonly provision: PluginBlockProvision
+    }[]
+  } = {},
 ): PluginBlockSet {
   const definitions: AnyBlockDefinition[] = []
   const owners = new Map<string, string>()
@@ -124,9 +142,22 @@ export function collectPluginBlocks(
   const conflicts: PluginBlockConflict[] = []
   const taken = new Set(options.taken ?? [])
 
-  for (const plugin of plugins) {
-    const manifest = plugin.manifest
-    for (const provision of manifest.provides.blocks ?? []) {
+  const declared: { readonly name: string; readonly provision: PluginBlockProvision }[] = [
+    ...plugins.flatMap((plugin) =>
+      (plugin.manifest.provides.blocks ?? []).map((provision) => ({
+        name: plugin.manifest.name,
+        provision,
+      })),
+    ),
+    ...(options.remembered ?? []).map((entry) => ({
+      name: entry.plugin,
+      provision: entry.provision,
+    })),
+  ]
+
+  for (const { name: pluginName, provision } of declared) {
+    {
+      const manifest = { name: pluginName, version: '0.0.0' }
       if (taken.has(provision.name)) {
         conflicts.push({
           plugin: manifest.name,
@@ -140,9 +171,14 @@ export function collectPluginBlocks(
       }
       try {
         const [definition] = pluginBlockDefinitions({
-          ...manifest,
-          provides: { ...manifest.provides, blocks: [provision] },
-        })
+          name: manifest.name,
+          version: manifest.version,
+          engine: '^1.0.0',
+          capabilities: [],
+          runtime: 'server',
+          isolated: true,
+          provides: { blocks: [provision] },
+        } as PluginManifest)
         if (definition === undefined) continue
         definitions.push(definition)
         taken.add(provision.name)
@@ -288,7 +324,14 @@ export interface PluginWidgetSet {
  */
 export function collectPluginWidgets(
   plugins: readonly ResolvedPlugin[],
-  options: { readonly taken?: Iterable<string> } = {},
+  options: {
+    readonly taken?: Iterable<string>
+    /** Widget types remembered from a plugin this site no longer has (L32). */
+    readonly remembered?: readonly {
+      readonly plugin: string
+      readonly provision: PluginWidgetProvision
+    }[]
+  } = {},
 ): PluginWidgetSet {
   const schemas = new Map<string, DeclaredSettingsSchema>()
   const owners = new Map<string, string>()
@@ -296,45 +339,58 @@ export function collectPluginWidgets(
   const conflicts: PluginBlockConflict[] = []
   const taken = new Set(options.taken ?? [])
 
-  for (const plugin of plugins) {
-    for (const provision of plugin.manifest.provides.widgets ?? []) {
-      if (taken.has(provision.name)) {
-        const owner = owners.get(provision.name)
-        conflicts.push({
-          plugin: plugin.manifest.name,
-          block: provision.name,
-          reason:
-            owner === undefined
-              ? `"${provision.name}" is already a widget type of this site.`
-              : `"${provision.name}" is already provided by the plugin "${owner}".`,
-        })
-        continue
-      }
-      try {
-        schemas.set(
-          provision.name,
-          declaredObjectSchema(provision.fields, `${plugin.manifest.name}.${provision.name}`),
-        )
-        taken.add(provision.name)
-        owners.set(provision.name, plugin.manifest.name)
-        descriptions.push({
-          name: provision.name,
-          label: provision.label ?? provision.name,
-          fields: Object.entries(provision.fields ?? {}).map(([name, declaration]) =>
-            describeField(name, declaration),
-          ),
-          plugin: plugin.manifest.title ?? plugin.manifest.name,
-          // A widget has no fallback, on purpose: chrome that cannot render is
-          // simply not drawn, and its settings wait in the database.
-          fallback: '',
-        })
-      } catch (error) {
-        conflicts.push({
-          plugin: plugin.manifest.name,
-          block: provision.name,
-          reason: error instanceof Error ? error.message : String(error),
-        })
-      }
+  const declared = [
+    ...plugins.flatMap((plugin) =>
+      (plugin.manifest.provides.widgets ?? []).map((provision) => ({
+        plugin: plugin.manifest as { name: string; title?: string },
+        provision,
+      })),
+    ),
+    ...(options.remembered ?? []).map((entry) => ({
+      // A plugin that is no longer installed has no manifest to read: what
+      // the site remembers is its name and what it declared, which is all
+      // this needs.
+      plugin: { name: entry.plugin } as { name: string; title?: string },
+      provision: entry.provision,
+    })),
+  ]
+  for (const { plugin, provision } of declared) {
+    if (taken.has(provision.name)) {
+      const owner = owners.get(provision.name)
+      conflicts.push({
+        plugin: plugin.name,
+        block: provision.name,
+        reason:
+          owner === undefined
+            ? `"${provision.name}" is already a widget type of this site.`
+            : `"${provision.name}" is already provided by the plugin "${owner}".`,
+      })
+      continue
+    }
+    try {
+      schemas.set(
+        provision.name,
+        declaredObjectSchema(provision.fields, `${plugin.name}.${provision.name}`),
+      )
+      taken.add(provision.name)
+      owners.set(provision.name, plugin.name)
+      descriptions.push({
+        name: provision.name,
+        label: provision.label ?? provision.name,
+        fields: Object.entries(provision.fields ?? {}).map(([name, declaration]) =>
+          describeField(name, declaration),
+        ),
+        plugin: plugin.title ?? plugin.name,
+        // A widget has no fallback, on purpose: chrome that cannot render is
+        // simply not drawn, and its settings wait in the database.
+        fallback: '',
+      })
+    } catch (error) {
+      conflicts.push({
+        plugin: plugin.name,
+        block: provision.name,
+        reason: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 

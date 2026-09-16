@@ -37,6 +37,7 @@ const MANIFEST = `${JSON.stringify(
           fallbackFrom: { text: 'message' },
         },
       ],
+      styles: 'styles.css',
       widgets: [
         {
           name: 'openingHours',
@@ -137,6 +138,11 @@ async function project(code: string = CODE): Promise<string> {
   await mkdir(pluginDir, { recursive: true })
   await writeFile(join(pluginDir, 'plugin.manifest.json'), MANIFEST, 'utf8')
   await writeFile(join(pluginDir, 'plugin.js'), code, 'utf8')
+  await writeFile(
+    join(pluginDir, 'styles.css'),
+    '.cg-callout { border-left: 4px solid currentColor; padding-left: 1rem; }\n',
+    'utf8',
+  )
   return root
 }
 
@@ -353,6 +359,100 @@ describe('a widget type a plugin provides', () => {
       // style — the plugin's type name, never the literal "plugin".
       expect(html).toContain('cg-widget--openingHours')
       expect(html).toContain('Ouvert : du mardi au samedi')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+})
+
+describe('once the plugin is gone', () => {
+  it('still shows the content, as the fallback the manifest named', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const first = await startServer(root, { registry: activeServers })
+    let token: string
+    try {
+      token = await loginWithMfaSetup(first.base, 'admin@example.com', 'sup3r-secret-pass')
+      await publishPage(first.base, token, {
+        key: 'c1',
+        type: 'callout',
+        data: { message: 'La billetterie ouvre lundi.', tone: 'warning' },
+      })
+      expect(await (await fetch(`${first.base}/une-page`)).text()).toContain('cg-callout')
+    } finally {
+      await first.stop()
+    }
+
+    // The plugin is removed from the site, exactly as uninstalling does.
+    const { rm } = await import('node:fs/promises')
+    await rm(join(root, 'plugins', 'callout-plugin'), { recursive: true, force: true })
+
+    const second = await startServer(root, { registry: activeServers })
+    try {
+      const html = await (await fetch(`${second.base}/une-page`)).text()
+      // The words someone wrote are still on the page — degraded into the
+      // block the manifest named, never lost with the plugin.
+      expect(html).toContain('La billetterie ouvre lundi.')
+      expect(html).not.toContain('cg-callout')
+    } finally {
+      await second.stop()
+    }
+  }, 120_000)
+})
+
+describe('a plugin’s own stylesheet', () => {
+  it('is served from the site, linked on the page, and cannot fetch anything', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      await publishPage(server.base, token, {
+        key: 'c1',
+        type: 'callout',
+        data: { message: 'Bonjour.' },
+      })
+
+      const html = await (await fetch(`${server.base}/une-page`)).text()
+      const link = /<link rel="stylesheet" href="(\/_cogenta\/plugins\/[^"]+)">/u.exec(html)
+      expect(link).not.toBeNull()
+
+      const sheet = await fetch(`${server.base}${(link?.[1] ?? '').replaceAll('&amp;', '&')}`)
+      expect(sheet.status).toBe(200)
+      expect(sheet.headers.get('content-type')).toContain('text/css')
+      expect(sheet.headers.get('x-content-type-options')).toBe('nosniff')
+      expect(await sheet.text()).toContain('.cg-callout')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
+  it('refuses a stylesheet that would reach out, and serves the page without it', async () => {
+    const root = await project()
+    // A selector that reports what the page holds is the reason a plugin's
+    // stylesheet may not fetch: refused whole, rather than edited.
+    await writeFile(
+      join(root, 'plugins', 'callout-plugin', 'styles.css'),
+      '.cg-callout[data-secret] { background: url(https://elsewhere.example/p.gif); }\n',
+      'utf8',
+    )
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      await publishPage(server.base, token, {
+        key: 'c1',
+        type: 'callout',
+        data: { message: 'Bonjour.' },
+      })
+
+      const html = await (await fetch(`${server.base}/une-page`)).text()
+      // The block still renders; only its styling is gone.
+      expect(html).toContain('cg-callout')
+      expect(html).not.toContain('/_cogenta/plugins/callout-plugin/styles.css')
+      expect(
+        (await fetch(`${server.base}/_cogenta/plugins/callout-plugin/styles.css`)).status,
+      ).toBe(404)
     } finally {
       await server.stop()
     }

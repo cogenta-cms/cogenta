@@ -8,9 +8,7 @@
     "storage.write:plugins/plugin-starter"
   ],
   "provides": {
-    "tools": [
-      "plugin-starter.hello"
-    ],
+    "tools": ["plugin-starter.hello"],
     "blocks": [
       {
         "name": "callout",
@@ -29,10 +27,7 @@
             "kind": "select",
             "label": "Ton",
             "options": {
-              "options": [
-                "info",
-                "warning"
-              ]
+              "options": ["info", "warning"]
             }
           }
         },
@@ -58,7 +53,8 @@
           }
         }
       }
-    ]
+    ],
+    "styles": "styles.css"
   },
   "main": "plugin.js",
   "runtime": "server",

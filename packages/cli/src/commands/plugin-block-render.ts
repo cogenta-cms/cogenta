@@ -238,6 +238,17 @@ export interface PluginBlockRendererOptions {
    * one cannot stay open for the other.
    */
   readonly kind?: 'blocks' | 'widgets'
+  /**
+   * Types this site remembers but no installed plugin provides any more
+   * (L32): the plugin was uninstalled, the content that used it was not.
+   * They are held here so the caller's degradation path finds the fallback
+   * their manifest declared — rendering one always fails, which is exactly
+   * what "degrade" means.
+   */
+  readonly orphans?: readonly {
+    readonly plugin: string
+    readonly provision: { readonly name: string }
+  }[]
   /** Runs a plugin handler. Injected so this file spawns nothing itself. */
   readonly invoke: (
     plugin: string,
@@ -251,6 +262,18 @@ export interface PluginBlockRendererOptions {
 }
 
 export const DEFAULT_PLUGIN_BLOCK_CACHE = 500
+
+/**
+ * How many of one page's plugin blocks are rendered at once.
+ *
+ * Deliberately below the runtime's own ceiling of eight runs in flight: a page
+ * with nine plugin blocks must not spend the whole site's budget on itself and
+ * push its own last block into "too many runs in flight" — which would show as
+ * a block mysteriously degrading on a busy page and nowhere else. Four
+ * overlapping forks already remove most of the wall-clock cost of a cold
+ * cache, and every block after the first render is a cache read anyway.
+ */
+export const MAX_BLOCKS_RENDERED_AT_ONCE = 4
 
 /**
  * A plugin block rendered on every visit would be a forked process per block
@@ -288,6 +311,16 @@ export function createPluginBlockRenderer(
       if (!provisions.has(provision.name)) provisions.set(provision.name, { plugin, provision })
     }
   }
+  for (const orphan of options.orphans ?? []) {
+    if (provisions.has(orphan.provision.name)) continue
+    // A plugin object that is not installed: every call for it fails, and the
+    // caller degrades. Written as a real entry rather than a special case so
+    // there is one path through `render`, not two.
+    provisions.set(orphan.provision.name, {
+      plugin: { manifest: { name: orphan.plugin, version: '0.0.0' } } as ResolvedPlugin,
+      provision: orphan.provision as PluginBlockProvision,
+    })
+  }
 
   const cache = new Map<string, HtmlElement>()
   const limit = options.cacheSize ?? DEFAULT_PLUGIN_BLOCK_CACHE
@@ -309,15 +342,15 @@ export function createPluginBlockRenderer(
       const nodes: Record<string, HtmlElement> = {}
       const degrade: string[] = []
 
-      for (const request of requests) {
+      const renderOne = async (request: PluginBlockRenderRequest): Promise<void> => {
         const owner = provisions.get(request.type)
-        if (owner === undefined) continue
+        if (owner === undefined) return
 
         const key = cacheKey(owner.plugin, request)
         const cached = cache.get(key)
         if (cached !== undefined) {
           nodes[request.key] = cached
-          continue
+          return
         }
 
         const result = await options.invoke(owner.plugin.manifest.name, handler, {
@@ -332,7 +365,7 @@ export function createPluginBlockRenderer(
             block: request.type,
             reason: result.error ?? 'the plugin failed',
           })
-          continue
+          return
         }
         const checked = checkPluginBlockNode(result.value)
         if (!checked.ok || checked.node === undefined) {
@@ -342,11 +375,24 @@ export function createPluginBlockRenderer(
             block: request.type,
             reason: checked.problem ?? 'the plugin returned something that is not markup',
           })
-          continue
+          return
         }
         remember(key, checked.node)
         nodes[request.key] = checked.node
       }
+
+      // Overlapping, but bounded: a page with several plugin blocks used to
+      // pay one process start after another, in a row, on every cold cache.
+      const queue = [...requests]
+      const workers = Array.from(
+        { length: Math.min(MAX_BLOCKS_RENDERED_AT_ONCE, queue.length) },
+        async () => {
+          for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+            await renderOne(next)
+          }
+        },
+      )
+      await Promise.all(workers)
 
       return { nodes, degrade }
     },

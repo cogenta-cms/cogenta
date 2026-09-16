@@ -1,0 +1,41 @@
+/*
+ * The stylesheet this plugin ships for the block and widget it provides.
+ *
+ * Static text, read once by the host and checked before it is served from the
+ * site's own origin: no `@import`, and no `url()` that is not an inline image
+ * — a stylesheet that could fetch could report what a page contains.
+ *
+ * Style your own classes, and take colours from the theme's own custom
+ * properties rather than hard-coding them: the same block then looks at home
+ * in a light theme, a dark one, and whatever the site's owner picked.
+ */
+
+.cg-callout {
+  border-inline-start: 3px solid var(--cg-color-accent, currentColor);
+  padding: 0.75rem 1rem;
+  background: var(--cg-color-surface-muted, transparent);
+}
+
+.cg-callout--warning {
+  border-inline-start-color: var(--cg-color-warning, #b45309);
+}
+
+.cg-callout p {
+  margin: 0;
+}
+
+.cg-key-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.cg-key-figure__value {
+  font-size: 1.75rem;
+  line-height: 1.1;
+}
+
+.cg-key-figure__caption {
+  color: var(--cg-color-text-muted, inherit);
+  font-size: 0.875rem;
+}

@@ -1,5 +1,85 @@
 # @cogenta/cli
 
+## 0.11.0
+
+### Minor Changes
+
+- Manage plugins the way a person would, not the way the filesystem does
+  
+  A plugin manifest may now carry a `title`: what to call it in front of a
+  person, when that is not what a package may be called. `name` stays the
+  package name everything is keyed on.
+  
+  `@cogenta/cli` gains starting points a plugin can be created from — react to a
+  publication, serve a page, run something daily, or start from scratch — each
+  one code that already validates and runs, plus `uninstallPlugin` (which keeps
+  a copy under `.cogenta/plugin-versions/`) and `describePluginSandboxes`, which
+  lists drafts from their manifests without evaluating their code.
+  
+  `cogenta serve` gains `DELETE /api/plugins/:name` (uninstall, revoking its
+  grants), `POST /api/plugins/:name/state` (turn a plugin off or on) and
+  `DELETE /api/plugins/sandbox/:id` (throw a draft away); `POST
+  /api/plugins/sandbox` now takes a `name` and a `template` and derives the
+  directory. `GET /api/plugins` reports each plugin's disabled state and
+  describes drafts rather than listing directory names.
+  
+  A plugin can now be disabled with the reason `'manual'` — a person turned it
+  off, which is not a violation but is the same answer to "may it run?".
+
+- The plugin workshop (L31 step 4). "Cogenta Plugin Builder" is a built-in agent that writes real plugins — manifest and code — into `.cogenta/plugin-sandbox/<id>/`, through three tools carrying the new contract C permission `plugin.write_sandbox` (`tools@1.7`, additive): `plugin.write_sandbox_file` (`sideEffects: true`, `reversible: true`, its `revert` deletes the file it wrote), `plugin.read_sandbox_file` and `plugin.check_sandbox`, which validates the manifest, evaluates the code in the real isolated worker with nothing granted, and checks that every declared event, route and schedule has its handler. The agent is pinned to `autonomy: propose` and **has no deploy tool at all**: installing what a sandbox holds is a human action from the new admin Plugins screen (or the CLI), where each capability a plugin asks for is granted one at a time — installing grants nothing. `/api/plugins` serves the screen: what is installed with what it was granted, the sandboxes, their files and checks, deploy, grant and revoke, admin-only throughout.
+
+- A plugin reacts to what happens on the site (L31 step 2). `cogenta serve` now loads the plugins a site has installed and hands each content lifecycle event (`content.publish`, `content.unpublish`, `content.delete`) to the plugins whose manifest subscribes to it, calling their `onContentEvent` handler inside the isolated worker with the capabilities they were really granted. A plugin can never break a write: an event fires after the write landed, and one that throws, times out or has been disabled is logged and skipped while the publish stands. `provides.eventSubscriptions` is validated against the closed event set (`PLUGIN_EVENT_NAMES`), so a plugin can no longer wait for an event no site emits.
+
+- Capabilities a plugin can actually use (L31 step 3). Five more are implemented and wired into `cogenta serve` and `cogenta plugin run`: `schema.read` (the site's collections and fields), `content.write_draft` (creates or updates a draft and never publishes it — what a plugin writes stays invisible until a human publishes), `content.publish`, `content.delete` (to the trash, reversible since `schema@2.0`) and `media.read` (metadata, never bytes). The four content capabilities can now name the collection they apply to (`content.write_draft:article`), re-checked on every call the way `http.fetch` re-checks a hostname; the bare form still means every collection. `cogenta plugin grant` refuses a capability nothing implements rather than handing a plugin a method that does nothing, and `isCapabilityImplemented`/`IMPLEMENTED_CAPABILITY_NAMES` say which those are.
+
+- A plugin serves a page and works on a cadence (L31 step 2). `provides.routes` mounts each declared path under `/_cogenta/plugins/<plugin name>`, a reserved prefix where a plugin can never shadow a site page nor be shadowed by one; the plugin's `onRequest` handler receives the method, path, query and body (text, 64 KiB cap) and answers with a status, one content type from a known list, and a body — never a header, so it cannot set a cookie on the site's origin or turn its answer into a download. `provides.schedules` registers real tasks on the site's own scheduler (`plugin:<name>:<schedule>`), which run on the same tick, take the same multi-replica claim, and can be run by hand from the "Tâches planifiées" screen. Both are validated in the manifest, and a plugin that throws is logged and answered for — a 500 with nothing of its error in the body.
+
+- A sandbox to write a plugin in (L31 step 4). `.cogenta/plugin-sandbox/<id>/` is where a plugin is written before any site runs it — the same shape the theme workshop already proved, and what makes it safe to let an agent write code: a path that resolves outside the sandbox is refused lexically *and* on the real filesystem (a symlink pointing out is caught), `check` refuses a plugin whose manifest does not validate, whose code does not evaluate in the real isolated worker, whose declared events, routes or schedules have no matching handler, or that asks for a capability nothing implements, and `deploy` never silently replaces an installed plugin — it keeps a copy of what it replaced. Installing grants nothing: a freshly deployed plugin holds no capability until a person grants one. `cogenta plugin sandbox new|list|files|check|deploy|delete` drives all of it, and `runIsolated`'s new `describeHandlers` reports what a plugin exposes without running any of it. `@cogenta/core` gains `PLUGIN_SANDBOX_PATH_ESCAPE` and `PLUGIN_SANDBOX_INVALID`.
+
+- **Breaking, released as a minor**: no package in this pre-alpha workspace has ever used `major`, since a major on 0.x would send it to 1.0.0 and claim a stability the project does not have (same judgement as ADR-0022's changesets). Two real escapes closed, found by a security review of L31 (2026-09-16), both reproduced with working proofs before the fix.
+  
+  **The sandbox held objects of the worker's own realm.** The `vm` context was handed the worker's `console`, `Math`, `JSON`, `Promise` and `setTimeout`, and `setTimeout.constructor` is that realm's `Function`: `setTimeout.constructor('return process')()` returned the real `process` — filesystem, `child_process`, and the site's `.env` with it — from any plugin, with no capability granted. Everything a plugin can touch is now built *inside* the context; the single bridge to the host has a null prototype and is deleted from the global after bootstrap; values cross as JSON so no prototype chain leads out. Six escape paths are regression tests.
+  
+  **A manifest was executed in the host process.** `plugin.manifest.mjs` was an imported module, so every boot ran one per installed plugin and *inspecting* a sandbox ran the very code being reviewed, before any signature or capability check. A manifest is now `plugin.manifest.json` — read, parsed, never executed — and an executable manifest is refused by name. **Breaking**: a plugin must ship `plugin.manifest.json`; `definePlugin` remains for writing and validating one.
+  
+  Also: `http.fetch` re-checks the granted hostname on every redirect hop (five maximum) instead of only the first, closing SSRF through a granted host that redirects inward; plugin route responses are served with `Content-Security-Policy: sandbox; default-src 'none'` and `nosniff`, so markup a plugin wrote cannot read the admin session token from the site's own origin; at most eight plugin runs are in flight at once (503 past that) so a public plugin route cannot exhaust the host; and a plugin's response body is capped at 1 MiB. Installing a plugin, granting a capability and revoking one are recorded in the audit log.
+
+### Patch Changes
+
+- Updated dependencies [`f3bc81f`, `78bec8c`, `f10fe19`, `5022597`, `f983074`, `b7f6096`, `614f545`, `5d2d358`]:
+  - @cogenta/plugins@0.6.0
+  - @cogenta/api@2.5.1
+  - @cogenta/agents@0.8.0
+  - @cogenta/agents-builtin@0.6.0
+  - @cogenta/core@0.11.0
+  - @cogenta/starters@0.1.1
+  - @cogenta/channels@0.3.7
+  - @cogenta/mcp@0.3.6
+  - @cogenta/analytics@0.3.6
+  - @cogenta/auth@0.5.5
+  - @cogenta/blocks@1.0.6
+  - @cogenta/comments@0.2.6
+  - @cogenta/commerce@0.5.2
+  - @cogenta/export@0.2.6
+  - @cogenta/forms@0.2.7
+  - @cogenta/import@0.2.6
+  - @cogenta/observability@0.2.6
+  - @cogenta/render@0.3.1
+  - @cogenta/schema@0.5.4
+  - @cogenta/seo@0.3.6
+  - @cogenta/widgets@0.1.1
+  - @cogenta/theme-association@0.4.1
+  - @cogenta/theme-blog@0.4.1
+  - @cogenta/theme-canonical@1.2.1
+  - @cogenta/theme-docs@0.4.1
+  - @cogenta/theme-ecommerce@1.2.1
+  - @cogenta/theme-entreprise@1.2.1
+  - @cogenta/theme-kit@0.4.1
+  - @cogenta/theme-magazine@1.2.1
+  - @cogenta/theme-portfolio@1.2.1
+  - @cogenta/theme-restaurant@0.4.1
+  - @cogenta/theme-saas@0.4.1
+
 ## 0.10.0
 
 ### Minor Changes

@@ -1,5 +1,13 @@
 # @cogenta/seo
 
+## 0.3.6
+
+### Patch Changes
+
+- Updated dependencies [`614f545`]:
+  - @cogenta/core@0.11.0
+  - @cogenta/schema@0.5.4
+
 ## 0.3.5
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-ecommerce",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A shop theme for a brand of durable everyday goods: sand and ink, Albert Sans, product photographs at 4:5, a product page with price, stock and details, and zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

@@ -1,5 +1,12 @@
 # @cogenta/schema
 
+## 0.5.4
+
+### Patch Changes
+
+- Updated dependencies [`614f545`]:
+  - @cogenta/core@0.11.0
+
 ## 0.5.3
 
 ### Patch Changes

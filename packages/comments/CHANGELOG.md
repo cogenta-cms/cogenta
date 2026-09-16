@@ -1,5 +1,12 @@
 # @cogenta/comments
 
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies [`614f545`]:
+  - @cogenta/core@0.11.0
+
 ## 0.2.5
 
 ### Patch Changes

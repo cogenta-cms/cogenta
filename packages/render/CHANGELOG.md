@@ -1,5 +1,13 @@
 # @cogenta/render
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [`614f545`]:
+  - @cogenta/core@0.11.0
+  - @cogenta/blocks@1.0.6
+
 ## 0.3.0
 
 ### Minor Changes

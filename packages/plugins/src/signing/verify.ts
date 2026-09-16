@@ -1,7 +1,7 @@
 import { createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import type { PluginManifest } from '../manifest.js'
-import { canonicalizeContent } from './sign.js'
+import { canonicalizeContent, pluginSignaturePayload } from './sign.js'
 
 /**
  * Public keys of registries this installation trusts. Empty: no real
@@ -64,13 +64,23 @@ export function verifyContentAgainstTrustedKeys(
   return trustedPublicKeys.some((key) => verifyContentSignature(content, signatureBase64, key))
 }
 
-/** Verifies a plugin manifest against trusted keys — the task-9 entry point, now a thin wrapper. */
+/**
+ * Verifies a plugin against trusted keys: its manifest, and the digest of the
+ * code it ships when it ships any (L31 step 1). Editing a signed plugin's
+ * code therefore breaks its signature, which is the whole point — before
+ * this, only the manifest was covered.
+ */
 export function verifyPluginSignature(
   manifest: PluginManifest,
   signatureBase64: string | null,
   trustedPublicKeys: readonly string[],
+  codeDigest: string | null = null,
 ): boolean {
-  return verifyContentAgainstTrustedKeys(manifest, signatureBase64, trustedPublicKeys)
+  return verifyContentAgainstTrustedKeys(
+    pluginSignaturePayload(manifest, codeDigest),
+    signatureBase64,
+    trustedPublicKeys,
+  )
 }
 
 /**

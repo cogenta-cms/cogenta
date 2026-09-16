@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { pluginCodeDigest } from '../../src/entry.js'
 import type { PluginManifest } from '../../src/manifest.js'
 import { generateSigningKeyPair } from '../../src/signing/keys.js'
-import { canonicalizeManifest, signManifest } from '../../src/signing/sign.js'
+import { canonicalizeManifest, signManifest, signPlugin } from '../../src/signing/sign.js'
 import { verifyManifestSignature, verifyPluginSignature } from '../../src/signing/verify.js'
 
 const MANIFEST: PluginManifest = Object.freeze({
@@ -93,5 +94,35 @@ describe('verifyPluginSignature', () => {
     const { privateKey } = generateSigningKeyPair()
     const signature = signManifest(MANIFEST, privateKey)
     expect(verifyPluginSignature(MANIFEST, signature, [])).toBe(false)
+  })
+})
+
+describe('a signature that covers the code (L31 step 1)', () => {
+  it('verifies manifest and code together, and breaks when either changes', async () => {
+    const { publicKey, privateKey } = await generateSigningKeyPair()
+    const code = '({ handle: () => 1 })'
+    const signature = signPlugin(MANIFEST, pluginCodeDigest(code), privateKey)
+
+    expect(verifyPluginSignature(MANIFEST, signature, [publicKey], pluginCodeDigest(code))).toBe(
+      true,
+    )
+    // One character of the plugin's own code, and the signature no longer holds.
+    expect(
+      verifyPluginSignature(
+        MANIFEST,
+        signature,
+        [publicKey],
+        pluginCodeDigest('({ handle: () => 2 })'),
+      ),
+    ).toBe(false)
+    // Nor does the manifest alone satisfy it: the code is part of what was signed.
+    expect(verifyPluginSignature(MANIFEST, signature, [publicKey])).toBe(false)
+  })
+
+  it('keeps verifying a manifest-only signature for a plugin that ships no code', async () => {
+    const { publicKey, privateKey } = await generateSigningKeyPair()
+    const signature = signManifest(MANIFEST, privateKey)
+
+    expect(verifyPluginSignature(MANIFEST, signature, [publicKey])).toBe(true)
   })
 })

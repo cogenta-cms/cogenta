@@ -813,9 +813,14 @@ navigateur ne dirait déjà.
 que `runPlugin` alimente à chaque appel avec une durée réellement mesurée
 (`IsolatedRunResult.durationMs`, chronométrée côté hôte autour de `runIsolated`) et
 l'issue réelle (succès, erreur, timeout, mémoire, crash). Le point honnête à garder en
-tête : **rien dans ce dépôt n'appelle `runPlugin`**, ni `cogenta serve`, ni aucun autre
-appelant réel — même constat R2-honnête que « aucun `AgentRegistry` vivant n'existe nulle
-part dans ce dépôt », répété depuis L5. L'écran « Extensions installées » (tâche 1) lit
+tête, **résolu en partie le 2026-09-16 (L31 étape 1)** : `cogenta plugin run` appelle
+désormais réellement `runPlugin`, sur un plugin installé dans `plugins/<nom>/`, dont le
+code est lu depuis le fichier que son manifeste nomme, avec les capacités réellement
+accordées (`cogenta plugin grant`) et les vrais gestionnaires de `content.read`,
+`storage.*` et `http.fetch`. Ce qui reste vrai : **`cogenta serve` n'appelle toujours pas
+`runPlugin`** — un plugin ne réagit à aucun événement, ne sert aucune route et n'a aucune
+tâche planifiée, faute de point d'extension (L31 étape 2). Les magasins d'usage et de
+désactivation se remplissent donc à la main, pas encore sous le trafic d'un site. L'écran « Extensions installées » (tâche 1) lit
 donc un `PluginUsageStore` et un `PluginDisableStore` réels, câblés et testés de bout en
 bout, mais qui resteront vides sur un vrai déploiement tant qu'aucun pipeline
 d'exécution de plugin n'existe — l'écran le dit honnêtement (« Jamais exécutée ») plutôt

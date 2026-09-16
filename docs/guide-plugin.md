@@ -152,21 +152,36 @@ should degrade gracefully, not assume every capability it once had is still ther
 ```
 
 `runPlugin(manifest, code, grants, options)` — the real, non-bypassable entry point
-(`packages/plugins/src/host/worker-runner.ts`) — takes this file's content as a plain
-string and real host-side capability handlers (`createContentReadHandler`,
+(`packages/plugins/src/host/worker-runner.ts`) — takes this file's content, which
+`readPluginCode` reads from the path the manifest's `main` names, and real host-side capability handlers (`createContentReadHandler`,
 `createStorageWriteHandler`, …, `packages/plugins/src/host/capabilities.ts`); it resolves
 the actually-granted capability list itself from your manifest and the real grant store,
 runs the code in the isolated worker, and returns the JSON-serialized result.
 
-**There is no argument-passing channel yet.** The message protocol between host and
-worker (`packages/plugins/src/host/protocol.ts`) carries a `code` string and nothing
-else — no separate `args` field, and no convention yet for a host to automatically read
-a plugin's entry file and inject per-call parameters into it. Today, a real integration
-either runs a fixed script (as the starter does), or a caller builds the exact code
-string per invocation on the host side, substituting real values with `JSON.stringify`
-(never raw concatenation — that's how you'd introduce a string-escaping bug into your
-own sandboxed code) — see `@cogenta/plugins`'s own `test/host/sdk.test.ts` for that
-pattern. A safer, structured argument channel doesn't exist yet; expect it to improve.
+**Your code lives in a file, and the host calls it by name (L31).** The manifest's
+`main` names that file (`plugin.js` by default), `readPluginCode` reads it, and the
+script's completion value is the set of handlers your plugin exposes:
+
+```js
+;({
+  greet: async (input) => `hello ${input.name}`,
+})
+```
+
+The host then calls exactly one of them, with a payload that travels as structured data
+through the worker protocol (`invoke` and `input`, `packages/plugins/src/host/protocol.ts`)
+— never by building a code string per call, which is how an escaping bug ends up inside
+your own sandbox. By hand:
+
+```bash
+cogenta plugin run @example/plugin-starter --invoke greet --input '{"name":"Ada"}'
+```
+
+A plugin that exposes no handler of that name fails by name; a script that names no
+handler at all still works exactly as before, its completion value being the result.
+
+**A signature covers your code, not only your manifest.** `signPlugin(manifest, digest,
+key)` signs both, and changing one character of the entry file invalidates it.
 
 Every SDK call is re-verified host-side against the *specific* request, not just "was
 this capability name granted at all" (`packages/plugins/src/host/capabilities.ts`) — a
@@ -220,6 +235,34 @@ always). Your new version can install and run, but the new capability's SDK meth
 stays absent until a human explicitly approves it. Don't assume a permission bump
 takes effect immediately — write your plugin so the absence of a not-yet-approved
 capability degrades gracefully rather than crashing.
+
+## Where a plugin lives on a site (L31)
+
+One directory per plugin under `plugins/` at the root of the site, each holding its
+`plugin.manifest.*` and the file its `main` names:
+
+```
+mon-site/
+  cogenta.config.mjs
+  plugins/
+    mon-plugin/
+      plugin.manifest.mjs
+      plugin.js
+```
+
+`plugins.dir` moves that directory and `plugins.enabled: false` stops a site loading any
+of them at all. The CLI is the hand path onto all of it:
+
+```bash
+cogenta plugin list                       # what this site has installed
+cogenta plugin check mon-plugin           # its manifest validates, its code reads
+cogenta plugin grant mon-plugin content.read
+cogenta plugin run mon-plugin --invoke greet --input '{"name":"Ada"}'
+```
+
+A capability only ever reaches the sandbox through a real grant row: there is no flag
+that hands a plugin a capability for one run, and `grant` refuses a capability the
+manifest never requested.
 
 ## The starter template
 

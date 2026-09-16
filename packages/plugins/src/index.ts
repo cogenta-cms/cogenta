@@ -1,3 +1,9 @@
+export {
+  MAX_PLUGIN_CODE_BYTES,
+  pluginCodeDigest,
+  pluginEntryPath,
+  readPluginCode,
+} from './entry.js'
 export type { CapabilityCallContext, CapabilityHandler } from './host/capabilities.js'
 export {
   createContentReadHandler,
@@ -18,6 +24,12 @@ export {
   runIsolatedOrThrow,
   runPlugin,
 } from './host/worker-runner.js'
+export type {
+  InstalledPluginFailure,
+  InstalledPlugins,
+  LoadInstalledPluginsOptions,
+} from './installed.js'
+export { loadInstalledPlugins } from './installed.js'
 export type { LoadPluginOptions, PluginSource, ResolvedPlugin } from './loader.js'
 export {
   loadMarketplacePlugin,
@@ -34,6 +46,7 @@ export type {
   PluginRuntime,
 } from './manifest.js'
 export {
+  DEFAULT_PLUGIN_MAIN,
   definePlugin,
   PLUGIN_CAPABILITY_NAMES,
   PLUGIN_RUNTIMES,
@@ -128,8 +141,10 @@ export { exportPrivateKey, exportPublicKey, generateSigningKeyPair } from './sig
 export {
   canonicalizeContent,
   canonicalizeManifest,
+  pluginSignaturePayload,
   signContent,
   signManifest,
+  signPlugin,
 } from './signing/sign.js'
 export {
   readSignatureFile,

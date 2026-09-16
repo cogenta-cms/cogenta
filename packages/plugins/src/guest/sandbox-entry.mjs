@@ -120,7 +120,7 @@ parentPort.on('message', (message) => {
   }
 
   if (message.type !== 'run') return
-  const { id, code, grantedCapabilities } = message
+  const { id, code, grantedCapabilities, invoke, input } = message
 
   // Fire-and-report, not awaited by the message handler itself: plugin code
   // may be a top-level `async () => {...}()` (e.g. to `await import(...)`
@@ -138,10 +138,29 @@ parentPort.on('message', (message) => {
       // loop from inside the same thread, which a host-side terminate() can
       // be slow to land on under heavy CPU contention.
       const rawValue = script.runInContext(context, { timeout: 5000 })
-      const value =
+      const evaluated =
         rawValue !== null && typeof rawValue === 'object' && typeof rawValue.then === 'function'
           ? await rawValue
           : rawValue
+      // A named invocation (L31): the script's completion value is the set of
+      // handlers the plugin exposes, and exactly one of them is called, with
+      // the host's payload. A plugin that exposes no such handler fails by
+      // name rather than silently returning its own value for a call it never
+      // handled. With no `invoke`, the completion value is the result, as
+      // before.
+      let value = evaluated
+      if (typeof invoke === 'string') {
+        const handler =
+          evaluated !== null && typeof evaluated === 'object' ? evaluated[invoke] : undefined
+        if (typeof handler !== 'function') {
+          throw new Error(`this plugin exposes no "${invoke}" handler`)
+        }
+        const returned = handler(input)
+        value =
+          returned !== null && typeof returned === 'object' && typeof returned.then === 'function'
+            ? await returned
+            : returned
+      }
       result = { id, type: 'result', value: toSerializable(value) }
     } catch (error) {
       result = {

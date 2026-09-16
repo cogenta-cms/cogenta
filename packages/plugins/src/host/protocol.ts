@@ -20,6 +20,14 @@ export interface WorkerRunMessage {
   readonly type: 'run'
   readonly code: string
   readonly grantedCapabilities: readonly string[]
+  /**
+   * The name of the handler the plugin's completion value must expose, and
+   * the payload it is called with (L31 step 1). Absent: the script is
+   * evaluated and its completion value is the result, exactly as before —
+   * which is all a plugin could do while there was no way to call it.
+   */
+  readonly invoke?: string
+  readonly input?: unknown
 }
 
 /** Worker → host: the plugin's sandboxed code is calling an SDK method — a real capability request, not yet executed. */

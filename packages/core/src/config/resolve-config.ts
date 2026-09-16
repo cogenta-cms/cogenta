@@ -169,6 +169,10 @@ export function resolveConfig(
       maxPaths: config.notFoundLog.maxPaths,
       retainDays: config.notFoundLog.retainDays,
     }),
+    plugins: Object.freeze({
+      enabled: config.plugins.enabled,
+      dir: config.plugins.dir,
+    }),
     webhooks: Object.freeze({
       endpoints: Object.freeze([...config.webhooks.endpoints]),
       secret: secrets.webhookSecret,

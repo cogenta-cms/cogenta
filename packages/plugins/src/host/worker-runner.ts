@@ -35,6 +35,15 @@ const MODULE_RENDER_ENTRY_URL = new URL('../guest/module-render-entry.mjs', impo
 export interface RunIsolatedOptions {
   /** Killed and reported as a timeout past this — the basic kill switch this task's tests need. */
   readonly timeoutMs?: number
+  /**
+   * Call one named handler of the plugin rather than merely evaluating it
+   * (L31 step 1): the script's completion value must be an object carrying a
+   * function of this name, and it is called with `input`. Absent: the script
+   * is evaluated and its completion value is the result, as before.
+   */
+  readonly invoke?: string
+  /** The payload the named handler receives. Plain data only: it crosses a worker boundary. */
+  readonly input?: unknown
   /** Real V8 heap ceiling for the worker's old-generation heap. */
   readonly maxOldGenerationSizeMb?: number
   /**
@@ -225,7 +234,14 @@ export async function runIsolated(
       }
     })
 
-    const request: WorkerRunMessage = { id, type: 'run', code, grantedCapabilities }
+    const request: WorkerRunMessage = {
+      id,
+      type: 'run',
+      code,
+      grantedCapabilities,
+      ...(options.invoke === undefined ? {} : { invoke: options.invoke }),
+      ...(options.input === undefined ? {} : { input: options.input }),
+    }
     worker.postMessage(request)
   })
 }

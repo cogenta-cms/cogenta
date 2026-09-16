@@ -29,6 +29,12 @@ export default definePlugin({
     tools: ['plugin-starter.hello'],
   },
 
+  // The file holding the code, relative to this package. `plugin.js` is the
+  // default; naming it explicitly is what a plugin with a build step does
+  // (`main: 'dist/plugin.js'`). The signature of a signed plugin covers this
+  // file's bytes as well as this manifest.
+  main: 'plugin.js',
+
   runtime: 'server',
   isolated: true,
 })

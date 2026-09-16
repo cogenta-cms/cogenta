@@ -117,6 +117,15 @@ export interface CogentaConfigInput {
     readonly retainDays?: number
   }
   /**
+   * Where this site's plugins live, and whether they are loaded at all
+   * (L31 step 1). One subdirectory per plugin under `dir`, relative to the
+   * project root.
+   */
+  readonly plugins?: {
+    readonly enabled?: boolean
+    readonly dir?: string
+  }
+  /**
    * Where a content-lifecycle webhook is sent (L14 task 1).
    *
    * There is no `secret` field, on purpose: the signing secret comes from
@@ -309,6 +318,11 @@ export interface CogentaConfig {
     readonly enabled: boolean
     readonly maxPaths: number
     readonly retainDays: number
+  }
+  /** Where this site's plugins live, resolved, defaults applied (L31 step 1). */
+  readonly plugins: {
+    readonly enabled: boolean
+    readonly dir: string
   }
   /**
    * `secret` is `undefined` until `COGENTA_WEBHOOK_SECRET` is set. Whoever

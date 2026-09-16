@@ -61,6 +61,30 @@ export function signContent(content: unknown, privateKeyBase64: string): string 
   return cryptoSign(null, data, privateKey).toString('base64')
 }
 
+/**
+ * What a signature covers for a plugin whose code lives on disk (L31 step 1):
+ * the manifest **and** the digest of its entry file. Signing the manifest
+ * alone left the code — the part that actually runs — unsigned, which
+ * `sign.ts` admitted in its own comment until there was an entry file to
+ * cover. A plugin with no readable code keeps the manifest-only payload, so a
+ * signature made before this still verifies.
+ */
+export function pluginSignaturePayload(
+  manifest: PluginManifest,
+  codeDigest: string | null,
+): unknown {
+  return codeDigest === null ? manifest : { code: codeDigest, manifest }
+}
+
+/** Signs a plugin: its manifest, and the digest of the code it ships. */
+export function signPlugin(
+  manifest: PluginManifest,
+  codeDigest: string | null,
+  privateKeyBase64: string,
+): string {
+  return signContent(pluginSignaturePayload(manifest, codeDigest), privateKeyBase64)
+}
+
 /** Signs a plugin manifest — the task-9 entry point, now a thin wrapper over `signContent`. */
 export function signManifest(manifest: PluginManifest, privateKeyBase64: string): string {
   return signContent(manifest, privateKeyBase64)

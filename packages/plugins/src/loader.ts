@@ -2,6 +2,7 @@ import { access, stat } from 'node:fs/promises'
 import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { CogentaError } from '@cogenta/core'
+import { pluginCodeDigest, pluginEntryPath, readPluginCode } from './entry.js'
 import { definePlugin, type PluginManifest } from './manifest.js'
 import { satisfiesRange } from './semver.js'
 import {
@@ -49,6 +50,14 @@ export interface ResolvedPlugin {
   readonly devMode: boolean
   /** `true` only when a `registry` plugin's signature was checked and matched a trusted key. Always `false` in dev mode — there was nothing to check. */
   readonly signatureVerified: boolean
+  /**
+   * Absolute path to the file holding the plugin's code (`manifest.main`,
+   * `plugin.js` by default), or `null` when that file does not exist —
+   * `loadPlugin` reports the fact rather than refusing, so `cogenta plugin
+   * list` can show a half-installed plugin instead of failing to list
+   * anything (L31 step 1). Nothing here reads or runs it.
+   */
+  readonly entryPath: string | null
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -167,6 +176,8 @@ export async function resolveSignatureStatus(
   manifest: PluginManifest,
   manifestPath: string,
   trustedPublicKeys: readonly string[],
+  /** The digest of the plugin's own code, so the signature covers what runs (L31 step 1). */
+  codeDigest: string | null = null,
 ): Promise<{ readonly devMode: boolean; readonly signatureVerified: boolean }> {
   if (source !== 'registry') {
     return { devMode: true, signatureVerified: false }
@@ -182,7 +193,7 @@ export async function resolveSignatureStatus(
     })
   }
 
-  const verified = verifyPluginSignature(manifest, signature, trustedPublicKeys)
+  const verified = verifyPluginSignature(manifest, signature, trustedPublicKeys, codeDigest)
   if (!verified) {
     throw new CogentaError({
       code: 'PLUGIN_SIGNATURE_INVALID',
@@ -222,11 +233,13 @@ export async function loadPlugin(
   const packageRoot = await resolvePackageRoot(reference, source)
   const manifestPath = await findManifestFile(packageRoot)
   const manifest = await importManifest(manifestPath)
+  const code = await codeOf(packageRoot, manifest)
   const { devMode, signatureVerified } = await resolveSignatureStatus(
     source,
     manifest,
     manifestPath,
     trustedPublicKeys,
+    code === null ? null : pluginCodeDigest(code),
   )
 
   return {
@@ -237,7 +250,13 @@ export async function loadPlugin(
     engineCompatible: satisfiesRange(engineVersion, manifest.engine),
     devMode,
     signatureVerified,
+    entryPath: code === null ? null : pluginEntryPath(packageRoot, manifest),
   }
+}
+
+/** The plugin's code, or `null` when it ships none — never a throw, so a broken install still lists. */
+async function codeOf(packageRoot: string, manifest: PluginManifest): Promise<string | null> {
+  return readPluginCode(packageRoot, manifest).catch(() => null)
 }
 
 /**
@@ -278,11 +297,13 @@ export async function loadMarketplacePlugin(
 
   const manifestPath = await findManifestFile(packageRoot)
   const manifest = await importManifest(manifestPath)
+  const code = await codeOf(packageRoot, manifest)
   const { devMode, signatureVerified } = await resolveSignatureStatus(
     'registry',
     manifest,
     manifestPath,
     trustedPublicKeys,
+    code === null ? null : pluginCodeDigest(code),
   )
 
   return {
@@ -293,6 +314,7 @@ export async function loadMarketplacePlugin(
     engineCompatible: satisfiesRange(engineVersion, manifest.engine),
     devMode,
     signatureVerified,
+    entryPath: code === null ? null : pluginEntryPath(packageRoot, manifest),
   }
 }
 

@@ -163,6 +163,23 @@ const securitySchema = z.strictObject({
  * the path plus its referrer already answer the only question this log
  * exists for ("what should I redirect?").
  */
+/**
+ * Where a site's plugins live (L31 step 1).
+ *
+ * A directory relative to the project root, one subdirectory per plugin,
+ * each holding a `plugin.manifest.*` and the file its `main` names. Until
+ * L31 a plugin had nowhere to live at all: `loadPlugin` could resolve an
+ * npm package or an arbitrary path, and nothing ever looked anywhere.
+ *
+ * `enabled: false` keeps a site that ships plugins from loading any of them
+ * — the switch an operator reaches for after a bad install, without deleting
+ * anything (R1: the CMS runs with no plugin at all).
+ */
+const pluginsSchema = z.strictObject({
+  enabled: z.boolean().default(true),
+  dir: z.string().min(1).default('plugins'),
+})
+
 const notFoundLogSchema = z.strictObject({
   enabled: z.boolean().default(true),
   maxPaths: z.number().int().positive().max(100_000).default(2000),
@@ -350,6 +367,7 @@ export const configSchema = z.strictObject({
   storage: storageSchema.prefault({}),
   security: securitySchema.prefault({}),
   notFoundLog: notFoundLogSchema.prefault({}),
+  plugins: pluginsSchema.prefault({}),
   webhooks: webhooksSchema.prefault({}),
   analytics: analyticsSchema.prefault({}),
   llm: llmSchema.optional(),

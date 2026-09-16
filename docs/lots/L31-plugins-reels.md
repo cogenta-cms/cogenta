@@ -78,7 +78,7 @@ langage clair, journal d'audit des installations, et mise à jour de `BLOCKERS.m
 | Étape | État | Notes |
 |---|---|---|
 | Conception | fait | 2026-09-16, sur reconnaissance réelle du code |
-| 1. Exécution réelle | à faire | |
+| 1. Exécution réelle | fait | `main` dans le manifeste, code lu du disque, signature couvrant le code, canal d'invocation (`invoke`/`input`), `plugins/<nom>/` + `plugins.dir`/`plugins.enabled`, `cogenta plugin list/check/grant/revoke/run`, test de bout en bout sur un vrai site |
 | 2. Points d'extension | à faire | |
 | 3. Capacités | à faire | |
 | 4. Atelier IA | à faire | |

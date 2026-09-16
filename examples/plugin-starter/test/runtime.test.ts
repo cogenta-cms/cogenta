@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,6 +10,7 @@ import {
   createStorageWriteHandler,
   ensurePluginTables,
   loadPlugin,
+  readPluginCode,
   runPlugin,
 } from '@cogenta/plugins'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -29,7 +30,9 @@ afterEach(async () => {
 describe('the plugin-starter runtime code', () => {
   it('runs for real inside the isolated worker, using only its granted capabilities', async () => {
     const resolved = await loadPlugin(packageRoot)
-    const code = await readFile(join(packageRoot, 'plugin.js'), 'utf8')
+    // The real path a host takes: the code comes from the file the manifest
+    // names, never from a string the test happened to have.
+    const code = await readPluginCode(resolved.packageRoot, resolved.manifest)
 
     const db = await createSqliteHandle({ url: ':memory:' })
     await ensurePluginTables(db)
@@ -45,6 +48,8 @@ describe('the plugin-starter runtime code', () => {
     }))
 
     const result = await runPlugin(resolved.manifest, code, grants, {
+      invoke: 'greet',
+      input: { id: 'welcome' },
       disableStore,
       handlers: {
         'content.read': createContentReadHandler(async (id) =>

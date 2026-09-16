@@ -71,6 +71,20 @@ export interface PluginManifest {
   readonly runtime: PluginRuntime
   /** Whether this plugin runs in an isolated worker (task 3) — which registry it may join is a later task's concern, not this schema's. */
   readonly isolated: boolean
+  /**
+   * The file holding the plugin's code, relative to its package root
+   * (L31 step 1). Default: `plugin.js`.
+   *
+   * Until L31 a plugin's code reached `runPlugin` as a string its caller had
+   * found on its own, which is why nothing could run a plugin from disk and
+   * why a signature could only ever cover the manifest. Naming the file here
+   * is what makes both possible: the loader reads exactly this path, and a
+   * signature covers the manifest *and* the bytes of this file.
+   *
+   * It stays inside the package: an absolute path or a `..` segment is
+   * refused by validation, not merely discouraged.
+   */
+  readonly main?: string
 }
 
 /**
@@ -204,6 +218,27 @@ function checkCapability(
   // schema can enumerate; a non-empty parameter is already checked above.
 }
 
+/** The entry file a manifest names when it names none. */
+export const DEFAULT_PLUGIN_MAIN = 'plugin.js'
+
+/** A relative path inside the package, ending in a JavaScript extension. */
+const MAIN_PATTERN = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*\.(?:js|mjs|cjs)$/
+
+function checkMain(main: string | undefined, issues: PluginManifestIssue[]): void {
+  if (main === undefined) return
+  const invalid =
+    typeof main !== 'string' ||
+    main.trim() === '' ||
+    main.split('/').includes('..') ||
+    !MAIN_PATTERN.test(main)
+  if (invalid) {
+    issues.push({
+      path: 'main',
+      message: 'must be a relative JavaScript file inside the package, such as "plugin.js"',
+    })
+  }
+}
+
 function checkProvidesBlocks(
   blocks: readonly PluginBlockProvision[] | undefined,
   issues: PluginManifestIssue[],
@@ -238,6 +273,7 @@ function collectIssues(input: PluginManifest): PluginManifestIssue[] {
   if (typeof input.engine !== 'string' || !SEMVER_RANGE_PATTERN.test(input.engine)) {
     issues.push({ path: 'engine', message: 'must be a semver range such as "^1.0.0"' })
   }
+  checkMain(input.main, issues)
   if (!PLUGIN_RUNTIMES.includes(input.runtime)) {
     issues.push({ path: 'runtime', message: `must be one of: ${PLUGIN_RUNTIMES.join(', ')}` })
   }

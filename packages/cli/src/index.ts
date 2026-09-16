@@ -11,6 +11,7 @@ import { runImport } from './commands/import.js'
 import { runLinks } from './commands/links.js'
 import { runMcp } from './commands/mcp.js'
 import { runMigrate } from './commands/migrate.js'
+import { runPluginCommand } from './commands/plugin.js'
 import { runRoles } from './commands/roles.js'
 import { runServe } from './commands/serve.js'
 import { runSkin } from './commands/skin.js'
@@ -45,6 +46,8 @@ export {
 } from './commands/media-images.js'
 export type { MigrateOptions, MigrateSubcommand } from './commands/migrate.js'
 export { loadMigrations, MIGRATIONS_DIRECTORY, runMigrate } from './commands/migrate.js'
+export type { PluginCommandOptions } from './commands/plugin.js'
+export { runPluginCommand } from './commands/plugin.js'
 export type { RolesOptions, RolesSubcommand } from './commands/roles.js'
 export { runRoles } from './commands/roles.js'
 export type { ServeOptions } from './commands/serve.js'
@@ -80,6 +83,11 @@ Commands
   restore apply <file.zip>     Restore a backup — CLI only (fiche 26)
   generate types   Write TypeScript declarations for the content schema
   links check      Crawl published content and report links that lead nowhere
+  plugin list      List the plugins this site has installed
+  plugin check <name>           Validate one plugin's manifest and code
+  plugin grant <name> <cap>     Grant a capability the plugin requests
+  plugin revoke <name> <cap>    Take a granted capability back
+  plugin run <name>             Run it, with the capabilities it was granted
   skin list        Show the site's active skin
   skin validate <tokens.json>   Check a token file against contract D
   skin apply <tokens.json>      Validate, then make it the active skin
@@ -111,6 +119,9 @@ Options
                           roles export: where to write the file (default cogenta.role-permissions.json)
   --description <text>    skin generate: free text describing the site
   --external              links check: also follow links that leave the site
+  --invoke <handler>      plugin run: the handler to call inside the plugin
+  --input '<json>'        plugin run: the payload that handler receives
+  --collection <name>     plugin run: the collection a granted content.read reads
   --collections <a,b,c>   export: only these collections (default: all)
   --dir <path>            backup / update: where to write/read backups (default .cogenta/backups)
   --passphrase <text>     backup create / restore: encrypt or decrypt the backup
@@ -198,6 +209,9 @@ export async function run(options: RunOptions): Promise<number> {
         dir: { type: 'string' },
         passphrase: { type: 'string' },
         'confirm-breaking': { type: 'boolean' },
+        invoke: { type: 'string' },
+        input: { type: 'string' },
+        collection: { type: 'string' },
       },
     })
   } catch (error) {
@@ -371,6 +385,23 @@ export async function run(options: RunOptions): Promise<number> {
       env,
       ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
       ...(parsed.values.external === true ? { external: true } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'plugin') {
+    return runPluginCommand({
+      subcommand: parsed.positionals[1],
+      args: parsed.positionals.slice(2),
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(typeof parsed.values.invoke === 'string' ? { invoke: parsed.values.invoke } : {}),
+      ...(typeof parsed.values.input === 'string' ? { input: parsed.values.input } : {}),
+      ...(typeof parsed.values.collection === 'string'
+        ? { collection: parsed.values.collection }
+        : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

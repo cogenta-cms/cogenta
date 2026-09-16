@@ -28,6 +28,13 @@ export interface WorkerRunMessage {
    */
   readonly invoke?: string
   readonly input?: unknown
+  /**
+   * Report the handler names the plugin exposes instead of its value (L31
+   * step 4). What a reviewer needs to know about code nobody has run yet is
+   * "what can the site call on this?", and the honest way to answer is to
+   * evaluate it in the real sandbox with nothing granted and look.
+   */
+  readonly describeHandlers?: boolean
 }
 
 /** Worker → host: the plugin's sandboxed code is calling an SDK method — a real capability request, not yet executed. */

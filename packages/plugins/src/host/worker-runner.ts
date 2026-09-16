@@ -44,6 +44,8 @@ export interface RunIsolatedOptions {
   readonly invoke?: string
   /** The payload the named handler receives. Plain data only: it crosses a worker boundary. */
   readonly input?: unknown
+  /** Report the names of the handlers the plugin exposes rather than running one (L31 step 4). */
+  readonly describeHandlers?: boolean
   /** Real V8 heap ceiling for the worker's old-generation heap. */
   readonly maxOldGenerationSizeMb?: number
   /**
@@ -241,6 +243,7 @@ export async function runIsolated(
       grantedCapabilities,
       ...(options.invoke === undefined ? {} : { invoke: options.invoke }),
       ...(options.input === undefined ? {} : { input: options.input }),
+      ...(options.describeHandlers === true ? { describeHandlers: true } : {}),
     }
     worker.postMessage(request)
   })

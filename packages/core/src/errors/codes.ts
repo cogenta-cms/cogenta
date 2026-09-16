@@ -362,6 +362,14 @@ export const ERROR_CODES = [
   // Plugins — signature and verification (L7 task 9)
   'PLUGIN_SIGNATURE_MISSING',
   'PLUGIN_SIGNATURE_INVALID',
+  /**
+   * A path a plugin sandbox was asked to write or read resolves outside it
+   * (L31 step 4) — `..`, an absolute path, or a symlink pointing out. The
+   * same structural refusal `THEME_SANDBOX_PATH_ESCAPE` makes for themes.
+   */
+  'PLUGIN_SANDBOX_PATH_ESCAPE',
+  /** A sandbox does not hold a plugin a site could install: no manifest, no code, or one that does not validate. */
+  'PLUGIN_SANDBOX_INVALID',
 
   // Fleet — site-side telemetry emission (L8 task 2)
   'FLEET_TELEMETRY_FORBIDDEN_FIELD',

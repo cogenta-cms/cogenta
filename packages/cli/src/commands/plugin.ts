@@ -33,6 +33,14 @@ import {
 } from '@cogenta/plugins'
 import { createContentStore, createSchemaTables } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
+import {
+  checkPluginSandbox,
+  createPluginSandbox,
+  deletePluginSandbox,
+  deployPluginFromSandbox,
+  listPluginSandboxes,
+  listPluginSandboxFiles,
+} from './plugin-sandbox.js'
 import { loadCollections } from './serve.js'
 
 /**
@@ -57,6 +65,12 @@ const USAGE = `Usage
   cogenta plugin grant <name> <capability>
   cogenta plugin revoke <name> <capability>
   cogenta plugin run <name> [--invoke <handler>] [--input '<json>'] [--collection <name>]
+  cogenta plugin sandbox new <id> [--name <plugin name>]
+  cogenta plugin sandbox list
+  cogenta plugin sandbox files <id>
+  cogenta plugin sandbox check <id>
+  cogenta plugin sandbox deploy <id> [--overwrite]
+  cogenta plugin sandbox delete <id>
 
 Plugins live in one directory per plugin under "plugins/" (configurable with
 plugins.dir), each holding a plugin.manifest.* and the file its "main" names.
@@ -81,6 +95,10 @@ export interface PluginCommandOptions {
   readonly input?: string
   /** The collection a granted `content.read` reads from (`--collection`). */
   readonly collection?: string
+  /** The plugin name a new sandbox starts from (`--name`). */
+  readonly name?: string
+  /** Replace an installed plugin, keeping a copy of it (`--overwrite`). */
+  readonly overwrite?: boolean
 }
 
 function describe(plugin: ResolvedPlugin): string {
@@ -108,7 +126,7 @@ export async function runPluginCommand(options: PluginCommandOptions): Promise<n
   const { out, stderr } = options
   const env = options.env ?? process.env
   const logger = options.logger ?? createLogger({ level: 'silent' })
-  const subcommands = ['list', 'check', 'grant', 'revoke', 'run']
+  const subcommands = ['list', 'check', 'grant', 'revoke', 'run', 'sandbox']
 
   if (options.subcommand === undefined) {
     stderr(`cogenta plugin needs a subcommand.\n\n${USAGE}`)
@@ -126,6 +144,12 @@ export async function runPluginCommand(options: PluginCommandOptions): Promise<n
   const projectRoot =
     loaded.path === null ? resolvePath(options.cwd ?? process.cwd()) : dirname(loaded.path)
   const pluginsConfig = loaded.config.plugins
+
+  // A sandbox is a place on disk, not a site: it needs no database, no
+  // storage and no schema, which is exactly why an agent can be let near it.
+  if (options.subcommand === 'sandbox') {
+    return runSandbox(options, projectRoot, pluginsConfig.dir)
+  }
 
   let selection: Awaited<ReturnType<ReturnType<typeof createDatabaseRegistry>['select']>> | null =
     null
@@ -320,4 +344,91 @@ export async function runPluginCommand(options: PluginCommandOptions): Promise<n
     await storage?.dispose()
     await selection?.instance.close()
   }
+}
+
+/** `cogenta plugin sandbox …` — where a plugin is written before any site runs it (L31 step 4). */
+async function runSandbox(
+  options: PluginCommandOptions,
+  projectRoot: string,
+  pluginsDir: string,
+): Promise<number> {
+  const { out, stderr } = options
+  const action = options.args[0]
+  const id = options.args[1]
+
+  if (action === 'list') {
+    const ids = await listPluginSandboxes(projectRoot)
+    if (ids.length === 0) {
+      out.ok('No plugin sandbox yet. Create one with "cogenta plugin sandbox new <id>".')
+      return 0
+    }
+    out.ok(`${ids.length} sandbox(es):`)
+    for (const name of ids) out.detail(name)
+    return 0
+  }
+
+  if (action === undefined || id === undefined) {
+    stderr(`cogenta plugin sandbox needs an action and an id.\n\n${USAGE}`)
+    return 2
+  }
+
+  if (action === 'new') {
+    const dir = await createPluginSandbox(projectRoot, id, {
+      ...(options.name === undefined ? {} : { name: options.name }),
+    })
+    out.ok(`Sandbox ready at ${dir}`)
+    out.detail('It holds a manifest and a handler that already validate. Edit, then check it.')
+    return 0
+  }
+
+  if (action === 'files') {
+    for (const file of await listPluginSandboxFiles(projectRoot, id)) out.detail(file)
+    return 0
+  }
+
+  if (action === 'check') {
+    const check = await checkPluginSandbox(projectRoot, id)
+    if (check.manifest !== null) {
+      out.detail(`${check.manifest.name} ${check.manifest.version}`)
+      out.detail(`handlers: ${check.handlers.join(', ') || 'none'}`)
+      out.detail(`capabilities requested: ${check.manifest.capabilities.join(', ') || 'none'}`)
+    }
+    if (check.ok) {
+      out.ok('This sandbox holds a plugin a site could install.')
+      return 0
+    }
+    for (const problem of check.problems) stderr(`${problem}\n`)
+    return 1
+  }
+
+  if (action === 'deploy') {
+    const deployment = await deployPluginFromSandbox(projectRoot, id, {
+      pluginsDir,
+      ...(options.overwrite === true ? { overwrite: true } : {}),
+    })
+    if (!deployment.ok) {
+      for (const problem of deployment.problems) stderr(`${problem}\n`)
+      return 1
+    }
+    out.ok(`Installed at ${deployment.installedAt}`)
+    if (deployment.backupAt !== undefined) {
+      out.detail(`the copy it replaced is kept at ${deployment.backupAt}`)
+    }
+    // Installing grants nothing: that is the point of saying so here.
+    out.detail(
+      `It holds no capability yet. It asks for: ${
+        deployment.capabilities?.join(', ') || 'nothing'
+      }. Grant what you agree to with "cogenta plugin grant".`,
+    )
+    return 0
+  }
+
+  if (action === 'delete') {
+    await deletePluginSandbox(projectRoot, id)
+    out.ok(`Sandbox "${id}" deleted. Nothing installed was touched.`)
+    return 0
+  }
+
+  stderr(`Unknown sandbox action "${action}".\n\n${USAGE}`)
+  return 2
 }

@@ -122,6 +122,8 @@ Options
   --invoke <handler>      plugin run: the handler to call inside the plugin
   --input '<json>'        plugin run: the payload that handler receives
   --collection <name>     plugin run: the collection a granted content.read reads
+  --name <plugin name>    plugin sandbox new: the name the plugin will carry
+  --overwrite             plugin sandbox deploy: replace an installed plugin, keeping a copy
   --collections <a,b,c>   export: only these collections (default: all)
   --dir <path>            backup / update: where to write/read backups (default .cogenta/backups)
   --passphrase <text>     backup create / restore: encrypt or decrypt the backup
@@ -210,6 +212,8 @@ export async function run(options: RunOptions): Promise<number> {
         passphrase: { type: 'string' },
         'confirm-breaking': { type: 'boolean' },
         invoke: { type: 'string' },
+        name: { type: 'string' },
+        overwrite: { type: 'boolean' },
         input: { type: 'string' },
         collection: { type: 'string' },
       },
@@ -402,6 +406,8 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.collection === 'string'
         ? { collection: parsed.values.collection }
         : {}),
+      ...(typeof parsed.values.name === 'string' ? { name: parsed.values.name } : {}),
+      ...(parsed.values.overwrite === true ? { overwrite: true } : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

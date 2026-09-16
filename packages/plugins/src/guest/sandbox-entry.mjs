@@ -120,7 +120,7 @@ parentPort.on('message', (message) => {
   }
 
   if (message.type !== 'run') return
-  const { id, code, grantedCapabilities, invoke, input } = message
+  const { id, code, grantedCapabilities, invoke, input, describeHandlers } = message
 
   // Fire-and-report, not awaited by the message handler itself: plugin code
   // may be a top-level `async () => {...}()` (e.g. to `await import(...)`
@@ -149,7 +149,12 @@ parentPort.on('message', (message) => {
       // handled. With no `invoke`, the completion value is the result, as
       // before.
       let value = evaluated
-      if (typeof invoke === 'string') {
+      if (describeHandlers === true) {
+        value =
+          evaluated !== null && typeof evaluated === 'object'
+            ? Object.keys(evaluated).filter((key) => typeof evaluated[key] === 'function')
+            : []
+      } else if (typeof invoke === 'string') {
         const handler =
           evaluated !== null && typeof evaluated === 'object' ? evaluated[invoke] : undefined
         if (typeof handler !== 'function') {

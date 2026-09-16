@@ -341,3 +341,125 @@ describe('a plugin writing content', () => {
     }
   }, 120_000)
 })
+
+describe('the plugin workshop over HTTP', () => {
+  it('writes a plugin into a sandbox, checks it, and installs it only when asked', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    await createUser(root, 'editor@example.com', 'sup3r-secret-pass', ['editor'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+
+      // An editor may not manage plugins at all.
+      const editorToken = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'sup3r-secret-pass',
+      )
+      expect(
+        (await fetch(`${server.base}/api/plugins`, { headers: auth(editorToken) })).status,
+      ).toBe(403)
+
+      const created = await fetch(`${server.base}/api/plugins/sandbox`, {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ id: 'atelier', name: 'from-the-workshop' }),
+      })
+      expect(created.status).toBe(201)
+
+      // Written the way an agent's tool writes it: one file at a time.
+      const written = await fetch(
+        `${server.base}/api/plugins/sandbox/atelier/file?path=plugin.js`,
+        {
+          method: 'PUT',
+          headers: auth(token),
+          body: JSON.stringify({ content: '({ onSchedule: () => "did it" })' }),
+        },
+      )
+      expect(written.status).toBe(200)
+      await fetch(`${server.base}/api/plugins/sandbox/atelier/file?path=plugin.manifest.mjs`, {
+        method: 'PUT',
+        headers: auth(token),
+        body: JSON.stringify({
+          content: `export default {
+  name: 'from-the-workshop',
+  version: '1.0.0',
+  engine: '^1.0.0',
+  capabilities: [],
+  provides: { schedules: [{ name: 'nightly', everyMinutes: 1440 }] },
+  runtime: 'server',
+  isolated: true,
+}
+`,
+        }),
+      })
+
+      const checked = await fetch(`${server.base}/api/plugins/sandbox/atelier`, {
+        headers: auth(token),
+      })
+      const state = (await checked.json()) as {
+        data: { files: string[]; check: { ok: boolean; handlers: string[] } }
+      }
+      expect(state.data.files).toContain('plugin.js')
+      expect(state.data.check.ok).toBe(true)
+      expect(state.data.check.handlers).toEqual(['onSchedule'])
+
+      // Nothing is installed until someone asks for it.
+      const beforeDeploy = (await (
+        await fetch(`${server.base}/api/plugins`, { headers: auth(token) })
+      ).json()) as { data: { installed: { name: string }[]; sandboxes: string[] } }
+      expect(beforeDeploy.data.sandboxes).toContain('atelier')
+      expect(beforeDeploy.data.installed.some((p) => p.name === 'from-the-workshop')).toBe(false)
+
+      const deployed = await fetch(`${server.base}/api/plugins/sandbox/atelier/deploy`, {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({}),
+      })
+      expect(deployed.status).toBe(200)
+
+      const after = (await (
+        await fetch(`${server.base}/api/plugins`, { headers: auth(token) })
+      ).json()) as { data: { installed: { name: string; capabilities: string[] }[] } }
+      const installed = after.data.installed.find((p) => p.name === 'from-the-workshop')
+      expect(installed).toBeDefined()
+      // Installed, and holding nothing: capabilities are granted separately.
+      expect(installed?.capabilities).toEqual([])
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
+  it('refuses to install a sandbox whose code does not check out', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      await fetch(`${server.base}/api/plugins/sandbox`, {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ id: 'broken' }),
+      })
+      await fetch(`${server.base}/api/plugins/sandbox/broken/file?path=plugin.js`, {
+        method: 'PUT',
+        headers: auth(token),
+        body: JSON.stringify({ content: 'not javascript (' }),
+      })
+
+      const deployed = await fetch(`${server.base}/api/plugins/sandbox/broken/deploy`, {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({}),
+      })
+
+      expect(deployed.status).toBe(409)
+      const body = (await deployed.json()) as { data: { ok: boolean; problems: string[] } }
+      expect(body.data.ok).toBe(false)
+      expect(body.data.problems.join(' ')).toContain('evaluate')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+})

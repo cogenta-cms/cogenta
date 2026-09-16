@@ -36,6 +36,21 @@ export type {
   PerformancePageInput,
   PerformanceSeverity,
 } from './performance/types.js'
+export { pluginBuilderAgent } from './plugin-builder/agent.js'
+export type {
+  CheckPluginSandboxInput,
+  CheckPluginSandboxOutput,
+  PluginSandboxToolOptions,
+  ReadPluginSandboxInput,
+  ReadPluginSandboxOutput,
+  WritePluginSandboxFileInput,
+  WritePluginSandboxFileOutput,
+} from './plugin-builder/sandbox-tools.js'
+export {
+  createCheckPluginSandboxTool,
+  createReadPluginSandboxTool,
+  createWritePluginSandboxFileTool,
+} from './plugin-builder/sandbox-tools.js'
 export { securityAgent } from './security/agent.js'
 export { bumpDependencyVersion } from './security/bump-version.js'
 export type {

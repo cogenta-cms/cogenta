@@ -274,7 +274,8 @@
       "help": "Aide"
     },
     "commerceCustomers": "Clients",
-    "widgets": "Widgets"
+    "widgets": "Widgets",
+    "plugins": "Plugins"
   },
   "breadcrumb": {
     "newEntry": "Nouveau",
@@ -4508,6 +4509,47 @@
     "anonymizeConfirm": "Ceci efface l’e-mail et le nom du client. Ses commandes gardent leur propre copie. Cette action est irréversible.",
     "anonymizeError": "Impossible d'anonymiser ce client.",
     "anonymized": "La fiche de ce client a été anonymisée."
+  },
+  "plugins": {
+    "heading": "Plugins",
+    "description": "Les extensions installées sur ce site, ce que chacune a le droit de faire, et les bacs à sable où un plugin s'écrit.",
+    "adminOnly": "Seul un administrateur peut gérer les plugins.",
+    "loadError": "Les plugins n'ont pas pu être chargés.",
+    "actionError": "L'action a échoué.",
+    "installed": "Installés",
+    "noneInstalled": "Aucun plugin installé. Écrivez-en un dans un bac à sable ci-dessous, ou demandez-le à l'agent « Cogenta Plugin Builder ».",
+    "unsigned": "Non signé (local)",
+    "noCode": "Sans code",
+    "doesWhat": "Événements : {{events}} · Routes : {{routes}} · Tâches : {{schedules}}",
+    "asksNothing": "Ce plugin ne demande aucune permission.",
+    "permissions": "Permissions demandées",
+    "granted": "Accordée",
+    "notGranted": "Non accordée",
+    "grant": "Accorder",
+    "revoke": "Retirer",
+    "sandboxes": "Bacs à sable",
+    "sandboxHelp": "Un bac à sable est du code que rien n'exécute : ni le site, ni une requête. L'agent « Cogenta Plugin Builder » y écrit, vous relisez, et vous seul installez.",
+    "sandboxId": "Identifiant du bac à sable",
+    "pluginName": "Nom du plugin (facultatif)",
+    "createSandbox": "Créer",
+    "noSandbox": "Aucun bac à sable pour l'instant.",
+    "checksOut": "Prêt à installer",
+    "notReady": "Pas encore installable",
+    "handlers": "Handlers exposés : {{handlers}}",
+    "saveFile": "Enregistrer le fichier",
+    "install": "Installer",
+    "replace": "Remplacer l'installé",
+    "installHelp": "Installer n'accorde aucune permission : vous les donnez ensuite, une par une.",
+    "status": {
+      "granted": "Permission accordée.",
+      "revoked": "Permission retirée.",
+      "sandboxCreated": "Bac à sable créé.",
+      "sandboxOpened": "Bac à sable ouvert.",
+      "fileOpened": "Fichier ouvert.",
+      "fileSaved": "Fichier enregistré.",
+      "installed": "Plugin installé.",
+      "replaced": "Plugin remplacé, l'ancienne copie est conservée."
+    }
   },
   "widgets": {
     "heading": "Widgets",

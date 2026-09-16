@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   CONTENT_WATCH_AGENT_NAME,
   ensureBuiltinAgents,
+  PLUGIN_BUILDER_AGENT_NAME,
   SECURITY_AGENT_NAME,
   SITE_MONITOR_AGENT_NAME,
   SUPERAGENT_NAME,
@@ -124,8 +125,24 @@ describe('ensureBuiltinAgents', () => {
     ).toBe(false)
   })
 
-  it('only ever seeds exactly five agents', async () => {
+  it('only ever seeds exactly six agents', async () => {
     await ensureBuiltinAgents(store)
-    expect(await store.list()).toHaveLength(5)
+    expect(await store.list()).toHaveLength(6)
+  })
+
+  it('seeds the plugin builder, which may only propose (L31 step 4)', async () => {
+    await ensureBuiltinAgents(store)
+
+    const builder = (await store.list()).find((agent) => agent.name === PLUGIN_BUILDER_AGENT_NAME)
+
+    expect(builder?.tools).toEqual([
+      'plugin.write_sandbox_file',
+      'plugin.read_sandbox_file',
+      'plugin.check_sandbox',
+    ])
+    // There is no deploy tool, at any autonomy level: code reaches a site
+    // when a human installs it, never because an agent decided to.
+    expect(builder?.autonomy?.default).toBe('propose')
+    expect(builder?.tools.some((tool) => tool.includes('deploy'))).toBe(false)
   })
 })

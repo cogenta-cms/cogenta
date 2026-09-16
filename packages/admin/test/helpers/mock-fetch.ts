@@ -423,6 +423,9 @@ export const themeRefineRequests: Record<string, unknown>[] = []
  * mock AGENTS.md forbids: the actual request/response wiring is exercised
  * end-to-end against a real server in `packages/cli/test/serve.test.ts`.
  */
+/** The capabilities the `/api/plugins` mock considers granted (L31). */
+export const mockPluginGrants: string[] = []
+
 /** The widgets the `/api/widgets` mock holds, reset by each test that uses them (L30). */
 export const mockWidgets: {
   id: string
@@ -9722,6 +9725,67 @@ export function installMockFetch(
             pageBuilderPatterns = pageBuilderPatterns.filter((p) => p.id !== id)
             return new Response(null, { status: 204 })
           }
+        }
+      }
+
+      // `/api/plugins` (L31 step 4) — the workshop, as the screen sees it:
+      // what is installed with what it was granted, and the sandboxes a
+      // plugin is written in.
+      if (url.includes('/api/plugins')) {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Only the admin role.' } })
+        }
+        if (/\/api\/plugins$/u.test(url) && method === 'GET') {
+          return json(200, {
+            data: {
+              installed: [
+                {
+                  name: 'demo-notes',
+                  version: '1.0.0',
+                  capabilities: ['storage.write:plugins/demo-notes', 'content.read:article'],
+                  granted: mockPluginGrants,
+                  provides: { eventSubscriptions: ['content.publish'], routes: ['/recent'] },
+                  devMode: true,
+                  hasCode: true,
+                },
+              ],
+              failures: [],
+              sandboxes: ['atelier'],
+            },
+          })
+        }
+        const grantMatch = /\/api\/plugins\/([^/?]+)\/grants/u.exec(url)
+        if (grantMatch !== null && method === 'POST') {
+          const capability = (body as { capability: string }).capability
+          if (!mockPluginGrants.includes(capability)) mockPluginGrants.push(capability)
+          return json(201, { data: { plugin: grantMatch[1], capability } })
+        }
+        if (grantMatch !== null && method === 'DELETE') {
+          const capability = new URL(url, 'http://localhost').searchParams.get('capability') ?? ''
+          const at = mockPluginGrants.indexOf(capability)
+          if (at !== -1) mockPluginGrants.splice(at, 1)
+          return new Response(null, { status: 204 })
+        }
+        if (url.includes('/api/plugins/sandbox/atelier/deploy') && method === 'POST') {
+          return json(200, { data: { ok: true, problems: [], installedAt: '/site/plugins/demo' } })
+        }
+        if (/\/api\/plugins\/sandbox\/atelier$/u.test(url) && method === 'GET') {
+          return json(200, {
+            data: {
+              id: 'atelier',
+              files: ['plugin.js', 'plugin.manifest.mjs'],
+              check: {
+                ok: true,
+                problems: [],
+                handlers: ['onContentEvent'],
+                unimplemented: [],
+                manifest: { name: 'demo-notes', capabilities: [] },
+              },
+            },
+          })
+        }
+        if (url.includes('/api/plugins/sandbox') && method === 'POST') {
+          return json(201, { data: { id: (body as { id: string }).id } })
         }
       }
 

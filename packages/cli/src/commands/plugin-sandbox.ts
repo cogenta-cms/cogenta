@@ -343,3 +343,60 @@ export async function deployPluginFromSandbox(
     capabilities: check.manifest.capabilities,
   }
 }
+
+/**
+ * What `plugin.write_sandbox_file`, `plugin.read_sandbox_file` and
+ * `plugin.check_sandbox` are handed (L31 step 4): this package holds the
+ * filesystem and its guards, `@cogenta/agents-builtin` holds the tool
+ * definitions, and the dependency arrow runs that way — exactly the shape the
+ * theme workshop already uses (`createThemeSandboxToolWiring`).
+ */
+export function createPluginSandboxToolWiring(projectRoot: string): {
+  readonly writeFile: (input: {
+    readonly sandboxId: string
+    readonly path: string
+    readonly content: string
+  }) => Promise<{ readonly path: string }>
+  readonly deleteFile: (input: {
+    readonly sandboxId: string
+    readonly path: string
+  }) => Promise<void>
+  readonly readFile: (input: {
+    readonly sandboxId: string
+    readonly path: string
+  }) => Promise<{ readonly content: string }>
+  readonly listFiles: (input: { readonly sandboxId: string }) => Promise<readonly string[]>
+  readonly check: (input: { readonly sandboxId: string }) => Promise<{
+    readonly ok: boolean
+    readonly problems: readonly string[]
+    readonly handlers: readonly string[]
+    readonly capabilities: readonly string[]
+  }>
+} {
+  return {
+    writeFile: async (input) => {
+      // A sandbox an agent names may not exist yet: creating it on first
+      // write is the difference between "start by asking a human to run a
+      // command" and "get on with it".
+      await mkdir(pluginSandboxDirectory(projectRoot, input.sandboxId), { recursive: true })
+      return writePluginSandboxFile(projectRoot, input.sandboxId, input.path, input.content)
+    },
+    deleteFile: async (input) => {
+      const dir = pluginSandboxDirectory(projectRoot, input.sandboxId)
+      await rm(await resolveRealPath(dir, input.path), { force: true })
+    },
+    readFile: async (input) => ({
+      content: await readPluginSandboxFile(projectRoot, input.sandboxId, input.path),
+    }),
+    listFiles: (input) => listPluginSandboxFiles(projectRoot, input.sandboxId),
+    check: async (input) => {
+      const result = await checkPluginSandbox(projectRoot, input.sandboxId)
+      return {
+        ok: result.ok,
+        problems: result.problems,
+        handlers: result.handlers,
+        capabilities: result.manifest?.capabilities ?? [],
+      }
+    },
+  }
+}

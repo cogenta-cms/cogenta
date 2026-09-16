@@ -274,7 +274,8 @@
       "help": "Help"
     },
     "commerceCustomers": "Customers",
-    "widgets": "Widgets"
+    "widgets": "Widgets",
+    "plugins": "Plugins"
   },
   "breadcrumb": {
     "newEntry": "New",
@@ -4508,6 +4509,47 @@
     "anonymizeConfirm": "This erases the customer’s email and name. Their orders keep their own copy. This cannot be undone.",
     "anonymizeError": "Could not anonymise this customer.",
     "anonymized": "This customer record has been anonymised."
+  },
+  "plugins": {
+    "heading": "Plugins",
+    "description": "What this site has installed, what each one is allowed to do, and the sandboxes a plugin is written in.",
+    "adminOnly": "Only an administrator can manage plugins.",
+    "loadError": "The plugins could not be loaded.",
+    "actionError": "That did not work.",
+    "installed": "Installed",
+    "noneInstalled": "No plugin installed. Write one in a sandbox below, or ask the “Cogenta Plugin Builder” agent for it.",
+    "unsigned": "Unsigned (local)",
+    "noCode": "No code",
+    "doesWhat": "Events: {{events}} · Routes: {{routes}} · Schedules: {{schedules}}",
+    "asksNothing": "This plugin asks for no permission at all.",
+    "permissions": "Permissions requested",
+    "granted": "Granted",
+    "notGranted": "Not granted",
+    "grant": "Grant",
+    "revoke": "Revoke",
+    "sandboxes": "Sandboxes",
+    "sandboxHelp": "A sandbox is code nothing runs: not the site, not a request. The “Cogenta Plugin Builder” agent writes there, you read it, and only you install it.",
+    "sandboxId": "Sandbox id",
+    "pluginName": "Plugin name (optional)",
+    "createSandbox": "Create",
+    "noSandbox": "No sandbox yet.",
+    "checksOut": "Ready to install",
+    "notReady": "Not installable yet",
+    "handlers": "Handlers exposed: {{handlers}}",
+    "saveFile": "Save the file",
+    "install": "Install",
+    "replace": "Replace the installed one",
+    "installHelp": "Installing grants nothing: you give permissions afterwards, one at a time.",
+    "status": {
+      "granted": "Permission granted.",
+      "revoked": "Permission revoked.",
+      "sandboxCreated": "Sandbox created.",
+      "sandboxOpened": "Sandbox opened.",
+      "fileOpened": "File opened.",
+      "fileSaved": "File saved.",
+      "installed": "Plugin installed.",
+      "replaced": "Plugin replaced; the previous copy is kept."
+    }
   },
   "widgets": {
     "heading": "Widgets",

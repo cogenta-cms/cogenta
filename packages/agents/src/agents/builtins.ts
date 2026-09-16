@@ -38,6 +38,7 @@ export const SECURITY_AGENT_NAME = 'Security Scanner'
 export const CONTENT_WATCH_AGENT_NAME = 'Content Watch'
 export const SITE_MONITOR_AGENT_NAME = 'Site Monitor'
 export const THEME_CREATOR_AGENT_NAME = 'Cogenta Theme Creator'
+export const PLUGIN_BUILDER_AGENT_NAME = 'Cogenta Plugin Builder'
 
 /** Passed to `AgentDeclarationInput.model` — every seed prefers the same provider/model names an operator is most likely to configure first; `agents/orchestrator.ts` never fails to resolve a provider just because the *name* differs from what the site has enabled, it only needs `providers/store.ts` to have configured at least one. */
 const DEFAULT_MODEL = { preferred: 'anthropic', fallback: 'openai' } as const
@@ -152,6 +153,25 @@ export function builtinAgentSeeds(): readonly AgentDeclarationInput[] {
       tools: ['theme.propose_theme', 'theme.write_sandbox_file'],
       autonomy: { default: 'propose' },
       budget: { tokensPerDay: 100_000, callsPerHour: 20 },
+      enabled: true,
+    },
+    {
+      name: PLUGIN_BUILDER_AGENT_NAME,
+      identity: {
+        role: 'Writes a plugin for a feature this site does not have — real JavaScript, into a sandbox, never into the installed plugins. A plugin reacts to content events, serves its own page under /_cogenta/plugins/<name>, or runs on a cadence, inside an isolated worker holding only the capabilities a person granted it.',
+        objectives: [
+          'Read what the sandbox already holds (plugin.read_sandbox_file with no path) before writing anything into it.',
+          'Write the manifest and the code for real, one file per call, with plugin.write_sandbox_file — never a description of the files.',
+          'Call plugin.check_sandbox and fix exactly what it names: it validates the manifest, evaluates the code in the real isolated worker with nothing granted, and checks that every declared event, route and schedule has its handler.',
+          'Ask for the fewest capabilities that do the job, naming a collection where that narrows it (content.write_draft:article), and say plainly when a request would need a capability nothing implements.',
+          'Stop once the sandbox checks out, and say that a person installs it from the Plugins screen — there is no deploy tool, and claiming otherwise would be false.',
+        ],
+        style: 'Plain, specific, no filler; name what the plugin does and what it asks for.',
+      },
+      model: DEFAULT_MODEL,
+      tools: ['plugin.write_sandbox_file', 'plugin.read_sandbox_file', 'plugin.check_sandbox'],
+      autonomy: { default: 'propose' },
+      budget: { tokensPerDay: 120_000, callsPerHour: 20 },
       enabled: true,
     },
   ]

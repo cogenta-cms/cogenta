@@ -46,6 +46,7 @@ import { MenusRoute } from './routes/menus.js'
 import { NotFoundRoute } from './routes/not-found.js'
 import { ObservabilityRoute } from './routes/observability.js'
 import { OpsSettingsRoute } from './routes/ops-settings.js'
+import { PluginsRoute } from './routes/plugins.js'
 import { ProfileRoute } from './routes/profile.js'
 import { PromptSettingsRoute } from './routes/prompt-settings.js'
 import { ProvidersRoute } from './routes/providers.js'
@@ -136,6 +137,7 @@ export function App(): JSX.Element {
                 <Route path="commerce/payment" element={<CommercePaymentRoute />} />
                 <Route path="appearance" element={<AppearanceRoute />} />
                 <Route path="widgets" element={<WidgetsRoute />} />
+                <Route path="plugins" element={<PluginsRoute />} />
                 <Route path="theme-generator" element={<ThemeGeneratorRoute />} />
                 <Route path="theme-sandbox" element={<ThemeSandboxRoute />} />
                 <Route path="admin-appearance" element={<AdminAppearanceRoute />} />

@@ -825,7 +825,16 @@ remplissent donc sous le trafic d'un vrai site. Depuis la fin de l'étape 2, un 
 une **route publique** (`/_cogenta/plugins/<nom>`, sans en-tête de son choix) et déclare une
 **tâche planifiée** qui tourne sur le planificateur du site. Ce qui reste déclaratif :
 `provides.blocks` (contrat B figé, une RFC serait requise) et `provides.tools` (aucun
-`AgentRegistry` vivant, même constat R2 depuis L5). L'écran « Extensions installées » (tâche 1) lit
+`AgentRegistry` vivant, même constat R2 depuis L5).
+
+**L31 étape 4 (2026-09-16)** : « Cogenta Plugin Builder » écrit de vrais plugins dans
+`.cogenta/plugin-sandbox/<id>/` via trois outils, et l'écran Plugins de l'admin installe ce
+qu'un humain a relu. Deux limites honnêtes : (1) aucun essai avec un vrai fournisseur LLM
+n'a été fait (pas de clé dans cette session) — les outils, l'agent et l'écran sont testés,
+la qualité réelle du code qu'un modèle écrit ne l'est pas ; (2) dix capacités du vocabulaire
+(`channel.send`, `agent.delegate`, `memory.*`, `deps.*`, `build.trigger`, `deploy.trigger`,
+`site.config_*`, `media.write`) restent sans implémentation — elles sont désormais refusées
+à l'octroi au lieu d'être accordables pour rien. L'écran « Extensions installées » (tâche 1) lit
 donc un `PluginUsageStore` et un `PluginDisableStore` réels, câblés et testés de bout en
 bout, mais qui resteront vides sur un vrai déploiement tant qu'aucun pipeline
 d'exécution de plugin n'existe — l'écran le dit honnêtement (« Jamais exécutée ») plutôt

@@ -252,6 +252,8 @@ import {
   describeCapability,
   ensureMarketplaceTables,
   ensurePluginTables,
+  isCapabilityImplemented,
+  loadInstalledPlugins,
   type MarketplaceCatalogEntry,
 } from '@cogenta/plugins'
 import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
@@ -377,6 +379,16 @@ import {
   PLUGIN_ROUTE_PREFIX,
   type PluginRuntime,
 } from './plugin-runtime.js'
+import {
+  checkPluginSandbox,
+  createPluginSandbox,
+  createPluginSandboxToolWiring,
+  deployPluginFromSandbox,
+  listPluginSandboxes,
+  listPluginSandboxFiles,
+  readPluginSandboxFile,
+  writePluginSandboxFile,
+} from './plugin-sandbox.js'
 import { createSampleDataEngine } from './sample-data.js'
 import { renderSearchPage } from './search-page.js'
 import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
@@ -1196,6 +1208,29 @@ interface AssembleSiteOptions {
    * `createThemeSandboxToolWiring(projectRoot)` and always present once
    * `cogenta serve` boots.
    */
+  /** L31 step 4 — what "Cogenta Plugin Builder"'s tools write and check (`createPluginSandboxToolWiring`). */
+  readonly pluginSandboxTools?: {
+    readonly writeFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+      readonly content: string
+    }) => Promise<{ readonly path: string }>
+    readonly deleteFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+    }) => Promise<void>
+    readonly readFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+    }) => Promise<{ readonly content: string }>
+    readonly listFiles: (input: { readonly sandboxId: string }) => Promise<readonly string[]>
+    readonly check: (input: { readonly sandboxId: string }) => Promise<{
+      readonly ok: boolean
+      readonly problems: readonly string[]
+      readonly handlers: readonly string[]
+      readonly capabilities: readonly string[]
+    }>
+  }
   readonly themeSandboxTools?: {
     readonly writeFile: (input: {
       readonly sandboxId: string
@@ -1940,6 +1975,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           ...(options.themeSandboxTools === undefined
             ? {}
             : { themeSandbox: options.themeSandboxTools }),
+          ...(options.pluginSandboxTools === undefined
+            ? {}
+            : { pluginSandbox: options.pluginSandboxTools }),
         })
   if (agentsRuntime !== undefined) logger.info(agentsRuntime.summary)
 
@@ -4315,6 +4353,8 @@ export interface RuntimeExtras {
    * route at all rather than 500ing on a runtime nobody constructed.
    */
   readonly pluginRuntime?: PluginRuntime
+  /** Where this site keeps its plugins (`plugins.dir`), for the workshop routes. */
+  readonly pluginsDir?: string
   /**
    * Fiche 73 tasks 4-8 — the theme sandbox/deploy/versions/export routes
    * below need the real project root the same way `configureThemeRegistry`
@@ -5500,6 +5540,200 @@ export function createRequestListener(
       // Fiche 73 tasks 4-8 — the theme sandbox: create/clone, isolated
       // preview, the deploy pipeline, versions, export/import. Checked
       // before the generic `/api/theme` mount below for the same structural
+      // The plugin workshop's own routes (L31 step 4), the same family as the
+      // theme sandbox's just above and for the same reason: `projectRoot` —
+      // where `.cogenta/plugin-sandbox/` and `plugins/` both live — is only
+      // reachable here. Admin-only, checked once. Nothing here runs an
+      // installed plugin: a sandbox is a directory, and `check` evaluates its
+      // code with no capability granted.
+      if (
+        extras !== undefined &&
+        extras.projectRoot !== undefined &&
+        url.pathname.startsWith('/api/plugins')
+      ) {
+        if (!context.actor.roles.includes('admin')) {
+          jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may manage plugins.')
+          return
+        }
+        const projectRoot = extras.projectRoot
+        const jsonHeaders = {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+        } as const
+        const segments = url.pathname.split('/').filter((segment) => segment.length > 0)
+
+        // GET /api/plugins — what is installed, and what is being written.
+        if (url.pathname === '/api/plugins' && req.method === 'GET') {
+          const installed = await loadInstalledPlugins({
+            projectRoot,
+            dir: extras.pluginsDir ?? 'plugins',
+          })
+          await ensurePluginTables(site.db)
+          const grantStore = createPluginGrantStore(site.db)
+          const granted = new Map<string, readonly string[]>()
+          for (const plugin of installed.plugins) {
+            granted.set(
+              plugin.manifest.name,
+              (await grantStore.listGrants(plugin.manifest.name)).map((grant) => grant.capability),
+            )
+          }
+          res.writeHead(200, jsonHeaders)
+          res.end(
+            JSON.stringify({
+              data: {
+                installed: installed.plugins.map((plugin) => ({
+                  name: plugin.manifest.name,
+                  version: plugin.manifest.version,
+                  capabilities: plugin.manifest.capabilities,
+                  granted: granted.get(plugin.manifest.name) ?? [],
+                  provides: plugin.manifest.provides,
+                  devMode: plugin.devMode,
+                  hasCode: plugin.entryPath !== null,
+                })),
+                failures: installed.failures,
+                sandboxes: await listPluginSandboxes(projectRoot),
+              },
+            }),
+          )
+          return
+        }
+
+        // POST /api/plugins/:name/grants  { capability }
+        // DELETE /api/plugins/:name/grants?capability=
+        if (segments.length === 4 && segments[3] === 'grants' && segments[2] !== 'sandbox') {
+          const pluginName = decodeURIComponent(segments[2] as string)
+          await ensurePluginTables(site.db)
+          const grantStore = createPluginGrantStore(site.db)
+          if (req.method === 'POST') {
+            const body = (await readBody(req)) as { capability?: unknown } | undefined
+            const capability = typeof body?.capability === 'string' ? body.capability : ''
+            if (capability === '') {
+              jsonError(res, 400, 'PLUGIN_SANDBOX_INVALID', 'A "capability" is required.')
+              return
+            }
+            // A capability nothing implements would be a promise the site
+            // cannot keep: refused here exactly as the CLI refuses it.
+            if (!isCapabilityImplemented(capability)) {
+              jsonError(
+                res,
+                422,
+                'PLUGIN_CAPABILITY_REFUSED',
+                `Nothing implements "${capability}" yet, so granting it would do nothing.`,
+              )
+              return
+            }
+            await grantStore.grant(pluginName, capability)
+            res.writeHead(201, jsonHeaders)
+            res.end(JSON.stringify({ data: { plugin: pluginName, capability } }))
+            return
+          }
+          if (req.method === 'DELETE') {
+            const capability = url.searchParams.get('capability') ?? ''
+            if (capability === '') {
+              jsonError(res, 400, 'PLUGIN_SANDBOX_INVALID', 'A "capability" is required.')
+              return
+            }
+            await grantStore.revoke(pluginName, capability)
+            res.writeHead(204, { 'cache-control': 'no-store' })
+            res.end()
+            return
+          }
+          jsonError(res, 405, 'METHOD_NOT_ALLOWED', 'This path answers POST and DELETE.')
+          return
+        }
+
+        // POST /api/plugins/sandbox  { id, name? }
+        if (url.pathname === '/api/plugins/sandbox' && req.method === 'POST') {
+          const body = (await readBody(req)) as { id?: unknown; name?: unknown } | undefined
+          const id = typeof body?.id === 'string' ? body.id : ''
+          if (id === '') {
+            jsonError(res, 400, 'PLUGIN_SANDBOX_INVALID', 'A sandbox "id" is required.')
+            return
+          }
+          try {
+            await createPluginSandbox(projectRoot, id, {
+              ...(typeof body?.name === 'string' && body.name !== '' ? { name: body.name } : {}),
+            })
+          } catch (error) {
+            writeRestResponse(res, errorResponse(error))
+            return
+          }
+          res.writeHead(201, jsonHeaders)
+          res.end(JSON.stringify({ data: { id } }))
+          return
+        }
+
+        // GET /api/plugins/sandbox/:id — its files, and what it checks out as.
+        if (segments.length === 4 && segments[2] === 'sandbox' && req.method === 'GET') {
+          const id = decodeURIComponent(segments[3] as string)
+          try {
+            const [files, check] = await Promise.all([
+              listPluginSandboxFiles(projectRoot, id),
+              checkPluginSandbox(projectRoot, id),
+            ])
+            res.writeHead(200, jsonHeaders)
+            res.end(JSON.stringify({ data: { id, files, check } }))
+          } catch (error) {
+            writeRestResponse(res, errorResponse(error))
+          }
+          return
+        }
+
+        // GET /api/plugins/sandbox/:id/file?path= — one file's content.
+        // PUT the same path writes it.
+        if (segments.length === 5 && segments[2] === 'sandbox' && segments[4] === 'file') {
+          const id = decodeURIComponent(segments[3] as string)
+          const path = url.searchParams.get('path') ?? ''
+          if (path === '') {
+            jsonError(res, 400, 'PLUGIN_SANDBOX_INVALID', 'A "path" query parameter is required.')
+            return
+          }
+          try {
+            if (req.method === 'GET') {
+              const content = await readPluginSandboxFile(projectRoot, id, path)
+              res.writeHead(200, jsonHeaders)
+              res.end(JSON.stringify({ data: { id, path, content } }))
+              return
+            }
+            if (req.method === 'PUT') {
+              const body = (await readBody(req)) as { content?: unknown } | undefined
+              const content = typeof body?.content === 'string' ? body.content : ''
+              await writePluginSandboxFile(projectRoot, id, path, content)
+              res.writeHead(200, jsonHeaders)
+              res.end(JSON.stringify({ data: { id, path } }))
+              return
+            }
+          } catch (error) {
+            writeRestResponse(res, errorResponse(error))
+            return
+          }
+          jsonError(res, 405, 'METHOD_NOT_ALLOWED', 'This path answers GET and PUT.')
+          return
+        }
+
+        // POST /api/plugins/sandbox/:id/deploy  { overwrite? } — the human
+        // half of the workshop: an agent writes, a person installs.
+        if (
+          segments.length === 5 &&
+          segments[2] === 'sandbox' &&
+          segments[4] === 'deploy' &&
+          req.method === 'POST'
+        ) {
+          const id = decodeURIComponent(segments[3] as string)
+          const body = (await readBody(req)) as { overwrite?: unknown } | undefined
+          const deployment = await deployPluginFromSandbox(projectRoot, id, {
+            pluginsDir: extras.pluginsDir ?? 'plugins',
+            ...(body?.overwrite === true ? { overwrite: true } : {}),
+          })
+          res.writeHead(deployment.ok ? 200 : 409, jsonHeaders)
+          res.end(JSON.stringify({ data: deployment }))
+          return
+        }
+
+        jsonError(res, 404, 'CONTENT_NOT_FOUND', 'No such plugin route.')
+        return
+      }
+
       // reason `/api/theme/preview`/`/api/theme/gallery-preview` are: none
       // of this reaches `ThemeRouter`, and `projectRoot` (where
       // `.cogenta/theme-sandbox/`/`themes/` both live) is only reachable
@@ -7236,6 +7470,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   }
   const themeCreatorTools = await createThemeCreatorToolWiring(themeWiringOptions)
   const themeSandboxTools = createThemeSandboxToolWiring(projectRoot)
+  const pluginSandboxTools = createPluginSandboxToolWiring(projectRoot)
 
   const site = await assembleSite({
     db: selection.instance,
@@ -7278,6 +7513,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // `theme.propose_theme` is then simply not registered (R2).
     ...(themeCreatorTools === undefined ? {} : { themeCreatorTools }),
     themeSandboxTools,
+    pluginSandboxTools,
     // The image model an operator picked on the Providers screen, read fresh
     // on every request: a key saved from the admin has to work on the next
     // call, not after a restart. `undefined` is R2's no-provider state — the
@@ -7803,6 +8039,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     withRequestTracing(
       createRequestListener(site, logger, {
         ...(pluginRuntime === null ? {} : { pluginRuntime }),
+        pluginsDir: loaded.config.plugins.dir,
         healthRouter,
         toolsRouter,
         scheduledTasksRouter,

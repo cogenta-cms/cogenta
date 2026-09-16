@@ -52,7 +52,13 @@ import {
   type ToolDefinition,
   type ToolRegistry,
 } from '@cogenta/agents'
-import { createProposeThemeTool, createWriteSandboxFileTool } from '@cogenta/agents-builtin'
+import {
+  createCheckPluginSandboxTool,
+  createProposeThemeTool,
+  createReadPluginSandboxTool,
+  createWritePluginSandboxFileTool,
+  createWriteSandboxFileTool,
+} from '@cogenta/agents-builtin'
 import type {
   AgentConversationStoreLike,
   AgentRegistryLike,
@@ -217,6 +223,33 @@ export interface BuildAgentRuntimeOptions {
       readonly sandboxId: string
       readonly path: string
     }) => Promise<void>
+  }
+  /**
+   * L31 step 4 — what "Cogenta Plugin Builder"'s three tools write, read and
+   * check. Absent means they are not registered at all, which is the honest
+   * state for a caller with no project root to sandbox in.
+   */
+  readonly pluginSandbox?: {
+    readonly writeFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+      readonly content: string
+    }) => Promise<{ readonly path: string }>
+    readonly deleteFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+    }) => Promise<void>
+    readonly readFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+    }) => Promise<{ readonly content: string }>
+    readonly listFiles: (input: { readonly sandboxId: string }) => Promise<readonly string[]>
+    readonly check: (input: { readonly sandboxId: string }) => Promise<{
+      readonly ok: boolean
+      readonly problems: readonly string[]
+      readonly handlers: readonly string[]
+      readonly capabilities: readonly string[]
+    }>
   }
 }
 
@@ -497,6 +530,33 @@ function buildToolRegistry(options: {
       readonly path: string
     }) => Promise<void>
   }
+  /**
+   * L31 step 4 — what "Cogenta Plugin Builder"'s three tools write, read and
+   * check. Absent means they are not registered at all, which is the honest
+   * state for a caller with no project root to sandbox in.
+   */
+  readonly pluginSandbox?: {
+    readonly writeFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+      readonly content: string
+    }) => Promise<{ readonly path: string }>
+    readonly deleteFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+    }) => Promise<void>
+    readonly readFile: (input: {
+      readonly sandboxId: string
+      readonly path: string
+    }) => Promise<{ readonly content: string }>
+    readonly listFiles: (input: { readonly sandboxId: string }) => Promise<readonly string[]>
+    readonly check: (input: { readonly sandboxId: string }) => Promise<{
+      readonly ok: boolean
+      readonly problems: readonly string[]
+      readonly handlers: readonly string[]
+      readonly capabilities: readonly string[]
+    }>
+  }
 }) {
   const contentServiceLike: ContentServiceLike = contentServiceLikeOf(options.contentService)
   const contentBrowseServiceLike = contentBrowseServiceLikeOf(
@@ -545,6 +605,16 @@ function buildToolRegistry(options: {
     ...(options.themeSandbox === undefined
       ? []
       : [createWriteSandboxFileTool(options.themeSandbox)]),
+    // L31 step 4 — "Cogenta Plugin Builder"'s three tools. The write is the
+    // only one with side effects, and it writes into a sandbox no request can
+    // reach; installing what it wrote stays a human action.
+    ...(options.pluginSandbox === undefined
+      ? []
+      : [
+          createWritePluginSandboxFileTool(options.pluginSandbox),
+          createReadPluginSandboxTool(options.pluginSandbox),
+          createCheckPluginSandboxTool(options.pluginSandbox),
+        ]),
   ]
   return createToolRegistry(definitions)
 }
@@ -756,6 +826,7 @@ export async function buildAgentRuntime(
     redirects: options.redirects,
     ...(options.themeCreator === undefined ? {} : { themeCreator: options.themeCreator }),
     ...(options.themeSandbox === undefined ? {} : { themeSandbox: options.themeSandbox }),
+    ...(options.pluginSandbox === undefined ? {} : { pluginSandbox: options.pluginSandbox }),
     ...(options.storeGeneratedImage === undefined
       ? {}
       : { storeGeneratedImage: options.storeGeneratedImage }),

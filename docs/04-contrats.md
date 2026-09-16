@@ -576,6 +576,7 @@ code.patch
 mcp.external:<connexionId>.<nomOutilDistant>
 theme.customize
 theme.write_sandbox
+plugin.write_sandbox
 ```
 
 `document.extract` (ajoutée en `tools@1.1`, L19 tâche 1) autorise la lecture du texte
@@ -610,6 +611,19 @@ de pièces jointes optionnelles — jamais à en générer le HTML/CSS lui-même
 reste des paquets TypeScript typés) et jamais à appliquer quoi que ce soit sur le
 site : choisir un candidat reste l'action humaine existante sur
 `PUT /api/theme/overrides`.
+
+**`tools@1.7` le 2026-09-16** (L31 étape 4) : la taxonomie gagne `plugin.write_sandbox`,
+pour les trois outils de « Cogenta Plugin Builder » — `plugin.write_sandbox_file`
+(`sideEffects: true`, `reversible: true`, `revert` supprime le fichier écrit),
+`plugin.read_sandbox_file` et `plugin.check_sandbox` (tous deux `sideEffects: false`).
+Aucune signature d'outil existante n'est touchée : un ajout par le bas, mineur au même
+titre que `theme.write_sandbox` en `1.6`. La portée est structurellement bornée :
+l'écriture ne peut atteindre que `<projectRoot>/.cogenta/plugin-sandbox/<id>/`, jamais
+`plugins/` — un chemin qui tenterait d'en sortir est refusé (`PLUGIN_SANDBOX_PATH_ESCAPE`,
+vérifié lexicalement **et** sur le vrai système de fichiers, liens symboliques compris).
+**Il n'existe volontairement aucun outil d'installation** : installer ce qu'un bac à sable
+contient est une action humaine, depuis l'écran Plugins ou la CLI, et un plugin installé ne
+détient aucune capacité tant qu'un humain n'en accorde pas une.
 
 `theme.write_sandbox` (ajoutée en `tools@1.6`, fiche 73 tâche 7) autorise un agent à
 écrire un fichier de code de thème réel — mais seulement dans un bac à sable isolé

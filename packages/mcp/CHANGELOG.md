@@ -1,5 +1,12 @@
 # @cogenta/mcp
 
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/agents@0.8.1
+
 ## 0.3.6
 
 ### Patch Changes

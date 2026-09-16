@@ -1,5 +1,12 @@
 # @cogenta/forms
 
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/channels@0.3.8
+
 ## 0.2.7
 
 ### Patch Changes

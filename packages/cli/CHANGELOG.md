@@ -1,5 +1,120 @@
 # @cogenta/cli
 
+## 0.12.0
+
+### Minor Changes
+
+- A plugin can declare a block, and it becomes a real block of the site
+  
+  `provides.blocks` has been in the manifest shape since L7 with nothing reading
+  it. It now carries what registering a block actually needs: a label, a field
+  schema declared as data, an optional heading level, and `fallbackFrom` — where
+  the fallback block's fields take their values from.
+  
+  That last one is what makes falling back a promise the site can keep: a
+  `countdown`'s data does not satisfy `prose`'s schema, so "it degrades to prose"
+  would have meant "it disappears". Naming the mapping makes the degradation
+  something the plugin author decided and a reader can check.
+  
+  `@cogenta/blocks` gains `blockFieldFromDeclaration`/`blockSchemaFromDeclaration`:
+  a block schema written as data rather than as calls to `f.*`, built by those
+  same constructors, so a declared block is a first-class block — same validator,
+  same envelope, same fallback chain. Nothing here knows what a plugin is.
+  
+  `@cogenta/cli` gains `pluginBlockDefinitions`, `collectPluginBlocks` (which
+  reports a name already taken instead of overwriting someone else's block) and
+  `pluginBlockFallback`. Contract B is untouched: a plugin block never joins the
+  seventeen of the vocabulary, it is registered beside them.
+
+- The editor offers the blocks a plugin provides
+  
+  `GET /api/plugins/blocks` reports what this site's plugins add to the block
+  list — name, label, fields, which plugin brings it, and what it degrades to.
+  Readable by anyone who may edit content rather than by administrators only:
+  without it, a plugin's block on the page being edited would have no label and
+  no fields.
+  
+  The seventeen blocks of the vocabulary are baked into the admin bundle because
+  they never change; these depend on which plugins a site has installed, so only
+  the server can know them. A field's declared label and help text travel with
+  it, so a person filling the block in reads "Colonne de gauche" rather than
+  `leftLabel`.
+  
+  The builder preview and the appearance preview render plugin blocks too — a
+  preview that did not would show a person editing one nothing at all.
+
+- A block a plugin provides is rendered on the page
+  
+  Contract D grows one optional field, `RenderContext.blockNodes` (`theme@1.7`):
+  markup the host already produced, keyed by the block's contract B `_key`. A
+  theme honours it with one line — `providedBlockNode(block, ctx)` — and a theme
+  that does not is not broken: it renders the block's declared fallback, which
+  is the degradation contract B has promised since L3. The ten themes in this
+  repository honour it.
+  
+  `cogenta serve` runs a plugin's `onRenderBlock` handler in the
+  permission-restricted child process, with exactly the capabilities that plugin
+  was granted, and checks the tree it returns against a tag and attribute
+  allowlist before it reaches a page: no `script`, no `on*`, no `javascript:`,
+  bounded depth, node count and text. A plugin that throws, times out or returns
+  something else degrades to its fallback — the page is never defaced and never
+  emptied.
+  
+  Rendered trees are cached against the plugin, its version, the block type, the
+  stored values and the locale, so a block is not a forked process per visit.
+  `PluginRuntime` gains `invokeHandler`, so this runs under the same concurrency
+  ceiling, grants and disable-on-violation policy as a plugin route.
+
+- A plugin can provide a widget type, not only a block
+  
+  `provides.widgets` declares a type and the settings it holds, the same way
+  `provides.blocks` declares a block. Deliberately without a fallback, unlike a
+  block: a widget is chrome, not content — one that cannot render is simply not
+  drawn, its settings stay in the database, and reinstalling the plugin brings it
+  back exactly as it was.
+  
+  `@cogenta/widgets` accepts `extraTypes` on the store and on
+  `validateWidgetSettings`: a type a plugin provides is validated against the
+  schema that plugin declared, and a type nothing can render is still refused —
+  the store must never hold a widget no one can draw.
+  
+  `@cogenta/theme-kit`'s `ResolvedWidget` gains a member carrying markup the host
+  already produced (contract D `theme@1.7`, same bump as the blocks). Every theme
+  gets it for free: widget areas are rendered by `renderWidgetArea`, which lives
+  here rather than in each theme. The section still carries the plugin's own type
+  name in its class, so a theme styles `cg-widget--openingHours` like any other.
+  
+  `@cogenta/blocks` gains `declaredObjectSchema`, the settings-object counterpart
+  of `blockSchemaFromDeclaration`.
+
+### Patch Changes
+
+- Updated dependencies [`6a2b8c4`, `c86102a`, `860bb0d`, `6fc014e`]:
+  - @cogenta/blocks@1.1.0
+  - @cogenta/plugins@0.7.0
+  - @cogenta/theme-kit@0.5.0
+  - @cogenta/theme-canonical@1.3.0
+  - @cogenta/theme-blog@0.5.0
+  - @cogenta/theme-docs@0.5.0
+  - @cogenta/theme-association@0.5.0
+  - @cogenta/theme-ecommerce@1.3.0
+  - @cogenta/theme-entreprise@1.3.0
+  - @cogenta/theme-magazine@1.3.0
+  - @cogenta/theme-portfolio@1.3.0
+  - @cogenta/theme-restaurant@0.5.0
+  - @cogenta/theme-saas@0.5.0
+  - @cogenta/widgets@0.2.0
+  - @cogenta/agents@0.8.1
+  - @cogenta/api@2.5.2
+  - @cogenta/import@0.2.7
+  - @cogenta/render@0.3.2
+  - @cogenta/starters@0.1.2
+  - @cogenta/agents-builtin@0.6.1
+  - @cogenta/channels@0.3.8
+  - @cogenta/mcp@0.3.7
+  - @cogenta/commerce@0.5.3
+  - @cogenta/forms@0.2.8
+
 ## 0.11.0
 
 ### Minor Changes

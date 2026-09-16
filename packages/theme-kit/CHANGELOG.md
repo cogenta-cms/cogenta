@@ -1,5 +1,59 @@
 # @cogenta/theme-kit
 
+## 0.5.0
+
+### Minor Changes
+
+- A block a plugin provides is rendered on the page
+  
+  Contract D grows one optional field, `RenderContext.blockNodes` (`theme@1.7`):
+  markup the host already produced, keyed by the block's contract B `_key`. A
+  theme honours it with one line — `providedBlockNode(block, ctx)` — and a theme
+  that does not is not broken: it renders the block's declared fallback, which
+  is the degradation contract B has promised since L3. The ten themes in this
+  repository honour it.
+  
+  `cogenta serve` runs a plugin's `onRenderBlock` handler in the
+  permission-restricted child process, with exactly the capabilities that plugin
+  was granted, and checks the tree it returns against a tag and attribute
+  allowlist before it reaches a page: no `script`, no `on*`, no `javascript:`,
+  bounded depth, node count and text. A plugin that throws, times out or returns
+  something else degrades to its fallback — the page is never defaced and never
+  emptied.
+  
+  Rendered trees are cached against the plugin, its version, the block type, the
+  stored values and the locale, so a block is not a forked process per visit.
+  `PluginRuntime` gains `invokeHandler`, so this runs under the same concurrency
+  ceiling, grants and disable-on-violation policy as a plugin route.
+
+- A plugin can provide a widget type, not only a block
+  
+  `provides.widgets` declares a type and the settings it holds, the same way
+  `provides.blocks` declares a block. Deliberately without a fallback, unlike a
+  block: a widget is chrome, not content — one that cannot render is simply not
+  drawn, its settings stay in the database, and reinstalling the plugin brings it
+  back exactly as it was.
+  
+  `@cogenta/widgets` accepts `extraTypes` on the store and on
+  `validateWidgetSettings`: a type a plugin provides is validated against the
+  schema that plugin declared, and a type nothing can render is still refused —
+  the store must never hold a widget no one can draw.
+  
+  `@cogenta/theme-kit`'s `ResolvedWidget` gains a member carrying markup the host
+  already produced (contract D `theme@1.7`, same bump as the blocks). Every theme
+  gets it for free: widget areas are rendered by `renderWidgetArea`, which lives
+  here rather than in each theme. The section still carries the plugin's own type
+  name in its class, so a theme styles `cg-widget--openingHours` like any other.
+  
+  `@cogenta/blocks` gains `declaredObjectSchema`, the settings-object counterpart
+  of `blockSchemaFromDeclaration`.
+
+### Patch Changes
+
+- Updated dependencies [`6a2b8c4`, `6fc014e`]:
+  - @cogenta/blocks@1.1.0
+  - @cogenta/render@0.3.2
+
 ## 0.4.1
 
 ### Patch Changes

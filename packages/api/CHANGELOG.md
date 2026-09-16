@@ -1,5 +1,16 @@
 # @cogenta/api
 
+## 2.5.2
+
+### Patch Changes
+
+- Updated dependencies [`6a2b8c4`, `6fc014e`]:
+  - @cogenta/blocks@1.1.0
+  - @cogenta/widgets@0.2.0
+  - @cogenta/channels@0.3.8
+  - @cogenta/mcp@0.3.7
+  - @cogenta/forms@0.2.8
+
 ## 2.5.1
 
 ### Patch Changes

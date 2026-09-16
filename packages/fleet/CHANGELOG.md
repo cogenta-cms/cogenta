@@ -1,5 +1,14 @@
 # @cogenta/fleet
 
+## 0.1.13
+
+### Patch Changes
+
+- Updated dependencies [`6a2b8c4`, `c86102a`, `6fc014e`]:
+  - @cogenta/plugins@0.7.0
+  - @cogenta/agents-builtin@0.6.1
+  - @cogenta/channels@0.3.8
+
 ## 0.1.12
 
 ### Patch Changes

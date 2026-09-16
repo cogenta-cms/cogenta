@@ -1,5 +1,12 @@
 # @cogenta/import
 
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [`6a2b8c4`, `6fc014e`]:
+  - @cogenta/blocks@1.1.0
+
 ## 0.2.6
 
 ### Patch Changes

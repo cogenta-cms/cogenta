@@ -1,5 +1,13 @@
 # @cogenta/agents
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [`6a2b8c4`, `6fc014e`]:
+  - @cogenta/blocks@1.1.0
+  - @cogenta/render@0.3.2
+
 ## 0.8.0
 
 ### Minor Changes

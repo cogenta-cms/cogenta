@@ -1,5 +1,75 @@
 # @cogenta/theme-ecommerce
 
+## 1.2.0
+
+### Minor Changes
+
+- [`b8ad25e`](https://github.com/cogenta-cms/cogenta/commit/b8ad25e6310470928db7291c2bb818bf91eb727e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The E-commerce theme is redesigned for a small brand of durable everyday
+  goods. Albert Sans sets everything, light and large for headlines, regular for
+  text, medium for names and prices. The page is sand and warm ink, with a stone
+  band for the footer and one terracotta kept for focus rings, text selection and
+  the underline of links in running text. Corners are square, and structure is
+  drawn with space and hairlines.
+  
+  What changes on a site:
+  
+  - The header is one row under a hairline, held at the top of the window: the
+    shop's name or logo, the navigation in words and the header action as an
+    underlined link. There is no cart, search or account control. On a phone the
+    navigation opens as a CSS-only full-height panel of large links. The footer
+    is a stone band with the name, tagline and address note, the footer menu,
+    social profiles with their names, and the copyright line.
+  - A `hero` sets its headline on the grid, with the subtitle and one action
+    beside it, and the photograph across the whole window underneath. Text is
+    never laid over the picture.
+  - A `collectionList` whose entries all carry a numeric `price` is a product
+    grid: photographs at 4:5, four across on a wide screen and two on a phone,
+    the name and the price under each in tabular figures, and "Sold out" as a
+    plain line of text when `inStock` is false. Entries with a picture and no
+    price (categories, for example) are square tiles named by an arrow link;
+    anything else is a ruled index. A list never shows the page it is on.
+  - A product page now uses contract D `theme@1.5` fields: the photograph on
+    seven columns, and beside it, held in view, the category, name, price, stock
+    status, short description, an order action, a delivery note and the details
+    (`material`, `dimensions`, `weight`, `capacity`, `origin`, `care`). The theme
+    draws no "Add to cart". The action comes from the entry's `orderLink`: an
+    email address reads "Order by email" (or "Ask about the next batch" when sold
+    out), any other link "Order this piece", and `orderLabel` overrides the
+    wording. Prices use the entry's `currency` code and fall back to euros. A host
+    older than `theme@1.5` gets a plain page header instead.
+  - `featureGrid` items without a sentence become one ruled line of statements
+    (delivery, returns, repairs); with sentences they are ruled columns with a
+    small line icon and no tile. `mediaFigure` aligned `start` or `end` is a
+    split of photograph and caption, `cta` a line under an ink rule, `faq` and
+    `accordion` details rows beside a held title, `quote` and `testimonial` words
+    set large and light with a hanging opening mark, `stats` and `statCounter`
+    figures under hairlines, `pricingTable` ruled columns, `logos` and
+    `logoStrip` marks along one row, `gallery` squares, masonry or a scrolling
+    row, `embed` a frame that contacts no third party before consent.
+  - Page headers show the title, and an entry's summary beside it. Date, author
+    and reading time appear only for dated entries.
+  - The dark palette is a deep warm brown-black with sand type and a lifted
+    terracotta; photographs are dimmed slightly. No gradient, shadow, hover lift,
+    keyframe or scroll-driven animation remains, and transitions are capped at
+    150 ms.
+  
+  Class names are new throughout, so custom CSS written against the previous
+  markup needs updating. An existing site keeps the fonts and colours of its
+  current skin until that skin is updated: the theme reads its typeface and
+  palette from the skin, so copy this theme's `tokens.json` into the site's
+  `theme.tokens.json` (or set the skin's sans to Albert Sans and its accent to
+  `#9a4a2e`) to get the new typography and palette.
+
+- The shop theme now sets widget areas in its own register (contract D `theme@1.6`): it exports `widgetAreas`, places the footer widget columns inside its stone footer as a tier under a hairline, each column starting on a column of the row above, and styles the host's `cg-sidebar-layout` the way a product sheet sets its details: a caption label, ruled rows of words, a product's photograph at 4:5 on the plate, a call to action as the theme's arrow link and a search button as underlined words, so the one filled ink rectangle stays with the page's own action. Beside the column a page title stacks over its lead, running text and questions take the column at the reading measure, goods go three across and a product's photograph and sheet share the column; on a phone and a tablet the column follows the page. A strip of entries with photographs before or after the content lines up with the goods grid. Host-rendered page titles keep their style inside the content column, and search excerpts and counts follow the dark palette. The store blueprint seeds a customer care list and a contact prompt beside the ordering, delivery, repairs, contact and terms pages, the newest pieces beside search results, and in the footer the shop's telephone and the letters from the workshop, each hidden where the page already says the same; the contact page now names the letters' address.
+
+### Patch Changes
+
+- Widget areas on the public site (L30). `cogenta serve` resolves the widgets of every page it renders (entries, term and date archives, search, forms), decides their visibility for the real request, reads their data through the permission-checked gateway, and either hands them to a theme that places them itself (`widgetAreas` export, contract D `theme@1.6`) or places them around the theme's output. It mounts `/api/widgets`, serves date archives at `/archive/{collection}/{year}/{month}`, follows widget dropdowns through `/_cogenta/go` (same-site paths only), includes widgets in backups and clears them on a sample-data reset. Headings of running text now carry an `id`, so a table of contents can link to them.
+- Updated dependencies [`58630a9`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb), [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9), `41d2036`]:
+  - @cogenta/theme-kit@0.4.0
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+
 ## 1.1.3
 
 ### Patch Changes

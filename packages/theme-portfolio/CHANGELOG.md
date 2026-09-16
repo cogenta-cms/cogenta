@@ -1,5 +1,69 @@
 # @cogenta/theme-portfolio
 
+## 1.2.0
+
+### Minor Changes
+
+- [`c1c6ec9`](https://github.com/cogenta-cms/cogenta/commit/c1c6ec9c8128931e1f8cedb59db62c547de0174c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The Portfolio theme is redesigned for an independent design studio. Archivo,
+  used across its width axis, sets everything: the studio's statement and
+  project titles wide and very large, the text and captions at normal width.
+  The page is black and white with one signal colour, international orange,
+  kept for the underline of the studio's address, focus rings and text
+  selection.
+  
+  What changes on a site:
+  
+  - The header is one row: the studio's name, its tagline and three or four
+    words of navigation. On a phone the navigation opens as a CSS-only
+    full-height panel. The footer is a hairline, the name, the address note,
+    the menu, social links and the copyright line.
+  - A page that opens on a `hero` sets its title as the studio's statement,
+    across the page, with the subtitle and actions from the seventh column.
+  - A `grid` listing is the work grid: 3:2 covers edge to edge in an
+    asymmetric sequence of six (seven columns beside four with a drop, a full
+    row at 2:1, four beside seven), each with its title and a caption line of
+    client, discipline and year. The client is left out of the caption when the
+    title already names it. A `list` becomes an index of rows (title, client,
+    discipline, year), a `carousel` a scrolling strip of covers.
+  - An entry with a cover outside the `page` collection is set as a project:
+    the title, the summary as a statement, the lead visual at full width, then
+    a fact sheet in four columns (the year, then each taxonomy of the entry,
+    such as client, disciplines and team, with terms linked to their archives).
+    Prose over 110 words runs in two columns on wide screens, and figures and
+    galleries keep their own ratios, so a case study reads as a sequence of
+    mixed image shapes.
+  - A taxonomy archive is an index of the work filed under the term, with each
+    project's summary and year.
+  - `featureGrid` is a typographic list (rows with a description, or names in
+    columns), `cta` the studio's address set very large with an orange
+    underline, `quote` a client's line set large, `testimonial` a paragraph to
+    be read, `faq` answers set open, `accordion` ruled notes, `stats` and
+    `statCounter` figures between hairlines, `pricingTable` engagements as a
+    ruled table, `logos` and `logoStrip` marks on plates, `gallery` pictures at
+    their own shapes, `embed` a film at the size of a picture. Arrow links carry
+    one continuous underline under their words.
+  - The dark palette is designed on true black with the signal kept, and
+    pictures are dimmed slightly. No gradient, shadow on images, hover lift,
+    keyframe or scroll-driven animation remains; transitions are capped at
+    150 ms.
+  
+  Class names are new throughout, so custom CSS written against the previous
+  markup needs updating. An existing site keeps the fonts and colours of its
+  current skin until that skin is updated: the theme reads its typeface and
+  palette from the skin, so copy this theme's `tokens.json` into the site's
+  `theme.tokens.json` (or set the skin's sans to Archivo and its accent to
+  `#ff4f00`) to get the new typography and palette.
+
+- The portfolio theme now sets widget areas in its own register (contract D `theme@1.6`): it exports `widgetAreas`, opens its footer on a tier of widget columns right under the footer's hairline, on the footer's twelve columns (one column alone is set like the theme's contact block, a call to action's heading at the size of the contact line), and styles the host's `cg-sidebar-layout` on the page's own grid: the content on the first eight columns, the widgets on the last three, the columns the header's navigation and the footer's profiles already stand on. Every widget opens like a block of the theme, a hairline in ink and a small sentence-case label; lists are ruled rows like the index of work, the page being read underlined in the signal; work in a widget keeps its 3:2 cover, and before or after the content it is a row of covers across the grid that becomes a scrolling strip on a phone; a call to action is the theme's arrow link, never a second filled rectangle; headings and quotations stay in Archivo instead of the host floor's serif. Inside the content column a project, an archive, running text and the work grid keep their proportions on eight columns, and the first section keeps its opening space. The host-rendered search page is now set in the theme's register on the page's edges: its title at the size of an archive title with the count under it, the form as a baseline field, the results as ruled rows with the date under the title and the statement beside it. The portfolio blueprint seeds the widgets: after a project, the three projects that share the most with it at their covers; beside the index of a discipline, a client or a member of the team, the other terms of that taxonomy, and the disciplines beside search results; in the footer, the studio's invitation to new work on every page that does not already end on one. No column is placed beside a project.
+
+### Patch Changes
+
+- Widget areas on the public site (L30). `cogenta serve` resolves the widgets of every page it renders (entries, term and date archives, search, forms), decides their visibility for the real request, reads their data through the permission-checked gateway, and either hands them to a theme that places them itself (`widgetAreas` export, contract D `theme@1.6`) or places them around the theme's output. It mounts `/api/widgets`, serves date archives at `/archive/{collection}/{year}/{month}`, follows widget dropdowns through `/_cogenta/go` (same-site paths only), includes widgets in backups and clears them on a sample-data reset. Headings of running text now carry an `id`, so a table of contents can link to them.
+- Updated dependencies [`58630a9`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb), [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9), `41d2036`]:
+  - @cogenta/theme-kit@0.4.0
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+
 ## 1.1.3
 
 ### Patch Changes

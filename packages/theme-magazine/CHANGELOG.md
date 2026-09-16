@@ -1,5 +1,76 @@
 # @cogenta/theme-magazine
 
+## 1.2.0
+
+### Minor Changes
+
+- [`91248bc`](https://github.com/cogenta-cms/cogenta/commit/91248bc57b81216e6e2b9a7d49ec4b6649eaba1b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The Magazine theme is redesigned as a serious news and culture daily: Fraunces
+  for the nameplate and every headline, Source Serif 4 for the text, and Libre
+  Franklin for kickers, bylines, dates, navigation and captions, on white
+  newsprint in black ink with one editorial red kept for section kickers and a
+  few rules.
+  
+  What changes on a site:
+  
+  - The masthead has three rows: a thin bar with today's date, the tagline, the
+    header action and the light/dark control; the nameplate, centred; and the
+    sections in spaced capitals between a double rule and a hairline. On a phone
+    the sections open as a CSS-only full-height panel and the header action stays
+    visible in the bar.
+  - A page that opens on an untitled `grid` listing is set as a front page: the
+    first story across eight columns with its photograph, three briefs beside it
+    behind a column rule, and the next stories in a row of four divided by
+    hairlines. A titled `grid` becomes a section rail, a `carousel` becomes a
+    strip of columns (the opinion strip, with the columnist in the kicker), and a
+    `list` becomes a numbered ranked list. Kickers come from a plain-text
+    `kicker` field (or `section`/`category`/`topic` when they hold text); a
+    taxonomy id is never shown.
+  - An entry with a date, a standfirst, a cover or terms is set as an article:
+    its section term as a red kicker linking to its front, a very large headline,
+    an italic standfirst, a byline built from `author`/`authors` taxonomy terms
+    (each linked to its archive) and the date between hairlines, then the lead
+    photograph. When the body opens with a `mediaFigure`, that figure, with its
+    caption and credit, is the lead photograph instead of the uncaptioned cover.
+    The text sits in a 66-character column with display subheads, pull quotes
+    hanging to its left, and a two-line drop cap where the browser supports a
+    true initial letter.
+  - A taxonomy archive is set as a section front in type: the term very large on
+    a double rule, then the same lead, briefs and row composition.
+  - `featureGrid` is a contents panel with column rules and no icons, `cta` an
+    appeal between a double rule and its actions, `faq` a reader's guide set
+    open, `accordion` collapsible ruled notes, `stats` figures between rules,
+    `statCounter` a ruled table, `pricingTable` subscription rates as a ruled
+    table, `logos` and `logoStrip` marks in one tone, `gallery` a picture spread.
+  - The colophon repeats the nameplate over four dense columns and a legal line
+    with the copyright year. The dark palette is designed on ink with the red
+    lifted for contrast, and photographs are dimmed slightly on ink.
+  - Every scroll-driven entrance animation is gone, so a full-page capture, a
+    print or a crawler sees the whole page. No shadow, gradient, pill or hover
+    lift remains; transitions are capped at 150 ms.
+  
+  Class names are new throughout, so custom CSS written against the previous
+  markup needs updating. An existing site keeps the fonts and colours of its
+  current skin until that skin is updated: the theme reads the display and
+  interface faces and the palette from the skin, so copy this theme's
+  `tokens.json` into the site's `theme.tokens.json` (or set the skin's serif to
+  Fraunces and its sans to Libre Franklin) to get the new typography and palette.
+
+- Widget areas set in the magazine's register (contract D `theme@1.6`, L30): the sidebar is a rail of labels on heavy rules beside a story, a section front or search results, with headlines in the display face and the membership pitch on a rule of editorial red; stories under an article run as a strip between column rules; the footer columns sit inside the colophon, under the name. The theme exports `widgetAreas`.
+
+### Patch Changes
+
+- Widget areas on the public site (L30). `cogenta serve` resolves the widgets of every page it renders (entries, term and date archives, search, forms), decides their visibility for the real request, reads their data through the permission-checked gateway, and either hands them to a theme that places them itself (`widgetAreas` export, contract D `theme@1.6`) or places them around the theme's output. It mounts `/api/widgets`, serves date archives at `/archive/{collection}/{year}/{month}`, follows widget dropdowns through `/_cogenta/go` (same-site paths only), includes widgets in backups and clears them on a sample-data reset. Headings of running text now carry an `id`, so a table of contents can link to them.
+
+- [`5e76281`](https://github.com/cogenta-cms/cogenta/commit/5e76281d8a1f058f1220c751f408412375bfa329) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A cover without a picture now spans the page, so the rule under it runs the full width like every other rule instead of stopping short at column 10.
+
+- [`6513fc6`](https://github.com/cogenta-cms/cogenta/commit/6513fc665b7f173c266634e1a0bbe79d286719a9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Magazine sets an article, a text page and the search results on a centred reading axis instead of a column that left a third of the screen empty on the right. A page of running text (About, Standards) is no longer set as a news story because it has a reading time: no byline rule, no "min read", no drop cap. `cogenta serve`'s search page gives each result its summary and publication date plus a result count, and the search and form pages now carry the site's tagline, social links and footer note like every other public page.
+
+- [`3d785c2`](https://github.com/cogenta-cms/cogenta/commit/3d785c2bb044a397aab259d12ec301f913a3bb1e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The search results page sets its result count inside the title, so it lands wherever a theme places the title, and carries a zero-specificity floor stylesheet (skin tokens only) so a theme that does not style the summary, date or page width still shows a readable page instead of a title against the window edge.
+- Updated dependencies [`58630a9`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb), [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9), `41d2036`]:
+  - @cogenta/theme-kit@0.4.0
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+
 ## 1.1.3
 
 ### Patch Changes

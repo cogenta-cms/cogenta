@@ -1,5 +1,67 @@
 # @cogenta/theme-saas
 
+## 0.4.0
+
+### Minor Changes
+
+- [`36bd4c4`](https://github.com/cogenta-cms/cogenta/commit/36bd4c44694a299ac0963327e6ff185cc7a66d1a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The SaaS theme is redesigned for a serious piece of business software: white
+  and a structured grey scale, a near-black ink and one signal blue kept for
+  links, focus and the primary button, with Geist for everything a visitor reads
+  and Geist Mono for what software prints (eyebrows, dates in an index, units,
+  step numbers, the label of a recommended plan).
+  
+  What changes on a site:
+  
+  - The hero is left-aligned: a short title set large, the subtitle and the
+    actions under it, then the product screenshot across the twelve columns in
+    a single hairline frame. The mesh background, the badge, the offset shapes
+    and the glows are gone. On a phone the screenshot is cropped to a readable
+    part of the interface.
+  - `featureGrid` has two readings chosen from its data: with icons, a grid of
+    three columns with a small stroke icon beside each title and no tiles; with
+    no icons, a numbered sequence of steps hanging from hairlines.
+  - `pricingTable` becomes a ruled comparison. Feature lines written as
+    `Label: value` become rows with one value per plan, and plain lines become
+    rows checked where a plan lists them. Plans that cannot be compared are
+    shown as ruled columns with their own lists. The recommended plan is marked
+    with a "Recommended" label and a rule in ink, never a tinted card. On a
+    phone the table scrolls sideways inside its own region.
+  - A `collectionList` in the `list` layout becomes a product tour (screenshot
+    and words, alternating sides) when its entries have pictures, and a ruled
+    index with the date in Geist Mono when they do not, as a changelog prints
+    it. The `grid` and `carousel` layouts are columns without cards.
+  - `stats` is a ruled row of figures with their units, `statCounter` a ruled
+    strip, `testimonial` one customer's words with a framed portrait, `faq` two
+    columns of open answers, `accordion` ruled rows, `logoStrip` a caption above
+    wordmarks set at one height and greyed (inverted in the dark), and `cta` a
+    sober close under a hairline. A page without a hero opens on its title, the
+    entry's date and summary, and its screenshot.
+  - The header is a sticky bar on the page's own ground under a hairline, with
+    the header action as the one filled button and a CSS-only mobile menu. The
+    footer is organised in columns: an unlinked item (`submenu-placeholder`) in
+    the footer menu starts a column and names it.
+  - The dark palette is designed: a near-black ground taken from the ink,
+    lightness steps for bands and panels, a lifted blue, and screenshots dimmed
+    slightly. No shadow, gradient, blur, pill or scroll animation remains;
+    transitions are capped at 150 ms.
+  
+  Class names are new throughout (`cs-` prefix), so custom CSS written against
+  the previous markup needs updating. An existing site keeps the fonts and
+  colours of its current skin until that skin is updated: the theme reads both
+  from the skin, so copy this theme's `tokens.json` into the site's
+  `theme.tokens.json` (or set the skin's sans to Geist and its mono to Geist
+  Mono) to get the new typography and palette.
+
+- The saas theme now sets widget areas in its own register (contract D `theme@1.6`): it exports `widgetAreas`, places the footer widget columns inside its footer on the same twelve columns, and styles the host's `cg-sidebar-layout` as a quiet side column beside changelog entries, feature pages, archives and search results, parted from the content by a hairline, with small semibold labels, dates and counts in Geist Mono, the column search as a hairline control and the call to action as the theme's one primary button; on a phone the column stacks under the content on the page's own gutters. Blocks inside the content column keep the page edges and a full reading measure, and the search page title keeps its style there. The saas blueprint seeds that column: a search box, the changelog by month, recently shipped releases, resource links and a demo call to action, each shown only where the page does not already list the same thing.
+
+### Patch Changes
+
+- Widget areas on the public site (L30). `cogenta serve` resolves the widgets of every page it renders (entries, term and date archives, search, forms), decides their visibility for the real request, reads their data through the permission-checked gateway, and either hands them to a theme that places them itself (`widgetAreas` export, contract D `theme@1.6`) or places them around the theme's output. It mounts `/api/widgets`, serves date archives at `/archive/{collection}/{year}/{month}`, follows widget dropdowns through `/_cogenta/go` (same-site paths only), includes widgets in backups and clears them on a sample-data reset. Headings of running text now carry an `id`, so a table of contents can link to them.
+- Updated dependencies [`58630a9`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb), [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9), `41d2036`]:
+  - @cogenta/theme-kit@0.4.0
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+
 ## 0.3.3
 
 ### Patch Changes

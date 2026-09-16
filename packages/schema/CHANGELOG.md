@@ -1,5 +1,12 @@
 # @cogenta/schema
 
+## 0.5.3
+
+### Patch Changes
+
+- Updated dependencies [`166b71e`, [`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0), `8153b2d`]:
+  - @cogenta/core@0.10.0
+
 ## 0.5.2
 
 ### Patch Changes

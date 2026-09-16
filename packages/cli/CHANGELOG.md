@@ -1,5 +1,103 @@
 # @cogenta/cli
 
+## 0.10.0
+
+### Minor Changes
+
+- [`04596cc`](https://github.com/cogenta-cms/cogenta/commit/04596ccc457331b1ea4881ab0b3ab3f09f8b9867) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta dev` now restarts itself, in-process and on the same port, when `cogenta.schema.*` changes, so a schema written from the admin (a site plan, sample data) is served without a manual restart. A schema that no longer loads leaves the server down until the next save instead of exiting. `cogenta serve` is unchanged and never restarts implicitly.
+
+- Widget areas on the public site (L30). `cogenta serve` resolves the widgets of every page it renders (entries, term and date archives, search, forms), decides their visibility for the real request, reads their data through the permission-checked gateway, and either hands them to a theme that places them itself (`widgetAreas` export, contract D `theme@1.6`) or places them around the theme's output. It mounts `/api/widgets`, serves date archives at `/archive/{collection}/{year}/{month}`, follows widget dropdowns through `/_cogenta/go` (same-site paths only), includes widgets in backups and clears them on a sample-data reset. Headings of running text now carry an `id`, so a table of contents can link to them.
+
+- [`6513fc6`](https://github.com/cogenta-cms/cogenta/commit/6513fc665b7f173c266634e1a0bbe79d286719a9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Magazine sets an article, a text page and the search results on a centred reading axis instead of a column that left a third of the screen empty on the right. A page of running text (About, Standards) is no longer set as a news story because it has a reading time: no byline rule, no "min read", no drop cap. `cogenta serve`'s search page gives each result its summary and publication date plus a result count, and the search and form pages now carry the site's tagline, social links and footer note like every other public page.
+
+- Plugins actually run (L31 step 1). A plugin's code now lives in a file its manifest names (`main`, `plugin.js` by default), which `readPluginCode` reads and a signature covers — signing a plugin covers its code and not only its manifest, so changing one character of it invalidates the signature. The worker protocol gains a structured invocation: `runPlugin(…, { invoke, input })` calls one named handler of the plugin with a payload, instead of a caller building a code string per call. A site holds its plugins in one directory per plugin under `plugins/` (`loadInstalledPlugins`, configurable with `plugins.dir`, switched off entirely with `plugins.enabled: false`), and `cogenta plugin list|check|grant|revoke|run` is the hand path onto all of it — running a plugin against the site's real database and storage, with only the capabilities it has really been granted. `cogenta serve` still calls no plugin: an extension point (content events, a public route, a scheduled job) is the next step.
+
+- Widgets in the sample data (L30). A blueprint content pack can declare `widgets` (`BlueprintWidget`, seeded by `seedBlueprintWidgets` through the real widget store), and the magazine blueprint places a rail (search, latest stories, sections, the membership pitch) beside its stories, section fronts and search results, with related stories under each article. `npm create cogenta` seeds them with the menus; importing a theme's sample data from the admin fills empty widget areas and keeps an area the site already fills (`widgets` in the preview, warning `widgets-kept`), and a reset counts the widgets it deletes. `cogenta serve` now draws the sidebar beside the content of every reading page (an article, an archive, search results, a form) in one markup, `cg-sidebar-layout`, with the entry's comments in the same column; the home page and a page opening on its own hero keep their full width.
+
+- [`78989f1`](https://github.com/cogenta-cms/cogenta/commit/78989f11702f3c4e9dfdd0328fc50099fceabd64) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Choosing a theme can now bring its own look with it.** `POST /api/theme/activate`
+  switches the site's theme and, when `applySkin` is true, applies that theme's
+  own typography and colours in the same write (validated against contract D
+  first). The appearance screen asks before selecting a theme: use the complete
+  theme, or keep the site's current colours and fonts and change only the layout.
+  Before, selecting a theme always kept the site's skin, so a newly chosen theme
+  never showed the fonts and palette it was designed with.
+
+- [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Contract D `theme@1.5`: an entry page can show the entry's own fields.**
+  `PageEntryMeta` gains an optional `fields` record carrying the entry's plain
+  values (text, slug, number, boolean, date, datetime, select, color), so a
+  product page can finally print its price and whether it is in stock, and a
+  dish its price. Rich text, media, relations and blocks are never included.
+  Strictly additive: a `theme@1.4` theme ignores the field and renders exactly
+  as before.
+
+- [`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Apply a theme together with its starter's sample data (L28). `POST /api/theme/sample-data/preview` computes, without writing, what importing the sample data would do — collections added or found incompatible, slugs the site already owns, menus and settings filled or kept, media added, and for a reset exactly what is deleted — as coded warnings. `POST /api/theme/sample-data/apply` recomputes that plan and applies it: `keep` is strictly additive, `reset` takes and verifies a backup first and requires the site name typed as confirmation. Both rewrite the schema, so applying is limited to `cogenta dev`. `GET /api/theme` gains `sampleData: { themes, writable }`. New error codes `THEME_SAMPLE_DATA_UNAVAILABLE` and `THEME_SAMPLE_DATA_CONFIRMATION_INVALID`.
+
+### Patch Changes
+
+- [`22b9cc7`](https://github.com/cogenta-cms/cogenta/commit/22b9cc7b5f60e3e5f1513a7eadc6e4dd15eee712) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The appearance gallery now previews each theme with its own typography and
+  colours. Every card used to render with the site's current skin, so all the
+  themes shared one palette and one typeface and looked alike; only the active
+  theme's card still shows the site as it really looks.
+  
+  The preview page itself is now a credible site (a fictional architecture
+  practice with a hero, figures, services, news, a client quote, questions and a
+  closing call to action) instead of three blocks of copy about the CMS.
+
+- [`7711371`](https://github.com/cogenta-cms/cogenta/commit/77113713a5be32d462995565474b0fa546653147) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Importing sample data while keeping the site now adds the sample's missing links after the site's own in a header or footer menu that already exists, instead of leaving the imported sections unreachable. Nothing of the site's menu is removed or reordered; a header button stays as it is. The preview reports it as a `merge` outcome with a `menu-merged` warning.
+
+- [`3d785c2`](https://github.com/cogenta-cms/cogenta/commit/3d785c2bb044a397aab259d12ec301f913a3bb1e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The search results page sets its result count inside the title, so it lands wherever a theme places the title, and carries a zero-specificity floor stylesheet (skin tokens only) so a theme that does not style the summary, date or page width still shows a readable page instead of a title against the window edge.
+
+- [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A typeface a skin names now loads. `@cogenta/render` gains `WEB_FONTS`, a closed catalogue of Google Fonts families whose `css2` requests were each verified, and `renderSkinCss` opens with an `@import` for every catalogue family a skin's `font.sans`/`font.serif`/`font.mono` stacks lead with. `cogenta serve` drops such an import when the theme already loads the same family. The skin generator is told which families load, so a personalisation no longer falls back to Georgia or Times.
+
+- [`fd13b07`](https://github.com/cogenta-cms/cogenta/commit/fd13b07be98919c51b2b576a3fb8e43ac69a884d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Category, tag and author archive pages now carry the same site chrome as every
+  other page: the tagline, the footer note and the social links set in the
+  admin. They were never passed to the theme there, so an archive's header and
+  footer were missing them.
+  
+  An article whose body is made of prose blocks, rather than one rich text
+  field, now shows its reading time in the entry header too: it was only ever
+  counted from a rich text field, so most article pages never had one.
+
+- [`2b5a543`](https://github.com/cogenta-cms/cogenta/commit/2b5a5430fc617fdf3d10d24a0a957e2ad72c6ae8) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Theme typefaces finally load.** `cogenta serve` joins the skin's custom
+  properties and the active theme's stylesheet into one sheet, skin first — which
+  put every theme's Google Fonts `@import` after a rule, where CSS silently
+  ignores it. No theme had ever rendered in its own typeface: Fraunces, Inter
+  Tight, Cormorant and the rest all fell back to the system font. Remote
+  `@import` statements are now hoisted to the top of the joined sheet.
+- Updated dependencies [`ffbfcc3`, `58630a9`, [`050485d`](https://github.com/cogenta-cms/cogenta/commit/050485d05079937ec90afc4e9e3d28c7ff1d0c63), [`5e76281`](https://github.com/cogenta-cms/cogenta/commit/5e76281d8a1f058f1220c751f408412375bfa329), [`6513fc6`](https://github.com/cogenta-cms/cogenta/commit/6513fc665b7f173c266634e1a0bbe79d286719a9), `166b71e`, [`7711371`](https://github.com/cogenta-cms/cogenta/commit/77113713a5be32d462995565474b0fa546653147), `dc78c2c`, [`3d785c2`](https://github.com/cogenta-cms/cogenta/commit/3d785c2bb044a397aab259d12ec301f913a3bb1e), [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb), [`ae9338b`](https://github.com/cogenta-cms/cogenta/commit/ae9338b6e95bdbe5d39d8a3db6a954060f9f1546), [`78989f1`](https://github.com/cogenta-cms/cogenta/commit/78989f11702f3c4e9dfdd0328fc50099fceabd64), [`34fc60c`](https://github.com/cogenta-cms/cogenta/commit/34fc60ce348c28ddc1f496099bcc77b6f85a03e9), `d6bbcaa`, [`e0639e3`](https://github.com/cogenta-cms/cogenta/commit/e0639e35c80f7f2d2731baab02767ab9f3534148), `e5d3ac7`, [`9b774fc`](https://github.com/cogenta-cms/cogenta/commit/9b774fc00833f1a4bcfdc4cd384737c2c798214f), `c283598`, [`205e165`](https://github.com/cogenta-cms/cogenta/commit/205e165e5b8b2a64564bc6f35d344eb8d7d95496), `9945340`, [`b8ad25e`](https://github.com/cogenta-cms/cogenta/commit/b8ad25e6310470928db7291c2bb818bf91eb727e), `fa77567`, [`9102637`](https://github.com/cogenta-cms/cogenta/commit/9102637f2cf5933894729bd70d4b6af06b30ce80), `ee5bd9b`, [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9), `41d2036`, [`91248bc`](https://github.com/cogenta-cms/cogenta/commit/91248bc57b81216e6e2b9a7d49ec4b6649eaba1b), `af98ae4`, [`c1c6ec9`](https://github.com/cogenta-cms/cogenta/commit/c1c6ec9c8128931e1f8cedb59db62c547de0174c), `b9c61fe`, [`b8fe0c9`](https://github.com/cogenta-cms/cogenta/commit/b8fe0c9fbfa3f77244890e16b7dd7f28a54a2c14), `62c69de`, [`36bd4c4`](https://github.com/cogenta-cms/cogenta/commit/36bd4c44694a299ac0963327e6ff185cc7a66d1a), `2b296b3`, [`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0), `8153b2d`]:
+  - @cogenta/api@2.5.0
+  - @cogenta/theme-kit@0.4.0
+  - @cogenta/theme-canonical@1.2.0
+  - @cogenta/theme-blog@0.4.0
+  - @cogenta/theme-magazine@1.2.0
+  - @cogenta/theme-portfolio@1.2.0
+  - @cogenta/theme-entreprise@1.2.0
+  - @cogenta/theme-ecommerce@1.2.0
+  - @cogenta/theme-saas@0.4.0
+  - @cogenta/theme-restaurant@0.4.0
+  - @cogenta/theme-association@0.4.0
+  - @cogenta/agents@0.7.1
+  - @cogenta/plugins@0.5.0
+  - @cogenta/core@0.10.0
+  - @cogenta/starters@0.1.0
+  - @cogenta/widgets@0.1.0
+  - @cogenta/render@0.3.0
+  - @cogenta/theme-docs@0.4.0
+  - @cogenta/agents-builtin@0.5.1
+  - @cogenta/channels@0.3.6
+  - @cogenta/mcp@0.3.5
+  - @cogenta/analytics@0.3.5
+  - @cogenta/auth@0.5.4
+  - @cogenta/blocks@1.0.5
+  - @cogenta/comments@0.2.5
+  - @cogenta/commerce@0.5.1
+  - @cogenta/export@0.2.5
+  - @cogenta/forms@0.2.6
+  - @cogenta/import@0.2.5
+  - @cogenta/observability@0.2.5
+  - @cogenta/schema@0.5.3
+  - @cogenta/seo@0.3.5
+
 ## 0.9.0
 
 ### Minor Changes

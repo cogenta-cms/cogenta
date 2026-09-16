@@ -1,5 +1,32 @@
 # @cogenta/theme-kit
 
+## 0.4.0
+
+### Minor Changes
+
+- [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - **Contract D `theme@1.5`: an entry page can show the entry's own fields.**
+  `PageEntryMeta` gains an optional `fields` record carrying the entry's plain
+  values (text, slug, number, boolean, date, datetime, select, color), so a
+  product page can finally print its price and whether it is in stock, and a
+  dish its price. Rich text, media, relations and blocks are never included.
+  Strictly additive: a `theme@1.4` theme ignores the field and renders exactly
+  as before.
+
+- Contract D `theme@1.6` (L30): widget areas. `ChromeInput.widgets` carries the footer columns to a theme that declares `widgetAreas`, and `PageContent.widgets` the areas a theme adds of its own, as finished view models (`ResolvedWidget`: text, image, gallery, embed, quote, call to action, links, contact, about, entries, terms, tag cloud, archives, comments, search, social, form, table of contents, calendar). `renderWidgetArea` and `renderFooterWidgets` are the shared rendering every theme can use. The standard page areas are placed by the host in one markup every theme styles (`cg-sidebar-layout`: the sidebar beside the content of a reading page, bands elsewhere). Both fields are optional: a theme that ignores them renders as before.
+
+### Patch Changes
+
+- Widget areas on the public site (L30). `cogenta serve` resolves the widgets of every page it renders (entries, term and date archives, search, forms), decides their visibility for the real request, reads their data through the permission-checked gateway, and either hands them to a theme that places them itself (`widgetAreas` export, contract D `theme@1.6`) or places them around the theme's output. It mounts `/api/widgets`, serves date archives at `/archive/{collection}/{year}/{month}`, follows widget dropdowns through `/_cogenta/go` (same-site paths only), includes widgets in backups and clears them on a sample-data reset. Headings of running text now carry an `id`, so a table of contents can link to them.
+
+- [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The GitHub, Mastodon, Bluesky, TikTok, Threads and Pinterest icons in
+  `renderSocialLinks` are now the platforms' real silhouettes (Simple Icons,
+  CC0-1.0) instead of shapes built from circles and rectangles, which read as a
+  blob, a speech bubble or a stray letter in every theme's footer. Markup is
+  unchanged apart from the icon paths.
+- Updated dependencies [[`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37)]:
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+
 ## 0.3.3
 
 ### Patch Changes

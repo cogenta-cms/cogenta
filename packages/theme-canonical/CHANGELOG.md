@@ -1,5 +1,75 @@
 # @cogenta/theme-canonical
 
+## 1.2.0
+
+### Minor Changes
+
+- [`9b774fc`](https://github.com/cogenta-cms/cogenta/commit/9b774fc00833f1a4bcfdc4cd384737c2c798214f) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The default theme is redesigned as an exemplary, sector-neutral default: pure
+  neutrals, a near-black ink and one deep blue kept for links and the focus ring,
+  Instrument Sans for everything a visitor reads and every heading, and
+  Instrument Serif for the one display line of a page (a hero title, a page
+  title) and for quotations. Every page is laid on a twelve-column grid inside a
+  72rem page, from one left edge, with one vertical rhythm between blocks.
+  
+  What changes on a site:
+  
+  - The hero sets its title large in the display face, the subtitle and the
+    actions under it, then its photograph across the page. The tinted disc
+    behind the picture, the pill badge, the rounded shadowed image and the
+    fade-in on scroll are gone. A primary action is a button in ink; a secondary
+    action is an underlined link with an arrow.
+  - A titled section opens under a rule in ink. `featureGrid`, `stats` and
+    `pricingTable` are columns under hairlines rather than cards; `faq` sets its
+    title beside the questions on a wide screen, `accordion` under them, both
+    with a plus that turns into a minus. `statCounter` shows its figures in the
+    display face. `cta` is a band a step off the page with the actions at the
+    end of the row. `testimonial` and `quote` are set against the page, with
+    real quotation marks. `logos` and `logoStrip` show wordmarks in greyscale
+    (turned light in the dark). An `embed` waiting for consent is a short note
+    on a band instead of a frame-sized grey box.
+  - `pricingTable` lines prices, feature lists and buttons up across plans, says
+    "Recommended" on the highlighted plan, and gives an unset action the filled
+    button on the recommended plan and an outline on the others.
+  - `collectionList`: `list` is a dated index; `grid` and `carousel` open each
+    entry on its picture only when every entry has one, and are set in type
+    alone otherwise, so no row shows a hole. Dates read as long dates in the
+    page's language everywhere, the term archive included.
+  - The entry header, the term archive, the search page, public forms and the
+    comment thread are designed on the same grid.
+  - The header is a bar on the page's own ground that scrolls away, with the
+    header action as its one filled button, the light/dark control, and a
+    CSS-only menu on a phone (a visible "Menu" control, the action at the foot of
+    the panel). The footer is a band with the site's name, tagline, note and
+    social links beside the footer menu in columns (an unlinked menu item starts
+    a column and names it), and a legal line with the year and the site's name.
+  - The dark palette is designed: a near-black ground taken from the skin's own
+    ink, lightness steps for bands and the footer, a lifted accent, and
+    photographs dimmed slightly. No shadow, gradient, blur, pill or scroll
+    animation remains; transitions are capped at 150 ms.
+  
+  Class names a host or a test relies on are unchanged (`cg-main`,
+  `cg-page__title`, `cg-site-header`, `cg-skip-link`, every `data-block`,
+  `data-block-key` and `data-field` hook of the page builder); the chrome's inner
+  markup and a few block internals are new, so custom CSS written against them
+  may need updating. `footerGroups` is a new export.
+  
+  The theme's stylesheet now loads Instrument Sans and Instrument Serif from
+  Google Fonts, and the default skin (`tokens.json`, which new `blank` sites
+  copy) names them. An existing site keeps the fonts and colours of its current
+  skin until that skin is updated: copy this theme's `tokens.json` into the
+  site's `theme.tokens.json`, or set the skin's sans to Instrument Sans and its
+  serif to Instrument Serif, to get the new typography and palette.
+
+- The reference theme now declares its widget areas (`theme@1.6`, `widgetAreas`) and sets every widget in its own register. On an entry, an archive, search results or a form page, the sidebar sits on the twelve-column grid beside the content (eight columns of content, four for the sidebar, a double gutter between them), its first rule level with the page's first line; under 64rem it stacks under the content, in as many columns as the width holds. Each widget opens under a rule in ink like a section title; lists, terms, archives and recent entries run between hairlines with dates and counts in muted tabular figures; a quotation is set in the display face with a hung opening mark; a call to action sits on the band with its action as the one filled control in ink; tag clouds are words at steps of the type scale, calendars a table of figures, contact hours a ledger, forms and search boxes use the theme's own controls. The bands before and after the content follow the section rhythm, and in a band recent or related entries sit side by side. Footer widget columns are placed inside the theme's own footer, between the footer menu and the legal line, and the footer renders exactly as before when no footer column has a widget. Inside the content column, blocks, titles, forms and comments align to the column edges (the page inset is zeroed there), and the one rule that read a direct child of `<main>` (a form error) still applies inside the sidebar layout. The search results page also gets its count, excerpts and dates in the theme's muted ink, which now follows the dark scheme.
+
+### Patch Changes
+
+- Widget areas on the public site (L30). `cogenta serve` resolves the widgets of every page it renders (entries, term and date archives, search, forms), decides their visibility for the real request, reads their data through the permission-checked gateway, and either hands them to a theme that places them itself (`widgetAreas` export, contract D `theme@1.6`) or places them around the theme's output. It mounts `/api/widgets`, serves date archives at `/archive/{collection}/{year}/{month}`, follows widget dropdowns through `/_cogenta/go` (same-site paths only), includes widgets in backups and clears them on a sample-data reset. Headings of running text now carry an `id`, so a table of contents can link to them.
+- Updated dependencies [`58630a9`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb), [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9), `41d2036`]:
+  - @cogenta/theme-kit@0.4.0
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+
 ## 1.1.3
 
 ### Patch Changes

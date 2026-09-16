@@ -1,5 +1,13 @@
 # @cogenta/agents-builtin
 
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [[`050485d`](https://github.com/cogenta-cms/cogenta/commit/050485d05079937ec90afc4e9e3d28c7ff1d0c63), `166b71e`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0), `8153b2d`]:
+  - @cogenta/agents@0.7.1
+  - @cogenta/core@0.10.0
+
 ## 0.5.0
 
 ### Minor Changes

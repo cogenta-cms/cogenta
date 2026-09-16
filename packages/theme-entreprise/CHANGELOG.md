@@ -1,5 +1,57 @@
 # @cogenta/theme-entreprise
 
+## 1.2.0
+
+### Minor Changes
+
+- [`9102637`](https://github.com/cogenta-cms/cogenta/commit/9102637f2cf5933894729bd70d4b6af06b30ce80) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The Entreprise theme is redesigned for a management consultancy or any firm
+  that sells judgement: an editorial twelve-column grid, Newsreader for titles
+  and Hanken Grotesk for text, hairlines instead of boxes and shadows, and one
+  deep green accent spent sparingly.
+  
+  What a site owner will see:
+  
+  - A typographic hero: a small-capital line under a short rule, a large serif
+    title, then the introduction and actions beside a frankly cropped photograph.
+  - `featureGrid` becomes a numbered list of practices (01, 02…) between
+    hairlines, with its title held in the left columns. Icons are no longer drawn.
+  - `stats` sets key figures in one row between vertical rules; `statCounter`
+    sets them as a ruled table beside its title.
+  - `collectionList` in the `list` layout shows alternating image and text rows
+    (a case-study register); `grid` is a three-column editorial index; an entry
+    without a picture becomes a typographic row rather than a card with a gap.
+  - `testimonial` is a large serif pull quote with a small black-and-white
+    portrait; `quote` is a quieter italic quotation in the reading column.
+  - `faq` keeps its title in view on the left while the questions scroll on the
+    right; `accordion` numbers its steps across the full width.
+  - `cta` is an ink band across the page; in dark mode it becomes a raised ink
+    surface between hairlines.
+  - `logoStrip` and `logos` show client marks in greyscale (lifted in dark mode);
+    `logos` is a ruled register whose column count fills whole rows.
+  - `prose` is a reading column whose second-level headings hang in the left
+    margin on wide screens.
+  - The footer is a colophon: name and tagline, footer links, the footer note
+    set as blocks (separate office addresses with blank lines and each first
+    line becomes a label), social icons, and a `© year name` legal line.
+  - Reading time is shown on an entry only when it is three minutes or more.
+  - The dark palette is redesigned on deep ink surfaces with ivory text.
+  
+  Your content is unchanged; every block keeps its contract. A site whose skin
+  still names the previous fonts (Archivo, Source Serif 4) keeps them until the
+  skin is updated: the theme's own `tokens.json` now names Newsreader and Hanken
+  Grotesk. Nothing moves or fades in on scroll any more, and no stylesheet uses
+  `animation-timeline`.
+
+- The entreprise theme now declares its widget areas (`theme@1.6`) and sets them in its own register: beside a case study, a practice, a sector archive or search results, the side column sits on the page's own gutters with each widget opening on an ink rule and a small-capitals label, work titles in the display serif, counts in tabular figures, and the call to discuss a mandate as the theme's one dark plane; under the text, selected work reads as an exhibit of three. The reading column keeps its hanging headings on a wide screen and stacks them above the text when narrower, the sidebar stacks under the content on mobile, footer widget columns are placed inside the theme's own footer, and rules that read a direct child of `<main>` still apply inside the sidebar layout. The search results page also gets its excerpts in the text face and a dark-aware result count. The `vitrine` blueprint seeds the widgets such a firm would have: sectors with counts, other case studies and the mandate call beside a case study, the other practices and a partner's contact details beside a practice with selected work under it, and a search box and sectors on a sector archive, never on the home page or the site's own pages.
+
+### Patch Changes
+
+- Widget areas on the public site (L30). `cogenta serve` resolves the widgets of every page it renders (entries, term and date archives, search, forms), decides their visibility for the real request, reads their data through the permission-checked gateway, and either hands them to a theme that places them itself (`widgetAreas` export, contract D `theme@1.6`) or places them around the theme's output. It mounts `/api/widgets`, serves date archives at `/archive/{collection}/{year}/{month}`, follows widget dropdowns through `/_cogenta/go` (same-site paths only), includes widgets in backups and clears them on a sample-data reset. Headings of running text now carry an `id`, so a table of contents can link to them.
+- Updated dependencies [`58630a9`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb), [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9), `41d2036`]:
+  - @cogenta/theme-kit@0.4.0
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+
 ## 1.1.3
 
 ### Patch Changes

@@ -1,5 +1,76 @@
 # @cogenta/theme-docs
 
+## 0.4.0
+
+### Minor Changes
+
+- [`205e165`](https://github.com/cogenta-cms/cogenta/commit/205e165e5b8b2a64564bc6f35d344eb8d7d95496) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The documentation theme is redesigned for first-class technical documentation:
+  white and a cool grey scale, a near-black ink and one deep petrol teal kept for
+  links, the page being read and focus, with IBM Plex Sans for everything a reader
+  reads and IBM Plex Mono for code.
+  
+  What changes on a site:
+  
+  - **A documentation page** has three columns on a wide screen: the navigation,
+    held in view as the page scrolls and grouped by section with the current page
+    marked; the article, with a breadcrumb, the title, the entry's summary under
+    it, and the date the page last changed; and "On this page", built from the
+    article's own headings. The table of contents goes below 80rem, and below
+    64rem the navigation folds into a disclosure at the top of the article that
+    names the current section and page. Previous and next links at the bottom
+    follow the documentation's reading order. The navigation now orders sections
+    by the smallest `order` they hold, so a section never jumps when two pages
+    were created in the same millisecond.
+  - **Running text** reads four shapes an editor can already write, and renders
+    them as documentation furniture. Every other theme keeps rendering the same
+    data as ordinary paragraphs and lists:
+    - a paragraph whose spans are all marked `code` is a code block; when its
+      first span is also bold, that span is the block's label (a file name, or
+      "Terminal"). Long lines scroll inside the block, comment lines are set as
+      comments, and in a shell example the `$ ` prompt cannot be selected and
+      program output is set apart;
+    - a blockquote opening on a bold "Note", "Tip", "Important", "Warning" or
+      "Caution" is a note (teal rule for notes and tips, ink rule otherwise);
+    - a bulleted list whose items all open on a span marked only `code` is a
+      reference table: the term, an optional italic type or default, and the
+      description, aligned in columns between hairlines;
+    - inline code holding a key or a key chord (`Ctrl+C`) is set as keys.
+    `h2` and `h3` headings get an id and link to themselves.
+  - **The home page hero** carries a large search field: a real `GET /search`
+    form, no script. The header carries a compact one, the top sections, and on a
+    phone a search link and a menu that opens without a script.
+  - `featureGrid` is short entries hanging from hairlines in up to four columns,
+    without icon tiles; a `collectionList` of `doc_page` entries is the whole
+    documentation in one column per section; other lists are ruled indexes or
+    columns of framed pictures. `faq` answers in the open beside its title,
+    `accordion` is ruled rows, `stats` and `statCounter` ruled figures in tabular
+    numerals, `pricingTable` plans side by side between hairlines, `cta` a close
+    between two rules, and `quote`/`testimonial` a quotation hanging from an ink
+    rule.
+  - The footer is organised in columns: an unlinked item
+    (`submenu-placeholder`) in the footer menu starts a column and names it. The
+    legal line prints the copyright year and the product's name.
+  - The dark palette is designed for reading code: a cool near-black ground, code
+    raised a step above it, soft white text and a lifted teal; diagrams are
+    dimmed slightly. No shadow, gradient, blur, pill or scroll animation remains,
+    and the search results and term archive pages align with the rest of the site.
+  
+  Class names are new throughout (`cd-` prefix), so custom CSS written against the
+  previous markup needs updating. An existing site keeps the fonts and colours of
+  its current skin until that skin is updated: the theme reads both from the skin,
+  so copy this theme's `tokens.json` into the site's `theme.tokens.json` (or set
+  the skin's sans to IBM Plex Sans and its mono to IBM Plex Mono) to get the new
+  typography and palette.
+
+- The documentation theme now declares its widget areas and sets them in its own register. On a documentation page the sidebar becomes the right-hand rail it shares with "On this page": the contents stay in view while the page is read and the widgets sit at the foot of the rail, level with the end of the article, so the docs grid never gains a fourth column; a page with no contents gives the rail to the widgets, between 64rem and 80rem they close the article's column, and on a phone they follow the page. Beside search results and archives the same rail sits at the page's right edge. Footer widget columns are placed inside the theme's footer, above the legal line, and search result summaries take the theme's muted ink in dark mode. The documentation blueprint seeds a "Need help?" list and the 2.4 upgrade note on doc pages, and a "Popular pages" list beside search results.
+
+### Patch Changes
+
+- Updated dependencies [`58630a9`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb), [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9), `41d2036`]:
+  - @cogenta/theme-kit@0.4.0
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+
 ## 0.3.3
 
 ### Patch Changes

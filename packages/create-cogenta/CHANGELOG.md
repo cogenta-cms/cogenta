@@ -1,5 +1,274 @@
 # create-cogenta
 
+## 0.6.0
+
+### Minor Changes
+
+- Widgets in the sample data (L30). A blueprint content pack can declare `widgets` (`BlueprintWidget`, seeded by `seedBlueprintWidgets` through the real widget store), and the magazine blueprint places a rail (search, latest stories, sections, the membership pitch) beside its stories, section fronts and search results, with related stories under each article. `npm create cogenta` seeds them with the menus; importing a theme's sample data from the admin fills empty widget areas and keeps an area the site already fills (`widgets` in the preview, warning `widgets-kept`), and a reset counts the widgets it deletes. `cogenta serve` now draws the sidebar beside the content of every reading page (an article, an archive, search results, a form) in one markup, `cg-sidebar-layout`, with the entry's comments in the same column; the home page and a page opening on its own hero keep their full width.
+
+### Patch Changes
+
+- [`4d296dd`](https://github.com/cogenta-cms/cogenta/commit/4d296dd86b74511bd2ef67e50d32cb0bf5e93257) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `association` blueprint now scaffolds a neighbourhood charity run from an
+  old library in a northern English town: a Thursday food bank, a homework club,
+  a community garden and a winter coat bank, with 312 volunteers and two
+  part-time staff. The site is named after the organisation the person typed, in
+  its copy, its volunteer's story and its email addresses.
+  
+  The home page opens on a photograph of the volunteers with the statement of
+  the cause and two actions (donate, volunteer), then last year's figures with a
+  sentence of context each, the four programmes, the next four events, a
+  volunteer's story with her photograph, where each pound goes, a monthly-gift
+  band that says what £5, £12 and £30 pay for, the partners' wordmarks and the
+  questions people ask. New pages: what we do, events, volunteer with us, ways to
+  give, where the money goes, our story (history, trustees, staff, partners),
+  contact us and privacy.
+  
+  Nothing takes a payment, and nothing pretends to. Ways to give explains a
+  standing order set up with the donor's own bank from details the treasurer
+  sends, cheques and cash, Gift Aid, payroll giving and gifts in wills, with an
+  email and a telephone number. Volunteering is an email, a call or the next
+  orientation evening, which is a real event page.
+  
+  The `event` collection gains `endsAt`, `address`, `cost` and `booking`; a new
+  `programme` collection (`/what-we-do/:slug`) carries a schedule, place,
+  audience, cost and contact. Six events are dated one to six weeks after the
+  site is created, each with a page of its own; since the month moves with the
+  scaffold, their copy names no weekday and no season, and every clock time it
+  writes falls inside the event's own hours. The footer is seeded in three
+  headed columns and its note carries the registered charity number, the
+  address, the telephone number and the site's own email address; comments are
+  closed. The telephone number is in the range reserved for drama. The starting
+  skin matches `@cogenta/theme-association` (Bricolage Grotesque and Source
+  Sans 3, paper, ink and a deep green).
+  
+  The photographs were checked at full size: invented lettering on T-shirts,
+  caps, boxes and signs was retouched or cropped out, the river clean-up picture
+  and the food drive picture with printed packaging were dropped, and the
+  procedural gallery, avatar and partner marks are replaced by a volunteer's
+  portrait crop and six partner wordmarks rendered from OFL typefaces.
+
+- [`837c73e`](https://github.com/cogenta-cms/cogenta/commit/837c73e0d73c748488e5efef4df888ebf0561a6a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `blog` blueprint now scaffolds a credible personal publication: ten essays
+  and letters written in the first person, dated across three years, three of
+  them long reads, filed under four subjects and eight tags, with a picture only
+  where one belongs. The home page features one essay, then the latest pieces as
+  an index, an epigraph, the earliest pieces, the subjects and the Sunday letter;
+  new `archive` and `newsletter` pages join `about`, and every menu item leads to
+  a real page or to the site's feed.
+  
+  The demo copy names the site it was created for, the starting skin now matches
+  `@cogenta/theme-blog` (Literata, Figtree, warm paper and an ink-blue accent),
+  and the bundled photographs that showed invented text on screens and book
+  spines are removed; the remaining ones are cropped so nothing unreadable is
+  left in frame. The "As featured in" strip and the abstract avatars are gone.
+
+- [`ae9338b`](https://github.com/cogenta-cms/cogenta/commit/ae9338b6e95bdbe5d39d8a3db6a954060f9f1546) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Moves its content packs to `@cogenta/starters`; public exports unchanged.
+  `BLUEPRINT_CONTENT_PACKS`, `BlueprintContentPack`, `RecommendedAgentHint` and
+  `SeedDemoContent` are re-exported from the new package, and
+  `npm create cogenta` scaffolds the same files, tables and rows as before.
+
+- [`16df4bd`](https://github.com/cogenta-cms/cogenta/commit/16df4bdde1a70d7577367a28612bc9df56d713c1) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `documentation` blueprint now scaffolds the documentation of a
+  self-hosted webhook delivery server: an application sends it events over HTTP,
+  and it signs, sends, retries and records a request for every subscribed
+  endpoint. The product is named after the site, with a trailing "Docs" or
+  "Documentation" dropped (falling back to "Relay"), and its command, environment
+  variables and header names are derived from that name, so the quickstart, the
+  CLI reference and the HTTP API reference always agree.
+  
+  Thirteen published pages in four sections, with real code in shell, YAML,
+  JSON, TypeScript and Python, notes, and reference tables the theme lays out in
+  columns: Introduction, Installation, Quickstart and Core concepts; Verifying
+  signatures, Retries and replay, Configuration and Deploying to production; the
+  CLI, configuration and HTTP API references; Troubleshooting and What's new.
+  The home page opens on the statement and the search field, then three places to
+  start, the whole documentation by section, the code to send a first event,
+  common questions and where to go when something fails.
+  
+  `doc_page` gains a `summary` field, shown under the page title, and its `order`
+  now runs across the whole documentation. The footer menu is seeded in four
+  headed columns, comments are closed, the footer note is a licence line, and
+  the starting skin matches `@cogenta/theme-docs` (IBM Plex Sans and IBM Plex
+  Mono, white and cool grey, one teal).
+  
+  Pictures: the abstract hero and page panels are gone. One diagram of how an
+  event becomes signed requests, rendered once with IBM Plex (OFL) and bundled
+  as a PNG, illustrates "Core concepts".
+
+- [`ae2af4f`](https://github.com/cogenta-cms/cogenta/commit/ae2af4f31277f66f9c5c0ad6643dc524a81194c1) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `magazine` blueprint now scaffolds a credible city news and culture
+  magazine: eighteen articles across News, Business, Culture and Opinion, dated
+  over three weeks, three of them long reads of more than 700 words, written as
+  reporting, criticism and signed columns with named sources, figures and quotes
+  from a fictional city.
+  
+  Sections and writers are now real taxonomies (`section`, `author`), so every
+  section has a front page and every writer an archive, and an article page can
+  show its section and byline. Articles gain a `kicker` and a `frontPage` flag;
+  the home page is a front page of the flagged stories followed by the opinion
+  columns, a Culture rail, a ranked list and a Business rail, and new
+  `subscribe` and `standards` pages join `about`. Menus lead to the section
+  fronts and to real pages only.
+  
+  The demo copy names the site it was created for, the footer note reads as a
+  publisher's line, and the starting skin now matches `@cogenta/theme-magazine`
+  (Fraunces, Libre Franklin, white newsprint and one editorial red). The bundled
+  photographs that showed invented lettering on signs, shopfronts, printed
+  pages and equipment are removed; nine clean photographs remain, some cropped so
+  nothing unreadable is left in frame, and most stories carry no picture, as in
+  a newspaper. The abstract logos, avatar and About page composition are gone.
+
+- [`1e11452`](https://github.com/cogenta-cms/cogenta/commit/1e11452cbffa78a6c55d140e8a49c7cf830fe70f) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `portfolio` blueprint now scaffolds the site of a small design studio in
+  London: eight projects for invented clients (a concert hall, a publisher, a
+  ferry terminal, a building society, a charity's annual report, a regional
+  rail app, a family cannery and a mill museum), dated from 2022 to 2025, the
+  newest written as case studies of 300 to 700 words with the brief, the work
+  and the result, figures, galleries and a client's words.
+  
+  Every picture is real design work drawn for the blueprint: posters, book
+  covers, signs and pictograms, stationery, report spreads, app screens, tins
+  and exhibition graphics, with legible type and alt text that describes them.
+  The previous nine photographs are removed.
+  
+  Projects are filed under three taxonomies, `client`, `disciplines` and `team`,
+  so every client, discipline and person has an archive, and each project keeps
+  a plain-text `client` and `discipline` for its caption. The home page is a
+  statement naming the studio, the selected work, the disciplines, figures, a
+  client's quote, a list of clients, an index and the studio's address. New
+  `work`, `studio`, `contact` and `privacy` pages replace the previous set. The
+  copy names the site it was created for, the address is derived from that name,
+  comments are closed on the work, and the starting skin matches
+  `@cogenta/theme-portfolio` (Archivo, black and white, one orange).
+
+- [`75c84a6`](https://github.com/cogenta-cms/cogenta/commit/75c84a636737ef0010ac098187f5b6db4e152050) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `restaurant` blueprint now scaffolds a contemporary bistro in a former
+  silk-weaving workshop on the slopes of the Croix-Rousse in Lyon. Its menu has
+  nineteen dishes and wines for a week in early autumn, in four sections
+  (starters, mains, cheese and desserts, wine by the glass), each with a price in
+  euros, a description, where it comes from, allergens, a wine to drink with it
+  where it has one, a vegetarian flag and a note from the kitchen or the cellar.
+  Each dish page lists the rest of its section.
+  
+  The home page opens on the dining room with the restaurant's own name and one
+  "Reserve a table" link, then a short welcome, the week's menu with its prices,
+  a band of four dish photographs, the kitchen's story, a press quote, the hours
+  and address, the private room and how to book. New pages: menu (with set menus
+  and allergy notes), our story (the room, the kitchen, the wine, the suppliers),
+  reservations, private dining, hours and address, and the legal notice. There is
+  no booking engine and nothing pretends to be one: the reservations page says
+  how booking works (telephone hours, an email answered the same day, the
+  counter kept for guests without a booking, deposits for groups, cancelling),
+  and its actions are a telephone link and an email link.
+  
+  The copy names the site it was created for, and the email addresses are
+  derived from that name. The footer note is the address card with the hours,
+  comments are closed on the menu, and the starting skin matches
+  `@cogenta/theme-restaurant` (Cormorant Garamond and Karla, cream and charcoal,
+  one brass).
+  
+  The `menu_item` collection gains `currency`, `vegetarian`, `sourcing`,
+  `pairing`, `allergens` and a `blocks` zone, and its sections are renamed. The
+  dish photographs are cropped to one 4:5 ratio and renamed after the dishes they
+  show; the crème brûlée, the two wine glasses and the glass of water are no
+  longer bundled, and the procedural gallery shots and testimonial avatar are no
+  longer seeded.
+
+- [`7848de4`](https://github.com/cogenta-cms/cogenta/commit/7848de4dee8506a95ecc6e2a30cd010b88dab4da) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `saas` blueprint now scaffolds the marketing site of a B2B product for
+  finance and operations teams: spend approvals, an audit log that cannot be
+  rewritten, ERP sync, SSO and SCIM, spend reporting and an API. The product is
+  named after the site (falling back to "Ledgerline"), and its email addresses
+  are derived from that name.
+  
+  The home page opens on a screenshot of the approvals queue, then a strip of
+  six customer wordmarks, the six capabilities, how a request moves through the
+  product in three steps, a tour of three features with their screenshots,
+  figures with their units, one customer's words, the plans compared in a
+  table, questions finance teams ask, and a closing call to action. New pages:
+  product, pricing (with billing questions), security (hosting, access, the
+  audit log, subprocessors), changelog, company, book a demo, legal and
+  privacy.
+  
+  There is no signup or billing system behind the site and nothing pretends to
+  be one: "Book a demo", "Start a trial" and "Talk to sales" lead to a page that
+  explains how a solutions engineer sets up a 14-day trial with your own
+  approval policy, with an email link and a telephone link.
+  
+  The `feature` collection gains a `blocks` zone, so each feature has a page of
+  its own, and a new `changelog` collection holds six dated product updates. The
+  footer menu is seeded in four headed columns (Product, Company, Resources,
+  Legal) with the demo content; the header menu no longer links to pages that do
+  not exist. Comments are closed and the starting skin matches
+  `@cogenta/theme-saas` (Geist and Geist Mono, white and grey, one blue).
+  
+  Pictures: seven interface screenshots (the approvals queue, the policy editor,
+  the audit log, the ERP connection, sign-in and provisioning, the time-to-approve
+  report, the API and webhooks settings) and six customer wordmarks, all rendered
+  once with OFL typefaces and bundled as PNG files. The photograph of people
+  around laptops is no longer bundled, and the procedural product visual,
+  feature covers and avatars are no longer seeded; the one customer portrait is
+  kept.
+
+- [`f7726ee`](https://github.com/cogenta-cms/cogenta/commit/f7726ee8b67b279e22b1ef372626d92fb5d81834) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A blueprint's demo content can now name the business the person is actually
+  creating: `SeedContext` carries the site name given at install
+  (`siteName`, optional), so seeded copy no longer has to refer to a fictional
+  company whose name matches nothing on the site.
+  
+  Bundled demo assets can also be PNG files (a wordmark, an interface mock), not
+  only JPEG photographs: `seedDemoMedia` now labels each asset by its bytes.
+
+- [`cc5ca97`](https://github.com/cogenta-cms/cogenta/commit/cc5ca975b9a851f892f26fa13592ff215110ff7e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `store` blueprint now scaffolds the shop of a small brand of durable
+  everyday goods with a shop and a repair bench in Lisbon. It sells twelve
+  products from the workshops it buys from (a field jacket, a canvas shoulder
+  bag, a porcelain pour-over set, a striped wool blanket and eight more), each
+  with a price in euros, stock, material, dimensions, origin, care, a delivery
+  note, two paragraphs on how it is made, and an order link that emails the shop
+  with the product in the subject line. Two are sold out.
+  
+  Products are grouped in four categories (Wear, Carry, Kitchen, Living), now a
+  small `category` collection routed at `/category/:slug`, each with a
+  photograph, a summary, its goods and a note on its makers. Product pages list
+  more from the same category. The home page opens on a full-width photograph,
+  then the categories, the season's four newest pieces, a line of commitments,
+  the brand's story beside a photograph, a customer's letter, questions before
+  ordering and a line about the workshop's letters. New pages: shop, about, how
+  to order, delivery and returns, repairs, contact, and terms and privacy.
+  
+  The copy names the site it was created for, and the email addresses are
+  derived from that name. The footer note gives the address and company
+  registration, comments are closed on the catalogue, and the starting skin
+  matches `@cogenta/theme-ecommerce` (Albert Sans, sand and ink, one terracotta).
+  
+  The bundled photographs are retouched to remove invented lettering from the
+  labels and cards, a floating shadow, a mannequin and three objects from the
+  banner that are not in the catalogue. Six files are renamed after the products
+  they show. The procedural testimonial avatar and the five placeholder marks
+  are no longer seeded.
+
+- [`1acf666`](https://github.com/cogenta-cms/cogenta/commit/1acf666264124a2583495e1338c3eb74faf749d6) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `vitrine` blueprint now scaffolds the website of a management consultancy
+  that bears the name you gave your site: six practices with their own pages,
+  three case studies filed by sector (with `/sector/<name>` archive pages), a
+  Practices page, a Case studies page, an About page and a Contact page listing
+  three offices.
+  
+  Its demo copy is specific and free of placeholder talk about the CMS, and its
+  images are real: cropped photographs for the hero and the case studies,
+  client portraits, six fictional client wordmarks and a research
+  exhibit rendered as a chart, all bundled with the package. The previous
+  dashboard photograph, whose screen showed invented text, and the abstract
+  placeholder covers are gone.
+  
+  The starting skin now names the Entreprise theme's typefaces (Newsreader and
+  Hanken Grotesk) and palette, so a new site uses them from the first render.
+  Existing sites are not changed.
+- Updated dependencies [`ffbfcc3`, [`04596cc`](https://github.com/cogenta-cms/cogenta/commit/04596ccc457331b1ea4881ab0b3ab3f09f8b9867), `58630a9`, [`050485d`](https://github.com/cogenta-cms/cogenta/commit/050485d05079937ec90afc4e9e3d28c7ff1d0c63), [`22b9cc7`](https://github.com/cogenta-cms/cogenta/commit/22b9cc7b5f60e3e5f1513a7eadc6e4dd15eee712), [`6513fc6`](https://github.com/cogenta-cms/cogenta/commit/6513fc665b7f173c266634e1a0bbe79d286719a9), `166b71e`, [`7711371`](https://github.com/cogenta-cms/cogenta/commit/77113713a5be32d462995565474b0fa546653147), `dc78c2c`, [`3d785c2`](https://github.com/cogenta-cms/cogenta/commit/3d785c2bb044a397aab259d12ec301f913a3bb1e), [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`ae9338b`](https://github.com/cogenta-cms/cogenta/commit/ae9338b6e95bdbe5d39d8a3db6a954060f9f1546), [`fd13b07`](https://github.com/cogenta-cms/cogenta/commit/fd13b07be98919c51b2b576a3fb8e43ac69a884d), [`78989f1`](https://github.com/cogenta-cms/cogenta/commit/78989f11702f3c4e9dfdd0328fc50099fceabd64), `d6bbcaa`, `e5d3ac7`, [`9b774fc`](https://github.com/cogenta-cms/cogenta/commit/9b774fc00833f1a4bcfdc4cd384737c2c798214f), `c283598`, `9945340`, `fa77567`, `ee5bd9b`, [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9), [`2b5a543`](https://github.com/cogenta-cms/cogenta/commit/2b5a5430fc617fdf3d10d24a0a957e2ad72c6ae8), `b9c61fe`, `62c69de`, `2b296b3`, [`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0), `8153b2d`]:
+  - @cogenta/api@2.5.0
+  - @cogenta/cli@0.10.0
+  - @cogenta/theme-canonical@1.2.0
+  - @cogenta/agents@0.7.1
+  - @cogenta/core@0.10.0
+  - @cogenta/starters@0.1.0
+  - @cogenta/render@0.3.0
+  - @cogenta/auth@0.5.4
+  - @cogenta/blocks@1.0.5
+  - @cogenta/comments@0.2.5
+  - @cogenta/schema@0.5.3
+
 ## 0.5.3
 
 ### Patch Changes

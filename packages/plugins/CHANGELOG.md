@@ -1,5 +1,18 @@
 # @cogenta/plugins
 
+## 0.5.0
+
+### Minor Changes
+
+- Plugins actually run (L31 step 1). A plugin's code now lives in a file its manifest names (`main`, `plugin.js` by default), which `readPluginCode` reads and a signature covers — signing a plugin covers its code and not only its manifest, so changing one character of it invalidates the signature. The worker protocol gains a structured invocation: `runPlugin(…, { invoke, input })` calls one named handler of the plugin with a payload, instead of a caller building a code string per call. A site holds its plugins in one directory per plugin under `plugins/` (`loadInstalledPlugins`, configurable with `plugins.dir`, switched off entirely with `plugins.enabled: false`), and `cogenta plugin list|check|grant|revoke|run` is the hand path onto all of it — running a plugin against the site's real database and storage, with only the capabilities it has really been granted. `cogenta serve` still calls no plugin: an extension point (content events, a public route, a scheduled job) is the next step.
+
+### Patch Changes
+
+- Updated dependencies [[`050485d`](https://github.com/cogenta-cms/cogenta/commit/050485d05079937ec90afc4e9e3d28c7ff1d0c63), `166b71e`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0), `8153b2d`]:
+  - @cogenta/agents@0.7.1
+  - @cogenta/core@0.10.0
+  - @cogenta/render@0.3.0
+
 ## 0.4.1
 
 ### Patch Changes

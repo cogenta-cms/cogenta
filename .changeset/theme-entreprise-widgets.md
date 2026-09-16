@@ -1,6 +1,0 @@
----
-"@cogenta/theme-entreprise": minor
-"@cogenta/starters": patch
----
-
-The entreprise theme now declares its widget areas (`theme@1.6`) and sets them in its own register: beside a case study, a practice, a sector archive or search results, the side column sits on the page's own gutters with each widget opening on an ink rule and a small-capitals label, work titles in the display serif, counts in tabular figures, and the call to discuss a mandate as the theme's one dark plane; under the text, selected work reads as an exhibit of three. The reading column keeps its hanging headings on a wide screen and stacks them above the text when narrower, the sidebar stacks under the content on mobile, footer widget columns are placed inside the theme's own footer, and rules that read a direct child of `<main>` still apply inside the sidebar layout. The search results page also gets its excerpts in the text face and a dark-aware result count. The `vitrine` blueprint seeds the widgets such a firm would have: sectors with counts, other case studies and the mandate call beside a case study, the other practices and a partner's contact details beside a practice with selected work under it, and a search box and sectors on a sector archive, never on the home page or the site's own pages.

@@ -1,5 +1,15 @@
 # @cogenta/core
 
+## 0.10.0
+
+### Minor Changes
+
+- Plugins actually run (L31 step 1). A plugin's code now lives in a file its manifest names (`main`, `plugin.js` by default), which `readPluginCode` reads and a signature covers — signing a plugin covers its code and not only its manifest, so changing one character of it invalidates the signature. The worker protocol gains a structured invocation: `runPlugin(…, { invoke, input })` calls one named handler of the plugin with a payload, instead of a caller building a code string per call. A site holds its plugins in one directory per plugin under `plugins/` (`loadInstalledPlugins`, configurable with `plugins.dir`, switched off entirely with `plugins.enabled: false`), and `cogenta plugin list|check|grant|revoke|run` is the hand path onto all of it — running a plugin against the site's real database and storage, with only the capabilities it has really been granted. `cogenta serve` still calls no plugin: an extension point (content events, a public route, a scheduled job) is the next step.
+
+- [`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Apply a theme together with its starter's sample data (L28). `POST /api/theme/sample-data/preview` computes, without writing, what importing the sample data would do — collections added or found incompatible, slugs the site already owns, menus and settings filled or kept, media added, and for a reset exactly what is deleted — as coded warnings. `POST /api/theme/sample-data/apply` recomputes that plan and applies it: `keep` is strictly additive, `reset` takes and verifies a backup first and requires the site name typed as confirmation. Both rewrite the schema, so applying is limited to `cogenta dev`. `GET /api/theme` gains `sampleData: { themes, writable }`. New error codes `THEME_SAMPLE_DATA_UNAVAILABLE` and `THEME_SAMPLE_DATA_CONFIRMATION_INVALID`.
+
+- New package `@cogenta/widgets` (L30): widget areas as on WordPress. It holds the widget vocabulary (content widgets such as text, image, gallery, quote, call to action, links, contact and about; dynamic widgets such as recent, related and popular entries, terms, tag cloud, archives, recent comments, search, menu, social links, form, table of contents and calendar), its validation with defaults, the standard areas every theme receives (`sidebar`, `content-before`, `content-after`, `footer-1` to `footer-4`), visibility rules (pages, audience, devices, period, languages) evaluated by one pure function, and the `cogenta_widgets` store with ordering, moves between areas, duplication and hiding. `@cogenta/core` gains `WIDGET_INVALID` and `WIDGET_NOT_FOUND`.
+
 ## 0.9.0
 
 ### Minor Changes

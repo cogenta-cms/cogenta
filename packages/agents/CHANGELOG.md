@@ -1,5 +1,24 @@
 # @cogenta/agents
 
+## 0.7.1
+
+### Patch Changes
+
+- [`050485d`](https://github.com/cogenta-cms/cogenta/commit/050485d05079937ec90afc4e9e3d28c7ff1d0c63) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The file-backed stores (agent declarations, memory, prompt templates, provider
+  configs, skills, agent skills, traces) no longer start creating their directory
+  the moment they are constructed. They create it on the first call that needs
+  it. Before, a store whose directory could not be created (a path under a file,
+  a read-only mount) raised an unhandled promise rejection even if nothing ever
+  used it — which ends a Node process by default. The error now reaches the first
+  call instead, and a later call retries once the directory becomes creatable.
+
+- [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A typeface a skin names now loads. `@cogenta/render` gains `WEB_FONTS`, a closed catalogue of Google Fonts families whose `css2` requests were each verified, and `renderSkinCss` opens with an `@import` for every catalogue family a skin's `font.sans`/`font.serif`/`font.mono` stacks lead with. `cogenta serve` drops such an import when the theme already loads the same family. The skin generator is told which families load, so a personalisation no longer falls back to Georgia or Times.
+- Updated dependencies [`166b71e`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`7944c60`](https://github.com/cogenta-cms/cogenta/commit/7944c609bcc66874b14ab8d4eb950ec337585de0), `8153b2d`]:
+  - @cogenta/core@0.10.0
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+  - @cogenta/schema@0.5.3
+
 ## 0.7.0
 
 ### Minor Changes

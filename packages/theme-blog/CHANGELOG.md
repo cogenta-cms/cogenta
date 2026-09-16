@@ -1,5 +1,57 @@
 # @cogenta/theme-blog
 
+## 0.4.0
+
+### Minor Changes
+
+- [`e0639e3`](https://github.com/cogenta-cms/cogenta/commit/e0639e35c80f7f2d2731baab02767ab9f3534148) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The Blog theme is redesigned as a personal publication made for reading:
+  Literata for everything a reader reads (titles, essays, standfirsts,
+  quotations, at the optical size drawn for each size) and Figtree for
+  everything a reader uses (navigation, dates, labels, buttons), on a warm paper
+  with a warm near-black ink and one ink-blue accent kept for links.
+  
+  What changes on a site:
+  
+  - The page is a twelve-column grid with a margin: dates, years, labels and
+    attributions sit in the first three columns, and every block starts its text
+    on the same line.
+  - A `collectionList` in the `list` layout becomes an editorial index: the date
+    in the margin, the year once at the head of each year, the title and
+    standfirst, and a picture only for the entries that have one. The `grid` and
+    `carousel` layouts become a ruled shelf. A taxonomy archive uses the same
+    index.
+  - An entry with a date, a standfirst, a cover or terms is set as an essay: the
+    topic, date and reading time in the margin beside a large title, the cover
+    at 3:2, a 68-character reading column with pull quotes, captioned figures
+    and a small-capitals `h4` for notes, and the terms it is filed under at the
+    end. A reading time under two minutes is no longer shown.
+  - `featureGrid` is drawn as a table of contents without icons, `cta` as an
+    invitation between two rules, `faq` with its title held in the margin, and
+    the other blocks in the same register. Comments get baseline form fields.
+  - The header no longer sticks to the top of the window, its call to action is
+    an outlined control, and the mobile menu is a CSS-only panel. The footer is
+    a short colophon with the copyright year and real social icons.
+  - The dark palette is redesigned on warm ink surfaces, and photographs are
+    dimmed slightly on ink. No shadow, gradient, pill or scroll animation
+    remains; transitions are capped at 150 ms.
+  
+  Class names are new throughout, so custom CSS written against the previous
+  markup needs updating. An existing site keeps the fonts and colours of its
+  current skin until that skin is updated: the theme reads both from the skin,
+  so copy this theme's `tokens.json` into the site's `theme.tokens.json` (or set
+  the skin's serif to Literata and its sans to Figtree) to get the new
+  typography and palette.
+
+- The blog theme now sets widget areas in its own register (contract D `theme@1.6`): it declares `widgetAreas`, so footer widget columns sit inside its colophon between the navigation and the legal line, and a new `widgets.css` puts the host's sidebar layout on the theme's twelve-column grid. On a wide screen the content keeps nine columns, so the margin and the text line stay exactly where they are on every other page, and the sidebar takes the last three; below that width the sidebar follows the content in as many columns as fit. Widgets use the theme's own type (small-capital labels on an ink rule, titles in the text face, hairlines between rows, fields drawn as baselines), and related entries after an essay are set like the index, with the date in the margin. The `blog` blueprint now seeds a sidebar (about, search, recent posts, subjects with counts, tags, posts by year) on posts, subject and tag archives, date archives and search results, plus a "Further reading" list under each post.
+
+### Patch Changes
+
+- Widget areas on the public site (L30). `cogenta serve` resolves the widgets of every page it renders (entries, term and date archives, search, forms), decides their visibility for the real request, reads their data through the permission-checked gateway, and either hands them to a theme that places them itself (`widgetAreas` export, contract D `theme@1.6`) or places them around the theme's output. It mounts `/api/widgets`, serves date archives at `/archive/{collection}/{year}/{month}`, follows widget dropdowns through `/_cogenta/go` (same-site paths only), includes widgets in backups and clears them on a sample-data reset. Headings of running text now carry an `id`, so a table of contents can link to them.
+- Updated dependencies [`58630a9`, [`bea9ead`](https://github.com/cogenta-cms/cogenta/commit/bea9eadcae2d5d49e3272eeb2437d135ee012c37), [`cbfcc6d`](https://github.com/cogenta-cms/cogenta/commit/cbfcc6d9f36e18813d40a2a9bee41c3bb34e34bb), [`e5126ed`](https://github.com/cogenta-cms/cogenta/commit/e5126ed095b7ea326d765f86b3620935fd5670d9), `41d2036`]:
+  - @cogenta/theme-kit@0.4.0
+  - @cogenta/render@0.3.0
+  - @cogenta/blocks@1.0.5
+
 ## 0.3.3
 
 ### Patch Changes

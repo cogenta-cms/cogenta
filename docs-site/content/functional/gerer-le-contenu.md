@@ -85,6 +85,52 @@ Quelques conséquences voulues :
   page protégée est servie en `noindex` — indexer une page que personne ne peut
   lire n'apporte rien et en dirait trop.
 
+## Rechercher et remplacer dans tout le contenu
+
+Le jour où une marque change de nom, où un domaine bouge ou où une raison
+sociale est corrigée : **Contenu → Rechercher et remplacer**
+(`/replace`). L'écran apparaît pour toute personne qui peut modifier au moins
+une collection.
+
+**On voit avant d'écrire, toujours.** Saisir l'expression et son remplacement
+puis *Rechercher* ne modifie rien : l'écran liste les entrées concernées, par
+leur titre, et pour chacune chaque changement sous la forme avant / après, avec
+sa place dite en clair (« Bloc 3 · heading »). Le bouton *Remplacer partout*
+n'existe qu'une fois cet aperçu affiché, et demande une confirmation. Modifier
+l'expression, le remplacement ou une option efface l'aperçu : ce qui est
+appliqué est toujours ce qui vient d'être montré.
+
+**Ce qui est touché** : les champs texte, le texte riche (sa mise en forme et
+ses liens restent en place) et le texte à l'intérieur des blocs. **Ce qui ne
+l'est jamais** : les slugs — changer une adresse casse tous les liens vers la
+page, cela se fait page par page, avec une redirection —, les identifiants, les
+relations, les médias, les nombres. Seules les collections que vous pouvez
+modifier sont parcourues : une recherche montre le texte autour de chaque
+occurrence, elle ne doit pas servir à lire en masse ce qu'on ne peut que lire.
+
+Deux options : **ignorer la casse** (désactivée par défaut, parce qu'un
+changement de nom de marque tient presque toujours à sa casse) et **mots
+entiers uniquement** (« art » ne touche plus « article »).
+
+Ce qu'il faut savoir :
+
+- **chaque entrée modifiée reçoit une nouvelle version**, comme une
+  modification à la main : un remplacement se défait entrée par entrée depuis
+  son onglet *Historique*. Il est aussi inscrit au journal d'audit, avec
+  l'expression et son remplacement ;
+- **il se comporte exactement comme une modification à la main** : dans une
+  collection à brouillons, une page publiée garde sa version en ligne jusqu'à
+  ce qu'elle soit republiée ; sans brouillons, le changement est en ligne
+  aussitôt ;
+- une entrée **modifiée par quelqu'un entre l'aperçu et l'application** est
+  laissée intacte et comptée à part, plutôt que d'écraser son changement ;
+- l'aperçu s'arrête à **50 entrées** et le dit : appliquez, puis relancez la
+  recherche pour les suivantes. Si le remplacement **contient** l'expression
+  (« Cogenta » → « Cogenta SA »), l'écran prévient qu'une nouvelle recherche
+  retrouverait les mêmes entrées ;
+- une occurrence **coupée par une mise en forme** (« Cogen**ta** ») n'est pas
+  trouvée : la recoller réécrirait la mise en forme de la phrase.
+
 ## La corbeille
 
 `/trash` — mettre une entrée à la corbeille n'efface plus rien : ses

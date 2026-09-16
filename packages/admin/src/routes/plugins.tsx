@@ -3,30 +3,36 @@ import { useTranslation } from 'react-i18next'
 import { describeApiError } from '../api/describe-error.js'
 import {
   createSandbox,
-  deploySandbox,
   getPlugins,
-  getSandbox,
   grantCapability,
   type InstalledPlugin,
+  type PluginDraft,
   type PluginsState,
-  readSandboxFile,
   revokeCapability,
-  type SandboxState,
-  writeSandboxFile,
+  setPluginDisabled,
+  uninstallPlugin,
 } from '../api/plugins-client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { Badge, Button, Field, Input, Notice, PageHeader } from '../ui/index.js'
+import { describeCapability, describeProvides } from '../plugins/plugin-capabilities.js'
+import { CreatePluginDialog } from '../plugins/plugin-create-dialog.js'
+import { PluginDraftEditor } from '../plugins/plugin-draft-editor.js'
+import { Badge, Button, Notice, PageHeader } from '../ui/index.js'
 
 /**
- * « Plugins » (L31 step 4): what this site has installed, what each one is
- * allowed to do, and the sandboxes a plugin is written in — by a person here,
- * or by the "Cogenta Plugin Builder" agent through its own tools.
+ * « Plugins » — what this site has installed, what each one may do, and the
+ * plugins being written.
  *
- * The screen is built around the one rule the whole lot rests on: **writing a
- * plugin and installing it are two different acts**. A sandbox is code nobody
- * runs; installing it is a button on this page; and even then the plugin
- * holds nothing until someone grants a capability, one at a time, from the
- * list its manifest asks for.
+ * Rewritten after the first version of this screen was, fairly, called too
+ * technical: it asked for a "sandbox id", showed capabilities as raw
+ * identifiers, and had no way to switch a plugin off, remove one, or throw a
+ * draft away. What replaces it is the same two acts a person actually
+ * performs — manage what is installed, write something new — with the words
+ * of the task rather than the words of the implementation.
+ *
+ * The rule the whole thing rests on has not moved: **writing a plugin and
+ * installing it are two different acts**, and installing one grants it
+ * nothing. A plugin holds no capability until someone says yes to that
+ * capability, on its own line, one at a time.
  */
 
 export function PluginsRoute(): JSX.Element {
@@ -38,10 +44,9 @@ export function PluginsRoute(): JSX.Element {
   const [state, setState] = useState<PluginsState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
-  const [newSandbox, setNewSandbox] = useState('')
-  const [newName, setNewName] = useState('')
-  const [openSandbox, setOpenSandbox] = useState<SandboxState | null>(null)
-  const [openFile, setOpenFile] = useState<{ path: string; content: string } | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [openDraft, setOpenDraft] = useState<string | null>(null)
+  const [confirmingRemoval, setConfirmingRemoval] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -58,21 +63,27 @@ export function PluginsRoute(): JSX.Element {
     void load()
   }, [load])
 
-  async function act(run: () => Promise<unknown>, done: string): Promise<void> {
-    if (token === null) return
-    setBusy(true)
-    setError(null)
-    try {
-      await run()
-      setStatus(done)
-      await load()
-      if (openSandbox !== null) setOpenSandbox(await getSandbox(token, openSandbox.id))
-    } catch (caught) {
-      setError(describeApiError(caught, t('plugins.actionError')).message)
-    } finally {
-      setBusy(false)
-    }
-  }
+  const report = useCallback(
+    (caught: unknown) => setError(describeApiError(caught, t('plugins.actionError')).message),
+    [t],
+  )
+
+  const act = useCallback(
+    async (run: () => Promise<unknown>, done: string): Promise<void> => {
+      setBusy(true)
+      setError(null)
+      try {
+        await run()
+        setStatus(done)
+        await load()
+      } catch (caught) {
+        report(caught)
+      } finally {
+        setBusy(false)
+      }
+    },
+    [load, report],
+  )
 
   if (!isAdmin) {
     return (
@@ -85,12 +96,23 @@ export function PluginsRoute(): JSX.Element {
     )
   }
 
-  const capabilityRow = (plugin: InstalledPlugin, capability: string): JSX.Element => {
+  const installedNames = new Set((state?.installed ?? []).map((plugin) => plugin.name))
+  const draft = (state?.sandboxes ?? []).find((item) => item.id === openDraft) ?? null
+
+  function capabilityRow(plugin: InstalledPlugin, capability: string): JSX.Element {
+    const described = describeCapability(t, capability)
     const granted = plugin.granted.includes(capability)
     return (
-      <li key={capability} className="flex flex-wrap items-center justify-between gap-2 py-1">
-        <code className="text-xs">{capability}</code>
-        <div className="flex items-center gap-2">
+      <li key={capability} className="flex flex-wrap items-center justify-between gap-2 py-2">
+        <span className="flex flex-col">
+          <span className="text-sm">{described.label}</span>
+          <span className="text-xs text-muted-foreground">
+            {described.scope === null
+              ? described.raw
+              : t('plugins.limitedTo', { scope: described.scope, raw: described.raw })}
+          </span>
+        </span>
+        <span className="flex items-center gap-2">
           <Badge tone={granted ? 'success' : 'neutral'}>
             {granted ? t('plugins.granted') : t('plugins.notGranted')}
           </Badge>
@@ -111,7 +133,125 @@ export function PluginsRoute(): JSX.Element {
           >
             {granted ? t('plugins.revoke') : t('plugins.grant')}
           </Button>
+        </span>
+      </li>
+    )
+  }
+
+  function installedCard(plugin: InstalledPlugin): JSX.Element {
+    const off = plugin.disabled !== null
+    const removing = confirmingRemoval === plugin.name
+    return (
+      <li key={plugin.name} className="rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="flex flex-col">
+            <span className="font-semibold">
+              {plugin.title ?? plugin.name}{' '}
+              <span className="text-muted-foreground">{plugin.version}</span>
+            </span>
+            {plugin.title !== null && (
+              <span className="text-xs text-muted-foreground">{plugin.name}</span>
+            )}
+          </span>
+          <span className="flex flex-wrap gap-1">
+            <Badge tone={off ? 'neutral' : 'success'}>
+              {off ? t('plugins.state.off') : t('plugins.state.on')}
+            </Badge>
+            {plugin.devMode && <Badge tone="warning">{t('plugins.unsigned')}</Badge>}
+            {!plugin.hasCode && <Badge tone="danger">{t('plugins.noCode')}</Badge>}
+          </span>
         </div>
+
+        <ul className="m-0 mt-2 list-none p-0 text-sm text-muted-foreground">
+          {describeProvides(t, plugin.provides).map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+
+        {off && plugin.disabled !== null && (
+          <Notice tone={plugin.disabled.reason === 'manual' ? 'info' : 'warning'} live="off">
+            <p className="m-0">
+              {t(`plugins.disabledBecause.${plugin.disabled.reason}`, {
+                defaultValue: t('plugins.disabledBecause.crash'),
+              })}
+            </p>
+          </Notice>
+        )}
+
+        {plugin.capabilities.length === 0 ? (
+          <p className="m-0 mt-3 text-sm">{t('plugins.asksNothing')}</p>
+        ) : (
+          <>
+            <h3 className="mt-3 mb-0 text-sm font-semibold">{t('plugins.permissions')}</h3>
+            <p className="m-0 mb-1 text-xs text-muted-foreground">{t('plugins.permissionsHelp')}</p>
+            <ul className="m-0 list-none divide-y divide-border p-0">
+              {plugin.capabilities.map((capability) => capabilityRow(plugin, capability))}
+            </ul>
+          </>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={busy || token === null}
+            onClick={() =>
+              void act(
+                () => setPluginDisabled(token as string, plugin.name, !off),
+                off ? t('plugins.status.enabled') : t('plugins.status.disabled'),
+              )
+            }
+          >
+            {off ? t('plugins.enable') : t('plugins.disable')}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={busy || token === null}
+            onClick={() => {
+              if (!removing) {
+                setConfirmingRemoval(plugin.name)
+                return
+              }
+              setConfirmingRemoval(null)
+              void act(async () => {
+                const removal = await uninstallPlugin(token as string, plugin.name)
+                if (!removal.ok) throw new Error(removal.problems.join(' '))
+              }, t('plugins.status.uninstalled'))
+            }}
+          >
+            {removing ? t('plugins.confirmUninstall') : t('plugins.uninstall')}
+          </Button>
+          <span className="text-xs text-muted-foreground">{t('plugins.uninstallHelp')}</span>
+        </div>
+      </li>
+    )
+  }
+
+  function draftCard(item: PluginDraft): JSX.Element {
+    return (
+      <li
+        key={item.id}
+        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card p-4"
+      >
+        <span className="flex flex-col">
+          <span className="font-semibold">{item.title ?? item.name}</span>
+          <span className="text-xs text-muted-foreground">
+            {item.readable
+              ? describeProvides(t, item.provides).join(' · ')
+              : t('plugins.draft.unreadable')}
+          </span>
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant={openDraft === item.id ? 'secondary' : 'ghost'}
+          onClick={() => setOpenDraft(openDraft === item.id ? null : item.id)}
+        >
+          {openDraft === item.id ? t('plugins.draft.close') : t('plugins.draft.open')}
+        </Button>
       </li>
     )
   }
@@ -122,6 +262,11 @@ export function PluginsRoute(): JSX.Element {
         id="plugins-heading"
         title={t('plugins.heading')}
         description={t('plugins.description')}
+        actions={
+          <Button type="button" onClick={() => setCreating(true)} disabled={busy}>
+            {t('plugins.create.open')}
+          </Button>
+        }
       />
       {error !== null && (
         <Notice tone="danger" live="polite">
@@ -142,220 +287,63 @@ export function PluginsRoute(): JSX.Element {
           <p className="m-0 text-sm text-muted-foreground">{t('plugins.noneInstalled')}</p>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-4 p-0">
-            {state.installed.map((plugin) => (
-              <li key={plugin.name} className="rounded-xl border border-border bg-card p-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-semibold">
-                    {plugin.name} <span className="text-muted-foreground">{plugin.version}</span>
-                  </span>
-                  <div className="flex gap-1">
-                    {plugin.devMode && <Badge tone="warning">{t('plugins.unsigned')}</Badge>}
-                    {!plugin.hasCode && <Badge tone="danger">{t('plugins.noCode')}</Badge>}
-                  </div>
-                </div>
-                <p className="m-0 mt-1 text-sm text-muted-foreground">
-                  {t('plugins.doesWhat', {
-                    events: (plugin.provides.eventSubscriptions ?? []).join(', ') || '—',
-                    routes: (plugin.provides.routes ?? []).join(', ') || '—',
-                    schedules:
-                      (plugin.provides.schedules ?? []).map((item) => item.name).join(', ') || '—',
-                  })}
-                </p>
-                {plugin.capabilities.length === 0 ? (
-                  <p className="m-0 mt-2 text-sm">{t('plugins.asksNothing')}</p>
-                ) : (
-                  <>
-                    <h3 className="mt-3 mb-1 text-sm font-semibold">{t('plugins.permissions')}</h3>
-                    <ul className="m-0 list-none divide-y divide-border p-0">
-                      {plugin.capabilities.map((capability) => capabilityRow(plugin, capability))}
-                    </ul>
-                  </>
-                )}
-              </li>
-            ))}
+            {state.installed.map((plugin) => installedCard(plugin))}
           </ul>
         )}
-        {state !== null &&
-          state.failures.map((failure) => (
-            <Notice key={failure.directory} tone="warning" live="off">
-              <p>
-                {failure.directory}: {failure.message}
-              </p>
-            </Notice>
-          ))}
-      </section>
-
-      <section aria-labelledby="plugins-sandboxes" className="flex flex-col gap-3">
-        <h2 id="plugins-sandboxes" className="m-0 text-base font-semibold">
-          {t('plugins.sandboxes')}
-        </h2>
-        <p className="m-0 text-sm text-muted-foreground">{t('plugins.sandboxHelp')}</p>
-        <div className="flex flex-wrap items-end gap-2">
-          <Field label={t('plugins.sandboxId')}>
-            {(control) => (
-              <Input
-                {...control}
-                value={newSandbox}
-                onChange={(event) => setNewSandbox(event.target.value)}
-              />
-            )}
-          </Field>
-          <Field label={t('plugins.pluginName')}>
-            {(control) => (
-              <Input
-                {...control}
-                value={newName}
-                onChange={(event) => setNewName(event.target.value)}
-              />
-            )}
-          </Field>
-          <Button
-            type="button"
-            disabled={busy || newSandbox.trim() === '' || token === null}
-            onClick={() =>
-              void act(
-                () => createSandbox(token as string, newSandbox.trim(), newName.trim()),
-                t('plugins.status.sandboxCreated'),
-              )
-            }
-          >
-            {t('plugins.createSandbox')}
-          </Button>
-        </div>
-        {state !== null && state.sandboxes.length === 0 ? (
-          <p className="m-0 text-sm text-muted-foreground">{t('plugins.noSandbox')}</p>
-        ) : (
-          <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-            {(state?.sandboxes ?? []).map((id) => (
-              <li key={id}>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={openSandbox?.id === id ? 'secondary' : 'ghost'}
-                  onClick={() =>
-                    void act(async () => {
-                      if (token === null) return
-                      setOpenFile(null)
-                      setOpenSandbox(await getSandbox(token, id))
-                    }, t('plugins.status.sandboxOpened'))
-                  }
-                >
-                  {id}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {openSandbox !== null && (
-          <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="m-0 text-sm font-semibold">{openSandbox.id}</h3>
-              <Badge tone={openSandbox.check.ok ? 'success' : 'warning'}>
-                {openSandbox.check.ok ? t('plugins.checksOut') : t('plugins.notReady')}
-              </Badge>
-            </div>
-            {openSandbox.check.problems.length > 0 && (
-              <Notice tone="warning" live="off">
-                <ul className="m-0 pl-4">
-                  {openSandbox.check.problems.map((problem) => (
-                    <li key={problem}>{problem}</li>
-                  ))}
-                </ul>
-              </Notice>
-            )}
-            <p className="m-0 text-sm text-muted-foreground">
-              {t('plugins.handlers', { handlers: openSandbox.check.handlers.join(', ') || '—' })}
+        {(state?.failures ?? []).map((failure) => (
+          <Notice key={failure.directory} tone="warning" live="off">
+            <p>
+              {t('plugins.brokenPlugin', {
+                directory: failure.directory,
+                message: failure.message,
+              })}
             </p>
-            <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-              {openSandbox.files.map((path) => (
-                <li key={path}>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      void act(async () => {
-                        if (token === null) return
-                        const file = await readSandboxFile(token, openSandbox.id, path)
-                        setOpenFile({ path, content: file.content })
-                      }, t('plugins.status.fileOpened'))
-                    }
-                  >
-                    {path}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            {openFile !== null && (
-              <div className="flex flex-col gap-2">
-                <Field label={openFile.path}>
-                  {(control) => (
-                    <textarea
-                      {...control}
-                      rows={16}
-                      className="w-full rounded-md border border-border bg-background p-2 font-mono text-xs"
-                      value={openFile.content}
-                      onChange={(event: { target: { value: string } }) =>
-                        setOpenFile({ path: openFile.path, content: event.target.value })
-                      }
-                    />
-                  )}
-                </Field>
-                <div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() =>
-                      void act(
-                        () =>
-                          writeSandboxFile(
-                            token as string,
-                            openSandbox.id,
-                            openFile.path,
-                            openFile.content,
-                          ),
-                        t('plugins.status.fileSaved'),
-                      )
-                    }
-                  >
-                    {t('plugins.saveFile')}
-                  </Button>
-                </div>
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                disabled={busy || !openSandbox.check.ok}
-                onClick={() =>
-                  void act(async () => {
-                    const deployment = await deploySandbox(token as string, openSandbox.id, false)
-                    if (!deployment.ok) throw new Error(deployment.problems.join(' '))
-                  }, t('plugins.status.installed'))
-                }
-              >
-                {t('plugins.install')}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={busy || !openSandbox.check.ok}
-                onClick={() =>
-                  void act(async () => {
-                    const deployment = await deploySandbox(token as string, openSandbox.id, true)
-                    if (!deployment.ok) throw new Error(deployment.problems.join(' '))
-                  }, t('plugins.status.replaced'))
-                }
-              >
-                {t('plugins.replace')}
-              </Button>
-              <span className="text-xs text-muted-foreground">{t('plugins.installHelp')}</span>
-            </div>
-          </div>
+          </Notice>
+        ))}
+      </section>
+
+      <section aria-labelledby="plugins-drafts" className="flex flex-col gap-3">
+        <h2 id="plugins-drafts" className="m-0 text-base font-semibold">
+          {t('plugins.drafts')}
+        </h2>
+        <p className="m-0 text-sm text-muted-foreground">{t('plugins.draftsHelp')}</p>
+        {state !== null && state.sandboxes.length === 0 ? (
+          <p className="m-0 text-sm text-muted-foreground">{t('plugins.noDraft')}</p>
+        ) : (
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {(state?.sandboxes ?? []).map((item) => draftCard(item))}
+          </ul>
+        )}
+        {draft !== null && token !== null && (
+          <PluginDraftEditor
+            key={draft.id}
+            token={token}
+            draft={draft}
+            installedAlready={installedNames.has(draft.name)}
+            busy={busy}
+            onBusy={setBusy}
+            onDone={(message) => {
+              setStatus(message)
+              void load()
+            }}
+            onError={report}
+            onClose={() => setOpenDraft(null)}
+          />
         )}
       </section>
+
+      <CreatePluginDialog
+        open={creating}
+        onOpenChange={setCreating}
+        templates={state?.templates ?? []}
+        busy={busy}
+        onCreate={(name, template) =>
+          void act(async () => {
+            const created = await createSandbox(token as string, name, template)
+            setOpenDraft(created.id)
+          }, t('plugins.status.draftCreated'))
+        }
+      />
     </section>
   )
 }

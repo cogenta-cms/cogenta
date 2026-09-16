@@ -6,7 +6,10 @@ import { authHeader, request } from './http.js'
  */
 
 export interface InstalledPlugin {
+  /** The package name: what its directory, its grants and its install target are keyed on. */
   readonly name: string
+  /** What to call it in front of a person, when the manifest says so. */
+  readonly title: string | null
   readonly version: string
   /** What its manifest asks for. */
   readonly capabilities: readonly string[]
@@ -19,6 +22,12 @@ export interface InstalledPlugin {
   }
   readonly devMode: boolean
   readonly hasCode: boolean
+  /** Set when the plugin does not run: a person switched it off, or the site did. */
+  readonly disabled: {
+    readonly reason: 'timeout' | 'memory' | 'crash' | 'manual'
+    readonly disabledAt: string
+    readonly details: string | null
+  } | null
 }
 
 export interface PluginFailure {
@@ -27,10 +36,29 @@ export interface PluginFailure {
   readonly message: string
 }
 
+/** A plugin being written: described from its manifest, without running its code. */
+export interface PluginDraft {
+  readonly id: string
+  readonly name: string
+  readonly title: string | null
+  readonly version: string
+  readonly capabilities: readonly string[]
+  readonly provides: InstalledPlugin['provides']
+  readonly readable: boolean
+}
+
+/** A starting point offered at creation time — the screen puts words on each `id`. */
+export interface PluginTemplateOption {
+  readonly id: string
+  readonly capabilities: readonly string[]
+  readonly provides: InstalledPlugin['provides']
+}
+
 export interface PluginsState {
   readonly installed: readonly InstalledPlugin[]
   readonly failures: readonly PluginFailure[]
-  readonly sandboxes: readonly string[]
+  readonly sandboxes: readonly PluginDraft[]
+  readonly templates: readonly PluginTemplateOption[]
 }
 
 export interface SandboxCheck {
@@ -61,11 +89,49 @@ export function getPlugins(token: string): Promise<PluginsState> {
   return request('/api/plugins', { headers: authHeader(token) })
 }
 
-export function createSandbox(token: string, id: string, name?: string): Promise<{ id: string }> {
+/** The host derives the directory from the name: a person names a plugin, not a folder. */
+export function createSandbox(
+  token: string,
+  name: string,
+  template: string,
+): Promise<{ id: string }> {
   return request('/api/plugins/sandbox', {
     method: 'POST',
     headers: { ...authHeader(token), ...JSON_HEADERS },
-    body: JSON.stringify({ id, ...(name === undefined || name === '' ? {} : { name }) }),
+    body: JSON.stringify({ name, template }),
+  })
+}
+
+export function deleteSandbox(token: string, id: string): Promise<null> {
+  return request(`/api/plugins/sandbox/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
+export function uninstallPlugin(
+  token: string,
+  plugin: string,
+): Promise<{
+  readonly ok: boolean
+  readonly problems: readonly string[]
+  readonly backupAt?: string
+}> {
+  return request(`/api/plugins/${encodeURIComponent(plugin)}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
+export function setPluginDisabled(
+  token: string,
+  plugin: string,
+  disabled: boolean,
+): Promise<{ readonly plugin: string; readonly disabled: boolean }> {
+  return request(`/api/plugins/${encodeURIComponent(plugin)}/state`, {
+    method: 'POST',
+    headers: { ...authHeader(token), ...JSON_HEADERS },
+    body: JSON.stringify({ disabled }),
   })
 }
 

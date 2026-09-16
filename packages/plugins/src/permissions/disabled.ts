@@ -1,8 +1,18 @@
 import { type DatabaseHandle, identifier, sql } from '@cogenta/core'
 import { PERMISSION_TABLES } from './tables.js'
 
-/** Why a plugin was killed and disabled — the two real policy violations this task enforces, plus a catch-all for any other worker crash. */
-export type PluginViolationReason = 'timeout' | 'memory' | 'crash'
+/**
+ * Why a plugin is off: the two real policy violations the runtime enforces, a
+ * catch-all for any other worker crash, and `'manual'` — a person turned it
+ * off from the Plugins screen.
+ *
+ * `'manual'` sits in the same union rather than in a second table because the
+ * question the runtime asks is one question ("may this plugin run?"), and two
+ * answers to it would eventually disagree. What differs is what a screen
+ * says: a plugin the site disabled after it ran out of memory is not the same
+ * news as one its owner switched off.
+ */
+export type PluginViolationReason = 'timeout' | 'memory' | 'crash' | 'manual'
 
 export interface PluginDisabledRecord {
   readonly pluginName: string

@@ -105,6 +105,17 @@ export type PluginRuntime = (typeof PLUGIN_RUNTIMES)[number]
 export interface PluginManifest {
   /** npm-scoped or plain package name, e.g. `@auteur/mon-plugin`. */
   readonly name: string
+  /**
+   * What to call this plugin in front of a person — "Lettre d'information",
+   * where `name` is `lettre-information`.
+   *
+   * Optional, and never an identifier: the name is what a directory, a grant
+   * and an install target are keyed on, and it has to stay a package name.
+   * Without this field an admin screen had to show the slug and a person had
+   * to type one, which is how a plugin ended up being created by filling in a
+   * folder name.
+   */
+  readonly title?: string
   /** Exact semver, e.g. `1.0.0`. */
   readonly version: string
   /** A semver range this plugin declares compatibility with, e.g. `^1.0.0`. */
@@ -375,6 +386,12 @@ function collectIssues(input: PluginManifest): PluginManifestIssue[] {
       path: 'name',
       message: 'must be a valid package name such as "@auteur/mon-plugin"',
     })
+  }
+  if (
+    input.title !== undefined &&
+    (typeof input.title !== 'string' || input.title.trim() === '' || input.title.length > 80)
+  ) {
+    issues.push({ path: 'title', message: 'must be a short human name, at most 80 characters' })
   }
   if (typeof input.version !== 'string' || !SEMVER_PATTERN.test(input.version)) {
     issues.push({ path: 'version', message: 'must be an exact semver version such as "1.0.0"' })

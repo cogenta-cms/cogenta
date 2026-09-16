@@ -6,7 +6,8 @@
     "schemaError": "Impossible de charger le schéma : {{message}}",
     "cancel": "Annuler",
     "save": "Enregistrer",
-    "saving": "Enregistrement…"
+    "saving": "Enregistrement…",
+    "close": "Fermer"
   },
   "fields": {
     "geoLat": "Latitude",
@@ -4512,43 +4513,118 @@
   },
   "plugins": {
     "heading": "Plugins",
-    "description": "Les extensions installées sur ce site, ce que chacune a le droit de faire, et les bacs à sable où un plugin s'écrit.",
+    "description": "Les extensions de ce site : ce que chacune a le droit de faire, et celles que vous êtes en train d'écrire.",
     "adminOnly": "Seul un administrateur peut gérer les plugins.",
     "loadError": "Les plugins n'ont pas pu être chargés.",
     "actionError": "L'action a échoué.",
     "installed": "Installés",
-    "noneInstalled": "Aucun plugin installé. Écrivez-en un dans un bac à sable ci-dessous, ou demandez-le à l'agent « Cogenta Plugin Builder ».",
+    "noneInstalled": "Aucun plugin installé pour l'instant. Créez-en un, ou demandez-le à l'agent « Cogenta Plugin Builder ».",
+    "brokenPlugin": "Le dossier « {{directory}} » n'est pas un plugin valide : {{message}}",
     "unsigned": "Non signé (local)",
     "noCode": "Sans code",
-    "doesWhat": "Événements : {{events}} · Routes : {{routes}} · Tâches : {{schedules}}",
     "asksNothing": "Ce plugin ne demande aucune permission.",
-    "permissions": "Permissions demandées",
+    "permissions": "Ce qu'il demande à pouvoir faire",
+    "permissionsHelp": "Rien n'est accordé tant que vous ne l'accordez pas, une permission à la fois. Vous pouvez en retirer une à tout moment.",
     "granted": "Accordée",
     "notGranted": "Non accordée",
-    "grant": "Accorder",
+    "grant": "Autoriser",
     "revoke": "Retirer",
-    "sandboxes": "Bacs à sable",
-    "sandboxHelp": "Un bac à sable est du code que rien n'exécute : ni le site, ni une requête. L'agent « Cogenta Plugin Builder » y écrit, vous relisez, et vous seul installez.",
-    "sandboxId": "Identifiant du bac à sable",
-    "pluginName": "Nom du plugin (facultatif)",
-    "createSandbox": "Créer",
-    "noSandbox": "Aucun bac à sable pour l'instant.",
-    "checksOut": "Prêt à installer",
-    "notReady": "Pas encore installable",
-    "handlers": "Handlers exposés : {{handlers}}",
-    "saveFile": "Enregistrer le fichier",
-    "install": "Installer",
-    "replace": "Remplacer l'installé",
-    "installHelp": "Installer n'accorde aucune permission : vous les donnez ensuite, une par une.",
+    "limitedTo": "Limité à « {{scope}} » · {{raw}}",
+    "capabilityUnknown": "{{capability}}",
+    "enable": "Activer",
+    "disable": "Désactiver",
+    "uninstall": "Désinstaller",
+    "confirmUninstall": "Confirmer la désinstallation",
+    "uninstallHelp": "Désinstaller retire le plugin du site et ses permissions ; une copie de son code est conservée.",
+    "state": {
+      "on": "Actif",
+      "off": "Désactivé"
+    },
+    "disabledBecause": {
+      "manual": "Vous avez désactivé ce plugin. Le site ne l'exécute plus.",
+      "timeout": "Le site a désactivé ce plugin : il a dépassé son temps d'exécution.",
+      "memory": "Le site a désactivé ce plugin : il a dépassé la mémoire qui lui est allouée.",
+      "crash": "Le site a désactivé ce plugin après un échec à l'exécution."
+    },
+    "does": {
+      "events": "S'exécute à chaque {{events}}.",
+      "routes": "Sert une page : {{routes}}.",
+      "schedule": "Exécute la tâche « {{name}} » toutes les {{hours}} h.",
+      "nothing": "Ne fait rien par lui-même : il attend d'être appelé."
+    },
+    "drafts": "En cours d'écriture",
+    "draftsHelp": "Un plugin en cours d'écriture n'est exécuté par rien : ni le site, ni une visite. Vous le relisez, puis vous l'installez quand il est prêt.",
+    "noDraft": "Rien en cours d'écriture.",
+    "create": {
+      "open": "Créer un plugin",
+      "title": "Créer un plugin",
+      "description": "Donnez-lui un nom et choisissez ce qu'il doit faire. Vous obtiendrez du code qui fonctionne déjà, à modifier ensuite.",
+      "nameLabel": "Nom du plugin",
+      "nameHint": "Le dossier est déduit du nom ; vous n'avez rien d'autre à saisir.",
+      "namePlaceholder": "Lettre d'information",
+      "templateLabel": "Que doit-il faire ?",
+      "submit": "Créer"
+    },
+    "template": {
+      "blank": {
+        "title": "Partir de zéro",
+        "description": "Un squelette vide, à écrire vous-même ou à confier à l'IA."
+      },
+      "on-publish": {
+        "title": "Réagir à une publication",
+        "description": "S'exécute chaque fois qu'un contenu est publié ou dépublié."
+      },
+      "page": {
+        "title": "Ajouter une page au site",
+        "description": "Sert une page à une adresse réservée au plugin."
+      },
+      "daily": {
+        "title": "Faire une tâche chaque jour",
+        "description": "S'exécute tout seul, une fois par 24 heures."
+      }
+    },
+    "draft": {
+      "open": "Modifier",
+      "close": "Fermer",
+      "editing": "Plugin « {{name}} » en cours d'écriture",
+      "ready": "Prêt à installer",
+      "notReady": "Pas encore installable",
+      "problems": "À corriger avant de pouvoir l'installer :",
+      "willAsk": "Une fois installé, il demandera : {{capabilities}}.",
+      "files": "Fichiers du plugin",
+      "save": "Enregistrer",
+      "unsaved": "Modifications non enregistrées.",
+      "check": "Vérifier",
+      "install": "Installer",
+      "replace": "Remplacer la version installée",
+      "delete": "Supprimer",
+      "confirmDelete": "Confirmer la suppression",
+      "installHelp": "Installer n'accorde aucune permission : vous les donnez ensuite, une par une.",
+      "unreadable": "Son manifeste ne se lit pas : ouvrez-le pour voir ce qui cloche."
+    },
     "status": {
       "granted": "Permission accordée.",
       "revoked": "Permission retirée.",
-      "sandboxCreated": "Bac à sable créé.",
-      "sandboxOpened": "Bac à sable ouvert.",
-      "fileOpened": "Fichier ouvert.",
+      "draftCreated": "Plugin créé. Vous pouvez le modifier ci-dessous.",
+      "draftDeleted": "Brouillon supprimé.",
+      "checked": "Vérification faite.",
       "fileSaved": "Fichier enregistré.",
-      "installed": "Plugin installé.",
-      "replaced": "Plugin remplacé, l'ancienne copie est conservée."
+      "installed": "Plugin installé. Accordez-lui maintenant ses permissions.",
+      "replaced": "Plugin remplacé, l'ancienne copie est conservée.",
+      "uninstalled": "Plugin désinstallé.",
+      "enabled": "Plugin activé.",
+      "disabled": "Plugin désactivé."
+    },
+    "capability": {
+      "content.read": "Lire le contenu du site",
+      "content.write_draft": "Créer et modifier des brouillons",
+      "content.publish": "Publier du contenu",
+      "content.delete": "Mettre du contenu à la corbeille",
+      "media.read": "Voir les fichiers de la médiathèque",
+      "schema.read": "Lire la structure des collections",
+      "http.fetch": "Appeler un service extérieur",
+      "storage.read": "Lire ses propres fichiers",
+      "storage.write": "Écrire ses propres fichiers"
     }
   },
   "widgets": {

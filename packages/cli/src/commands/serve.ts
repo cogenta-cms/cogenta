@@ -383,10 +383,14 @@ import {
   checkPluginSandbox,
   createPluginSandbox,
   createPluginSandboxToolWiring,
+  deletePluginSandbox,
   deployPluginFromSandbox,
-  listPluginSandboxes,
+  describePluginSandboxes,
   listPluginSandboxFiles,
+  PLUGIN_TEMPLATES,
+  pluginSandboxIdFromName,
   readPluginSandboxFile,
+  uninstallPlugin,
   writePluginSandboxFile,
 } from './plugin-sandbox.js'
 import { createSampleDataEngine } from './sample-data.js'
@@ -3964,7 +3968,14 @@ async function recordApiKeyAudit(
 async function recordPluginAudit(
   site: Site,
   actor: AccessContext['actor'],
-  action: 'plugin.install' | 'plugin.grant' | 'plugin.revoke',
+  action:
+    | 'plugin.install'
+    | 'plugin.uninstall'
+    | 'plugin.grant'
+    | 'plugin.revoke'
+    | 'plugin.enable'
+    | 'plugin.disable'
+    | 'plugin.sandbox_delete',
   logger: Logger,
   diff: Record<string, unknown>,
 ): Promise<void> {
@@ -5588,7 +5599,19 @@ export function createRequestListener(
           })
           await ensurePluginTables(site.db)
           const grantStore = createPluginGrantStore(site.db)
+          const disableStore = createPluginDisableStore(site.db)
           const granted = new Map<string, readonly string[]>()
+          const off = new Map<
+            string,
+            { reason: string; disabledAt: string; details: string | null }
+          >()
+          for (const record of await disableStore.listDisabled()) {
+            off.set(record.pluginName, {
+              reason: record.reason,
+              disabledAt: record.disabledAt,
+              details: record.details ?? null,
+            })
+          }
           for (const plugin of installed.plugins) {
             granted.set(
               plugin.manifest.name,
@@ -5601,18 +5624,81 @@ export function createRequestListener(
               data: {
                 installed: installed.plugins.map((plugin) => ({
                   name: plugin.manifest.name,
+                  title: plugin.manifest.title ?? null,
                   version: plugin.manifest.version,
                   capabilities: plugin.manifest.capabilities,
                   granted: granted.get(plugin.manifest.name) ?? [],
                   provides: plugin.manifest.provides,
                   devMode: plugin.devMode,
                   hasCode: plugin.entryPath !== null,
+                  disabled: off.get(plugin.manifest.name) ?? null,
                 })),
                 failures: installed.failures,
-                sandboxes: await listPluginSandboxes(projectRoot),
+                sandboxes: await describePluginSandboxes(projectRoot),
+                templates: PLUGIN_TEMPLATES.map((template) => ({
+                  id: template.id,
+                  capabilities: template.capabilities,
+                  provides: template.provides,
+                })),
               },
             }),
           )
+          return
+        }
+
+        // DELETE /api/plugins/:name — uninstall. The code is kept under
+        // `.cogenta/plugin-versions/`, and the grants go with it: a plugin
+        // reinstalled later starts from nothing granted, like any other.
+        if (segments.length === 3 && segments[2] !== 'sandbox' && req.method === 'DELETE') {
+          const pluginName = decodeURIComponent(segments[2] as string)
+          const removal = await uninstallPlugin(projectRoot, pluginName, {
+            pluginsDir: extras.pluginsDir ?? 'plugins',
+          })
+          if (!removal.ok) {
+            res.writeHead(404, jsonHeaders)
+            res.end(JSON.stringify({ data: removal }))
+            return
+          }
+          await ensurePluginTables(site.db)
+          const grantStore = createPluginGrantStore(site.db)
+          for (const grant of await grantStore.listGrants(pluginName)) {
+            await grantStore.revoke(pluginName, grant.capability)
+          }
+          await createPluginDisableStore(site.db).enable(pluginName)
+          await recordPluginAudit(site, context.actor, 'plugin.uninstall', logger, {
+            plugin: pluginName,
+            backupAt: removal.backupAt ?? null,
+          })
+          res.writeHead(200, jsonHeaders)
+          res.end(JSON.stringify({ data: removal }))
+          return
+        }
+
+        // POST /api/plugins/:name/state  { disabled } — the switch a person
+        // reaches for first: off means the runtime skips it entirely, on
+        // means it runs again, and neither touches its code or its grants.
+        if (
+          segments.length === 4 &&
+          segments[3] === 'state' &&
+          segments[2] !== 'sandbox' &&
+          req.method === 'POST'
+        ) {
+          const pluginName = decodeURIComponent(segments[2] as string)
+          const body = (await readBody(req)) as { disabled?: unknown } | undefined
+          const disabled = body?.disabled === true
+          await ensurePluginTables(site.db)
+          const disableStore = createPluginDisableStore(site.db)
+          if (disabled) await disableStore.disable(pluginName, 'manual')
+          else await disableStore.enable(pluginName)
+          await recordPluginAudit(
+            site,
+            context.actor,
+            disabled ? 'plugin.disable' : 'plugin.enable',
+            logger,
+            { plugin: pluginName },
+          )
+          res.writeHead(200, jsonHeaders)
+          res.end(JSON.stringify({ data: { plugin: pluginName, disabled } }))
           return
         }
 
@@ -5670,17 +5756,40 @@ export function createRequestListener(
           return
         }
 
-        // POST /api/plugins/sandbox  { id, name? }
+        // POST /api/plugins/sandbox  { name, template?, id? }
+        //
+        // A person names the plugin; the directory is derived from that name,
+        // so a creation form asks one question rather than two — one of which
+        // was a slug. An explicit `id` still wins, for a caller (an agent, the
+        // CLI) that has one.
         if (url.pathname === '/api/plugins/sandbox' && req.method === 'POST') {
-          const body = (await readBody(req)) as { id?: unknown; name?: unknown } | undefined
-          const id = typeof body?.id === 'string' ? body.id : ''
-          if (id === '') {
-            jsonError(res, 400, 'PLUGIN_SANDBOX_INVALID', 'A sandbox "id" is required.')
+          const body = (await readBody(req)) as
+            | { id?: unknown; name?: unknown; template?: unknown }
+            | undefined
+          const name = typeof body?.name === 'string' ? body.name.trim() : ''
+          const id =
+            typeof body?.id === 'string' && body.id !== '' ? body.id : pluginSandboxIdFromName(name)
+          if (name === '' && (typeof body?.id !== 'string' || body.id === '')) {
+            jsonError(res, 400, 'PLUGIN_SANDBOX_INVALID', 'A plugin "name" is required.')
+            return
+          }
+          if ((await describePluginSandboxes(projectRoot)).some((sandbox) => sandbox.id === id)) {
+            jsonError(
+              res,
+              409,
+              'PLUGIN_SANDBOX_INVALID',
+              `A plugin is already being written under "${id}". Give this one another name.`,
+            )
             return
           }
           try {
             await createPluginSandbox(projectRoot, id, {
-              ...(typeof body?.name === 'string' && body.name !== '' ? { name: body.name } : {}),
+              // The manifest's `name` is the derived slug — it keys the
+              // directory, the grants and the install target, and has to stay
+              // a package name. What the person typed becomes the title.
+              name: id,
+              ...(name === '' || name === id ? {} : { title: name }),
+              ...(typeof body?.template === 'string' ? { template: body.template } : {}),
             })
           } catch (error) {
             writeRestResponse(res, errorResponse(error))
@@ -5688,6 +5797,19 @@ export function createRequestListener(
           }
           res.writeHead(201, jsonHeaders)
           res.end(JSON.stringify({ data: { id } }))
+          return
+        }
+
+        // DELETE /api/plugins/sandbox/:id — throw away a draft. Nothing
+        // installed is touched: a draft is code nobody runs.
+        if (segments.length === 4 && segments[2] === 'sandbox' && req.method === 'DELETE') {
+          const id = decodeURIComponent(segments[3] as string)
+          await deletePluginSandbox(projectRoot, id)
+          await recordPluginAudit(site, context.actor, 'plugin.sandbox_delete', logger, {
+            sandbox: id,
+          })
+          res.writeHead(204, { 'cache-control': 'no-store' })
+          res.end()
           return
         }
 

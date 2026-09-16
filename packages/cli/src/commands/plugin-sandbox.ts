@@ -5,6 +5,7 @@ import {
   IMPLEMENTED_CAPABILITY_NAMES,
   isCapabilityImplemented,
   loadPlugin,
+  type PluginManifest,
   type ResolvedPlugin,
   readPluginCode,
   runIsolated,
@@ -84,16 +85,124 @@ async function resolveRealPath(sandboxDir: string, relativePath: string): Promis
   return target
 }
 
-const STARTER_MANIFEST = (name: string): string =>
+/**
+ * What a person picks from when they create a plugin, instead of being handed
+ * an empty file and a manifest format to learn.
+ *
+ * Each one is a plugin that already works: it validates, it evaluates in the
+ * real sandbox, and installing it does something observable. The capabilities
+ * it asks for are the narrowest that do its job — and they are still only
+ * requests, granted one at a time by a person afterwards.
+ */
+export interface PluginTemplate {
+  readonly id: string
+  /** What the plugin will do, in the words of someone who has not read the manifest format. */
+  readonly capabilities: readonly string[]
+  readonly provides: PluginManifest['provides']
+  readonly code: string
+}
+
+const TEMPLATE_CODE = {
+  blank: `// The plugin's code. The value at the end of this file is the set of
+// handlers it exposes; the site calls one of them by name. \`sdk\` is the only
+// global, and it carries exactly the capabilities that were granted — an
+// ungranted one is not refused, it is simply absent.
+;({
+  onContentEvent: async (event) => ({ seen: event.event }),
+})
+`,
+  'on-publish': `// Runs every time an entry is published or unpublished.
+// \`event.event\` is the name, \`event.collection\` and \`event.id\` say what moved.
+;({
+  onContentEvent: async (event) => {
+    if (event.event !== 'content.publish') return { skipped: event.event }
+
+    // Granted "content.read"? Then the entry itself is readable.
+    const entry = await sdk.content.read({ collection: event.collection, id: event.id })
+    console.log('published: ' + (entry?.values?.title ?? event.id))
+
+    return { handled: event.id }
+  },
+})
+`,
+  page: `// Serves a page of its own, at /_cogenta/plugins/<plugin name>/hello.
+// Answer with a status, a content type and a body — nothing else: a plugin
+// never sets a header on the site's own origin.
+;({
+  onRequest: async (request) => ({
+    status: 200,
+    contentType: 'text/html',
+    body: '<h1>Hello from a plugin</h1><p>You asked for ' + request.path + '.</p>',
+  }),
+})
+`,
+  daily: `// Runs on its own cadence — every 24 hours, as the manifest says.
+// Return a short sentence: it is what the Operations screen shows as the
+// result of the run.
+;({
+  onSchedule: async (task) => 'ran ' + task.name,
+})
+`,
+} as const
+
+export const PLUGIN_TEMPLATES: readonly PluginTemplate[] = [
+  { id: 'blank', capabilities: [], provides: {}, code: TEMPLATE_CODE.blank },
+  {
+    id: 'on-publish',
+    capabilities: ['content.read'],
+    provides: { eventSubscriptions: ['content.publish', 'content.unpublish'] },
+    code: TEMPLATE_CODE['on-publish'],
+  },
+  { id: 'page', capabilities: [], provides: { routes: ['/hello'] }, code: TEMPLATE_CODE.page },
+  {
+    id: 'daily',
+    capabilities: [],
+    provides: { schedules: [{ name: 'daily', everyMinutes: 24 * 60 }] },
+    code: TEMPLATE_CODE.daily,
+  },
+]
+
+export function pluginTemplate(id: string | undefined): PluginTemplate {
+  return (
+    PLUGIN_TEMPLATES.find((template) => template.id === id) ??
+    (PLUGIN_TEMPLATES[0] as PluginTemplate)
+  )
+}
+
+/**
+ * A plugin's name is written by a person ("Lettre d'information"); its
+ * directory is not. Deriving one from the other is what lets a creation form
+ * ask a single question instead of two, one of which is a slug.
+ */
+export function pluginSandboxIdFromName(name: string): string {
+  const slug = name
+    .normalize('NFD')
+    .replaceAll(/[\u0300-\u036f]/gu, '')
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/gu, '-')
+    .replaceAll(/^-+|-+$/gu, '')
+    .slice(0, 64)
+  return slug === '' ? 'plugin' : slug
+}
+
+const STARTER_MANIFEST = (
+  name: string,
+  title: string | undefined,
+  template: PluginTemplate,
+): string =>
   `${JSON.stringify(
     {
       name,
+      // What a person calls it, when that is not what a package may be
+      // called. Omitted when the two are the same, so a hand-written plugin
+      // never grows a field it did not ask for.
+      ...(title === undefined || title === name ? {} : { title }),
       version: '1.0.0',
       // Ask for the narrowest capabilities that do the job: every one is
       // something a person has to say yes to before the plugin can use it.
-      capabilities: [],
+      capabilities: template.capabilities,
       engine: '^1.0.0',
-      provides: {},
+      provides: template.provides,
       runtime: 'server',
       isolated: true,
       main: 'plugin.js',
@@ -102,25 +211,27 @@ const STARTER_MANIFEST = (name: string): string =>
     2,
   )}\n`
 
-const STARTER_CODE = `// The plugin's code. The script's completion value is the set of handlers it
-// exposes; the site calls one of them by name. \`sdk\` is the only global, and
-// it carries exactly the capabilities that were granted.
-;({
-  onContentEvent: async (event) => ({ seen: event.event }),
-})
-`
-
 /** Creates an empty sandbox, holding a manifest and a handler that already validates. */
 export async function createPluginSandbox(
   projectRoot: string,
   id: string,
-  options: { readonly name?: string } = {},
+  options: {
+    readonly name?: string
+    /** The human name, when it is not a package name — "Lettre d'information". */
+    readonly title?: string
+    readonly template?: string
+  } = {},
 ): Promise<string> {
   const dir = pluginSandboxDirectory(projectRoot, id)
   await mkdir(dir, { recursive: true })
   const name = options.name ?? id
-  await writeFile(join(dir, 'plugin.manifest.json'), STARTER_MANIFEST(name), 'utf8')
-  await writeFile(join(dir, 'plugin.js'), STARTER_CODE, 'utf8')
+  const template = pluginTemplate(options.template)
+  await writeFile(
+    join(dir, 'plugin.manifest.json'),
+    STARTER_MANIFEST(name, options.title, template),
+    'utf8',
+  )
+  await writeFile(join(dir, 'plugin.js'), template.code, 'utf8')
   return dir
 }
 
@@ -132,6 +243,58 @@ export async function listPluginSandboxes(projectRoot: string): Promise<readonly
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort()
+}
+
+export interface PluginSandboxSummary {
+  readonly id: string
+  /** The plugin's own name, as its manifest states it — never the directory's. */
+  readonly name: string
+  /** What to call it in front of a person, when the manifest says. */
+  readonly title: string | null
+  readonly version: string
+  readonly capabilities: readonly string[]
+  readonly provides: PluginManifest['provides']
+  /** `false` when the manifest does not even parse: enough to show, not enough to install. */
+  readonly readable: boolean
+}
+
+/**
+ * Every draft, described from its manifest alone.
+ *
+ * Deliberately not `checkPluginSandbox`: that one evaluates the plugin's code
+ * in a real sandboxed process, which is the right thing to do before
+ * installing and the wrong thing to do for every draft each time a screen
+ * opens. Listing reads JSON; checking runs code, on purpose, when asked.
+ */
+export async function describePluginSandboxes(
+  projectRoot: string,
+): Promise<readonly PluginSandboxSummary[]> {
+  const ids = await listPluginSandboxes(projectRoot)
+  return await Promise.all(
+    ids.map(async (id) => {
+      const raw = await readFile(
+        join(pluginSandboxDirectory(projectRoot, id), 'plugin.manifest.json'),
+        'utf8',
+      ).catch(() => null)
+      let parsed: Partial<PluginManifest> | null = null
+      if (raw !== null) {
+        try {
+          parsed = JSON.parse(raw) as Partial<PluginManifest>
+        } catch {
+          parsed = null
+        }
+      }
+      return {
+        id,
+        name: typeof parsed?.name === 'string' ? parsed.name : id,
+        title: typeof parsed?.title === 'string' ? parsed.title : null,
+        version: typeof parsed?.version === 'string' ? parsed.version : '—',
+        capabilities: Array.isArray(parsed?.capabilities) ? parsed.capabilities : [],
+        provides: (parsed?.provides ?? {}) as PluginManifest['provides'],
+        readable: parsed !== null,
+      }
+    }),
+  )
 }
 
 export async function listPluginSandboxFiles(
@@ -346,6 +509,47 @@ export async function deployPluginFromSandbox(
     ...(backupAt === undefined ? {} : { backupAt }),
     capabilities: check.manifest.capabilities,
   }
+}
+
+export interface PluginUninstall {
+  readonly ok: boolean
+  readonly problems: readonly string[]
+  /** Where the removed copy was kept — nothing here destroys a plugin's code. */
+  readonly backupAt?: string
+}
+
+/**
+ * Removes an installed plugin from `plugins/<name>/`.
+ *
+ * The copy is kept under `.cogenta/plugin-versions/`, for the same reason a
+ * replaced plugin is: "I removed the wrong one" must not be the end of the
+ * story. The grants are the caller's to revoke — they live in the database,
+ * not on disk, and revoking them is an act the audit log should carry under
+ * its own name.
+ */
+export async function uninstallPlugin(
+  projectRoot: string,
+  name: string,
+  options: { readonly pluginsDir?: string } = {},
+): Promise<PluginUninstall> {
+  const directory = join(projectRoot, options.pluginsDir ?? 'plugins', name.replace('/', '__'))
+  const exists = await lstat(directory).then(
+    () => true,
+    () => false,
+  )
+  if (!exists) {
+    return { ok: false, problems: [`No plugin is installed at ${directory}.`] }
+  }
+  const backupAt = join(
+    projectRoot,
+    PLUGIN_VERSIONS_ROOT,
+    name.replace('/', '__'),
+    new Date().toISOString().replaceAll(':', '-'),
+  )
+  await mkdir(dirname(backupAt), { recursive: true })
+  await cp(directory, backupAt, { recursive: true })
+  await rm(directory, { recursive: true, force: true })
+  return { ok: true, problems: [], backupAt }
 }
 
 /**

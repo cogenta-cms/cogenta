@@ -79,7 +79,7 @@ export interface MarketplaceInstallRecordLike {
 /** Structural mirror of `@cogenta/plugins`' `PluginDisabledRecord` — same reasoning as every other `*Like` type here. */
 export interface MarketplacePluginDisabledRecordLike {
   readonly pluginName: string
-  readonly reason: 'timeout' | 'memory' | 'crash'
+  readonly reason: 'timeout' | 'memory' | 'crash' | 'manual'
   readonly details: string | null
   readonly disabledAt: string
 }

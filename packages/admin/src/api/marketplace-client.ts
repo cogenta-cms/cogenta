@@ -88,7 +88,7 @@ export interface MarketplaceUsageInfo {
 }
 
 export interface MarketplaceDisabledInfo {
-  readonly reason: 'timeout' | 'memory' | 'crash'
+  readonly reason: 'timeout' | 'memory' | 'crash' | 'manual'
   readonly details: string | null
   readonly disabledAt: string
 }

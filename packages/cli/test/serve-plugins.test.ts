@@ -430,8 +430,15 @@ describe('the plugin workshop over HTTP', () => {
       // Nothing is installed until someone asks for it.
       const beforeDeploy = (await (
         await fetch(`${server.base}/api/plugins`, { headers: auth(token) })
-      ).json()) as { data: { installed: { name: string }[]; sandboxes: string[] } }
-      expect(beforeDeploy.data.sandboxes).toContain('atelier')
+      ).json()) as {
+        data: { installed: { name: string }[]; sandboxes: { id: string; name: string }[] }
+      }
+      // A draft is listed by what it is, not only by its directory: the
+      // screen names the plugin, and the name comes from the manifest.
+      expect(beforeDeploy.data.sandboxes.map((sandbox) => sandbox.id)).toContain('atelier')
+      expect(beforeDeploy.data.sandboxes.map((sandbox) => sandbox.name)).toContain(
+        'from-the-workshop',
+      )
       expect(beforeDeploy.data.installed.some((p) => p.name === 'from-the-workshop')).toBe(false)
 
       const deployed = await fetch(`${server.base}/api/plugins/sandbox/atelier/deploy`, {
@@ -490,6 +497,147 @@ describe('the plugin workshop over HTTP', () => {
       const body = (await deployed.json()) as { data: { ok: boolean; problems: string[] } }
       expect(body.data.ok).toBe(false)
       expect(body.data.problems.join(' ')).toContain('evaluate')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
+  it('creates from a name and a purpose, then switches off, uninstalls, and drops a draft', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+
+      // A person names a plugin and says what it should do; the directory is
+      // the host's business, and the code it lands on already works.
+      const created = await fetch(`${server.base}/api/plugins/sandbox`, {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ name: 'Lettre information', template: 'on-publish' }),
+      })
+      expect(created.status).toBe(201)
+      expect(((await created.json()) as { data: { id: string } }).data.id).toBe(
+        'lettre-information',
+      )
+
+      const listed = (await (
+        await fetch(`${server.base}/api/plugins`, { headers: auth(token) })
+      ).json()) as {
+        data: {
+          sandboxes: { id: string; name: string; title: string | null; capabilities: string[] }[]
+          templates: { id: string }[]
+        }
+      }
+      const draft = listed.data.sandboxes.find((sandbox) => sandbox.id === 'lettre-information')
+      // Two different things, and both true: what a person calls it, and the
+      // package name everything else is keyed on.
+      expect(draft?.title).toBe('Lettre information')
+      expect(draft?.name).toBe('lettre-information')
+      // The template asked for the narrowest capability that does its job,
+      // and the screen can show it before anything is installed.
+      expect(draft?.capabilities).toEqual(['content.read'])
+      expect(listed.data.templates.map((template) => template.id)).toContain('daily')
+
+      // The same name twice is refused rather than silently overwriting a
+      // draft someone was working on.
+      expect(
+        (
+          await fetch(`${server.base}/api/plugins/sandbox`, {
+            method: 'POST',
+            headers: auth(token),
+            body: JSON.stringify({ name: 'Lettre information', template: 'blank' }),
+          })
+        ).status,
+      ).toBe(409)
+
+      // It checks out as written, without a line being changed.
+      const checked = (await (
+        await fetch(`${server.base}/api/plugins/sandbox/lettre-information`, {
+          headers: auth(token),
+        })
+      ).json()) as { data: { check: { ok: boolean; handlers: string[] } } }
+      expect(checked.data.check.ok).toBe(true)
+      expect(checked.data.check.handlers).toEqual(['onContentEvent'])
+
+      expect(
+        (
+          await fetch(`${server.base}/api/plugins/sandbox/lettre-information/deploy`, {
+            method: 'POST',
+            headers: auth(token),
+            body: JSON.stringify({}),
+          })
+        ).status,
+      ).toBe(200)
+
+      await fetch(`${server.base}/api/plugins/lettre-information/grants`, {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ capability: 'content.read' }),
+      })
+
+      // Off: the record says a person did it, not that the plugin misbehaved.
+      expect(
+        (
+          await fetch(`${server.base}/api/plugins/lettre-information/state`, {
+            method: 'POST',
+            headers: auth(token),
+            body: JSON.stringify({ disabled: true }),
+          })
+        ).status,
+      ).toBe(200)
+      const off = (await (
+        await fetch(`${server.base}/api/plugins`, { headers: auth(token) })
+      ).json()) as {
+        data: {
+          installed: { name: string; title: string | null; disabled: { reason: string } | null }[]
+        }
+      }
+      const live = off.data.installed.find((plugin) => plugin.name === 'lettre-information')
+      expect(live?.title).toBe('Lettre information')
+      expect(live?.disabled?.reason).toBe('manual')
+
+      // Uninstalled: gone from the site, and its grants gone with it.
+      const removed = await fetch(`${server.base}/api/plugins/lettre-information`, {
+        method: 'DELETE',
+        headers: auth(token),
+      })
+      expect(removed.status).toBe(200)
+      expect(
+        ((await removed.json()) as { data: { backupAt?: string } }).data.backupAt,
+      ).toBeDefined()
+
+      const afterRemoval = (await (
+        await fetch(`${server.base}/api/plugins`, { headers: auth(token) })
+      ).json()) as { data: { installed: { name: string; granted: string[] }[] } }
+      expect(
+        afterRemoval.data.installed.some((plugin) => plugin.name === 'lettre-information'),
+      ).toBe(false)
+
+      // The draft it was installed from is still there, and can be dropped.
+      expect(
+        (
+          await fetch(`${server.base}/api/plugins/sandbox/lettre-information`, {
+            method: 'DELETE',
+            headers: auth(token),
+          })
+        ).status,
+      ).toBe(204)
+      const afterDrop = (await (
+        await fetch(`${server.base}/api/plugins`, { headers: auth(token) })
+      ).json()) as { data: { sandboxes: { id: string }[] } }
+      expect(afterDrop.data.sandboxes.map((sandbox) => sandbox.id)).not.toContain(
+        'lettre-information',
+      )
+
+      // Every one of those acts is attributable afterwards.
+      const audit = (await (
+        await fetch(`${server.base}/api/audit`, { headers: auth(token) })
+      ).json()) as { data: { action: string }[] }
+      const actions = audit.data.map((entry) => entry.action)
+      expect(actions).toContain('plugin.disable')
+      expect(actions).toContain('plugin.uninstall')
+      expect(actions).toContain('plugin.sandbox_delete')
     } finally {
       await server.stop()
     }

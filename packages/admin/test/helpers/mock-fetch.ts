@@ -426,6 +426,68 @@ export const themeRefineRequests: Record<string, unknown>[] = []
 /** The capabilities the `/api/plugins` mock considers granted (L31). */
 export const mockPluginGrants: string[] = []
 
+interface MockPluginProvides {
+  eventSubscriptions?: readonly string[]
+  routes?: readonly string[]
+  schedules?: readonly { name: string; everyMinutes: number }[]
+}
+
+/** What the `/api/plugins` mock reports as installed — mutated by install and uninstall. */
+export const mockPluginsInstalled: {
+  name: string
+  title: string | null
+  version: string
+  capabilities: readonly string[]
+  provides: MockPluginProvides
+  devMode: boolean
+  hasCode: boolean
+}[] = []
+
+/** The drafts the mock holds — mutated by create and delete. */
+export const mockPluginDrafts: {
+  id: string
+  name: string
+  title: string | null
+  version: string
+  capabilities: readonly string[]
+  provides: MockPluginProvides
+  readable: boolean
+}[] = []
+
+/** Plugins the mock considers switched off, by name. */
+export const mockPluginDisabled = new Map<
+  string,
+  { reason: 'timeout' | 'memory' | 'crash' | 'manual'; disabledAt: string; details: string | null }
+>()
+
+/** Draft file contents the mock has been told to keep, keyed `<draft>:<path>`. */
+export const mockPluginDraftFiles = new Map<string, string>()
+
+/** Puts the plugin mock back to one installed plugin and one draft. */
+export function resetMockPlugins(): void {
+  mockPluginGrants.splice(0, mockPluginGrants.length)
+  mockPluginDisabled.clear()
+  mockPluginDraftFiles.clear()
+  mockPluginsInstalled.splice(0, mockPluginsInstalled.length, {
+    name: 'demo-notes',
+    title: null,
+    version: '1.0.0',
+    capabilities: ['storage.write:plugins/demo-notes', 'content.read:article'],
+    provides: { eventSubscriptions: ['content.publish'], routes: ['/recent'] },
+    devMode: true,
+    hasCode: true,
+  })
+  mockPluginDrafts.splice(0, mockPluginDrafts.length, {
+    id: 'atelier',
+    name: 'atelier',
+    title: null,
+    version: '1.0.0',
+    capabilities: [],
+    provides: {},
+    readable: true,
+  })
+}
+
 /** The widgets the `/api/widgets` mock holds, reset by each test that uses them (L30). */
 export const mockWidgets: {
   id: string
@@ -9728,9 +9790,11 @@ export function installMockFetch(
         }
       }
 
-      // `/api/plugins` (L31 step 4) — the workshop, as the screen sees it:
-      // what is installed with what it was granted, and the sandboxes a
-      // plugin is written in.
+      // `/api/plugins` (L31) — the plugin screen's host, stateful where the
+      // screen's own behaviour depends on it: a draft really appears when it
+      // is created and really disappears when it is deleted, a plugin really
+      // turns off, and uninstalling really empties the list. A mock that
+      // always answered the same thing would let the screen claim anything.
       if (url.includes('/api/plugins')) {
         if (!user.roles.includes('admin')) {
           return json(403, { error: { code: 'FORBIDDEN', message: 'Only the admin role.' } })
@@ -9738,19 +9802,27 @@ export function installMockFetch(
         if (/\/api\/plugins$/u.test(url) && method === 'GET') {
           return json(200, {
             data: {
-              installed: [
+              installed: mockPluginsInstalled.map((plugin) => ({
+                ...plugin,
+                granted: mockPluginGrants,
+                disabled: mockPluginDisabled.get(plugin.name) ?? null,
+              })),
+              failures: [],
+              sandboxes: mockPluginDrafts,
+              templates: [
+                { id: 'blank', capabilities: [], provides: {} },
                 {
-                  name: 'demo-notes',
-                  version: '1.0.0',
-                  capabilities: ['storage.write:plugins/demo-notes', 'content.read:article'],
-                  granted: mockPluginGrants,
-                  provides: { eventSubscriptions: ['content.publish'], routes: ['/recent'] },
-                  devMode: true,
-                  hasCode: true,
+                  id: 'on-publish',
+                  capabilities: ['content.read'],
+                  provides: { eventSubscriptions: ['content.publish'] },
+                },
+                { id: 'page', capabilities: [], provides: { routes: ['/hello'] } },
+                {
+                  id: 'daily',
+                  capabilities: [],
+                  provides: { schedules: [{ name: 'daily', everyMinutes: 1440 }] },
                 },
               ],
-              failures: [],
-              sandboxes: ['atelier'],
             },
           })
         }
@@ -9766,26 +9838,107 @@ export function installMockFetch(
           if (at !== -1) mockPluginGrants.splice(at, 1)
           return new Response(null, { status: 204 })
         }
-        if (url.includes('/api/plugins/sandbox/atelier/deploy') && method === 'POST') {
+        const stateMatch = /\/api\/plugins\/([^/?]+)\/state$/u.exec(url)
+        if (stateMatch !== null && method === 'POST') {
+          const name = decodeURIComponent(stateMatch[1] as string)
+          if ((body as { disabled: boolean }).disabled) {
+            mockPluginDisabled.set(name, {
+              reason: 'manual',
+              disabledAt: '2026-09-16T10:00:00.000Z',
+              details: null,
+            })
+          } else {
+            mockPluginDisabled.delete(name)
+          }
+          return json(200, { data: { plugin: name, disabled: mockPluginDisabled.has(name) } })
+        }
+        const deployMatch = /\/api\/plugins\/sandbox\/([^/?]+)\/deploy$/u.exec(url)
+        if (deployMatch !== null && method === 'POST') {
+          const draft = mockPluginDrafts.find((item) => item.id === deployMatch[1])
+          if (draft !== undefined && !mockPluginsInstalled.some((one) => one.name === draft.name)) {
+            mockPluginsInstalled.push({
+              name: draft.name,
+              title: draft.title,
+              version: draft.version,
+              capabilities: draft.capabilities,
+              provides: draft.provides,
+              devMode: true,
+              hasCode: true,
+            })
+          }
           return json(200, { data: { ok: true, problems: [], installedAt: '/site/plugins/demo' } })
         }
-        if (/\/api\/plugins\/sandbox\/atelier$/u.test(url) && method === 'GET') {
+        const fileMatch = /\/api\/plugins\/sandbox\/([^/?]+)\/file\?path=([^&]+)/u.exec(url)
+        if (fileMatch !== null) {
+          const path = decodeURIComponent(fileMatch[2] as string)
+          const key = `${fileMatch[1]}:${path}`
+          if (method === 'PUT') {
+            mockPluginDraftFiles.set(key, (body as { content: string }).content)
+            return json(200, { data: { id: fileMatch[1], path } })
+          }
           return json(200, {
             data: {
-              id: 'atelier',
+              id: fileMatch[1],
+              path,
+              content:
+                mockPluginDraftFiles.get(key) ??
+                ';({ onContentEvent: async (e) => ({ seen: e }) })',
+            },
+          })
+        }
+        const sandboxMatch = /\/api\/plugins\/sandbox\/([^/?]+)$/u.exec(url)
+        if (sandboxMatch !== null && method === 'GET') {
+          const id = decodeURIComponent(sandboxMatch[1] as string)
+          const draft = mockPluginDrafts.find((item) => item.id === id)
+          return json(200, {
+            data: {
+              id,
               files: ['plugin.js', 'plugin.manifest.json'],
               check: {
                 ok: true,
                 problems: [],
                 handlers: ['onContentEvent'],
                 unimplemented: [],
-                manifest: { name: 'demo-notes', capabilities: [] },
+                manifest: { name: draft?.name ?? id, capabilities: draft?.capabilities ?? [] },
               },
             },
           })
         }
-        if (url.includes('/api/plugins/sandbox') && method === 'POST') {
-          return json(201, { data: { id: (body as { id: string }).id } })
+        if (sandboxMatch !== null && method === 'DELETE') {
+          const id = decodeURIComponent(sandboxMatch[1] as string)
+          const at = mockPluginDrafts.findIndex((item) => item.id === id)
+          if (at !== -1) mockPluginDrafts.splice(at, 1)
+          return new Response(null, { status: 204 })
+        }
+        if (/\/api\/plugins\/sandbox$/u.test(url) && method === 'POST') {
+          const created = body as { name: string; template: string }
+          const id = created.name
+            .toLowerCase()
+            .normalize('NFD')
+            .replaceAll(/[^a-z0-9]+/gu, '-')
+            .replaceAll(/^-+|-+$/gu, '')
+          mockPluginDrafts.push({
+            id,
+            name: id,
+            title: created.name,
+            version: '1.0.0',
+            capabilities: created.template === 'on-publish' ? ['content.read'] : [],
+            provides:
+              created.template === 'on-publish'
+                ? { eventSubscriptions: ['content.publish'] }
+                : created.template === 'page'
+                  ? { routes: ['/hello'] }
+                  : {},
+            readable: true,
+          })
+          return json(201, { data: { id } })
+        }
+        const uninstallMatch = /\/api\/plugins\/([^/?]+)$/u.exec(url)
+        if (uninstallMatch !== null && method === 'DELETE') {
+          const name = decodeURIComponent(uninstallMatch[1] as string)
+          const at = mockPluginsInstalled.findIndex((plugin) => plugin.name === name)
+          if (at !== -1) mockPluginsInstalled.splice(at, 1)
+          return json(200, { data: { ok: true, problems: [], backupAt: '/site/.cogenta' } })
         }
       }
 

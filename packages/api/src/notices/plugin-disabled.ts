@@ -7,7 +7,7 @@ export function pluginDisabledNoticeId(pluginName: string): string {
 
 export interface DisabledPluginRecord {
   readonly pluginName: string
-  readonly reason: 'timeout' | 'memory' | 'crash'
+  readonly reason: 'timeout' | 'memory' | 'crash' | 'manual'
 }
 
 export interface PluginDisabledOptions {

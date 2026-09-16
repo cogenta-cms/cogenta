@@ -6,7 +6,8 @@
     "save": "Save",
     "saving": "Saving…",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "close": "Close"
   },
   "fields": {
     "geoLat": "Latitude",
@@ -4512,43 +4513,118 @@
   },
   "plugins": {
     "heading": "Plugins",
-    "description": "What this site has installed, what each one is allowed to do, and the sandboxes a plugin is written in.",
+    "description": "This site's plugins: what each one is allowed to do, and the ones you are writing.",
     "adminOnly": "Only an administrator can manage plugins.",
     "loadError": "The plugins could not be loaded.",
     "actionError": "That did not work.",
     "installed": "Installed",
-    "noneInstalled": "No plugin installed. Write one in a sandbox below, or ask the “Cogenta Plugin Builder” agent for it.",
+    "noneInstalled": "No plugin installed yet. Create one, or ask the “Cogenta Plugin Builder” agent for it.",
+    "brokenPlugin": "The “{{directory}}” folder is not a valid plugin: {{message}}",
     "unsigned": "Unsigned (local)",
     "noCode": "No code",
-    "doesWhat": "Events: {{events}} · Routes: {{routes}} · Schedules: {{schedules}}",
     "asksNothing": "This plugin asks for no permission at all.",
-    "permissions": "Permissions requested",
+    "permissions": "What it asks to be allowed to do",
+    "permissionsHelp": "Nothing is granted until you grant it, one permission at a time. You can take any of them back later.",
     "granted": "Granted",
     "notGranted": "Not granted",
-    "grant": "Grant",
+    "grant": "Allow",
     "revoke": "Revoke",
-    "sandboxes": "Sandboxes",
-    "sandboxHelp": "A sandbox is code nothing runs: not the site, not a request. The “Cogenta Plugin Builder” agent writes there, you read it, and only you install it.",
-    "sandboxId": "Sandbox id",
-    "pluginName": "Plugin name (optional)",
-    "createSandbox": "Create",
-    "noSandbox": "No sandbox yet.",
-    "checksOut": "Ready to install",
-    "notReady": "Not installable yet",
-    "handlers": "Handlers exposed: {{handlers}}",
-    "saveFile": "Save the file",
-    "install": "Install",
-    "replace": "Replace the installed one",
-    "installHelp": "Installing grants nothing: you give permissions afterwards, one at a time.",
+    "limitedTo": "Limited to “{{scope}}” · {{raw}}",
+    "capabilityUnknown": "{{capability}}",
+    "enable": "Turn on",
+    "disable": "Turn off",
+    "uninstall": "Uninstall",
+    "confirmUninstall": "Confirm the uninstall",
+    "uninstallHelp": "Uninstalling removes the plugin and its permissions; a copy of its code is kept.",
+    "state": {
+      "on": "On",
+      "off": "Off"
+    },
+    "disabledBecause": {
+      "manual": "You turned this plugin off. The site no longer runs it.",
+      "timeout": "The site turned this plugin off: it ran past its time limit.",
+      "memory": "The site turned this plugin off: it ran past the memory it is allowed.",
+      "crash": "The site turned this plugin off after it failed while running."
+    },
+    "does": {
+      "events": "Runs on every {{events}}.",
+      "routes": "Serves a page: {{routes}}.",
+      "schedule": "Runs the “{{name}}” task every {{hours}} h.",
+      "nothing": "Does nothing on its own: it waits to be called."
+    },
+    "drafts": "Being written",
+    "draftsHelp": "A plugin being written is run by nothing: not the site, not a visit. You read it, then install it when it is ready.",
+    "noDraft": "Nothing being written.",
+    "create": {
+      "open": "Create a plugin",
+      "title": "Create a plugin",
+      "description": "Give it a name and pick what it should do. You get code that already works, to change afterwards.",
+      "nameLabel": "Plugin name",
+      "nameHint": "The folder is derived from the name; there is nothing else to fill in.",
+      "namePlaceholder": "Newsletter",
+      "templateLabel": "What should it do?",
+      "submit": "Create"
+    },
+    "template": {
+      "blank": {
+        "title": "Start from scratch",
+        "description": "An empty skeleton, to write yourself or hand to the AI."
+      },
+      "on-publish": {
+        "title": "React to a publication",
+        "description": "Runs every time an entry is published or unpublished."
+      },
+      "page": {
+        "title": "Add a page to the site",
+        "description": "Serves a page at an address reserved for the plugin."
+      },
+      "daily": {
+        "title": "Do something every day",
+        "description": "Runs on its own, once every 24 hours."
+      }
+    },
+    "draft": {
+      "open": "Edit",
+      "close": "Close",
+      "editing": "Plugin “{{name}}” being written",
+      "ready": "Ready to install",
+      "notReady": "Not installable yet",
+      "problems": "To fix before it can be installed:",
+      "willAsk": "Once installed, it will ask for: {{capabilities}}.",
+      "files": "Plugin files",
+      "save": "Save",
+      "unsaved": "Unsaved changes.",
+      "check": "Check",
+      "install": "Install",
+      "replace": "Replace the installed version",
+      "delete": "Delete",
+      "confirmDelete": "Confirm the deletion",
+      "installHelp": "Installing grants nothing: you give permissions afterwards, one at a time.",
+      "unreadable": "Its manifest does not parse: open it to see what is wrong."
+    },
     "status": {
       "granted": "Permission granted.",
       "revoked": "Permission revoked.",
-      "sandboxCreated": "Sandbox created.",
-      "sandboxOpened": "Sandbox opened.",
-      "fileOpened": "File opened.",
+      "draftCreated": "Plugin created. You can edit it below.",
+      "draftDeleted": "Draft deleted.",
+      "checked": "Checked.",
       "fileSaved": "File saved.",
-      "installed": "Plugin installed.",
-      "replaced": "Plugin replaced; the previous copy is kept."
+      "installed": "Plugin installed. Now grant it its permissions.",
+      "replaced": "Plugin replaced; the previous copy is kept.",
+      "uninstalled": "Plugin uninstalled.",
+      "enabled": "Plugin turned on.",
+      "disabled": "Plugin turned off."
+    },
+    "capability": {
+      "content.read": "Read the site's content",
+      "content.write_draft": "Create and edit drafts",
+      "content.publish": "Publish content",
+      "content.delete": "Move content to the trash",
+      "media.read": "See the media library's files",
+      "schema.read": "Read the shape of the collections",
+      "http.fetch": "Call an outside service",
+      "storage.read": "Read its own files",
+      "storage.write": "Write its own files"
     }
   },
   "widgets": {

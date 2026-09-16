@@ -75,8 +75,20 @@ describe('definePlugin', () => {
 
   it('refuses a bare capability carrying an unexpected parameter', () => {
     expect(() =>
-      definePlugin(validManifest({ capabilities: ['content.read:something'] })),
+      definePlugin(validManifest({ capabilities: ['schema.read:something'] })),
     ).toThrowError(/does not take a parameter/)
+  })
+
+  it('lets a content capability name the collection it applies to (L31 step 3)', () => {
+    // A narrower grant is the one a reviewer should be able to prefer, and
+    // the bare form still means "every collection".
+    expect(
+      definePlugin(validManifest({ capabilities: ['content.write_draft:article'] })),
+    ).toBeTruthy()
+    expect(definePlugin(validManifest({ capabilities: ['content.write_draft'] }))).toBeTruthy()
+    expect(() =>
+      definePlugin(validManifest({ capabilities: ['content.publish:not a collection'] })),
+    ).toThrowError(/takes a collection name/)
   })
 
   it('refuses a block provision with no fallback', () => {

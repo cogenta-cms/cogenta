@@ -6,8 +6,13 @@ export {
 } from './entry.js'
 export type { CapabilityCallContext, CapabilityHandler } from './host/capabilities.js'
 export {
+  createContentDeleteHandler,
+  createContentPublishHandler,
   createContentReadHandler,
+  createContentWriteDraftHandler,
   createHttpFetchHandler,
+  createMediaReadHandler,
+  createSchemaReadHandler,
   createStorageReadHandler,
   createStorageWriteHandler,
 } from './host/capabilities.js'
@@ -50,6 +55,8 @@ export type {
 export {
   DEFAULT_PLUGIN_MAIN,
   definePlugin,
+  IMPLEMENTED_CAPABILITY_NAMES,
+  isCapabilityImplemented,
   MAX_PLUGIN_SCHEDULE_MINUTES,
   MIN_PLUGIN_SCHEDULE_MINUTES,
   PLUGIN_CAPABILITY_NAMES,

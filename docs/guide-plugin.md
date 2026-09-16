@@ -268,6 +268,31 @@ disabled until a human re-enables it — an event handler is not a place to do s
 Your code is read once, when the site starts: editing a plugin means restarting the
 site, the same rule its schema file already follows.
 
+## What your plugin can actually do today (L31)
+
+Nine capabilities have a real implementation behind them:
+
+| Capability | What the SDK gives you |
+|---|---|
+| `content.read` | `sdk.content.read({ id })` — one published entry |
+| `content.write_draft` | `sdk.content.write_draft({ collection, id?, values })` — creates or updates a **draft**, never publishes |
+| `content.publish` | `sdk.content.publish({ collection, id })` |
+| `content.delete` | `sdk.content.delete({ collection, id })` — to the trash, reversible |
+| `media.read` | `sdk.media.read({ id })` — a media item's metadata, never its bytes |
+| `schema.read` | `sdk.schema.read({})` — the site's collections and their fields |
+| `http.fetch` | `sdk.http.fetch({ url })`, only on the hostnames granted |
+| `storage.read` / `storage.write` | your own prefix, re-checked per call |
+
+The four content capabilities may name a collection — `content.write_draft:article` writes
+drafts of articles and nothing else, while the bare form means every collection. Ask for
+the narrower one: it is the one a reviewer can say yes to quickly.
+
+The rest of the vocabulary (`media.write`, `site.config_*`, `deps.*`, `build.trigger`,
+`deploy.trigger`, `channel.send`, `agent.delegate`, `memory.*`) is still declarable —
+the names come from contract C and describe real intentions — but **nothing implements
+them yet**, so `cogenta plugin grant` refuses them rather than handing you a method that
+does nothing.
+
 ## Serving a page of your own (L31)
 
 Declare the paths you serve, and expose `onRequest`:

@@ -1,11 +1,16 @@
 import type { DatabaseHandle, Logger, StorageDriver } from '@cogenta/core'
 import {
   type CapabilityHandler,
+  createContentDeleteHandler,
+  createContentPublishHandler,
   createContentReadHandler,
+  createContentWriteDraftHandler,
   createHttpFetchHandler,
+  createMediaReadHandler,
   createPluginDisableStore,
   createPluginGrantStore,
   createPluginUsageStore,
+  createSchemaReadHandler,
   createStorageReadHandler,
   createStorageWriteHandler,
   ensurePluginTables,
@@ -100,6 +105,20 @@ export interface PluginRuntimeOptions {
   readonly logger: Logger
   /** Reads one published entry of a collection — what a granted `content.read` reaches. */
   readonly readEntry?: (collection: string, id: string) => Promise<unknown>
+  /** Creates or updates the working face of an entry — `content.write_draft`, never publishing. */
+  readonly writeDraft?: (input: {
+    readonly collection: string
+    readonly id?: string
+    readonly values: Record<string, unknown>
+  }) => Promise<unknown>
+  /** Publishes an existing entry — `content.publish`. */
+  readonly publishEntry?: (collection: string, id: string) => Promise<unknown>
+  /** Moves an entry to the trash — `content.delete`, reversible since schema@2.0. */
+  readonly trashEntry?: (collection: string, id: string) => Promise<unknown>
+  /** One media item's metadata — `media.read`. */
+  readonly readMedia?: (id: string) => Promise<unknown>
+  /** The site's content model — `schema.read`. */
+  readonly readSchema?: () => Promise<unknown>
   readonly fetchImpl?: typeof fetch
 }
 
@@ -198,6 +217,26 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     if (readEntry !== undefined && collection !== null) {
       handlers['content.read'] = createContentReadHandler((id) => readEntry(collection, id))
     }
+    const writeDraft = options.writeDraft
+    if (writeDraft !== undefined) {
+      handlers['content.write_draft'] = createContentWriteDraftHandler(writeDraft)
+    }
+    const publishEntry = options.publishEntry
+    if (publishEntry !== undefined) {
+      handlers['content.publish'] = createContentPublishHandler((input) =>
+        publishEntry(input.collection, input.id),
+      )
+    }
+    const trashEntry = options.trashEntry
+    if (trashEntry !== undefined) {
+      handlers['content.delete'] = createContentDeleteHandler((input) =>
+        trashEntry(input.collection, input.id),
+      )
+    }
+    const readMedia = options.readMedia
+    if (readMedia !== undefined) handlers['media.read'] = createMediaReadHandler(readMedia)
+    const readSchema = options.readSchema
+    if (readSchema !== undefined) handlers['schema.read'] = createSchemaReadHandler(readSchema)
     return handlers
   }
 

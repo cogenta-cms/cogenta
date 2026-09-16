@@ -141,3 +141,114 @@ export function createStorageWriteHandler(driver: StorageDriver): CapabilityHand
     return { ok: true }
   }
 }
+
+/**
+ * The collections a capability was granted for, or `null` when it was granted
+ * bare — "all of them" (L31 step 3). Re-read per call, like every other
+ * parameter check here: a plugin cannot widen its own grant by asking twice.
+ */
+function grantedCollections(
+  name: string,
+  context: CapabilityCallContext,
+): readonly string[] | null {
+  if (context.grantedCapabilities.includes(name)) return null
+  const named = grantedParameters(name, context)
+  if (named.length === 0) refused(`"${name}" was not granted`)
+  return named
+}
+
+function assertCollection(name: string, collection: string, context: CapabilityCallContext): void {
+  const allowed = grantedCollections(name, context)
+  if (allowed !== null && !allowed.includes(collection)) {
+    refused(`"${name}" was not granted for the collection "${collection}"`)
+  }
+}
+
+/**
+ * `schema.read` — what this site's content model is: its collections, their
+ * fields and their labels. A plugin that writes a draft has to know what a
+ * collection holds, and asking the host beats hard-coding a shape that a
+ * site is free to change.
+ */
+export function createSchemaReadHandler(readSchema: () => Promise<unknown>): CapabilityHandler {
+  return async (_args, context) => {
+    if (!context.grantedCapabilities.includes('schema.read'))
+      refused('"schema.read" was not granted')
+    return await readSchema()
+  }
+}
+
+/**
+ * `content.write_draft` — creates or updates the working face of an entry,
+ * and **never publishes it**. The name is the promise: what a plugin writes
+ * stays invisible to a visitor until a human publishes it, which is the
+ * difference between a plugin that drafts and a plugin that speaks for the
+ * site (R6's spirit — an agent proposes, a human applies).
+ */
+export function createContentWriteDraftHandler(
+  writeDraft: (input: {
+    readonly collection: string
+    readonly id?: string
+    readonly values: Record<string, unknown>
+  }) => Promise<unknown>,
+): CapabilityHandler {
+  return async (args, context) => {
+    const record = asRecord(args)
+    const collection = asString(record.collection, 'collection')
+    assertCollection('content.write_draft', collection, context)
+    const values = record.values
+    if (values === null || typeof values !== 'object' || Array.isArray(values)) {
+      refused('"values" must be an object')
+    }
+    const id = record.id === undefined ? undefined : asString(record.id, 'id')
+    return await writeDraft({
+      collection,
+      ...(id === undefined ? {} : { id }),
+      values: values as Record<string, unknown>,
+    })
+  }
+}
+
+/** `content.publish` — makes an existing entry public. Reversible by unpublishing it. */
+export function createContentPublishHandler(
+  publish: (input: { readonly collection: string; readonly id: string }) => Promise<unknown>,
+): CapabilityHandler {
+  return async (args, context) => {
+    const record = asRecord(args)
+    const collection = asString(record.collection, 'collection')
+    assertCollection('content.publish', collection, context)
+    return await publish({ collection, id: asString(record.id, 'id') })
+  }
+}
+
+/**
+ * `content.delete` — moves an entry to the trash, never a hard delete: since
+ * `schema@2.0` (ADR-0022) `delete()` is reversible, and a plugin is exactly
+ * the caller for which that matters. Purging stays a human decision.
+ */
+export function createContentDeleteHandler(
+  trash: (input: { readonly collection: string; readonly id: string }) => Promise<unknown>,
+): CapabilityHandler {
+  return async (args, context) => {
+    const record = asRecord(args)
+    const collection = asString(record.collection, 'collection')
+    assertCollection('content.delete', collection, context)
+    return await trash({ collection, id: asString(record.id, 'id') })
+  }
+}
+
+/**
+ * `media.read` — one media item's metadata (its name, type, size, dimensions
+ * and public URL for an image), never its bytes: a sandbox returns JSON to
+ * the host, so handing it a file would mean holding the whole thing in memory
+ * twice to no purpose. A plugin that needs the bytes of a public image has
+ * `http.fetch`.
+ */
+export function createMediaReadHandler(
+  readMedia: (id: string) => Promise<unknown>,
+): CapabilityHandler {
+  return async (args, context) => {
+    if (!context.grantedCapabilities.includes('media.read')) refused('"media.read" was not granted')
+    return await readMedia(asString(asRecord(args).id, 'id'))
+  }
+}

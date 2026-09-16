@@ -6961,6 +6961,23 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // The plugins this site has installed, and the events they asked for
   // (L31 step 2). Off entirely with `plugins.enabled: false`; a site with no
   // `plugins/` directory builds an empty runtime and pays nothing for it.
+  /** One store per collection for the plugin runtime, or `null` for a name this site does not have. */
+  const pluginStores = new Map<string, ReturnType<typeof createContentStore>>()
+  const pluginContentStore = (
+    collectionName: string,
+  ): ReturnType<typeof createContentStore> | null => {
+    const existing = pluginStores.get(collectionName)
+    if (existing !== undefined) return existing
+    const collection = collections.find((item) => item.name === collectionName)
+    if (collection === undefined) return null
+    const store = createContentStore({
+      db: selection.instance,
+      collection,
+      defaultLocale: loaded.config.site.defaultLocale,
+    })
+    pluginStores.set(collectionName, store)
+    return store
+  }
   const pluginRuntime = loaded.config.plugins.enabled
     ? await createPluginRuntime({
         projectRoot,
@@ -6971,14 +6988,47 @@ export async function runServe(options: ServeOptions): Promise<number> {
         // The published face of one entry, the same thing a visitor sees —
         // a plugin reading drafts would be reading something no reader can.
         readEntry: async (collectionName, id) => {
-          const collection = collections.find((item) => item.name === collectionName)
-          if (collection === undefined) return null
-          return createContentStore({
-            db: selection.instance,
-            collection,
-            defaultLocale: loaded.config.site.defaultLocale,
-          }).read(id)
+          const store = pluginContentStore(collectionName)
+          return store === null ? null : store.read(id)
         },
+        // A draft, never a publication: what a plugin writes stays invisible
+        // until a human publishes it (L31 step 3). `state: 'working'` is the
+        // same face the admin's own editor writes to.
+        writeDraft: async ({ collection: collectionName, id, values }) => {
+          const store = pluginContentStore(collectionName)
+          if (store === null) return null
+          if (id === undefined) {
+            const created = await store.create({ values })
+            return { id: created.id, status: created.status }
+          }
+          const updated = await store.update(id, { values })
+          return { id: updated.id, status: updated.status }
+        },
+        publishEntry: async (collectionName, id) => {
+          const store = pluginContentStore(collectionName)
+          if (store === null) return null
+          const published = await store.publish(id)
+          return { id: published.id, status: published.status }
+        },
+        // The trash, not a purge: reversible since schema@2.0 (ADR-0022),
+        // which is exactly what makes this safe to hand a plugin at all.
+        trashEntry: async (collectionName, id) => {
+          const store = pluginContentStore(collectionName)
+          if (store === null) return null
+          await store.delete(id)
+          return { id, trashed: true }
+        },
+        readSchema: async () =>
+          collections.map((collection) => ({
+            name: collection.name,
+            labels: collection.labels,
+            routing: collection.routing ?? null,
+            fields: Object.entries(collection.fields).map(([name, field]) => ({
+              name,
+              kind: field.kind,
+              required: field.required ?? false,
+            })),
+          })),
       })
     : null
   if (pluginRuntime !== null && pluginRuntime.plugins.length > 0) {

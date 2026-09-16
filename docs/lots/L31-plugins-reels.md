@@ -80,6 +80,6 @@ langage clair, journal d'audit des installations, et mise à jour de `BLOCKERS.m
 | Conception | fait | 2026-09-16, sur reconnaissance réelle du code |
 | 1. Exécution réelle | fait | `main` dans le manifeste, code lu du disque, signature couvrant le code, canal d'invocation (`invoke`/`input`), `plugins/<nom>/` + `plugins.dir`/`plugins.enabled`, `cogenta plugin list/check/grant/revoke/run`, test de bout en bout sur un vrai site |
 | 2. Points d'extension | fait | événements de contenu (`onContentEvent`), route publique sous `/_cogenta/plugins/<nom>` (`onRequest`, sans en-tête choisi par le plugin), tâche planifiée sur le planificateur du site (`onSchedule`) — chacun prouvé sur un vrai serveur |
-| 3. Capacités | à faire | |
+| 3. Capacités | fait | `schema.read`, `content.write_draft` (jamais publier), `content.publish`, `content.delete` (corbeille, réversible), `media.read` implémentés et câblés dans `cogenta serve` et la CLI ; les capacités de contenu peuvent nommer une collection ; `cogenta plugin grant` refuse une capacité que rien n'implémente |
 | 4. Atelier IA | à faire | |
 | 5. Sécurité | à faire | |

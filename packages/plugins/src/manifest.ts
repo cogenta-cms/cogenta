@@ -180,6 +180,51 @@ const PARAMETERIZED_CAPABILITIES: ReadonlySet<PluginCapabilityName> = new Set([
   'channel.send',
 ])
 
+/**
+ * Capabilities that may name what they apply to, and mean "all of it" when
+ * they do not (L31 step 3): `content.write_draft:article` writes drafts of
+ * articles and nothing else, while a bare `content.write_draft` writes drafts
+ * anywhere. Optional rather than required, because a plugin written before
+ * this — and the bare form the lot doc itself shows — must keep validating.
+ *
+ * A narrower grant is the one a reviewer should be able to prefer, so the
+ * handler re-checks the collection on every call, exactly as `http.fetch`
+ * re-checks a hostname.
+ */
+const COLLECTION_SCOPED_CAPABILITIES: ReadonlySet<PluginCapabilityName> = new Set([
+  'content.read',
+  'content.write_draft',
+  'content.publish',
+  'content.delete',
+])
+
+/**
+ * The capabilities a host in this repository can actually honour today
+ * (L31 step 3). The rest of the vocabulary stays declarable — the names come
+ * from contract C and describe real intentions — but granting one would hand
+ * a plugin a method that does nothing, so `cogenta plugin grant` refuses it
+ * and says which are real.
+ */
+export const IMPLEMENTED_CAPABILITY_NAMES: readonly PluginCapabilityName[] = [
+  'content.read',
+  'content.write_draft',
+  'content.publish',
+  'content.delete',
+  'media.read',
+  'schema.read',
+  'http.fetch',
+  'storage.read',
+  'storage.write',
+]
+
+const IMPLEMENTED_SET: ReadonlySet<string> = new Set(IMPLEMENTED_CAPABILITY_NAMES)
+
+/** Whether a capability string (with or without its parameter) is one a host can honour. */
+export function isCapabilityImplemented(capability: string): boolean {
+  const separator = capability.indexOf(':')
+  return IMPLEMENTED_SET.has(separator === -1 ? capability : capability.slice(0, separator))
+}
+
 const CAPABILITY_NAME_SET: ReadonlySet<string> = new Set(PLUGIN_CAPABILITY_NAMES)
 
 /** Table-safe and consistent with how `defineCollection` guards collection names elsewhere in this workspace. */
@@ -219,6 +264,17 @@ function checkCapability(
   }
 
   const requiresParameter = PARAMETERIZED_CAPABILITIES.has(name as PluginCapabilityName)
+  const acceptsParameter = COLLECTION_SCOPED_CAPABILITIES.has(name as PluginCapabilityName)
+
+  if (acceptsParameter && !requiresParameter) {
+    if (parameter !== undefined && !COLLECTION_NAME_PATTERN.test(parameter)) {
+      issues.push({
+        path,
+        message: `"${name}" takes a collection name, found "${parameter}"`,
+      })
+    }
+    return
+  }
 
   if (!requiresParameter) {
     if (parameter !== undefined) {
@@ -264,6 +320,9 @@ function checkCapability(
 
 /** The entry file a manifest names when it names none. */
 export const DEFAULT_PLUGIN_MAIN = 'plugin.js'
+
+/** A collection name, the same shape `defineCollection` accepts. */
+const COLLECTION_NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 
 /** A scheduled task's name inside a plugin: lower case, digits and dashes. */
 const SCHEDULE_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/

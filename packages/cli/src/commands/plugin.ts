@@ -11,15 +11,21 @@ import {
 } from '@cogenta/core'
 import {
   type CapabilityHandler,
+  createContentDeleteHandler,
+  createContentPublishHandler,
   createContentReadHandler,
+  createContentWriteDraftHandler,
   createHttpFetchHandler,
   createPluginDisableStore,
   createPluginGrantStore,
   createPluginUsageStore,
+  createSchemaReadHandler,
   createStorageReadHandler,
   createStorageWriteHandler,
   ensurePluginTables,
+  IMPLEMENTED_CAPABILITY_NAMES,
   type InstalledPlugins,
+  isCapabilityImplemented,
   loadInstalledPlugins,
   type ResolvedPlugin,
   readPluginCode,
@@ -181,6 +187,14 @@ export async function runPluginCommand(options: PluginCommandOptions): Promise<n
         stderr(`cogenta plugin ${options.subcommand} needs a capability.\n\n${USAGE}`)
         return 2
       }
+      if (options.subcommand === 'grant' && !isCapabilityImplemented(capability)) {
+        stderr(
+          `"${capability}" is part of the vocabulary but nothing implements it yet, so granting ` +
+            `it would give "${name}" a method that does nothing. Implemented today: ` +
+            `${IMPLEMENTED_CAPABILITY_NAMES.join(', ')}.\n`,
+        )
+        return 1
+      }
       if (!found.manifest.capabilities.includes(capability)) {
         stderr(
           `"${name}" does not request "${capability}". It requests: ${
@@ -213,13 +227,13 @@ export async function runPluginCommand(options: PluginCommandOptions): Promise<n
     const grants = await grantStore.listGrants(name)
     const handlers: Record<string, CapabilityHandler> = {}
 
-    if (grants.some((grant) => grant.capability === 'content.read')) {
+    if (grants.some((grant) => grant.capability.startsWith('content.'))) {
       const collections = await loadCollections(projectRoot)
       const collectionName = options.collection ?? collections[0]?.name
       const collection = collections.find((item) => item.name === collectionName)
       if (collection === undefined) {
         stderr(
-          `This plugin was granted content.read, but no collection was named. Pass --collection.\n`,
+          `This plugin was granted a content capability, but no collection was named. Pass --collection.\n`,
         )
         return 2
       }
@@ -232,6 +246,28 @@ export async function runPluginCommand(options: PluginCommandOptions): Promise<n
       // The published face, never a draft: a plugin reads what the site
       // shows, and an unpublished entry simply does not exist for it.
       handlers['content.read'] = createContentReadHandler(async (id) => store.read(id))
+      handlers['content.write_draft'] = createContentWriteDraftHandler(async (input) => {
+        if (input.id === undefined) {
+          const created = await store.create({ values: input.values })
+          return { id: created.id, status: created.status }
+        }
+        const updated = await store.update(input.id, { values: input.values })
+        return { id: updated.id, status: updated.status }
+      })
+      handlers['content.publish'] = createContentPublishHandler(async (input) => {
+        const published = await store.publish(input.id)
+        return { id: published.id, status: published.status }
+      })
+      handlers['content.delete'] = createContentDeleteHandler(async (input) => {
+        await store.delete(input.id)
+        return { id: input.id, trashed: true }
+      })
+      handlers['schema.read'] = createSchemaReadHandler(async () =>
+        collections.map((item) => ({
+          name: item.name,
+          fields: Object.keys(item.fields),
+        })),
+      )
     }
 
     if (grants.some((grant) => grant.capability.startsWith('storage.'))) {

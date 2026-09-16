@@ -12,4 +12,9 @@ no fields.
 
 The seventeen blocks of the vocabulary are baked into the admin bundle because
 they never change; these depend on which plugins a site has installed, so only
-the server can know them.
+the server can know them. A field's declared label and help text travel with
+it, so a person filling the block in reads "Colonne de gauche" rather than
+`leftLabel`.
+
+The builder preview and the appearance preview render plugin blocks too — a
+preview that did not would show a person editing one nothing at all.

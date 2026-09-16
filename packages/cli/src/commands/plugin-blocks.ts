@@ -174,6 +174,8 @@ export interface PluginBlockFieldDescription {
   readonly unique: false
   readonly hasCustomValidation: false
   readonly options: Readonly<Record<string, unknown>>
+  /** The label and help text the declaration gave, if it gave any. */
+  readonly admin?: { readonly label?: string; readonly help?: string }
 }
 
 export interface PluginBlockDescription {
@@ -191,6 +193,8 @@ function describeField(
     readonly kind: string
     readonly required?: boolean
     readonly localized?: boolean
+    readonly label?: string
+    readonly help?: string
     readonly options?: Readonly<Record<string, unknown>>
     readonly of?: Readonly<Record<string, unknown>>
   },
@@ -200,7 +204,7 @@ function describeField(
   // of editor, never of format.
   const isList = declaration.kind === 'list'
   const items = Object.entries(
-    (declaration.of ?? {}) as Record<string, { kind: string; required?: boolean }>,
+    (declaration.of ?? {}) as Record<string, { kind: string; required?: boolean; label?: string }>,
   ).map(([itemName, item]) => ({
     name: itemName,
     kind: item.kind,
@@ -209,6 +213,7 @@ function describeField(
     unique: false as const,
     hasCustomValidation: false as const,
     options: {},
+    ...(item.label === undefined ? {} : { admin: { label: item.label } }),
   }))
   return {
     name,
@@ -220,6 +225,16 @@ function describeField(
     options: isList
       ? { ...(declaration.options ?? {}), list: true, items }
       : (declaration.options ?? {}),
+    // The words the plugin author chose, so a person filling the block in
+    // reads "Colonne de gauche" rather than `leftLabel`.
+    ...(declaration.label === undefined && declaration.help === undefined
+      ? {}
+      : {
+          admin: {
+            ...(declaration.label === undefined ? {} : { label: declaration.label }),
+            ...(declaration.help === undefined ? {} : { help: declaration.help }),
+          },
+        }),
   }
 }
 

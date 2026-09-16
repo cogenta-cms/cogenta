@@ -31,7 +31,7 @@ const MANIFEST = `${JSON.stringify(
           label: 'Encadré',
           fallback: 'quote',
           fields: {
-            message: { kind: 'text', required: true, options: { max: 300 } },
+            message: { kind: 'text', required: true, label: 'Message', options: { max: 300 } },
             tone: { kind: 'select', options: { options: ['info', 'warning'] } },
           },
           fallbackFrom: { text: 'message' },
@@ -205,6 +205,8 @@ describe('a block a plugin provides, on a real page', () => {
           unique: false,
           hasCustomValidation: false,
           options: { max: 300 },
+          // The words the plugin author chose reach the person filling it in.
+          admin: { label: 'Message' },
         },
         {
           name: 'tone',

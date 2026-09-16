@@ -5487,6 +5487,12 @@ export function createRequestListener(
             widgets: (request: WidgetRenderRequest) => widgetsForSite(site, request, context),
             authorFor: (userId) => authorForSite(site, userId),
             resolveTerm: site.resolveTaxonomyTerm,
+            // L32 — the appearance preview shows the real page, plugin
+            // blocks included, or it is not a preview of the real page.
+            ...(extras?.blockRegistry === undefined ? {} : { blocks: extras.blockRegistry }),
+            ...(extras?.pluginBlockRenderer === undefined
+              ? {}
+              : { pluginBlocks: extras.pluginBlockRenderer }),
           },
           context,
         )
@@ -6424,6 +6430,14 @@ export function createRequestListener(
               widgets: (request: WidgetRenderRequest) => widgetsForSite(site, request, context),
               authorFor: (userId) => authorForSite(site, userId),
               resolveTerm: site.resolveTaxonomyTerm,
+              // L32 — a preview that did not render a plugin's block would
+              // show a person editing it nothing at all, which is the one
+              // thing this preview exists not to do. Same registry, same
+              // renderer, same allowlist as the published page.
+              ...(extras?.blockRegistry === undefined ? {} : { blocks: extras.blockRegistry }),
+              ...(extras?.pluginBlockRenderer === undefined
+                ? {}
+                : { pluginBlocks: extras.pluginBlockRenderer }),
             },
             context,
           )

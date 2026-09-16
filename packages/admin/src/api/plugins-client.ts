@@ -218,6 +218,7 @@ export function getPluginBlocks(token: string): Promise<{
       readonly unique: false
       readonly hasCustomValidation: false
       readonly options: Readonly<Record<string, unknown>>
+      readonly admin?: { readonly label?: string; readonly help?: string }
     }[]
     readonly plugin: string
     readonly fallback: string

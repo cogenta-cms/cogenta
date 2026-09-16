@@ -408,6 +408,7 @@ export interface PluginBlockWireDefinition {
     readonly required: boolean
     readonly localized: boolean
     readonly options: Readonly<Record<string, unknown>>
+    readonly admin?: FieldAdminMeta
   }[]
 }
 
@@ -433,6 +434,7 @@ export function registerPluginBlocks(blocks: readonly PluginBlockWireDefinition[
         unique: false,
         hasCustomValidation: false,
         options: candidate.options,
+        ...(candidate.admin === undefined ? {} : { admin: candidate.admin }),
       })),
   }))
 }

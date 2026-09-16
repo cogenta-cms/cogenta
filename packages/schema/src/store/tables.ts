@@ -6,6 +6,7 @@ import {
   type SqlExecutor,
   type SqlFragment,
   sql,
+  unsafeRaw,
 } from '@cogenta/core'
 import type {
   CollectionDefinition,
@@ -442,8 +443,74 @@ export async function createSchemaTables(
 
   for (const collection of orderByDependency(collections)) {
     await createOne(db, collection)
+    await addMissingSystemColumns(db, collection)
   }
 }
+
+/**
+ * The system columns a newer Cogenta added, on a table that already exists.
+ *
+ * `create table if not exists` does nothing to a table that is already there,
+ * so a site created before a system column existed would keep failing every
+ * insert after an upgrade — "no column named visibility" — until someone
+ * hand-wrote a migration. Found the honest way: a real playground site,
+ * upgraded, refusing to save a page.
+ *
+ * Deliberately narrow. Only the store's **own** columns are reconciled, never
+ * a field a developer declared: a missing user field is a real migration with
+ * real data questions, and answering it silently at boot is exactly what
+ * ADR-0010 keeps out of production. These are the engine's, the same way
+ * `ensurePluginTables` and `ensureWidgetTables` create the engine's tables on
+ * every boot.
+ *
+ * Each column is checked before it is added rather than added-and-caught: a
+ * swallowed error hides a real failure, and "the column is already there" is
+ * not the only reason an `alter table` can fail.
+ */
+async function addMissingSystemColumns(
+  db: DatabaseHandle,
+  collection: CollectionDefinition,
+): Promise<void> {
+  const dialect = db.dialect
+  const table = identifier(entriesTable(collection.name), dialect)
+
+  for (const [column, definition] of RECONCILED_SYSTEM_COLUMNS) {
+    const present = await db
+      .query(sql`select ${identifier(column, dialect)} from ${table} where 1 = 0`)
+      .then(
+        () => true,
+        () => false,
+      )
+    if (present) continue
+    await db.query(sql`alter table ${table} add column ${definition(dialect)}`)
+  }
+}
+
+/**
+ * System columns added after the first release, with the definition an
+ * existing row must end up with. Ordered oldest first; adding to this list is
+ * how a future system column reaches sites that already exist.
+ */
+const RECONCILED_SYSTEM_COLUMNS: readonly [string, (dialect: DatabaseDialect) => SqlFragment][] = [
+  [
+    'review_state',
+    (dialect) =>
+      sql`${identifier('review_state', dialect)} ${textColumn(dialect, 24)} not null default ${unsafeRaw("'none'")}`,
+  ],
+  [
+    'assigned_reviewer',
+    (dialect) => sql`${identifier('assigned_reviewer', dialect)} ${textColumn(dialect, 64)}`,
+  ],
+  [
+    'visibility',
+    (dialect) =>
+      sql`${identifier('visibility', dialect)} ${textColumn(dialect, 16)} not null default ${unsafeRaw("'public'")}`,
+  ],
+  [
+    'access_password',
+    (dialect) => sql`${identifier('access_password', dialect)} ${textColumn(dialect, 255)}`,
+  ],
+]
 
 export function orderByDependency(
   collections: readonly CollectionDefinition[],

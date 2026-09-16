@@ -32,6 +32,12 @@ export interface Entry {
   readonly deletedAt: string | null
   /** `'none'` on a collection that never turned the workflow on (`schema@2.1`, ADR-0027). */
   readonly reviewState: ReviewState
+  /**
+   * Who may see this entry once published (`schema@2.2`, ADR-0034).
+   * Orthogonal to `status`, like `deletedAt` and `reviewState`: a private
+   * page is published *and* private.
+   */
+  readonly visibility?: 'public' | 'private' | 'password'
   readonly assignedReviewer: string | null
   readonly version: number
   readonly createdAt: string
@@ -636,6 +642,29 @@ export function duplicateEntry(
       method: 'POST',
       headers: authHeader(token),
       ...(values === undefined ? {} : { body: JSON.stringify({ values }) }),
+    },
+  )
+}
+
+/**
+ * Sets who may see an entry (`schema@2.2`, ADR-0034).
+ *
+ * The server gates this on `publish`, not `update`: who may read a page is
+ * what publishing decides. The password is sent once and never read back —
+ * no response carries it, or its hash.
+ */
+export function setEntryVisibility(
+  token: string,
+  collection: string,
+  entryId: string,
+  input: { readonly visibility: 'public' | 'private' | 'password'; readonly password?: string },
+): Promise<Entry> {
+  return request(
+    `/api/content/${encodeURIComponent(collection)}/${encodeURIComponent(entryId)}/visibility`,
+    {
+      method: 'POST',
+      headers: { ...authHeader(token), 'content-type': 'application/json' },
+      body: JSON.stringify(input),
     },
   )
 }

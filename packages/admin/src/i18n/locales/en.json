@@ -719,6 +719,22 @@
       "requestChangesButton": "Request changes",
       "changesRequested": "Changes requested.",
       "requestChangesError": "Could not request changes on this entry."
+    },
+    "visibility": {
+      "label": "Visibility",
+      "public": "Public",
+      "private": "Private",
+      "password": "Password protected",
+      "explain": {
+        "public": "Anyone can read this page.",
+        "private": "Only people who can edit this collection see it. For everyone else the page does not exist.",
+        "password": "The page stays listed, but its content asks for a password."
+      },
+      "passwordLabel": "Page password",
+      "passwordKeep": "Leave blank to keep the current password.",
+      "apply": "Apply",
+      "saved": "Visibility saved.",
+      "failed": "The visibility could not be changed."
     }
   },
   "media": {

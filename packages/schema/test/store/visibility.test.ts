@@ -123,6 +123,27 @@ describe('an entry’s visibility', () => {
     expect((await index.search({ text: 'interne', locale: 'en' })).hits).toHaveLength(1)
   })
 
+  it('adds the column to a table that predates it, rather than failing every write', async () => {
+    // The upgrade path, proved rather than promised: a table built the way it
+    // was before this field existed, then `createSchemaTables` again — which
+    // is exactly what `cogenta serve` does on every boot.
+    const { sql, identifier, unsafeRaw } = await import('@cogenta/core')
+    await db.query(
+      sql`alter table ${identifier('cogenta_vis_page', db.dialect)} drop column ${identifier('visibility', db.dialect)}`,
+    )
+    await db.query(
+      sql`alter table ${identifier('cogenta_vis_page', db.dialect)} drop column ${identifier('access_password', db.dialect)}`,
+    )
+    expect(unsafeRaw).toBeTypeOf('function')
+
+    await createSchemaTables(db, [page])
+
+    const store = createContentStore({ db, collection: page })
+    const entry = await store.create({ values: { title: 'Après mise à jour' } })
+    expect(entry.visibility).toBe('public')
+    expect((await store.setVisibility(entry.id, 'private')).visibility).toBe('private')
+  })
+
   it('leaves an entry of a database written before the column existed public', async () => {
     // The migration's own promise: nothing becomes private by being migrated.
     const migration = schema22Migration({ collections: [page] })

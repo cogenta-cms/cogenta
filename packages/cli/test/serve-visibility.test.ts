@@ -22,6 +22,7 @@ const COLLECTIONS = `export default [
     fields: {
       title: { kind: 'text', required: true, options: { max: 200 } },
       slug: { kind: 'slug', required: true, options: { from: 'title', unique: true } },
+      excerpt: { kind: 'text', options: { max: 300 } },
       blocks: { kind: 'blocks', options: {} },
     },
     permissions: {
@@ -63,7 +64,7 @@ async function publish(base: string, token: string, title: string, slug: string)
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      values: { title, slug },
+      values: { title, slug, excerpt: 'Ce que cette page raconte' },
       blocks: {
         blocks: [
           {
@@ -151,6 +152,13 @@ describe('a page that is not simply public', () => {
       expect(lockedHtml).toContain('Dossier de presse')
       expect(lockedHtml).not.toContain('Le contenu secret.')
       expect(lockedHtml).toContain('cg-unlock__form')
+      // The summary is content too: a page whose excerpt can be read without
+      // the password has had its password answered for whoever asks.
+      expect(lockedHtml).not.toContain('Ce que cette page raconte')
+      // And nothing describes it to a crawler either: a page nobody can read
+      // has nothing to index, and its own summary in a description or a
+      // JSON-LD block would answer the password for whoever asks.
+      expect(lockedHtml).toContain('noindex')
 
       // A wrong answer says so, and hands out nothing.
       const refused = await fetch(`${server.base}/_cogenta/unlock`, {

@@ -219,6 +219,9 @@ export const MOCK_TRASHED_NOTE = {
   blocks: {},
 }
 
+/** What `POST .../visibility` has been told, by entry id (`schema@2.2`). */
+export const mockEntryVisibility = new Map<string, string>()
+
 export const MOCK_ENTRIES = [
   {
     id: 'entry-1',
@@ -7017,6 +7020,28 @@ export function installMockFetch(
             code: 'CONTENT_REFERENCED',
             message: `"${MOCK_TRASHED_BLOCKED_ENTRY.id}" cannot be removed from "article": 1 entry of "note" still reference it.`,
           },
+        })
+      }
+
+      // `POST /api/content/{collection}/{id}/visibility` (`schema@2.2`,
+      // ADR-0034). Stateful: the editor reads back what it set, and a
+      // protected entry with no password is refused the way the server
+      // refuses it.
+      const visibilityMatch = /\/api\/content\/([^/?]+)\/([^/?]+)\/visibility$/u.exec(url)
+      if (visibilityMatch !== null && method === 'POST') {
+        const input = body as { visibility?: string; password?: string }
+        const visibility = input.visibility ?? 'public'
+        if (visibility === 'password' && (input.password ?? '') === '') {
+          return json(422, {
+            error: {
+              code: 'CONTENT_INVALID',
+              message: 'A password-protected entry needs a password.',
+            },
+          })
+        }
+        mockEntryVisibility.set(visibilityMatch[2] as string, visibility)
+        return json(200, {
+          data: { ...MOCK_ENTRIES[0], id: visibilityMatch[2], visibility },
         })
       }
 

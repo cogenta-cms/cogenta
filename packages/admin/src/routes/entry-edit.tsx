@@ -49,6 +49,7 @@ import { TranslationSwitcher } from '../collections/translation-switcher.js'
 import { useAutosave } from '../collections/use-autosave.js'
 import { validateEntry } from '../collections/validate-entry.js'
 import { EntryProductLinkCard } from '../commerce/entry-product-link-card.js'
+import { type EntryVisibility, VisibilityCard } from '../content/visibility-card.js'
 import { previewPermalink } from '../lib/permalink.js'
 import { slugify } from '../lib/slugify.js'
 import { useDirtyGuard } from '../lib/use-dirty-guard.js'
@@ -236,6 +237,7 @@ export function EntryEditRoute(): JSX.Element {
   const [recovered, setRecovered] = useState<AutosaveRecord | null>(null)
   const [editorMode, setEditorMode] = useState<EditorMode>(storedEditorMode)
   const [status, setStatus] = useState('draft')
+  const [visibility, setVisibility] = useState<EntryVisibility>('public')
   const [statusBusy, setStatusBusy] = useState(false)
   const [statusError, setStatusError] = useState<ApiErrorDescription | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
@@ -340,6 +342,7 @@ export function EntryEditRoute(): JSX.Element {
           setLocale(entry.locale)
           setTranslationOf(entry.translationOf)
           setStatus(entry.status)
+          setVisibility(entry.visibility ?? 'public')
           setPublishedAt(entry.publishedAt)
           setLoadedUpdatedAt(entry.updatedAt)
           setCreatedBy(entry.createdBy)
@@ -1517,6 +1520,21 @@ export function EntryEditRoute(): JSX.Element {
                   </Select>
                 </CardBody>
               </Card>
+            )}
+
+            {/* Visibility (`schema@2.2`, ADR-0034): who may see this entry
+                once it is published. Orthogonal to the status above — a
+                private page is published *and* private — and applied on its
+                own button because the server gates it on `publish` while the
+                form gates on `update`. */}
+            {!isNew && id !== undefined && token !== null && (
+              <VisibilityCard
+                token={token}
+                collection={name}
+                entryId={id}
+                current={visibility}
+                onChanged={setVisibility}
+              />
             )}
 
             {/* Permalink (task 4): a preview, not the source of truth — see

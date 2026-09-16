@@ -717,6 +717,43 @@ export const DEFAULT_FOOTER_MENU_LOCATION = 'footer'
 export const STYLESHEET_PATH = '/_cogenta/styles.css'
 
 /**
+ * An entry's header with everything that is *content* taken out, for a page
+ * whose password has not been answered.
+ *
+ * Built by omission rather than by `undefined`, because
+ * `exactOptionalPropertyTypes` treats "absent" and "present and undefined" as
+ * different things — and absent is what the theme's own `entry.excerpt ===
+ * undefined` checks already expect.
+ */
+/**
+ * An entry's values with everything but its identity removed, for the SEO
+ * head of a page whose password has not been answered.
+ *
+ * Keeps the fields a listing already shows — the title and the slug, which a
+ * link carries anyway — and drops the rest, so a summary, a teaser or a
+ * custom SEO description written for the page cannot describe content the
+ * visitor is not allowed to read.
+ */
+function publicValuesOf(
+  collection: CollectionDefinition,
+  entry: ContentEntry,
+): Record<string, unknown> {
+  const kept: Record<string, unknown> = {}
+  for (const [name, field] of Object.entries(collection.fields)) {
+    if (field.kind === 'slug' || name === 'title') kept[name] = entry.values[name]
+  }
+  return kept
+}
+
+function withoutContent(entry: PageEntryMeta): PageEntryMeta {
+  const { excerpt, fields, readingMinutes, ...rest } = entry
+  void excerpt
+  void fields
+  void readingMinutes
+  return rest
+}
+
+/**
  * The `<link>` tags for the stylesheets this site's plugins ship — after the
  * theme's own, so a plugin styles its blocks without being able to restyle
  * the page around them by accident of ordering.
@@ -1734,7 +1771,17 @@ async function renderEntryPage(
   // were sent, and find it locked.
   const locked = entry.visibility === 'password' && options.unlocked?.(entry.id) !== true
   const node = theme.renderPage(
-    locked ? { ...pageContent, blocks: [] } : pageContent,
+    locked
+      ? {
+          ...pageContent,
+          blocks: [],
+          // The excerpt is content: a summary readable without the password
+          // is the password answered for whoever asks. The title, the date
+          // and the byline stay — a protected page is listed and linkable, so
+          // they are public by design; they say when and by whom, never what.
+          ...(pageContent.entry === undefined ? {} : { entry: withoutContent(pageContent.entry) }),
+        }
+      : pageContent,
     themeContext,
     fetchedEntries as FetchedEntries,
     options.blocks,
@@ -1853,13 +1900,27 @@ async function renderEntryPage(
     }
   }
 
+  // The SEO description, the Open Graph tags and the JSON-LD all derive from
+  // the entry's own fields, so a locked page is described to a crawler by the
+  // very text the password protects. It is therefore described by a copy of
+  // the entry with those fields removed — the title and the dates stay, being
+  // public by design.
+  const lockedResource = locked
+    ? { collection, entry: { ...entry, values: publicValuesOf(collection, entry) } }
+    : resource
+
   // `head` already carries a real `<title>` (`renderSeoHead`, above) — no
   // second one is written into the template below.
   const head = [
-    renderSeoHead(seoSite, resource, {
+    renderSeoHead(seoSite, lockedResource, {
       ...(alternates.length === 0 ? {} : { alternates }),
       ...(mediaAssets.size === 0 ? {} : { media: seoMedia }),
       ...(seoSettings === null ? {} : { seo: seoSettings }),
+      // A page nobody can read without a password has nothing to offer a
+      // crawler, and its own summary in a `description` or a JSON-LD block
+      // would answer the password for whoever asks. It is already out of the
+      // sitemap; this is the other half of the same decision.
+      ...(locked ? { noindex: true } : {}),
     }),
     // Search Console/Webmaster Tools verification (fiche 50 task 2) — the
     // same site-wide tags on every page, not just the home page: neither

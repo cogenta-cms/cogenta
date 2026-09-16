@@ -58,17 +58,20 @@ describe('a plugin sandbox', () => {
     await writePluginSandboxFile(
       root,
       'draft',
-      'plugin.manifest.mjs',
-      `export default {
-  name: 'broken',
-  version: '1.0.0',
-  engine: '^1.0.0',
-  capabilities: ['agent.delegate'],
-  provides: { routes: ['/hello'] },
-  runtime: 'server',
-  isolated: true,
-}
-`,
+      'plugin.manifest.json',
+      `${JSON.stringify(
+        {
+          name: 'broken',
+          version: '1.0.0',
+          engine: '^1.0.0',
+          capabilities: ['agent.delegate'],
+          provides: { routes: ['/hello'] },
+          runtime: 'server',
+          isolated: true,
+        },
+        null,
+        2,
+      )}\n`,
     )
     await writePluginSandboxFile(root, 'draft', 'plugin.js', '({ onContentEvent: () => 1 })')
 
@@ -98,17 +101,20 @@ describe('a plugin sandbox', () => {
     await writePluginSandboxFile(
       root,
       'draft',
-      'plugin.manifest.mjs',
-      `export default {
-  name: 'my-plugin',
-  version: '1.0.0',
-  engine: '^1.0.0',
-  capabilities: ['content.read:article'],
-  provides: { eventSubscriptions: ['content.publish'] },
-  runtime: 'server',
-  isolated: true,
-}
-`,
+      'plugin.manifest.json',
+      `${JSON.stringify(
+        {
+          name: 'my-plugin',
+          version: '1.0.0',
+          engine: '^1.0.0',
+          capabilities: ['content.read:article'],
+          provides: { eventSubscriptions: ['content.publish'] },
+          runtime: 'server',
+          isolated: true,
+        },
+        null,
+        2,
+      )}\n`,
     )
 
     const first = await deployPluginFromSandbox(root, 'draft')

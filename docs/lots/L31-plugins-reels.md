@@ -82,4 +82,36 @@ langage clair, journal d'audit des installations, et mise à jour de `BLOCKERS.m
 | 2. Points d'extension | fait | événements de contenu (`onContentEvent`), route publique sous `/_cogenta/plugins/<nom>` (`onRequest`, sans en-tête choisi par le plugin), tâche planifiée sur le planificateur du site (`onSchedule`) — chacun prouvé sur un vrai serveur |
 | 3. Capacités | fait | `schema.read`, `content.write_draft` (jamais publier), `content.publish`, `content.delete` (corbeille, réversible), `media.read` implémentés et câblés dans `cogenta serve` et la CLI ; les capacités de contenu peuvent nommer une collection ; `cogenta plugin grant` refuse une capacité que rien n'implémente |
 | 4. Atelier IA | fait | bac à sable `.cogenta/plugin-sandbox/<id>/` avec ses gardes, trois outils (`plugin.write_sandbox_file`/`read_sandbox_file`/`check_sandbox`, permission `plugin.write_sandbox`, contrat C `tools@1.7`), agent « Cogenta Plugin Builder » (`autonomy: propose`, aucun outil d'installation), routes `/api/plugins/*` et écran admin Plugins avec revue des permissions et installation confirmée |
-| 5. Sécurité | à faire | |
+| 5. Sécurité | fait | revue indépendante : verdict initial NON CONFORME, deux failles critiques avec preuves exécutées, les six constats corrigés et couverts par des tests de non-régression |
+
+## Rapport de clôture (2026-09-16)
+
+**La revue de sécurité a rendu NON CONFORME, et elle avait raison.** Deux failles
+critiques, chacune reproduite par un PoC exécuté, toutes deux héritées de la conception de
+L7 et rendues réellement atteignables par L31 (qui est ce qui a fait charger des plugins
+par un vrai site, et écrire du code par une IA) :
+
+1. **Évasion complète du bac à sable.** Le contexte `vm` recevait les objets du worker
+   (`console`, `Math`, `JSON`, `Promise`, `setTimeout`) : `setTimeout.constructor` est le
+   `Function` du worker, donc `setTimeout.constructor('return process')()` rendait le vrai
+   `process` — système de fichiers, `child_process`, le `.env` du site. Aucune capacité
+   n'était nécessaire. Vérifié avant correction (`pid` réel obtenu), puis refermé : tout ce
+   qu'un plugin peut toucher est désormais **construit à l'intérieur du contexte**, le seul
+   pont vers l'hôte a un prototype nul et est supprimé du global après amorçage, et les
+   valeurs traversent en JSON. Six chemins d'évasion sont des tests de non-régression.
+2. **Le manifeste s'exécutait dans le processus hôte.** `plugin.manifest.mjs` était un
+   module `import`é : chaque démarrage exécutait un manifeste par plugin installé, et
+   *inspecter* un bac à sable exécutait le code qu'on prétendait relire, avant toute
+   vérification. Le manifeste est maintenant **`plugin.manifest.json`, lu et jamais
+   exécuté** ; un fichier `.mjs` est refusé par son nom, avec la raison.
+
+Quatre constats de moindre gravité, tous corrigés : SSRF par redirection sur `http.fetch`
+(le nom d'hôte est revérifié à **chaque** saut, cinq maximum), XSS possible sur l'origine du
+site par une route de plugin (réponses servies sous `Content-Security-Policy: sandbox;
+default-src 'none'` et `nosniff`), absence de plafond de workers simultanés (huit, puis 503),
+et taille de réponse non bornée (1 Mio).
+
+**Ce qui reste vrai et doit être dit** : un contexte `vm` n'est pas une frontière de
+sécurité à lui seul (la documentation de Node le dit, `docs/05-securite.md` aussi). Les
+chemins connus sont fermés et testés ; la vraie frontière serait un processus séparé sous
+le modèle de permissions de Node. C'est la suite naturelle, notée dans `BLOCKERS.md`.

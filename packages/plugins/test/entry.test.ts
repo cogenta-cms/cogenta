@@ -24,17 +24,21 @@ const MANIFEST: PluginManifest = {
   isolated: true,
 }
 
-function manifestSource(extra = ''): string {
-  return `export default {
-  name: 'test-plugin',
-  version: '1.0.0',
-  engine: '^1.0.0',
-  capabilities: [],
-  provides: {},
-  runtime: 'server',
-  isolated: true,${extra}
-}
-`
+function manifestSource(extra: Record<string, unknown> = {}): string {
+  return `${JSON.stringify(
+    {
+      name: 'test-plugin',
+      version: '1.0.0',
+      engine: '^1.0.0',
+      capabilities: [],
+      provides: {},
+      runtime: 'server',
+      isolated: true,
+      ...extra,
+    },
+    null,
+    2,
+  )}\n`
 }
 
 describe('a plugin’s code on disk', () => {
@@ -75,7 +79,7 @@ describe('a plugin’s code on disk', () => {
   })
 
   it('reports the entry path a loaded plugin ships, and null when it ships none', async () => {
-    await writeFile(join(dir, 'plugin.manifest.mjs'), manifestSource(), 'utf8')
+    await writeFile(join(dir, 'plugin.manifest.json'), manifestSource(), 'utf8')
 
     expect((await loadPlugin(dir)).entryPath).toBeNull()
 
@@ -105,9 +109,9 @@ describe('the plugins a site has installed', () => {
     const broken = join(root, 'plugins', 'broken')
     await mkdir(good, { recursive: true })
     await mkdir(broken, { recursive: true })
-    await writeFile(join(good, 'plugin.manifest.mjs'), manifestSource(), 'utf8')
+    await writeFile(join(good, 'plugin.manifest.json'), manifestSource(), 'utf8')
     await writeFile(join(good, 'plugin.js'), '({})', 'utf8')
-    await writeFile(join(broken, 'plugin.manifest.mjs'), 'export default { name: 42 }\n', 'utf8')
+    await writeFile(join(broken, 'plugin.manifest.json'), '{ "name": 42 }\n', 'utf8')
 
     const installed = await loadInstalledPlugins({ projectRoot: root })
 

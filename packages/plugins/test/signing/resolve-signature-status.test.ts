@@ -33,8 +33,8 @@ describe('resolveSignatureStatus', () => {
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'cogenta-plugin-signing-'))
-    manifestPath = join(dir, 'plugin.manifest.mjs')
-    await writeFile(manifestPath, '// real manifest file is not read here\n', 'utf8')
+    manifestPath = join(dir, 'plugin.manifest.json')
+    await writeFile(manifestPath, '{}\n', 'utf8')
   })
 
   afterEach(async () => {

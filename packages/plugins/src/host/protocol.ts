@@ -148,8 +148,15 @@ export interface WorkerCallbackCallMessage {
   readonly args: readonly unknown[]
 }
 
+/** Worker → host: one line a plugin logged, already bounded and stringified by the guest. */
+export interface WorkerPluginLogMessage {
+  readonly type: 'plugin-log'
+  readonly line: string
+}
+
 export type WorkerGuestMessage =
   | WorkerResultMessage
   | WorkerErrorMessage
   | WorkerSdkCallMessage
   | WorkerCallbackCallMessage
+  | WorkerPluginLogMessage

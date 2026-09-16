@@ -46,6 +46,8 @@ export interface RunIsolatedOptions {
   readonly input?: unknown
   /** Report the names of the handlers the plugin exposes rather than running one (L31 step 4). */
   readonly describeHandlers?: boolean
+  /** Called with each line a plugin logged, so a host can put it in its own logger. */
+  readonly onLog?: (line: string) => void
   /** Real V8 heap ceiling for the worker's old-generation heap. */
   readonly maxOldGenerationSizeMb?: number
   /**
@@ -217,9 +219,14 @@ export async function runIsolated(
         finish({ ok: false, error: message.message })
         return
       }
+      // One line a plugin logged, handed to whatever logger the host uses.
+      if (message.type === 'plugin-log') {
+        options.onLog?.(String((message as { line?: unknown }).line ?? ''))
+        return
+      }
       // `sandbox-entry.mjs` (the guest this worker actually runs) only ever
-      // sends `sdk-call` besides `result`/`error` — `callback-call` belongs
-      // to `runIsolatedModule`'s own, different guest entry.
+      // sends `sdk-call` and `plugin-log` besides `result`/`error` —
+      // `callback-call` belongs to `runIsolatedModule`'s own, different guest.
       if (message.type === 'callback-call') return
       void handleSdkCall(message, handlers, grantedCapabilities, worker)
     })

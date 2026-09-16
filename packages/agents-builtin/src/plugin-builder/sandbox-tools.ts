@@ -45,7 +45,7 @@ export interface PluginSandboxToolOptions {
 
 const WriteInput = z.object({
   sandboxId: z.string().min(1),
-  /** Sandbox-relative: `plugin.manifest.mjs`, `plugin.js`, `lib/feed.js`. Never absolute, never `../`. */
+  /** Sandbox-relative: `plugin.manifest.json`, `plugin.js`, `lib/feed.js`. Never absolute, never `../`. */
   path: z.string().min(1),
   content: z.string(),
 })
@@ -56,7 +56,7 @@ export type WritePluginSandboxFileOutput = z.infer<typeof WriteOutput>
 
 const WRITE_DESCRIPTION = `Writes one real source file into a plugin sandbox — actual JavaScript, not a description of it. A plugin is how this CMS gains a feature it does not have: it reacts to content events, serves its own page, or runs on a cadence, inside an isolated worker with only the capabilities a human granted it.
 
-Two files matter. \`plugin.manifest.mjs\` exports default an object with EXACTLY these fields: name (a package-like name, e.g. 'newsletter-digest'), version ('1.0.0', exact semver), engine ('^1.0.0', a semver RANGE), capabilities (string[], see below), provides (object, see below), runtime: 'server', isolated: true, and optionally main (the code file, 'plugin.js' by default).
+Two files matter. \`plugin.manifest.json\` is a JSON object — data, never code, because a manifest is read and never executed — with EXACTLY these fields: name (a package-like name, e.g. 'newsletter-digest'), version ('1.0.0', exact semver), engine ('^1.0.0', a semver RANGE), capabilities (string[], see below), provides (object, see below), runtime: 'server', isolated: true, and optionally main (the code file, 'plugin.js' by default).
 
 \`plugin.js\` is a classic script — no import, no require, no top-level await. Its completion value is the set of handlers the site can call, written as an expression statement:
 

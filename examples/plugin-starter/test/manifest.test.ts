@@ -23,8 +23,8 @@ describe('the plugin-starter manifest', () => {
     ])
   })
 
-  it('resolves manifestPath to the real plugin.manifest.mjs on disk', async () => {
+  it('resolves manifestPath to the real plugin.manifest.json on disk', async () => {
     const resolved = await loadPlugin(packageRoot)
-    expect(resolved.manifestPath).toBe(join(packageRoot, 'plugin.manifest.mjs'))
+    expect(resolved.manifestPath).toBe(join(packageRoot, 'plugin.manifest.json'))
   })
 })

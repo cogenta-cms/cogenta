@@ -5,16 +5,19 @@ import { CogentaError } from '@cogenta/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { loadPlugin } from '../src/loader.js'
 
-const VALID_MANIFEST = `export default {
-  name: 'test-plugin',
-  version: '1.0.0',
-  engine: '^1.0.0',
-  capabilities: ['content.read'],
-  provides: {},
-  runtime: 'server',
-  isolated: true,
-}
-`
+const VALID_MANIFEST = `${JSON.stringify(
+  {
+    name: 'test-plugin',
+    version: '1.0.0',
+    engine: '^1.0.0',
+    capabilities: ['content.read'],
+    provides: {},
+    runtime: 'server',
+    isolated: true,
+  },
+  null,
+  2,
+)}\n`
 
 describe('loadPlugin', () => {
   let dir: string
@@ -28,18 +31,18 @@ describe('loadPlugin', () => {
   })
 
   it('resolves a valid local plugin and reports its source', async () => {
-    await writeFile(join(dir, 'plugin.manifest.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir, 'plugin.manifest.json'), VALID_MANIFEST, 'utf8')
 
     const resolved = await loadPlugin(dir)
 
     expect(resolved.source).toBe('local')
     expect(resolved.packageRoot).toBe(dir)
-    expect(resolved.manifestPath).toBe(join(dir, 'plugin.manifest.mjs'))
+    expect(resolved.manifestPath).toBe(join(dir, 'plugin.manifest.json'))
     expect(resolved.manifest.name).toBe('test-plugin')
   })
 
   it('a local plugin is dev mode — allowed unsigned, no signature checked (L7 task 9)', async () => {
-    await writeFile(join(dir, 'plugin.manifest.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir, 'plugin.manifest.json'), VALID_MANIFEST, 'utf8')
 
     const resolved = await loadPlugin(dir)
 
@@ -47,12 +50,12 @@ describe('loadPlugin', () => {
     expect(resolved.signatureVerified).toBe(false)
   })
 
-  it('checks manifest file names in the documented order', async () => {
-    // .mjs is last in PLUGIN_MANIFEST_FILE_NAMES — .ts would win if present,
-    // so writing only .mjs proves the fallback search, not just the first hit.
-    await writeFile(join(dir, 'plugin.manifest.mjs'), VALID_MANIFEST, 'utf8')
-    const resolved = await loadPlugin(dir)
-    expect(resolved.manifestPath.endsWith('plugin.manifest.mjs')).toBe(true)
+  it('refuses an executable manifest, and says why (L31 step 5)', async () => {
+    // A manifest used to be an imported module, which meant a plugin ran code
+    // in the host process before anything checked it. Finding one now is a
+    // named refusal rather than a silent "no manifest here".
+    await writeFile(join(dir, 'plugin.manifest.mjs'), `export default ${VALID_MANIFEST}`, 'utf8')
+    await expect(loadPlugin(dir)).rejects.toMatchObject({ code: 'PLUGIN_MANIFEST_INVALID' })
   })
 
   it('rejects a local path with no manifest file', async () => {
@@ -67,17 +70,17 @@ describe('loadPlugin', () => {
     })
   })
 
-  it('rejects a manifest file with no default export', async () => {
-    await writeFile(join(dir, 'plugin.manifest.mjs'), 'export const notDefault = 1\n', 'utf8')
+  it('rejects a manifest that is not an object', async () => {
+    await writeFile(join(dir, 'plugin.manifest.json'), '["not", "a manifest"]\n', 'utf8')
     await expect(loadPlugin(dir)).rejects.toMatchObject({
       code: 'PLUGIN_MANIFEST_EXPORT_INVALID',
     })
   })
 
-  it('rejects a manifest whose default export fails validation, wrapping the real issue', async () => {
+  it('rejects a manifest whose content fails validation, wrapping the real issue', async () => {
     await writeFile(
-      join(dir, 'plugin.manifest.mjs'),
-      `export default {
+      join(dir, 'plugin.manifest.json'),
+      `${JSON.stringify({
         name: 'test-plugin',
         version: '1.0.0',
         engine: '^1.0.0',
@@ -85,16 +88,28 @@ describe('loadPlugin', () => {
         provides: {},
         runtime: 'server',
         isolated: true,
-      }
-      `,
+      })}\n`,
       'utf8',
     )
     await expect(loadPlugin(dir)).rejects.toMatchObject({ code: 'PLUGIN_MANIFEST_INVALID' })
   })
 
-  it('rejects a manifest file with a real syntax error', async () => {
-    await writeFile(join(dir, 'plugin.manifest.mjs'), 'this is not valid javascript {{{', 'utf8')
-    await expect(loadPlugin(dir)).rejects.toMatchObject({ code: 'PLUGIN_MANIFEST_LOAD_FAILED' })
+  it('rejects a manifest that is not valid JSON', async () => {
+    await writeFile(join(dir, 'plugin.manifest.json'), '{ not json ', 'utf8')
+    await expect(loadPlugin(dir)).rejects.toMatchObject({ code: 'PLUGIN_MANIFEST_INVALID' })
+  })
+
+  it('never executes a manifest, whatever it contains (L31 step 5)', async () => {
+    // The proof is the absence of an effect: this file would create a marker
+    // on import, and JSON.parse simply refuses it.
+    await writeFile(
+      join(dir, 'plugin.manifest.json'),
+      'process.env.COGENTA_PLUGIN_MANIFEST_RAN = "yes"\n',
+      'utf8',
+    )
+
+    await expect(loadPlugin(dir)).rejects.toMatchObject({ code: 'PLUGIN_MANIFEST_INVALID' })
+    expect(process.env['COGENTA_PLUGIN_MANIFEST_RAN']).toBeUndefined()
   })
 
   it('recognises a git reference and refuses honestly instead of pretending to resolve it', async () => {
@@ -113,7 +128,7 @@ describe('loadPlugin', () => {
   })
 
   it('reports engine compatibility using the real semver matcher', async () => {
-    await writeFile(join(dir, 'plugin.manifest.mjs'), VALID_MANIFEST, 'utf8')
+    await writeFile(join(dir, 'plugin.manifest.json'), VALID_MANIFEST, 'utf8')
 
     const compatible = await loadPlugin(dir, { engineVersion: '1.2.3' })
     expect(compatible.engineCompatible).toBe(true)

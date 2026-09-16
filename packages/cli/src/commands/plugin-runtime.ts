@@ -97,6 +97,19 @@ export interface PluginHttpRequest {
 /** Bodies larger than this are refused before a plugin ever sees them. */
 export const MAX_PLUGIN_REQUEST_BODY_BYTES = 64 * 1024
 
+/** And an answer larger than this is not served: a plugin cannot make the host hold it. */
+export const MAX_PLUGIN_RESPONSE_BODY_BYTES = 1024 * 1024
+
+/**
+ * How many plugin runs may be in flight at once (L31 step 5, security
+ * review). A plugin route is public and unauthenticated, and every request
+ * spawns a worker with its own heap: without a ceiling, a thousand
+ * simultaneous requests are a thousand workers and the site is gone. Past it,
+ * the host answers 503 rather than queueing without bound — a plugin page
+ * that is briefly unavailable is a smaller failure than a site that is.
+ */
+export const MAX_CONCURRENT_PLUGIN_RUNS = 8
+
 export interface PluginRuntimeOptions {
   readonly projectRoot: string
   readonly dir: string
@@ -206,6 +219,8 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
   const grantStore = createPluginGrantStore(db)
   const disableStore = createPluginDisableStore(db)
   const usageStore = createPluginUsageStore(db)
+  /** Plugin runs in flight, bounded by `MAX_CONCURRENT_PLUGIN_RUNS`. */
+  let running = 0
 
   function handlersFor(collection: string | null): Record<string, CapabilityHandler> {
     const handlers: Record<string, CapabilityHandler> = {
@@ -248,6 +263,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
         const grants = await grantStore.listGrants(name)
         const handlers = handlersFor(event.collection)
         const result = await runPlugin(plugin.manifest, code, grants, {
+          onLog: (line) => logger.info('plugin log', { plugin: name, line }),
           invoke: PLUGIN_EVENT_HANDLER,
           input: event,
           handlers,
@@ -298,9 +314,19 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     if (found === null) return null
     const { entry } = found
     const name = entry.plugin.manifest.name
+    if (running >= MAX_CONCURRENT_PLUGIN_RUNS) {
+      logger.warn('plugin route refused: too many runs in flight', { plugin: name })
+      return {
+        status: 503,
+        contentType: 'text/plain',
+        body: 'This page is busy. Try again in a moment.',
+      }
+    }
+    running += 1
     try {
       const grants = await grantStore.listGrants(name)
       const result = await runPlugin(entry.plugin.manifest, entry.code, grants, {
+        onLog: (line) => logger.info('plugin log', { plugin: name, line }),
         invoke: PLUGIN_REQUEST_HANDLER,
         input: { ...request, path: found.path },
         handlers: handlersFor(null),
@@ -325,6 +351,8 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
         error: String(error),
       })
       return { status: 500, contentType: 'text/plain', body: 'This page could not be built.' }
+    } finally {
+      running -= 1
     }
   }
 
@@ -346,6 +374,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
           run: async () => {
             const grants = await grantStore.listGrants(pluginName)
             const result = await runPlugin(entry.plugin.manifest, entry.code, grants, {
+              onLog: (line) => logger.info('plugin log', { plugin: pluginName, line }),
               invoke: PLUGIN_SCHEDULE_HANDLER,
               input: { name: schedule.name },
               handlers: handlersFor(null),
@@ -405,5 +434,12 @@ function checkResponse(value: unknown): PluginHttpResponse {
     return invalid
   }
   if (typeof body !== 'string') return invalid
+  if (body.length > MAX_PLUGIN_RESPONSE_BODY_BYTES) {
+    return {
+      status: 500,
+      contentType: 'text/plain',
+      body: 'This page could not be built: the plugin answered with too much.',
+    }
+  }
   return { status, contentType, body }
 }

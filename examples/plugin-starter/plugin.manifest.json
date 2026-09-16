@@ -1,0 +1,16 @@
+{
+  "name": "@example/plugin-starter",
+  "version": "1.0.0",
+  "engine": "^1.0.0",
+  "capabilities": [
+    "content.read",
+    "storage.read:plugins/plugin-starter",
+    "storage.write:plugins/plugin-starter"
+  ],
+  "provides": {
+    "tools": ["plugin-starter.hello"]
+  },
+  "main": "plugin.js",
+  "runtime": "server",
+  "isolated": true
+}

@@ -54,8 +54,8 @@ export default definePlugin({
 })
 ```
 
-This file is real — it's `examples/plugin-starter/plugin.manifest.mjs`, unmodified.
-Save it as `plugin.manifest.mjs` (or `.ts`/`.mts`/`.js` — `loadPlugin` checks those four
+This file is real — it's `examples/plugin-starter/plugin.manifest.json`, unmodified.
+Save it as `plugin.manifest.json` (or `.ts`/`.mts`/`.js` — `loadPlugin` checks those four
 names in that order, `packages/plugins/src/loader.ts`) at the root of your plugin
 package, exactly the way a site's own `cogenta.config.mjs` is loaded — a plugin manifest
 is a user-authored file, not a registry entry format.
@@ -241,9 +241,8 @@ capability degrades gracefully rather than crashing.
 A plugin subscribes to content lifecycle events in its manifest, and exposes one
 handler named `onContentEvent`:
 
-```js
-// plugin.manifest.mjs
-provides: { eventSubscriptions: ['content.publish'] },
+```json
+{ "provides": { "eventSubscriptions": ["content.publish"] } }
 ```
 
 ```js
@@ -297,9 +296,8 @@ does nothing.
 
 Declare the paths you serve, and expose `onRequest`:
 
-```js
-// plugin.manifest.mjs
-provides: { routes: ['/hello'] },
+```json
+{ "provides": { "routes": ["/hello"] } }
 ```
 
 ```js
@@ -326,9 +324,8 @@ body says nothing about your error (it is logged instead).
 
 ## Work on a cadence (L31)
 
-```js
-// plugin.manifest.mjs
-provides: { schedules: [{ name: 'daily-digest', everyMinutes: 1440 }] },
+```json
+{ "provides": { "schedules": [{ "name": "daily-digest", "everyMinutes": 1440 }] } }
 ```
 
 ```js
@@ -343,6 +340,17 @@ from there. The string you return is the summary that screen shows. Five minutes
 shortest cadence, because nothing here is a durable worker (R1) — a task runs when a
 tick finds it due.
 
+## The manifest is data, never code (L31 step 5)
+
+`plugin.manifest.json` is a JSON object. It used to be a JavaScript module the host
+imported, which meant a manifest was arbitrary code running in the host process: every
+boot executed one per installed plugin, and *inspecting* a plugin in the workshop ran it
+too, before any signature or capability check. A security review of 2026-09-16 found it,
+with a working proof; the loader now reads and parses, and refuses a `plugin.manifest.mjs`
+by name.
+
+`definePlugin` still exists for writing and validating one; what ships is the JSON.
+
 ## Where a plugin lives on a site (L31)
 
 One directory per plugin under `plugins/` at the root of the site, each holding its
@@ -353,7 +361,7 @@ mon-site/
   cogenta.config.mjs
   plugins/
     mon-plugin/
-      plugin.manifest.mjs
+      plugin.manifest.json
       plugin.js
 ```
 

@@ -1,4 +1,4 @@
-import { access, stat } from 'node:fs/promises'
+import { access, readFile, stat } from 'node:fs/promises'
 import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { CogentaError } from '@cogenta/core'
@@ -25,7 +25,23 @@ export type PluginSource = 'registry' | 'local' | 'git'
  * loaded the same way `cogenta.config.mjs`/`cogenta.schema.mjs` already are,
  * not a bespoke new mechanism.
  */
-export const PLUGIN_MANIFEST_FILE_NAMES = [
+/**
+ * A plugin's manifest is **data**, in one file, and it is never executed
+ * (L31 step 5, security review of 2026-09-16).
+ *
+ * It used to be a JavaScript module the host `import`ed. That made a manifest
+ * arbitrary code running in the host process: `cogenta serve` executed one
+ * per installed plugin at every boot, and — worse for a workshop whose whole
+ * point is reviewing code an agent wrote — *inspecting* a sandbox ran it too,
+ * before any signature or capability check. A JSON file cannot do that.
+ *
+ * `definePlugin` still exists, and is still how a plugin's author gets types
+ * and validation while writing one; what ships is the JSON it describes.
+ */
+export const PLUGIN_MANIFEST_FILE_NAMES = ['plugin.manifest.json'] as const
+
+/** Manifest files this loader deliberately refuses, so the reason is a message rather than silence. */
+const EXECUTABLE_MANIFEST_NAMES = [
   'plugin.manifest.ts',
   'plugin.manifest.mts',
   'plugin.manifest.js',
@@ -94,44 +110,68 @@ async function findManifestFile(packageRoot: string): Promise<string> {
     const candidate = join(packageRoot, name)
     if (await exists(candidate)) return candidate
   }
+  for (const name of EXECUTABLE_MANIFEST_NAMES) {
+    if (await exists(join(packageRoot, name))) {
+      throw new CogentaError({
+        code: 'PLUGIN_MANIFEST_INVALID',
+        message: `"${name}" is not a plugin manifest: a manifest is data, never code.`,
+        hint: 'Ship plugin.manifest.json. A manifest used to be an imported module, which meant a plugin could run code in the host process before anything checked it.',
+        details: { packageRoot, found: name },
+      })
+    }
+  }
   throw new CogentaError({
     code: 'PLUGIN_MANIFEST_FILE_NOT_FOUND',
     message: `No plugin manifest found in ${packageRoot}.`,
-    hint: `Add one of: ${PLUGIN_MANIFEST_FILE_NAMES.join(', ')}.`,
+    hint: `Add ${PLUGIN_MANIFEST_FILE_NAMES[0]} — a JSON file, never a module.`,
     details: { packageRoot },
   })
 }
 
-async function importManifest(manifestPath: string): Promise<PluginManifest> {
-  let module: { default?: unknown }
+/**
+ * Reads a manifest. **Reads** — it parses JSON and validates the result; no
+ * plugin code runs in this process, which is the property the whole workshop
+ * depends on (see `PLUGIN_MANIFEST_FILE_NAMES`).
+ */
+async function readManifest(manifestPath: string): Promise<PluginManifest> {
+  let text: string
   try {
-    module = (await import(pathToFileURL(manifestPath).href)) as { default?: unknown }
+    text = await readFile(manifestPath, 'utf8')
   } catch (error) {
     throw new CogentaError({
       code: 'PLUGIN_MANIFEST_LOAD_FAILED',
-      message: `Could not load ${manifestPath}: ${error instanceof Error ? error.message : String(error)}`,
-      hint: manifestPath.endsWith('.ts')
-        ? 'A TypeScript manifest needs a Node runtime that strips types (Node 22.18+). Use plugin.manifest.mjs on an older one.'
-        : 'Check the file for a syntax error, and that every import it uses is installed.',
+      message: `Could not read ${manifestPath}: ${error instanceof Error ? error.message : String(error)}`,
+      hint: 'Check that the file exists and is readable.',
       cause: error,
       details: { manifestPath },
     })
   }
 
-  if (module.default === undefined) {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch (error) {
     throw new CogentaError({
-      code: 'PLUGIN_MANIFEST_EXPORT_INVALID',
-      message: `${manifestPath} has no default export.`,
-      hint: 'Export the manifest as the default: `export default definePlugin({ … })`.',
+      code: 'PLUGIN_MANIFEST_INVALID',
+      message: `${manifestPath} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      hint: 'A manifest is a JSON object — write it by hand, or generate it with definePlugin and JSON.stringify.',
+      cause: error,
       details: { manifestPath },
     })
   }
 
-  // `definePlugin` re-validates even though a well-formed manifest module
-  // already called it once at module-load time — a manifest file could
-  // export a plain object instead of calling `definePlugin` itself, and
-  // this is the only place that can catch that.
-  return definePlugin(module.default as PluginManifest)
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new CogentaError({
+      code: 'PLUGIN_MANIFEST_EXPORT_INVALID',
+      message: `${manifestPath} does not hold a manifest object.`,
+      hint: 'The file must contain a single JSON object with name, version, engine, capabilities, provides, runtime and isolated.',
+      details: { manifestPath },
+    })
+  }
+
+  // The same validation `definePlugin` gives an author writing one by hand:
+  // reading JSON says nothing about whether the fields make sense.
+  return definePlugin(parsed as PluginManifest)
 }
 
 export interface LoadPluginOptions {
@@ -232,7 +272,7 @@ export async function loadPlugin(
   const source: PluginSource = looksLikeLocalPath(reference) ? 'local' : 'registry'
   const packageRoot = await resolvePackageRoot(reference, source)
   const manifestPath = await findManifestFile(packageRoot)
-  const manifest = await importManifest(manifestPath)
+  const manifest = await readManifest(manifestPath)
   const code = await codeOf(packageRoot, manifest)
   const { devMode, signatureVerified } = await resolveSignatureStatus(
     source,
@@ -274,7 +314,7 @@ async function codeOf(packageRoot: string, manifest: PluginManifest): Promise<st
  * entirely, which is exactly the shortcut the lot's own "pièges connus"
  * section forbids.
  *
- * Reuses `findManifestFile`/`importManifest`/`resolveSignatureStatus`
+ * Reuses `findManifestFile`/`readManifest`/`resolveSignatureStatus`
  * as-is — no re-implementation of manifest loading or signature checking,
  * only a different, stricter trust classification of the same pipeline.
  */
@@ -296,7 +336,7 @@ export async function loadMarketplacePlugin(
   }
 
   const manifestPath = await findManifestFile(packageRoot)
-  const manifest = await importManifest(manifestPath)
+  const manifest = await readManifest(manifestPath)
   const code = await codeOf(packageRoot, manifest)
   const { devMode, signatureVerified } = await resolveSignatureStatus(
     'registry',

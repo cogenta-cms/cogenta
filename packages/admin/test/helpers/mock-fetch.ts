@@ -9773,7 +9773,7 @@ export function installMockFetch(
           return json(200, {
             data: {
               id: 'atelier',
-              files: ['plugin.js', 'plugin.manifest.mjs'],
+              files: ['plugin.js', 'plugin.manifest.json'],
               check: {
                 ok: true,
                 problems: [],

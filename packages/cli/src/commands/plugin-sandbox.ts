@@ -84,19 +84,23 @@ async function resolveRealPath(sandboxDir: string, relativePath: string): Promis
   return target
 }
 
-const STARTER_MANIFEST = (name: string): string => `export default {
-  name: ${JSON.stringify(name)},
-  version: '1.0.0',
-  engine: '^1.0.0',
-  // Ask for the narrowest capabilities that do the job: every one of these is
-  // something a person has to say yes to before the plugin can use it.
-  capabilities: [],
-  provides: {},
-  runtime: 'server',
-  isolated: true,
-  main: 'plugin.js',
-}
-`
+const STARTER_MANIFEST = (name: string): string =>
+  `${JSON.stringify(
+    {
+      name,
+      version: '1.0.0',
+      // Ask for the narrowest capabilities that do the job: every one is
+      // something a person has to say yes to before the plugin can use it.
+      capabilities: [],
+      engine: '^1.0.0',
+      provides: {},
+      runtime: 'server',
+      isolated: true,
+      main: 'plugin.js',
+    },
+    null,
+    2,
+  )}\n`
 
 const STARTER_CODE = `// The plugin's code. The script's completion value is the set of handlers it
 // exposes; the site calls one of them by name. \`sdk\` is the only global, and
@@ -115,7 +119,7 @@ export async function createPluginSandbox(
   const dir = pluginSandboxDirectory(projectRoot, id)
   await mkdir(dir, { recursive: true })
   const name = options.name ?? id
-  await writeFile(join(dir, 'plugin.manifest.mjs'), STARTER_MANIFEST(name), 'utf8')
+  await writeFile(join(dir, 'plugin.manifest.json'), STARTER_MANIFEST(name), 'utf8')
   await writeFile(join(dir, 'plugin.js'), STARTER_CODE, 'utf8')
   return dir
 }

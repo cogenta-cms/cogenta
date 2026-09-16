@@ -6,7 +6,7 @@ and not the person who installs anything.
 
 ## What a plugin is here
 
-A directory holding a manifest and one code file. The site loads it at startup, runs it
+A directory holding `plugin.manifest.json` (data, never executed) and one code file. The site loads it at startup, runs it
 inside an isolated worker (`node:worker_threads` plus a `vm` sandbox, no filesystem, no
 network, no environment variables), and calls one of its handlers. The only thing it can
 reach is `sdk`, built from the capabilities a person granted — a capability that was not

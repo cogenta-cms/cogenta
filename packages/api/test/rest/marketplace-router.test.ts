@@ -48,12 +48,8 @@ async function writeSignedPlugin(
   capabilities: readonly string[] = ['content.read'],
 ): Promise<string> {
   const pluginDir = await mkdtemp(join(dir, 'plugin-'))
-  const manifestPath = join(pluginDir, 'plugin.manifest.mjs')
-  await writeFile(
-    manifestPath,
-    `export default ${JSON.stringify(manifestFor(capabilities))}\n`,
-    'utf8',
-  )
+  const manifestPath = join(pluginDir, 'plugin.manifest.json')
+  await writeFile(manifestPath, `${JSON.stringify(manifestFor(capabilities), null, 2)}\n`, 'utf8')
   await writeFile(
     `${manifestPath}.sig`,
     signManifest(manifestFor(capabilities), privateKey),
@@ -458,12 +454,12 @@ describe('createMarketplaceRouter (L17)', () => {
       const bumpedDir = await writeSignedPlugin(dir, privateKey, ['content.read'])
       // Overwrite the manifest with a higher version, same capabilities.
       await writeFile(
-        join(bumpedDir, 'plugin.manifest.mjs'),
-        `export default ${JSON.stringify({ ...manifestFor(['content.read']), version: '1.1.0' })}\n`,
+        join(bumpedDir, 'plugin.manifest.json'),
+        `${JSON.stringify({ ...manifestFor(['content.read']), version: '1.1.0' }, null, 2)}\n`,
         'utf8',
       )
       await writeFile(
-        join(bumpedDir, 'plugin.manifest.mjs.sig'),
+        join(bumpedDir, 'plugin.manifest.json.sig'),
         signManifest({ ...manifestFor(['content.read']), version: '1.1.0' }, privateKey),
         'utf8',
       )
@@ -500,12 +496,8 @@ describe('createMarketplaceRouter (L17)', () => {
         version: '1.1.0',
       }
       const widenedDir = await mkdtemp(join(dir, 'plugin-'))
-      const widenedManifestPath = join(widenedDir, 'plugin.manifest.mjs')
-      await writeFile(
-        widenedManifestPath,
-        `export default ${JSON.stringify(widenedManifest)}\n`,
-        'utf8',
-      )
+      const widenedManifestPath = join(widenedDir, 'plugin.manifest.json')
+      await writeFile(widenedManifestPath, `${JSON.stringify(widenedManifest, null, 2)}\n`, 'utf8')
       await writeFile(
         `${widenedManifestPath}.sig`,
         signManifest(widenedManifest, privateKey),

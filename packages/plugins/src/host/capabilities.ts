@@ -83,17 +83,33 @@ export function createContentReadHandler(
  */
 export function createHttpFetchHandler(fetchImpl: typeof fetch = fetch): CapabilityHandler {
   return async (args, context) => {
-    const url = asString(asRecord(args).url, 'url')
     const allowedDomains = grantedParameters('http.fetch', context)
-    const hostname = new URL(url).hostname
-    if (!allowedDomains.includes(hostname)) {
-      refused(`"http.fetch" was not granted for domain "${hostname}"`)
+    let target = asString(asRecord(args).url, 'url')
+
+    // Every hop is checked, not only the first (L31 step 5, security review).
+    // `fetch` follows up to twenty redirects on its own, so a granted host
+    // that answers `302 Location: http://169.254.169.254/…` used to walk a
+    // plugin straight into the site's own network — the exact-hostname check
+    // passed once, and the redirect went wherever it liked.
+    for (let hop = 0; hop <= MAX_HTTP_REDIRECTS; hop += 1) {
+      const hostname = new URL(target).hostname
+      if (!allowedDomains.includes(hostname)) {
+        refused(`"http.fetch" was not granted for domain "${hostname}"`)
+      }
+      const response = await fetchImpl(target, { redirect: 'manual' })
+      const location = response.headers.get('location')
+      if (response.status >= 300 && response.status < 400 && location !== null) {
+        target = new URL(location, target).toString()
+        continue
+      }
+      return { status: response.status, body: await response.text() }
     }
-    const response = await fetchImpl(url)
-    const body = await response.text()
-    return { status: response.status, body }
+    refused('"http.fetch" followed too many redirects')
   }
 }
+
+/** Beyond this, a chain of redirects is a loop, not a destination. */
+const MAX_HTTP_REDIRECTS = 5
 
 function isWithinGrantedPrefix(path: string, prefixes: readonly string[]): boolean {
   return prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))

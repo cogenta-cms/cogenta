@@ -3955,6 +3955,24 @@ async function recordApiKeyAudit(
  * The count is recorded, never the exported rows themselves: the audit log
  * is not where a second copy of everyone's activity belongs.
  */
+/**
+ * The plugin workshop's own audit entries (L31 step 5): installing a plugin,
+ * granting a capability, taking one back. Same hash-chained log as every
+ * other write, and a failed journal entry never undoes the act it describes —
+ * the same restraint `recordAuditExportAudit` already takes.
+ */
+async function recordPluginAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  action: 'plugin.install' | 'plugin.grant' | 'plugin.revoke',
+  logger: Logger,
+  diff: Record<string, unknown>,
+): Promise<void> {
+  await site.auth.audit
+    .record({ actorId: actor.id, actorRoles: actor.roles, action, diff })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
 async function recordAuditExportAudit(
   site: Site,
   actor: AccessContext['actor'],
@@ -5623,6 +5641,12 @@ export function createRequestListener(
               return
             }
             await grantStore.grant(pluginName, capability)
+            // Every grant is a decision someone took: the audit log is where
+            // "who let this plugin write drafts?" is answered later.
+            await recordPluginAudit(site, context.actor, 'plugin.grant', logger, {
+              plugin: pluginName,
+              capability,
+            })
             res.writeHead(201, jsonHeaders)
             res.end(JSON.stringify({ data: { plugin: pluginName, capability } }))
             return
@@ -5634,6 +5658,10 @@ export function createRequestListener(
               return
             }
             await grantStore.revoke(pluginName, capability)
+            await recordPluginAudit(site, context.actor, 'plugin.revoke', logger, {
+              plugin: pluginName,
+              capability,
+            })
             res.writeHead(204, { 'cache-control': 'no-store' })
             res.end()
             return
@@ -5725,6 +5753,16 @@ export function createRequestListener(
             pluginsDir: extras.pluginsDir ?? 'plugins',
             ...(body?.overwrite === true ? { overwrite: true } : {}),
           })
+          if (deployment.ok) {
+            // Installing code an agent may have written is exactly the act
+            // that must be attributable afterwards.
+            await recordPluginAudit(site, context.actor, 'plugin.install', logger, {
+              sandbox: id,
+              installedAt: deployment.installedAt ?? null,
+              replaced: deployment.backupAt !== undefined,
+              capabilities: deployment.capabilities ?? [],
+            })
+          }
           res.writeHead(deployment.ok ? 200 : 409, jsonHeaders)
           res.end(JSON.stringify({ data: deployment }))
           return
@@ -6457,6 +6495,13 @@ export function createRequestListener(
         res.writeHead(answer.status, {
           'content-type': `${answer.contentType}; charset=utf-8`,
           'cache-control': 'no-store',
+          // A plugin's answer is served from the site's own origin, where the
+          // admin's session token lives: without this, a plugin — or a plugin
+          // reflecting its own query string — could run script there and read
+          // it. `sandbox` also costs the page its forms and same-origin
+          // identity, which is the right default for markup a plugin wrote.
+          'content-security-policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+          'x-content-type-options': 'nosniff',
         })
         res.end(answer.body)
         return

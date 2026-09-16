@@ -29,16 +29,19 @@ const COLLECTIONS: readonly CollectionDefinition[] = [
   },
 ]
 
-const MANIFEST = `export default {
-  name: 'reader',
-  version: '1.0.0',
-  engine: '^1.0.0',
-  capabilities: ['content.read'],
-  provides: {},
-  runtime: 'server',
-  isolated: true,
-}
-`
+const MANIFEST = `${JSON.stringify(
+  {
+    name: 'reader',
+    version: '1.0.0',
+    engine: '^1.0.0',
+    capabilities: ['content.read'],
+    provides: {},
+    runtime: 'server',
+    isolated: true,
+  },
+  null,
+  2,
+)}\n`
 
 /** A plugin that only works if the capability really reached the sandbox. */
 const CODE = `({
@@ -74,7 +77,7 @@ async function project(options: { readonly code?: string } = {}): Promise<Projec
 
   const pluginDir = join(root, 'plugins', 'reader')
   await mkdir(pluginDir, { recursive: true })
-  await writeFile(join(pluginDir, 'plugin.manifest.mjs'), MANIFEST, 'utf8')
+  await writeFile(join(pluginDir, 'plugin.manifest.json'), MANIFEST, 'utf8')
   await writeFile(join(pluginDir, 'plugin.js'), options.code ?? CODE, 'utf8')
 
   const db = await createSqliteHandle({ url: join(root, 'site.db') })

@@ -32,7 +32,8 @@ function manifestFor(capabilities: readonly string[]) {
 }
 
 function manifestSource(capabilities: readonly string[]): string {
-  return `export default ${JSON.stringify(manifestFor(capabilities))}\n`
+  // Data, never a module: a manifest is read, never executed (L31 step 5).
+  return `${JSON.stringify(manifestFor(capabilities), null, 2)}\n`
 }
 
 async function writePlugin(
@@ -43,7 +44,7 @@ async function writePlugin(
   } = {},
 ): Promise<string> {
   const pluginDir = await mkdtemp(join(dir, 'plugin-'))
-  const manifestPath = join(pluginDir, 'plugin.manifest.mjs')
+  const manifestPath = join(pluginDir, 'plugin.manifest.json')
   const capabilities = options.capabilities ?? ['content.read']
   await writeFile(manifestPath, manifestSource(capabilities), 'utf8')
 

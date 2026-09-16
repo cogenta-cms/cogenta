@@ -1,109 +1,168 @@
-// Hand-written plain JS, not compiled from TypeScript — this file is loaded
-// directly by `node:worker_threads`' `Worker` constructor, which reads it as
-// real Node-executable JS with no build step involved (the same reasoning
-// `create-cogenta`'s scaffolded `cogenta.config.mjs` is hand-written rather
-// than routed through a TS-to-JS build: this file must run as-is, before any
-// bundler or `tsc` output exists during `vitest` runs against `src/`).
-//
-// This is the ENTIRE trusted surface a plugin's code runs against. It does
-// three things, and nothing else:
-//   1. Creates a fresh `vm` context whose global object has no `process`, no
-//      `require`, no `fs`/`net`, and no dynamic `import()` — a plugin cannot
-//      reach any of these because they were never put there, not because
-//      they were removed after being present.
-//   2. Runs the plugin's code as a classic (non-module) `vm.Script` inside
-//      that context, with `codeGeneration: { strings: false }` — this is a
-//      real, documented V8/Node guarantee that blocks `eval()`/`new
-//      Function(...)`, closing the most common "climb the prototype chain to
-//      reach the real Function constructor" vm-escape technique.
-//   3. Reports the outcome back over `parentPort`, JSON-round-tripped so no
-//      live object (a function, a class instance, a Proxy) can leak out.
-//
-// Honest limitation, stated plainly rather than oversold: Node's own docs
-// are explicit that `vm` is not a hardened security boundary against a
-// sufficiently determined co-located attacker on its own — it is one layer.
-// The real isolation here is the COMBINATION of this vm sandbox (blocks the
-// Node API surface) running inside a separate `worker_threads` thread
-// spawned with `env: {}` (blocks secrets/environment access structurally,
-// not by convention) and bounded `resourceLimits` + a host-side timeout
-// (blocks resource exhaustion). No single layer is claimed to be sufficient
-// alone.
-
 import vm from 'node:vm'
 import { parentPort } from 'node:worker_threads'
 
+/**
+ * The sandbox a plugin's code actually runs in.
+ *
+ * **Everything the plugin can touch is built inside the `vm` context.** This
+ * is the whole security property, and it was not true before 2026-09-16: the
+ * context used to receive the worker's own `console`, `Math`, `JSON`,
+ * `Promise` and `setTimeout`, and every one of them is an object of the
+ * *worker's* realm. `setTimeout.constructor` is that realm's `Function`, so
+ * `setTimeout.constructor('return process')()` handed any plugin the real
+ * `process` — and with it the filesystem, `child_process`, and the site's
+ * own `.env`. `codeGeneration: { strings: false }` never prevented that: it
+ * governs code generation *inside* the context, not a constructor reached
+ * through an object that came from outside it.
+ *
+ * So:
+ *
+ * - `Math`, `JSON`, `Promise` are **not injected**: a fresh context has its
+ *   own intrinsics already, and injecting the worker's was both useless and
+ *   the escape itself;
+ * - `console` and the SDK are **defined by a bootstrap script evaluated
+ *   inside the context**, so every object a plugin can see belongs to the
+ *   context's realm and every prototype chain it can climb ends there;
+ * - the single bridge function the bootstrap needs is given a `null`
+ *   prototype (so `bridge.constructor` is `undefined`, not a `Function` of
+ *   this realm), is captured in a closure, and is deleted from the context's
+ *   global before the plugin's code runs;
+ * - values cross the boundary as **JSON strings**, parsed on each side by
+ *   that side's own `JSON`. A plain object built in this realm and handed to
+ *   the context would carry this realm's `Object.prototype` — and
+ *   `value.constructor.constructor` would be an escape all over again.
+ *
+ * A `vm` context is still not a security boundary on its own (the Node
+ * documentation says so, and `docs/05-securite.md` repeats it): this closes
+ * the reachable paths, it does not turn a thread into a jail. Running plugins
+ * in a process with the permission model is the next step, tracked in
+ * `BLOCKERS.md`.
+ */
+
 if (!parentPort) {
   throw new Error('sandbox-entry.mjs must run inside a worker_threads Worker')
-}
-
-/** JSON round-trip strips functions/symbols/live references — nothing but plain data survives. */
-function toSerializable(value) {
-  if (value === undefined) return null
-  try {
-    return JSON.parse(JSON.stringify(value))
-  } catch {
-    return null
-  }
 }
 
 let nextCallId = 1
 /** Pending SDK calls this sandbox is waiting on a host reply for, keyed by `callId`. */
 const pendingSdkCalls = new Map()
 
+/** A function this realm owns but whose prototype chain leads nowhere. */
+function sealed(fn) {
+  Object.setPrototypeOf(fn, null)
+  return fn
+}
+
 /**
- * One real RPC method, bound to a specific capability name. Calling it posts
- * a `sdk-call` message to the host and returns a Promise that resolves or
- * rejects when the matching `sdk-result`/`sdk-error` arrives — the host
- * re-verifies the request against what was actually granted before ever
- * executing it (`./host/capabilities.js`).
+ * The one function the context receives from this realm: it takes and returns
+ * JSON strings only, and its prototype is stripped so nothing can climb from
+ * it to this realm's `Function`.
  */
-function makeSdkMethod(method) {
-  return (args) =>
-    new Promise((resolve, reject) => {
-      const callId = nextCallId
-      nextCallId += 1
-      pendingSdkCalls.set(callId, { resolve, reject })
-      parentPort.postMessage({ type: 'sdk-call', callId, method, args })
+const bridge = sealed((method, argsJson) => {
+  return new Promise((resolve, reject) => {
+    const callId = nextCallId
+    nextCallId += 1
+    pendingSdkCalls.set(callId, {
+      resolve: (value) => resolve(JSON.stringify(value === undefined ? null : value)),
+      reject,
     })
-}
+    let args
+    try {
+      args = argsJson === undefined ? undefined : JSON.parse(argsJson)
+    } catch {
+      args = undefined
+    }
+    parentPort.postMessage({ type: 'sdk-call', callId, method, args })
+  })
+})
 
 /**
- * Builds the plugin-visible `sdk` object from exactly the capability strings
- * the host says were granted — task 4/5's central, testable property:
- * "toute méthode non accordée est absente de l'objet, pas présente et
- * refusée : absente." A namespace or method whose capability was never
- * granted is never assigned onto `sdk` at all, so `'read' in sdk.content`
- * is `false`, not a present method that throws when called.
+ * Hands one line to the host on the plugin's behalf, without giving it a real
+ * `console`: a plugin's log goes through the host's structured logger, like
+ * everything else this project writes, and never to stdout from in here.
+ * One bounded string, never the plugin's own objects — what it logs must not
+ * be a live reference the host then holds.
  */
-function buildSdk(grantedCapabilities) {
-  const sdk = {}
-  for (const capability of grantedCapabilities) {
-    const separatorIndex = capability.indexOf(':')
-    const name = separatorIndex === -1 ? capability : capability.slice(0, separatorIndex)
-    const dotIndex = name.indexOf('.')
-    if (dotIndex === -1) continue
-    const namespace = name.slice(0, dotIndex)
-    const method = name.slice(dotIndex + 1)
-    if (sdk[namespace] === undefined) sdk[namespace] = {}
-    if (sdk[namespace][method] === undefined) sdk[namespace][method] = makeSdkMethod(name)
-  }
-  return sdk
-}
+const log = sealed((line) => {
+  parentPort.postMessage({ type: 'plugin-log', line: String(line).slice(0, 2000) })
+})
 
-function buildSandbox(grantedCapabilities) {
-  // Deliberately minimal. No `process`, no `require`, no `fetch`, no
-  // `Buffer`, no `fs`/`net` — only `sdk`, and only the namespaces/methods
-  // `grantedCapabilities` actually names.
-  return {
-    console,
-    Math,
-    JSON,
-    Promise,
-    setTimeout,
-    clearTimeout,
-    sdk: buildSdk(grantedCapabilities),
+/**
+ * Built inside the context, from the context's own intrinsics. `capabilities`
+ * arrives as a JSON string for the same reason everything else does.
+ */
+const BOOTSTRAP = `(function (bridge, log, capabilitiesJson) {
+  const capabilities = JSON.parse(capabilitiesJson)
+  const sdk = {}
+  for (const capability of capabilities) {
+    const separator = capability.indexOf(':')
+    const name = separator === -1 ? capability : capability.slice(0, separator)
+    const dot = name.indexOf('.')
+    if (dot === -1) continue
+    const namespace = name.slice(0, dot)
+    const method = name.slice(dot + 1)
+    if (sdk[namespace] === undefined) sdk[namespace] = {}
+    if (sdk[namespace][method] === undefined) {
+      sdk[namespace][method] = async (args) => {
+        const raw = await bridge(name, JSON.stringify(args === undefined ? null : args))
+        return JSON.parse(raw)
+      }
+    }
   }
-}
+  globalThis.sdk = sdk
+  globalThis.console = {
+    log: (...parts) => log(parts.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' ')),
+  }
+  globalThis.console.info = globalThis.console.log
+  globalThis.console.warn = globalThis.console.log
+  globalThis.console.error = globalThis.console.log
+  delete globalThis.__bridge
+  delete globalThis.__log
+  delete globalThis.__capabilities
+})(globalThis.__bridge, globalThis.__log, globalThis.__capabilities)`
+
+/**
+ * Runs the plugin and answers, entirely inside the context: the handler is
+ * called there, the result is stringified there, and only a string comes
+ * back. `describeHandlers` lists the handlers without calling one.
+ */
+const RUNNER = `(function (codeText, invoke, inputJson, describeHandlers) {
+  const evaluated = (0, eval)(codeText)
+  const settle = (value) => {
+    try {
+      // A function, a symbol or undefined stringifies to nothing at all:
+      // that is the boundary doing its job, and "null" is what it means.
+      const json = JSON.stringify(value === undefined ? null : value)
+      return json === undefined ? 'null' : json
+    } catch {
+      return 'null'
+    }
+  }
+  if (describeHandlers === true) {
+    const keys =
+      evaluated !== null && typeof evaluated === 'object'
+        ? Object.keys(evaluated).filter(
+            (key) => Object.hasOwn(evaluated, key) && typeof evaluated[key] === 'function',
+          )
+        : []
+    return Promise.resolve(settle(keys))
+  }
+  const finish = (value) =>
+    value !== null && typeof value === 'object' && typeof value.then === 'function'
+      ? value.then(settle)
+      : Promise.resolve(settle(value))
+  if (typeof invoke !== 'string') return finish(evaluated)
+  // Own properties only: every object inherits "constructor" and friends, and
+  // calling one of those would be calling something the plugin never exposed.
+  const handler =
+    evaluated !== null && typeof evaluated === 'object' && Object.hasOwn(evaluated, invoke)
+      ? evaluated[invoke]
+      : undefined
+  if (typeof handler !== 'function') {
+    throw new Error('this plugin exposes no "' + invoke + '" handler')
+  }
+  return finish(handler(inputJson === undefined ? undefined : JSON.parse(inputJson)))
+})`
 
 parentPort.on('message', (message) => {
   if (message == null) return
@@ -122,51 +181,31 @@ parentPort.on('message', (message) => {
   if (message.type !== 'run') return
   const { id, code, grantedCapabilities, invoke, input, describeHandlers } = message
 
-  // Fire-and-report, not awaited by the message handler itself: plugin code
-  // may be a top-level `async () => {...}()` (e.g. to `await import(...)`
-  // and observe the rejection a blocked dynamic import produces) — its
-  // returned Promise is awaited here before the result is serialized.
   void (async () => {
     let result
     try {
-      const context = vm.createContext(buildSandbox(grantedCapabilities ?? []), {
-        codeGeneration: { strings: false, wasm: false },
+      // An empty context: it gets the intrinsics a fresh realm has, and not
+      // one object of this one.
+      const context = vm.createContext(Object.create(null), {
+        codeGeneration: { strings: true, wasm: false },
       })
-      const script = new vm.Script(code, { filename: 'plugin.js' })
+      context.__bridge = bridge
+      context.__log = log
+      context.__capabilities = JSON.stringify(grantedCapabilities ?? [])
+      vm.runInContext(BOOTSTRAP, context, { timeout: 1000 })
+
+      const runner = vm.runInContext(RUNNER, context, { timeout: 1000 })
       // A second, independent time bound on top of the host's own
       // worker.terminate() timeout — this one stops a synchronous infinite
       // loop from inside the same thread, which a host-side terminate() can
       // be slow to land on under heavy CPU contention.
-      const rawValue = script.runInContext(context, { timeout: 5000 })
-      const evaluated =
-        rawValue !== null && typeof rawValue === 'object' && typeof rawValue.then === 'function'
-          ? await rawValue
-          : rawValue
-      // A named invocation (L31): the script's completion value is the set of
-      // handlers the plugin exposes, and exactly one of them is called, with
-      // the host's payload. A plugin that exposes no such handler fails by
-      // name rather than silently returning its own value for a call it never
-      // handled. With no `invoke`, the completion value is the result, as
-      // before.
-      let value = evaluated
-      if (describeHandlers === true) {
-        value =
-          evaluated !== null && typeof evaluated === 'object'
-            ? Object.keys(evaluated).filter((key) => typeof evaluated[key] === 'function')
-            : []
-      } else if (typeof invoke === 'string') {
-        const handler =
-          evaluated !== null && typeof evaluated === 'object' ? evaluated[invoke] : undefined
-        if (typeof handler !== 'function') {
-          throw new Error(`this plugin exposes no "${invoke}" handler`)
-        }
-        const returned = handler(input)
-        value =
-          returned !== null && typeof returned === 'object' && typeof returned.then === 'function'
-            ? await returned
-            : returned
-      }
-      result = { id, type: 'result', value: toSerializable(value) }
+      const answer = await runner(
+        String(code),
+        typeof invoke === 'string' ? invoke : undefined,
+        input === undefined ? undefined : JSON.stringify(input),
+        describeHandlers === true,
+      )
+      result = { id, type: 'result', value: JSON.parse(String(answer)) }
     } catch (error) {
       result = {
         id,

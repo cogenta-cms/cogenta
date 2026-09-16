@@ -834,7 +834,18 @@ n'a été fait (pas de clé dans cette session) — les outils, l'agent et l'éc
 la qualité réelle du code qu'un modèle écrit ne l'est pas ; (2) dix capacités du vocabulaire
 (`channel.send`, `agent.delegate`, `memory.*`, `deps.*`, `build.trigger`, `deploy.trigger`,
 `site.config_*`, `media.write`) restent sans implémentation — elles sont désormais refusées
-à l'octroi au lieu d'être accordables pour rien. L'écran « Extensions installées » (tâche 1) lit
+à l'octroi au lieu d'être accordables pour rien.
+
+**L31 étape 5 (2026-09-16), après une revue de sécurité qui a rendu NON CONFORME** : deux
+failles critiques réelles ont été trouvées et corrigées (évasion du bac à sable `vm` par les
+objets de l'hôte injectés dans le contexte ; manifeste exécuté dans le processus hôte), plus
+quatre constats moindres (SSRF par redirection, XSS possible via une route de plugin,
+absence de plafond de workers, réponse non bornée). Ce qui **reste ouvert** : un contexte
+`vm` n'est pas une frontière de sécurité à lui seul — les chemins connus sont fermés et
+couverts par des tests, mais la vraie isolation serait un **processus séparé sous le modèle
+de permissions de Node** (`--permission --allow-fs-read=…`), jamais un thread partageant le
+processus de l'hôte. Tant que ce n'est pas fait, un plugin tiers reste un code à relire, pas
+un code à ignorer : ne jamais installer un plugin qu'on n'a pas lu. L'écran « Extensions installées » (tâche 1) lit
 donc un `PluginUsageStore` et un `PluginDisableStore` réels, câblés et testés de bout en
 bout, mais qui resteront vides sur un vrai déploiement tant qu'aucun pipeline
 d'exécution de plugin n'existe — l'écran le dit honnêtement (« Jamais exécutée ») plutôt

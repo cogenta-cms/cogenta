@@ -17,20 +17,23 @@ import { createUser, loginWithMfaSetup, startServer } from './helpers/serve-harn
  * real publish ever reaches it.
  */
 
-const MANIFEST = `export default {
-  name: 'watcher',
-  version: '1.0.0',
-  engine: '^1.0.0',
-  capabilities: ['storage.write:plugins/watcher', 'content.write_draft:article', 'schema.read'],
-  provides: {
-    eventSubscriptions: ['content.publish'],
-    routes: ['/hello', '/echo'],
-    schedules: [{ name: 'sweep', everyMinutes: 60 }],
+const MANIFEST = `${JSON.stringify(
+  {
+    name: 'watcher',
+    version: '1.0.0',
+    engine: '^1.0.0',
+    capabilities: ['storage.write:plugins/watcher', 'content.write_draft:article', 'schema.read'],
+    provides: {
+      eventSubscriptions: ['content.publish'],
+      routes: ['/hello', '/echo'],
+      schedules: [{ name: 'sweep', everyMinutes: 60 }],
+    },
+    runtime: 'server',
+    isolated: true,
   },
-  runtime: 'server',
-  isolated: true,
-}
-`
+  null,
+  2,
+)}\n`
 
 const CODE = `({
   onDraft: async (input) => {
@@ -118,7 +121,7 @@ async function project(options: { readonly grant?: boolean } = {}): Promise<stri
 
   const pluginDir = join(root, 'plugins', 'watcher')
   await mkdir(pluginDir, { recursive: true })
-  await writeFile(join(pluginDir, 'plugin.manifest.mjs'), MANIFEST, 'utf8')
+  await writeFile(join(pluginDir, 'plugin.manifest.json'), MANIFEST, 'utf8')
   await writeFile(join(pluginDir, 'plugin.js'), CODE, 'utf8')
 
   if (options.grant === true) {
@@ -242,6 +245,22 @@ describe('a plugin serving its own route', () => {
       const sneaky = await fetch(`${server.base}/_cogenta/plugins/watcher/hello?sneaky=yes`)
       expect(sneaky.status).toBe(200)
       expect(sneaky.headers.get('set-cookie')).toBeNull()
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
+  it('serves a plugin’s HTML under a CSP that lets it run no script', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const answer = await fetch(`${server.base}/_cogenta/plugins/watcher/hello?name=Ada`)
+
+      // The admin's session token lives in this origin's localStorage: markup
+      // a plugin wrote must not be able to read it (L31 step 5).
+      expect(answer.headers.get('content-security-policy')).toContain('sandbox')
+      expect(answer.headers.get('content-security-policy')).toContain("default-src 'none'")
+      expect(answer.headers.get('x-content-type-options')).toBe('nosniff')
     } finally {
       await server.stop()
     }
@@ -378,20 +397,23 @@ describe('the plugin workshop over HTTP', () => {
         },
       )
       expect(written.status).toBe(200)
-      await fetch(`${server.base}/api/plugins/sandbox/atelier/file?path=plugin.manifest.mjs`, {
+      await fetch(`${server.base}/api/plugins/sandbox/atelier/file?path=plugin.manifest.json`, {
         method: 'PUT',
         headers: auth(token),
         body: JSON.stringify({
-          content: `export default {
-  name: 'from-the-workshop',
-  version: '1.0.0',
-  engine: '^1.0.0',
-  capabilities: [],
-  provides: { schedules: [{ name: 'nightly', everyMinutes: 1440 }] },
-  runtime: 'server',
-  isolated: true,
-}
-`,
+          content: `${JSON.stringify(
+            {
+              name: 'from-the-workshop',
+              version: '1.0.0',
+              engine: '^1.0.0',
+              capabilities: [],
+              provides: { schedules: [{ name: 'nightly', everyMinutes: 1440 }] },
+              runtime: 'server',
+              isolated: true,
+            },
+            null,
+            2,
+          )}\n`,
         }),
       })
 
@@ -426,6 +448,16 @@ describe('the plugin workshop over HTTP', () => {
       expect(installed).toBeDefined()
       // Installed, and holding nothing: capabilities are granted separately.
       expect(installed?.capabilities).toEqual([])
+
+      // Installing code an agent may have written is attributable afterwards
+      // (L31 step 5): it is in the same hash-chained audit log as every other
+      // write, with who did it.
+      const audit = await fetch(`${server.base}/api/audit?action=plugin.install`, {
+        headers: auth(token),
+      })
+      expect(audit.status).toBe(200)
+      const entries = ((await audit.json()) as { data: { action: string }[] }).data
+      expect(entries.some((entry) => entry.action === 'plugin.install')).toBe(true)
     } finally {
       await server.stop()
     }

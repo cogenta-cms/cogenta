@@ -276,7 +276,8 @@
     },
     "commerceCustomers": "Clients",
     "widgets": "Widgets",
-    "plugins": "Plugins"
+    "plugins": "Plugins",
+    "replace": "Rechercher et remplacer"
   },
   "breadcrumb": {
     "newEntry": "Nouveau",
@@ -4921,5 +4922,35 @@
       }
     },
     "fromPlugin": "Fourni par l’extension « {{plugin}} »"
+  },
+  "replace": {
+    "heading": "Rechercher et remplacer",
+    "description": "Trouvez une expression dans tout le contenu que vous pouvez modifier, voyez chaque changement avant qu'il soit fait, puis appliquez-le.",
+    "find": "Rechercher",
+    "replaceWith": "Remplacer par",
+    "options": "Options",
+    "caseInsensitive": "Ignorer la casse",
+    "wholeWord": "Mots entiers uniquement",
+    "scope": "Cherche dans les titres, le texte riche et le texte des blocs. Ne touche jamais aux slugs : changer une adresse casse les liens, cela se fait page par page.",
+    "search": "Rechercher",
+    "nothing": "Aucune occurrence trouvée.",
+    "found": "{{occurrences}} dans {{entries}}",
+    "entries_one": "{{count}} entrée",
+    "entries_other": "{{count}} entrées",
+    "apply": "Remplacer partout",
+    "confirmQuestion_one": "Modifier {{count}} entrée ?",
+    "confirmQuestion_other": "Modifier {{count}} entrées ?",
+    "confirm": "Confirmer le remplacement",
+    "truncated": "L'aperçu s'est arrêté à {{count}} entrées. Remplacez ces entrées, puis relancez la recherche pour les suivantes.",
+    "occurrences_one": "{{count}} occurrence",
+    "occurrences_other": "{{count}} occurrences",
+    "done_one": "{{count}} entrée modifiée. Chaque modification est une nouvelle version, restaurable depuis l'historique de l'entrée.",
+    "done_other": "{{count}} entrées modifiées. Chaque modification est une nouvelle version, restaurable depuis l'historique de l'entrée.",
+    "skipped_one": "{{count}} entrée laissée intacte : elle a été modifiée entre l'aperçu et le remplacement.",
+    "skipped_other": "{{count}} entrées laissées intactes : elles ont été modifiées entre l'aperçu et le remplacement.",
+    "failed": "Le remplacement n'a pas pu être fait.",
+    "untitled": "Sans titre",
+    "inBlock": "Bloc {{position}} · {{field}}",
+    "inZoneBlock": "Zone {{zone}}, bloc {{position}} · {{field}}"
   }
 }

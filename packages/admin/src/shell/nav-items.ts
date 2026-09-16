@@ -155,6 +155,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     badge: 'trash',
   },
   {
+    // L34. Shown to anyone who may edit at least one collection: the server
+    // searches only what this user may update, so the item's visibility and
+    // the tool's reach are the same rule.
+    to: '/replace',
+    labelKey: 'nav.replace',
+    group: 'content',
+    visibleWhen: { kind: 'collectionAction', action: 'update' },
+  },
+  {
     to: '/forms',
     labelKey: 'nav.forms',
     group: 'content',

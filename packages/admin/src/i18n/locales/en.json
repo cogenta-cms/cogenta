@@ -276,7 +276,8 @@
     },
     "commerceCustomers": "Customers",
     "widgets": "Widgets",
-    "plugins": "Plugins"
+    "plugins": "Plugins",
+    "replace": "Search and replace"
   },
   "breadcrumb": {
     "newEntry": "New",
@@ -4921,5 +4922,35 @@
       }
     },
     "fromPlugin": "Provided by the “{{plugin}}” plugin"
+  },
+  "replace": {
+    "heading": "Search and replace",
+    "description": "Find a phrase across all the content you may edit, see every change before it is made, then apply it.",
+    "find": "Find",
+    "replaceWith": "Replace with",
+    "options": "Options",
+    "caseInsensitive": "Ignore case",
+    "wholeWord": "Whole words only",
+    "scope": "Searches titles, rich text and the text inside blocks. Never touches slugs: changing an address breaks links, and that is done page by page.",
+    "search": "Search",
+    "nothing": "Nothing found.",
+    "found": "{{occurrences}} in {{entries}}",
+    "entries_one": "{{count}} entry",
+    "entries_other": "{{count}} entries",
+    "apply": "Replace everywhere",
+    "confirmQuestion_one": "Change {{count}} entry?",
+    "confirmQuestion_other": "Change {{count}} entries?",
+    "confirm": "Confirm the replacement",
+    "truncated": "The preview stopped at {{count}} entries. Replace these, then search again for the next ones.",
+    "occurrences_one": "{{count}} occurrence",
+    "occurrences_other": "{{count}} occurrences",
+    "done_one": "{{count}} entry changed. Each change is a new version, restorable from the entry's history.",
+    "done_other": "{{count}} entries changed. Each change is a new version, restorable from the entry's history.",
+    "skipped_one": "{{count}} entry left alone: it was edited between the preview and the replacement.",
+    "skipped_other": "{{count}} entries left alone: they were edited between the preview and the replacement.",
+    "failed": "The replacement could not be made.",
+    "untitled": "Untitled",
+    "inBlock": "Block {{position}} · {{field}}",
+    "inZoneBlock": "Zone {{zone}}, block {{position}} · {{field}}"
   }
 }

@@ -50,6 +50,7 @@ import { PluginsRoute } from './routes/plugins.js'
 import { ProfileRoute } from './routes/profile.js'
 import { PromptSettingsRoute } from './routes/prompt-settings.js'
 import { ProvidersRoute } from './routes/providers.js'
+import { ReplaceRoute } from './routes/replace.js'
 import { ResetPasswordRoute } from './routes/reset-password.js'
 import { ReviewRoute } from './routes/review.js'
 import { RolesRoute } from './routes/roles.js'
@@ -154,6 +155,7 @@ export function App(): JSX.Element {
                 <Route path="tools" element={<ToolsRoute />} />
                 <Route path="scheduled" element={<ScheduledRoute />} />
                 <Route path="trash" element={<TrashRoute />} />
+                <Route path="replace" element={<ReplaceRoute />} />
                 <Route path="assistant" element={<AssistantRoute />} />
                 <Route path="media" element={<MediaRoute />} />
                 <Route path="import" element={<ImportRoute />} />

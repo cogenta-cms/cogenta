@@ -668,3 +668,51 @@ export function setEntryVisibility(
     },
   )
 }
+
+/** One place a phrase was found, and what it would become (L34). */
+export interface ReplacementHit {
+  readonly path: string
+  readonly before: string
+  readonly after: string
+  readonly occurrences: number
+}
+
+export interface EntryReplacementPlan {
+  readonly entryId: string
+  readonly collection: string
+  readonly locale: string
+  /** The entry's title before any replacement; empty when it has none. */
+  readonly title: string
+  readonly hits: readonly ReplacementHit[]
+  readonly occurrences: number
+}
+
+export interface ReplaceReport {
+  readonly applied: boolean
+  readonly scanned: number
+  readonly truncated: boolean
+  readonly entries: readonly EntryReplacementPlan[]
+  readonly skipped?: readonly { readonly entryId: string; readonly reason: string }[]
+}
+
+export interface ReplaceInput {
+  readonly find: string
+  readonly replace: string
+  readonly caseInsensitive?: boolean
+  readonly wholeWord?: boolean
+  readonly collections?: readonly string[]
+  readonly apply?: boolean
+}
+
+/**
+ * Previews a search and replace across the collections this user may edit,
+ * or — only when `apply` is true — performs it (L34). A POST even for a
+ * preview: the phrase is content, and content does not belong in a URL.
+ */
+export function replaceContent(token: string, input: ReplaceInput): Promise<ReplaceReport> {
+  return request('/api/content/-/replace', {
+    method: 'POST',
+    headers: { ...authHeader(token), 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}

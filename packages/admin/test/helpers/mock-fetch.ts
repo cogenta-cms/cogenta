@@ -219,6 +219,9 @@ export const MOCK_TRASHED_NOTE = {
   blocks: {},
 }
 
+/** Every `POST /api/content/-/replace` the mock received, in order (L34). */
+export const replaceCalls: { find: string; replace: string; apply: boolean }[] = []
+
 /** What `POST .../visibility` has been told, by entry id (`schema@2.2`). */
 export const mockEntryVisibility = new Map<string, string>()
 
@@ -7020,6 +7023,42 @@ export function installMockFetch(
             code: 'CONTENT_REFERENCED',
             message: `"${MOCK_TRASHED_BLOCKED_ENTRY.id}" cannot be removed from "article": 1 entry of "note" still reference it.`,
           },
+        })
+      }
+
+      // `POST /api/content/-/replace` (L34). Stateful enough to prove the
+      // screen's one rule: a preview writes nothing, an application does.
+      if (/\/api\/content\/-\/replace$/u.test(url) && method === 'POST') {
+        const input = body as { find: string; replace: string; apply?: boolean }
+        replaceCalls.push({ find: input.find, replace: input.replace, apply: input.apply === true })
+        const entries =
+          input.find === 'absent'
+            ? []
+            : [
+                {
+                  entryId: 'entry-1',
+                  collection: 'article',
+                  locale: 'en',
+                  title: `${input.find} article`,
+                  occurrences: 2,
+                  hits: [
+                    {
+                      path: 'title',
+                      before: `${input.find} article`,
+                      after: `${input.replace} article`,
+                      occurrences: 1,
+                    },
+                    {
+                      path: 'blocks.blocks[2].data.heading',
+                      before: `Why ${input.find}`,
+                      after: `Why ${input.replace}`,
+                      occurrences: 1,
+                    },
+                  ],
+                },
+              ]
+        return json(200, {
+          data: { applied: input.apply === true, scanned: 3, truncated: false, entries },
         })
       }
 

@@ -194,8 +194,7 @@ des blocs natifs, et le widget « Chiffre clé » dans la barre latérale publiq
 
 ### Reste à faire, et limites assumées
 
-- **ADR-0036 rédigée, non insérée** (`docs/03-decisions.md` est protégé en
-  écriture — texte ci-dessous, à insérer par l'humain).
+- **ADR-0036** insérée dans `docs/03-decisions.md` le 2026-09-16.
 - **Cache en mémoire**, borné à 500 rendus : un redémarrage le vide, donc un bloc
   de plugin sur une page très visitée paie un `fork` au premier affichage après
   chaque redémarrage. Un cache durable serait un vrai choix d'infrastructure
@@ -210,68 +209,6 @@ des blocs natifs, et le widget « Chiffre clé » dans la barre latérale publiq
   *type de bloc* déclare au thème, et un bloc de plugin est rendu par le plugin,
   pas par le thème. Le panneau de droite l'édite normalement.
 
-## ADR-0036 — prête à insérer (fichier protégé)
+## ADR-0036
 
-```markdown
-## ADR-0036 — Un plugin étend le vocabulaire sans y entrer
-
-**Date** : 2026-09-16
-**Statut** : acceptée
-
-### Contexte
-
-Les contrats B (blocs) et le vocabulaire de widgets sont fermés et figés. Un
-utilisateur demande ce que tout CMS permet : qu'une extension ajoute un composant
-à une page. Trois voies existaient :
-
-1. ouvrir le contrat B par RFC à chaque besoin — un vocabulaire figé qui grossit
-   n'est plus figé, et chaque ajout est une migration pour tous les thèmes ;
-2. laisser un plugin rendre du HTML libre — ce que fait WordPress, et ce que R3
-   interdit explicitement (« un bloc ne stocke jamais de HTML ni de CSS ») ;
-3. enregistrer les blocs d'un plugin **à côté** du vocabulaire, avec un repli
-   déclaré vers un bloc du vocabulaire.
-
-`BlockRegistry` prévoyait la troisième depuis L3 (« les blocs du vocabulaire, plus
-ce qu'un thème ou un plugin ajoute ») et `resolveRenderable` en implémentait déjà
-la chaîne de repli, sans que rien ne l'utilise.
-
-### Décision
-
-Un bloc ou un widget fourni par un plugin **n'entre jamais dans le vocabulaire**.
-Il est enregistré à côté, pour ce site-là, et :
-
-- un **bloc** déclare un `fallback` (obligatoire) et un `fallbackFrom` qui dit
-  d'où les champs du repli tirent leurs valeurs ; sans cette carte, « se replier
-  sur `prose` » signifierait « disparaître », les données d'un bloc arbitraire ne
-  satisfaisant pas le schéma d'un bloc du vocabulaire ;
-- un **widget** ne déclare pas de repli : c'est de l'habillage, et un widget
-  absent n'est pas dessiné ;
-- le schéma des champs est déclaré **en données** dans `plugin.manifest.json`,
-  jamais en code (ADR de L31 : le manifeste est lu, jamais exécuté), et il est
-  compilé par les constructeurs `f.*` du vocabulaire lui-même, donc un bloc de
-  plugin a le même validateur et la même enveloppe qu'un autre ;
-- le rendu renvoie **un arbre** (`@cogenta/theme-kit`), jamais une chaîne, et
-  l'hôte le revalide contre une liste blanche de balises, d'attributs et d'URLs
-  avant sérialisation ; un arbre refusé fait tomber le bloc sur son repli, il
-  n'est jamais « nettoyé » en autre chose ;
-- le rendu s'exécute dans le processus enfant restreint de L31, avec les seules
-  capacités accordées, et son résultat est mis en cache sur l'empreinte des
-  entrées.
-
-Contrat D monté en `theme@1.7`, additif : `RenderContext.blockNodes` porte le
-markup déjà produit par l'hôte, et `ResolvedWidget` gagne un membre du même
-genre. Un thème qui ignore l'un ou l'autre rend le repli déclaré — la dégradation
-promise depuis L3, pas un accident.
-
-### Conséquences
-
-- Le contrat B reste figé et son compte de blocs ne bouge pas ; aucune RFC n'est
-  requise pour qu'un site gagne un composant.
-- Désinstaller un plugin dégrade les pages qui utilisaient ses blocs au lieu de
-  les vider, et laisse leurs données intactes pour une réinstallation.
-- Un bloc de plugin coûte une exécution de plugin au premier rendu de chaque
-  combinaison (plugin, version, valeurs, locale) ; le cache est en mémoire, donc
-  ce coût revient après un redémarrage.
-- Un plugin ne peut pas livrer de CSS : il émet des classes, le thème les style.
-  C'est une limite volontaire de cette ADR, à rouvrir séparément si besoin.
-```
+Insérée le 2026-09-16 dans `docs/03-decisions.md`, qui fait foi.

@@ -51,8 +51,8 @@ décrit ses visuels comme des **compositions** (palette + formes), rendues au sc
 comme n'importe quel téléversement). Style volontairement abstrait — le registre visuel des
 templates SaaS/agence/portfolio modernes — et non des « fausses photos ». **Renoncement
 assumé** : un restaurant de démonstration n'aura pas de photo de plat ; il aura une
-composition chaude et élégante que le propriétaire remplace en un clic. Texte d'ADR prêt à
-insérer plus bas (ADR-0035 ; `docs/03-decisions.md` est protégé en écriture).
+composition chaude et élégante que le propriétaire remplace en un clic. Décision tracée en
+ADR-0035 (`docs/03-decisions.md`).
 
 ### D2 — `theme@1.4`, strictement additif
 
@@ -190,38 +190,9 @@ push.
   L19 où le contenu généré par un modèle reste en brouillon : ici c'est du contenu de
   démonstration écrit par le projet, `provenance: 'human'`, pas la sortie d'un modèle).
 
-## ADR-0035 — prête à insérer (fichier protégé)
+## ADR-0035
 
-```markdown
-## ADR-0035 — Les visuels de démonstration sont générés procéduralement, en PNG, sans dépendance
-
-**Statut** : Proposé (rédigée par L25, à insérer par l'humain)
-
-**Contexte** — Un template de site n'est crédible qu'avec des visuels, et les blueprints
-n'en semaient aucun. Trois voies ont été testées et écartées : le SVG semé comme média est
-refusé par l'API (ADR-0017), la rastérisation SVG par `wasm-vips` n'existe pas dans le build
-embarqué (`svgload` absent, vérifié), et `sharp` — qui saurait le faire — est un pair
-optionnel dont R10 interdit de faire le chemin principal. Des photos tierces poseraient un
-problème de licence invérifiable et de poids de paquet.
-
-**Décision** — `create-cogenta` génère ses visuels de démonstration lui-même : un encodeur
-PNG minimal sur `node:zlib` et un rendu procédural (dégradés, halos, formes anticrénelées,
-grain) décrit par des compositions par blueprint, ingéré ensuite par le pipeline média
-ordinaire. Zéro dépendance, zéro asset binaire dans le paquet.
-
-**Justification** — Le registre visuel abstrait est celui des templates SaaS, agence et
-portfolio modernes ; il vieillit bien, se remplace en un clic, et ne peut violer aucune
-licence. Le rendu tient en quelques secondes au scaffold, une fois pour toutes.
-
-**Conséquences** — Les blueprints décrivent des compositions, pas des fichiers. Le pipeline
-média reçoit du PNG et produit les variantes comme pour un téléversement humain.
-
-**Renoncement assumé** — Aucune photo réaliste : un restaurant de démo n'a pas de photo de
-plat. C'est le prix de « zéro dépendance et zéro licence », payé en connaissance de cause.
-
-**Écarté** — SVG (ADR-0017) ; `sharp` en chemin principal (R10) ; photos embarquées
-(licence, poids) ; images générées par IA au scaffold (R2 : le CMS marche sans clé).
-```
+Insérée le 2026-09-16 dans `docs/03-decisions.md`, qui fait foi.
 
 ## État d'avancement (mis à jour à chaque étape)
 
@@ -362,7 +333,7 @@ réellement scaffoldé par `npm create cogenta` : `canonical` (référence), `bl
 `restaurant`, `association`. Chaque blueprint active son thème, sème 8 à 12 sections avec
 visuels, des entrées publiées avec couvertures, les menus, l'accroche, les liens sociaux et
 la note de pied de page ; `blank` reste vierge. Les visuels sont générés procéduralement en
-PNG (ADR-0035 rédigée, à insérer) en compositions plates.
+PNG (ADR-0035) en compositions plates.
 
 **Fondations posées par le lot** (réutilisables au-delà des thèmes) : `ChromeInput` 1.4
 (`tagline`/`social`/`footerNote`/`headerAction`), `PageContent.entry` + `renderEntryHeader`

@@ -162,57 +162,6 @@ refusée et sitemap propre) et le parcours complet dans un navigateur sur
 - **Le contrôle n'apparaît pas à la création** d'une entrée, seulement après le
   premier enregistrement — il faut une entrée pour lui donner une visibilité.
 
-## ADR-0037 — prête à insérer (fichier protégé)
+## ADR-0037
 
-```markdown
-## ADR-0037 — La visibilité d'une entrée est orthogonale à son statut
-
-**Date** : 2026-09-16
-**Statut** : acceptée
-
-### Contexte
-
-Une entrée est `draft`, `scheduled`, `published` ou `archived`. Rien ne permet
-d'exprimer « publiée, mais réservée » — ni la note interne visible des seuls
-rédacteurs, ni le dossier de presse derrière un mot de passe. Les deux existent
-dans le cœur de WordPress, et leur absence pousse les gens à dépublier, ce qui
-casse les liens.
-
-Trois voies étaient possibles :
-
-1. ajouter `private` et `password` à `ContentStatus` — mais le statut deviendrait
-   deux informations dans un champ (une page privée serait-elle encore publiée ?),
-   tous les `switch` exhaustifs du dépôt changeraient, et « planifiée et privée »
-   resterait inexprimable ;
-2. un réglage hors contenu (une table de permissions par entrée) — un second
-   système d'autorisation à côté de celui qui existe ;
-3. un champ **orthogonal**, comme `deletedAt` (ADR-0022) et `reviewState`
-   (ADR-0027) l'ont déjà été.
-
-### Décision
-
-`visibility` (`'public' | 'private' | 'password'`) est un champ système
-orthogonal à `status`, en `schema@2.3`, additif et réversible. Avec lui :
-
-- **privée** : visible des seuls acteurs à qui la couche de permissions
-  accorderait `update` sur la collection. Pour les autres, **404 et non 403** —
-  pour une note interne, l'existence est déjà l'information — et absence de
-  toute liste, de la recherche, du sitemap et des relations ;
-- **protégée** : listée, liable, mais son contenu et son résumé demandent un mot
-  de passe, dont seule l'empreinte est stockée et qui n'est jamais relisible ;
-- **changer la visibilité exige `publish`**, emprunté comme la corbeille
-  emprunte `delete` : le vocabulaire des cinq actions reste figé, et qui peut
-  lire une page est ce que publier décide.
-
-La preuve de déverrouillage est un jeton signé (jamais chiffré) dans un cookie
-par entrée, calqué sur les jetons de prévisualisation, d'une durée bornée.
-
-### Conséquences
-
-- Le contrat A monte en `schema@2.3` sans qu'un client existant change une ligne.
-- Le filtre vit dans la couche partagée par REST et GraphQL : une page privée ne
-  peut pas fuir par un transport qui aurait oublié la règle.
-- Une page protégée n'est ni indexée ni décrite : son résumé est du contenu.
-- Ce qui n'est **pas** décidé ici : la limitation de débit des tentatives de mot
-  de passe, et le partage d'un déverrouillage entre appareils.
-```
+Insérée le 2026-09-16 dans `docs/03-decisions.md`, qui fait foi.

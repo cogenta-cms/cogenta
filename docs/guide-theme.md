@@ -35,7 +35,7 @@ boundary against reading `process.env` or the database directly) is
 produce a serializable render tree is fiche 73's biggest open technical
 question, still unresolved. Until it lands, a theme's protection is a
 **static scan**, not a runtime sandbox — see
-[ADR-0034](adr-0034-draft.md) ("un thème peut venir d'un dossier local au
+[ADR-0034](03-decisions.md) ("un thème peut venir d'un dossier local au
 projet") for the decision this rests on, and the honest caveat it names in
 its own "point de vigilance": *this is real protection against the most
 obvious attack class, not execution isolation*.

@@ -95,6 +95,8 @@ export const SYSTEM_COLUMNS = [
   'deleted_at',
   'review_state',
   'assigned_reviewer',
+  'visibility',
+  'access_password',
   'locale',
   'translation_of',
   'version',

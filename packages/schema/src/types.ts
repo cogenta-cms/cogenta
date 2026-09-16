@@ -53,6 +53,19 @@ export type ContentStatus = (typeof CONTENT_STATUSES)[number]
  * still the `publish` action. Confounding the two would publish by surprise
  * and would remove the control the `publish` permission grants.
  */
+/**
+ * How an entry may be seen, orthogonal to its status (`schema@2.2`, ADR-0034).
+ *
+ * A private page is `published` *and* private: making it public does not
+ * republish it, it lifts a restriction. Keeping this out of `ContentStatus`
+ * is what leaves every exhaustive switch on a status in this repository
+ * untouched, and what lets "scheduled" and "private" coexist without
+ * contradicting each other.
+ */
+export const CONTENT_VISIBILITIES = ['public', 'private', 'password'] as const
+
+export type ContentVisibility = (typeof CONTENT_VISIBILITIES)[number]
+
 export const REVIEW_STATES = ['none', 'pending', 'changes-requested', 'approved'] as const
 
 export type ReviewState = (typeof REVIEW_STATES)[number]
@@ -271,6 +284,15 @@ export interface SystemFields {
   readonly reviewState: ReviewState
   /** Who is expected to review this entry next, or `null`. Set at submission or chosen by an editor. */
   readonly assignedReviewer: string | null
+  /**
+   * Who may see this entry once it is published (`schema@2.2`, ADR-0034).
+   * `'public'` for everything written before the field existed.
+   *
+   * Orthogonal to `status`, exactly as `deletedAt` and `reviewState` are.
+   * The password itself is never here: only its hash is stored, and no read
+   * returns it.
+   */
+  readonly visibility: ContentVisibility
   readonly locale: string
   readonly translationOf: string | null
   readonly version: number

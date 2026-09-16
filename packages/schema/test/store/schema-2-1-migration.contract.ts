@@ -12,6 +12,7 @@ import {
 } from '../../src/store/columns.js'
 import { blocksTable, entriesTable, versionsTable } from '../../src/store/naming.js'
 import { schema21Migration } from '../../src/store/schema-2-1-migration.js'
+import { schema22Migration } from '../../src/store/schema-2-2-migration.js'
 import { createContentStore } from '../../src/store/store.js'
 
 export interface MigrationHarness {
@@ -133,8 +134,19 @@ export function runSchema21MigrationContract(
       }
     }
 
+    // 2.2 is chained after the migration under test for the same reason the
+    // 2.0 contract chains 2.1: `createContentStore` writes the *current*
+    // shape, so a test that runs the live store after migrating has to bring
+    // the table all the way there. What this file proves is still the 2.0 →
+    // 2.1 step itself.
     const migrator = () =>
-      createMigrator({ db, migrations: [schema21Migration({ collections: [article] })] })
+      createMigrator({
+        db,
+        migrations: [
+          schema21Migration({ collections: [article] }),
+          schema22Migration({ collections: [article] }),
+        ],
+      })
 
     beforeEach(async () => {
       harness = await create()
@@ -199,7 +211,9 @@ export function runSchema21MigrationContract(
 
     it('reverses cleanly, dropping both columns', async () => {
       await migrator().up()
-      await migrator().down()
+      // Both steps of the chain: `down()` with no count rolls back one, which
+      // would now be 2.2 and leave this migration's own columns in place.
+      await migrator().down({ steps: 2 })
 
       expect(await columnExists(entriesTable(article.name), 'review_state')).toBe(false)
       expect(await columnExists(entriesTable(article.name), 'assigned_reviewer')).toBe(false)
@@ -207,7 +221,7 @@ export function runSchema21MigrationContract(
 
     it('can be applied again after a rollback, ending where it started', async () => {
       await migrator().up()
-      await migrator().down()
+      await migrator().down({ steps: 2 })
       await migrator().up()
 
       expect(await columnExists(entriesTable(article.name), 'review_state')).toBe(true)

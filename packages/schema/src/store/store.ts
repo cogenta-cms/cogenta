@@ -9,8 +9,10 @@ import {
 } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
 import {
+  CONTENT_VISIBILITIES,
   type CollectionDefinition,
   type ContentStatus,
+  type ContentVisibility,
   DEFAULT_TRASH_RETAIN_DAYS,
   type Provenance,
   type ReviewState,
@@ -105,6 +107,35 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
   delete(id: string): Promise<boolean>
   /** Takes an entry back out of the trash, with the status it went in with. */
   untrash(id: string): Promise<ContentEntry<TValues>>
+  /**
+   * Who may see this entry once it is published (`schema@2.2`, ADR-0034).
+   *
+   * Orthogonal to publishing: making a page private does not unpublish it,
+   * and making it public does not publish it. `'password'` needs a hash,
+   * which the caller computes — this layer stores what it is given and has no
+   * opinion about how a password becomes a hash; `'public'` and `'private'`
+   * clear whatever hash was there, so a page that stops being protected
+   * cannot be unlocked by an old cookie a second time.
+   *
+   * There is deliberately no way to read the hash back. Nothing in this
+   * repository needs it except the one comparison that verifies a password,
+   * and that comparison is given the hash by `verifyEntryPassword`.
+   */
+  setVisibility(
+    id: string,
+    visibility: ContentVisibility,
+    options?: { readonly passwordHash?: string },
+  ): Promise<ContentEntry<TValues>>
+  /**
+   * Whether this is the password a protected entry asks for.
+   *
+   * Takes the comparison rather than the hash: the hash never leaves this
+   * store, so no caller can accidentally serialise it into a response. A
+   * caller passes what it received and a comparer; `false` for an entry that
+   * is not protected at all, so a missing check cannot open a page by
+   * accident.
+   */
+  verifyEntryPassword(id: string, compare: (hash: string) => Promise<boolean>): Promise<boolean>
   /** The real `DELETE`, and the only one. What `delete()` did before 2.0. */
   purge(id: string): Promise<boolean>
   /** Purges what has sat in the trash longer than `trash.retainDays`. */
@@ -590,6 +621,9 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       deletedAt: nullableText(row['deleted_at']),
       reviewState: (nullableText(row['review_state']) ?? 'none') as ReviewState,
       assignedReviewer: nullableText(row['assigned_reviewer']),
+      // `'public'` for a row written before the column existed, and for a
+      // dialect that hands back a NULL where the default should have applied.
+      visibility: (nullableText(row['visibility']) ?? 'public') as ContentVisibility,
       locale: text(row['locale']),
       translationOf: nullableText(row['translation_of']),
       version: Number(overrides.version ?? row['version']),
@@ -1027,6 +1061,7 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       'updated_by',
       'status',
       'review_state',
+      'visibility',
       'locale',
       'translation_of',
       'version',
@@ -1041,6 +1076,9 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       author,
       status,
       'none' satisfies ReviewState,
+      // Public unless someone says otherwise, and never inferable from the
+      // status: a draft is not "private", it is simply not published yet.
+      'public' satisfies ContentVisibility,
       input.locale ?? defaultLocale,
       input.translationOf ?? null,
       1,
@@ -1309,6 +1347,52 @@ export function createContentStore<TValues extends ContentValues = ContentValues
         },
         { immediate: true },
       ),
+
+    setVisibility: async (id, visibility, options = {}) =>
+      db.transaction(
+        async (tx) => {
+          const row = await loadRow(tx, id)
+          if (row === null) throw notFound(collection.name, id)
+          if (!CONTENT_VISIBILITIES.includes(visibility)) {
+            throw new CogentaError({
+              code: 'CONTENT_INVALID',
+              message: `"${String(visibility)}" is not a visibility.`,
+              hint: `Use one of ${CONTENT_VISIBILITIES.join(', ')}.`,
+              details: { collection: collection.name, id, visibility },
+            })
+          }
+          if (visibility === 'password' && options.passwordHash === undefined) {
+            throw new CogentaError({
+              code: 'CONTENT_INVALID',
+              message: 'A password-protected entry needs a password.',
+              hint: 'Pass the hash of the password this entry should ask for.',
+              details: { collection: collection.name, id },
+            })
+          }
+          await tx.query(
+            sql`update ${entries}
+                set ${identifier('visibility', dialect)} = ${visibility},
+                    ${identifier('access_password', dialect)} = ${
+                      visibility === 'password' ? (options.passwordHash ?? null) : null
+                    },
+                    ${identifier('updated_at', dialect)} = ${stamp()}
+                where ${identifier('id', dialect)} = ${id}`,
+          )
+          const updated = await loadRow(tx, id)
+          if (updated === null) throw notFound(collection.name, id)
+          return { ...(await liveEntry(tx, updated)), state: 'working' as const }
+        },
+        { immediate: true },
+      ),
+
+    verifyEntryPassword: async (id, compare) => {
+      const row = await loadRow(db, id)
+      if (row === null) return false
+      if ((nullableText(row['visibility']) ?? 'public') !== 'password') return false
+      const hash = nullableText(row['access_password'])
+      if (hash === null) return false
+      return await compare(hash)
+    },
 
     untrash: async (id) =>
       db.transaction(

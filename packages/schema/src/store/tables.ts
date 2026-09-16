@@ -176,6 +176,12 @@ function systemColumns(dialect: DatabaseDialect): SqlFragment[] {
     // instead of a NULL it has to special-case.
     sql`${identifier('review_state', dialect)} ${textColumn(dialect, 24)} not null`,
     sql`${identifier('assigned_reviewer', dialect)} ${textColumn(dialect, 64)}`,
+    // Orthogonal to `status` again (`schema@2.2`, ADR-0034), and `'public'`
+    // rather than nullable for the same reason `review_state` is `'none'`.
+    sql`${identifier('visibility', dialect)} ${textColumn(dialect, 16)} not null`,
+    // The hash of the password a protected entry asks for — never the
+    // password, and never returned by a read.
+    sql`${identifier('access_password', dialect)} ${textColumn(dialect, 255)}`,
     sql`${identifier('locale', dialect)} ${textColumn(dialect, 16)} not null`,
     sql`${identifier('translation_of', dialect)} ${uuidColumn(dialect)}`,
     sql`${identifier('version', dialect)} ${integerColumn()} not null`,

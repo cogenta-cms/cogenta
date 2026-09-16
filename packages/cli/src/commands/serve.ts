@@ -3605,6 +3605,11 @@ function contentAuditAction(method: string, subAction: string | undefined): stri
       return 'content.untrash'
     case 'purge':
       return 'content.purge'
+    // Who may read a page is a decision of its own (`schema@2.2`), and one an
+    // auditor will ask about: "who made this note public?". Found missing
+    // while wiring L34 — it fell to `default` and was never recorded.
+    case 'visibility':
+      return 'content.visibility'
     case 'history':
     case 'diff':
     case 'preview':
@@ -3618,6 +3623,16 @@ function contentAuditAction(method: string, subAction: string | undefined): stri
     default:
       return null
   }
+}
+
+/** The part of a `/-/replace` answer the audit log reads. */
+interface ReplaceAuditReport {
+  readonly applied?: boolean
+  readonly entries?: readonly {
+    readonly entryId: string
+    readonly collection: string
+    readonly occurrences: number
+  }[]
 }
 
 /**
@@ -3648,6 +3663,36 @@ async function recordContentAudit(
     .split('/')
     .filter((segment) => segment.length > 0)
   const [collection, id, subAction] = segments
+
+  // A search-and-replace that was applied (L34) crosses collections, so it
+  // is recorded once per entry it wrote — the audit log is a per-entry
+  // history, and "which pages did that rename touch?" has to be answerable
+  // from it. Each row carries the phrase and its replacement, never the text
+  // around them: that is in the entry's own version history already.
+  if (collection === '-' && id === 'replace') {
+    const report = (response.body as { readonly data?: ReplaceAuditReport } | null)?.data
+    if (report?.applied !== true) return
+    const request = body as { readonly find?: unknown; readonly replace?: unknown } | null
+    for (const written of report.entries ?? []) {
+      await site.auth.audit
+        .record({
+          actorId: actor.id,
+          actorRoles: actor.roles,
+          action: 'content.replace',
+          collection: written.collection,
+          entryId: written.entryId,
+          diff: {
+            _replace: {
+              find: typeof request?.find === 'string' ? request.find : '',
+              replace: typeof request?.replace === 'string' ? request.replace : '',
+              occurrences: written.occurrences,
+            },
+          },
+        })
+        .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+    }
+    return
+  }
   if (collection === undefined || collection === '-') return
 
   const action = contentAuditAction(method, subAction)

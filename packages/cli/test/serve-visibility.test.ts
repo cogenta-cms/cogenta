@@ -275,4 +275,45 @@ describe('a page that is not simply public', () => {
       await server.stop()
     }
   }, 120_000)
+
+  it('records who changed a visibility, and who ran a replacement, in the audit log', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      const auth = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+      const id = await publish(server.base, token, 'Note Cogenta', 'note')
+
+      await fetch(`${server.base}/api/content/page/${id}/visibility`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({ visibility: 'private' }),
+      })
+      // A preview writes nothing, so it records nothing.
+      await fetch(`${server.base}/api/content/-/replace`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({ find: 'Cogenta', replace: 'Kogenta' }),
+      })
+      await fetch(`${server.base}/api/content/-/replace`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({ find: 'Cogenta', replace: 'Kogenta', apply: true }),
+      })
+
+      const audit = (await (await fetch(`${server.base}/api/audit`, { headers: auth })).json()) as {
+        data: { action: string; entryId?: string }[]
+      }
+      const actions = audit.data.map((row) => row.action)
+
+      // "Who made this note private?" and "which pages did the rename touch?"
+      // — both answerable from the log, which neither was before.
+      expect(actions).toContain('content.visibility')
+      expect(actions.filter((action) => action === 'content.replace')).toHaveLength(1)
+      expect(audit.data.find((row) => row.action === 'content.replace')?.entryId).toBe(id)
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
 })

@@ -82,7 +82,7 @@ langage clair, journal d'audit des installations, et mise à jour de `BLOCKERS.m
 | 2. Points d'extension | fait | événements de contenu (`onContentEvent`), route publique sous `/_cogenta/plugins/<nom>` (`onRequest`, sans en-tête choisi par le plugin), tâche planifiée sur le planificateur du site (`onSchedule`) — chacun prouvé sur un vrai serveur |
 | 3. Capacités | fait | `schema.read`, `content.write_draft` (jamais publier), `content.publish`, `content.delete` (corbeille, réversible), `media.read` implémentés et câblés dans `cogenta serve` et la CLI ; les capacités de contenu peuvent nommer une collection ; `cogenta plugin grant` refuse une capacité que rien n'implémente |
 | 4. Atelier IA | fait | bac à sable `.cogenta/plugin-sandbox/<id>/` avec ses gardes, trois outils (`plugin.write_sandbox_file`/`read_sandbox_file`/`check_sandbox`, permission `plugin.write_sandbox`, contrat C `tools@1.7`), agent « Cogenta Plugin Builder » (`autonomy: propose`, aucun outil d'installation), routes `/api/plugins/*` et écran admin Plugins avec revue des permissions et installation confirmée |
-| 5. Sécurité | fait | revue indépendante : verdict initial NON CONFORME, deux failles critiques avec preuves exécutées, les six constats corrigés et couverts par des tests de non-régression |
+| 5. Sécurité | fait | processus enfant sous `--permission` par défaut, repli worker annoncé ; revue indépendante : verdict initial NON CONFORME, deux failles critiques avec preuves exécutées, les six constats corrigés et couverts par des tests de non-régression |
 
 ## Rapport de clôture (2026-09-16)
 
@@ -111,7 +111,56 @@ site par une route de plugin (réponses servies sous `Content-Security-Policy: s
 default-src 'none'` et `nosniff`), absence de plafond de workers simultanés (huit, puis 503),
 et taille de réponse non bornée (1 Mio).
 
-**Ce qui reste vrai et doit être dit** : un contexte `vm` n'est pas une frontière de
-sécurité à lui seul (la documentation de Node le dit, `docs/05-securite.md` aussi). Les
-chemins connus sont fermés et testés ; la vraie frontière serait un processus séparé sous
-le modèle de permissions de Node. C'est la suite naturelle, notée dans `BLOCKERS.md`.
+**La suite naturelle a été faite dans la foulée** : un contexte `vm` n'est pas une
+frontière de sécurité à lui seul (la documentation de Node le dit, `docs/05-securite.md`
+aussi), donc un plugin s'exécute désormais **par défaut dans un processus enfant sous le
+modèle de permissions de Node** — `fork` avec `--permission`, un seul répertoire lisible
+(celui du guest), `env: {}` et un plafond de tas. Même une évasion totale du `vm` atterrit
+alors là où `fs` et `child_process` répondent `ERR_ACCESS_DENIED` et où l'environnement est
+vide. Le thread worker reste le repli pour un runtime antérieur à Node 22.5, annoncé une
+fois par `process.emitWarning` plutôt que silencieusement, et chaque résultat d'exécution
+porte `isolation: 'process' | 'worker'`. Les drapeaux sont eux-mêmes testés
+(`packages/plugins/test/host/process-isolation.test.ts` lance la liste exacte que le runner
+passe et vérifie les trois refus), pas seulement commentés. Ce qui reste vrai : le
+processus restreint borne ce qu'un plugin peut atteindre, il ne dit pas ce qu'il fait des
+capacités qu'on lui accorde — un plugin tiers reste un code à relire.
+
+## Suite : l'écran Plugins repris (2026-09-16)
+
+Retour utilisateur après essai, mot pour mot : « dans la section plugin, je vois Bacs à
+sable, ça me semble trop technique, il faut une gestion, création, … simple, robuste mais
+surtout intuitive, complète ». Le reproche était juste : l'écran demandait un « identifiant
+de bac à sable » (un nom de dossier), affichait les permissions en identifiants bruts, et
+ne savait ni désactiver, ni désinstaller, ni jeter un brouillon.
+
+Ce qui remplace : **créer** demande un nom et ce que le plugin doit faire — quatre points de
+départ (`blank`, `on-publish`, `page`, `daily`), chacun étant du code qui valide et tourne
+déjà — et le dossier est déduit du nom. Le manifeste gagne un champ **`title`** optionnel,
+parce qu'un nom de paquet et un nom lisible sont deux choses différentes : `name` reste la
+clé du dossier, des octrois et de la cible d'installation. Chaque permission est une phrase
+(« Publier du contenu »), avec son identifiant en dessous pour qui audite plutôt que décide,
+et sa portée quand elle en a une. Quatre actes manquants existent : **activer/désactiver**
+(nouvelle raison `'manual'` dans `PluginViolationReason` — une personne l'a éteint, ce qui
+n'est pas une violation mais est la même réponse à « peut-il tourner ? »), **désinstaller**
+(le code est conservé sous `.cogenta/plugin-versions/`, les octrois sont révoqués),
+**supprimer un brouillon**, et **vérifier** à la demande. Les deux gestes destructeurs
+demandent confirmation sur place, en deux clics, sans boîte de dialogue qu'un réflexe
+referme.
+
+Routes ajoutées à `cogenta serve` : `DELETE /api/plugins/:name`,
+`POST /api/plugins/:name/state`, `DELETE /api/plugins/sandbox/:id` ; `POST
+/api/plugins/sandbox` prend désormais `{name, template}` ; `GET /api/plugins` rend l'état
+désactivé de chaque plugin et **décrit** les brouillons (lecture du manifeste seul — lister
+ne doit pas exécuter le code de chaque brouillon, contrairement à vérifier, qui l'exécute
+exprès).
+
+**Vérifié sur le vrai site** (`examples/local-playground`, navigateur réel) : plugin créé
+depuis le formulaire, code fonctionnel à l'écran, installé, permission accordée, plugin
+désactivé avec la bonne phrase, puis désinstallé et brouillon supprimé par les routes
+elles-mêmes. Deux défauts qu'aucun test n'aurait trouvés ont été corrigés à ce moment-là :
+la confirmation n'existait que pour un lecteur d'écran (rien ne semblait se passer), et
+l'éditeur s'ouvrait hors du champ visible.
+
+**Pas fait, et assumé** : la CLI `cogenta plugin` n'a pas gagné les sous-commandes
+équivalentes (`uninstall`, `enable`/`disable`, `--template`) — l'écran était la demande, et
+la CLI couvre déjà lister, vérifier, octroyer et exécuter.

@@ -27,8 +27,19 @@ de départ réaliste, **le thème dédié à ce type déjà actif**, une page d'
 images de couverture, les menus d'en-tête et de pied de page, l'accroche et les liens
 sociaux, un skin cohérent, et des réglages de sécurité/cache déjà différenciés (le cache
 de page, notamment, n'a pas le même bon défaut pour une boutique que pour un blog
-statique). Le préréglage `blank` reste vierge. Les pages de gabarit (accueil, à propos) ne
-portent pas de fil de commentaires ; les articles gardent le réglage du site.
+statique). Les pages de gabarit (accueil, à propos) ne portent pas de fil de
+commentaires ; les articles gardent le réglage du site.
+
+**Sans choix explicite, c'est la vitrine** qui est installée — y compris avec
+`npm create cogenta --yes`. Le préréglage `blank`, en dernier dans la liste, reste
+un schéma vide pour qui veut tout concevoir lui-même : tant qu'aucune page
+d'accueil n'existe, l'adresse `/` affiche une page « Votre site est en ligne » qui
+indique où aller, et disparaît dès qu'une page dont le slug est `home` est publiée.
+
+Un lien mort n'affiche jamais une erreur technique : si le site n'a pas créé sa
+propre page d'erreur (une page au chemin `/404`), une page « introuvable » est
+rendue avec l'habillage du thème actif, avec un retour à l'accueil et un champ
+de recherche.
 
 ## Se connecter la première fois
 

@@ -18,9 +18,9 @@ It watches its own security, patches itself, optimises itself, and reports back.
 design is complete and public. The foundation (L0), the content model (L1), rendering
 (L3) and the admin (L2) are done. The multi-agent runtime (L4) and its built-in agents
 (L5 — security, SEO, performance, content, mostly complete) are in place. `npm create
-cogenta` scaffolds a working site end to end — any of eight blueprints (blank, blog,
-vitrine, portfolio, documentation, magazine, association, restaurant, saas), each with
-real demo content, plus an optional AI-generated skin validated against WCAG contrast
+cogenta` scaffolds a working site end to end — any of ten blueprints (vitrine by default,
+blog, magazine, portfolio, documentation, association, restaurant, saas, store, or an empty
+blank schema), each but blank with real demo content, plus an optional AI-generated skin validated against WCAG contrast
 and a monotone type scale before it's ever written to disk. The `cogenta` CLI covers
 `doctor`, `migrate`, `users create`, `serve`/`dev`, `import wordpress` (with a
 conversion report and preserved redirects), `generate types`, and `skin

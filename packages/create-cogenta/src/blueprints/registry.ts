@@ -18,7 +18,6 @@ export interface Blueprint {
  * it stops at contract A and does not reach for `@cogenta/commerce`.
  */
 export const BLUEPRINTS: readonly Blueprint[] = [
-  { id: 'blank', label: 'Blank — empty schema, nothing pre-configured', available: true },
   { id: 'vitrine', label: 'Showcase site — services, testimonials, demo content', available: true },
   { id: 'blog', label: 'Blog — posts, categories, demo content', available: true },
   { id: 'magazine', label: 'Magazine — articles by section, demo content', available: true },
@@ -32,9 +31,29 @@ export const BLUEPRINTS: readonly Blueprint[] = [
   { id: 'restaurant', label: 'Restaurant — menu, demo content', available: true },
   { id: 'saas', label: 'SaaS — features, demo content', available: true },
   { id: 'store', label: 'Online store — product catalogue, demo content', available: true },
+  // Last, and said plainly: an empty schema serves no page at all until one
+  // is designed, which is a developer's starting point, not a first site.
+  {
+    id: 'blank',
+    label: 'Blank — empty schema, nothing pre-configured (for developers)',
+    available: true,
+  },
 ]
 
-export const DEFAULT_BLUEPRINT_ID = 'blank'
+/**
+ * What the installer proposes when nobody chooses (L36): `vitrine`, a
+ * complete site with a home page, a theme and demo content. Until then it was
+ * `blank`, and `npm create cogenta --yes` produced a site whose first answer
+ * at `/` was an error.
+ */
+export const DEFAULT_BLUEPRINT_ID = 'vitrine'
+
+/**
+ * What a blueprint id that does not exist resolves to, and what a
+ * programmatic `scaffoldSite` call that names none gets: the empty schema,
+ * which invents nothing on the caller's behalf.
+ */
+export const FALLBACK_BLUEPRINT_ID = 'blank'
 
 export interface ResolvedBlueprint {
   readonly blueprint: Blueprint
@@ -47,13 +66,13 @@ export function resolveBlueprint(id: string): ResolvedBlueprint {
   if (requested?.available) {
     return { blueprint: requested, fellBackToBlank: false }
   }
-  const blank = BLUEPRINTS.find((entry) => entry.id === DEFAULT_BLUEPRINT_ID)
+  const blank = BLUEPRINTS.find((entry) => entry.id === FALLBACK_BLUEPRINT_ID)
   if (blank === undefined) {
     throw new CogentaError({
       code: 'BLUEPRINT_REGISTRY_CORRUPT',
       message: 'The "blank" blueprint is missing from the registry.',
-      hint: 'BLUEPRINTS must always include an entry whose id is DEFAULT_BLUEPRINT_ID — this is a bug in the registry, not a user-facing condition.',
-      details: { defaultBlueprintId: DEFAULT_BLUEPRINT_ID },
+      hint: 'BLUEPRINTS must always include an entry whose id is FALLBACK_BLUEPRINT_ID — this is a bug in the registry, not a user-facing condition.',
+      details: { fallbackBlueprintId: FALLBACK_BLUEPRINT_ID },
     })
   }
   return { blueprint: blank, fellBackToBlank: true }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { BLUEPRINTS, DEFAULT_BLUEPRINT_ID, resolveBlueprint } from '../src/blueprints/registry.js'
+import {
+  BLUEPRINTS,
+  DEFAULT_BLUEPRINT_ID,
+  FALLBACK_BLUEPRINT_ID,
+  resolveBlueprint,
+} from '../src/blueprints/registry.js'
 
 describe('BLUEPRINTS registry', () => {
   it('lists every blueprint as available — L9 task 8 is complete, no "coming soon" placeholders remain', () => {
@@ -23,8 +28,15 @@ describe('BLUEPRINTS registry', () => {
 })
 
 describe('resolveBlueprint', () => {
+  it('proposes the showcase site by default, first in the list, and keeps blank last', () => {
+    // L36: the default used to be `blank`, whose first answer at `/` was an error.
+    expect(DEFAULT_BLUEPRINT_ID).toBe('vitrine')
+    expect(BLUEPRINTS[0]?.id).toBe('vitrine')
+    expect(BLUEPRINTS.at(-1)?.id).toBe('blank')
+  })
+
   it('resolves the blank blueprint directly, without falling back', () => {
-    const resolved = resolveBlueprint(DEFAULT_BLUEPRINT_ID)
+    const resolved = resolveBlueprint(FALLBACK_BLUEPRINT_ID)
     expect(resolved.fellBackToBlank).toBe(false)
     expect(resolved.blueprint.id).toBe('blank')
   })

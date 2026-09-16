@@ -36,7 +36,7 @@ import {
   seedDemoMedia,
   seedSiteSettings,
 } from '@cogenta/starters'
-import { DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
+import { FALLBACK_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
 
 /** The collection `definePageCollection` builds in every blueprint — template pages, never discussion threads. */
 const PAGE_COLLECTION_NAME = 'page'
@@ -50,7 +50,7 @@ export interface ScaffoldAnswers {
   readonly databaseUrl?: string
   readonly llm?: { readonly provider: string; readonly model: string }
   readonly adminEmail: string
-  /** Defaults to `blank` (`DEFAULT_BLUEPRINT_ID`) — the existing, unchanged behaviour. */
+  /** Defaults to `blank` (`FALLBACK_BLUEPRINT_ID`) for a programmatic call; the installer always passes one (`vitrine` unless chosen otherwise). */
   readonly blueprintId?: string
   /** Already generated and validated by `chooseSkin` (L9 task 7). Absent: the theme's default `tokens.json` is copied, exactly as before this option existed. */
   readonly skinTokens?: SkinTokens
@@ -301,7 +301,7 @@ export async function scaffoldSite(
   env: Record<string, string | undefined> = process.env,
 ): Promise<ScaffoldResult> {
   const { blueprint, fellBackToBlank } = resolveBlueprint(
-    answers.blueprintId ?? DEFAULT_BLUEPRINT_ID,
+    answers.blueprintId ?? FALLBACK_BLUEPRINT_ID,
   )
   const pack = BLUEPRINT_CONTENT_PACKS[blueprint.id]
 

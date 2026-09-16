@@ -14,7 +14,12 @@ export type {
 } from '@cogenta/starters'
 export { BLUEPRINT_CONTENT_PACKS } from '@cogenta/starters'
 export type { Blueprint, ResolvedBlueprint } from './blueprints/registry.js'
-export { BLUEPRINTS, DEFAULT_BLUEPRINT_ID, resolveBlueprint } from './blueprints/registry.js'
+export {
+  BLUEPRINTS,
+  DEFAULT_BLUEPRINT_ID,
+  FALLBACK_BLUEPRINT_ID,
+  resolveBlueprint,
+} from './blueprints/registry.js'
 export { ConfigFileError, loadConfigFile } from './config-file.js'
 export type { CheckStatus, EnvironmentCheck, EnvironmentReport } from './environment.js'
 export { checkEnvironment } from './environment.js'

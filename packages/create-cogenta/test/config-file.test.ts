@@ -29,7 +29,7 @@ describe('loadConfigFile', () => {
     expect(answers.siteName).toBe('My Site')
     expect(answers.siteUrl).toBe('https://example.com')
     expect(answers.defaultLocale).toBe('en')
-    expect(answers.blueprintId).toBe('blank')
+    expect(answers.blueprintId).toBe('vitrine')
     expect(answers.databaseDriver).toBe('sqlite')
     expect(answers.llmProvider).toBe('none')
     expect(answers.adminEmail).toBe('admin@example.com')

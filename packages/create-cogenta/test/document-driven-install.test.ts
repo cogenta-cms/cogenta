@@ -411,7 +411,7 @@ describe('R2 — the installer without a document or a provider', () => {
     expect(asked.some((question) => question.includes('API key'))).toBe(false)
   }, 120_000)
 
-  it('produces a site with no site-plan draft, no approved collections and the default skin', async () => {
+  it('produces the default showcase site, and no site-plan draft', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-l19-none-'))
     dirs.push(targetDir)
     const { out } = captureOutput()
@@ -425,9 +425,10 @@ describe('R2 — the installer without a document or a provider', () => {
     })
 
     expect(exitCode).toBe(0)
-    // `blank` is the default site type: an empty schema, exactly as before L19.
+    // No document, no provider: the schema is the default site type's own
+    // (`vitrine` since L36), never a plan's — nothing was proposed or approved.
     const schema = await readFile(join(targetDir, 'cogenta.schema.mjs'), 'utf8')
-    expect(schema.trim()).toBe('export default []')
+    expect(schema).toContain('"name": "service"')
     await expect(readdir(join(targetDir, '.cogenta', 'site-plans'))).rejects.toThrow()
   }, 120_000)
 })

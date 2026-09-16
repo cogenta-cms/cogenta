@@ -1,3 +1,4 @@
+import { DEFAULT_BLUEPRINT_ID } from './blueprints/registry.js'
 import type { LlmProviderId } from './llm-setup.js'
 
 /** What every wizard step (interactive, `--yes`, or `--config file`) converges on before scaffolding. */
@@ -31,7 +32,7 @@ export function defaultAnswers(targetDir: string, siteName: string): WizardAnswe
     siteName,
     siteUrl: 'http://localhost:4000',
     defaultLocale: 'en',
-    blueprintId: 'blank',
+    blueprintId: DEFAULT_BLUEPRINT_ID,
     databaseDriver: 'sqlite',
     llmProvider: 'none',
     adminEmail: 'admin@example.com',

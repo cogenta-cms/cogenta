@@ -33,7 +33,10 @@ describe('runWizard', () => {
 
     expect(exitCode).toBe(0)
     expect(text()).toContain('Password:')
-    expect(text()).toContain('Default skin')
+    // L36: every default now means the showcase site, with its own skin —
+    // not the empty schema whose first answer at `/` was an error.
+    expect(text()).toContain('Showcase site')
+    expect(text()).toContain('"vitrine" starting skin')
   })
 
   it('installs non-interactively from a --config file', async () => {

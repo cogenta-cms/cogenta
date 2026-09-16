@@ -101,6 +101,28 @@ describe('an entry’s visibility', () => {
     expect(await store.verifyEntryPassword(entry.id, async () => true)).toBe(false)
   })
 
+  it('leaves the search index when it stops being public, and returns when it is', async () => {
+    const { createSqliteSearch } = await import('../../src/search/sqlite.js')
+    const { withSearchIndexing } = await import('../../src/store/search-indexing.js')
+    const index = await createSqliteSearch({ db, fts5: true })
+    const store = withSearchIndexing(createContentStore({ db, collection: page }), {
+      collection: page,
+      index,
+    })
+
+    const entry = await store.create({ values: { title: 'Note interne' } })
+    await store.publish(entry.id)
+    expect((await index.search({ text: 'interne', locale: 'en' })).hits).toHaveLength(1)
+
+    // Site search is read by anyone: an excerpt of a private note in a result
+    // list would be the note, published.
+    await store.setVisibility(entry.id, 'private')
+    expect((await index.search({ text: 'interne', locale: 'en' })).hits).toHaveLength(0)
+
+    await store.setVisibility(entry.id, 'public')
+    expect((await index.search({ text: 'interne', locale: 'en' })).hits).toHaveLength(1)
+  })
+
   it('leaves an entry of a database written before the column existed public', async () => {
     // The migration's own promise: nothing becomes private by being migrated.
     const migration = schema22Migration({ collections: [page] })

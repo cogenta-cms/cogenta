@@ -26,6 +26,7 @@ import {
   type SerialisedEntry,
   scanPages,
   serialiseEntry,
+  visibilityGateFor,
 } from '../content/index.js'
 import type { AccessContext, PermissionLayer } from '../types.js'
 import {
@@ -417,14 +418,23 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     return 'working'
   }
 
-  /** The per-entry gate, applied to every row a read path is about to return. */
+  /**
+   * The per-entry gate, applied to every row a read path is about to return.
+   *
+   * Two questions, one predicate: may this actor see an unpublished row
+   * (`draftGateFor`), and may it see a *restricted* published one
+   * (`visibilityGateFor`, `schema@2.2`). Composing them here rather than at
+   * each call site is what stops a private entry slipping through one read
+   * path because someone remembered the draft rule and forgot the other.
+   */
   function draftGate(
     target: CollectionDefinition,
     context: AccessContext,
     state: EntryState,
   ): (entry: ContentEntry) => boolean {
-    const gate = draftGateFor(permissions, target, context, state)
-    return (entry) => gate(entry.id)
+    const drafts = draftGateFor(permissions, target, context, state)
+    const visible = visibilityGateFor(permissions, target, context)
+    return (entry) => drafts(entry.id) && visible(entry)
   }
 
   /**

@@ -21,6 +21,8 @@ import {
   matchesFilter,
   roleState,
   scanPages,
+  visibilityGateFor,
+  visibleToActor,
 } from '../content/index.js'
 import type {
   AccessContext,
@@ -182,9 +184,10 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
     const filter = request.filter
     const pushed = pushdown(collection, filter)
 
+    const visible = visibilityGateFor(permissions, collection, context)
     const scan = await scanPages<ContentEntry>({
       limit,
-      accept: (entry) => filter === undefined || matchesFilter(filter, entry),
+      accept: (entry) => visible(entry) && (filter === undefined || matchesFilter(filter, entry)),
       startCursor: request.after,
       maxFetches: MAX_SCANS,
       fetch: (cursor) => {
@@ -252,13 +255,21 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
 
     read: async (name, id, context) => {
       const collection = definitionOf(name)
-      return storeOf(name).read(id, { state: stateForEntry(collection, id, context) })
+      const entry = await storeOf(name).read(id, {
+        state: stateForEntry(collection, id, context),
+      })
+      // A restricted entry is `null` here, not an error: to an actor who may
+      // not see it, it does not exist (`schema@2.2`, ADR-0034), and the
+      // transport above turns that into the same answer as a wrong id.
+      if (entry === null || !visibleToActor(permissions, collection, context, entry)) return null
+      return entry
     },
 
     readMany: async (name, ids, context) => {
       const collection = definitionOf(name)
       const found = new Map<string, ContentEntry>()
       const store = storeOf(name)
+      const visible = visibilityGateFor(permissions, collection, context)
 
       // De-duplicated: twenty articles by three authors is three reads, which
       // is the N+1 the spec asks to prevent. The loop itself is the store's
@@ -267,7 +278,9 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
       // one: every caller batches through here already.
       for (const id of new Set(ids)) {
         const entry = await store.read(id, { state: stateForEntry(collection, id, context) })
-        if (entry !== null) found.set(id, entry)
+        // The batched loader is exactly where a relation would otherwise
+        // expose what a direct read refuses.
+        if (entry !== null && visible(entry)) found.set(id, entry)
       }
       return found
     },

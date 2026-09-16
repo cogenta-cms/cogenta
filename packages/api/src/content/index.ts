@@ -30,3 +30,4 @@ export type {
   SerialisedEntry,
 } from './serialise.js'
 export { serialiseEntry } from './serialise.js'
+export { visibilityGateFor, visibleToActor } from './visibility.js'

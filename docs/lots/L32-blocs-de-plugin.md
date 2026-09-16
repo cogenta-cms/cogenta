@@ -48,9 +48,9 @@ liste blanche de balises et d'attributs avant de le sérialiser : pas de
 
 | Étape | Contenu | État |
 |---|---|---|
-| 1 | Déclarer et enregistrer : `provides.blocks` gagne un libellé et un schéma de champs (types fermés, réutilisant `@cogenta/blocks`) ; un bloc de plugin devient une vraie `AnyBlockDefinition` du registre du site | à faire |
-| 2 | Rendre : handler `onRenderBlock`, exécution dans le processus restreint de L31, validation de l'arbre reçu, cache par empreinte des données, repli sur erreur/absence/désactivation | à faire |
-| 3 | L'éditeur : le bloc apparaît dans le panneau d'insertion du page builder avec ses champs, comme un bloc du vocabulaire | à faire |
+| 1 | Déclarer et enregistrer : `provides.blocks` gagne un libellé, un schéma de champs déclaré **en données** et `fallbackFrom` ; un bloc de plugin devient une vraie `AnyBlockDefinition` du registre du site | **fait** |
+| 2 | Rendre : handler `onRenderBlock`, exécution dans le processus restreint de L31, validation de l'arbre reçu contre une liste blanche, cache par empreinte, repli sur erreur/absence/désactivation | **fait** |
+| 3 | L'éditeur : le bloc apparaît dans le panneau d'insertion avec ses champs et les libellés que son auteur a écrits, et la prévisualisation le rend vraiment | **fait** |
 | 4 | Les widgets : même chose pour un type de widget fourni par un plugin | à faire |
 | 5 | ADR, documentation d'auteur, et un vrai plugin d'exemple vérifié dans un navigateur sur un site réel | à faire |
 
@@ -69,3 +69,64 @@ liste blanche de balises et d'attributs avant de le sérialiser : pas de
    thème).
 4. **Désinstaller doit rester sans danger.** Les données du bloc restent dans
    l'entrée ; c'est le rendu qui disparaît, remplacé par le repli.
+
+
+## Ce qui est fait (2026-09-16)
+
+**Étape 1.** `PluginBlockProvision` gagne `label`, `fields` (déclaré en données,
+parce que `plugin.manifest.json` est lu et jamais exécuté depuis la revue de
+sécurité de L31), `headingLevel` et surtout **`fallbackFrom`** : d'où le bloc de
+repli tire ses valeurs. Sans cette carte, « il se replie en `prose` » voulait
+dire « il disparaît » — les données d'un `countdown` ne satisfont pas le schéma
+de `prose`. `@cogenta/blocks` gagne `blockFieldFromDeclaration` /
+`blockSchemaFromDeclaration` : le schéma est construit par **les constructeurs
+`f.*` du vocabulaire lui-même**, donc un bloc de plugin a le même validateur, la
+même enveloppe et la même chaîne de repli qu'un autre. Le contrat B ne bouge pas :
+`VOCABULARY_NAMES` compte toujours dix-sept noms, vérifié par un test.
+
+**Étape 2.** Le plugin implémente `onRenderBlock` et renvoie **un arbre**, jamais
+une chaîne : la forme de nœud de `@cogenta/theme-kit` est déjà du JSON, donc elle
+traverse la frontière du bac à sable sans rien inventer, et elle n'a aucun
+`raw()`. L'hôte revalide quand même — liste blanche de balises et d'attributs,
+URLs (`javascript:`, `data:` non-image), profondeur, nombre de nœuds, taille du
+texte — parce qu'un plugin est du code tiers et que sa sortie est de la donnée
+venue de l'extérieur (R8). Un bloc qui émet un `<script>` est **refusé en entier**
+et remplacé par son repli, jamais « nettoyé » en autre chose. Le rendu tourne
+dans le processus enfant restreint de L31, via un nouveau `PluginRuntime.invokeHandler`
+qui applique les mêmes gardes qu'une route (plafond de huit exécutions, capacités
+accordées, désactivation sur violation). Le résultat est mis en cache sur
+l'empreinte (plugin, version, type, valeurs, locale), sinon un bloc coûterait un
+`fork` par visite. Contrat D monté en **`theme@1.7`**, additif : `RenderContext.blockNodes`,
+honoré par une ligne (`providedBlockNode`) dans chacun des dix thèmes ; un thème
+tiers qui l'ignore rend le repli, ce qui est la dégradation promise depuis L3.
+
+**Étape 3.** `GET /api/plugins/blocks` décrit les blocs du site dans la forme
+qu'utilise la table de blocs de l'admin — **avant la porte admin**, parce que
+c'est un rédacteur qui en a besoin : sans elle, le bloc qu'il édite n'aurait ni
+libellé ni champs. L'admin les enregistre à côté du vocabulaire gelé, en
+**restreignant** (jamais en castant) les types de champ qu'il sait rendre : un
+`kind` venu d'un serveur plus récent est ignoré, le bloc se place quand même. Les
+prévisualisations (page builder, apparence) reçoivent le registre et le rendeur,
+sinon éditer un bloc de plugin se ferait à l'aveugle.
+
+**Vérifié dans un navigateur, sur `examples/local-playground`** : un vrai plugin
+`comparatif` déclare un bloc « Tableau comparatif » (titre, deux colonnes, liste
+de lignes) ; il apparaît dans le panneau d'insertion (cherché par son libellé et
+par `comparisonTable`), ses champs portent les libellés écrits par son auteur
+(« Titre », « Colonne de gauche »), il figure dans le plan de la page, et la
+prévisualisation dessine son vrai tableau au milieu des blocs du vocabulaire.
+Trois tests de bout en bout sur un vrai serveur couvrent le reste : une page
+s'enregistre avec un bloc que le vocabulaire n'a jamais connu, un plugin qui lève
+une exception se replie sur le bloc qu'il a nommé, et un plugin qui émet un
+script voit son bloc refusé.
+
+### Reste à faire
+
+- **Étape 4** : les types de widget fournis par un plugin (`WIDGET_SETTINGS` est
+  un ensemble fermé, même geste que pour les blocs).
+- **Étape 5** : ADR (le texte revient à l'humain, `docs/03-decisions.md` étant
+  protégé), documentation d'auteur de plugin, et un plugin d'exemple versionné
+  dans le dépôt plutôt que seulement dans le playground.
+- **Connu et assumé** : le cache de rendu est en mémoire et borné à 500 entrées,
+  donc un redémarrage le vide ; un bloc de plugin sur une page très visitée paie
+  un `fork` au premier affichage après chaque redémarrage.

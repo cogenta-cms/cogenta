@@ -17,6 +17,7 @@
   list-style: none;
   font-size: var(--cg-text-xs);
   font-weight: var(--cg-weight-medium);
+  font-family: var(--cg-font-label);
   letter-spacing: var(--cg-tracking-label);
   text-transform: uppercase;
 }
@@ -105,6 +106,7 @@
 .cg-index__date {
   font-size: var(--cg-text-xs);
   font-weight: var(--cg-weight-medium);
+  font-family: var(--cg-font-label);
   letter-spacing: var(--cg-tracking-label);
   text-transform: uppercase;
   font-variant-numeric: lining-nums tabular-nums;

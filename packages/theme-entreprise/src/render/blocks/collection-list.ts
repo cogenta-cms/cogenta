@@ -100,7 +100,26 @@ function renderEntry(
         ),
       ),
       excerpt === undefined ? null : h('p', { class: 'cg-entry__excerpt' }, excerpt),
+      renderKeyFigure(entry),
     ),
+  )
+}
+
+/**
+ * The one number a case study is remembered by, when the entry declares it
+ * (`keyFigure`, and `keyFigureLabel` for what it measures): set large under
+ * the summary, as a result on a data sheet. An entry without it renders
+ * exactly as before.
+ */
+function renderKeyFigure(entry: ContentEntry): HtmlElement | null {
+  const value = entry.keyFigure
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const label = typeof entry.keyFigureLabel === 'string' ? entry.keyFigureLabel : undefined
+  return h(
+    'p',
+    { class: 'cg-entry__figure' },
+    h('span', { class: 'cg-entry__figure-value' }, value),
+    label === undefined ? null : h('span', { class: 'cg-entry__figure-label' }, label),
   )
 }
 
@@ -116,7 +135,7 @@ export function renderCollectionList(
       ? h('p', { class: 'cg-collection__empty' }, ctx.t('collection.empty'))
       : h(
           block.layout === 'list' ? 'ol' : 'ul',
-          { class: 'cg-collection__items', 'data-count': String(Math.min(entries.length, 4)) },
+          { class: 'cg-collection__items', 'data-count': String(entries.length) },
           entries.map((entry, index) => renderEntry(entry, index, ctx, entryTag)),
         )
 

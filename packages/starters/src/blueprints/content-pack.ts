@@ -101,6 +101,12 @@ export interface BlueprintContentPack {
    * carries. Absent: no media seeded, `media` stays `{}`.
    */
   readonly mediaSpecs?: readonly DemoMediaSpec[]
+  /**
+   * Collections, besides `page`, that should carry no comment thread (L36):
+   * a solution page or a job opening is not a discussion. Opted out at the
+   * collection level, the same switch the admin exposes. Absent: only `page`.
+   */
+  readonly commentsDisabledOn?: readonly string[]
 }
 
 /**

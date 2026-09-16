@@ -310,7 +310,7 @@
   color: var(--cg-ink);
   font-family: var(--cg-font-display);
   font-size: calc((var(--cg-text-md) + var(--cg-text-lg)) / 2);
-  font-weight: var(--cg-weight-regular);
+  font-weight: var(--cg-weight-display);
   line-height: 1.22;
   letter-spacing: -0.006em;
   text-decoration-color: transparent;
@@ -345,6 +345,7 @@
   color: var(--cg-ink-subtle);
   font-size: var(--cg-text-xs);
   font-weight: var(--cg-weight-medium);
+  font-family: var(--cg-font-label);
   letter-spacing: var(--cg-tracking-label);
   text-transform: uppercase;
   font-variant-numeric: lining-nums tabular-nums;
@@ -664,7 +665,7 @@
   color: var(--cg-band-ink);
   font-family: var(--cg-font-display);
   font-size: var(--cg-text-xl);
-  font-weight: var(--cg-weight-regular);
+  font-weight: var(--cg-weight-display);
   line-height: 1.15;
   letter-spacing: var(--cg-tracking-heading);
   text-wrap: pretty;
@@ -829,7 +830,7 @@
   border-block-start-color: var(--cg-line);
   font-family: var(--cg-font-display);
   font-size: var(--cg-size-subheading);
-  font-weight: var(--cg-weight-regular);
+  font-weight: var(--cg-weight-display);
   line-height: var(--cg-leading-heading);
   letter-spacing: var(--cg-tracking-heading);
   text-transform: none;

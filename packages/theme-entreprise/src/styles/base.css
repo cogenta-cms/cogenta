@@ -54,7 +54,7 @@ img {
 
 :where(h1, h2, h3, h4, h5, h6) {
   font-family: var(--cg-font-display);
-  font-weight: var(--cg-weight-regular);
+  font-weight: var(--cg-weight-display);
   line-height: var(--cg-leading-heading);
   letter-spacing: var(--cg-tracking-heading);
   text-wrap: balance;

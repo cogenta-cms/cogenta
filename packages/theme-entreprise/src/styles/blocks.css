@@ -66,6 +66,7 @@
   list-style: none;
   font-size: var(--cg-text-xs);
   font-weight: var(--cg-weight-medium);
+  font-family: var(--cg-font-label);
   letter-spacing: var(--cg-tracking-label);
   text-transform: uppercase;
   color: var(--cg-ink-muted);
@@ -139,7 +140,12 @@
 
 /* --------------------------------------------------------------------------
    hero
-   -------------------------------------------------------------------------- */
+   --------------------------------------------------------------------------
+
+   With a photograph, the hero is the photograph: full bleed under the
+   header, the title set in paper colour at the bottom of the frame over one
+   flat ink veil (a uniform tint, never a gradient), subtitle and actions
+   beneath it. Without one, a typographic hero on the grid. */
 
 .cg-hero__inner {
   row-gap: var(--cg-s10);
@@ -153,30 +159,33 @@
   margin: 0 0 var(--cg-s8);
   font-size: var(--cg-text-xs);
   font-weight: var(--cg-weight-medium);
+  font-family: var(--cg-font-label);
   letter-spacing: var(--cg-tracking-label);
   text-transform: uppercase;
   color: var(--cg-ink-muted);
 }
 
+/* A square marker, the signal of a healthy reading, rather than a rule. */
 .cg-hero__eyebrow::before {
   content: "";
   flex: none;
-  inline-size: var(--cg-s8);
-  block-size: var(--cg-rule);
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
   background: var(--cg-accent);
 }
 
 .cg-hero__title {
   max-inline-size: 17ch;
   font-size: var(--cg-size-display);
-  font-weight: var(--cg-weight-regular);
+  font-weight: var(--cg-weight-display);
   line-height: var(--cg-leading-display);
   letter-spacing: var(--cg-tracking-display);
+  text-wrap: balance;
 }
 
 .cg-hero__subtitle {
   margin: 0;
-  max-inline-size: 38ch;
+  max-inline-size: 42ch;
   font-size: var(--cg-size-lead);
   line-height: 1.45;
   color: var(--cg-ink-muted);
@@ -190,6 +199,78 @@
   inline-size: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
+}
+
+.cg-hero[data-media="present"] {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: flex-end;
+  min-block-size: min(86svh, 54rem);
+  padding-block: var(--cg-s32) clamp(var(--cg-s12), 7vw, var(--cg-s20));
+  color: var(--cg-band-ink);
+  background: var(--cg-band);
+}
+
+:is(.cg-main, .cg-sidebar-layout__content) > .cg-hero[data-media="present"]:first-child {
+  padding-block-start: var(--cg-s32);
+}
+
+.cg-hero[data-media="present"] .cg-hero__inner {
+  inline-size: 100%;
+}
+
+.cg-hero[data-media="present"] .cg-hero__media {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+
+.cg-hero[data-media="present"] .cg-hero__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--cg-band) 60%, transparent);
+}
+
+.cg-hero[data-media="present"] .cg-hero__image {
+  block-size: 100%;
+  aspect-ratio: auto;
+}
+
+.cg-hero[data-media="present"] .cg-hero__eyebrow {
+  color: var(--cg-band-muted);
+}
+
+/* Over a photograph, the lead keeps the paper colour: a muted tone on a
+   busy picture is where contrast is lost first. */
+.cg-hero[data-media="present"] .cg-hero__subtitle {
+  color: var(--cg-band-ink);
+}
+
+.cg-hero[data-media="present"] .cg-hero__title {
+  color: var(--cg-band-ink);
+}
+
+.cg-hero[data-media="present"] .cg-action[data-emphasis="primary"] {
+  background: var(--cg-band-ink);
+  border-color: var(--cg-band-ink);
+  color: var(--cg-band);
+}
+
+.cg-hero[data-media="present"] .cg-action[data-emphasis="primary"]:hover {
+  background: var(--cg-accent);
+  border-color: var(--cg-accent);
+  color: var(--cg-accent-fg);
+}
+
+.cg-hero[data-media="present"] .cg-action[data-emphasis="secondary"] {
+  color: var(--cg-band-ink);
+  text-decoration-color: var(--cg-band-muted);
+}
+
+.cg-hero[data-media="present"] :focus-visible {
+  outline-color: var(--cg-band-ink);
 }
 
 @media (min-width: 64rem) {
@@ -219,6 +300,18 @@
     grid-column: 6 / span 6;
     align-self: start;
   }
+
+  .cg-hero[data-media="present"] .cg-hero__inner {
+    row-gap: var(--cg-s10);
+  }
+
+  .cg-hero[data-media="present"] .cg-hero__intro {
+    grid-column: 1 / span 10;
+  }
+
+  .cg-hero[data-media="present"] .cg-hero__aside {
+    grid-column: 1 / span 6;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -245,6 +338,7 @@
   padding-block: var(--cg-s6) 0;
   font-size: var(--cg-text-xs);
   font-weight: var(--cg-weight-medium);
+  font-family: var(--cg-font-label);
   letter-spacing: var(--cg-tracking-label);
   text-transform: uppercase;
   color: var(--cg-ink-muted);
@@ -266,16 +360,14 @@
 
 @media (min-width: 64rem) {
   .cg-logo-strip__caption {
-    grid-column: 1 / span 2;
+    grid-column: 1 / -1;
     grid-row: 2;
-    align-self: center;
-    padding-block: 0;
-    max-inline-size: 12ch;
+    padding-block: var(--cg-s6) 0;
   }
 
   .cg-logo-strip__items {
-    grid-column: 3 / -1;
-    grid-row: 2;
+    grid-column: 1 / -1;
+    grid-row: 3;
     grid-template-columns: none;
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
@@ -373,8 +465,20 @@
    stats: one typographic row between vertical rules.
    -------------------------------------------------------------------------- */
 
+/* An instrument panel: the one ink band of the middle of a page. */
+.cg-stats {
+  padding-block: calc(var(--cg-section) * 0.6) calc(var(--cg-section) * 0.45);
+  background: var(--cg-band);
+  color: var(--cg-band-ink);
+  --cg-line: var(--cg-band-line);
+}
+
 .cg-stats .cg-head {
   margin-block-end: var(--cg-s8);
+}
+
+.cg-stats .cg-head__title {
+  color: var(--cg-band-ink);
 }
 
 .cg-stats__items {
@@ -408,24 +512,29 @@
 .cg-stat__value {
   font-family: var(--cg-font-display);
   font-size: var(--cg-size-figure);
-  font-weight: var(--cg-weight-light);
+  font-weight: var(--cg-weight-display);
   line-height: 1;
   letter-spacing: -0.02em;
   font-variant-numeric: lining-nums tabular-nums;
-  color: var(--cg-ink);
+  color: var(--cg-band-ink);
 }
 
 .cg-stat__unit {
-  margin-inline-start: 0.06em;
-  font-size: 0.62em;
+  margin-inline-start: 0.3em;
+  font-family: var(--cg-font-label);
+  font-size: 0.42em;
   letter-spacing: 0;
+  color: color-mix(in oklab, var(--cg-accent) 45%, var(--cg-band-ink));
 }
 
 .cg-stat__label {
   max-inline-size: 24ch;
-  font-size: var(--cg-text-sm);
-  line-height: 1.45;
-  color: var(--cg-ink-muted);
+  font-family: var(--cg-font-label);
+  font-size: var(--cg-text-xs);
+  line-height: 1.5;
+  letter-spacing: var(--cg-tracking-label);
+  text-transform: uppercase;
+  color: var(--cg-band-muted);
 }
 
 @media (min-width: 64rem) {
@@ -473,7 +582,7 @@
 .cg-counter__value {
   font-family: var(--cg-font-display);
   font-size: var(--cg-size-figure);
-  font-weight: var(--cg-weight-light);
+  font-weight: var(--cg-weight-display);
   line-height: 1;
   letter-spacing: -0.02em;
   font-variant-numeric: lining-nums tabular-nums;
@@ -520,6 +629,7 @@
   margin: 0 0 var(--cg-s3);
   font-size: var(--cg-text-xs);
   font-weight: var(--cg-weight-medium);
+  font-family: var(--cg-font-label);
   letter-spacing: var(--cg-tracking-label);
   text-transform: uppercase;
   font-variant-numeric: lining-nums tabular-nums;
@@ -709,6 +819,36 @@
   }
 }
 
+/* A case study's key figure: the result, set as a reading on a data sheet. */
+.cg-entry__figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--cg-s2) var(--cg-s4);
+  margin: var(--cg-s6) 0 0;
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-entry__figure-value {
+  font-size: var(--cg-size-heading);
+  font-weight: var(--cg-weight-display);
+  line-height: 1;
+  letter-spacing: var(--cg-tracking-heading);
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--cg-accent);
+}
+
+.cg-entry__figure-label {
+  max-inline-size: 26ch;
+  font-family: var(--cg-font-label);
+  font-size: var(--cg-text-xs);
+  line-height: 1.5;
+  letter-spacing: var(--cg-tracking-label);
+  text-transform: uppercase;
+  color: var(--cg-ink-muted);
+}
+
 /* carousel: the grid's item, in a scroll-snapping row. */
 .cg-collection__viewport,
 .cg-gallery__viewport {
@@ -742,7 +882,7 @@
 .cg-pullquote__quote {
   font-family: var(--cg-font-display);
   font-size: var(--cg-size-quote);
-  font-weight: var(--cg-weight-light);
+  font-weight: var(--cg-weight-display);
   line-height: 1.18;
   letter-spacing: -0.012em;
   color: var(--cg-ink);
@@ -1280,7 +1420,7 @@ details[open] > summary .cg-toggle-mark::after {
   }
 
   .cg-figure[data-align="wide"] .cg-figure__media {
-    grid-column: 1 / span 9;
+    grid-column: 1 / -1;
     grid-row: 1;
   }
 
@@ -1294,7 +1434,6 @@ details[open] > summary .cg-toggle-mark::after {
     grid-row: 1;
   }
 
-  .cg-figure[data-align="wide"] .cg-figure__caption,
   .cg-figure[data-align="start"] .cg-figure__caption,
   .cg-figure[data-align="end"] .cg-figure__caption {
     grid-row: 1;
@@ -1304,7 +1443,8 @@ details[open] > summary .cg-toggle-mark::after {
   }
 
   .cg-figure[data-align="wide"] .cg-figure__caption {
-    grid-column: 10 / -1;
+    grid-column: 1 / span 7;
+    grid-row: 2;
   }
 
   .cg-figure[data-align="start"] .cg-figure__caption {
@@ -1498,7 +1638,7 @@ details[open] > summary .cg-toggle-mark::after {
 .cg-pricing__amount {
   font-family: var(--cg-font-display);
   font-size: var(--cg-size-heading);
-  font-weight: var(--cg-weight-light);
+  font-weight: var(--cg-weight-display);
   line-height: 1;
   letter-spacing: -0.02em;
   font-variant-numeric: lining-nums tabular-nums;
@@ -1599,6 +1739,7 @@ details[open] > summary .cg-toggle-mark::after {
   margin: 0;
   font-size: var(--cg-text-xs);
   font-weight: var(--cg-weight-medium);
+  font-family: var(--cg-font-label);
   letter-spacing: var(--cg-tracking-label);
   text-transform: uppercase;
   color: var(--cg-ink-muted);

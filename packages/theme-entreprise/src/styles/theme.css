@@ -13,15 +13,15 @@
  * a skin token or from a `--cg-*` property composed from those.
  *
  * The one thing this file adds on its own is the Google Fonts request for the
- * two families `tokens.json` names: Newsreader (display and headings, with
- * its optical-size axis, so a 13 px caption and an 80 px title each get the
- * cut drawn for them) and Hanken Grotesk (text and interface). A skin only
+ * two families `tokens.json` names: Geist (display, headings, text and
+ * interface, on one variable weight axis) and Geist Mono (labels, indices,
+ * figures and captions, the register of an engineering document). A skin only
  * names a family; it never fetches one. Both fall back to real system stacks
  * if Google Fonts is unreachable, and `display=swap` keeps text visible while
  * they load. `cogenta serve` hoists this `@import` above the skin's rules.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,300..700;1,400&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap");
 
 @import "./tokens.css";
 @import "./base.css";

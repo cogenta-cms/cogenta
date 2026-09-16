@@ -251,36 +251,35 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
     shadow: { sm: '0 1px 0 rgba(31, 28, 24, 0.06)', md: '0 8px 24px rgba(31, 28, 24, 0.1)' },
   },
   /**
-   * A management consultancy (`@cogenta/theme-entreprise`, L27 studio pass):
-   * a cool ivory paper, a blue-black ink and one deep green accent spent
-   * rarely; Newsreader for display and headings, Hanken Grotesk for text.
-   * Copied from `packages/theme-entreprise/tokens.json` rather than
-   * referenced (the same independent-copy discipline `restaurant` follows),
-   * so a scaffolded `vitrine` site's skin names the theme's own typefaces
-   * and palette from the first render: the theme reads both from the skin,
-   * and a skin that named other fonts would silently replace them.
+   * An engineering company (`@cogenta/theme-entreprise`, L36): a cool grey
+   * paper, a blue-black ink and one signal green, the colour of a healthy
+   * reading in its own product; Geist for display and text, Geist Mono for
+   * labels and figures. Copied from `packages/theme-entreprise/tokens.json`
+   * rather than referenced, so a scaffolded `vitrine` site's skin names the
+   * theme's own typefaces and palette from the first render.
    */
   vitrine: {
     color: {
-      bg: '#f5f5f0',
-      fg: '#0f1a24',
-      accent: '#174a3a',
+      bg: '#f4f4f2',
+      fg: '#0c0f14',
+      accent: '#087044',
       accentFg: '#ffffff',
-      muted: '#e9e9e2',
-      mutedFg: '#4a535b',
-      border: '#d6d6ce',
+      muted: '#e8e8e4',
+      mutedFg: '#4b525a',
+      border: '#d7d8d3',
     },
     font: {
-      sans: "'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
-      serif: "'Newsreader', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
-      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+      sans: "'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+      serif:
+        "'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+      mono: "'Geist Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
       scale: 1.25,
-      baseSize: '1.0625rem',
+      baseSize: '1rem',
     },
     space: { unit: '0.25rem', density: 'comfortable' },
     radius: { sm: '0.0625rem', md: '0.125rem', lg: '0.1875rem' },
     motion: { duration: '140ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
-    shadow: { sm: '0 1px 0 rgba(15, 26, 36, 0.06)', md: '0 8px 24px rgba(15, 26, 36, 0.12)' },
+    shadow: { sm: '0 1px 0 rgba(12, 15, 20, 0.06)', md: '0 8px 24px rgba(12, 15, 20, 0.12)' },
   },
   /**
    * A neighbourhood charity (L27, `@cogenta/theme-association`): warm paper,

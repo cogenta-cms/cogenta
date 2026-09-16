@@ -499,11 +499,13 @@ export async function scaffoldSite(
         // `page` collection (the one `definePageCollection` builds) is opted
         // out at the collection level, the same switch the admin exposes;
         // every other collection keeps the site default.
-        if (pack.collections.some((collection) => collection.name === PAGE_COLLECTION_NAME)) {
+        const closed = [PAGE_COLLECTION_NAME, ...(pack.commentsDisabledOn ?? [])].filter((name) =>
+          pack.collections.some((collection) => collection.name === name),
+        )
+        if (closed.length > 0) {
           await ensureCommentsTables(selection.instance)
-          await createCommentSettingsStore(selection.instance).setCollection(PAGE_COLLECTION_NAME, {
-            enabled: false,
-          })
+          const settings = createCommentSettingsStore(selection.instance)
+          for (const name of closed) await settings.setCollection(name, { enabled: false })
         }
       }
 

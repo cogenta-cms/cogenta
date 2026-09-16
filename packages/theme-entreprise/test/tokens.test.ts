@@ -62,7 +62,7 @@ describe('the default skin', () => {
     expect(contrast(tokens.color.mutedFg, tokens.color.muted)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('picks one deep green accent, never the indigo or violet of a generated template', () => {
+  it('picks one signal green accent, never the indigo or violet of a generated template', () => {
     const hex = tokens.color.accent.replace('#', '')
     const [r, g, b] = [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16))
     expect(g as number).toBeGreaterThan(r as number)
@@ -84,13 +84,16 @@ describe('the default skin', () => {
   })
 
   it('names the Google Fonts families this theme loads, with a real system fallback', () => {
-    expect(tokens.font.serif.startsWith("'Newsreader'")).toBe(true)
-    expect(tokens.font.serif).toMatch(/serif$/)
-    expect(tokens.font.sans.startsWith("'Hanken Grotesk'")).toBe(true)
+    // L36: one grotesk for display and text, and a monospace for labels and
+    // figures, the register of an engineering data sheet.
+    expect(tokens.font.sans.startsWith("'Geist'")).toBe(true)
+    expect(tokens.font.serif.startsWith("'Geist'")).toBe(true)
     expect(tokens.font.sans).toMatch(/system-ui/)
+    expect(tokens.font.mono.startsWith("'Geist Mono'")).toBe(true)
+    expect(tokens.font.mono).toMatch(/monospace$/)
     const theme = readFileSync(new URL('../src/styles/theme.css', import.meta.url), 'utf8')
-    expect(theme).toContain('family=Newsreader:ital,opsz,wght@')
-    expect(theme).toContain('family=Hanken+Grotesk:')
+    expect(theme).toContain('family=Geist:wght@')
+    expect(theme).toContain('family=Geist+Mono:')
   })
 
   it('avoids the most overused default sans faces as its primary choice', () => {
@@ -113,7 +116,7 @@ describe('the default skin', () => {
       expect(primary).not.toBe(overused)
       expect(tokens.font.serif.split(',')[0]).not.toContain(overused)
     }
-    expect(primary).toBe('Hanken Grotesk')
+    expect(primary).toBe('Geist')
   })
 
   it('uses a typographic scale that increases monotonically', () => {

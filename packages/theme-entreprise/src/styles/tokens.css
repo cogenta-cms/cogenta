@@ -1,11 +1,12 @@
 /*
  * `@cogenta/theme-entreprise`'s design system.
  *
- * The register is a management consultancy's: institutional restraint,
- * generous whitespace, editorial confidence. Neutrals carry the page (a cool
- * ivory paper and a blue-black ink), one deep green accent is spent rarely
- * (links, the eyebrow rule, one bar in an exhibit), and depth comes from
- * hairlines and space, never from shadows or tinted boxes.
+ * The register is an engineering company's: precise, factual, quietly
+ * technical. Neutrals carry the page (a cool grey paper and a blue-black ink),
+ * one signal green is spent rarely (links, markers, one bar in a chart), and
+ * depth comes from hairlines, full-bleed photographs and ink bands, never from
+ * shadows or tinted boxes. Labels, indices and figures are set in a monospace,
+ * as on a drawing or a data sheet.
  *
  * Contract D fixes a closed skin token set, so nothing here adds a token:
  * every value is derived from a `--cogenta-*` property (`calc`,
@@ -91,13 +92,14 @@
 }
 
 /* --------------------------------------------------------------------------
-   Type: Newsreader for display and headings, Hanken Grotesk for text and
-   interface. The skin names both; the theme only decides where each goes.
+   Type: Geist for display, headings and text, Geist Mono for labels, indices
+   and figures. The skin names both; the theme only decides where each goes.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
   --cg-font-display: var(--cogenta-font-serif);
   --cg-font-text: var(--cogenta-font-sans);
+  --cg-font-label: var(--cogenta-font-mono);
 
   --cg-text-xs: var(--cogenta-font-size-xs, 0.68rem);
   --cg-text-sm: var(--cogenta-font-size-sm, 0.85rem);
@@ -123,19 +125,21 @@
   --cg-size-figure: clamp(var(--cg-text-3xl), calc(1rem + 3vw), var(--cg-text-5xl));
   --cg-size-lead: clamp(var(--cg-text-lg), calc(0.9rem + 0.6vw), var(--cg-text-xl));
 
-  --cg-leading-display: 1.02;
-  --cg-leading-heading: 1.1;
+  --cg-leading-display: 0.98;
+  --cg-leading-heading: 1.08;
   --cg-leading-snug: 1.3;
   --cg-leading-text: 1.62;
 
-  --cg-tracking-display: -0.022em;
-  --cg-tracking-heading: -0.014em;
-  --cg-tracking-label: 0.08em;
+  --cg-tracking-display: -0.042em;
+  --cg-tracking-heading: -0.03em;
+  --cg-tracking-label: 0.04em;
 
   --cg-weight-light: 350;
   --cg-weight-regular: 400;
   --cg-weight-medium: 500;
   --cg-weight-semibold: 600;
+  /* Display and headings: a grotesk reads confident at medium, not light. */
+  --cg-weight-display: 500;
 }
 
 /* --------------------------------------------------------------------------

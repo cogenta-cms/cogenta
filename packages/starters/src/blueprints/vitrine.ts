@@ -896,6 +896,9 @@ export function createVitrineContentPack(locale: string): BlueprintContentPack {
     widgets: vitrineWidgets(copy),
     siteSettings: vitrineSiteSettings(copy),
     mediaSpecs: vitrineMediaSpecs(copy),
+    // A company site: no comment thread under a solution, a case study, a
+    // job opening or a press article.
+    commentsDisabledOn: ['solution', 'case_study', 'job', 'post'],
   }
 }
 

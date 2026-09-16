@@ -1,5 +1,12 @@
 # @cogenta/blocks
 
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [`082a630`, `43d82cf`, `3872f56`]:
+  - @cogenta/schema@0.6.0
+
 ## 1.1.0
 
 ### Minor Changes

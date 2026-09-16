@@ -1,5 +1,12 @@
 # @cogenta/agents-builtin
 
+## 0.6.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/agents@0.8.2
+
 ## 0.6.1
 
 ### Patch Changes

@@ -1,5 +1,61 @@
 # @cogenta/api
 
+## 2.6.0
+
+### Minor Changes
+
+- A password-protected page asks for its password, and opens
+  
+  `POST /{collection}/{id}/visibility` sets an entry public, private or
+  password-protected. Gated by **`publish`**, borrowed the way the trash borrows
+  `delete`: the five actions of contract A are frozen, and this changes what the
+  public sees. Someone who may fix a typo must not be able to make a private note
+  public.
+  
+  `@cogenta/api` gains `createUnlockTokens`: the same signed-not-encrypted shape
+  as the preview tokens — HMAC-SHA256, constant-time comparison, a version in the
+  payload — carrying one assertion, "whoever holds this answered the password of
+  entry X, until this instant". One entry, one cookie, named after a digest of
+  the id rather than the id itself.
+  
+  `cogenta serve` renders the page itself when it is locked — the theme's header,
+  the entry's own title, its footer — with a form where the content would be, and
+  answers `POST /_cogenta/unlock` with a cookie and a redirect. The password
+  travels in a form body, never in a URL, a referrer or a log line; a redirect
+  target that is not a path of this site becomes the home page; and a request
+  carrying any cookie was already answered `private, no-store`.
+
+- A private entry is invisible everywhere it is read, not only on its page
+  
+  The per-entry gate that already decided who may see a draft now also decides
+  who may see a restricted published entry, composed once in
+  `@cogenta/api`'s content layer and reached by both transports: by id, in a
+  list, through a batched relation, and in GraphQL. Filtering the rendered page
+  and leaving the row in the API would have been a rendering preference, not
+  privacy.
+  
+  A password-protected entry is deliberately *not* filtered: it exists, it is
+  listed and it can be linked to — what the password gates is its content.
+  
+  Two places that read content for a crawler or a searcher exclude both:
+  `/sitemap.xml` skips a protected entry (nobody following that URL can read
+  it), and `withSearchIndexing` removes an entry from the index the moment it
+  stops being public — an excerpt in a result list is content. Changing
+  visibility reindexes, which the test that asked found missing.
+
+### Patch Changes
+
+- Updated dependencies [`082a630`, `43d82cf`, `3872f56`]:
+  - @cogenta/schema@0.6.0
+  - @cogenta/auth@0.5.6
+  - @cogenta/blocks@1.1.1
+  - @cogenta/export@0.2.7
+  - @cogenta/seo@0.3.7
+  - @cogenta/widgets@0.2.1
+  - @cogenta/channels@0.3.9
+  - @cogenta/mcp@0.3.8
+  - @cogenta/forms@0.2.9
+
 ## 2.5.2
 
 ### Patch Changes

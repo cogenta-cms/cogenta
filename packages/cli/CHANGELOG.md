@@ -1,5 +1,101 @@
 # @cogenta/cli
 
+## 0.14.0
+
+### Minor Changes
+
+- The editor sets an entry's visibility, and an existing site gains the column
+  
+  The entry editor grows a « Visibilité » card beside the status: Public,
+  Private, Password protected, with the sentence each choice means and a
+  password field that is blank on every visit — nothing reads a password back,
+  so the screen must not pretend it holds one. Applied on its own button,
+  because the server gates it on `publish` while the form gates on `update`.
+  
+  Two things a browser found that the tests had not:
+  
+  **A site created before this version never gained the columns.** `create table
+  if not exists` does nothing to a table that already exists, so every write
+  failed with "no column named visibility" until someone hand-wrote a migration.
+  `createSchemaTables` now reconciles the store's **own** system columns at boot
+  — never a field a developer declared, which is a real migration with real data
+  questions.
+  
+  **A locked page described itself to crawlers.** Its excerpt reached the meta
+  description and the JSON-LD, so the summary of a protected page was readable
+  without the password. A locked page is now rendered without its excerpt, and
+  its SEO head is built from its title and slug alone, `noindex`.
+
+- A password-protected page asks for its password, and opens
+  
+  `POST /{collection}/{id}/visibility` sets an entry public, private or
+  password-protected. Gated by **`publish`**, borrowed the way the trash borrows
+  `delete`: the five actions of contract A are frozen, and this changes what the
+  public sees. Someone who may fix a typo must not be able to make a private note
+  public.
+  
+  `@cogenta/api` gains `createUnlockTokens`: the same signed-not-encrypted shape
+  as the preview tokens — HMAC-SHA256, constant-time comparison, a version in the
+  payload — carrying one assertion, "whoever holds this answered the password of
+  entry X, until this instant". One entry, one cookie, named after a digest of
+  the id rather than the id itself.
+  
+  `cogenta serve` renders the page itself when it is locked — the theme's header,
+  the entry's own title, its footer — with a form where the content would be, and
+  answers `POST /_cogenta/unlock` with a cookie and a redirect. The password
+  travels in a form body, never in a URL, a referrer or a log line; a redirect
+  target that is not a path of this site becomes the home page; and a request
+  carrying any cookie was already answered `private, no-store`.
+
+### Patch Changes
+
+- A private entry is invisible everywhere it is read, not only on its page
+  
+  The per-entry gate that already decided who may see a draft now also decides
+  who may see a restricted published entry, composed once in
+  `@cogenta/api`'s content layer and reached by both transports: by id, in a
+  list, through a batched relation, and in GraphQL. Filtering the rendered page
+  and leaving the row in the API would have been a rendering preference, not
+  privacy.
+  
+  A password-protected entry is deliberately *not* filtered: it exists, it is
+  listed and it can be linked to — what the password gates is its content.
+  
+  Two places that read content for a crawler or a searcher exclude both:
+  `/sitemap.xml` skips a protected entry (nobody following that URL can read
+  it), and `withSearchIndexing` removes an entry from the index the moment it
+  stops being public — an excerpt in a result list is content. Changing
+  visibility reindexes, which the test that asked found missing.
+- Updated dependencies [`082a630`, `43d82cf`, `130d762`, `3872f56`]:
+  - @cogenta/schema@0.6.0
+  - @cogenta/api@2.6.0
+  - @cogenta/agents@0.8.2
+  - @cogenta/auth@0.5.6
+  - @cogenta/blocks@1.1.1
+  - @cogenta/export@0.2.7
+  - @cogenta/import@0.2.8
+  - @cogenta/plugins@0.8.1
+  - @cogenta/seo@0.3.7
+  - @cogenta/starters@0.1.3
+  - @cogenta/widgets@0.2.1
+  - @cogenta/agents-builtin@0.6.2
+  - @cogenta/channels@0.3.9
+  - @cogenta/mcp@0.3.8
+  - @cogenta/render@0.3.3
+  - @cogenta/theme-association@0.5.1
+  - @cogenta/theme-blog@0.5.1
+  - @cogenta/theme-canonical@1.3.1
+  - @cogenta/theme-docs@0.5.1
+  - @cogenta/theme-ecommerce@1.3.1
+  - @cogenta/theme-entreprise@1.3.1
+  - @cogenta/theme-kit@0.5.1
+  - @cogenta/theme-magazine@1.3.1
+  - @cogenta/theme-portfolio@1.3.1
+  - @cogenta/theme-restaurant@0.5.1
+  - @cogenta/theme-saas@0.5.1
+  - @cogenta/commerce@0.5.4
+  - @cogenta/forms@0.2.9
+
 ## 0.13.0
 
 ### Minor Changes

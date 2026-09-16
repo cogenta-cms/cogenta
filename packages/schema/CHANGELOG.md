@@ -1,5 +1,65 @@
 # @cogenta/schema
 
+## 0.6.0
+
+### Minor Changes
+
+- The editor sets an entry's visibility, and an existing site gains the column
+  
+  The entry editor grows a « Visibilité » card beside the status: Public,
+  Private, Password protected, with the sentence each choice means and a
+  password field that is blank on every visit — nothing reads a password back,
+  so the screen must not pretend it holds one. Applied on its own button,
+  because the server gates it on `publish` while the form gates on `update`.
+  
+  Two things a browser found that the tests had not:
+  
+  **A site created before this version never gained the columns.** `create table
+  if not exists` does nothing to a table that already exists, so every write
+  failed with "no column named visibility" until someone hand-wrote a migration.
+  `createSchemaTables` now reconciles the store's **own** system columns at boot
+  — never a field a developer declared, which is a real migration with real data
+  questions.
+  
+  **A locked page described itself to crawlers.** Its excerpt reached the meta
+  description and the JSON-LD, so the summary of a protected page was readable
+  without the password. A locked page is now rendered without its excerpt, and
+  its SEO head is built from its title and slug alone, `noindex`.
+
+- An entry can be private or password-protected (`schema@2.2`)
+  
+  `visibility` joins `deletedAt` and `reviewState` as a field **orthogonal to
+  `status`**: a private page is `published` *and* private, so making it public
+  does not republish it and every exhaustive switch on `ContentStatus` in this
+  repository stays untouched.
+  
+  `ContentStore` gains `setVisibility` and `verifyEntryPassword`. The password is
+  never stored in the clear and never read back: the store holds a hash the
+  caller computed, and verification takes the comparison rather than handing the
+  hash out, so no response can serialise it by accident. Turning a protected
+  entry public clears the hash, so an old unlock cannot open it again later.
+  
+  `schema22Migration` adds both columns, reversibly: `visibility` is `not null
+  default 'public'`, so nothing becomes private by being migrated.
+
+- A private entry is invisible everywhere it is read, not only on its page
+  
+  The per-entry gate that already decided who may see a draft now also decides
+  who may see a restricted published entry, composed once in
+  `@cogenta/api`'s content layer and reached by both transports: by id, in a
+  list, through a batched relation, and in GraphQL. Filtering the rendered page
+  and leaving the row in the API would have been a rendering preference, not
+  privacy.
+  
+  A password-protected entry is deliberately *not* filtered: it exists, it is
+  listed and it can be linked to — what the password gates is its content.
+  
+  Two places that read content for a crawler or a searcher exclude both:
+  `/sitemap.xml` skips a protected entry (nobody following that URL can read
+  it), and `withSearchIndexing` removes an entry from the index the moment it
+  stops being public — an excerpt in a result list is content. Changing
+  visibility reindexes, which the test that asked found missing.
+
 ## 0.5.4
 
 ### Patch Changes

@@ -53,7 +53,12 @@ export type { AuditRouter, AuditRouterOptions } from './audit-router.js'
 export { createAuditRouter } from './audit-router.js'
 export type { AuthRouter, AuthRouterOptions, ForgotPasswordEvent } from './auth-router.js'
 export { createAuthRouter, resolveActor } from './auth-router.js'
-export { parseCreateBody, parseRestoreBody, parseUpdateBody } from './body.js'
+export {
+  parseCreateBody,
+  parseRestoreBody,
+  parseUpdateBody,
+  parseVisibilityBody,
+} from './body.js'
 export type {
   ContentPage,
   ContentService,

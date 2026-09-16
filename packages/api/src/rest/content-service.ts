@@ -1,3 +1,4 @@
+import { hashPassword } from '@cogenta/auth'
 import { CogentaError } from '@cogenta/core'
 import {
   type CollectionDefinition,
@@ -6,6 +7,7 @@ import {
   type ContentEntry,
   type ContentStatus,
   type ContentStore,
+  type ContentVisibility,
   type CreateInput,
   type DuplicateInput,
   type EntryState,
@@ -170,6 +172,17 @@ export interface ContentService {
   ): Promise<SerialisedEntry>
   /** The real delete: nothing is kept, and nothing comes back. */
   purge(context: AccessContext, name: string, id: string): Promise<void>
+  /**
+   * Who may see this entry once it is published (`schema@2.2`, ADR-0034).
+   * Gated by `publish`, borrowed the way the trash borrows `delete`.
+   */
+  setVisibility(
+    context: AccessContext,
+    name: string,
+    id: string,
+    input: { readonly visibility: ContentVisibility; readonly password?: string },
+    options: ReadOptions,
+  ): Promise<SerialisedEntry>
   publish(
     context: AccessContext,
     name: string,
@@ -715,6 +728,40 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       permissions.assert('delete', target, context)
 
       const entry = await store(target).untrash(id)
+      return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
+    },
+
+    /**
+     * Who may see this entry once published (`schema@2.2`, ADR-0034).
+     *
+     * Gated by **`publish`**, borrowed the way the trash borrows `delete`:
+     * the five actions of contract A are frozen, and this changes what the
+     * public sees, which is what publishing means. An actor who may edit a
+     * page but not publish it must not be able to make a private note public
+     * either.
+     *
+     * The password is hashed here and handed to the store already hashed: the
+     * store has no opinion about hashing, and this service never keeps the
+     * clear text beyond this call.
+     */
+    setVisibility: async (context, name, id, input, readOptions) => {
+      const target = collection(name)
+      permissions.assert('publish', target, context)
+
+      if (input.visibility === 'password' && (input.password ?? '') === '') {
+        throw new CogentaError({
+          code: 'CONTENT_INVALID',
+          message: 'A password-protected entry needs a password.',
+          hint: 'Send the password this page should ask for.',
+          details: { collection: name, id },
+        })
+      }
+
+      const entry = await store(target).setVisibility(id, input.visibility, {
+        ...(input.visibility === 'password' && input.password !== undefined
+          ? { passwordHash: await hashPassword(input.password) }
+          : {}),
+      })
       return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
     },
 

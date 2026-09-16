@@ -55,6 +55,7 @@ import {
   type WidgetAreas,
 } from '@cogenta/theme-kit'
 import { DEFAULT_LOGO_PATH } from './default-logo.js'
+import { renderPasswordForm, UNLOCK_FLOOR_CSS } from './entry-lock.js'
 import type { PluginBlockRenderer } from './plugin-block-render.js'
 import { pluginBlockFallback } from './plugin-blocks.js'
 import type { SeoRenderDefaults } from './seo.js'
@@ -248,6 +249,15 @@ export interface ThemeRenderOptions {
    * area happened to draw would buy less than it costs in wrong answers.
    */
   readonly pluginStyleHrefs?: readonly string[]
+  /**
+   * Whether this visitor has already answered a protected entry's password
+   * (`schema@2.2`, ADR-0034). Absent means "nobody has": a protected page
+   * then renders its lock screen, which is the safe direction for a caller
+   * that forgot to wire this.
+   */
+  readonly unlocked?: (entryId: string) => boolean
+  /** True when this render follows a wrong password, so the form says so. */
+  readonly unlockFailed?: boolean
   /**
    * The path served at `/` (fiche 23 task 4) — a real, honest replacement
    * for the `/home` fallback this file used to hardcode.
@@ -1718,12 +1728,31 @@ async function renderEntryPage(
     entry: entryMeta,
     ...(placesWidgets && hasAnyWidget(themeWidgets) ? { widgets: themeWidgets } : {}),
   }
+  // A protected entry renders its own page — the theme's header, its title,
+  // its footer — with the form where the content would have been. Not a
+  // separate page: a visitor following a link should land on the page they
+  // were sent, and find it locked.
+  const locked = entry.visibility === 'password' && options.unlocked?.(entry.id) !== true
   const node = theme.renderPage(
-    pageContent,
+    locked ? { ...pageContent, blocks: [] } : pageContent,
     themeContext,
     fetchedEntries as FetchedEntries,
     options.blocks,
   )
+  const body = locked
+    ? {
+        ...node,
+        children: [
+          ...node.children,
+          renderPasswordForm({
+            entryId: entry.id,
+            path: pathname,
+            locale: entry.locale,
+            failed: options.unlockFailed === true,
+          }),
+        ],
+      }
+    : node
   // The comment thread and form (fiche 15 task 6) — a property of the route,
   // not of the page's own blocks, so it is appended after `<main>` rather
   // than folded into `renderPage`'s tree (see `ThemeRenderOptions.comments`'s
@@ -1764,7 +1793,9 @@ async function renderEntryPage(
     contentTail: commentsHtml,
   }
   const placedWidgets = placesWidgets ? hostWidgets : pageWidgets
-  const bodyHtml = placeWidgetsInMain(serialize(node), placedWidgets, placement)
+  const bodyHtml = `${placeWidgetsInMain(serialize(body), placedWidgets, placement)}${
+    locked ? `\n<style>${UNLOCK_FLOOR_CSS}</style>` : ''
+  }`
   if (usesSidebarLayout(placedWidgets, placement)) commentsHtml = ''
 
   // The head is `@cogenta/seo`'s, not this file's: title, description,

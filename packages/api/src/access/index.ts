@@ -24,3 +24,9 @@ export {
   PREVIEW_SIGNING_KEY_ENV,
   PREVIEW_SIGNING_KEY_MINIMUM_LENGTH,
 } from './preview-token.js'
+export type { UnlockTokenOptions, UnlockTokenService } from './unlock-token.js'
+export {
+  createUnlockTokens,
+  DEFAULT_UNLOCK_LIFETIME_SECONDS,
+  MAX_UNLOCK_LIFETIME_SECONDS,
+} from './unlock-token.js'

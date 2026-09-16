@@ -135,7 +135,7 @@ function headerOf(req: IncomingMessage, name: string): string | undefined {
 }
 
 /** True behind a TLS socket, or behind a proxy that says it terminated one. */
-function isSecure(req: IncomingMessage): boolean {
+export function isSecure(req: IncomingMessage): boolean {
   if ('encrypted' in req.socket && req.socket.encrypted === true) return true
   return headerOf(req, 'x-forwarded-proto')?.split(',')[0]?.trim() === 'https'
 }

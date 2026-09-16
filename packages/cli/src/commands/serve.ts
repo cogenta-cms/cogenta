@@ -87,9 +87,11 @@ import {
   createTaxonomyRouter,
   createThemeRouter,
   createToolsRouter,
+  createUnlockTokens,
   createUpdateRouter,
   createUsersRouter,
   createWidgetRouter,
+  DEFAULT_UNLOCK_LIFETIME_SECONDS,
   errorResponse,
   executeGraphQL,
   type ForgotPasswordEvent,
@@ -137,12 +139,19 @@ import {
   type ThemeRouterOptions,
   type ToolsRouter,
   type TrashStatus,
+  type UnlockTokenService,
   type UpdateRouter,
   type UsersRouter,
   variantKeyFor,
   type WidgetRouter,
 } from '@cogenta/api'
-import { type AuditLog, type AuthStore, createAuditLog, createAuthStore } from '@cogenta/auth'
+import {
+  type AuditLog,
+  type AuthStore,
+  createAuditLog,
+  createAuthStore,
+  verifyPassword,
+} from '@cogenta/auth'
 import { type BlockRegistry, createBlockRegistry, VOCABULARY_NAMES } from '@cogenta/blocks'
 import {
   type ChannelRegistry,
@@ -374,8 +383,9 @@ import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
 import { DEFAULT_LOGO_CONTENT_TYPE, DEFAULT_LOGO_PATH, defaultLogoBytes } from './default-logo.js'
 import { runDoctor } from './doctor.js'
+import { parseCookies, UNLOCK_PATH } from './entry-lock.js'
 import { renderFormNotFoundPage, renderFormPage } from './forms-page.js'
-import { applySecurity, type SecurityConfig } from './http-security.js'
+import { applySecurity, isSecure, type SecurityConfig } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
@@ -946,6 +956,13 @@ interface Site {
    * ask the one authority too, rather than re-deciding who may edit (R4).
    */
   readonly permissions: PermissionLayer
+  /**
+   * One store per collection, the same instances REST and GraphQL read
+   * through. Held so the routes this file serves itself can reach a store
+   * without building a second, undecorated one beside them — the mistake
+   * `cogenta mcp` already documents having made.
+   */
+  readonly storeFor: (collection: CollectionDefinition) => ContentStore
   /** `.cogenta/schema.json`'s in-memory twin — the admin's only view of the collections (never the schema modules themselves, which are Node code). */
   readonly schemaDocument: SchemaDocument
   /**
@@ -2579,6 +2596,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     auth,
     cogentaVersion,
     ...(options.pluginWidgets === undefined ? {} : { pluginWidgets: options.pluginWidgets }),
+    storeFor,
     restRouter: createRestRouter({ service, siteUrl: site.url }),
     authRouter: createAuthRouter({
       auth,
@@ -3365,6 +3383,35 @@ function isStoredSocialLinkList(value: unknown): value is readonly StoredSocialL
  * stores. Every read goes through the same permission-checked gateway the
  * page itself uses, with the visitor's own access context.
  */
+/**
+ * Whether this is the password the entry asks for (`schema@2.2`, ADR-0034).
+ *
+ * The comparison happens inside the store, which hands the hash to
+ * `verifyPassword` and never to this file: the hash of a page's password has
+ * no business travelling through a request handler, where it could end up in
+ * a log line or a response by accident.
+ *
+ * `false` for everything that is not a match, including an unknown entry and
+ * an entry that is not protected at all — the caller must not be able to tell
+ * those apart, and neither must a visitor.
+ */
+async function unlockEntry(site: Site, entryId: string, password: string): Promise<boolean> {
+  if (entryId === '' || password === '') return false
+  for (const collection of site.collections) {
+    const store = site.storeFor(collection)
+    try {
+      const opened = await store.verifyEntryPassword(entryId, (hash: string) =>
+        verifyPassword(password, hash),
+      )
+      if (opened) return true
+    } catch {
+      // A collection whose table does not hold this entry: not an error, just
+      // the wrong place to look.
+    }
+  }
+  return false
+}
+
 async function widgetsForSite(
   site: Site,
   request: WidgetRenderRequest,
@@ -4446,6 +4493,12 @@ export interface RuntimeExtras {
     { readonly css: string; readonly digest: string }
   >
   readonly pluginStyleHrefs?: readonly string[]
+  /**
+   * Issues and checks the proof that a visitor answered a protected page's
+   * password (`schema@2.2`). Absent — a site built by hand in a test — means
+   * a protected page simply stays locked.
+   */
+  readonly unlockTokens?: UnlockTokenService
   /** Where this site keeps its plugins (`plugins.dir`), for the workshop routes. */
   readonly pluginsDir?: string
   /**
@@ -6701,6 +6754,57 @@ export function createRequestListener(
       // plugin. The plugin picks a status, one content type from a known
       // list, and a body — never a header, so it cannot set a cookie on this
       // origin or turn its answer into a download.
+      // `POST /_cogenta/unlock` — the visitor answers a protected page's
+      // password (`schema@2.2`, ADR-0034).
+      //
+      // A form POST rather than a link or a query parameter: a password must
+      // never reach a URL, a referrer or an access log. The answer is a
+      // cookie for that one entry and a redirect back to the page, so the
+      // browser re-asks for the page it was on and the site serves it
+      // normally — there is no second rendering path to keep in step.
+      if (url.pathname === UNLOCK_PATH && extras?.unlockTokens !== undefined) {
+        if (req.method !== 'POST') {
+          res.writeHead(405, { allow: 'POST' }).end()
+          return
+        }
+        const form = new URLSearchParams((await readBodyText(req)) ?? '')
+        const entryId = form.get('entry') ?? ''
+        const password = form.get('password') ?? ''
+        const next = form.get('next') ?? '/'
+        // Only ever back to a path of this site: a redirect target from a
+        // form field is an open redirect waiting to happen.
+        const back = /^\/(?!\/)[^\s]*$/u.test(next) ? next : '/'
+
+        const opened = await unlockEntry(site, entryId, password)
+        if (!opened) {
+          // The same answer whatever went wrong — wrong password, unknown
+          // entry, an entry that is not protected at all: a different one
+          // would tell a stranger which pages exist and which are locked.
+          res.writeHead(303, {
+            location: `${back}${back.includes('?') ? '&' : '?'}unlock=failed`,
+            'cache-control': 'no-store',
+          })
+          res.end()
+          return
+        }
+
+        const token = extras.unlockTokens.issue(entryId)
+        res.writeHead(303, {
+          location: back,
+          'cache-control': 'no-store',
+          'set-cookie': [
+            `${extras.unlockTokens.cookieName(entryId)}=${encodeURIComponent(token)}`,
+            'Path=/',
+            'HttpOnly',
+            'SameSite=Lax',
+            `Max-Age=${DEFAULT_UNLOCK_LIFETIME_SECONDS}`,
+            ...(isSecure(req) ? ['Secure'] : []),
+          ].join('; '),
+        })
+        res.end()
+        return
+      }
+
       // A plugin's stylesheet (L32), before its routes so a plugin cannot
       // declare a route that shadows its own stylesheet. Static text, read
       // and checked at boot; served with `nosniff` and immutable caching,
@@ -6912,6 +7016,20 @@ export function createRequestListener(
           ...(extras?.pluginStyleHrefs === undefined
             ? {}
             : { pluginStyleHrefs: extras.pluginStyleHrefs }),
+          // Which protected pages this visitor has already answered
+          // (`schema@2.2`). Read from the request's own cookies, never from a
+          // query parameter: a link carrying an unlock would be a link that
+          // shares the page with whoever it is forwarded to.
+          ...(extras?.unlockTokens === undefined
+            ? {}
+            : {
+                unlocked: (entryId: string) =>
+                  extras.unlockTokens?.accepts(
+                    entryId,
+                    parseCookies(req.headers.cookie).get(extras.unlockTokens.cookieName(entryId)),
+                  ) === true,
+                unlockFailed: url.searchParams.get('unlock') === 'failed',
+              }),
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {
@@ -8492,6 +8610,11 @@ export async function runServe(options: ServeOptions): Promise<number> {
     },
   })
 
+  // The proof a visitor answered a protected page's password (`schema@2.2`).
+  // Signed with the site's own auth key rather than a second secret nobody
+  // would remember to set.
+  const unlockTokens = createUnlockTokens({ signingKey: loaded.config.auth.signingKey })
+
   const server = createServer(
     withRequestTracing(
       createRequestListener(site, logger, {
@@ -8502,6 +8625,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
         ...(pluginBlockRenderer === null ? {} : { pluginBlockRenderer }),
         ...(pluginWidgetRenderer === null ? {} : { pluginWidgetRenderer }),
         ...(pluginStyleSheets.size === 0 ? {} : { pluginStyleSheets, pluginStyleHrefs }),
+        unlockTokens,
         ...(pluginWidgets === null || pluginWidgets.descriptions.length === 0
           ? {}
           : { pluginWidgetDescriptions: pluginWidgets.descriptions }),

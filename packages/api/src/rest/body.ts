@@ -62,6 +62,18 @@ const unpublishSchema = z.object({
 
 const duplicateSchema = z.object({ values: valuesSchema.optional() })
 
+/**
+ * `POST .../visibility` (`schema@2.2`, ADR-0034).
+ *
+ * The password is bounded like any other secret a person types: long enough
+ * to be worth asking for, short enough that nobody stores a novel in a hash
+ * function's input.
+ */
+const visibilitySchema = z.object({
+  visibility: z.enum(['public', 'private', 'password']),
+  password: z.string().min(1).max(256).optional(),
+})
+
 const submitSchema = z.object({ reviewerId: z.string().min(1).nullable().optional() })
 
 const assignReviewerSchema = z.object({ reviewerId: z.string().min(1).nullable() })
@@ -113,6 +125,17 @@ export function parseUnpublishBody(body: unknown): {
   return {
     ...(parsed.status === undefined ? {} : { status: parsed.status }),
     ...(parsed.publishedAt === undefined ? {} : { publishedAt: parsed.publishedAt }),
+  }
+}
+
+export function parseVisibilityBody(body: unknown): {
+  readonly visibility: 'public' | 'private' | 'password'
+  readonly password?: string
+} {
+  const parsed = decode(visibilitySchema, body)
+  return {
+    visibility: parsed.visibility,
+    ...(parsed.password === undefined ? {} : { password: parsed.password }),
   }
 }
 

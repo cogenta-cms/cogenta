@@ -13,6 +13,7 @@ import {
   parseSubmitBody,
   parseUnpublishBody,
   parseUpdateBody,
+  parseVisibilityBody,
 } from './body.js'
 import type { ContentService } from './content-service.js'
 import type { DependencySource, ResponseDependencies } from './dependencies.js'
@@ -41,6 +42,7 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './
  *   PATCH  /{collection}/{id}              update
  *   DELETE /{collection}/{id}              move to the trash (schema@2.0)
  *   POST   /{collection}/{id}/untrash      take it back out
+ *   POST   /{collection}/{id}/visibility   public, private or password-protected
  *   POST   /{collection}/{id}/purge        delete it for good
  *   POST   /{collection}/{id}/publish      publish
  *   POST   /{collection}/{id}/unpublish    back to draft or archived
@@ -406,6 +408,20 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
       case 'untrash': {
         if (method !== 'POST') return methodNotAllowed(['POST'])
         const entry = await service.untrash(context, name, id, {
+          state: 'working',
+          depth: read.depth,
+        })
+        return jsonResponse(200, { data: entry })
+      }
+
+      case 'visibility': {
+        // POST on its own path, never a field of `PATCH /{id}`: who may read
+        // a page is a decision of its own, gated by `publish` rather than by
+        // `update`, and folding it into the ordinary edit would hand it to
+        // anyone who can fix a typo.
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        const input = parseVisibilityBody(request.body)
+        const entry = await service.setVisibility(context, name, id, input, {
           state: 'working',
           depth: read.depth,
         })

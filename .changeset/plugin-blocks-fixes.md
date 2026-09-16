@@ -25,3 +25,9 @@ plugin author's test runs the host's own rules: no `@import`, no `url()` that is
 not an inline image (a URL in a selector is how CSS becomes an exfiltration
 channel), no script under another name. Comments are stripped first — found by
 this project's own example being refused for documenting the rule it follows.
+
+**`cogenta plugin check` now says what a plugin adds** — its blocks and what each
+degrades to, its widget types, and whether its stylesheet would be served. Run
+against this repository's own example it immediately found a block that would
+vanish on uninstall, which is why a `prose` fallback with no field mapping now
+keeps the block's own text as paragraphs rather than nothing.

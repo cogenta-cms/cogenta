@@ -139,14 +139,18 @@ describe('cogenta serve — /api/agents with no LLM provider configured (R2)', (
     // default, same as the other two examples. L26 task 5 adds a fifth,
     // "Cogenta Theme Creator" — enabled by default like the superagent,
     // since sideEffects: false on its only tool means it can never do
-    // anything unprompted or destructive even when idle.
-    expect(body.data).toHaveLength(5)
+    // anything unprompted or destructive even when idle. L31 step 4 adds a
+    // sixth, "Cogenta Plugin Builder": enabled, because writing into a
+    // sandbox is not writing to the site — it holds no tool that installs
+    // anything, and its autonomy is pinned to `propose`.
+    expect(body.data).toHaveLength(6)
     const byName = new Map(body.data.map((a) => [a.name, a]))
     expect(byName.get('Cogenta Agent')).toMatchObject({ enabled: true, builtin: true })
     expect(byName.get('Security Scanner')).toMatchObject({ enabled: false, builtin: true })
     expect(byName.get('Content Watch')).toMatchObject({ enabled: false, builtin: true })
     expect(byName.get('Site Monitor')).toMatchObject({ enabled: false, builtin: true })
     expect(byName.get('Cogenta Theme Creator')).toMatchObject({ enabled: true, builtin: true })
+    expect(byName.get('Cogenta Plugin Builder')).toMatchObject({ builtin: true })
   })
 
   it('refuses to run — with a code the admin can explain — before any network call is possible', async () => {

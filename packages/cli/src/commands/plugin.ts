@@ -1,4 +1,5 @@
-import { dirname, resolve as resolvePath } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { dirname, join, resolve as resolvePath } from 'node:path'
 import process from 'node:process'
 import {
   createDatabaseRegistry,
@@ -11,6 +12,7 @@ import {
 } from '@cogenta/core'
 import {
   type CapabilityHandler,
+  checkPluginStylesheet,
   createContentDeleteHandler,
   createContentPublishHandler,
   createContentReadHandler,
@@ -197,6 +199,40 @@ export async function runPluginCommand(options: PluginCommandOptions): Promise<n
       }
       await readPluginCode(found.packageRoot, found.manifest)
       out.detail('its code reads, and its manifest validates')
+
+      // What it adds to the site's own vocabularies (L32) — the thing a
+      // person checking a plugin before installing it most wants to see
+      // after the capabilities it asks for.
+      const blocks = found.manifest.provides.blocks ?? []
+      const widgets = found.manifest.provides.widgets ?? []
+      for (const block of blocks) {
+        out.detail(
+          `block "${block.name}" (${block.label ?? block.name}) — degrades to ${block.fallback}${
+            block.fallbackFrom !== undefined
+              ? ''
+              : block.fallback === 'prose'
+                ? ', keeping its text as paragraphs'
+                : ': declare "fallbackFrom", or it would vanish once uninstalled'
+          }`,
+        )
+      }
+      for (const widget of widgets) {
+        out.detail(`widget "${widget.name}" (${widget.label ?? widget.name})`)
+      }
+      const styles = found.manifest.provides.styles
+      if (styles !== undefined) {
+        const css = await readFile(join(found.packageRoot, styles), 'utf8').catch(() => null)
+        if (css === null) {
+          stderr(`Its manifest names a stylesheet that is not there: ${styles}\n`)
+          return 1
+        }
+        const checked = checkPluginStylesheet(css)
+        if (!checked.ok) {
+          stderr(`Its stylesheet would not be served: ${checked.reason ?? 'refused'}\n`)
+          return 1
+        }
+        out.detail(`stylesheet ${styles} — accepted`)
+      }
       return 0
     }
 

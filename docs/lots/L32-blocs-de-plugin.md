@@ -179,6 +179,16 @@ commentaire qu'il n'utilise pas `@import`. `checkPluginStylesheet` vit dans
 `@cogenta/plugins` pour qu'un auteur de plugin teste avec **la fonction de
 l'hôte** plutôt qu'avec une copie de ses règles.
 
+**4 (trouvé par le correctif 1).** `cogenta plugin check` dit maintenant ce qu'un
+plugin ajoute au site — ses blocs et leur repli, ses widgets, sa feuille de style
+(refusée ou acceptée). La première exécution a immédiatement signalé un défaut
+dans mon propre plugin de démonstration : un bloc replié sur `prose` sans carte de
+champs *disparaîtrait* à la désinstallation. Plutôt que d'obliger chaque auteur à
+écrire une carte — ce que la plupart ne feront pas, et alors la page perd les mots
+— **un repli `prose` sans carte garde le texte du bloc en paragraphes**, dans
+l'ordre où ses champs sont déclarés, et rien d'autre que ce que quelqu'un a tapé.
+`fallbackFrom` reste là pour un repli plus précis.
+
 **Vérifié dans le navigateur** : le tableau comparatif est enfin stylé au milieu
 des blocs natifs, et le widget « Chiffre clé » dans la barre latérale publique.
 

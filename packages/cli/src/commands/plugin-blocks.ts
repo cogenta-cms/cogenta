@@ -89,10 +89,19 @@ export function pluginBlockFallback(
   stored: Readonly<Record<string, unknown>>,
   registry: BlockRegistry,
 ): Record<string, unknown> | null {
-  const mapping = provision.fallbackFrom
-  if (mapping === undefined) return null
   const definition = registry.get(provision.fallback)
   if (definition === undefined) return null
+
+  const mapping = provision.fallbackFrom
+  if (mapping === undefined) {
+    // No mapping, and the author chose `prose`: build the paragraphs out of
+    // the block's own text, in the order it was declared. Most blocks have no
+    // natural mapping into a vocabulary block, and asking every author to
+    // invent one only means most of them will not — and the page loses the
+    // words. Nothing is invented here: every paragraph is text someone typed
+    // into this very block.
+    return provision.fallback === 'prose' ? proseFromText(provision, stored, definition) : null
+  }
 
   const candidate: Record<string, unknown> = {
     _key: stored['_key'],
@@ -107,6 +116,47 @@ export function pluginBlockFallback(
   // to the placement, not to the plugin, so it survives the degradation.
   if (stored['variant'] !== undefined) candidate['variant'] = stored['variant']
 
+  const parsed = definition.validator.safeParse(candidate)
+  return parsed.success ? (parsed.data as Record<string, unknown>) : null
+}
+
+/** Plain text a block holds, in the order its manifest declares the fields. */
+function textValues(
+  provision: PluginBlockProvision,
+  stored: Readonly<Record<string, unknown>>,
+): readonly string[] {
+  const found: string[] = []
+  for (const [name, field] of Object.entries(provision.fields ?? {})) {
+    if (field.kind !== 'text') continue
+    const value = stored[name]
+    if (typeof value === 'string' && value.trim() !== '') found.push(value)
+  }
+  return found.slice(0, MAX_FALLBACK_PARAGRAPHS)
+}
+
+/** Past this a degraded block is a wall of text where a component used to be. */
+const MAX_FALLBACK_PARAGRAPHS = 20
+
+function proseFromText(
+  provision: PluginBlockProvision,
+  stored: Readonly<Record<string, unknown>>,
+  definition: AnyBlockDefinition,
+): Record<string, unknown> | null {
+  const paragraphs = textValues(provision, stored)
+  if (paragraphs.length === 0) return null
+  const candidate = {
+    _key: stored['_key'],
+    _type: definition.name,
+    _version: definition.version,
+    body: paragraphs.map((text, index) => ({
+      _key: `p${index}`,
+      _type: 'block',
+      style: 'normal',
+      markDefs: [],
+      children: [{ _key: `s${index}`, _type: 'span', text, marks: [] }],
+    })),
+    ...(stored['variant'] === undefined ? {} : { variant: stored['variant'] }),
+  }
   const parsed = definition.validator.safeParse(candidate)
   return parsed.success ? (parsed.data as Record<string, unknown>) : null
 }

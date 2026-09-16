@@ -391,9 +391,15 @@ registered beside it, and it declares a `fallback` — a vocabulary block to dra
 place when your plugin is not there. That is what stops a plugin from taking a page
 hostage: uninstall it and the page degrades, it does not empty.
 
-Because your block's data will not satisfy the fallback's own schema, the manifest also
-says where the fallback's fields come from. Without that map, "it falls back to `quote`"
-would mean "it disappears".
+Because your block's data will not satisfy the fallback's own schema, the manifest also says
+where the fallback's fields come from. Without that map, "it falls back to `quote`" would
+mean "it disappears".
+
+One case needs no map: **`fallback: "prose"`**. Most blocks have no natural mapping into a
+vocabulary block, so a plugin block that falls back to prose and declares no mapping keeps
+its own text as paragraphs, in the order its fields are declared — nothing invented, only
+what someone typed into that block. Declare `fallbackFrom` when you want something more
+precise than that.
 
 ```json
 "provides": {

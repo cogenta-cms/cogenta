@@ -122,12 +122,51 @@ describe('a block a plugin declares', () => {
     })
   })
 
+  it('keeps the words as paragraphs when the author named prose and no mapping', () => {
+    const registry = createBlockRegistry()
+    const provision = {
+      name: 'comparisonTable',
+      fallback: 'prose',
+      fields: {
+        heading: { kind: 'text', required: true },
+        leftLabel: { kind: 'text', required: true },
+        rows: { kind: 'list', of: { criterion: { kind: 'text' } } },
+      },
+    } as const
+
+    const degraded = pluginBlockFallback(
+      provision,
+      {
+        _key: 'a',
+        heading: 'Cogenta face aux CMS classiques',
+        leftLabel: 'Cogenta',
+        rows: [{ _key: 'r1', criterion: 'Agents intégrés' }],
+      },
+      registry,
+    ) as { _type: string; body: { children: { text: string }[] }[] } | null
+
+    // Most blocks have no natural mapping into a vocabulary block. Rather than
+    // lose the words, the text the author typed becomes paragraphs — in the
+    // order the manifest declares the fields, and nothing but that text.
+    expect(degraded?._type).toBe('prose')
+    expect(degraded?.body.map((block) => block.children[0]?.text)).toEqual([
+      'Cogenta face aux CMS classiques',
+      'Cogenta',
+    ])
+  })
+
   it('leaves a blank slot rather than markup built from the wrong fields', () => {
     const registry = createBlockRegistry()
 
-    // No mapping declared: nothing is invented.
+    // No mapping declared, and a fallback that is not prose: nothing is
+    // invented, because there is no honest way to know which field is which.
     expect(
       pluginBlockFallback({ name: 'callout', fallback: 'quote' }, { _key: 'a' }, registry),
+    ).toBeNull()
+    // And prose with nothing to say stays empty rather than becoming a blank
+    // paragraph.
+    expect(
+      pluginBlockFallback({ name: 'callout', fallback: 'prose' }, { _key: 'a' }, registry),
     ).toBeNull()
 
     // A mapping that does not produce what the fallback requires (`quote`

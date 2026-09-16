@@ -6,6 +6,7 @@ import type { PluginGrant } from '../permissions/grants.js'
 import { resolveGrantedCapabilities } from '../permissions/resolve.js'
 import type { PluginUsageStore } from '../permissions/usage.js'
 import type { CapabilityHandler } from './capabilities.js'
+import { runInPermissionedProcess, supportsPermissionModel } from './process-runner.js'
 import type {
   WorkerGuestMessage,
   WorkerHostReplyMessage,
@@ -48,6 +49,13 @@ export interface RunIsolatedOptions {
   readonly describeHandlers?: boolean
   /** Called with each line a plugin logged, so a host can put it in its own logger. */
   readonly onLog?: (line: string) => void
+  /**
+   * Where the plugin runs. `'process'` (the default) forks a child under
+   * Node's permission model; `'worker'` uses a worker thread, which shares
+   * this process and is therefore weaker — it exists for a runtime without
+   * the permission model, and for the tests that keep that path honest.
+   */
+  readonly isolation?: 'process' | 'worker'
   /** Real V8 heap ceiling for the worker's old-generation heap. */
   readonly maxOldGenerationSizeMb?: number
   /**
@@ -75,6 +83,24 @@ export interface RunIsolatedOptions {
 const DEFAULT_TIMEOUT_MS = 2000
 const DEFAULT_MAX_OLD_GENERATION_MB = 64
 
+let fallbackWarned = false
+
+/**
+ * Said out loud, once per process: a host running plugins in a thread rather
+ * than in a permission-restricted child has a weaker boundary than the one
+ * this package documents, and a silent downgrade is how a security property
+ * turns into a rumour. `emitWarning` rather than a logger, because this layer
+ * has no logger and must not take one to say a single sentence.
+ */
+function warnOnceAboutFallback(): void {
+  if (fallbackWarned) return
+  fallbackWarned = true
+  process.emitWarning(
+    `Node ${process.versions.node} has no permission model (22.5 or later required): plugins run in a worker thread, which shares this process. Upgrade Node to isolate them in a restricted child process.`,
+    'CogentaPluginIsolation',
+  )
+}
+
 export interface IsolatedRunResult {
   readonly ok: boolean
   readonly value?: unknown
@@ -95,6 +121,14 @@ export interface IsolatedRunResult {
    * just not one of the two named-and-required policies.
    */
   readonly reason?: PluginViolationReason
+  /**
+   * Where the code actually ran. Reported rather than assumed, because the
+   * two are not equally strong: `'process'` is a child under Node's
+   * permission model (no filesystem, no `child_process`, empty environment),
+   * `'worker'` is a thread inside the host's own process. A host that shows
+   * a plugin's run to a human can say which one it got.
+   */
+  readonly isolation: 'process' | 'worker'
 }
 
 /**
@@ -169,6 +203,29 @@ export async function runIsolated(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const grantedCapabilities = options.grantedCapabilities ?? []
   const handlers = options.handlers ?? {}
+  const maxOldGenerationSizeMb = options.maxOldGenerationSizeMb ?? DEFAULT_MAX_OLD_GENERATION_MB
+
+  // A forked process under the permission model is the real boundary: even a
+  // total escape from the `vm` lands where no file can be read and nothing
+  // can be spawned. A worker thread shares this process, so it is the
+  // fallback, never the default — and a caller that asks for it explicitly
+  // (this package's own tests do, to keep exercising that path) gets it.
+  const wanted = options.isolation ?? 'process'
+  if (wanted === 'process' && !supportsPermissionModel()) warnOnceAboutFallback()
+  if (wanted === 'process' && supportsPermissionModel()) {
+    const startedAt = Date.now()
+    const result = await runInPermissionedProcess(code, {
+      timeoutMs,
+      maxOldGenerationSizeMb,
+      grantedCapabilities,
+      handlers,
+      ...(options.invoke === undefined ? {} : { invoke: options.invoke }),
+      ...(options.input === undefined ? {} : { input: options.input }),
+      ...(options.describeHandlers === true ? { describeHandlers: true } : {}),
+      ...(options.onLog === undefined ? {} : { onLog: options.onLog }),
+    })
+    return { ...result, isolation: 'process', durationMs: Date.now() - startedAt }
+  }
   const id = nextRequestId
   nextRequestId += 1
 
@@ -192,12 +249,12 @@ export async function runIsolated(
 
   return await new Promise<IsolatedRunResult>((resolve) => {
     let settled = false
-    const finish = (result: Omit<IsolatedRunResult, 'durationMs'>): void => {
+    const finish = (result: Omit<IsolatedRunResult, 'durationMs' | 'isolation'>): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       void worker.terminate()
-      resolve({ ...result, durationMs: Date.now() - startedAt })
+      resolve({ ...result, isolation: 'worker', durationMs: Date.now() - startedAt })
     }
 
     const timer = setTimeout(() => {
@@ -228,6 +285,9 @@ export async function runIsolated(
       // sends `sdk-call` and `plugin-log` besides `result`/`error` —
       // `callback-call` belongs to `runIsolatedModule`'s own, different guest.
       if (message.type === 'callback-call') return
+      // `guest-ready` belongs to the forked-process guest, which waits for
+      // its `run`; a worker gets one at spawn and never sends it.
+      if (message.type === 'guest-ready') return
       void handleSdkCall(message, handlers, grantedCapabilities, worker)
     })
 
@@ -344,12 +404,12 @@ export async function runIsolatedModule(
 
   return await new Promise<IsolatedRunResult>((resolve) => {
     let settled = false
-    const finish = (result: Omit<IsolatedRunResult, 'durationMs'>): void => {
+    const finish = (result: Omit<IsolatedRunResult, 'durationMs' | 'isolation'>): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       void worker.terminate()
-      resolve({ ...result, durationMs: Date.now() - startedAt })
+      resolve({ ...result, isolation: 'worker', durationMs: Date.now() - startedAt })
     }
 
     const timer = setTimeout(() => {
@@ -486,10 +546,10 @@ export async function runIsolatedOrThrow(
   const result = await runIsolated(code, options)
   if (result.ok) return result.value
   throw new CogentaError({
-    code:
-      result.error === 'plugin worker timed out'
-        ? 'PLUGIN_WORKER_TIMEOUT'
-        : 'PLUGIN_WORKER_RUNTIME_ERROR',
+    // The reason, never the message: the two isolation paths word a timeout
+    // differently, and a security-relevant classification that depends on a
+    // sentence is one refactor away from silently becoming wrong.
+    code: result.reason === 'timeout' ? 'PLUGIN_WORKER_TIMEOUT' : 'PLUGIN_WORKER_RUNTIME_ERROR',
     message: result.error ?? 'Plugin worker failed for an unknown reason.',
     hint: 'Check the plugin code for an unhandled error, an infinite loop, or excessive memory use.',
   })

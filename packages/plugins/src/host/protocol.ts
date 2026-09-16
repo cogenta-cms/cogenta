@@ -148,6 +148,11 @@ export interface WorkerCallbackCallMessage {
   readonly args: readonly unknown[]
 }
 
+/** Guest → host: the child process is up and waiting for its one `run` message. */
+export interface WorkerGuestReadyMessage {
+  readonly type: 'guest-ready'
+}
+
 /** Worker → host: one line a plugin logged, already bounded and stringified by the guest. */
 export interface WorkerPluginLogMessage {
   readonly type: 'plugin-log'
@@ -160,3 +165,4 @@ export type WorkerGuestMessage =
   | WorkerSdkCallMessage
   | WorkerCallbackCallMessage
   | WorkerPluginLogMessage
+  | WorkerGuestReadyMessage

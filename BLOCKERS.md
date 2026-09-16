@@ -840,12 +840,19 @@ la qualité réelle du code qu'un modèle écrit ne l'est pas ; (2) dix capacit�
 failles critiques réelles ont été trouvées et corrigées (évasion du bac à sable `vm` par les
 objets de l'hôte injectés dans le contexte ; manifeste exécuté dans le processus hôte), plus
 quatre constats moindres (SSRF par redirection, XSS possible via une route de plugin,
-absence de plafond de workers, réponse non bornée). Ce qui **reste ouvert** : un contexte
-`vm` n'est pas une frontière de sécurité à lui seul — les chemins connus sont fermés et
-couverts par des tests, mais la vraie isolation serait un **processus séparé sous le modèle
-de permissions de Node** (`--permission --allow-fs-read=…`), jamais un thread partageant le
-processus de l'hôte. Tant que ce n'est pas fait, un plugin tiers reste un code à relire, pas
-un code à ignorer : ne jamais installer un plugin qu'on n'a pas lu. L'écran « Extensions installées » (tâche 1) lit
+absence de plafond de workers, réponse non bornée). **Ce qui restait ouvert est fait** : un
+contexte `vm` n'étant pas une frontière de sécurité à lui seul, un plugin s'exécute
+désormais par défaut dans un **processus enfant sous le modèle de permissions de Node**
+(`fork` avec `--permission --allow-fs-read=<répertoire du guest>/*`, `env: {}`,
+`--max-old-space-size`) — même une évasion totale du `vm` atterrit là où `fs` et
+`child_process` répondent `ERR_ACCESS_DENIED` et où l'environnement est vide. Le thread
+worker reste le repli pour un runtime antérieur à Node 22.5, annoncé une fois par un vrai
+`process.emitWarning` plutôt que silencieusement, et chaque résultat d'exécution porte
+`isolation: 'process' | 'worker'` pour qu'un écran puisse dire lequel il a eu. Les drapeaux
+eux-mêmes sont testés (`test/host/process-isolation.test.ts` fait tourner la liste exacte
+que le runner passe, et vérifie les trois refus sur cette machine), pas seulement commentés.
+**Reste vrai malgré tout** : un plugin tiers est un code à relire — le processus restreint
+borne ce qu'il peut atteindre, il ne dit pas ce qu'il fait des capacités qu'on lui accorde. L'écran « Extensions installées » (tâche 1) lit
 donc un `PluginUsageStore` et un `PluginDisableStore` réels, câblés et testés de bout en
 bout, mais qui resteront vides sur un vrai déploiement tant qu'aucun pipeline
 d'exécution de plugin n'existe — l'écran le dit honnêtement (« Jamais exécutée ») plutôt

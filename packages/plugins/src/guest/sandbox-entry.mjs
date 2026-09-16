@@ -1,5 +1,5 @@
-import vm from 'node:vm'
 import { parentPort } from 'node:worker_threads'
+import { runInSandbox, sealed } from './sandbox-core.mjs'
 
 /**
  * The sandbox a plugin's code actually runs in.
@@ -47,12 +47,6 @@ let nextCallId = 1
 /** Pending SDK calls this sandbox is waiting on a host reply for, keyed by `callId`. */
 const pendingSdkCalls = new Map()
 
-/** A function this realm owns but whose prototype chain leads nowhere. */
-function sealed(fn) {
-  Object.setPrototypeOf(fn, null)
-  return fn
-}
-
 /**
  * The one function the context receives from this realm: it takes and returns
  * JSON strings only, and its prototype is stripped so nothing can climb from
@@ -78,91 +72,12 @@ const bridge = sealed((method, argsJson) => {
 
 /**
  * Hands one line to the host on the plugin's behalf, without giving it a real
- * `console`: a plugin's log goes through the host's structured logger, like
- * everything else this project writes, and never to stdout from in here.
- * One bounded string, never the plugin's own objects — what it logs must not
- * be a live reference the host then holds.
+ * `console`: a plugin's log goes through the host's structured logger, and
+ * never to stdout from in here.
  */
 const log = sealed((line) => {
   parentPort.postMessage({ type: 'plugin-log', line: String(line).slice(0, 2000) })
 })
-
-/**
- * Built inside the context, from the context's own intrinsics. `capabilities`
- * arrives as a JSON string for the same reason everything else does.
- */
-const BOOTSTRAP = `(function (bridge, log, capabilitiesJson) {
-  const capabilities = JSON.parse(capabilitiesJson)
-  const sdk = {}
-  for (const capability of capabilities) {
-    const separator = capability.indexOf(':')
-    const name = separator === -1 ? capability : capability.slice(0, separator)
-    const dot = name.indexOf('.')
-    if (dot === -1) continue
-    const namespace = name.slice(0, dot)
-    const method = name.slice(dot + 1)
-    if (sdk[namespace] === undefined) sdk[namespace] = {}
-    if (sdk[namespace][method] === undefined) {
-      sdk[namespace][method] = async (args) => {
-        const raw = await bridge(name, JSON.stringify(args === undefined ? null : args))
-        return JSON.parse(raw)
-      }
-    }
-  }
-  globalThis.sdk = sdk
-  globalThis.console = {
-    log: (...parts) => log(parts.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' ')),
-  }
-  globalThis.console.info = globalThis.console.log
-  globalThis.console.warn = globalThis.console.log
-  globalThis.console.error = globalThis.console.log
-  delete globalThis.__bridge
-  delete globalThis.__log
-  delete globalThis.__capabilities
-})(globalThis.__bridge, globalThis.__log, globalThis.__capabilities)`
-
-/**
- * Runs the plugin and answers, entirely inside the context: the handler is
- * called there, the result is stringified there, and only a string comes
- * back. `describeHandlers` lists the handlers without calling one.
- */
-const RUNNER = `(function (codeText, invoke, inputJson, describeHandlers) {
-  const evaluated = (0, eval)(codeText)
-  const settle = (value) => {
-    try {
-      // A function, a symbol or undefined stringifies to nothing at all:
-      // that is the boundary doing its job, and "null" is what it means.
-      const json = JSON.stringify(value === undefined ? null : value)
-      return json === undefined ? 'null' : json
-    } catch {
-      return 'null'
-    }
-  }
-  if (describeHandlers === true) {
-    const keys =
-      evaluated !== null && typeof evaluated === 'object'
-        ? Object.keys(evaluated).filter(
-            (key) => Object.hasOwn(evaluated, key) && typeof evaluated[key] === 'function',
-          )
-        : []
-    return Promise.resolve(settle(keys))
-  }
-  const finish = (value) =>
-    value !== null && typeof value === 'object' && typeof value.then === 'function'
-      ? value.then(settle)
-      : Promise.resolve(settle(value))
-  if (typeof invoke !== 'string') return finish(evaluated)
-  // Own properties only: every object inherits "constructor" and friends, and
-  // calling one of those would be calling something the plugin never exposed.
-  const handler =
-    evaluated !== null && typeof evaluated === 'object' && Object.hasOwn(evaluated, invoke)
-      ? evaluated[invoke]
-      : undefined
-  if (typeof handler !== 'function') {
-    throw new Error('this plugin exposes no "' + invoke + '" handler')
-  }
-  return finish(handler(inputJson === undefined ? undefined : JSON.parse(inputJson)))
-})`
 
 parentPort.on('message', (message) => {
   if (message == null) return
@@ -184,28 +99,16 @@ parentPort.on('message', (message) => {
   void (async () => {
     let result
     try {
-      // An empty context: it gets the intrinsics a fresh realm has, and not
-      // one object of this one.
-      const context = vm.createContext(Object.create(null), {
-        codeGeneration: { strings: true, wasm: false },
+      const value = await runInSandbox({
+        code,
+        grantedCapabilities,
+        invoke,
+        input,
+        describeHandlers,
+        bridge,
+        log,
       })
-      context.__bridge = bridge
-      context.__log = log
-      context.__capabilities = JSON.stringify(grantedCapabilities ?? [])
-      vm.runInContext(BOOTSTRAP, context, { timeout: 1000 })
-
-      const runner = vm.runInContext(RUNNER, context, { timeout: 1000 })
-      // A second, independent time bound on top of the host's own
-      // worker.terminate() timeout — this one stops a synchronous infinite
-      // loop from inside the same thread, which a host-side terminate() can
-      // be slow to land on under heavy CPU contention.
-      const answer = await runner(
-        String(code),
-        typeof invoke === 'string' ? invoke : undefined,
-        input === undefined ? undefined : JSON.stringify(input),
-        describeHandlers === true,
-      )
-      result = { id, type: 'result', value: JSON.parse(String(answer)) }
+      result = { id, type: 'result', value }
     } catch (error) {
       result = {
         id,

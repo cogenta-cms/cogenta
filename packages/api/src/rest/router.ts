@@ -9,6 +9,7 @@ import {
   parseAssignReviewerBody,
   parseCreateBody,
   parseDuplicateBody,
+  parseReplaceBody,
   parseRestoreBody,
   parseSubmitBody,
   parseUnpublishBody,
@@ -43,6 +44,7 @@ import { parseListQuery, parsePositiveInteger, parseReadQuery, single } from './
  *   DELETE /{collection}/{id}              move to the trash (schema@2.0)
  *   POST   /{collection}/{id}/untrash      take it back out
  *   POST   /{collection}/{id}/visibility   public, private or password-protected
+ *   POST   /-/replace                     find a phrase everywhere, then replace it
  *   POST   /{collection}/{id}/purge        delete it for good
  *   POST   /{collection}/{id}/publish      publish
  *   POST   /{collection}/{id}/unpublish    back to draft or archived
@@ -277,6 +279,18 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
       if (extra !== undefined) throw noRoute()
       if (method !== 'GET') return methodNotAllowed(['GET'])
       return jsonResponse(200, { data: await service.summary(context) })
+    }
+
+    // Search and replace across the collections this actor may edit (L34).
+    // Engine-level rather than collection-level, because one run crosses
+    // collections — and `POST` even for a preview: the phrase being looked
+    // for is content, and content does not belong in a URL or an access log.
+    if (name === 'replace') {
+      if (extra !== undefined) throw noRoute()
+      if (method !== 'POST') return methodNotAllowed(['POST'])
+      return jsonResponse(200, {
+        data: await service.replace(context, parseReplaceBody(request.body)),
+      })
     }
 
     if (name !== 'by-path' || extra !== undefined) throw noRoute()

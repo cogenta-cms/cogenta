@@ -128,6 +128,43 @@ export function parseUnpublishBody(body: unknown): {
   }
 }
 
+/**
+ * `POST /-/replace` (L34).
+ *
+ * `apply` defaults to absent, which the service reads as a preview: the
+ * dangerous value is the one a caller has to type.
+ */
+const replaceSchema = z.object({
+  find: z.string().min(1).max(500),
+  replace: z.string().max(500),
+  caseInsensitive: z.boolean().optional(),
+  wholeWord: z.boolean().optional(),
+  collections: z.array(z.string().min(1)).max(100).optional(),
+  apply: z.boolean().optional(),
+  limit: z.number().int().min(1).max(500).optional(),
+})
+
+export function parseReplaceBody(body: unknown): {
+  readonly find: string
+  readonly replace: string
+  readonly caseInsensitive?: boolean
+  readonly wholeWord?: boolean
+  readonly collections?: readonly string[]
+  readonly apply?: boolean
+  readonly limit?: number
+} {
+  const parsed = decode(replaceSchema, body)
+  return {
+    find: parsed.find,
+    replace: parsed.replace,
+    ...(parsed.caseInsensitive === undefined ? {} : { caseInsensitive: parsed.caseInsensitive }),
+    ...(parsed.wholeWord === undefined ? {} : { wholeWord: parsed.wholeWord }),
+    ...(parsed.collections === undefined ? {} : { collections: parsed.collections }),
+    ...(parsed.apply === undefined ? {} : { apply: parsed.apply }),
+    ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
+  }
+}
+
 export function parseVisibilityBody(body: unknown): {
   readonly visibility: 'public' | 'private' | 'password'
   readonly password?: string

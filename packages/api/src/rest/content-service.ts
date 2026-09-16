@@ -10,8 +10,11 @@ import {
   type ContentVisibility,
   type CreateInput,
   type DuplicateInput,
+  type EntryReplacementPlan,
   type EntryState,
   enrichWordDiffs,
+  planEntryReplacement,
+  type ReplaceOptions,
   type RouteMatch,
   resolveUrl,
   type SortOrder,
@@ -95,6 +98,33 @@ export interface ReadOptions {
   readonly depth: number
 }
 
+/** What a search-and-replace was asked to do (L34). */
+export interface ReplaceRequest extends ReplaceOptions {
+  /** Which collections to search. Absent means every one this actor may edit. */
+  readonly collections?: readonly string[]
+  /** `true` writes. Anything else is a preview, which is the default. */
+  readonly apply?: boolean
+  /** How many matching entries to plan for. Bounded, because a site is not a laptop. */
+  readonly limit?: number
+}
+
+export interface ReplaceReport {
+  readonly applied: boolean
+  /** How many entries were looked at, so a truncated answer can say so honestly. */
+  readonly scanned: number
+  /** True when the limit was reached before the search ran out of entries. */
+  readonly truncated: boolean
+  readonly entries: readonly EntryReplacementPlan[]
+  /** Entries the apply step left alone because they moved under it. */
+  readonly skipped?: readonly { readonly entryId: string; readonly reason: string }[]
+}
+
+/** How many matching entries one preview plans for, and the ceiling a caller may raise it to. */
+const DEFAULT_REPLACE_LIMIT = 50
+const MAX_REPLACE_LIMIT = 500
+/** Rows read per underlying page while the search walks a collection. */
+const REPLACE_SCAN_PAGE = 100
+
 export interface ContentService {
   readonly limits: QueryLimits
   /** Throws `CONTENT_NOT_FOUND` when the schema declares no such collection. */
@@ -170,6 +200,15 @@ export interface ContentService {
     id: string,
     options: ReadOptions,
   ): Promise<SerialisedEntry>
+  /**
+   * Finds a phrase across the collections this actor may edit, and — only
+   * when asked — replaces it (L34).
+   *
+   * Two steps in one method on purpose: the preview and the application must
+   * be computed by the same code, or the thing a person approved is not the
+   * thing that gets written.
+   */
+  replace(context: AccessContext, input: ReplaceRequest): Promise<ReplaceReport>
   /** The real delete: nothing is kept, and nothing comes back. */
   purge(context: AccessContext, name: string, id: string): Promise<void>
   /**
@@ -610,6 +649,93 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       // Only the published count is safe to hand back — see the interface
       // comment above.
       return { published: raw.published }
+    },
+
+    replace: async (context, input) => {
+      if (input.find === '') {
+        throw new CogentaError({
+          code: 'CONTENT_INVALID',
+          message: 'Nothing to search for.',
+          hint: 'Type the phrase to find.',
+        })
+      }
+
+      // Only collections this actor may *edit*. Not "may read": a preview
+      // shows the text around every match, so a search someone could run over
+      // a collection they may only read would be a way to read it in bulk
+      // through a tool meant for editing.
+      const targets = options.collections.filter(
+        (candidate) =>
+          (input.collections === undefined || input.collections.includes(candidate.name)) &&
+          permissions.can('update', candidate, context).allowed,
+      )
+
+      const limit = Math.min(Math.max(input.limit ?? DEFAULT_REPLACE_LIMIT, 1), MAX_REPLACE_LIMIT)
+      const plans: EntryReplacementPlan[] = []
+      let scanned = 0
+      let truncated = false
+
+      for (const target of targets) {
+        let cursor: string | undefined
+        for (;;) {
+          const page = await store(target).list({
+            state: 'working',
+            limit: REPLACE_SCAN_PAGE,
+            ...(cursor === undefined ? {} : { cursor }),
+          })
+          for (const entry of page.items) {
+            scanned += 1
+            const plan = planEntryReplacement(target, entry, input)
+            if (plan.occurrences === 0) continue
+            if (plans.length >= limit) {
+              truncated = true
+              break
+            }
+            plans.push(plan)
+          }
+          const next = page.nextCursor
+          if (next === null || next === undefined || truncated) break
+          cursor = next
+        }
+        if (truncated) break
+      }
+
+      if (input.apply !== true) {
+        return { applied: false, scanned, truncated, entries: plans }
+      }
+
+      // Applied through the ordinary write path, deliberately: validation, a
+      // new version in the history, the search index and the content events
+      // all come with it, so a replacement is undone entry by entry from the
+      // History tab like any other edit. A direct UPDATE would have none of
+      // that, which is the whole reason this tool exists.
+      const applied: EntryReplacementPlan[] = []
+      const skipped: { readonly entryId: string; readonly reason: string }[] = []
+      for (const plan of plans) {
+        const target = options.collections.find((candidate) => candidate.name === plan.collection)
+        if (target === undefined) continue
+        // Re-read and re-plan at the moment of writing: between the preview
+        // and the apply someone may have edited the entry, and writing the
+        // preview's values would silently discard their change.
+        const current = await store(target).read(plan.entryId, { state: 'working' })
+        if (current === null) {
+          skipped.push({ entryId: plan.entryId, reason: 'gone' })
+          continue
+        }
+        const fresh = planEntryReplacement(target, current, input)
+        if (fresh.occurrences === 0) {
+          skipped.push({ entryId: plan.entryId, reason: 'changed' })
+          continue
+        }
+        await store(target).update(plan.entryId, {
+          ...(fresh.values === undefined ? {} : { values: fresh.values }),
+          ...(fresh.blocks === undefined ? {} : { blocks: fresh.blocks }),
+          updatedBy: context.actor.id,
+        })
+        applied.push(fresh)
+      }
+
+      return { applied: true, scanned, truncated, entries: applied, skipped }
     },
 
     summary: async (context) => {

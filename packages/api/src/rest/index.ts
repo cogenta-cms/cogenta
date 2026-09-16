@@ -55,6 +55,7 @@ export type { AuthRouter, AuthRouterOptions, ForgotPasswordEvent } from './auth-
 export { createAuthRouter, resolveActor } from './auth-router.js'
 export {
   parseCreateBody,
+  parseReplaceBody,
   parseRestoreBody,
   parseUpdateBody,
   parseVisibilityBody,

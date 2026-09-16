@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 #
-# Publish the sixteen packages `@cogenta/cli@0.8.0` already depends on and npm
-# does not have.
+# Publish the workspace packages npm has never had a version of.
+#
+# Today that is two: `@cogenta/widgets` and `@cogenta/starters`. They must be
+# on the registry **before** the push that lets CI publish everything else,
+# because `@cogenta/api`, `@cogenta/cli` and `create-cogenta` pin them to an
+# exact version — published first, those three would be uninstallable, the
+# very incident this script was first written to repair (`@cogenta/cli@0.8.0`).
 #
 # Why this script exists, and why it is run by hand.
 #
@@ -14,11 +19,8 @@
 # CI as usual, provided the human then links each package to the workflow on
 # npmjs.com.
 #
-# **The versions here are deliberately not bumped.** `@cogenta/cli@0.8.0` is
-# already on the registry and pins each of these to an exact version — it asks
-# for `@cogenta/analytics@0.3.3`, not `^0.3.3`. Publishing anything higher
-# leaves that release permanently uninstallable. These are the exact versions
-# it asks for, which is what makes this a repair rather than a new release.
+# The versions are the ones already in each package.json: build first
+# (`pnpm build`), so `dist/` is what the source says.
 #
 # Order is dependency-first. It does not matter to the registry, which accepts
 # a package whose dependencies do not exist yet, but it matters if the run
@@ -40,22 +42,8 @@ cd "$(dirname "$0")/.." || exit 1
 PUBLISH_FLAGS="--provenance=false --no-git-checks --access public"
 
 PACKAGES="
-packages/analytics|@cogenta/analytics|0.3.3
-packages/comments|@cogenta/comments|0.2.3
-packages/commerce|@cogenta/commerce|0.4.3
-packages/export|@cogenta/export|0.2.3
-packages/forms|@cogenta/forms|0.2.4
-packages/observability|@cogenta/observability|0.2.3
-packages/theme-kit|@cogenta/theme-kit|0.3.2
-packages/theme-association|@cogenta/theme-association|0.3.2
-packages/theme-blog|@cogenta/theme-blog|0.3.2
-packages/theme-docs|@cogenta/theme-docs|0.3.2
-packages/theme-ecommerce|@cogenta/theme-ecommerce|1.1.2
-packages/theme-entreprise|@cogenta/theme-entreprise|1.1.2
-packages/theme-magazine|@cogenta/theme-magazine|1.1.2
-packages/theme-portfolio|@cogenta/theme-portfolio|1.1.2
-packages/theme-restaurant|@cogenta/theme-restaurant|0.3.2
-packages/theme-saas|@cogenta/theme-saas|0.3.2
+packages/widgets|@cogenta/widgets|0.2.3
+packages/starters|@cogenta/starters|0.1.5
 "
 
 # Swallowing this error once cost a whole round trip: the script said "not

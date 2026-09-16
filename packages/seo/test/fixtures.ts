@@ -121,6 +121,9 @@ export function makeEntry(overrides: EntryOverrides = {}): ContentEntry {
     deletedAt: null,
     reviewState: 'none',
     assignedReviewer: null,
+    // `schema@2.3`: public, the only visibility a sitemap or a canonical tag
+    // is ever computed for (ADR-0037).
+    visibility: 'public',
     locale: overrides.locale ?? 'en',
     translationOf: overrides.translationOf ?? null,
     version: 1,

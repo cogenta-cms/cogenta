@@ -1,5 +1,12 @@
 # @cogenta/fleet
 
+## 0.1.14
+
+### Patch Changes
+
+- Updated dependencies [`506c774`]:
+  - @cogenta/plugins@0.8.0
+
 ## 0.1.13
 
 ### Patch Changes

@@ -1,7 +1,7 @@
 import { type HtmlElement, h } from '@cogenta/theme-kit'
 
 /**
- * The lock screen of a password-protected page (`schema@2.2`, ADR-0034).
+ * The lock screen of a password-protected page (`schema@2.3`, ADR-0037).
  *
  * Deliberately the page itself, not a separate one: the theme still draws its
  * header, its footer and the entry's own title, and only the content is

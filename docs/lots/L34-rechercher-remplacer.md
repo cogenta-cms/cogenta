@@ -99,7 +99,7 @@ Aucun contrat n'a bougé : une fonction et une route ajoutées, pas d'ADR.
 1. **L'audit ignorait tout ce lot, et L33 avec.** Le journal d'audit de
    `cogenta serve` sautait l'espace de noms `-` (celui de la route) et ne
    connaissait pas l'action `visibility` : un changement de visibilité, depuis
-   `schema@2.2`, n'était inscrit nulle part. Les deux le sont.
+   `schema@2.3`, n'était inscrit nulle part. Les deux le sont.
 2. **L'aperçu était illisible sur du vrai contenu.** Sur le playground, la
    première capture montrait « page · 01a0a6a4 » à la place du titre, des
    chemins `blocks.blocks[2].data.heading` qui chevauchaient le texte, et

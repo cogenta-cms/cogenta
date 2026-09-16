@@ -252,7 +252,7 @@ export interface ContentService {
   /** The real delete: nothing is kept, and nothing comes back. */
   purge(context: AccessContext, name: string, id: string): Promise<void>
   /**
-   * Who may see this entry once it is published (`schema@2.2`, ADR-0034).
+   * Who may see this entry once it is published (`schema@2.3`, ADR-0037).
    * Gated by `publish`, borrowed the way the trash borrows `delete`.
    */
   setVisibility(
@@ -515,7 +515,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
    *
    * Two questions, one predicate: may this actor see an unpublished row
    * (`draftGateFor`), and may it see a *restricted* published one
-   * (`visibilityGateFor`, `schema@2.2`). Composing them here rather than at
+   * (`visibilityGateFor`, `schema@2.3`). Composing them here rather than at
    * each call site is what stops a private entry slipping through one read
    * path because someone remembered the draft rule and forgot the other.
    */
@@ -966,7 +966,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     },
 
     /**
-     * Who may see this entry once published (`schema@2.2`, ADR-0034).
+     * Who may see this entry once published (`schema@2.3`, ADR-0037).
      *
      * Gated by **`publish`**, borrowed the way the trash borrows `delete`:
      * the five actions of contract A are frozen, and this changes what the

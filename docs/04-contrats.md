@@ -19,6 +19,9 @@
 > taxonomie ouverte de `tools@1.1` (`document.extract`) : le décorateur
 > `strikethrough` et le nœud `hr` s'ajoutent au « Texte riche » ci-dessous, voir
 > cette section.
+> **Monté en `schema@2.3` le 2026-09-16** (ADR-0037 — visibilité par entrée), montée
+> **mineure et strictement additive** : voir « Champs système » ci-dessous. Annoncée
+> d'abord par erreur comme `schema@2.2`, numéro déjà pris par la fiche 42 ; corrigé.
 
 ### Définition d'un type
 
@@ -82,6 +85,7 @@ status: draft | scheduled | published | archived
 deletedAt: string | null
 reviewState: none | pending | changes-requested | approved
 assignedReviewer: string | null
+visibility: public | private | password
 locale · translationOf · version
 provenance: human | assisted | generated
 provenanceDetail: { agent, model, at, prompt? }
@@ -112,6 +116,22 @@ submit          none | changes-requested → pending           (action: update)
 approve         pending → approved                            (action: publish)
 requestChanges  pending → changes-requested                    (action: publish)
 ```
+
+**`visibility` (`schema@2.3`, ADR-0037) est orthogonal à `status`, comme `deletedAt` et
+`reviewState`.** Une page privée est `published` *et* privée ; la rendre publique ne la
+republie pas, cela lève une restriction. `'public'` par défaut, y compris pour toute
+entrée existante au moment de la migration.
+
+- `private` : visible des seuls acteurs à qui la couche de permissions accorderait
+  `update` sur la collection ; pour tous les autres l'entrée **n'existe pas** (404, pas
+  403), ni par identifiant, ni en liste, ni à travers une relation, ni dans la recherche
+  ou le sitemap.
+- `password` : l'entrée reste listée et liable ; son **contenu** est gardé. Le magasin
+  conserve une empreinte calculée par l'appelant et **n'offre aucun moyen de la
+  relire** (`setVisibility(id, visibility, { passwordHash })`,
+  `verifyEntryPassword(id, compare)`) ; rouvrir l'entrée efface l'empreinte.
+- Changer la visibilité exige l'action **`publish`** (`POST .../visibility`), empruntée
+  comme la corbeille emprunte `delete` : les cinq actions restent figées.
 
 Le workflow est **optionnel par collection** : `workflow: { enabled: true }` sur
 `defineCollection()`. Absent, une collection se comporte exactement comme avant
@@ -313,6 +333,14 @@ historique de relecture à perdre.
 ADR** — même traitement que `tools@1.1`/`document.extract` : un ajout par le bas à une
 taxonomie ouverte. Aucune signature existante modifiée ; un document stocké avant ce
 changement reste valide à l'identique.
+
+`schema@2.2 → 2.3` (ADR-0037, 2026-09-16) : ajout du champ système `visibility`
+(orthogonal à `status`) et de l'empreinte de mot de passe, jamais lisible ; nouvelles
+méthodes `ContentStore.setVisibility()`/`verifyEntryPassword()` ; nouvelle route REST
+`POST .../visibility`. **Strictement additive** : aucune signature existante n'a bougé,
+un client qui ignore `visibility` lit les mêmes statuts qu'avant. Migration réversible
+(`schema23Migration`, identifiant `0004_schema_2_2_entry_visibility` conservé tel
+qu'appliqué) ; le `down` supprime les deux colonnes et rend toute entrée publique.
 
 ---
 
@@ -663,7 +691,8 @@ defineAgent({
 
 > **Figé en `theme@1.3` le 2026-09-02, monté en `theme@1.4` le 2026-09-05 (L25 D2), puis en
 > `theme@1.5` le 2026-09-14 (L27, `PageEntryMeta.fields`), puis en `theme@1.6` le 2026-09-15
-> (L30, zones de widgets).**
+> (L30, zones de widgets), puis en `theme@1.7` le 2026-09-16 (L32, blocs et widgets de
+> plugin, ADR-0036).**
 > Ajouter une entrée à `ctx` est mineur ; en modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
@@ -1150,6 +1179,31 @@ pour dessiner un widget (R5).
 seule la feuille de style change. Ils rendent `null` quand une zone n'a rien à montrer, pour
 qu'un thème décide de sa mise en page sur la valeur de retour. Les appareils masqués arrivent en
 attributs (`data-hide-desktop|tablet|mobile`) : une même page en cache sert tous les écrans.
+
+### Blocs et widgets de plugin — `RenderContext.blockNodes`, `ResolvedWidget` `plugin` — theme@1.7
+
+Ajouté en L32 (ADR-0036), **optionnel et additif**. Un plugin fournit des types de bloc et
+de widget **à côté** du vocabulaire du contrat B, jamais dedans ; l'hôte exécute le plugin
+dans son propre processus, revalide l'arbre produit, et le remet au thème déjà calculé :
+
+```ts
+interface RenderContext {
+  /* … */
+  // Balisage déjà produit par l'hôte pour certains blocs, indexé par la `_key` contrat B.
+  readonly blockNodes?: Readonly<Record<string, HtmlElement>>
+}
+
+type ResolvedWidget =
+  | { readonly type: 'plugin'; readonly widgetType: string; readonly node: HtmlElement }
+  | /* … les types de theme@1.6 … */
+```
+
+Un thème honore `blockNodes` par une seule ligne, `providedBlockNode(ctx, block)`
+(`@cogenta/theme-kit`), avant son propre `switch` de blocs. Un thème qui l'ignore **n'est
+pas cassé** : il rend le repli (`fallback`) que le bloc de plugin déclare obligatoirement,
+la dégradation que le contrat B promet depuis L3. Côté widgets, aucun thème n'a de ligne à
+écrire : `renderWidgetArea` rend le nœud du membre `plugin` comme n'importe quel autre corps.
+Un nœud n'est jamais une chaîne HTML : c'est un arbre theme-kit, sans échappatoire `raw()`.
 
 ### Versionnement
 

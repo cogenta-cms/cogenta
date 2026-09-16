@@ -12,7 +12,7 @@ import { textColumn } from './columns.js'
 import { entriesTable } from './naming.js'
 
 /**
- * The `schema@2.1 → 2.2` migration (ADR-0034).
+ * The `schema@2.1 → 2.3` migration (ADR-0037).
  *
  * Adds the two columns per-entry visibility needs:
  *
@@ -34,12 +34,17 @@ import { entriesTable } from './naming.js'
  * ability to express one, on a project with no site in production.
  */
 
-export interface Schema22MigrationOptions {
+export interface Schema23MigrationOptions {
   readonly collections: readonly CollectionDefinition[]
   /** Overridable so a site can slot this into its own numbering. */
   readonly id?: string
 }
 
+// The id says `2_2` because the visibility contract was first labelled
+// `schema@2.2` — a number fiche 42 had already taken for `strikethrough`/`hr`.
+// The label is corrected to `schema@2.3`; the id is not, because it is what a
+// database that already ran this migration recorded, and renaming it would run
+// the migration a second time there.
 const DEFAULT_ID = '0004_schema_2_2_entry_visibility'
 
 function addVisibility(collection: CollectionDefinition, dialect: DatabaseDialect): SqlFragment {
@@ -67,12 +72,12 @@ function dropColumn(
   return sql`alter table ${table} drop column ${identifier(column, dialect)}`
 }
 
-export function schema22Migration(options: Schema22MigrationOptions): Migration {
+export function schema23Migration(options: Schema23MigrationOptions): Migration {
   const { collections } = options
 
   return {
     id: options.id ?? DEFAULT_ID,
-    name: 'schema@2.2 — per-entry visibility',
+    name: 'schema@2.3 — per-entry visibility',
     destructive: false,
     impact:
       "Adds visibility (not null, default 'public') and a nullable access_password column to " +

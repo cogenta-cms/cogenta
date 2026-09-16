@@ -46,7 +46,7 @@
   
   `cogenta serve` records every entry an applied replacement wrote in the audit
   log, with the phrase and its replacement. It also now records a visibility
-  change (`content.visibility`), which fell through unrecorded since `schema@2.2`.
+  change (`content.visibility`), which fell through unrecorded since `schema@2.3`.
 
 ### Patch Changes
 

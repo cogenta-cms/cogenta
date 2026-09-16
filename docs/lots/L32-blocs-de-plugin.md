@@ -194,7 +194,7 @@ des blocs natifs, et le widget « Chiffre clé » dans la barre latérale publiq
 
 ### Reste à faire, et limites assumées
 
-- **ADR-0033 rédigée, non insérée** (`docs/03-decisions.md` est protégé en
+- **ADR-0036 rédigée, non insérée** (`docs/03-decisions.md` est protégé en
   écriture — texte ci-dessous, à insérer par l'humain).
 - **Cache en mémoire**, borné à 500 rendus : un redémarrage le vide, donc un bloc
   de plugin sur une page très visitée paie un `fork` au premier affichage après
@@ -210,10 +210,10 @@ des blocs natifs, et le widget « Chiffre clé » dans la barre latérale publiq
   *type de bloc* déclare au thème, et un bloc de plugin est rendu par le plugin,
   pas par le thème. Le panneau de droite l'édite normalement.
 
-## ADR-0033 — prête à insérer (fichier protégé)
+## ADR-0036 — prête à insérer (fichier protégé)
 
 ```markdown
-## ADR-0033 — Un plugin étend le vocabulaire sans y entrer
+## ADR-0036 — Un plugin étend le vocabulaire sans y entrer
 
 **Date** : 2026-09-16
 **Statut** : acceptée

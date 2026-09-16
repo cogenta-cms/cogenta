@@ -251,7 +251,7 @@ export interface ThemeRenderOptions {
   readonly pluginStyleHrefs?: readonly string[]
   /**
    * Whether this visitor has already answered a protected entry's password
-   * (`schema@2.2`, ADR-0034). Absent means "nobody has": a protected page
+   * (`schema@2.3`, ADR-0037). Absent means "nobody has": a protected page
    * then renders its lock screen, which is the safe direction for a caller
    * that forgot to wire this.
    */

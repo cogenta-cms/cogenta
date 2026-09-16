@@ -19,7 +19,7 @@ import {
   versionsTable,
 } from '../../src/store/naming.js'
 import { schema21Migration } from '../../src/store/schema-2-1-migration.js'
-import { schema22Migration } from '../../src/store/schema-2-2-migration.js'
+import { schema23Migration } from '../../src/store/schema-2-3-migration.js'
 import { schema2Migration } from '../../src/store/schema-2-migration.js'
 import { createContentStore } from '../../src/store/store.js'
 import { createTaxonomyStore } from '../../src/store/taxonomy-store.js'
@@ -165,7 +165,7 @@ export function runSchema2MigrationContract(
       }
     }
 
-    // `createContentStore` targets the *current* shape (`schema@2.2`), so a
+    // `createContentStore` targets the *current* shape (`schema@2.3`), so a
     // test that exercises the live store after migrating up has to bring the
     // table all the way there — `schema2Migration` on its own only proves the
     // 1.0 → 2.0 step, which is still exactly what most of this file checks.
@@ -175,7 +175,7 @@ export function runSchema2MigrationContract(
         migrations: [
           schema2Migration({ collections: [article], taxonomies: [category] }),
           schema21Migration({ collections: [article] }),
-          schema22Migration({ collections: [article] }),
+          schema23Migration({ collections: [article] }),
         ],
       })
 
@@ -268,7 +268,7 @@ export function runSchema2MigrationContract(
       const trashed = await store.create({ values: { title: 'Jeté' } })
       await store.delete(trashed.id)
 
-      // Three steps now that the chain is 2.0 → 2.1 → 2.2: rolling back two
+      // Three steps now that the chain is 2.0 → 2.1 → 2.3: rolling back two
       // would leave `deleted_at` in place and prove nothing about 2.0.
       await migrator().down({ ...confirmed, steps: 3 })
 

@@ -4,14 +4,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { schema22Migration } from '../../src/store/schema-2-2-migration.js'
+import { schema23Migration } from '../../src/store/schema-2-3-migration.js'
 import { createContentStore } from '../../src/store/store.js'
 import { createSchemaTables } from '../../src/store/tables.js'
 import type { CollectionDefinition } from '../../src/types.js'
 
 /**
  * L33 step 1 — visibility is a field of its own, orthogonal to `status`
- * (`schema@2.2`, ADR-0034), and the password a protected entry asks for never
+ * (`schema@2.3`, ADR-0037), and the password a protected entry asks for never
  * leaves the store.
  */
 
@@ -146,7 +146,7 @@ describe('an entry’s visibility', () => {
 
   it('leaves an entry of a database written before the column existed public', async () => {
     // The migration's own promise: nothing becomes private by being migrated.
-    const migration = schema22Migration({ collections: [page] })
+    const migration = schema23Migration({ collections: [page] })
 
     expect(migration.destructive).toBe(false)
     expect(migration.impact).toContain("default 'public'")

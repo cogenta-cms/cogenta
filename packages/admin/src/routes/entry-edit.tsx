@@ -1522,7 +1522,7 @@ export function EntryEditRoute(): JSX.Element {
               </Card>
             )}
 
-            {/* Visibility (`schema@2.2`, ADR-0034): who may see this entry
+            {/* Visibility (`schema@2.3`, ADR-0037): who may see this entry
                 once it is published. Orthogonal to the status above — a
                 private page is published *and* private — and applied on its
                 own button because the server gates it on `publish` while the

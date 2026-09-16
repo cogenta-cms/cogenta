@@ -12,7 +12,7 @@ import {
 } from '../../src/store/columns.js'
 import { blocksTable, entriesTable, versionsTable } from '../../src/store/naming.js'
 import { schema21Migration } from '../../src/store/schema-2-1-migration.js'
-import { schema22Migration } from '../../src/store/schema-2-2-migration.js'
+import { schema23Migration } from '../../src/store/schema-2-3-migration.js'
 import { createContentStore } from '../../src/store/store.js'
 
 export interface MigrationHarness {
@@ -144,7 +144,7 @@ export function runSchema21MigrationContract(
         db,
         migrations: [
           schema21Migration({ collections: [article] }),
-          schema22Migration({ collections: [article] }),
+          schema23Migration({ collections: [article] }),
         ],
       })
 

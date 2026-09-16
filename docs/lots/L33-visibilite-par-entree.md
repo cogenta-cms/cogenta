@@ -30,7 +30,7 @@ restriction. Conséquences directes :
 - un client écrit avant ce lot lit exactement les statuts qu'il a toujours lus ;
 - « privé » et « planifié » se combinent sans se contredire.
 
-Contrat A monté en **`schema@2.2`** : additif, une migration réversible, sur le
+Contrat A monté en **`schema@2.3`** : additif, une migration réversible, sur le
 modèle exact de `schema21Migration`.
 
 ## Les règles de lecture, énoncées avant de coder
@@ -66,11 +66,11 @@ pas un second.
 
 | Étape | Contenu | État |
 |---|---|---|
-| 1 | Contrat A `schema@2.2` : `visibility` + le hash, migration réversible, magasin (poser/retirer un mot de passe sans jamais le relire) | **fait** |
+| 1 | Contrat A `schema@2.3` : `visibility` + le hash, migration réversible, magasin (poser/retirer un mot de passe sans jamais le relire) | **fait** |
 | 2 | Lecture filtrée : la porte par entrée apprend la visibilité, REST et GraphQL la traversent, sitemap et recherche excluent | **fait** |
 | 3 | La page protégée : formulaire, vérification, cookie signé, et le rendu réel derrière | **fait** |
 | 4 | L'admin : le contrôle « Visibilité » de l'éditeur d'entrée, façon WordPress | **fait** |
-| 5 | ADR-0034, documentation, tests de bout en bout | **fait** |
+| 5 | ADR-0037, documentation, tests de bout en bout | **fait** |
 
 ## Pièges connus, écrits avant de coder
 
@@ -162,10 +162,10 @@ refusée et sitemap propre) et le parcours complet dans un navigateur sur
 - **Le contrôle n'apparaît pas à la création** d'une entrée, seulement après le
   premier enregistrement — il faut une entrée pour lui donner une visibilité.
 
-## ADR-0034 — prête à insérer (fichier protégé)
+## ADR-0037 — prête à insérer (fichier protégé)
 
 ```markdown
-## ADR-0034 — La visibilité d'une entrée est orthogonale à son statut
+## ADR-0037 — La visibilité d'une entrée est orthogonale à son statut
 
 **Date** : 2026-09-16
 **Statut** : acceptée
@@ -192,7 +192,7 @@ Trois voies étaient possibles :
 ### Décision
 
 `visibility` (`'public' | 'private' | 'password'`) est un champ système
-orthogonal à `status`, en `schema@2.2`, additif et réversible. Avec lui :
+orthogonal à `status`, en `schema@2.3`, additif et réversible. Avec lui :
 
 - **privée** : visible des seuls acteurs à qui la couche de permissions
   accorderait `update` sur la collection. Pour les autres, **404 et non 403** —
@@ -209,7 +209,7 @@ par entrée, calqué sur les jetons de prévisualisation, d'une durée bornée.
 
 ### Conséquences
 
-- Le contrat A monte en `schema@2.2` sans qu'un client existant change une ligne.
+- Le contrat A monte en `schema@2.3` sans qu'un client existant change une ligne.
 - Le filtre vit dans la couche partagée par REST et GraphQL : une page privée ne
   peut pas fuir par un transport qui aurait oublié la règle.
 - Une page protégée n'est ni indexée ni décrite : son résumé est du contenu.

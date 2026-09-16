@@ -360,7 +360,7 @@ export async function collectRoutedResources(
         for (const entry of page.items) {
           // A password-protected entry is public enough to be linked to, but
           // not worth pointing a crawler at: nobody following that URL can
-          // read it (`schema@2.2`, ADR-0034). A private one never reaches
+          // read it (`schema@2.3`, ADR-0037). A private one never reaches
           // here at all — the gateway filtered it for `ANONYMOUS` already.
           if (entry.visibility === 'password') continue
           resources.push({ collection, entry })

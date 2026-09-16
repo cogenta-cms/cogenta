@@ -52,7 +52,7 @@ comme n'importe quel téléversement). Style volontairement abstrait — le regi
 templates SaaS/agence/portfolio modernes — et non des « fausses photos ». **Renoncement
 assumé** : un restaurant de démonstration n'aura pas de photo de plat ; il aura une
 composition chaude et élégante que le propriétaire remplace en un clic. Texte d'ADR prêt à
-insérer plus bas (ADR-0032 ; `docs/03-decisions.md` est protégé en écriture).
+insérer plus bas (ADR-0035 ; `docs/03-decisions.md` est protégé en écriture).
 
 ### D2 — `theme@1.4`, strictement additif
 
@@ -172,7 +172,7 @@ push.
 - [ ] Le blueprint `blank` produit un site octet pour octet identique à avant L25.
 - [ ] `demo-art` : zéro dépendance, PNG valides, rendu d'une composition < 2 s.
 - [ ] `pnpm turbo run build typecheck test --force` vert sur tout l'espace de travail.
-- [ ] Changesets pour chaque paquet publié touché ; contrat D documenté ; ADR-0032 rédigée.
+- [ ] Changesets pour chaque paquet publié touché ; contrat D documenté ; ADR-0035 rédigée.
 
 ## Pièges connus
 
@@ -190,10 +190,10 @@ push.
   L19 où le contenu généré par un modèle reste en brouillon : ici c'est du contenu de
   démonstration écrit par le projet, `provenance: 'human'`, pas la sortie d'un modèle).
 
-## ADR-0032 — prête à insérer (fichier protégé)
+## ADR-0035 — prête à insérer (fichier protégé)
 
 ```markdown
-## ADR-0032 — Les visuels de démonstration sont générés procéduralement, en PNG, sans dépendance
+## ADR-0035 — Les visuels de démonstration sont générés procéduralement, en PNG, sans dépendance
 
 **Statut** : Proposé (rédigée par L25, à insérer par l'humain)
 
@@ -362,7 +362,7 @@ réellement scaffoldé par `npm create cogenta` : `canonical` (référence), `bl
 `restaurant`, `association`. Chaque blueprint active son thème, sème 8 à 12 sections avec
 visuels, des entrées publiées avec couvertures, les menus, l'accroche, les liens sociaux et
 la note de pied de page ; `blank` reste vierge. Les visuels sont générés procéduralement en
-PNG (ADR-0032 rédigée, à insérer) en compositions plates.
+PNG (ADR-0035 rédigée, à insérer) en compositions plates.
 
 **Fondations posées par le lot** (réutilisables au-delà des thèmes) : `ChromeInput` 1.4
 (`tagline`/`social`/`footerNote`/`headerAction`), `PageContent.entry` + `renderEntryHeader`

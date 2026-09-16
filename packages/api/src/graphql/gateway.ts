@@ -259,7 +259,7 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
         state: stateForEntry(collection, id, context),
       })
       // A restricted entry is `null` here, not an error: to an actor who may
-      // not see it, it does not exist (`schema@2.2`, ADR-0034), and the
+      // not see it, it does not exist (`schema@2.3`, ADR-0037), and the
       // transport above turns that into the same answer as a wrong id.
       if (entry === null || !visibleToActor(permissions, collection, context, entry)) return null
       return entry

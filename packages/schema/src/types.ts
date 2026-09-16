@@ -54,7 +54,7 @@ export type ContentStatus = (typeof CONTENT_STATUSES)[number]
  * and would remove the control the `publish` permission grants.
  */
 /**
- * How an entry may be seen, orthogonal to its status (`schema@2.2`, ADR-0034).
+ * How an entry may be seen, orthogonal to its status (`schema@2.3`, ADR-0037).
  *
  * A private page is `published` *and* private: making it public does not
  * republish it, it lifts a restriction. Keeping this out of `ContentStatus`
@@ -285,7 +285,7 @@ export interface SystemFields {
   /** Who is expected to review this entry next, or `null`. Set at submission or chosen by an editor. */
   readonly assignedReviewer: string | null
   /**
-   * Who may see this entry once it is published (`schema@2.2`, ADR-0034).
+   * Who may see this entry once it is published (`schema@2.3`, ADR-0037).
    * `'public'` for everything written before the field existed.
    *
    * Orthogonal to `status`, exactly as `deletedAt` and `reviewState` are.

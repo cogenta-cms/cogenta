@@ -63,7 +63,7 @@ const unpublishSchema = z.object({
 const duplicateSchema = z.object({ values: valuesSchema.optional() })
 
 /**
- * `POST .../visibility` (`schema@2.2`, ADR-0034).
+ * `POST .../visibility` (`schema@2.3`, ADR-0037).
  *
  * The password is bounded like any other secret a person types: long enough
  * to be worth asking for, short enough that nobody stores a novel in a hash

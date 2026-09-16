@@ -172,8 +172,8 @@ export {
 } from './scheduled-publish-failures.js'
 export type { Schema21MigrationOptions } from './schema-2-1-migration.js'
 export { schema21Migration } from './schema-2-1-migration.js'
-export type { Schema22MigrationOptions } from './schema-2-2-migration.js'
-export { schema22Migration } from './schema-2-2-migration.js'
+export type { Schema23MigrationOptions } from './schema-2-3-migration.js'
+export { schema23Migration } from './schema-2-3-migration.js'
 export type { Schema2MigrationOptions } from './schema-2-migration.js'
 export { schema2Migration } from './schema-2-migration.js'
 export type {

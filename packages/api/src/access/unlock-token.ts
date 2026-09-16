@@ -1,8 +1,8 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 
 /**
- * The proof that a visitor answered a page's password (`schema@2.2`,
- * ADR-0034).
+ * The proof that a visitor answered a page's password (`schema@2.3`,
+ * ADR-0037).
  *
  * Deliberately the same shape as `preview-token.ts`, and for the same
  * reasons: signed rather than encrypted, because it carries no secret — only

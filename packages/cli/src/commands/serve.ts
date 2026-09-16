@@ -3393,7 +3393,7 @@ function isStoredSocialLinkList(value: unknown): value is readonly StoredSocialL
  * page itself uses, with the visitor's own access context.
  */
 /**
- * Whether this is the password the entry asks for (`schema@2.2`, ADR-0034).
+ * Whether this is the password the entry asks for (`schema@2.3`, ADR-0037).
  *
  * The comparison happens inside the store, which hands the hash to
  * `verifyPassword` and never to this file: the hash of a page's password has
@@ -3609,7 +3609,7 @@ function contentAuditAction(method: string, subAction: string | undefined): stri
       return 'content.untrash'
     case 'purge':
       return 'content.purge'
-    // Who may read a page is a decision of its own (`schema@2.2`), and one an
+    // Who may read a page is a decision of its own (`schema@2.3`), and one an
     // auditor will ask about: "who made this note public?". Found missing
     // while wiring L34 — it fell to `default` and was never recorded.
     case 'visibility':
@@ -4549,7 +4549,7 @@ export interface RuntimeExtras {
   readonly pluginStyleHrefs?: readonly string[]
   /**
    * Issues and checks the proof that a visitor answered a protected page's
-   * password (`schema@2.2`). Absent — a site built by hand in a test — means
+   * password (`schema@2.3`). Absent — a site built by hand in a test — means
    * a protected page simply stays locked.
    */
   readonly unlockTokens?: UnlockTokenService
@@ -6809,7 +6809,7 @@ export function createRequestListener(
       // list, and a body — never a header, so it cannot set a cookie on this
       // origin or turn its answer into a download.
       // `POST /_cogenta/unlock` — the visitor answers a protected page's
-      // password (`schema@2.2`, ADR-0034).
+      // password (`schema@2.3`, ADR-0037).
       //
       // A form POST rather than a link or a query parameter: a password must
       // never reach a URL, a referrer or an access log. The answer is a
@@ -7101,7 +7101,7 @@ export function createRequestListener(
             ? {}
             : { pluginStyleHrefs: extras.pluginStyleHrefs }),
           // Which protected pages this visitor has already answered
-          // (`schema@2.2`). Read from the request's own cookies, never from a
+          // (`schema@2.3`). Read from the request's own cookies, never from a
           // query parameter: a link carrying an unlock would be a link that
           // shares the page with whoever it is forwarded to.
           ...(extras?.unlockTokens === undefined
@@ -8695,7 +8695,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     },
   })
 
-  // The proof a visitor answered a protected page's password (`schema@2.2`).
+  // The proof a visitor answered a protected page's password (`schema@2.3`).
   // Signed with the site's own auth key rather than a second secret nobody
   // would remember to set.
   const unlockTokens = createUnlockTokens({ signingKey: loaded.config.auth.signingKey })

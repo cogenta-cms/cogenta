@@ -2,8 +2,8 @@ import type { CollectionDefinition, ContentEntry } from '@cogenta/schema'
 import type { AccessContext, PermissionLayer } from '../types.js'
 
 /**
- * Who may see an entry that is published but restricted (`schema@2.2`,
- * ADR-0034) — the second per-entry gate, beside the draft one, and in the
+ * Who may see an entry that is published but restricted (`schema@2.3`,
+ * ADR-0037) — the second per-entry gate, beside the draft one, and in the
  * same file's spirit: written once, composed by both transports.
  *
  * The rule, stated plainly:

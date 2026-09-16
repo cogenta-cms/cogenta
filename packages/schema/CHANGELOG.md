@@ -34,7 +34,7 @@
   
   `cogenta serve` records every entry an applied replacement wrote in the audit
   log, with the phrase and its replacement. It also now records a visibility
-  change (`content.visibility`), which fell through unrecorded since `schema@2.2`.
+  change (`content.visibility`), which fell through unrecorded since `schema@2.3`.
 
 ## 0.6.0
 
@@ -62,7 +62,7 @@
   without the password. A locked page is now rendered without its excerpt, and
   its SEO head is built from its title and slug alone, `noindex`.
 
-- An entry can be private or password-protected (`schema@2.2`)
+- An entry can be private or password-protected (`schema@2.3`)
   
   `visibility` joins `deletedAt` and `reviewState` as a field **orthogonal to
   `status`**: a private page is `published` *and* private, so making it public
@@ -75,7 +75,7 @@
   hash out, so no response can serialise it by accident. Turning a protected
   entry public clears the hash, so an old unlock cannot open it again later.
   
-  `schema22Migration` adds both columns, reversibly: `visibility` is `not null
+  `schema23Migration` adds both columns, reversibly: `visibility` is `not null
   default 'public'`, so nothing becomes private by being migrated.
 
 - A private entry is invisible everywhere it is read, not only on its page

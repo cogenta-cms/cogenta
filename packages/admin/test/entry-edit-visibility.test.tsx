@@ -4,7 +4,7 @@ import { App } from '../src/app.js'
 import { installMockFetch, mockEntryVisibility, VALID_TOKEN } from './helpers/mock-fetch.js'
 
 /**
- * The editor's « Visibilité » control (`schema@2.2`, ADR-0034) — WordPress's
+ * The editor's « Visibilité » control (`schema@2.3`, ADR-0037) — WordPress's
  * Public / Private / Password protected, in the same place and with the same
  * three meanings.
  */

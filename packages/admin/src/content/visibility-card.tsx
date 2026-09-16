@@ -6,7 +6,7 @@ import { Button, Card, CardBody, Field, Input, Notice, Select } from '../ui/inde
 
 /**
  * « Visibilité » — who may see this entry once it is published
- * (`schema@2.2`, ADR-0034), the control WordPress puts in the same place.
+ * (`schema@2.3`, ADR-0037), the control WordPress puts in the same place.
  *
  * Three states and one decision each:
  *

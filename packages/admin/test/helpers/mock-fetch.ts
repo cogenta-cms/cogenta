@@ -225,7 +225,7 @@ export const scheduleCalls: { id: string; status: string; publishedAt: unknown }
 /** Every `POST /api/content/-/replace` the mock received, in order (L34). */
 export const replaceCalls: { find: string; replace: string; apply: boolean }[] = []
 
-/** What `POST .../visibility` has been told, by entry id (`schema@2.2`). */
+/** What `POST .../visibility` has been told, by entry id (`schema@2.3`). */
 export const mockEntryVisibility = new Map<string, string>()
 
 export const MOCK_ENTRIES = [
@@ -7117,8 +7117,8 @@ export function installMockFetch(
         })
       }
 
-      // `POST /api/content/{collection}/{id}/visibility` (`schema@2.2`,
-      // ADR-0034). Stateful: the editor reads back what it set, and a
+      // `POST /api/content/{collection}/{id}/visibility` (`schema@2.3`,
+      // ADR-0037). Stateful: the editor reads back what it set, and a
       // protected entry with no password is refused the way the server
       // refuses it.
       const visibilityMatch = /\/api\/content\/([^/?]+)\/([^/?]+)\/visibility$/u.exec(url)

@@ -33,7 +33,7 @@ export interface Entry {
   /** `'none'` on a collection that never turned the workflow on (`schema@2.1`, ADR-0027). */
   readonly reviewState: ReviewState
   /**
-   * Who may see this entry once published (`schema@2.2`, ADR-0034).
+   * Who may see this entry once published (`schema@2.3`, ADR-0037).
    * Orthogonal to `status`, like `deletedAt` and `reviewState`: a private
    * page is published *and* private.
    */
@@ -647,7 +647,7 @@ export function duplicateEntry(
 }
 
 /**
- * Sets who may see an entry (`schema@2.2`, ADR-0034).
+ * Sets who may see an entry (`schema@2.3`, ADR-0037).
  *
  * The server gates this on `publish`, not `update`: who may read a page is
  * what publishing decides. The password is sent once and never read back —

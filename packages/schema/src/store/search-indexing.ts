@@ -60,7 +60,7 @@ async function reindex<TValues extends ContentValues>(
     const published = await store.read(id, { state: 'published' })
     if (published !== null) {
       // A restricted entry is removed from the index rather than left in it
-      // (`schema@2.2`, ADR-0034). Site search is read by anyone, and an
+      // (`schema@2.3`, ADR-0037). Site search is read by anyone, and an
       // excerpt is content: a private note whose text surfaces in a search
       // result is not private, and a protected page found by searching its
       // own words has had its password answered for it.
@@ -137,7 +137,7 @@ export function withSearchIndexing<TValues extends ContentValues = ContentValues
     publish: async (id, input) => after(await store.publish(id, input)),
     unpublish: async (id, input) => after(await store.unpublish(id, input)),
     // Visibility changes what a search result may show as surely as
-    // publishing does (`schema@2.2`): `reindex` drops a restricted entry and
+    // publishing does (`schema@2.3`): `reindex` drops a restricted entry and
     // puts it back when it opens again. Found by the test that asked.
     setVisibility: async (id, visibility, options) =>
       after(await store.setVisibility(id, visibility, options)),

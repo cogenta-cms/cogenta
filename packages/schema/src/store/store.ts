@@ -108,7 +108,7 @@ export interface ContentStore<TValues extends ContentValues = ContentValues> {
   /** Takes an entry back out of the trash, with the status it went in with. */
   untrash(id: string): Promise<ContentEntry<TValues>>
   /**
-   * Who may see this entry once it is published (`schema@2.2`, ADR-0034).
+   * Who may see this entry once it is published (`schema@2.3`, ADR-0037).
    *
    * Orthogonal to publishing: making a page private does not unpublish it,
    * and making it public does not publish it. `'password'` needs a hash,

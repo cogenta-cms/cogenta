@@ -48,9 +48,9 @@ qui échouait avant la correction.
 | Étape | Contenu | État |
 |---|---|---|
 | 1 | Prérequis : une parution repoussée ne sort plus à l'ancienne date | **fait** |
-| 2 | La lecture : `GET /api/content/-/calendar`, portes et bornes, entrées à programmer | à faire |
-| 3 | L'écran : mois, entrées par jour, glisser et bouton pour reprogrammer, brouillons à programmer | à faire |
-| 4 | Documentation et clôture | à faire |
+| 2 | La lecture : `GET /api/content/-/calendar`, portes et bornes, entrées à programmer | **fait** |
+| 3 | L'écran : mois, entrées par jour, glisser et bouton pour reprogrammer, brouillons à programmer | **fait** |
+| 4 | Documentation et clôture | **fait** |
 
 ## Pièges connus, écrits avant de coder
 
@@ -62,3 +62,56 @@ qui échouait avant la correction.
 3. **Aujourd'hui.** Déposer un brouillon sur aujourd'hui à une heure déjà
    passée le publierait au prochain passage de la file : l'heure proposée est
    donc l'heure pleine suivante.
+
+## Rapport de clôture (2026-09-16)
+
+**Le défaut d'abord.** Chaque enregistrement d'une entrée programmée met une
+tâche en file sans annuler la précédente, et le gestionnaire ne vérifiait que
+le statut : une parution repoussée sortait à l'ancienne date. Un test de bout
+en bout sur un vrai serveur l'a reproduit (programmée dans une demi-seconde,
+repoussée d'une heure, **publiée** au passage suivant) avant la correction :
+`isPublicationDue` (`@cogenta/schema`) fait décider la date *actuelle* de
+l'entrée, la tâche périmée ne fait rien et celle du dernier enregistrement
+publie à l'heure. Ce défaut existait avant le calendrier, depuis l'éditeur
+d'entrée ; le calendrier l'aurait rendu quotidien.
+
+**La lecture** (`GET /api/content/-/calendar?from=&to=`, `@cogenta/api`) ne
+parcourt que les collections qui déclarent `publishedAt` et dont l'acteur peut
+lire le non-publié, fait passer chaque entrée par la porte des listes
+(brouillons, visibilité), renvoie les parutions de la fenêtre triées et les
+brouillons à programmer, dit pour chacune si l'acteur peut la déplacer
+(`publish`). Fenêtre de 93 jours au plus, parcours borné à 5 000 lignes et qui
+le dit.
+
+**L'écran** (Contenu → Calendrier éditorial) : grille de six semaines,
+semaine commençant le lundi (le dimanche en anglais), regroupement par jour
+**local** dans le navigateur. Déposer une entrée et valider la boîte de dialogue
+appellent la même fonction, qui appelle la même route que l'éditeur d'entrée.
+Les règles de date (heure conservée, 9 h par défaut, heure pleine suivante
+aujourd'hui, refus d'un jour passé) vivent dans un module pur testé à part.
+
+Aucun contrat touché, pas d'ADR.
+
+### Vérifié
+
+`@cogenta/schema` (`isPublicationDue`, 3 tests), `@cogenta/cli` (programmation
+de bout en bout, dont la parution repoussée), `@cogenta/api` (calendrier,
+4 tests ; suite REST complète 1 020 verte), `@cogenta/admin` (règles de date,
+7 tests ; écran, 4 tests : jour d'affichage, reprogrammation sans glisser,
+glisser en gardant l'heure, entrée publiée non déplaçable). Dans un navigateur
+sur `examples/local-playground` : le mois de septembre avec les parutions
+réelles, un brouillon glissé sur un jour (programmé à 9 h locale), puis
+reprogrammé par la boîte de dialogue (vendredi 14 h), vérifié par l'API, puis
+supprimé.
+
+### Reste ouvert, assumé
+
+- **Pas de vue semaine ni liste** : le mois suffit à voir un planning ; une vue
+  semaine avec les heures serait l'étape suivante si des rédactions publient
+  plusieurs fois par jour.
+- **Le filtre de date s'évalue au-dessus du magasin** : `ListOptions` ne
+  connaît que l'égalité. Au-delà de 5 000 entrées par lecture, le calendrier le
+  dit ; le vrai remède est un filtre par plage dans le magasin, qui touche
+  l'interface du contrat A.
+- **Pas de glisser au clavier** : l'alternative clavier est la boîte de
+  dialogue, comme pour le page builder.

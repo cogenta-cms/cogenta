@@ -85,6 +85,37 @@ Quelques conséquences voulues :
   page protégée est servie en `noindex` — indexer une page que personne ne peut
   lire n'apporte rien et en dirait trop.
 
+## Programmer et voir le calendrier éditorial
+
+Une entrée peut être **programmée** : elle reste invisible du public jusqu'à la
+date choisie, puis se publie seule. Cela demande que sa collection ait un champ
+`publishedAt` (date de publication) — c'est le cas des articles des modèles
+fournis — et le droit de **publier** sur cette collection.
+
+**Contenu → Calendrier éditorial** (`/calendar`) montre ce qui sort, et quand,
+sur un mois : les parutions programmées (liseré bleu) et celles déjà en ligne
+(liseré vert), chacune sur le jour où elle sort *dans votre fuseau horaire*.
+À droite, **À programmer** liste les brouillons des collections qui ont une
+date de publication.
+
+- **Glisser** une parution programmée sur un autre jour la reprogramme en
+  **gardant son heure** : 9 h le mardi devient 9 h le jeudi.
+- **Glisser** un brouillon sur un jour le programme à 9 h ce jour-là — ou à
+  l'heure pleine suivante si c'est aujourd'hui et que 9 h est passé.
+- **Sans glisser** : cliquez sur une entrée, choisissez la date et l'heure,
+  *Programmer* ou *Reprogrammer*. C'est exactement la même opération.
+
+Ce que le calendrier ne fait pas, volontairement : il **ne déplace pas une
+entrée déjà publiée** (changer la date d'une page en ligne, c'est l'antidater,
+pas la planifier), et un **jour passé** n'accepte pas de dépôt — pour publier
+tout de suite, c'est le bouton *Publier* de l'éditeur. N'y apparaissent que les
+collections dont vous pouvez lire les brouillons.
+
+La publication programmée passe par la file de tâches du site : sans processus
+permanent, elle a lieu au premier passage qui suit l'heure choisie, pas à la
+seconde près. Repousser une parution est sûr : c'est toujours la **dernière**
+date enregistrée qui compte, jamais une plus ancienne.
+
 ## Rechercher et remplacer dans tout le contenu
 
 Le jour où une marque change de nom, où un domaine bouge ou où une raison

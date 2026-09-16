@@ -66,11 +66,11 @@ pas un second.
 
 | Étape | Contenu | État |
 |---|---|---|
-| 1 | Contrat A `schema@2.2` : `visibility` + le hash, migration réversible, magasin (poser/retirer un mot de passe sans jamais le relire) | à faire |
-| 2 | Lecture filtrée : la porte par entrée de `draft-access.ts` apprend la visibilité, REST et GraphQL la traversent, sitemap/recherche/flux excluent | à faire |
-| 3 | La page protégée : formulaire, vérification, cookie signé, et le rendu réel derrière | à faire |
-| 4 | L'admin : le contrôle « Visibilité » de l'éditeur d'entrée, façon WordPress | à faire |
-| 5 | ADR-0034, documentation, tests de bout en bout | à faire |
+| 1 | Contrat A `schema@2.2` : `visibility` + le hash, migration réversible, magasin (poser/retirer un mot de passe sans jamais le relire) | **fait** |
+| 2 | Lecture filtrée : la porte par entrée apprend la visibilité, REST et GraphQL la traversent, sitemap et recherche excluent | **fait** |
+| 3 | La page protégée : formulaire, vérification, cookie signé, et le rendu réel derrière | **fait** |
+| 4 | L'admin : le contrôle « Visibilité » de l'éditeur d'entrée, façon WordPress | **fait** |
+| 5 | ADR-0034, documentation, tests de bout en bout | **fait** |
 
 ## Pièges connus, écrits avant de coder
 
@@ -87,3 +87,125 @@ pas un second.
 4. **Le cache.** Une page protégée déverrouillée est `private, no-store` — la
    règle existe déjà pour les requêtes portant des identifiants (L10), il faut
    qu'elle s'applique ici aussi.
+
+
+## Rapport de clôture (2026-09-16)
+
+**Le champ.** `visibility` est le troisième champ **orthogonal au statut**,
+après `deletedAt` (ADR-0022) et `reviewState` (ADR-0027) : une page privée est
+`published` *et* privée. Aucun `switch` exhaustif sur `ContentStatus` n'a bougé,
+et un client écrit avant ce lot lit exactement les statuts qu'il a toujours lus.
+Le mot de passe n'existe jamais en clair : le magasin garde une empreinte
+calculée par l'appelant, n'offre **aucun moyen de la relire**, et vérifie en
+recevant la comparaison — donc aucune réponse ne peut la sérialiser par
+accident. Rouvrir une page efface l'empreinte : un ancien déverrouillage ne peut
+pas la rouvrir plus tard.
+
+**La lecture.** La porte qui filtrait déjà les brouillons filtre les entrées
+restreintes, écrite une fois dans la couche que les deux transports partagent :
+par identifiant, en liste, à travers une relation chargée par le dataloader, en
+GraphQL. Une page protégée n'est **pas** filtrée — elle existe et on peut lui
+faire un lien — mais les deux sortent du sitemap et de l'index de recherche, où
+un extrait *est* le contenu.
+
+**La page verrouillée** est la page elle-même : l'en-tête du thème, le titre de
+l'entrée, son pied de page, et un formulaire là où le contenu serait. Zéro
+JavaScript. La preuve de déverrouillage reprend la forme des jetons de
+prévisualisation (signée, jamais chiffrée, HMAC-SHA256, comparaison à temps
+constant, version dans la charge utile), accorde **une** entrée, expire, et
+voyage dans un cookie `HttpOnly; SameSite=Lax` nommé d'après une empreinte de
+l'identifiant plutôt que d'après l'identifiant.
+
+**La permission empruntée.** Changer la visibilité exige `publish`, pas
+`update` — comme la corbeille emprunte `delete` : les cinq actions du contrat A
+sont figées, et qui peut lire une page est ce que « publier » décide.
+
+### Trois choses que seul un essai réel a trouvées
+
+1. **Changer la visibilité ne réindexait pas** : une note passée en privé
+   gardait son extrait dans la recherche du site. Le décorateur d'indexation
+   ignorait la nouvelle écriture.
+2. **Un site créé avant ce lot ne gagnait jamais les colonnes** — `create table
+   if not exists` ne touche pas une table existante, donc *toute* écriture
+   échouait après une mise à jour. `createSchemaTables` réconcilie désormais les
+   colonnes **système du magasin**, et seulement elles : un champ déclaré par un
+   développeur reste une vraie migration.
+3. **Une page verrouillée se décrivait aux robots** : son résumé partait dans la
+   `meta description` et le JSON-LD. Elle est maintenant rendue sans extrait et
+   décrite par son seul titre, en `noindex`.
+
+### Vérifié
+
+`@cogenta/schema` 716, `@cogenta/api` 1 294, suites de rendu et SEO de la CLI
+157, écran d'édition de l'admin 45 — verts. Trois tests de bout en bout sur un
+vrai serveur (404 pour un visiteur / page pour un éditeur ; formulaire, mauvais
+mot de passe sans cookie, bon mot de passe avec `no-store` ; redirection ouverte
+refusée et sitemap propre) et le parcours complet dans un navigateur sur
+`examples/local-playground`.
+
+### Reste ouvert
+
+- **Pas de limitation de débit sur `/_cogenta/unlock`.** Un mot de passe de page
+  est court par nature ; rien n'empêche aujourd'hui de l'essayer en boucle. Le
+  pilote de limitation existe déjà dans le projet (`rateLimit`, dégradé en
+  mémoire) : l'y brancher est un petit lot à part, pas une retouche à glisser ici.
+- **Pas de partage de déverrouillage entre appareils** : le cookie est celui de
+  ce navigateur, ce qui est le comportement de WordPress et le seul honnête sans
+  compte.
+- **Le contrôle n'apparaît pas à la création** d'une entrée, seulement après le
+  premier enregistrement — il faut une entrée pour lui donner une visibilité.
+
+## ADR-0034 — prête à insérer (fichier protégé)
+
+```markdown
+## ADR-0034 — La visibilité d'une entrée est orthogonale à son statut
+
+**Date** : 2026-09-16
+**Statut** : acceptée
+
+### Contexte
+
+Une entrée est `draft`, `scheduled`, `published` ou `archived`. Rien ne permet
+d'exprimer « publiée, mais réservée » — ni la note interne visible des seuls
+rédacteurs, ni le dossier de presse derrière un mot de passe. Les deux existent
+dans le cœur de WordPress, et leur absence pousse les gens à dépublier, ce qui
+casse les liens.
+
+Trois voies étaient possibles :
+
+1. ajouter `private` et `password` à `ContentStatus` — mais le statut deviendrait
+   deux informations dans un champ (une page privée serait-elle encore publiée ?),
+   tous les `switch` exhaustifs du dépôt changeraient, et « planifiée et privée »
+   resterait inexprimable ;
+2. un réglage hors contenu (une table de permissions par entrée) — un second
+   système d'autorisation à côté de celui qui existe ;
+3. un champ **orthogonal**, comme `deletedAt` (ADR-0022) et `reviewState`
+   (ADR-0027) l'ont déjà été.
+
+### Décision
+
+`visibility` (`'public' | 'private' | 'password'`) est un champ système
+orthogonal à `status`, en `schema@2.2`, additif et réversible. Avec lui :
+
+- **privée** : visible des seuls acteurs à qui la couche de permissions
+  accorderait `update` sur la collection. Pour les autres, **404 et non 403** —
+  pour une note interne, l'existence est déjà l'information — et absence de
+  toute liste, de la recherche, du sitemap et des relations ;
+- **protégée** : listée, liable, mais son contenu et son résumé demandent un mot
+  de passe, dont seule l'empreinte est stockée et qui n'est jamais relisible ;
+- **changer la visibilité exige `publish`**, emprunté comme la corbeille
+  emprunte `delete` : le vocabulaire des cinq actions reste figé, et qui peut
+  lire une page est ce que publier décide.
+
+La preuve de déverrouillage est un jeton signé (jamais chiffré) dans un cookie
+par entrée, calqué sur les jetons de prévisualisation, d'une durée bornée.
+
+### Conséquences
+
+- Le contrat A monte en `schema@2.2` sans qu'un client existant change une ligne.
+- Le filtre vit dans la couche partagée par REST et GraphQL : une page privée ne
+  peut pas fuir par un transport qui aurait oublié la règle.
+- Une page protégée n'est ni indexée ni décrite : son résumé est du contenu.
+- Ce qui n'est **pas** décidé ici : la limitation de débit des tentatives de mot
+  de passe, et le partage d'un déverrouillage entre appareils.
+```

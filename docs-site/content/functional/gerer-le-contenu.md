@@ -52,6 +52,39 @@ l'étape. **Approuver n'est pas publier** : approuver autorise, un rôle
 distinct (`publish`) décide encore du moment. Une collection sans workflow
 activé se comporte exactement comme avant — rien n'y répond différemment.
 
+## Qui peut voir une page
+
+Dans l'éditeur, à côté du statut : **Visibilité**. Trois choix, et ils ne
+remplacent pas le statut — une page privée est *publiée* et privée, la rendre
+publique ne la republie donc pas, cela lève une restriction.
+
+**Publique.** Tout le monde la lit. C'est le cas par défaut, et rien de ce qui
+existait avant ce réglage n'a changé de comportement.
+
+**Privée.** Seules les personnes qui pourraient la modifier la voient. Pour
+tous les autres, la page **n'existe pas** : elle répond 404 et non « accès
+refusé », elle ne sort ni dans les listes, ni dans la recherche, ni dans le
+sitemap, ni au bout d'une relation. Pour une note interne, le simple fait
+qu'elle existe est déjà une information.
+
+**Protégée par un mot de passe.** La page reste listée et on peut lui faire un
+lien — ce que le mot de passe garde, c'est son contenu. Un visiteur atterrit
+sur la page elle-même, avec son titre et l'habillage du site, et un formulaire
+là où le texte serait. Le résumé n'y est pas non plus : un chapô lisible sans
+le mot de passe, c'est le mot de passe répondu à la place du visiteur. Une fois
+le bon mot de passe saisi, la page s'ouvre pour 24 heures sur ce navigateur.
+
+Quelques conséquences voulues :
+
+- **le mot de passe n'est jamais relisible**, ni par l'écran, ni par l'API :
+  seule son empreinte est conservée. Le champ est donc vide à chaque visite, et
+  le laisser vide sur une page déjà protégée conserve le mot de passe actuel ;
+- **changer la visibilité demande le droit de publier**, pas seulement celui de
+  modifier : rendre publique une note privée est une décision de publication ;
+- une page protégée ou privée **sort de l'index de recherche** du site, et une
+  page protégée est servie en `noindex` — indexer une page que personne ne peut
+  lire n'apporte rien et en dirait trop.
+
 ## La corbeille
 
 `/trash` — mettre une entrée à la corbeille n'efface plus rien : ses

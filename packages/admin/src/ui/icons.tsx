@@ -639,6 +639,15 @@ export const ToolsIcon = icon(
 )
 
 /** "Scheduled tasks" (`/scheduled`) — a calendar page, distinct from `ClockIcon`'s plain clock used elsewhere for "time-sensitive" dashboard items. */
+/** The editorial calendar (L35) — a month page, distinct from `ScheduledIcon`'s clock. */
+export const CalendarIcon = icon(
+  <>
+    <rect x="2.5" y="4" width="15" height="13" />
+    <path d="M2.5 7.5h15M6 2.5v3M14 2.5v3" />
+    <path d="M6 11h2M9 11h2M12 11h2M6 14h2M9 14h2" />
+  </>,
+)
+
 export const ScheduledIcon = icon(
   <>
     <rect x="2.5" y="4" width="15" height="13" />

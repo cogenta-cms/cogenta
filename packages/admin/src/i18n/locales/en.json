@@ -277,7 +277,8 @@
     "commerceCustomers": "Customers",
     "widgets": "Widgets",
     "plugins": "Plugins",
-    "replace": "Search and replace"
+    "replace": "Search and replace",
+    "calendar": "Editorial calendar"
   },
   "breadcrumb": {
     "newEntry": "New",
@@ -4953,5 +4954,35 @@
     "untitled": "Untitled",
     "inBlock": "Block {{position}} · {{field}}",
     "inZoneBlock": "Zone {{zone}}, block {{position}} · {{field}}"
+  },
+  "calendar": {
+    "heading": "Editorial calendar",
+    "description": "What comes out, and when. Drag a scheduled entry or a draft onto a day to schedule it, or open it to pick the date and time.",
+    "previous": "Previous month",
+    "next": "Next month",
+    "today": "Today",
+    "legendScheduled": "Scheduled",
+    "legendPublished": "Published",
+    "unscheduledHeading": "To schedule",
+    "unscheduledHelp": "Drafts from collections that have a publication date. Drag one onto a day: it goes out at 9 am.",
+    "noDrafts": "No drafts waiting.",
+    "untitled": "Untitled",
+    "dateLabel": "Publication date and time",
+    "schedule": "Schedule",
+    "reschedule": "Reschedule",
+    "openEntry": "Open the entry",
+    "close": "Close",
+    "publishedFixed": "This entry is already live: its date is not moved from the calendar.",
+    "noPermission": "You can see this entry, but scheduling it needs permission to publish.",
+    "scheduled": "“{{title}}” is scheduled for {{date}}.",
+    "inThePast": "That moment has passed: pick a date to come, or publish the entry from its editor.",
+    "scheduleFailed": "The schedule could not be saved.",
+    "loadFailed": "The calendar could not be loaded.",
+    "truncated": "The site has more entries than the calendar reads at once: some may be missing.",
+    "status": {
+      "scheduled": "Scheduled",
+      "published": "Published",
+      "draft": "Draft"
+    }
   }
 }

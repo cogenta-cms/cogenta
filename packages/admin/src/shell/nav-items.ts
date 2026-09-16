@@ -122,6 +122,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'content',
     visibleWhen: { kind: 'collectionAction', action: 'read' },
   },
+  {
+    // L35. What comes out when: shown to anyone who may edit a collection —
+    // the calendar itself only lists collections whose unpublished entries
+    // this user may read, and only offers to move what they may publish.
+    to: '/calendar',
+    labelKey: 'nav.calendar',
+    group: 'content',
+    visibleWhen: { kind: 'collectionAction', action: 'update' },
+  },
   { to: '/media', labelKey: 'nav.media', group: 'content', visibleWhen: { kind: 'always' } },
   {
     to: '/taxonomies',

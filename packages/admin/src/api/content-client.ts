@@ -716,3 +716,30 @@ export function replaceContent(token: string, input: ReplaceInput): Promise<Repl
     body: JSON.stringify(input),
   })
 }
+
+/** One entry as the editorial calendar shows it (L35). */
+export interface CalendarItem {
+  readonly collection: string
+  readonly entryId: string
+  readonly title: string
+  readonly status: string
+  readonly locale: string
+  readonly publishedAt: string | null
+  /** Scheduling is a publication decision: `true` only with `publish` on the collection. */
+  readonly canSchedule: boolean
+}
+
+export interface CalendarReport {
+  readonly items: readonly CalendarItem[]
+  readonly unscheduled: readonly CalendarItem[]
+  readonly truncated: boolean
+}
+
+/** What comes out between `from` and `to` — `GET /api/content/-/calendar`. */
+export function getCalendar(
+  token: string,
+  window: { readonly from: string; readonly to: string },
+): Promise<CalendarReport> {
+  const query = new URLSearchParams({ from: window.from, to: window.to })
+  return request(`/api/content/-/calendar?${query.toString()}`, { headers: authHeader(token) })
+}

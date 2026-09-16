@@ -12,6 +12,7 @@ import { ApiKeysRoute } from './routes/api-keys.js'
 import { AppearanceRoute } from './routes/appearance.js'
 import { AssistantRoute } from './routes/assistant.js'
 import { AuditRoute } from './routes/audit.js'
+import { CalendarRoute } from './routes/calendar.js'
 import { ChannelsRoute } from './routes/channels.js'
 import { CollectionListRoute } from './routes/collection-list.js'
 import { CollectionsRoute } from './routes/collections.js'
@@ -156,6 +157,7 @@ export function App(): JSX.Element {
                 <Route path="scheduled" element={<ScheduledRoute />} />
                 <Route path="trash" element={<TrashRoute />} />
                 <Route path="replace" element={<ReplaceRoute />} />
+                <Route path="calendar" element={<CalendarRoute />} />
                 <Route path="assistant" element={<AssistantRoute />} />
                 <Route path="media" element={<MediaRoute />} />
                 <Route path="import" element={<ImportRoute />} />

@@ -277,7 +277,8 @@
     "commerceCustomers": "Clients",
     "widgets": "Widgets",
     "plugins": "Plugins",
-    "replace": "Rechercher et remplacer"
+    "replace": "Rechercher et remplacer",
+    "calendar": "Calendrier éditorial"
   },
   "breadcrumb": {
     "newEntry": "Nouveau",
@@ -4953,5 +4954,35 @@
     "untitled": "Sans titre",
     "inBlock": "Bloc {{position}} · {{field}}",
     "inZoneBlock": "Zone {{zone}}, bloc {{position}} · {{field}}"
+  },
+  "calendar": {
+    "heading": "Calendrier éditorial",
+    "description": "Ce qui sort, et quand. Glissez une parution programmée ou un brouillon sur un jour pour le programmer, ou ouvrez-le pour choisir la date et l'heure.",
+    "previous": "Mois précédent",
+    "next": "Mois suivant",
+    "today": "Aujourd'hui",
+    "legendScheduled": "Programmé",
+    "legendPublished": "Publié",
+    "unscheduledHeading": "À programmer",
+    "unscheduledHelp": "Les brouillons des collections qui ont une date de publication. Glissez-en un sur un jour : il partira à 9 h.",
+    "noDrafts": "Aucun brouillon en attente.",
+    "untitled": "Sans titre",
+    "dateLabel": "Date et heure de publication",
+    "schedule": "Programmer",
+    "reschedule": "Reprogrammer",
+    "openEntry": "Ouvrir l'entrée",
+    "close": "Fermer",
+    "publishedFixed": "Cette entrée est déjà en ligne : sa date ne se déplace pas depuis le calendrier.",
+    "noPermission": "Vous pouvez voir cette entrée, mais la programmer demande le droit de publier.",
+    "scheduled": "« {{title}} » est programmé pour le {{date}}.",
+    "inThePast": "Ce moment est déjà passé : choisissez une date à venir, ou publiez l'entrée depuis son éditeur.",
+    "scheduleFailed": "La programmation n'a pas pu être enregistrée.",
+    "loadFailed": "Le calendrier n'a pas pu être chargé.",
+    "truncated": "Le site contient plus d'entrées que le calendrier n'en parcourt en une fois : certaines peuvent manquer.",
+    "status": {
+      "scheduled": "Programmé",
+      "published": "Publié",
+      "draft": "Brouillon"
+    }
   }
 }

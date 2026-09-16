@@ -219,6 +219,9 @@ export const MOCK_TRASHED_NOTE = {
   blocks: {},
 }
 
+/** Every `POST /api/content/article/{id}/unpublish` the mock received, in order (L35). */
+export const scheduleCalls: { id: string; status: string; publishedAt: unknown }[] = []
+
 /** Every `POST /api/content/-/replace` the mock received, in order (L34). */
 export const replaceCalls: { find: string; replace: string; apply: boolean }[] = []
 
@@ -5487,6 +5490,11 @@ export function installMockFetch(
         }
 
         if (collection === 'article' && action === 'unpublish' && method === 'POST') {
+          scheduleCalls.push({
+            id: id ?? '',
+            status: String(body.status),
+            publishedAt: body.publishedAt,
+          })
           const entry = MOCK_ENTRIES.find((candidate) => candidate.id === id)
           if (entry === undefined) {
             return json(404, { error: { code: 'CONTENT_NOT_FOUND', message: 'No entry.' } })
@@ -7022,6 +7030,53 @@ export function installMockFetch(
           error: {
             code: 'CONTENT_REFERENCED',
             message: `"${MOCK_TRASHED_BLOCKED_ENTRY.id}" cannot be removed from "article": 1 entry of "note" still reference it.`,
+          },
+        })
+      }
+
+      // `GET /api/content/-/calendar` (L35): one entry scheduled in two days,
+      // one already out today, and a draft waiting — relative to the real
+      // clock, so the grid the screen draws for "this month" contains them.
+      if (/\/api\/content\/-\/calendar\?/u.test(url) && method === 'GET') {
+        const soon = new Date()
+        soon.setDate(soon.getDate() + 2)
+        soon.setHours(10, 30, 0, 0)
+        const earlier = new Date()
+        earlier.setMinutes(0, 0, 0)
+        return json(200, {
+          data: {
+            truncated: false,
+            items: [
+              {
+                collection: 'article',
+                entryId: 'entry-1',
+                title: 'First article',
+                status: 'published',
+                locale: 'en',
+                publishedAt: earlier.toISOString(),
+                canSchedule: true,
+              },
+              {
+                collection: 'article',
+                entryId: 'entry-2',
+                title: 'Second article',
+                status: 'scheduled',
+                locale: 'en',
+                publishedAt: soon.toISOString(),
+                canSchedule: true,
+              },
+            ],
+            unscheduled: [
+              {
+                collection: 'article',
+                entryId: 'entry-draft',
+                title: 'Idea for later',
+                status: 'draft',
+                locale: 'en',
+                publishedAt: null,
+                canSchedule: true,
+              },
+            ],
           },
         })
       }

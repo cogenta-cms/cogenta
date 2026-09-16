@@ -57,6 +57,8 @@ describe('planning a replacement', () => {
       { path: 'title', before: 'Cogenta arrive', after: 'Kogenta arrive', occurrences: 1 },
     ])
     expect(plan.values?.['title']).toBe('Kogenta arrive')
+    // Named as the editor knows it today, not as it will read afterwards.
+    expect(plan.title).toBe('Cogenta arrive')
   })
 
   it('never touches a slug, a media reference, a number or an id', () => {

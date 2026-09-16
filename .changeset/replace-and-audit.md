@@ -8,7 +8,8 @@ Search and replace across content, previewed before it writes anything
 
 `@cogenta/schema` gains `planEntryReplacement`: a pure function that says where
 a phrase appears in an entry — text fields, rich text span by span, and the
-text inside blocks — and what it would become. It leaves alone what is not
+text inside blocks — and what it would become, naming the entry by its current
+title. It leaves alone what is not
 text: slugs, ids, relations, media references, marks and link hrefs.
 
 `@cogenta/api` gains `POST /api/content/-/replace`, a preview unless `apply` is

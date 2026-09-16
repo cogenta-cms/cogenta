@@ -1,3 +1,4 @@
+import { titleOf } from './search/extract.js'
 import type { BlockZones, ContentEntry, ContentValues } from './store/types.js'
 import type { CollectionDefinition } from './types.js'
 
@@ -55,6 +56,12 @@ export interface EntryReplacementPlan {
   readonly entryId: string
   readonly collection: string
   readonly locale: string
+  /**
+   * The entry's title as it reads now, before any replacement — what an editor
+   * recognises it by in a preview. Empty when the collection has no text field
+   * to take one from.
+   */
+  readonly title: string
   readonly hits: readonly ReplacementHit[]
   readonly occurrences: number
   /** The values to write, present only when something would change. */
@@ -172,6 +179,7 @@ export function planEntryReplacement(
     entryId: entry.id,
     collection: collection.name,
     locale: entry.locale,
+    title: titleOf(collection, entry),
     hits: [],
     occurrences: 0,
   }

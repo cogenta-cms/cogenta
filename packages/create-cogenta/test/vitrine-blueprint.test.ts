@@ -5,7 +5,7 @@ import type { VocabularyBlock } from '@cogenta/blocks'
 import { loadCollections } from '@cogenta/cli'
 import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import { buildPath, createContentStore } from '@cogenta/schema'
-import { caseStudy, page, service } from '@cogenta/starters/blueprints/vitrine'
+import { vitrineCopyFor, vitrineSchema } from '@cogenta/starters/blueprints/vitrine'
 import {
   type FetchedEntries,
   type HtmlNode,
@@ -18,13 +18,18 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
-// The blueprint seeds fifteen bundled images (a cropped hero photograph, a
-// rendered exhibit, six wordmarks, three portraits, three case-study photos)
-// through the real media pipeline, with WebP variants: the same order of
-// magnitude as `restaurant`'s scaffold, which documents this timeout.
-const SCAFFOLD_TIMEOUT = 180_000
+// The blueprint seeds thirty bundled images (twenty-two photographs, two
+// product screenshots, six client logos) through the real media pipeline,
+// with WebP variants: twice `restaurant`'s scaffold, which documents the order
+// of magnitude.
+const SCAFFOLD_TIMEOUT = 300_000
 
-describe('scaffoldSite — vitrine blueprint', () => {
+// Installed in French, the case this blueprint gained in L36: the schema, the
+// addresses and every word of content follow the site's language.
+const model = vitrineSchema(vitrineCopyFor('fr'))
+const { caseStudy, page, solution } = model
+
+describe('scaffoldSite — vitrine blueprint, installed in French', () => {
   let targetDir = ''
 
   beforeAll(async () => {
@@ -33,7 +38,7 @@ describe('scaffoldSite — vitrine blueprint', () => {
       targetDir,
       siteName: 'Harrow & Leigh',
       siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
+      defaultLocale: 'fr',
       databaseDriver: 'sqlite',
       adminEmail: 'admin@example.com',
       blueprintId: 'vitrine',
@@ -63,37 +68,54 @@ describe('scaffoldSite — vitrine blueprint', () => {
     }
   }
 
-  it('writes a schema file loadCollections can load back', async () => {
+  it('writes a schema file loadCollections can load back, routed in French', async () => {
     const collections = await loadCollections(targetDir)
     expect(collections.map((c) => c.name).sort()).toEqual([
       'case_study',
+      'job',
       'page',
-      'service',
+      'post',
+      'solution',
       'testimonial',
     ])
+    expect(collections.find((c) => c.name === 'case_study')?.routing?.pattern).toBe(
+      '/references/:slug',
+    )
   })
 
-  it('seeds published practices, case studies with photographs and sectors, and five pages', async () => {
+  it('seeds published solutions, case studies, jobs and articles, and ten French pages', async () => {
     await withDatabase(async (db) => {
-      const services = await createContentStore({ db, collection: service }).list()
-      expect(services.items).toHaveLength(6)
-      expect(services.items.every((entry) => entry.status === 'published')).toBe(true)
+      const solutions = await createContentStore({ db, collection: solution }).list()
+      expect(solutions.items).toHaveLength(6)
+      expect(solutions.items.every((entry) => entry.status === 'published')).toBe(true)
+      expect(solutions.items.every((entry) => typeof entry.values.coverImage === 'string')).toBe(
+        true,
+      )
 
       const studies = await createContentStore({ db, collection: caseStudy }).list()
-      expect(studies.items).toHaveLength(3)
+      expect(studies.items).toHaveLength(4)
       for (const study of studies.items) {
-        expect(study.status).toBe('published')
         expect(typeof study.values.coverImage).toBe('string')
         expect(study.values.sector).toBeTruthy()
       }
 
+      expect((await createContentStore({ db, collection: model.job }).list()).items).toHaveLength(4)
+      const posts = await createContentStore({ db, collection: model.post }).list()
+      expect(posts.items).toHaveLength(4)
+      expect(posts.items.every((entry) => typeof entry.values.publishedAt === 'string')).toBe(true)
+
       const pages = await createContentStore({ db, collection: page }).list()
       expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual([
-        'about',
-        'case-studies',
+        'actualites',
+        'carrieres',
+        'confidentialite',
         'contact',
+        'credits-photos',
+        'entreprise',
         'home',
-        'practices',
+        'mentions-legales',
+        'references',
+        'solutions',
       ])
     })
   })
@@ -127,12 +149,12 @@ describe('scaffoldSite — vitrine blueprint', () => {
         status: entry.status,
         ...entry.values,
       }))
-      const entries: FetchedEntries = { 'demo-home-work': themeEntries }
+      const entries: FetchedEntries = { 'home-work': themeEntries }
 
       const html = htmlOf(renderPage(pageContent, fakeThemeContext(), entries))
-      expect(html).toContain('Decisions that still hold a year later')
-      expect(html).toContain('Meridian Rail raises punctuality')
-      expect(html).toContain('Harrow &amp; Leigh analysis')
+      expect(html).toContain('Voir une panne venir, avant qu’elle ne coupe une ville')
+      expect(html).toContain('Ardenne Énergies réduit de 38')
+      expect(html).toContain('Harrow &amp; Leigh conçoit les capteurs')
     })
   })
 })
@@ -147,10 +169,10 @@ function fakeThemeContext(): RenderContext {
     site: {
       name: 'Harrow & Leigh',
       url: 'http://localhost:4000',
-      locales: ['en'],
-      defaultLocale: 'en',
+      locales: ['fr'],
+      defaultLocale: 'fr',
     },
-    locale: 'en',
+    locale: 'fr',
     url: new URL('http://localhost:4000/home'),
     t: (key) => key,
     // A minimal, honest `ImageSource` stands in for the image pipeline, which

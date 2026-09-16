@@ -428,7 +428,7 @@ describe('R2 — the installer without a document or a provider', () => {
     // No document, no provider: the schema is the default site type's own
     // (`vitrine` since L36), never a plan's — nothing was proposed or approved.
     const schema = await readFile(join(targetDir, 'cogenta.schema.mjs'), 'utf8')
-    expect(schema).toContain('"name": "service"')
+    expect(schema).toContain('"name": "solution"')
     await expect(readdir(join(targetDir, '.cogenta', 'site-plans'))).rejects.toThrow()
   }, 120_000)
 })

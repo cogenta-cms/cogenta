@@ -29,7 +29,7 @@ import {
   validateCollectionSet,
 } from '@cogenta/schema'
 import {
-  BLUEPRINT_CONTENT_PACKS,
+  contentPackFor,
   STARTING_SKINS,
   seedBlueprintMenus,
   seedBlueprintWidgets,
@@ -303,7 +303,9 @@ export async function scaffoldSite(
   const { blueprint, fellBackToBlank } = resolveBlueprint(
     answers.blueprintId ?? FALLBACK_BLUEPRINT_ID,
   )
-  const pack = BLUEPRINT_CONTENT_PACKS[blueprint.id]
+  // The pack in the site's own language: `vitrine` ships French and English
+  // copy, addresses included (L36).
+  const pack = contentPackFor(blueprint.id, answers.defaultLocale)
 
   await mkdir(answers.targetDir, { recursive: true })
   await mkdir(join(answers.targetDir, '.cogenta'), { recursive: true })

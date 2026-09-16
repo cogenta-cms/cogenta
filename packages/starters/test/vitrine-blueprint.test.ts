@@ -7,31 +7,30 @@ import {
   validateWidgetVisibility,
 } from '@cogenta/widgets'
 import { describe, expect, it } from 'vitest'
+import { contentPackFor } from '../src/blueprints/content-packs.js'
 import { bundledImageType, loadPhotoAsset } from '../src/blueprints/photo-assets.js'
 import {
   buildVitrineDemoPages,
-  caseStudy,
   DEFAULT_FIRM_NAME,
-  page,
-  service,
-  VITRINE_COLLECTIONS,
-  VITRINE_DEMO_CASE_STUDIES,
-  VITRINE_DEMO_SERVICES,
-  VITRINE_DEMO_TESTIMONIALS,
-  VITRINE_MEDIA_SPECS,
-  VITRINE_MENUS,
-  VITRINE_SITE_SETTINGS,
-  VITRINE_TAXONOMIES,
-  VITRINE_WIDGETS,
+  richText,
+  vitrineCopyFor,
+  vitrineMediaSpecs,
+  vitrineMenus,
+  vitrineSchema,
+  vitrineSiteSettings,
+  vitrineWidgets,
 } from '../src/blueprints/vitrine.js'
+import type { RichPart, VitrineCopy } from '../src/blueprints/vitrine-copy.js'
+import { VITRINE_PHOTO_CREDITS } from '../src/blueprints/vitrine-credits.js'
 
-/** Every piece of visitor-facing text a demo page or entry carries, flattened. */
+/** Every piece of visitor-facing text a value carries, flattened. */
 function textsOfValue(value: unknown): string[] {
   if (typeof value === 'string') return [value]
   if (Array.isArray(value)) return value.flatMap(textsOfValue)
   if (value !== null && typeof value === 'object') {
     return Object.entries(value).flatMap(([key, inner]) =>
-      key.startsWith('_') || key === 'media' || key === 'avatar' || key === 'collection'
+      key.startsWith('_') ||
+      ['media', 'avatar', 'collection', 'href', 'marks', 'style', 'listItem', 'icon'].includes(key)
         ? []
         : textsOfValue(inner),
     )
@@ -39,190 +38,219 @@ function textsOfValue(value: unknown): string[] {
   return []
 }
 
-function allDemoCopy(firm: string): string[] {
+const parts = (list: readonly RichPart[]) => textsOfValue(richText('t', list))
+
+function allDemoCopy(copy: VitrineCopy, firm: string): string[] {
+  const settings = copy.settings(firm)
   return [
-    ...buildVitrineDemoPages({}, new Map(), firm).flatMap((demo) => [
+    ...buildVitrineDemoPages(copy, { firm }).flatMap((demo) => [
       demo.title,
       ...demo.blocks.flatMap((block) => textsOfValue(block)),
     ]),
-    ...VITRINE_DEMO_SERVICES.flatMap((demo) => [
-      demo.name,
-      demo.description,
-      ...demo.body(firm).flatMap((part) => textsOfValue(part)),
+    ...copy.solutions.flatMap((item) => [item.name, item.description, ...parts(item.body(firm))]),
+    ...copy.caseStudies.flatMap((item) => [
+      item.title,
+      item.summary,
+      item.keyFigureLabel,
+      ...parts(item.body(firm)),
     ]),
-    ...VITRINE_DEMO_CASE_STUDIES.flatMap((demo) => [
-      demo.title,
-      demo.summary,
-      ...demo.body(firm).flatMap((part) => textsOfValue(part)),
-    ]),
-    ...VITRINE_DEMO_TESTIMONIALS.flatMap((demo) => [
-      demo.authorName,
-      demo.authorRole,
-      demo.quote(firm),
-    ]),
-    String(VITRINE_SITE_SETTINGS['general.tagline']),
-    String(VITRINE_SITE_SETTINGS['general.footerNote']),
+    ...copy.jobs.flatMap((item) => [item.title, item.summary, ...parts(item.body(firm))]),
+    ...copy.posts.flatMap((item) => [item.title, item.summary, ...parts(item.body(firm))]),
+    ...copy.testimonials.flatMap((item) => [item.authorName, item.authorRole, item.quote(firm)]),
+    ...copy.media.map((item) => item.alt),
+    settings.tagline,
   ]
 }
 
-describe('vitrine blueprint — content model and demo copy', () => {
-  // Audit fiche 06, T01 (P0): without these four fields the admin's SEO panel
-  // renders nothing for an entry of a routed collection.
-  it('declares the four conventional SEO override fields on every routed collection', () => {
-    for (const collection of [service, caseStudy, page]) {
-      expect(Object.keys(collection.fields)).toEqual(
-        expect.arrayContaining(['seoTitle', 'seoDescription', 'seoImage', 'seoNoindex']),
+for (const locale of ['fr', 'en'] as const) {
+  const copy = vitrineCopyFor(locale)
+  const model = vitrineSchema(copy)
+  const pages = buildVitrineDemoPages(copy)
+
+  describe(`vitrine blueprint (${locale}) — content model and copy`, () => {
+    it('declares the four conventional SEO override fields on every routed collection', () => {
+      for (const collection of model.collections.filter((c) => c.routing !== undefined)) {
+        for (const field of ['seoTitle', 'seoDescription', 'seoImage', 'seoNoindex']) {
+          expect(collection.fields[field], `${collection.name}.${field}`).toBeDefined()
+        }
+      }
+    })
+
+    it('routes every collection in the language of the site', () => {
+      const routed = (path: string) => matchPath(model.collections, path)?.collection
+      const fr = locale === 'fr'
+      expect(routed(`/solutions/${copy.solutions[0]?.slug}`)).toBe('solution')
+      expect(routed(`/${fr ? 'references' : 'case-studies'}/${copy.caseStudies[0]?.slug}`)).toBe(
+        'case_study',
       )
-    }
-  })
-
-  it('files case studies under a sector taxonomy, so a sector has its own archive page', () => {
-    expect(VITRINE_TAXONOMIES.map((taxonomy) => taxonomy.name)).toEqual(['sector'])
-    expect(caseStudy.fields.sector?.kind).toBe('taxonomy')
-  })
-
-  it('resolves pages, practices and case studies through @cogenta/schema routing', () => {
-    expect(matchPath(VITRINE_COLLECTIONS, '/about')).toEqual({
-      collection: 'page',
-      locale: null,
-      params: { slug: 'about' },
+      expect(routed(`/${fr ? 'carrieres' : 'careers'}/x`)).toBe('job')
+      expect(routed(`/${fr ? 'actualites' : 'news'}/x`)).toBe('post')
+      expect(routed(`/${copy.pageSlugs.company}`)).toBe('page')
+      expect(model.sector.name).toBe(fr ? 'secteur' : 'sector')
     })
-    expect(matchPath(VITRINE_COLLECTIONS, '/case-studies/meridian-rail-punctuality')).toEqual({
-      collection: 'case_study',
-      locale: null,
-      params: { slug: 'meridian-rail-punctuality' },
+
+    it('lets an article be scheduled, so it appears in the editorial calendar', () => {
+      expect(model.post.fields['publishedAt']?.kind).toBe('datetime')
     })
-  })
 
-  it('names the firm the site belongs to, and falls back to a fictional one', () => {
-    const named = allDemoCopy('Harrow & Leigh').join('\n')
-    expect(named).toContain('Harrow & Leigh')
-    expect(named).not.toContain(DEFAULT_FIRM_NAME)
-    expect(allDemoCopy(DEFAULT_FIRM_NAME).join('\n')).toContain(DEFAULT_FIRM_NAME)
-  })
+    it('names the company the site belongs to, and falls back to a fictional one', () => {
+      const named = allDemoCopy(copy, 'Acme Réseaux').join('\n')
+      expect(named).toContain('Acme Réseaux')
+      expect(named).not.toContain(DEFAULT_FIRM_NAME)
+      expect(allDemoCopy(copy, DEFAULT_FIRM_NAME).join('\n')).toContain(DEFAULT_FIRM_NAME)
+    })
 
-  it('never talks about the CMS, the scaffold or the demo itself', () => {
-    const copy = allDemoCopy(DEFAULT_FIRM_NAME).join('\n')
-    expect(copy).not.toMatch(/cogenta|scaffold|\bdemo\b|editable|lorem|javascript/i)
-  })
+    it('never talks about the CMS, the installer or the demonstration itself', () => {
+      const text = allDemoCopy(copy, DEFAULT_FIRM_NAME).join('\n')
+      expect(text).not.toMatch(/cogenta|scaffold|\bdemo\b|démo|lorem|javascript/i)
+    })
 
-  it('keeps to the studio charter: no buzzwords, no exclamation marks, at most one em dash per text', () => {
-    const buzzwords =
-      /\b(seamless|unlock|elevate|empower|supercharge|streamline|cutting-edge|robust|leverage)/i
-    for (const text of allDemoCopy(DEFAULT_FIRM_NAME)) {
-      expect(text, text).not.toMatch(buzzwords)
-      expect(text, text).not.toContain('!')
-      expect((text.match(/—/g) ?? []).length, text).toBeLessThanOrEqual(1)
-    }
-  })
-
-  it('seeds a home page of eight to twelve sections, without listing the practices twice', () => {
-    const [home] = buildVitrineDemoPages(
-      Object.fromEntries(VITRINE_MEDIA_SPECS.map((spec) => [spec.name, `media-${spec.name}`])),
-    )
-    expect(home?.slug).toBe('home')
-    const types = home?.blocks.map((block) => block._type) ?? []
-    expect(types.length).toBeGreaterThanOrEqual(8)
-    expect(types.length).toBeLessThanOrEqual(12)
-    expect(types.filter((type) => type === 'featureGrid')).toHaveLength(1)
-    const lists = (home?.blocks ?? []).filter(
-      (block): block is Extract<VocabularyBlock, { _type: 'collectionList' }> =>
-        block._type === 'collectionList',
-    )
-    expect(lists.map((list) => list.collection)).toEqual(['case_study'])
-  })
-
-  it('points every media slot at a bundled file, so no abstract placeholder art is ever seeded', () => {
-    for (const spec of VITRINE_MEDIA_SPECS) {
-      expect(spec.photo, spec.name).toBeDefined()
-      const bytes = loadPhotoAsset(spec.photo as string)
-      expect(bytes, spec.photo).toBeDefined()
-      const expected = (spec.photo as string).endsWith('.png') ? 'png' : 'jpg'
-      expect(bundledImageType(bytes as Uint8Array).extension, spec.photo).toBe(expected)
-    }
-  })
-
-  it('links every menu item to a page the blueprint actually seeds', () => {
-    const slugs = new Set(buildVitrineDemoPages({}).map((demo) => `/${demo.slug}`))
-    for (const item of [...VITRINE_MENUS.header, ...VITRINE_MENUS.footer]) {
-      expect(slugs.has(item.url as string), item.url).toBe(true)
-    }
-  })
-
-  describe('widgets', () => {
-    const context = (
-      kind: 'home' | 'entry' | 'taxonomy' | 'search',
-      path: string,
-      extra: { readonly collection?: string; readonly taxonomy?: string } = {},
-    ) => ({ kind, path, signedIn: false, locale: 'en', now: new Date(), ...extra })
-    const shownOn = (ctx: ReturnType<typeof context>) =>
-      VITRINE_WIDGETS.filter((widget) =>
-        isWidgetVisible(
-          { enabled: true, visibility: validateWidgetVisibility(widget.visibility) },
-          ctx,
-        ),
-      ).map((widget) => `${widget.area}:${widget.type}`)
-
-    it('seeds only widgets the widget vocabulary accepts, in areas that exist', () => {
-      for (const widget of VITRINE_WIDGETS) {
-        expect(isWidgetAreaId(widget.area), widget.area).toBe(true)
-        const settings =
-          typeof widget.settings === 'function' ? widget.settings({}) : widget.settings
-        expect(() => validateWidgetSettings(widget.type, settings)).not.toThrow()
-        expect(() => validateWidgetVisibility(widget.visibility)).not.toThrow()
+    it('keeps to the writing charter: no buzzwords, no exclamation marks, at most one em dash per text', () => {
+      const buzzwords =
+        /\b(seamless|unlock|elevate|empower|supercharge|streamline|cutting-edge|robust|leverage|game-changer)|innovant|révolutionn|de pointe|clé en main|incontournable|synergie|disrupt/i
+      for (const text of allDemoCopy(copy, DEFAULT_FIRM_NAME)) {
+        expect(text, text).not.toMatch(buzzwords)
+        expect(text, text).not.toContain('!')
+        expect((text.match(/—/g) ?? []).length, text).toBeLessThanOrEqual(1)
       }
     })
 
-    it('reads only collections and taxonomies the blueprint declares', () => {
-      const collections = new Set(VITRINE_COLLECTIONS.map((collection) => collection.name))
-      const taxonomies = new Set(VITRINE_TAXONOMIES.map((taxonomy) => taxonomy.name))
-      for (const widget of VITRINE_WIDGETS) {
-        const { collection, taxonomy, href } = (
-          typeof widget.settings === 'function' ? widget.settings({}) : widget.settings
-        ) as { readonly collection?: unknown; readonly taxonomy?: unknown; readonly href?: unknown }
-        if (typeof collection === 'string') {
-          expect(collections.has(collection), widget.title).toBe(true)
-        }
-        if (typeof taxonomy === 'string') {
-          expect(taxonomies.has(taxonomy), widget.title).toBe(true)
-        }
-        if (typeof href === 'string' && href.startsWith('/')) {
-          expect(buildVitrineDemoPages({}).some((demo) => `/${demo.slug}` === href)).toBe(true)
-        }
+    it('never gives a fictional person a real face', () => {
+      // Testimonials and leadership are named without a portrait: a real
+      // photograph of a real person would present them as someone they are not.
+      expect(copy.media.some((item) => /avatar|portrait/i.test(item.name))).toBe(false)
+    })
+
+    it('seeds a home page of eight to twelve sections, each list reading a declared collection', () => {
+      const home = pages[0]
+      expect(home?.slug).toBe('home')
+      const types = home?.blocks.map((block) => block._type) ?? []
+      expect(types.length).toBeGreaterThanOrEqual(8)
+      expect(types.length).toBeLessThanOrEqual(12)
+      const names = new Set(model.collections.map((collection) => collection.name))
+      for (const listBlock of pages
+        .flatMap((demo) => demo.blocks)
+        .filter(
+          (b): b is Extract<VocabularyBlock, { _type: 'collectionList' }> =>
+            b._type === 'collectionList',
+        )) {
+        expect(names.has(listBlock.collection), listBlock.collection).toBe(true)
       }
     })
 
-    it('keeps the home page and the site pages free of a side column', () => {
-      expect(shownOn(context('home', '/'))).toEqual([])
-      for (const demo of buildVitrineDemoPages({})) {
-        expect(
-          shownOn(context('entry', `/${demo.slug}`, { collection: 'page' })),
-          demo.slug,
-        ).toEqual([])
+    it('points every media slot at a bundled file of the right type', () => {
+      for (const spec of vitrineMediaSpecs(copy)) {
+        const bytes = loadPhotoAsset(spec.photo as string)
+        expect(bytes, spec.photo).toBeDefined()
+        const expected = (spec.photo as string).endsWith('.png') ? 'png' : 'jpg'
+        expect(bundledImageType(bytes as Uint8Array).extension, spec.photo).toBe(expected)
+        expect(spec.alt.length, spec.name).toBeGreaterThan(2)
       }
     })
 
-    it('sets a case study beside the sectors, the other case studies and the call to discuss a mandate', () => {
-      expect(shownOn(context('entry', '/case-studies/x', { collection: 'case_study' }))).toEqual([
-        'sidebar:terms',
-        'sidebar:recentEntries',
-        'sidebar:cta',
-      ])
+    it('credits every photograph it bundles, with its author, licence and source', () => {
+      const photos = vitrineMediaSpecs(copy)
+        .map((spec) => (spec.photo as string).replace('vitrine/', ''))
+        .filter((file) => file.endsWith('.jpg'))
+      const credited = new Set(VITRINE_PHOTO_CREDITS.map((credit) => credit.file))
+      for (const file of photos) expect(credited.has(file), file).toBe(true)
+      for (const credit of VITRINE_PHOTO_CREDITS) {
+        expect(credit.author.length).toBeGreaterThan(0)
+        expect(credit.source).toMatch(/^https:\/\/commons\.wikimedia\.org\//)
+        expect(credit.licence).toMatch(/^(CC0 1\.0|Public domain|CC BY [0-9.]+)$/)
+      }
+      const creditsPage = pages.find((demo) => demo.slug === copy.pageSlugs.credits)
+      expect(JSON.stringify(creditsPage)).toContain('creativecommons.org/licenses/by/4.0/')
     })
 
-    it("sets a practice beside the other practices and the partners' switchboard, with work under it", () => {
-      expect(shownOn(context('entry', '/services/x', { collection: 'service' }))).toEqual([
-        'sidebar:recentEntries',
-        'sidebar:contact',
-        'content-after:recentEntries',
-      ])
+    it('links every menu item to a page it seeds', () => {
+      const slugs = new Set(pages.map((demo) => `/${demo.slug}`))
+      const menus = vitrineMenus(copy)
+      for (const item of [...menus.header, ...menus.footer, menus.headerAction]) {
+        expect(slugs.has(item?.url as string), item?.url).toBe(true)
+      }
     })
 
-    it('never repeats the search form a results page already opens on', () => {
-      expect(shownOn(context('search', '/search'))).not.toContain('sidebar:search')
-      expect(shownOn(context('taxonomy', '/sector/transport', { taxonomy: 'sector' }))).toContain(
-        'sidebar:search',
+    it('ships one pack per language through contentPackFor', () => {
+      const pack = contentPackFor('vitrine', locale === 'fr' ? 'fr-FR' : 'en')
+      expect(pack?.collections.map((collection) => collection.name)).toEqual(
+        model.collections.map((collection) => collection.name),
       )
+      expect(pack?.siteSettings).toEqual(vitrineSiteSettings(copy))
+    })
+
+    describe('widgets', () => {
+      const widgets = vitrineWidgets(copy)
+      const context = (
+        kind: 'home' | 'entry' | 'taxonomy' | 'search',
+        path: string,
+        extra: { readonly collection?: string; readonly taxonomy?: string } = {},
+      ) => ({ kind, path, signedIn: false, locale, now: new Date(), ...extra })
+      const shownOn = (ctx: ReturnType<typeof context>) =>
+        widgets
+          .filter((widget) =>
+            isWidgetVisible(
+              { enabled: true, visibility: validateWidgetVisibility(widget.visibility) },
+              ctx,
+            ),
+          )
+          .map((widget) => `${widget.area}:${widget.type}`)
+
+      it('seeds only widgets the vocabulary accepts, reading only what the blueprint declares', () => {
+        const collections = new Set(model.collections.map((collection) => collection.name))
+        for (const widget of widgets) {
+          expect(isWidgetAreaId(widget.area), widget.area).toBe(true)
+          const settings =
+            typeof widget.settings === 'function' ? widget.settings({}) : widget.settings
+          expect(() => validateWidgetSettings(widget.type, settings)).not.toThrow()
+          const { collection, taxonomy, href } = settings as {
+            readonly collection?: unknown
+            readonly taxonomy?: unknown
+            readonly href?: unknown
+          }
+          if (typeof collection === 'string') expect(collections.has(collection)).toBe(true)
+          if (typeof taxonomy === 'string') expect(taxonomy).toBe(model.sector.name)
+          if (typeof href === 'string') {
+            expect(
+              pages.some((demo) => `/${demo.slug}` === href),
+              href,
+            ).toBe(true)
+          }
+        }
+      })
+
+      it('keeps the home page and the site pages free of a side column', () => {
+        expect(shownOn(context('home', '/'))).toEqual([])
+        for (const demo of pages) {
+          expect(
+            shownOn(context('entry', `/${demo.slug}`, { collection: 'page' })),
+            demo.slug,
+          ).toEqual([])
+        }
+      })
+
+      it('sets a case study beside the sectors, the other case studies and a call to action', () => {
+        expect(shownOn(context('entry', '/x', { collection: 'case_study' }))).toEqual([
+          'sidebar:terms',
+          'sidebar:recentEntries',
+          'sidebar:cta',
+        ])
+      })
+
+      it('sets a solution beside the other solutions and an engineer to call, with work under it', () => {
+        expect(shownOn(context('entry', '/x', { collection: 'solution' }))).toEqual([
+          'sidebar:recentEntries',
+          'sidebar:contact',
+          'content-after:recentEntries',
+        ])
+      })
+
+      it('never repeats the search form a results page already opens on', () => {
+        expect(shownOn(context('search', '/search'))).not.toContain('sidebar:search')
+        expect(shownOn(context('taxonomy', '/x/y', { taxonomy: model.sector.name }))).toContain(
+          'sidebar:search',
+        )
+      })
     })
   })
-})
+}

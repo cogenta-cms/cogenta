@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=block" rel="stylesheet">
+<style>
+:root{--bg:#0b0d10;--panel:#12151a;--panel2:#161a20;--line:#232932;--fg:#e7e9ec;--muted:#8a929e;--dim:#5d6571;--green:#3ecf8e;--amber:#f5b83d;--red:#f26b5b;--blue:#5b9dff}
+.light{--bg:#f4f5f7;--panel:#ffffff;--panel2:#fafbfc;--line:#e3e6ea;--fg:#12161c;--muted:#5f6875;--dim:#8a929e;--green:#159a62;--amber:#c7870f;--red:#d2463a;--blue:#2f6fe0}
+*{box-sizing:border-box}
+html,#root{height:100%}
+body{margin:0;width:1600px;height:100vh;background:var(--bg);color:var(--fg);font-family:'Inter Tight',sans-serif;font-size:13px;overflow:hidden}
+.app{display:grid;grid-template-columns:220px 1fr;height:100%}
+aside{border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;gap:4px;background:var(--panel)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;margin:0 6px 22px}
+.brand i{width:22px;height:22px;border:2px solid var(--fg);display:grid;place-items:center}
+.brand i::after{content:'';width:8px;height:8px;background:var(--green)}
+.nav a{display:flex;justify-content:space-between;padding:8px 10px;color:var(--muted);text-decoration:none;border-radius:4px}
+.nav a.on{background:var(--panel2);color:var(--fg);box-shadow:inset 2px 0 0 var(--green)}
+.nav small{font-family:'JetBrains Mono';color:var(--dim)}
+.sect{margin:18px 10px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.site{margin-top:auto;padding:10px;border:1px solid var(--line);border-radius:4px;color:var(--muted)}
+.site b{display:block;color:var(--fg);font-weight:600;margin-bottom:2px}
+main{display:flex;flex-direction:column;min-width:0}
+header{height:56px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 24px}
+.crumb{color:var(--muted)} .crumb b{color:var(--fg);font-weight:600}
+.search{margin-left:auto;width:280px;height:32px;border:1px solid var(--line);border-radius:4px;display:flex;align-items:center;padding:0 10px;color:var(--dim)}
+.pill{height:32px;padding:0 12px;border:1px solid var(--line);border-radius:4px;display:flex;align-items:center;gap:6px;color:var(--muted);font-family:'JetBrains Mono';font-size:12px}
+.content{padding:22px 24px;display:grid;gap:16px;grid-template-columns:repeat(12,1fr);grid-auto-rows:min-content}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px}
+.kpi{grid-column:span 3}
+.kpi .l{color:var(--muted);font-size:12px}
+.kpi .v{font-size:30px;font-weight:600;letter-spacing:-.02em;margin:8px 0 6px;font-variant-numeric:tabular-nums}
+.kpi .d{font-family:'JetBrains Mono';font-size:11.5px;color:var(--dim)}
+.kpi .d em{font-style:normal;color:var(--green)}
+.kpi .d em.w{color:var(--amber)}
+.ttl{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.ttl h3{margin:0;font-size:14px;font-weight:600}
+.ttl span{font-family:'JetBrains Mono';font-size:11.5px;color:var(--dim)}
+.map{grid-column:span 7;height:420px}
+.alerts{grid-column:span 5;height:420px}
+.chart{grid-column:span 12;height:260px}
+table{width:100%;border-collapse:collapse}
+td{padding:9px 0;border-top:1px solid var(--line);vertical-align:top}
+td:first-child{width:18px}
+.sev{display:inline-block;width:8px;height:8px;border-radius:50%;margin-top:4px}
+.a-t{font-weight:500}
+.a-m{color:var(--muted);font-size:12px;margin-top:2px}
+.time{font-family:'JetBrains Mono';font-size:11.5px;color:var(--dim);text-align:right;white-space:nowrap}
+.legend{display:flex;gap:14px;color:var(--muted);font-size:12px}
+.legend i{display:inline-block;width:10px;height:2px;vertical-align:middle;margin-right:6px}
+/* detail */
+.tabs{display:flex;gap:22px;padding:0 24px;border-bottom:1px solid var(--line)}
+.tabs a{padding:14px 0;color:var(--muted);text-decoration:none}
+.tabs a.on{color:var(--fg);box-shadow:inset 0 -2px 0 var(--fg)}
+.asset{padding:20px 24px 0;display:flex;align-items:flex-end;gap:16px}
+.asset h1{margin:0;font-size:24px;letter-spacing:-.02em;font-weight:600}
+.asset p{margin:4px 0 0;color:var(--muted)}
+.tag{font-family:'JetBrains Mono';font-size:11.5px;padding:3px 8px;border:1px solid var(--line);border-radius:3px;color:var(--muted)}
+.tag.warn{color:var(--amber);border-color:var(--amber)}
+.btn{margin-left:auto;height:34px;padding:0 14px;border-radius:4px;background:var(--fg);color:var(--bg);display:flex;align-items:center;font-weight:600}
+.btn2{height:34px;padding:0 14px;border-radius:4px;border:1px solid var(--line);display:flex;align-items:center;font-weight:500}
+.rec{grid-column:span 4}
+.rec .big{font-size:40px;font-weight:600;letter-spacing:-.03em;margin:6px 0 2px}
+.bar{height:8px;background:var(--panel2);border:1px solid var(--line);border-radius:4px;overflow:hidden;margin:14px 0 6px}
+.bar i{display:block;height:100%;background:var(--amber)}
+.note{border-left:2px solid var(--amber);padding:10px 12px;background:var(--panel2);margin-top:14px;line-height:1.45}
+.spec{grid-column:span 8;height:300px}
+.hist{grid-column:span 12}
+.hist td{padding:10px 8px 10px 0}
+.hist th{font-weight:500;color:var(--dim);text-align:left;font-size:12px;padding-bottom:8px}
+.mono{font-family:'JetBrains Mono';font-size:12px;white-space:nowrap}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const lang = new URLSearchParams(location.search).get('lang') || 'fr'
+const view = new URLSearchParams(location.search).get('view') || 'overview'
+const T = {
+  fr: { overview:'Vue d’ensemble', assets:'Actifs', alerts:'Alertes', maint:'Maintenance', reports:'Rapports', settings:'Paramètres', networks:'Réseaux', north:'Réseau Nord', south:'Réseau Sud', plant:'Poste de Valmy', search:'Rechercher un actif, un capteur…', range:'24 h',
+    k1:'Disponibilité du réseau', k1d:'<em>+0,006</em> vs 30 j', k2:'Alertes actives', k2d:'<em class="w">2 critiques</em> · 5 à surveiller', k3:'Capteurs en ligne', k3d:'22 hors ligne · <em>99,8 %</em>', k4:'Interventions planifiées', k4d:'8 cette semaine',
+    map:'Schéma du réseau', mapS:'mis à jour il y a 12 s', al:'Alertes', alS:'triées par gravité',
+    a:[['r','Échauffement anormal','Transformateur T2 · Poste de Valmy','il y a 4 min'],['r','Perte de communication','Nœud N-2207 · Ligne 63 kV Aube','il y a 18 min'],['a','Vibration hors tendance','Disjoncteur D14 · Poste de Rethel','il y a 41 min'],['a','Dérive du capteur','Débitmètre Q-118 · Station Castelane Est','il y a 1 h'],['a','Humidité élevée','Armoire A-31 · Poste de Sedan','il y a 2 h'],['b','Maintenance à planifier','Relais Buchholz · T2 Valmy','il y a 3 h']],
+    ch:'Température d’huile — Transformateur T2', chS:'7 jours · pas de 10 s', l1:'Mesure', l2:'Seuil d’alerte', l3:'Modèle attendu',
+    tabs:['Vue d’ensemble','Mesures','Maintenance','Documents','Historique'], asset:'Transformateur T2 · 90 MVA', assetS:'Poste de Valmy · mis en service en 2004 · 38 capteurs', warn:'Surveillance renforcée', plan:'Planifier l’intervention', exp:'Exporter',
+    rul:'Durée de vie résiduelle estimée', rulV:'41 jours', rulD:'avant dépassement du seuil de dégradation', conf:'Confiance du modèle : 87 %', recT:'Recommandation', rec:'Remplacer le relais Buchholz et contrôler l’étanchéité de la cuve avant le 14 octobre. Coupure estimée : 3 h, possible en report de charge sur T1.',
+    spec:'Spectre de vibration', specS:'dernier relevé · 09:42', hist:'Historique des interventions', hh:['Date','Intervention','Équipe','Durée','Résultat'],
+    hr:[['12/06/2026','Analyse d’huile (gaz dissous)','Équipe terrain','2 h 10','Conforme'],['03/02/2026','Remplacement ventilateur V3','Maintenance poste','4 h 30','Conforme'],['18/09/2025','Thermographie infrarouge','Équipe terrain','1 h 45','Point chaud corrigé']] },
+  en: { overview:'Overview', assets:'Assets', alerts:'Alerts', maint:'Maintenance', reports:'Reports', settings:'Settings', networks:'Networks', north:'North network', south:'South network', plant:'Valmy substation', search:'Search an asset or a sensor…', range:'24 h',
+    k1:'Network availability', k1d:'<em>+0.006</em> vs 30 d', k2:'Active alerts', k2d:'<em class="w">2 critical</em> · 5 to watch', k3:'Sensors online', k3d:'22 offline · <em>99.8%</em>', k4:'Scheduled interventions', k4d:'8 this week',
+    map:'Network diagram', mapS:'updated 12 s ago', al:'Alerts', alS:'sorted by severity',
+    a:[['r','Abnormal heating','Transformer T2 · Valmy substation','4 min ago'],['r','Communication lost','Node N-2207 · 63 kV Aube line','18 min ago'],['a','Vibration off trend','Breaker D14 · Rethel substation','41 min ago'],['a','Sensor drift','Flow meter Q-118 · Castelane East station','1 h ago'],['a','High humidity','Cabinet A-31 · Sedan substation','2 h ago'],['b','Maintenance to schedule','Buchholz relay · T2 Valmy','3 h ago']],
+    ch:'Oil temperature — Transformer T2', chS:'7 days · 10 s resolution', l1:'Measured', l2:'Alert threshold', l3:'Expected (model)',
+    tabs:['Overview','Measurements','Maintenance','Documents','History'], asset:'Transformer T2 · 90 MVA', assetS:'Valmy substation · in service since 2004 · 38 sensors', warn:'Under close watch', plan:'Schedule the work', exp:'Export',
+    rul:'Estimated remaining useful life', rulV:'41 days', rulD:'before the degradation threshold is crossed', conf:'Model confidence: 87%', recT:'Recommendation', rec:'Replace the Buchholz relay and check tank sealing before 14 October. Estimated outage: 3 h, possible with load transferred to T1.',
+    spec:'Vibration spectrum', specS:'last reading · 09:42', hist:'Intervention history', hh:['Date','Work','Team','Duration','Outcome'],
+    hr:[['2026-06-12','Oil analysis (dissolved gas)','Field team','2 h 10','Compliant'],['2026-02-03','Fan V3 replaced','Substation maintenance','4 h 30','Compliant'],['2025-09-18','Infrared thermography','Field team','1 h 45','Hot spot fixed']] },
+}[lang]
+const $ = (h) => h
+function rng(seed){ let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647 }
+function sidebar(active){
+  const items = [['overview','',T.overview],['assets',lang==='fr'?'12 440':'12,440',T.assets],['alerts','7',T.alerts],['maint','23',T.maint],['reports','',T.reports],['settings','',T.settings]]
+  return `<aside><div class="brand"><i></i>Vigie</div><nav class="nav">${items.map(([k,n,l])=>`<a class="${k===active?'on':''}">${l}<small>${n}</small></a>`).join('')}</nav>
+  <div class="sect">${T.networks}</div><nav class="nav"><a class="on" style="box-shadow:none">${T.north}<small>●</small></a><a>${T.south}</a></nav>
+  <div class="site"><b>Ardenne Énergies</b>${lang==='fr'?'Exploitation · 3 régions':'Operations · 3 regions'}</div></aside>`
+}
+function lineChart(w,h){
+  const r = rng(7); const n = 280; const pts = []; const exp = []
+  for (let i=0;i<n;i++){ const t=i/n; const base = 62 + 6*Math.sin(t*Math.PI*14) + 3*Math.sin(t*Math.PI*3); const drift = t>0.72 ? (t-0.72)*52 : 0
+    exp.push(base); pts.push(base + drift + (r()-.5)*2.2) }
+  const y = (v) => h - 24 - (v-48)/(92-48)*(h-40); const x = (i) => 40 + i*(w-56)/(n-1)
+  const path = (a) => a.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ')
+  const grid = [50,60,70,80,90].map(v=>`<line x1="40" x2="${w-16}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="30" y="${y(v)+4}" fill="var(--dim)" font-size="11" text-anchor="end" font-family="JetBrains Mono">${v}°</text>`).join('')
+  const days = (lang==='fr'?['lun.','mar.','mer.','jeu.','ven.','sam.','dim.']:['Mon','Tue','Wed','Thu','Fri','Sat','Sun']).map((d,i)=>`<text x="${40+i*(w-56)/7+10}" y="${h-4}" fill="var(--dim)" font-size="11" font-family="JetBrains Mono">${d}</text>`).join('')
+  const zone = `<rect x="${x(Math.round(n*0.72))}" y="12" width="${w-16-x(Math.round(n*0.72))}" height="${h-36}" fill="var(--red)" opacity=".07"/>`
+  return `<svg width="${w}" height="${h}">${grid}${zone}<line x1="40" x2="${w-16}" y1="${y(78)}" y2="${y(78)}" stroke="var(--amber)" stroke-dasharray="5 4"/><path d="${path(exp)}" fill="none" stroke="var(--dim)" stroke-width="1.5" stroke-dasharray="3 3"/><path d="${path(pts)}" fill="none" stroke="var(--blue)" stroke-width="1.6"/>${days}</svg>`
+}
+function networkMap(w,h){
+  const nodes = [[90,80,'g','Charleville'],[260,60,'g','Sedan'],[430,110,'a','Rethel'],[150,210,'g','Mézières'],[330,230,'r','Valmy'],[520,250,'g','Vouziers'],[210,330,'g','Signy'],[420,340,'r','N-2207'],[600,120,'g','Stenay'],[640,330,'g','Grandpré']]
+  const edges = [[0,1],[1,2],[0,3],[3,4],[2,4],[4,5],[3,6],[6,7],[4,7],[2,8],[5,9],[7,9],[8,5]]
+  const col = {g:'var(--green)',a:'var(--amber)',r:'var(--red)'}
+  const e = edges.map(([a,b])=>{const A=nodes[a],B=nodes[b];const bad=A[2]==='r'||B[2]==='r';return `<line x1="${A[0]}" y1="${A[1]}" x2="${B[0]}" y2="${B[1]}" stroke="${bad?'var(--red)':'var(--line)'}" stroke-width="${bad?2:1.5}" ${bad?'stroke-dasharray="6 5"':''}/>`}).join('')
+  const n = nodes.map(([x,y,s,l])=>`<rect x="${x-6}" y="${y-6}" width="12" height="12" fill="var(--panel)" stroke="${col[s]}" stroke-width="2"/><rect x="${x-2}" y="${y-2}" width="4" height="4" fill="${col[s]}"/><text x="${x+12}" y="${y+4}" fill="var(--muted)" stroke="var(--panel)" stroke-width="5" paint-order="stroke" font-size="11.5" font-family="JetBrains Mono">${l}</text>`).join('')
+  return `<svg width="${w}" height="${h}">${e}${n}</svg>`
+}
+function spectrum(w,h){
+  const r = rng(11); const bars = 64; const bw = (w-70)/bars
+  let s = ''
+  for (let i=0;i<bars;i++){ let v = 8 + r()*18; if (i===8) v=92; if (i===16) v=58; if (i===48) v=71; if (i===32) v=33
+    const bh = v/100*(h-40); const warn = i===48
+    s += `<rect x="${40+i*bw}" y="${h-24-bh}" width="${bw-3}" height="${bh}" fill="${warn?'var(--amber)':'var(--blue)'}" opacity="${warn?1:.85}"/>` }
+  const ticks = ['0','100','200','300','400 Hz'].map((t,i)=>`<text x="${40+i*(w-70)/4}" text-anchor="${i===4?'end':i===0?'start':'middle'}" y="${h-6}" fill="var(--dim)" font-size="11" font-family="JetBrains Mono">${t}</text>`).join('')
+  return `<svg width="${w}" height="${h}">${s}${ticks}<text x="${40+48*bw-6}" text-anchor="end" y="${h-24-71/100*(h-40)+14}" fill="var(--amber)" font-size="11.5" font-family="JetBrains Mono">300 Hz · +38 %</text></svg>`
+}
+function overview(){
+  const sev = {r:'var(--red)',a:'var(--amber)',b:'var(--blue)'}
+  return `<div class="app">${sidebar('overview')}<main>
+  <header><span class="crumb">${T.north} / <b>${T.overview}</b></span><div class="search">${T.search}</div><div class="pill">◷ ${T.range}</div></header>
+  <div class="content">
+    <div class="card kpi"><div class="l">${T.k1}</div><div class="v">${lang==='fr'?'99,982 %':'99.982%'}</div><div class="d">${T.k1d}</div></div>
+    <div class="card kpi"><div class="l">${T.k2}</div><div class="v">7</div><div class="d">${T.k2d}</div></div>
+    <div class="card kpi"><div class="l">${T.k3}</div><div class="v">${lang==='fr'?'12 418':'12,418'}</div><div class="d">${T.k3d}</div></div>
+    <div class="card kpi"><div class="l">${T.k4}</div><div class="v">23</div><div class="d">${T.k4d}</div></div>
+    <div class="card map"><div class="ttl"><h3>${T.map}</h3><span>${T.mapS}</span></div>${networkMap(760,360)}</div>
+    <div class="card alerts"><div class="ttl"><h3>${T.al}</h3><span>${T.alS}</span></div><table>${T.a.map(([s,t,m,w])=>`<tr><td><span class="sev" style="background:${sev[s]}"></span></td><td><div class="a-t">${t}</div><div class="a-m">${m}</div></td><td class="time">${w}</td></tr>`).join('')}</table></div>
+    <div class="card chart"><div class="ttl"><h3>${T.ch}</h3><div class="legend"><span><i style="background:var(--blue)"></i>${T.l1}</span><span><i style="background:var(--amber)"></i>${T.l2}</span><span><i style="background:var(--dim)"></i>${T.l3}</span><span class="mono" style="color:var(--dim)">${T.chS}</span></div></div>${lineChart(1300,196)}</div>
+  </div></main></div>`
+}
+function detail(){
+  document.body.classList.add('light')
+  return `<div class="app">${sidebar('assets')}<main>
+  <header><span class="crumb">${T.assets} / ${T.plant} / <b>T2</b></span><div class="search">${T.search}</div><div class="pill">◷ 30 ${lang==='fr'?'j':'d'}</div></header>
+  <div class="asset"><div><h1>${T.asset}</h1><p>${T.assetS}</p></div><span class="tag warn">${T.warn}</span><div class="btn2" style="margin-left:auto">${T.exp}</div><div class="btn" style="margin-left:0">${T.plan}</div></div>
+  <div class="tabs" style="margin-top:18px">${T.tabs.map((t,i)=>`<a class="${i===0?'on':''}">${t}</a>`).join('')}</div>
+  <div class="content">
+    <div class="card rec"><div class="ttl"><h3>${T.rul}</h3></div><div class="big">${T.rulV}</div><div style="color:var(--muted)">${T.rulD}</div><div class="bar"><i style="width:34%"></i></div><div class="mono" style="color:var(--dim)">${T.conf}</div><div class="note"><b>${T.recT}.</b> ${T.rec}</div></div>
+    <div class="card spec"><div class="ttl"><h3>${T.spec}</h3><span>${T.specS}</span></div>${spectrum(860,240)}</div>
+    <div class="card hist"><div class="ttl"><h3>${T.hist}</h3></div><table><tr>${T.hh.map(h=>`<th>${h}</th>`).join('')}</tr>${T.hr.map(r=>`<tr>${r.map((c,i)=>`<td class="${i===0||i===3?'mono':''}">${c}</td>`).join('')}</tr>`).join('')}</table></div>
+  </div></main></div>`
+}
+document.getElementById('root').innerHTML = view === 'overview' ? overview() : detail()
+</script>
+</body>
+</html>

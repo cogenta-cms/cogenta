@@ -7,7 +7,7 @@ import {
   dropSchemaTables,
   reindexAll,
 } from '@cogenta/schema'
-import { BLUEPRINT_CONTENT_PACKS } from '@cogenta/starters'
+import { BLUEPRINT_CONTENT_PACKS, contentPackFor } from '@cogenta/starters'
 
 export interface ResetPlaygroundDataOptions {
   readonly db: DatabaseHandle
@@ -36,7 +36,7 @@ export interface ResetPlaygroundDataOptions {
  */
 export async function resetPlaygroundData(options: ResetPlaygroundDataOptions): Promise<void> {
   const blueprintId = options.blueprintId ?? 'blog'
-  const pack = BLUEPRINT_CONTENT_PACKS[blueprintId]
+  const pack = contentPackFor(blueprintId, options.defaultLocale ?? 'en')
   if (pack === undefined) {
     throw new CogentaError({
       code: 'PLAYGROUND_BLUEPRINT_UNKNOWN',

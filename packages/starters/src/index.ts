@@ -4,7 +4,7 @@ export type {
   SeedContext,
   SeedDemoContent,
 } from './blueprints/content-pack.js'
-export { BLUEPRINT_CONTENT_PACKS } from './blueprints/content-packs.js'
+export { BLUEPRINT_CONTENT_PACKS, contentPackFor } from './blueprints/content-packs.js'
 export type { DemoMediaSpec, SeedDemoMediaDeps } from './blueprints/demo-media.js'
 export { seedDemoMedia } from './blueprints/demo-media.js'
 export type { BlueprintMenus, MenuItemSpec } from './blueprints/menus.js'

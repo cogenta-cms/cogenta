@@ -27,13 +27,8 @@ import { buildSaasDemoPages } from '../src/blueprints/saas.js'
 // before, minus the (now media-dependent) hero image, which this test does
 // not exercise.
 import { buildStoreDemoPages } from '../src/blueprints/store.js'
-// `vitrine`'s demo pages are now built from `SeedContext.media` and the
-// real service ids assigned at seed time (L25 pro pass) — like `saas` and
-// `store` above, `buildVitrineDemoPages({})` renders the same pages this
-// test checked before, minus the (now media-dependent) hero/logo-strip/
-// media-figure images and the featureGrid-to-service links, none of which
-// this test exercises.
-import { buildVitrineDemoPages } from '../src/blueprints/vitrine.js'
+// `vitrine` is written in French and in English (L36): both are checked.
+import { buildVitrineDemoPages, vitrineCopyFor } from '../src/blueprints/vitrine.js'
 
 const RESTAURANT_DEMO_PAGES = buildRestaurantDemoPages({})
 const PORTFOLIO_DEMO_PAGES = buildPortfolioDemoPages({})
@@ -42,7 +37,8 @@ const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())
 const DOCUMENTATION_DEMO_PAGES = buildDocumentationDemoPages({})
 const ASSOCIATION_DEMO_PAGES = buildAssociationDemoPages({})
-const VITRINE_DEMO_PAGES = buildVitrineDemoPages({})
+const VITRINE_DEMO_PAGES = buildVitrineDemoPages(vitrineCopyFor('en'))
+const VITRINE_FR_DEMO_PAGES = buildVitrineDemoPages(vitrineCopyFor('fr'))
 const MAGAZINE_DEMO_PAGES = buildMagazineDemoPages({})
 
 /**
@@ -75,6 +71,7 @@ const BLUEPRINTS: Readonly<Record<string, readonly DemoPage[]>> = {
   saas: SAAS_DEMO_PAGES,
   store: STORE_DEMO_PAGES,
   vitrine: VITRINE_DEMO_PAGES,
+  'vitrine (fr)': VITRINE_FR_DEMO_PAGES,
 }
 
 describe('the demo content every blueprint seeds', () => {

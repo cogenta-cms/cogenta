@@ -92,6 +92,16 @@ export function ReplaceRoute(): JSX.Element {
       .finally(() => setBusy(false))
   }
 
+  // "Cogenta" → "Cogenta SA": the replacement still contains the phrase, so
+  // searching again finds the same entries, and applying again would write
+  // "Cogenta SA SA". Said before the first application, not discovered after
+  // the second.
+  const replacementContainsPhrase =
+    find !== '' &&
+    (caseInsensitive
+      ? replace.toLocaleLowerCase().includes(find.toLocaleLowerCase())
+      : replace.includes(find))
+
   const totalOccurrences = (preview?.entries ?? []).reduce(
     (total, entry) => total + entry.occurrences,
     0,
@@ -217,6 +227,11 @@ export function ReplaceRoute(): JSX.Element {
               </div>
             )}
           </div>
+          {preview.entries.length > 0 && replacementContainsPhrase && (
+            <Notice tone="warning" live="off">
+              <p>{t('replace.reapplies')}</p>
+            </Notice>
+          )}
           {preview.truncated && (
             <Notice tone="warning" live="off">
               <p>{t('replace.truncated', { count: preview.entries.length })}</p>

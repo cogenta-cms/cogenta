@@ -4941,6 +4941,7 @@
     "confirmQuestion_one": "Modifier {{count}} entrée ?",
     "confirmQuestion_other": "Modifier {{count}} entrées ?",
     "confirm": "Confirmer le remplacement",
+    "reapplies": "Le texte de remplacement contient l'expression recherchée : une fois appliqué, une nouvelle recherche retrouvera les mêmes entrées, et les remplacer encore doublerait le changement. Appliquez une seule fois.",
     "truncated": "L'aperçu s'est arrêté à {{count}} entrées. Remplacez ces entrées, puis relancez la recherche pour les suivantes.",
     "occurrences_one": "{{count}} occurrence",
     "occurrences_other": "{{count}} occurrences",

@@ -4941,6 +4941,7 @@
     "confirmQuestion_one": "Change {{count}} entry?",
     "confirmQuestion_other": "Change {{count}} entries?",
     "confirm": "Confirm the replacement",
+    "reapplies": "The replacement contains the phrase being searched for: once applied, searching again finds the same entries, and replacing them again would apply the change twice. Apply it once.",
     "truncated": "The preview stopped at {{count}} entries. Replace these, then search again for the next ones.",
     "occurrences_one": "{{count}} occurrence",
     "occurrences_other": "{{count}} occurrences",

@@ -69,6 +69,14 @@ describe('search and replace', () => {
     expect(screen.queryByRole('button', { name: 'Remplacer partout' })).toBeNull()
   })
 
+  it('warns when the replacement contains the phrase, before anything is applied', async () => {
+    fireEvent.change(await screen.findByLabelText('Rechercher'), { target: { value: 'Cogenta' } })
+    fireEvent.change(screen.getByLabelText('Remplacer par'), { target: { value: 'Cogenta SA' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
+
+    expect(await screen.findByText(/doublerait le changement/u)).toBeDefined()
+  })
+
   it('says so plainly when nothing matches', async () => {
     fireEvent.change(await screen.findByLabelText('Rechercher'), { target: { value: 'absent' } })
     fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))

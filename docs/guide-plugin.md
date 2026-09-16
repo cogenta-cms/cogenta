@@ -268,6 +268,56 @@ disabled until a human re-enables it — an event handler is not a place to do s
 Your code is read once, when the site starts: editing a plugin means restarting the
 site, the same rule its schema file already follows.
 
+## Serving a page of your own (L31)
+
+Declare the paths you serve, and expose `onRequest`:
+
+```js
+// plugin.manifest.mjs
+provides: { routes: ['/hello'] },
+```
+
+```js
+// plugin.js
+;({
+  onRequest: (request) => ({
+    status: 200,
+    contentType: 'text/html',
+    body: `<p>Hello ${request.query.name ?? ''}</p>`,
+  }),
+})
+```
+
+It is served at `/_cogenta/plugins/<your plugin name>/hello`, a reserved prefix: a plugin
+never shadows one of the site's pages, and a page never shadows a plugin. `request`
+carries `method` (GET or POST), `path`, `query` and `body` (text, capped at 64 KiB).
+
+You answer with a status, one content type from a known list (`text/plain`, `text/html`,
+`application/json`, `application/xml`, `text/csv`) and a body — **never a header**. A
+plugin that could set headers could set a cookie on the site's own origin or turn its
+answer into a download; the host adds `cache-control: no-store` and nothing else. A path
+your manifest did not declare is a plain 404, and a handler that throws is a 500 whose
+body says nothing about your error (it is logged instead).
+
+## Work on a cadence (L31)
+
+```js
+// plugin.manifest.mjs
+provides: { schedules: [{ name: 'daily-digest', everyMinutes: 1440 }] },
+```
+
+```js
+// plugin.js
+;({ onSchedule: async ({ name }) => `sent the ${name}` })
+```
+
+Each entry becomes a real task on the site's own scheduler, named
+`plugin:<your plugin>:<schedule>`: it runs on the same tick, takes the same
+multi-replica claim, shows on the "Tâches planifiées" screen, and can be run by hand
+from there. The string you return is the summary that screen shows. Five minutes is the
+shortest cadence, because nothing here is a durable worker (R1) — a task runs when a
+tick finds it due.
+
 ## Where a plugin lives on a site (L31)
 
 One directory per plugin under `plugins/` at the root of the site, each holding its

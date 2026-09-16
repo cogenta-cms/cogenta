@@ -371,7 +371,12 @@ import { applySecurity, type SecurityConfig } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
-import { createPluginRuntime } from './plugin-runtime.js'
+import {
+  createPluginRuntime,
+  MAX_PLUGIN_REQUEST_BODY_BYTES,
+  PLUGIN_ROUTE_PREFIX,
+  type PluginRuntime,
+} from './plugin-runtime.js'
 import { createSampleDataEngine } from './sample-data.js'
 import { renderSearchPage } from './search-page.js'
 import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
@@ -3064,6 +3069,28 @@ async function readRawBodyBuffer(req: IncomingMessage): Promise<Buffer | undefin
  * rather than keeping only the last value, which is what a naive
  * `Object.fromEntries` would silently do.
  */
+/**
+ * A plugin route's body, as plain text (L31 step 2): a plugin receives what
+ * was sent, never a parsed shape this host guessed at, and never more than
+ * `MAX_PLUGIN_REQUEST_BODY_BYTES` — `null` says the body was refused, so the
+ * caller answers 413 rather than handing a plugin a truncated payload.
+ */
+async function readBodyText(req: IncomingMessage): Promise<string | null> {
+  const chunks: Buffer[] = []
+  let total = 0
+  let tooLarge = false
+  for await (const chunk of req) {
+    const buffer = chunk as Buffer
+    total += buffer.length
+    if (total > MAX_PLUGIN_REQUEST_BODY_BYTES) {
+      tooLarge = true
+      continue
+    }
+    chunks.push(buffer)
+  }
+  return tooLarge ? null : Buffer.concat(chunks).toString('utf8')
+}
+
 async function readBody(req: IncomingMessage): Promise<unknown> {
   const buffer = await readRawBodyBuffer(req)
   if (buffer === undefined || buffer.length === 0) return undefined
@@ -4282,6 +4309,12 @@ export interface RuntimeExtras {
    * runtime nobody constructed. `cogenta serve` always passes one.
    */
   readonly observabilityRouter?: ObservabilityRouter
+  /**
+   * The plugins this site loaded (L31 step 2). Optional like every other
+   * field here: a caller that builds a bare `Site` by hand serves no plugin
+   * route at all rather than 500ing on a runtime nobody constructed.
+   */
+  readonly pluginRuntime?: PluginRuntime
   /**
    * Fiche 73 tasks 4-8 — the theme sandbox/deploy/versions/export routes
    * below need the real project root the same way `configureThemeRegistry`
@@ -6161,6 +6194,40 @@ export function createRequestListener(
       // A widget's dropdown (terms, archives) navigates without any script by
       // submitting its choice here. Only a path on this site is followed: an
       // absolute or protocol-relative URL would make this an open redirect.
+      // A plugin's own route (L31 step 2), under a prefix no site route can
+      // reach: a plugin never shadows a page, and a page never shadows a
+      // plugin. The plugin picks a status, one content type from a known
+      // list, and a body — never a header, so it cannot set a cookie on this
+      // origin or turn its answer into a download.
+      const pluginRuntime = extras?.pluginRuntime
+      if (pluginRuntime !== undefined && url.pathname.startsWith(PLUGIN_ROUTE_PREFIX)) {
+        if (req.method !== 'GET' && req.method !== 'POST') {
+          jsonError(res, 405, 'METHOD_NOT_ALLOWED', 'A plugin route answers GET and POST.')
+          return
+        }
+        const body = req.method === 'POST' ? await readBodyText(req) : null
+        if (body === null && req.method === 'POST') {
+          jsonError(res, 413, 'REQUEST_TOO_LARGE', 'This request body is too large.')
+          return
+        }
+        const answer = await pluginRuntime.handleRequest(url.pathname, {
+          method: req.method,
+          path: url.pathname,
+          query: Object.fromEntries(url.searchParams.entries()),
+          body,
+        })
+        if (answer === null) {
+          jsonError(res, 404, 'CONTENT_NOT_FOUND', 'No plugin serves this path.')
+          return
+        }
+        res.writeHead(answer.status, {
+          'content-type': `${answer.contentType}; charset=utf-8`,
+          'cache-control': 'no-store',
+        })
+        res.end(answer.body)
+        return
+      }
+
       if (url.pathname === '/_cogenta/go' && req.method === 'GET') {
         const target = url.searchParams.get('to') ?? '/'
         const safe = target.startsWith('/') && !target.startsWith('//') && !target.includes('\\')
@@ -7444,6 +7511,9 @@ export async function runServe(options: ServeOptions): Promise<number> {
     db: site.db,
     logger,
   })
+  // A plugin's own scheduled work, beside the site's (L31 step 2): same tick,
+  // same claim, same screen — nothing here runs a durable worker of its own.
+  pluginRuntime?.registerSchedules(scheduledTaskRegistry)
   scheduledTaskRegistry.register({
     name: 'scheduled-publish',
     description: 'Publish entries whose scheduled time has come, and drain the tools queue.',
@@ -7682,6 +7752,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
   const server = createServer(
     withRequestTracing(
       createRequestListener(site, logger, {
+        ...(pluginRuntime === null ? {} : { pluginRuntime }),
         healthRouter,
         toolsRouter,
         scheduledTasksRouter,

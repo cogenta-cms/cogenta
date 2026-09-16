@@ -821,9 +821,11 @@ accordées (`cogenta plugin grant`) et les vrais gestionnaires de `content.read`
 `runPlugin` sur chaque événement de contenu (`content.publish`/`unpublish`/`delete`) pour
 les plugins qui les déclarent, ce qu'une publication réelle en HTTP prouve
 (`packages/cli/test/serve-plugins.test.ts`). Les magasins d'usage et de désactivation se
-remplissent donc sous le trafic d'un vrai site. Ce qui reste vrai : un plugin ne sert
-encore **aucune route publique** et n'a **aucune tâche planifiée** (L31 étape 2, suite), et
-`provides.blocks`/`provides.tools` restent déclaratifs. L'écran « Extensions installées » (tâche 1) lit
+remplissent donc sous le trafic d'un vrai site. Depuis la fin de l'étape 2, un plugin sert aussi
+une **route publique** (`/_cogenta/plugins/<nom>`, sans en-tête de son choix) et déclare une
+**tâche planifiée** qui tourne sur le planificateur du site. Ce qui reste déclaratif :
+`provides.blocks` (contrat B figé, une RFC serait requise) et `provides.tools` (aucun
+`AgentRegistry` vivant, même constat R2 depuis L5). L'écran « Extensions installées » (tâche 1) lit
 donc un `PluginUsageStore` et un `PluginDisableStore` réels, câblés et testés de bout en
 bout, mais qui resteront vides sur un vrai déploiement tant qu'aucun pipeline
 d'exécution de plugin n'existe — l'écran le dit honnêtement (« Jamais exécutée ») plutôt

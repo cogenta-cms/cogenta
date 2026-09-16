@@ -22,13 +22,30 @@ const MANIFEST = `export default {
   version: '1.0.0',
   engine: '^1.0.0',
   capabilities: ['storage.write:plugins/watcher'],
-  provides: { eventSubscriptions: ['content.publish'] },
+  provides: {
+    eventSubscriptions: ['content.publish'],
+    routes: ['/hello', '/echo'],
+    schedules: [{ name: 'sweep', everyMinutes: 60 }],
+  },
   runtime: 'server',
   isolated: true,
 }
 `
 
 const CODE = `({
+  onSchedule: (input) => 'swept ' + input.name,
+  onRequest: (request) => {
+    if (request.path === '/echo') {
+      return { status: 201, contentType: 'application/json', body: request.body }
+    }
+    if (request.query.crash === 'yes') {
+      throw new Error('deliberate failure')
+    }
+    if (request.query.sneaky === 'yes') {
+      return { status: 200, contentType: 'text/plain', body: 'x', headers: { 'set-cookie': 'a=b' } }
+    }
+    return { status: 200, contentType: 'text/html', body: '<p>Hello ' + (request.query.name || '') + '</p>' }
+  },
   onContentEvent: async (event) => {
     await sdk.storage.write({
       key: 'plugins/watcher/last-event.json',
@@ -163,6 +180,89 @@ describe('a plugin on a running site', () => {
       await publishOne(server.base, token, 'Another article')
 
       expect(await writtenEvent(root)).toBeNull()
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+})
+
+describe('a plugin serving its own route', () => {
+  it('answers under its reserved prefix, and nowhere else', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const hello = await fetch(`${server.base}/_cogenta/plugins/watcher/hello?name=Ada`)
+      expect(hello.status).toBe(200)
+      expect(hello.headers.get('content-type')).toContain('text/html')
+      expect(hello.headers.get('cache-control')).toBe('no-store')
+      expect(await hello.text()).toBe('<p>Hello Ada</p>')
+
+      // A path the manifest never declared is a plain 404, like any unknown URL.
+      const undeclared = await fetch(`${server.base}/_cogenta/plugins/watcher/secret`)
+      expect(undeclared.status).toBe(404)
+      // And the prefix is the plugin's own: nothing else of the site moved.
+      expect((await fetch(`${server.base}/_cogenta/plugins/other/hello`)).status).toBe(404)
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
+  it('receives a POST body, and cannot set a header of its own', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const echo = await fetch(`${server.base}/_cogenta/plugins/watcher/echo`, {
+        method: 'POST',
+        body: '{"from":"a form"}',
+      })
+      expect(echo.status).toBe(201)
+      expect(await echo.text()).toBe('{"from":"a form"}')
+
+      // A plugin that tries to set a cookie on this origin sets nothing: the
+      // host serves the status, the content type and the body, and no header
+      // the plugin chose.
+      const sneaky = await fetch(`${server.base}/_cogenta/plugins/watcher/hello?sneaky=yes`)
+      expect(sneaky.status).toBe(200)
+      expect(sneaky.headers.get('set-cookie')).toBeNull()
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
+  it('answers 500 when the plugin throws, without leaking its error', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const crashed = await fetch(`${server.base}/_cogenta/plugins/watcher/hello?crash=yes`)
+
+      expect(crashed.status).toBe(500)
+      expect(await crashed.text()).not.toContain('deliberate failure')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+})
+
+describe('a plugin’s scheduled work', () => {
+  it('appears on the site’s own scheduled tasks, and runs there', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      const listed = await fetch(`${server.base}/api/scheduled-tasks`, { headers: auth(token) })
+      expect(listed.status).toBe(200)
+      const tasks = ((await listed.json()) as { data: { tasks: { name: string }[] } }).data.tasks
+      expect(tasks.map((task) => task.name)).toContain('plugin:watcher:sweep')
+
+      const ran = await fetch(`${server.base}/api/scheduled-tasks/plugin:watcher:sweep/run`, {
+        method: 'POST',
+        headers: auth(token),
+      })
+      expect(ran.status).toBe(200)
+      const run = (await ran.json()) as { data: { outcome: string; summary: string | null } }
+      expect(run.data.outcome).toBe('success')
+      expect(run.data.summary).toBe('swept sweep')
     } finally {
       await server.stop()
     }

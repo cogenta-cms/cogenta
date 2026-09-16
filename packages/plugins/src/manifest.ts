@@ -47,6 +47,24 @@ export interface PluginBlockProvision {
  */
 export interface PluginProvides {
   readonly tools?: readonly string[]
+  /**
+   * Paths this plugin serves, each mounted under its own reserved namespace
+   * (`/_cogenta/plugins/<name><path>`, L31 step 2). Declared rather than
+   * inferred: what a plugin exposes publicly is the first thing a person
+   * reviewing it should be able to read, and the host mounts nothing it was
+   * not told about.
+   */
+  readonly routes?: readonly string[]
+  /**
+   * Work this plugin wants done on a cadence (L31 step 2). The host registers
+   * one scheduled task per entry, beside the site's own, so it shows on the
+   * "Tâches planifiées" screen and can be run by hand from there.
+   *
+   * A minimum of five minutes, because nothing here is a durable worker (R1):
+   * tasks run when a tick finds them due, and a plugin asking for "every
+   * second" would be asking for something this project does not have.
+   */
+  readonly schedules?: readonly PluginSchedule[]
   readonly blocks?: readonly PluginBlockProvision[]
   readonly fields?: readonly string[]
   readonly channels?: readonly string[]
@@ -70,6 +88,16 @@ export const PLUGIN_EVENT_NAMES = [
   'content.delete',
 ] as const
 export type PluginEventName = (typeof PLUGIN_EVENT_NAMES)[number]
+
+export interface PluginSchedule {
+  readonly name: string
+  readonly everyMinutes: number
+}
+
+/** Below this, a site would be running a plugin more often than it does its own work. */
+export const MIN_PLUGIN_SCHEDULE_MINUTES = 5
+/** A week: past this, a cadence is a calendar, and this scheduler is not one. */
+export const MAX_PLUGIN_SCHEDULE_MINUTES = 7 * 24 * 60
 
 export const PLUGIN_RUNTIMES = ['server'] as const
 export type PluginRuntime = (typeof PLUGIN_RUNTIMES)[number]
@@ -237,6 +265,12 @@ function checkCapability(
 /** The entry file a manifest names when it names none. */
 export const DEFAULT_PLUGIN_MAIN = 'plugin.js'
 
+/** A scheduled task's name inside a plugin: lower case, digits and dashes. */
+const SCHEDULE_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
+
+/** A path a plugin serves, relative to its own namespace: `/hello`, `/feeds/latest`. */
+const ROUTE_PATTERN = /^\/[A-Za-z0-9._~/-]*$/
+
 /** A relative path inside the package, ending in a JavaScript extension. */
 const MAIN_PATTERN = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*\.(?:js|mjs|cjs)$/
 
@@ -290,6 +324,37 @@ function collectIssues(input: PluginManifest): PluginManifestIssue[] {
     issues.push({ path: 'engine', message: 'must be a semver range such as "^1.0.0"' })
   }
   checkMain(input.main, issues)
+  for (const [index, schedule] of (input.provides?.schedules ?? []).entries()) {
+    const path = `provides.schedules[${index}]`
+    if (typeof schedule?.name !== 'string' || !SCHEDULE_NAME_PATTERN.test(schedule.name)) {
+      issues.push({ path: `${path}.name`, message: 'must be a short name such as "daily-digest"' })
+    }
+    const minutes = schedule?.everyMinutes
+    if (
+      typeof minutes !== 'number' ||
+      !Number.isInteger(minutes) ||
+      minutes < MIN_PLUGIN_SCHEDULE_MINUTES ||
+      minutes > MAX_PLUGIN_SCHEDULE_MINUTES
+    ) {
+      issues.push({
+        path: `${path}.everyMinutes`,
+        message: `must be a whole number of minutes between ${MIN_PLUGIN_SCHEDULE_MINUTES} and ${MAX_PLUGIN_SCHEDULE_MINUTES}`,
+      })
+    }
+  }
+  for (const [index, route] of (input.provides?.routes ?? []).entries()) {
+    const path = `provides.routes[${index}]`
+    if (
+      typeof route !== 'string' ||
+      !ROUTE_PATTERN.test(route) ||
+      route.split('/').includes('..')
+    ) {
+      issues.push({
+        path,
+        message: 'must be a path starting with "/", such as "/hello" — no "..", no query string',
+      })
+    }
+  }
   for (const [index, event] of (input.provides?.eventSubscriptions ?? []).entries()) {
     if (!PLUGIN_EVENT_NAMES.includes(event as PluginEventName)) {
       issues.push({

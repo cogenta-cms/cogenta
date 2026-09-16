@@ -48,6 +48,50 @@ import type { ContentLifecycleEvent } from '@cogenta/schema'
 /** The handler a subscribing plugin exposes; it receives the event as its payload. */
 export const PLUGIN_EVENT_HANDLER = 'onContentEvent'
 
+/** The handler a plugin serving a route exposes; it receives the request as its payload. */
+export const PLUGIN_REQUEST_HANDLER = 'onRequest'
+
+/** The handler a plugin with a schedule exposes; it receives `{ name }`. */
+export const PLUGIN_SCHEDULE_HANDLER = 'onSchedule'
+
+/** Every plugin route is mounted under this reserved prefix, never on a site's own paths. */
+export const PLUGIN_ROUTE_PREFIX = '/_cogenta/plugins/'
+
+/**
+ * What a plugin may answer with. Deliberately not "headers": a plugin that
+ * could set arbitrary headers could set a cookie on the site's own origin, or
+ * a `content-disposition` that turns its answer into a download. It picks a
+ * status, one content type from a known list, and a body — nothing else. The
+ * host adds `cache-control: no-store`, because a plugin's answer is computed
+ * per request and nothing here knows what it may safely cache.
+ */
+export const PLUGIN_CONTENT_TYPES = [
+  'text/plain',
+  'text/html',
+  'application/json',
+  'application/xml',
+  'text/csv',
+] as const
+
+/** A plugin's answer, after the host has checked it. */
+export interface PluginHttpResponse {
+  readonly status: number
+  readonly contentType: string
+  readonly body: string
+}
+
+export interface PluginHttpRequest {
+  readonly method: string
+  /** The path inside the plugin's own namespace, e.g. `/hello`. */
+  readonly path: string
+  readonly query: Readonly<Record<string, string>>
+  /** The request body as text, or `null` for a GET. Capped by the host. */
+  readonly body: string | null
+}
+
+/** Bodies larger than this are refused before a plugin ever sees them. */
+export const MAX_PLUGIN_REQUEST_BODY_BYTES = 64 * 1024
+
 export interface PluginRuntimeOptions {
   readonly projectRoot: string
   readonly dir: string
@@ -66,6 +110,28 @@ export interface PluginRuntime {
   readonly subscribers: number
   /** Hands the event to every plugin that subscribed to it. Never rejects. */
   dispatchContentEvent(event: ContentLifecycleEvent): Promise<void>
+  /** Every mounted route, as `<plugin name><path>` — what the site really exposes. */
+  readonly routes: readonly string[]
+  /**
+   * Declares each plugin's scheduled work on the site's own registry, so it
+   * runs on the same tick, takes the same multi-replica claim, and shows on
+   * the "Tâches planifiées" screen where a person can run it by hand.
+   */
+  registerSchedules(registry: {
+    register(definition: {
+      name: string
+      description: string
+      intervalMs: number
+      run: () => Promise<{ summary: string }>
+    }): void
+  }): void
+  /**
+   * Answers a request under `/_cogenta/plugins/`. `null` when no plugin
+   * declared that path, so the host 404s exactly as it would for any unknown
+   * URL; a plugin that fails answers 500 without leaking its error to the
+   * visitor (it is logged instead).
+   */
+  handleRequest(pathname: string, request: PluginHttpRequest): Promise<PluginHttpResponse | null>
 }
 
 export async function createPluginRuntime(options: PluginRuntimeOptions): Promise<PluginRuntime> {
@@ -86,15 +152,28 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
   // Only a plugin that ships code and subscribes to something is worth
   // holding on to: everything else would be a file read on every publish for
   // nothing.
-  const subscribing: { plugin: ResolvedPlugin; code: string; events: readonly string[] }[] = []
+  const subscribing: {
+    plugin: ResolvedPlugin
+    code: string
+    events: readonly string[]
+    routes: readonly string[]
+  }[] = []
   for (const plugin of installed.plugins) {
     const events = plugin.manifest.provides.eventSubscriptions ?? []
-    if (events.length === 0 || plugin.entryPath === null) continue
+    const routes = plugin.manifest.provides.routes ?? []
+    const schedules = plugin.manifest.provides.schedules ?? []
+    if (
+      (events.length === 0 && routes.length === 0 && schedules.length === 0) ||
+      plugin.entryPath === null
+    ) {
+      continue
+    }
     try {
       subscribing.push({
         plugin,
         code: await readPluginCode(plugin.packageRoot, plugin.manifest),
         events,
+        routes,
       })
     } catch (error) {
       logger.warn('plugin code unreadable', {
@@ -109,23 +188,26 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
   const disableStore = createPluginDisableStore(db)
   const usageStore = createPluginUsageStore(db)
 
+  function handlersFor(collection: string | null): Record<string, CapabilityHandler> {
+    const handlers: Record<string, CapabilityHandler> = {
+      'storage.read': createStorageReadHandler(storage),
+      'storage.write': createStorageWriteHandler(storage),
+      'http.fetch': createHttpFetchHandler(options.fetchImpl ?? fetch),
+    }
+    const readEntry = options.readEntry
+    if (readEntry !== undefined && collection !== null) {
+      handlers['content.read'] = createContentReadHandler((id) => readEntry(collection, id))
+    }
+    return handlers
+  }
+
   async function dispatchContentEvent(event: ContentLifecycleEvent): Promise<void> {
     for (const { plugin, code, events } of subscribing) {
       if (!events.includes(event.event)) continue
       const name = plugin.manifest.name
       try {
         const grants = await grantStore.listGrants(name)
-        const handlers: Record<string, CapabilityHandler> = {
-          'storage.read': createStorageReadHandler(storage),
-          'storage.write': createStorageWriteHandler(storage),
-          'http.fetch': createHttpFetchHandler(options.fetchImpl ?? fetch),
-        }
-        if (options.readEntry !== undefined) {
-          const readEntry = options.readEntry
-          handlers['content.read'] = createContentReadHandler((id) =>
-            readEntry(event.collection, id),
-          )
-        }
+        const handlers = handlersFor(event.collection)
         const result = await runPlugin(plugin.manifest, code, grants, {
           invoke: PLUGIN_EVENT_HANDLER,
           input: event,
@@ -154,10 +236,135 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     }
   }
 
+  /** The plugin and path a URL under the reserved prefix names, if any declared it. */
+  function match(pathname: string): { entry: (typeof subscribing)[number]; path: string } | null {
+    if (!pathname.startsWith(PLUGIN_ROUTE_PREFIX)) return null
+    const rest = pathname.slice(PLUGIN_ROUTE_PREFIX.length)
+    for (const entry of subscribing) {
+      const name = entry.plugin.manifest.name
+      // A scoped name carries its own slash (`@author/plugin`), so the plugin
+      // is matched by name first and the remainder is its path.
+      if (!rest.startsWith(name)) continue
+      const path = rest.slice(name.length) || '/'
+      if (entry.routes.includes(path)) return { entry, path }
+    }
+    return null
+  }
+
+  async function handleRequest(
+    pathname: string,
+    request: PluginHttpRequest,
+  ): Promise<PluginHttpResponse | null> {
+    const found = match(pathname)
+    if (found === null) return null
+    const { entry } = found
+    const name = entry.plugin.manifest.name
+    try {
+      const grants = await grantStore.listGrants(name)
+      const result = await runPlugin(entry.plugin.manifest, entry.code, grants, {
+        invoke: PLUGIN_REQUEST_HANDLER,
+        input: { ...request, path: found.path },
+        handlers: handlersFor(null),
+        disableStore,
+        usageStore,
+        onPluginDisabled: (disabled) =>
+          logger.error('plugin disabled', { plugin: name, reason: disabled.reason }),
+      })
+      if (!result.ok) {
+        logger.warn('plugin failed serving a route', {
+          plugin: name,
+          path: found.path,
+          error: result.error ?? 'unknown error',
+        })
+        return { status: 500, contentType: 'text/plain', body: 'This page could not be built.' }
+      }
+      return checkResponse(result.value)
+    } catch (error) {
+      logger.warn('plugin skipped serving a route', {
+        plugin: name,
+        path: found.path,
+        error: String(error),
+      })
+      return { status: 500, contentType: 'text/plain', body: 'This page could not be built.' }
+    }
+  }
+
+  function registerSchedules(registry: {
+    register(definition: {
+      name: string
+      description: string
+      intervalMs: number
+      run: () => Promise<{ summary: string }>
+    }): void
+  }): void {
+    for (const entry of subscribing) {
+      const pluginName = entry.plugin.manifest.name
+      for (const schedule of entry.plugin.manifest.provides.schedules ?? []) {
+        registry.register({
+          name: `plugin:${pluginName}:${schedule.name}`,
+          description: `Scheduled work of the plugin "${pluginName}".`,
+          intervalMs: schedule.everyMinutes * 60_000,
+          run: async () => {
+            const grants = await grantStore.listGrants(pluginName)
+            const result = await runPlugin(entry.plugin.manifest, entry.code, grants, {
+              invoke: PLUGIN_SCHEDULE_HANDLER,
+              input: { name: schedule.name },
+              handlers: handlersFor(null),
+              disableStore,
+              usageStore,
+              onPluginDisabled: (disabled) =>
+                logger.error('plugin disabled', { plugin: pluginName, reason: disabled.reason }),
+            })
+            // The registry records an error outcome from a rejection; a
+            // plugin's own failure is exactly that, and saying so is what
+            // makes the screen's "last run" honest.
+            if (!result.ok) throw new Error(result.error ?? 'the plugin failed')
+            return { summary: typeof result.value === 'string' ? result.value : 'ran' }
+          },
+        })
+      }
+    }
+  }
+
   return {
     plugins: installed.plugins,
     failures: installed.failures,
-    subscribers: subscribing.length,
+    registerSchedules,
+    subscribers: subscribing.filter((entry) => entry.events.length > 0).length,
+    routes: subscribing.flatMap((entry) =>
+      entry.routes.map((path) => `${entry.plugin.manifest.name}${path}`),
+    ),
     dispatchContentEvent,
+    handleRequest,
   }
+}
+
+/**
+ * What a plugin returned, as the host is willing to serve it. Anything else —
+ * a status outside the HTTP range, a content type not on the list, a body that
+ * is not a string — becomes a plain 500 rather than a header a plugin got to
+ * choose.
+ */
+function checkResponse(value: unknown): PluginHttpResponse {
+  const invalid: PluginHttpResponse = {
+    status: 500,
+    contentType: 'text/plain',
+    body: 'This page could not be built.',
+  }
+  if (value === null || typeof value !== 'object') return invalid
+  const record = value as Record<string, unknown>
+  const status = record['status'] ?? 200
+  const contentType = record['contentType'] ?? 'text/html'
+  const body = record['body'] ?? ''
+  if (typeof status !== 'number' || !Number.isInteger(status) || status < 200 || status > 599) {
+    return invalid
+  }
+  if (
+    typeof contentType !== 'string' ||
+    !PLUGIN_CONTENT_TYPES.includes(contentType as (typeof PLUGIN_CONTENT_TYPES)[number])
+  ) {
+    return invalid
+  }
+  if (typeof body !== 'string') return invalid
+  return { status, contentType, body }
 }

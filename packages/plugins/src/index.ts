@@ -45,10 +45,13 @@ export type {
   PluginManifestIssue,
   PluginProvides,
   PluginRuntime,
+  PluginSchedule,
 } from './manifest.js'
 export {
   DEFAULT_PLUGIN_MAIN,
   definePlugin,
+  MAX_PLUGIN_SCHEDULE_MINUTES,
+  MIN_PLUGIN_SCHEDULE_MINUTES,
   PLUGIN_CAPABILITY_NAMES,
   PLUGIN_EVENT_NAMES,
   PLUGIN_RUNTIMES,

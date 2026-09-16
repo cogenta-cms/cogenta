@@ -1411,7 +1411,33 @@ aucun accès à une base de site — ils utilisent
 jamais une constante dupliquée), ce qui est correct et volontaire, pas une
 limite à lever.
 
-## Le CMS publié sur npm est aujourd'hui impossible à installer
+## Publication npm : ce qui manque encore (mis à jour le 2026-09-16)
+
+**La section ci-dessous est périmée et conservée pour l'historique.** Vérifié en
+direct le 2026-09-16 contre le registre public : les seize paquets manquants ont
+été publiés le 2026-09-13, et `npm create cogenta@latest` puis `npm install` puis
+`npx cogenta serve` fonctionnent depuis un dossier vierge — `doctor` répond
+« Nothing is broken », l'admin répond 200. Le constat « impossible à installer »
+n'est plus vrai et ne doit plus être répété.
+
+**Ce qui reste vrai** : le registre est en retard de quatre versions mineures sur
+le dépôt (`@cogenta/cli` 0.9.0 publié contre 0.13.0 ici), et **deux paquets n'ont
+jamais eu de première version** — `@cogenta/widgets` (L30) et `@cogenta/starters`
+(L28), tous deux dépendances directes du `@cogenta/cli` d'aujourd'hui (404 sur le
+registre). Tant qu'ils n'y sont pas, la prochaine publication échouera, et rien de
+ce qui a été fait depuis L28 (données d'exemple, widgets, plugins réels, blocs et
+widgets fournis par un plugin) n'est installable par un utilisateur.
+
+**Pourquoi la CI ne peut pas s'en charger** : `release.yml` publie uniquement par
+Trusted Publishing (OIDC) et ne porte aucun jeton, et ce chemin ne peut pas créer
+la *première* version d'un paquet — le Trusted Publisher se configure sur la page
+d'un paquet, et un paquet sans version n'a pas de page (npm/cli#8544 ; le registre
+répond un 404 trompeur qui masque un refus d'autorisation).
+`scripts/publish-missing.sh` fait ce premier envoi, dans l'ordre des dépendances
+et de façon idempotente, depuis une machine authentifiée (`npm login` + 2FA), puis
+chaque nouveau paquet doit être lié au dépôt sur npmjs.com.
+
+## (périmé) Le CMS publié sur npm est aujourd'hui impossible à installer
 
 Constat vérifié le 2026-09-12, pas déduit : `npm install @cogenta/cli@0.8.0`
 dans un répertoire vierge échoue immédiatement (`ETARGET — No matching version

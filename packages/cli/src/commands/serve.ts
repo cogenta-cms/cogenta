@@ -375,7 +375,11 @@ import { createImageLibrary, resolveImageClient } from './image-library.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
 import { createPluginBlockRenderer, type PluginBlockRenderer } from './plugin-block-render.js'
-import { collectPluginBlocks } from './plugin-blocks.js'
+import {
+  collectPluginBlocks,
+  describePluginBlocks,
+  type PluginBlockDescription,
+} from './plugin-blocks.js'
 import {
   createPluginRuntime,
   MAX_PLUGIN_REQUEST_BODY_BYTES,
@@ -4403,6 +4407,8 @@ export interface RuntimeExtras {
    */
   readonly blockRegistry?: BlockRegistry
   readonly pluginBlockRenderer?: PluginBlockRenderer
+  /** The same blocks, described the way the admin's block table wants them (L32 step 3). */
+  readonly pluginBlockDescriptions?: readonly PluginBlockDescription[]
   /** Where this site keeps its plugins (`plugins.dir`), for the workshop routes. */
   readonly pluginsDir?: string
   /**
@@ -5601,6 +5607,23 @@ export function createRequestListener(
         extras.projectRoot !== undefined &&
         url.pathname.startsWith('/api/plugins')
       ) {
+        // GET /api/plugins/blocks — what this site's plugins add to the block
+        // list, in the shape the admin's own block table uses.
+        //
+        // Before the admin gate, deliberately: an *editor* is who needs this,
+        // since without it the blocks on the page they are editing have no
+        // label and no fields. It says what a block is called and what fields
+        // it holds — the same kind of thing `/api/schema` already tells any
+        // signed-in actor — and nothing about a plugin's code, grants or
+        // state.
+        if (url.pathname === '/api/plugins/blocks' && req.method === 'GET') {
+          res.writeHead(200, {
+            'content-type': 'application/json; charset=utf-8',
+            'cache-control': 'no-store',
+          })
+          res.end(JSON.stringify({ data: { blocks: extras.pluginBlockDescriptions ?? [] } }))
+          return
+        }
         if (!context.actor.roles.includes('admin')) {
           jsonError(res, 403, 'FORBIDDEN', 'Only the admin role may manage plugins.')
           return
@@ -8268,6 +8291,14 @@ export async function runServe(options: ServeOptions): Promise<number> {
           ? {}
           : { blockRegistry: siteBlockRegistry }),
         ...(pluginBlockRenderer === null ? {} : { pluginBlockRenderer }),
+        ...(pluginBlocks === null || pluginBlocks.definitions.length === 0
+          ? {}
+          : {
+              pluginBlockDescriptions: describePluginBlocks(
+                pluginRuntime?.plugins ?? [],
+                pluginBlocks,
+              ),
+            }),
         pluginsDir: loaded.config.plugins.dir,
         healthRouter,
         toolsRouter,

@@ -170,6 +170,52 @@ describe('a block a plugin provides, on a real page', () => {
       // Stamped with its contract B key like any other block, so the visual
       // builder can still map a click back to it.
       expect(html).toContain('data-block-key="c1"')
+
+      // And the editor is told the block exists, with its label and its
+      // fields — the seventeen of the vocabulary are baked into the admin
+      // bundle, this one can only come from the server.
+      const described = (await (
+        await fetch(`${server.base}/api/plugins/blocks`, {
+          headers: { authorization: `Bearer ${token}` },
+        })
+      ).json()) as {
+        data: {
+          blocks: {
+            name: string
+            label: string
+            plugin: string
+            fallback: string
+            fields: { name: string; kind: string; required: boolean }[]
+          }[]
+        }
+      }
+      expect(described.data.blocks).toHaveLength(1)
+      expect(described.data.blocks[0]).toMatchObject({
+        name: 'callout',
+        label: 'Encadré',
+        plugin: 'Encadrés',
+        fallback: 'quote',
+      })
+      expect(described.data.blocks[0]?.fields).toEqual([
+        {
+          name: 'message',
+          kind: 'text',
+          required: true,
+          localized: false,
+          unique: false,
+          hasCustomValidation: false,
+          options: { max: 300 },
+        },
+        {
+          name: 'tone',
+          kind: 'select',
+          required: false,
+          localized: false,
+          unique: false,
+          hasCustomValidation: false,
+          options: { options: ['info', 'warning'] },
+        },
+      ])
     } finally {
       await server.stop()
     }

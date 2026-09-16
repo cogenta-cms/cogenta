@@ -159,3 +159,91 @@ export function collectPluginBlocks(
 
   return { definitions, owners, labels, conflicts }
 }
+
+/**
+ * A field of a plugin block, in the shape the admin's own block table uses
+ * (`packages/admin/src/blocks/vocabulary.ts`). Deliberately the admin's
+ * shape, not contract B's: the admin is a browser bundle that never imports
+ * `@cogenta/blocks`, and this route exists precisely so it does not have to.
+ */
+export interface PluginBlockFieldDescription {
+  readonly name: string
+  readonly kind: string
+  readonly required: boolean
+  readonly localized: boolean
+  readonly unique: false
+  readonly hasCustomValidation: false
+  readonly options: Readonly<Record<string, unknown>>
+}
+
+export interface PluginBlockDescription {
+  readonly name: string
+  readonly label: string
+  readonly fields: readonly PluginBlockFieldDescription[]
+  /** Which plugin brings it — what an editor is told when it disappears. */
+  readonly plugin: string
+  readonly fallback: string
+}
+
+function describeField(
+  name: string,
+  declaration: {
+    readonly kind: string
+    readonly required?: boolean
+    readonly localized?: boolean
+    readonly options?: Readonly<Record<string, unknown>>
+    readonly of?: Readonly<Record<string, unknown>>
+  },
+): PluginBlockFieldDescription {
+  // A list compiles to the admin's `json` kind carrying the item shape, the
+  // same translation the vocabulary's own list fields already get — a change
+  // of editor, never of format.
+  const isList = declaration.kind === 'list'
+  const items = Object.entries(
+    (declaration.of ?? {}) as Record<string, { kind: string; required?: boolean }>,
+  ).map(([itemName, item]) => ({
+    name: itemName,
+    kind: item.kind,
+    required: item.required === true,
+    localized: false,
+    unique: false as const,
+    hasCustomValidation: false as const,
+    options: {},
+  }))
+  return {
+    name,
+    kind: isList ? 'json' : declaration.kind,
+    required: declaration.required === true,
+    localized: declaration.localized === true,
+    unique: false,
+    hasCustomValidation: false,
+    options: isList
+      ? { ...(declaration.options ?? {}), list: true, items }
+      : (declaration.options ?? {}),
+  }
+}
+
+/** Every plugin block this site registered, described for the admin. */
+export function describePluginBlocks(
+  plugins: readonly ResolvedPlugin[],
+  set: PluginBlockSet,
+): readonly PluginBlockDescription[] {
+  const registered = new Set(set.definitions.map((definition) => definition.name))
+  const described: PluginBlockDescription[] = []
+  for (const plugin of plugins) {
+    for (const provision of plugin.manifest.provides.blocks ?? []) {
+      if (!registered.has(provision.name)) continue
+      if (set.owners.get(provision.name) !== plugin.manifest.name) continue
+      described.push({
+        name: provision.name,
+        label: provision.label ?? provision.name,
+        fields: Object.entries(provision.fields ?? {}).map(([name, declaration]) =>
+          describeField(name, declaration),
+        ),
+        plugin: plugin.manifest.title ?? plugin.manifest.name,
+        fallback: provision.fallback,
+      })
+    }
+  }
+  return described
+}

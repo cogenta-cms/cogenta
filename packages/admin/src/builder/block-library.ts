@@ -1,5 +1,5 @@
 import type { BlockDefinition } from '../blocks/vocabulary.js'
-import { BLOCK_VOCABULARY } from '../blocks/vocabulary.js'
+import { allBlockDefinitions, BLOCK_VOCABULARY } from '../blocks/vocabulary.js'
 
 /**
  * The insertion panel's view of contract B's twelve blocks (L16 task 4).
@@ -39,13 +39,27 @@ export interface LibraryEntry {
   readonly category: BlockCategory
 }
 
-export const BLOCK_LIBRARY: readonly LibraryEntry[] = BLOCK_VOCABULARY.map((definition) => ({
-  definition,
-  // A block with no category entry is not hidden from the panel — it would be
-  // unusable rather than uncategorised. It lands in `listing`, and the test
-  // that every block is categorised is what actually catches the omission.
-  category: CATEGORY_BY_BLOCK[definition.name] ?? 'listing',
-}))
+function entryFor(definition: BlockDefinition): LibraryEntry {
+  return {
+    definition,
+    // A block with no category entry is not hidden from the panel — it would
+    // be unusable rather than uncategorised. It lands in `listing`, and the
+    // test that every block is categorised is what actually catches the
+    // omission. A block a plugin provides has no category by construction.
+    category: CATEGORY_BY_BLOCK[definition.name] ?? 'listing',
+  }
+}
+
+export const BLOCK_LIBRARY: readonly LibraryEntry[] = BLOCK_VOCABULARY.map(entryFor)
+
+/**
+ * The panel's real list: the vocabulary plus whatever this site's plugins
+ * provide (L32). A function rather than a constant because plugin blocks are
+ * fetched after the bundle loads.
+ */
+export function blockLibrary(): readonly LibraryEntry[] {
+  return allBlockDefinitions().map(entryFor)
+}
 
 /**
  * Diacritic- and case-insensitive, so "media" finds "Média".
@@ -69,7 +83,7 @@ export function fold(value: string): string {
 export function searchLibrary(
   query: string,
   category: BlockCategory | null = null,
-  library: readonly LibraryEntry[] = BLOCK_LIBRARY,
+  library: readonly LibraryEntry[] = blockLibrary(),
 ): readonly LibraryEntry[] {
   const needle = fold(query.trim())
   return library.filter((entry) => {

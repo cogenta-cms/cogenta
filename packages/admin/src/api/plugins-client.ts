@@ -196,3 +196,32 @@ export function revokeCapability(token: string, plugin: string, capability: stri
     { method: 'DELETE', headers: authHeader(token) },
   )
 }
+
+/**
+ * The blocks this site's plugins provide (L32). The seventeen of the
+ * vocabulary are baked into this bundle; these depend on which plugins the
+ * site has installed, so only the server knows them.
+ *
+ * Readable by anyone who may edit content, not only an administrator: without
+ * it, a plugin's block on the page being edited would have no label and no
+ * fields.
+ */
+export function getPluginBlocks(token: string): Promise<{
+  readonly blocks: readonly {
+    readonly name: string
+    readonly label: string
+    readonly fields: readonly {
+      readonly name: string
+      readonly kind: string
+      readonly required: boolean
+      readonly localized: boolean
+      readonly unique: false
+      readonly hasCustomValidation: false
+      readonly options: Readonly<Record<string, unknown>>
+    }[]
+    readonly plugin: string
+    readonly fallback: string
+  }[]
+}> {
+  return request('/api/plugins/blocks', { headers: authHeader(token) })
+}

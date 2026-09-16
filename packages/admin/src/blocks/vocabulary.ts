@@ -1,4 +1,5 @@
 import type { FieldAdminMeta, FieldKind, SchemaField } from '../schema/types.js'
+import { FIELD_KINDS } from '../schema/types.js'
 
 /**
  * The admin's own copy of contract B's twelve-block vocabulary
@@ -384,8 +385,70 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
 ]
 
+/**
+ * The blocks this particular site's plugins provide (L32).
+ *
+ * Unlike the vocabulary above, these cannot be baked into the bundle: they
+ * depend on which plugins are installed on the site being administered, so
+ * they are fetched once at start-up (`GET /api/blocks`) and registered here.
+ * A module-level registry rather than a context because every consumer of
+ * `blockDefinition` — the blocks field, the builder's library, the outline —
+ * asks for a block by name from deep inside a render, and one admin session
+ * administers exactly one site.
+ */
+let pluginBlocks: readonly BlockDefinition[] = []
+
+/** The wire shape `/api/plugins/blocks` answers: every field's kind is a plain string. */
+export interface PluginBlockWireDefinition {
+  readonly name: string
+  readonly label: string
+  readonly fields: readonly {
+    readonly name: string
+    readonly kind: string
+    readonly required: boolean
+    readonly localized: boolean
+    readonly options: Readonly<Record<string, unknown>>
+  }[]
+}
+
+/**
+ * Narrowed rather than cast: this is data from a server that may be newer
+ * than this bundle, and a field kind no editor here can render is dropped —
+ * the block still places, with the fields this admin understands, instead of
+ * the screen breaking on a kind it has never heard of.
+ */
+export function registerPluginBlocks(blocks: readonly PluginBlockWireDefinition[]): void {
+  pluginBlocks = blocks.map((block) => ({
+    name: block.name,
+    label: block.label,
+    fields: block.fields
+      .filter((candidate): candidate is typeof candidate & { kind: FieldKind } =>
+        (FIELD_KINDS as readonly string[]).includes(candidate.kind),
+      )
+      .map((candidate) => ({
+        name: candidate.name,
+        kind: candidate.kind,
+        required: candidate.required,
+        localized: candidate.localized,
+        unique: false,
+        hasCustomValidation: false,
+        options: candidate.options,
+      })),
+  }))
+}
+
+/** What a plugin provides, for a screen that needs to say so. */
+export function pluginBlockDefinitions(): readonly BlockDefinition[] {
+  return pluginBlocks
+}
+
+/** Every block this site can place: the frozen vocabulary, then what its plugins add. */
+export function allBlockDefinitions(): readonly BlockDefinition[] {
+  return pluginBlocks.length === 0 ? BLOCK_VOCABULARY : [...BLOCK_VOCABULARY, ...pluginBlocks]
+}
+
 export function blockDefinition(type: string): BlockDefinition | undefined {
-  return BLOCK_VOCABULARY.find((block) => block.name === type)
+  return allBlockDefinitions().find((block) => block.name === type)
 }
 
 let counter = 0

@@ -2,7 +2,7 @@ import { type JSX, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ContentBlock } from '../api/content-client.js'
 import { BlockForm } from '../blocks/block-form.js'
-import { BLOCK_VOCABULARY, blockDefinition, freshBlockKey } from '../blocks/vocabulary.js'
+import { allBlockDefinitions, blockDefinition, freshBlockKey } from '../blocks/vocabulary.js'
 import { FieldWrapper } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
@@ -118,7 +118,7 @@ export function BlocksField({
             <option value="" disabled>
               —
             </option>
-            {BLOCK_VOCABULARY.map((definition) => (
+            {allBlockDefinitions().map((definition) => (
               <option key={definition.name} value={definition.name}>
                 {definition.label}
               </option>

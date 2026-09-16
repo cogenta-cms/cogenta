@@ -9,8 +9,10 @@ import {
   useState,
 } from 'react'
 import { getAssistCapabilities } from '../api/assist-client.js'
+import { getPluginBlocks } from '../api/plugins-client.js'
 import { getShellStatus, type ShellStatus } from '../api/shell-status-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { registerPluginBlocks } from '../blocks/vocabulary.js'
 
 /**
  * The two reads the sidebar needs beyond the schema it already has
@@ -96,10 +98,15 @@ export function ChromeStatusProvider({ children }: { readonly children: ReactNod
     const current = tokenRef.current
     if (current === null) return
     try {
-      const [shellStatus, capabilities] = await Promise.all([
+      const [shellStatus, capabilities, blocks] = await Promise.all([
         getShellStatus(current),
         getAssistCapabilities(current),
+        // L32 — what this site's plugins add to the block list. A site with
+        // no plugin block answers an empty list; a server too old to know the
+        // route answers 404, and the catch below leaves the vocabulary alone.
+        getPluginBlocks(current).catch(() => ({ blocks: [] })),
       ])
+      registerPluginBlocks(blocks.blocks)
       setState({
         status: 'ready',
         chrome: {

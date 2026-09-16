@@ -154,4 +154,48 @@ describe('cogenta serve — scheduled publication', () => {
       await server.stop()
     }
   }, 60_000)
+  it('does not publish at the old date an entry whose schedule was pushed back', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers, scheduledPublishTickMs: 150 })
+    try {
+      const token = await editorToken(root, server.base)
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+      const created = await fetch(`${server.base}/api/content/article`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ values: { title: 'Postponed' } }),
+      })
+      const entry = (await created.json()) as { data: { id: string } }
+      const schedule = async (publishAt: string): Promise<void> => {
+        const response = await fetch(
+          `${server.base}/api/content/article/${entry.data.id}/unpublish`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ status: 'scheduled', publishedAt: publishAt }),
+          },
+        )
+        expect(response.status).toBe(200)
+        await response.arrayBuffer()
+      }
+
+      // Scheduled for "soon", then pushed back an hour. Every save enqueues a
+      // job and none is cancelled, so the first job is still in the queue:
+      // when it comes due it must find a date that has not, and do nothing.
+      await schedule(new Date(Date.now() + 500).toISOString())
+      await schedule(new Date(Date.now() + 3_600_000).toISOString())
+
+      await sleep(1500)
+
+      const stillScheduled = await fetch(
+        `${server.base}/api/content/article/${entry.data.id}?state=working`,
+        { headers },
+      )
+      const body = (await stillScheduled.json()) as { data: { status: string } }
+      expect(body.data.status).toBe('scheduled')
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
 })

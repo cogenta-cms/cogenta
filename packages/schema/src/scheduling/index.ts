@@ -6,6 +6,7 @@ export type {
 } from './publish.js'
 export {
   cancelPublication,
+  isPublicationDue,
   parsePayload,
   registerScheduledPublishing,
   reschedulePublication,

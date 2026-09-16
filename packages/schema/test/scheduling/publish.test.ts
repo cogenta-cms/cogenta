@@ -11,6 +11,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   cancelPublication,
+  isPublicationDue,
   parsePayload,
   registerScheduledPublishing,
   reschedulePublication,
@@ -208,5 +209,29 @@ describe('the job payload', () => {
       /payload/,
     )
     expect(() => parsePayload(null)).toThrowError(/payload/)
+  })
+})
+
+describe('isPublicationDue', () => {
+  const now = Date.parse('2026-09-16T09:00:00.000Z')
+
+  it('publishes a scheduled entry whose date has come', () => {
+    expect(
+      isPublicationDue({ status: 'scheduled', publishedAt: '2026-09-16T09:00:00.000Z' }, now),
+    ).toBe(true)
+  })
+
+  it('leaves alone an entry whose date was pushed back past the job that woke up', () => {
+    expect(
+      isPublicationDue({ status: 'scheduled', publishedAt: '2026-09-20T09:00:00.000Z' }, now),
+    ).toBe(false)
+  })
+
+  it('leaves alone an entry that is no longer scheduled, or has no date', () => {
+    expect(
+      isPublicationDue({ status: 'draft', publishedAt: '2026-09-15T09:00:00.000Z' }, now),
+    ).toBe(false)
+    expect(isPublicationDue({ status: 'scheduled', publishedAt: null }, now)).toBe(false)
+    expect(isPublicationDue({ status: 'scheduled', publishedAt: 'not a date' }, now)).toBe(false)
   })
 })

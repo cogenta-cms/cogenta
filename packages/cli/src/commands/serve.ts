@@ -305,6 +305,7 @@ import {
   ensureSearchConsoleConnectionTable,
   ensureSiteSettingsTables,
   entriesTable,
+  isPublicationDue,
   type MaintenanceStore,
   type MenuStore,
   type NotFoundLogStore,
@@ -1871,7 +1872,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         const target = stores.get(publication.collection)
         if (target === undefined) return
         const entry = await target.read(publication.entryId, { state: 'working' })
-        if (entry?.status === 'scheduled') await target.publish(publication.entryId)
+        // The entry's own current date decides, not the job's: a schedule
+        // pushed back leaves its earlier job in the queue (see
+        // `isPublicationDue`).
+        if (entry !== null && isPublicationDue(entry)) await target.publish(publication.entryId)
         // A retry that finally lands must make the earlier attempts' failure
         // disappear the same way a fixed migration or a re-enabled plugin
         // does for their own notices — nothing left over to dismiss by hand.

@@ -27,6 +27,26 @@ export interface ScheduledPublication {
   readonly publishAt: number
 }
 
+/**
+ * Whether a queued publication should really publish the entry it names, now.
+ *
+ * A job is never cancelled when an entry is rescheduled: every save enqueues
+ * a new one, and the handler re-reads the entry instead. Checking the status
+ * alone is not enough — an entry scheduled for Monday and pushed back to
+ * Friday is still `scheduled` when Monday's job comes due, and would go out
+ * four days early. So the entry's **current** date decides, not the job's:
+ * a job that finds a date still in the future does nothing, and the job
+ * enqueued by the later save publishes it when that date comes.
+ */
+export function isPublicationDue(
+  entry: { readonly status: string; readonly publishedAt: string | null },
+  now: number = Date.now(),
+): boolean {
+  if (entry.status !== 'scheduled' || entry.publishedAt === null) return false
+  const due = Date.parse(entry.publishedAt)
+  return Number.isFinite(due) && due <= now
+}
+
 /** Does the actual state change. Owned by the persistence layer (task 5), not by this file. */
 export type PublishHandler = (publication: ScheduledPublication) => Promise<void>
 

@@ -145,6 +145,16 @@ export interface PluginRuntime {
   /** Every mounted route, as `<plugin name><path>` — what the site really exposes. */
   readonly routes: readonly string[]
   /**
+   * Calls one named handler of one plugin, under the same gates as a route:
+   * the concurrency ceiling, the plugin's granted capabilities, and the
+   * disable-on-violation policy. Never rejects.
+   */
+  invokeHandler(
+    plugin: string,
+    handler: string,
+    input: unknown,
+  ): Promise<{ readonly ok: boolean; readonly value?: unknown; readonly error?: string }>
+  /**
    * Declares each plugin's scheduled work on the site's own registry, so it
    * runs on the same tick, takes the same multi-replica claim, and shows on
    * the "Tâches planifiées" screen where a person can run it by hand.
@@ -181,9 +191,13 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     })
   }
 
-  // Only a plugin that ships code and subscribes to something is worth
-  // holding on to: everything else would be a file read on every publish for
-  // nothing.
+  // Only a plugin that ships code and brings something is worth holding on
+  // to: everything else would be a file read on every publish for nothing.
+  //
+  // "Brings something" includes providing a block (L32): such a plugin
+  // subscribes to no event, serves no route and runs on no cadence, and yet
+  // is called on every page that places its block — leaving it out is why the
+  // first version of block rendering answered "no plugin named … is loaded".
   const subscribing: {
     plugin: ResolvedPlugin
     code: string
@@ -194,8 +208,12 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     const events = plugin.manifest.provides.eventSubscriptions ?? []
     const routes = plugin.manifest.provides.routes ?? []
     const schedules = plugin.manifest.provides.schedules ?? []
+    const blocks = plugin.manifest.provides.blocks ?? []
     if (
-      (events.length === 0 && routes.length === 0 && schedules.length === 0) ||
+      (events.length === 0 &&
+        routes.length === 0 &&
+        schedules.length === 0 &&
+        blocks.length === 0) ||
       plugin.entryPath === null
     ) {
       continue
@@ -394,10 +412,54 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     }
   }
 
+  /**
+   * Calls one named handler of one installed plugin, under the same gates a
+   * route goes through: the concurrency ceiling, the granted capabilities,
+   * the disable-on-violation policy, and the run recorded in the usage store.
+   *
+   * It exists so that a caller which is not a route, an event or a schedule —
+   * L32's block rendering — runs plugins through this runtime rather than
+   * spawning its own, which is how "eight runs in flight" stays a property of
+   * the site instead of a property of one code path.
+   */
+  async function invokeHandler(
+    pluginName: string,
+    handler: string,
+    input: unknown,
+  ): Promise<{ readonly ok: boolean; readonly value?: unknown; readonly error?: string }> {
+    const entry = subscribing.find((candidate) => candidate.plugin.manifest.name === pluginName)
+    if (entry === undefined)
+      return { ok: false, error: `no plugin named "${pluginName}" is loaded` }
+    if (running >= MAX_CONCURRENT_PLUGIN_RUNS) {
+      logger.warn('plugin call refused: too many runs in flight', { plugin: pluginName, handler })
+      return { ok: false, error: 'too many plugin runs in flight' }
+    }
+    running += 1
+    try {
+      const grants = await grantStore.listGrants(pluginName)
+      const result = await runPlugin(entry.plugin.manifest, entry.code, grants, {
+        onLog: (line) => logger.info('plugin log', { plugin: pluginName, line }),
+        invoke: handler,
+        input,
+        handlers: handlersFor(null),
+        disableStore,
+        usageStore,
+        onPluginDisabled: (disabled) =>
+          logger.error('plugin disabled', { plugin: pluginName, reason: disabled.reason }),
+      })
+      return result.ok
+        ? { ok: true, value: result.value }
+        : { ok: false, error: result.error ?? 'the plugin failed' }
+    } finally {
+      running -= 1
+    }
+  }
+
   return {
     plugins: installed.plugins,
     failures: installed.failures,
     registerSchedules,
+    invokeHandler,
     subscribers: subscribing.filter((entry) => entry.events.length > 0).length,
     routes: subscribing.flatMap((entry) =>
       entry.routes.map((path) => `${entry.plugin.manifest.name}${path}`),

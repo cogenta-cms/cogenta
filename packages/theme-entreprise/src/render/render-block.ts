@@ -5,6 +5,7 @@ import {
   h,
   type PageContent,
   pageHasOwnHeading,
+  providedBlockNode,
   type RenderContext,
   renderEntryHeader,
   resolveBlockForRender,
@@ -38,6 +39,11 @@ export function renderBlock(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement | null {
+  // A block a plugin provides arrives already rendered by the host, in a
+  // process of its own (contract D theme@1.7). Nothing else in this theme
+  // needs to know such blocks exist.
+  const provided = providedBlockNode(block, ctx)
+  if (provided !== null) return withBlockVariant(provided, block.variant)
   // `block`'s type says `VocabularyBlock`, but the value crossing this
   // boundary from stored content is not always literally one of the shared
   // vocabulary — resolving here is what turns an unimplemented theme-private

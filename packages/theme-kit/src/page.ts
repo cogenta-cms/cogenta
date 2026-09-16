@@ -135,6 +135,25 @@ export function withBlockVariant(
  * `null` for that one block, never a thrown error that would take the whole
  * page down with it.
  */
+/**
+ * The markup the host already produced for this block, if it produced any.
+ *
+ * One line at the top of a theme's `renderBlock` is the whole of what
+ * contract D `theme@1.7` asks of a theme: a block a plugin provides arrives
+ * here, already rendered, already checked by the host against a tag and
+ * attribute allowlist. A theme that never calls this renders the block's
+ * declared fallback instead — degraded, never blank, exactly as an
+ * unimplemented theme block has behaved since L3.
+ */
+export function providedBlockNode(
+  block: { readonly _key?: unknown },
+  ctx: { readonly blockNodes?: Readonly<Record<string, HtmlElement>> },
+): HtmlElement | null {
+  const key = block._key
+  if (typeof key !== 'string') return null
+  return ctx.blockNodes?.[key] ?? null
+}
+
 export function resolveBlockForRender(
   block: VocabularyBlock | UnknownPlacedBlock,
   knownNames: readonly string[],

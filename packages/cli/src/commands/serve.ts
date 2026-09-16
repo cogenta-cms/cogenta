@@ -143,6 +143,7 @@ import {
   type WidgetRouter,
 } from '@cogenta/api'
 import { type AuditLog, type AuthStore, createAuditLog, createAuthStore } from '@cogenta/auth'
+import { type BlockRegistry, createBlockRegistry, VOCABULARY_NAMES } from '@cogenta/blocks'
 import {
   type ChannelRegistry,
   createChannelLinkStore,
@@ -373,6 +374,8 @@ import { applySecurity, type SecurityConfig } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
+import { createPluginBlockRenderer, type PluginBlockRenderer } from './plugin-block-render.js'
+import { collectPluginBlocks } from './plugin-blocks.js'
 import {
   createPluginRuntime,
   MAX_PLUGIN_REQUEST_BODY_BYTES,
@@ -1094,6 +1097,12 @@ interface AssembleSiteOptions {
   readonly collections: readonly CollectionDefinition[]
   /** Declared taxonomies (`schema@2.0`). A site with none passes nothing. */
   readonly taxonomies?: readonly TaxonomyDefinition[]
+  /**
+   * The blocks this site knows — the frozen vocabulary plus whatever its
+   * plugins provide (L32). Absent means the vocabulary alone, which is every
+   * site that has no plugin block.
+   */
+  readonly blocks?: BlockRegistry
   readonly signingKey: string
   readonly site: {
     readonly name: string
@@ -1868,6 +1877,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     permissions,
     storeFor,
     routing: { locales: site.locales, defaultLocale: site.defaultLocale, redirects },
+    // L32 — the same registry the renderer resolves against, so a page can
+    // never be saved holding a block the renderer would refuse, and a block
+    // a plugin provides is accepted on write exactly as a vocabulary one is.
+    ...(options.blocks === undefined ? {} : { blocks: options.blocks }),
   })
 
   const auth = await createAuthStore({
@@ -4382,6 +4395,14 @@ export interface RuntimeExtras {
    * route at all rather than 500ing on a runtime nobody constructed.
    */
   readonly pluginRuntime?: PluginRuntime
+  /**
+   * L32 — the blocks installed plugins provide, registered beside the frozen
+   * vocabulary, and the renderer that runs those plugins to produce their
+   * markup. Absent on a site with no plugin block, which leaves every render
+   * on exactly the path it took before this lot.
+   */
+  readonly blockRegistry?: BlockRegistry
+  readonly pluginBlockRenderer?: PluginBlockRenderer
   /** Where this site keeps its plugins (`plugins.dir`), for the workshop routes. */
   readonly pluginsDir?: string
   /**
@@ -6773,6 +6794,13 @@ export function createRequestListener(
           // actor really being authenticated, so an anonymous visitor never
           // carries the markup.
           adminBar: true,
+          // L32: the registry a plugin's blocks were registered in, and the
+          // renderer that runs those plugins. Both absent on a site with no
+          // plugin block, which is the same code path as before this lot.
+          ...(extras?.blockRegistry === undefined ? {} : { blocks: extras.blockRegistry }),
+          ...(extras?.pluginBlockRenderer === undefined
+            ? {}
+            : { pluginBlocks: extras.pluginBlockRenderer }),
         }
         const html = await renderRequestedPage(url.pathname, renderOptions, context)
         if (html !== null) {
@@ -7439,6 +7467,33 @@ export async function runServe(options: ServeOptions): Promise<number> {
       refused: pluginRuntime.failures.length,
     })
   }
+  // L32 — the blocks installed plugins provide, registered beside the frozen
+  // contract B vocabulary rather than among it. One registry serves the
+  // whole site: the REST and GraphQL writers validate a stored block against
+  // it, and the renderer resolves a fallback through it, so a page can never
+  // be saved with a block the renderer would not recognise.
+  const pluginBlocks =
+    pluginRuntime === null
+      ? null
+      : collectPluginBlocks(pluginRuntime.plugins, { taken: VOCABULARY_NAMES })
+  const siteBlockRegistry = createBlockRegistry()
+  for (const definition of pluginBlocks?.definitions ?? []) siteBlockRegistry.register(definition)
+  for (const conflict of pluginBlocks?.conflicts ?? []) {
+    logger.warn('plugin block refused', {
+      plugin: conflict.plugin,
+      block: conflict.block,
+      reason: conflict.reason,
+    })
+  }
+  const pluginBlockRenderer =
+    pluginRuntime === null || (pluginBlocks?.definitions.length ?? 0) === 0
+      ? null
+      : createPluginBlockRenderer({
+          plugins: pluginRuntime.plugins,
+          invoke: (plugin, handler, input) => pluginRuntime.invokeHandler(plugin, handler, input),
+          onProblem: (problem) => logger.warn('plugin block did not render', problem),
+        })
+
   // Both sinks see the same event, and neither can stop the other: a webhook
   // endpoint that is down must not cost a plugin its notification, and a
   // plugin that throws must not cost the webhook its delivery.
@@ -7645,6 +7700,9 @@ export async function runServe(options: ServeOptions): Promise<number> {
     searchIndex,
     collections,
     taxonomies,
+    // L32: the writers validate a stored block against the same registry the
+    // renderer resolves one through.
+    ...((pluginBlocks?.definitions.length ?? 0) === 0 ? {} : { blocks: siteBlockRegistry }),
     signingKey: loaded.config.auth.signingKey,
     site: loaded.config.site,
     storage: storageSelection.instance,
@@ -8206,6 +8264,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
     withRequestTracing(
       createRequestListener(site, logger, {
         ...(pluginRuntime === null ? {} : { pluginRuntime }),
+        ...((pluginBlocks?.definitions.length ?? 0) === 0
+          ? {}
+          : { blockRegistry: siteBlockRegistry }),
+        ...(pluginBlockRenderer === null ? {} : { pluginBlockRenderer }),
         pluginsDir: loaded.config.plugins.dir,
         healthRouter,
         toolsRouter,

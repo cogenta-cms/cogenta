@@ -37,6 +37,9 @@ export type {
   ThemeManifest,
   ThemeRuntime,
 } from '@cogenta/render'
+
+import type { HtmlElement } from './html.js'
+
 export { defineTheme } from '@cogenta/render'
 
 /**
@@ -104,4 +107,16 @@ export interface RenderContext {
 
   /** Read-only content access. The only door to data a theme has. */
   readonly content: ContentClient
+
+  /**
+   * Markup the host has already produced for particular blocks, keyed by the
+   * block's contract B `_key` (contract D `theme@1.7`, additive).
+   *
+   * This is how a block a **plugin** provides reaches the page: the host runs
+   * the plugin, in a process of its own, and hands the resulting tree over.
+   * A theme that ignores this field is not broken — it renders the block's
+   * declared fallback instead, which is the degradation contract B has
+   * promised since L3. `providedBlockNode` is the one line that honours it.
+   */
+  readonly blockNodes?: Readonly<Record<string, HtmlElement>>
 }

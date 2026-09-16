@@ -3,6 +3,7 @@ import {
   type FetchedEntries,
   type PageContent,
   pageHasOwnHeading,
+  providedBlockNode,
   renderEntryHeader,
   resolveBlockForRender,
   withBlockKey,
@@ -43,6 +44,11 @@ export function renderBlock(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement | null {
+  // A block a plugin provides arrives already rendered by the host, in a
+  // process of its own (contract D theme@1.7). Nothing else in this theme
+  // needs to know such blocks exist.
+  const provided = providedBlockNode(block, ctx)
+  if (provided !== null) return withBlockVariant(provided, block.variant)
   // `block`'s type says `VocabularyBlock`, but the value crossing this
   // boundary from stored content is not always literally one of the twelve —
   // `theme-render.ts` cannot know at compile time what a block zone holds.

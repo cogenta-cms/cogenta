@@ -5,6 +5,7 @@ import {
   h,
   type PageContent,
   pageHasOwnHeading,
+  providedBlockNode,
   type RenderContext,
   resolveBlockForRender,
   withBlockKey,
@@ -35,6 +36,11 @@ export function renderBlock(
   entries: FetchedEntries = {},
   registry?: BlockRegistry,
 ): HtmlElement | null {
+  // A block a plugin provides arrives already rendered by the host, in a
+  // process of its own (contract D theme@1.7). Nothing else in this theme
+  // needs to know such blocks exist.
+  const provided = providedBlockNode(block, ctx)
+  if (provided !== null) return withBlockVariant(provided, block.variant)
   // A stored block is not always literally one of the shared vocabulary:
   // resolving here turns an unimplemented theme-private block into its
   // declared fallback instead of a silently blank slot.

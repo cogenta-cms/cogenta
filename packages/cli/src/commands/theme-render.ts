@@ -6,7 +6,12 @@ import {
   type MenuRouter,
   type QueryRequest,
 } from '@cogenta/api'
-import type { BlockRegistry, RichTextDocument, VocabularyBlock } from '@cogenta/blocks'
+import {
+  type BlockRegistry,
+  type RichTextDocument,
+  type VocabularyBlock,
+  vocabularyRegistry,
+} from '@cogenta/blocks'
 import { CogentaError, isCogentaError } from '@cogenta/core'
 import { describeMedia, type MediaAsset as RenderMediaAsset, renderSkin } from '@cogenta/render'
 import {
@@ -29,6 +34,7 @@ import {
   entryImage,
   escapeAttribute,
   type FetchedEntries,
+  type HtmlElement,
   type ImageOptions,
   type ImageSource,
   type LinkTargetInput,
@@ -49,6 +55,8 @@ import {
   type WidgetAreas,
 } from '@cogenta/theme-kit'
 import { DEFAULT_LOGO_PATH } from './default-logo.js'
+import type { PluginBlockRenderer } from './plugin-block-render.js'
+import { pluginBlockFallback } from './plugin-blocks.js'
 import type { SeoRenderDefaults } from './seo.js'
 import { alternatesForEntry, renderSeoHead, seoSiteFor, siteVerificationMetaTags } from './seo.js'
 import { minifyCss } from './theme-css.js'
@@ -225,6 +233,13 @@ export interface ThemeRenderOptions {
    * theme package (or a theme-shipping plugin) that does can rely on.
    */
   readonly blocks?: BlockRegistry
+  /**
+   * Renders the blocks a plugin provides (L32). Absent — no plugin, or a
+   * preview that deliberately runs none — every such block degrades to the
+   * fallback its manifest names, which is the behaviour a site without the
+   * plugin has anyway.
+   */
+  readonly pluginBlocks?: PluginBlockRenderer
   /**
    * The path served at `/` (fiche 23 task 4) — a real, honest replacement
    * for the `/home` fallback this file used to hardcode.
@@ -1543,9 +1558,16 @@ async function renderEntryPage(
     }
   }
 
+  // Filled just before the theme renders, when a plugin provides a block on
+  // this page (L32). Declared here because the context below closes over it.
+  let blockNodes: Record<string, HtmlElement> = {}
+
   const themeContext: RenderContext = {
     site: options.site,
     locale: entry.locale,
+    get blockNodes() {
+      return blockNodes
+    },
     url: new URL(pathname, options.site.url),
     t: createThemeTranslator(entry.locale),
     // The real `srcset`, from `@cogenta/render`'s own `describeMedia` (L10
@@ -1601,6 +1623,48 @@ async function renderEntryPage(
     },
   }
 
+  // A block a plugin provides is rendered here, before the theme sees the
+  // page: the plugin runs in its own process, the tree it returns is checked
+  // against the allowlist, and what could not be rendered is replaced by the
+  // fallback its manifest names. The theme is then handed ordinary blocks and
+  // a map of ready-made nodes — it needs to know nothing about plugins.
+  const pluginRenderer = options.pluginBlocks
+  if (pluginRenderer !== undefined) {
+    const requests = blocks
+      .filter((block) => pluginRenderer.provisionOf(block._type) !== undefined)
+      .map((block) => ({
+        type: block._type,
+        key: block._key,
+        values: block as unknown as Record<string, unknown>,
+        locale: entry.locale,
+      }))
+    if (requests.length > 0) {
+      const rendered = await pluginRenderer.render(requests)
+      blockNodes = rendered.nodes
+      const degraded = new Set(rendered.degrade)
+      if (degraded.size > 0) {
+        const registry = options.blocks ?? vocabularyRegistry
+        for (const [index, block] of blocks.entries()) {
+          if (!degraded.has(block._key)) continue
+          const provision = pluginRenderer.provisionOf(block._type)
+          const fallback =
+            provision === undefined
+              ? null
+              : pluginBlockFallback(
+                  provision,
+                  block as unknown as Record<string, unknown>,
+                  registry,
+                )
+          // No usable fallback means the slot is empty rather than wrong: a
+          // `prose` built from a countdown's fields would be markup nobody
+          // wrote.
+          blocks[index] = fallback as unknown as VocabularyBlock
+        }
+      }
+    }
+  }
+  const renderableBlocks = blocks.filter((block): block is VocabularyBlock => block !== null)
+
   const themeEntry = toThemeEntry(entry, collection.name)
   const entryMeta = await buildEntryMeta(
     entry,
@@ -1631,7 +1695,7 @@ async function renderEntryPage(
   const { host: hostWidgets, theme: themeWidgets } = partitionPageAreas(pageWidgets)
   const pageContent: PageContent = {
     title: entryTitle(entry),
-    blocks,
+    blocks: renderableBlocks,
     entry: entryMeta,
     ...(placesWidgets && hasAnyWidget(themeWidgets) ? { widgets: themeWidgets } : {}),
   }

@@ -29,10 +29,84 @@ export interface PluginManifestIssue {
  * fact — carrying it here now avoids a breaking manifest-shape change once
  * block registration is actually built (a later task).
  */
+/**
+ * The kinds a plugin block's field may take — contract B's own list
+ * (`BLOCK_FIELD_KINDS`) plus `list`, a repeating group, which is what a
+ * gallery, a comparison table or a set of steps is made of.
+ *
+ * Restated here rather than imported so that `@cogenta/plugins` does not take
+ * a dependency on `@cogenta/blocks` to validate a manifest: the host that
+ * turns a declaration into a real block definition owns that dependency, and
+ * a test in `@cogenta/cli` asserts the two lists still agree.
+ */
+export const PLUGIN_BLOCK_FIELD_KINDS = [
+  'text',
+  'richText',
+  'number',
+  'boolean',
+  'media',
+  'select',
+  'color',
+  'json',
+  'list',
+] as const
+
+export type PluginBlockFieldKind = (typeof PLUGIN_BLOCK_FIELD_KINDS)[number]
+
+/**
+ * One field of a plugin's block, declared as data.
+ *
+ * Data rather than code because the manifest is `plugin.manifest.json`, read
+ * and never executed (L31's security review): a schema that had to be built
+ * by calling functions would put manifest code back in the host process,
+ * which is the exact hole that was closed.
+ */
+export interface PluginBlockFieldDeclaration {
+  readonly kind: PluginBlockFieldKind
+  readonly required?: boolean
+  readonly localized?: boolean
+  /** Shown to the person filling the block in. */
+  readonly label?: string
+  readonly help?: string
+  /** Kind-specific settings, in the shape contract B's field builders expect. */
+  readonly options?: Readonly<Record<string, unknown>>
+  /** For `list` only: the fields one item of the list holds. Never nested twice. */
+  readonly of?: Readonly<Record<string, PluginBlockFieldDeclaration>>
+}
+
+/**
+ * A block a plugin provides outside the frozen contract B vocabulary. The
+ * fallback is part of the SHAPE, not a separate later check: "un bloc sans
+ * fallback est refusé" (docs/lots/L7-extensibilite.md § Manifeste) is a
+ * property of what a block provision IS, not something bolted on after the
+ * fact.
+ *
+ * L32 gives it what registering it actually needs: what to call it in an
+ * editor, and the fields it holds. The block never joins the vocabulary —
+ * contract B stays frozen — it is registered beside it, with the fallback
+ * that keeps a page readable once the plugin is gone.
+ */
 export interface PluginBlockProvision {
   readonly name: string
   /** The vocabulary block (e.g. `prose`) a renderer falls back to when this plugin is absent or its block is unrecognised. */
   readonly fallback: string
+  /**
+   * Where the fallback block's own fields take their values from, as
+   * `fallbackField: ownField`.
+   *
+   * Without this, falling back is a promise nobody can keep: a `countdown`'s
+   * data does not satisfy `prose`'s schema, so "it degrades to prose" would
+   * mean "it disappears". Naming the mapping makes the degradation something
+   * a plugin author decided and a reader can check. A field the mapping does
+   * not name is simply absent from the fallback, which is how an optional
+   * field is meant to behave.
+   */
+  readonly fallbackFrom?: Readonly<Record<string, string>>
+  /** What an editor calls it. Falls back to the name when absent. */
+  readonly label?: string
+  readonly fields?: Readonly<Record<string, PluginBlockFieldDeclaration>>
+  /** Whether the block renders a heading of its own, as contract B's `a11y` states it. */
+  readonly headingLevel?: 'none' | 'h2' | 'h3'
 }
 
 /**
@@ -359,22 +433,97 @@ function checkMain(main: string | undefined, issues: PluginManifestIssue[]): voi
   }
 }
 
+/** Contract B's own rule for a block name, restated for a declaration read from JSON. */
+const BLOCK_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/
+/** Past this a "block" is a page, and a form nobody can fill in. */
+const MAX_PLUGIN_BLOCK_FIELDS = 24
+
+function checkBlockFields(
+  fields: Readonly<Record<string, PluginBlockFieldDeclaration>> | undefined,
+  path: string,
+  issues: PluginManifestIssue[],
+  insideList: boolean,
+): void {
+  if (fields === undefined) return
+  const names = Object.keys(fields)
+  if (names.length > MAX_PLUGIN_BLOCK_FIELDS) {
+    issues.push({ path, message: `must declare at most ${MAX_PLUGIN_BLOCK_FIELDS} fields` })
+  }
+  for (const [name, field] of Object.entries(fields)) {
+    const fieldPath = `${path}.${name}`
+    if (!BLOCK_NAME_PATTERN.test(name)) {
+      issues.push({ path: fieldPath, message: 'must be a camelCase field name' })
+    }
+    if (!PLUGIN_BLOCK_FIELD_KINDS.includes(field?.kind as PluginBlockFieldKind)) {
+      issues.push({
+        path: `${fieldPath}.kind`,
+        message: `must be one of ${PLUGIN_BLOCK_FIELD_KINDS.join(', ')}`,
+      })
+      continue
+    }
+    if (field.kind === 'list') {
+      if (insideList) {
+        issues.push({ path: fieldPath, message: 'a list cannot hold another list' })
+        continue
+      }
+      if (field.of === undefined || Object.keys(field.of).length === 0) {
+        issues.push({ path: `${fieldPath}.of`, message: 'a list must say what one item holds' })
+        continue
+      }
+      checkBlockFields(field.of, `${fieldPath}.of`, issues, true)
+    } else if (field.of !== undefined) {
+      issues.push({ path: `${fieldPath}.of`, message: 'only a list declares "of"' })
+    }
+  }
+}
+
 function checkProvidesBlocks(
   blocks: readonly PluginBlockProvision[] | undefined,
   issues: PluginManifestIssue[],
 ): void {
   if (blocks === undefined) return
+  const seen = new Set<string>()
   blocks.forEach((block, index) => {
     const path = `provides.blocks[${index}]`
-    if (typeof block.name !== 'string' || block.name.trim() === '') {
-      issues.push({ path: `${path}.name`, message: 'is required' })
+    if (typeof block.name !== 'string' || !BLOCK_NAME_PATTERN.test(block.name)) {
+      issues.push({
+        path: `${path}.name`,
+        message: 'must be a camelCase block name, such as "countdown"',
+      })
+    } else if (seen.has(block.name)) {
+      issues.push({ path: `${path}.name`, message: 'is declared twice by this plugin' })
+    } else {
+      seen.add(block.name)
     }
     if (typeof block.fallback !== 'string' || block.fallback.trim() === '') {
       issues.push({
         path: `${path}.fallback`,
         message: 'is required — a block without a fallback is refused',
       })
+    } else if (block.fallback === block.name) {
+      issues.push({ path: `${path}.fallback`, message: 'cannot fall back on itself' })
     }
+    if (block.fallbackFrom !== undefined) {
+      const fields = block.fields ?? {}
+      for (const [into, from] of Object.entries(block.fallbackFrom)) {
+        if (typeof from !== 'string' || !(from in fields)) {
+          issues.push({
+            path: `${path}.fallbackFrom.${into}`,
+            message: `must name one of this block's own fields (${Object.keys(fields).join(', ') || 'none declared'})`,
+          })
+        }
+      }
+    }
+    if (block.label !== undefined && (typeof block.label !== 'string' || block.label.length > 80)) {
+      issues.push({ path: `${path}.label`, message: 'must be a short name, at most 80 characters' })
+    }
+    if (
+      block.headingLevel !== undefined &&
+      !['none', 'h2', 'h3'].includes(block.headingLevel as string)
+    ) {
+      issues.push({ path: `${path}.headingLevel`, message: 'must be "none", "h2" or "h3"' })
+    }
+    checkBlockFields(block.fields, `${path}.fields`, issues, false)
   })
 }
 

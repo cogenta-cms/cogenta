@@ -43,6 +43,8 @@ export {
   resolveSignatureStatus,
 } from './loader.js'
 export type {
+  PluginBlockFieldDeclaration,
+  PluginBlockFieldKind,
   PluginBlockProvision,
   PluginCapabilityName,
   PluginEventName,
@@ -59,6 +61,7 @@ export {
   isCapabilityImplemented,
   MAX_PLUGIN_SCHEDULE_MINUTES,
   MIN_PLUGIN_SCHEDULE_MINUTES,
+  PLUGIN_BLOCK_FIELD_KINDS,
   PLUGIN_CAPABILITY_NAMES,
   PLUGIN_EVENT_NAMES,
   PLUGIN_RUNTIMES,

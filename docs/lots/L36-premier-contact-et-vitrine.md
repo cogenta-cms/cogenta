@@ -39,8 +39,8 @@ Vérifié sur les paquets publiés, installés depuis npm dans un dossier vide :
 | 1 | Page 404 de repli et page de démarrage, rendues par le thème ; tests de bout en bout | **fait** |
 | 2 | `vitrine` par défaut dans l'installeur (`--yes` et assistant) | **fait** |
 | 3 | Vitrine de référence : état des lieux sur captures réelles, références du meilleur niveau, plan de refonte | **fait** |
-| 4 | Refonte du thème de la vitrine et de son contenu de démonstration | à faire |
-| 5 | Vérification sur un site réellement installé, documentation, publication | à faire |
+| 4 | Refonte du thème de la vitrine et de son contenu de démonstration | **fait** |
+| 5 | Vérification sur un site réellement installé, documentation, publication | **fait** (publication en attente de confirmation) |
 
 ## Pièges connus
 
@@ -101,3 +101,57 @@ une entreprise, ses solutions, ses références, ses équipes et ses offres d'em
 Un site existant qui l'utilise changera d'apparence à la mise à jour — pas de
 rupture de contrat (D reste `theme@1.7`), mais une rupture visuelle, à annoncer
 dans le changeset.
+
+## Rapport de clôture (2026-09-17)
+
+**Premier contact.** Un lien mort n'affiche plus le JSON de l'API mais une page
+« introuvable » dans l'habillage du thème actif (404, `no-store`, `noindex`), et `/`
+sans page d'accueil affiche une page de démarrage. `npm create cogenta --yes`
+installe la vitrine ; `blank` est en dernier, pour les développeurs.
+
+**La vitrine** est une entreprise d'ingénierie fictive (« Norvane », remplacée par le
+nom du site dès qu'il est connu) : capteurs, plateforme de supervision « Vigie »,
+maintenance prédictive, ingénierie, interventions terrain, cybersécurité industrielle ;
+quatre références chiffrées, trois témoignages sans portrait, quatre offres d'emploi,
+quatre articles programmables, dix pages. **Rédigée en français et en anglais**, pas
+traduite au rendu : `contentPackFor(id, locale)` choisit le contenu, les adresses et les
+libellés d'administration selon la langue principale du site.
+
+**Images.** Vingt-deux vraies photographies de Wikimedia Commons (CC0, domaine public,
+CC BY — jamais SA ni NC), choisies à l'œil sur des planches contact de près de
+900 candidates, recadrées, sans métadonnées, chacune créditée (auteur, licence, source)
+sur une page « Crédits photos » générée depuis `vitrine-credits.ts`. Logos clients et
+captures de la plateforme dessinés en HTML/CSS et rendus dans un navigateur, sources
+conservées dans `packages/starters/scripts/vitrine-assets/`. Les images générées par IA
+de l'ancienne vitrine sont supprimées.
+
+**Thème.** `@cogenta/theme-entreprise` passe au registre d'une entreprise d'ingénierie :
+Geist et Geist Mono, papier gris, encre bleu-noir, vert signal (contraste AA vérifié
+sur toutes les surfaces) ; hero photographique plein cadre sous un voile d'encre uniforme
+(aucun dégradé) ; chiffres en bande d'encre ; figures larges sur toute la grille ; chiffre
+clé d'une référence sous son résumé. Aucun contrat touché.
+
+### Trouvé en vérifiant sur de vrais sites installés
+
+1. Des formulaires de commentaires en bas des pages Solution, **en anglais sur le site
+   français** : un pack peut désormais fermer les commentaires par collection
+   (`commentsDisabledOn`), la vitrine les ferme partout.
+2. La grille de six solutions tombait en deux colonnes : le nombre d'entrées était
+   plafonné à 4 dans l'attribut qui choisit la grille.
+3. Le logo « maréa » ressemblait trop à une marque automobile connue : redessiné.
+4. Unités collées aux chiffres (« 14months ») et légende d'une figure isolée à droite.
+
+### Vérifié
+
+`@cogenta/starters` 378 tests, `create-cogenta` (dont un site installé en français de
+bout en bout), `@cogenta/theme-entreprise` 305, `@cogenta/cli` (pages de repli). Sites
+réellement installés en français et en anglais, capturés en bureau, mobile et sombre.
+
+### Reste ouvert
+
+- **Le formulaire de commentaires de `theme-kit` est en anglais en dur**, sur tous les
+  sites francophones qui l'affichent (articles de blog par exemple) : défaut préexistant,
+  hors de ce lot, à corriger ensuite.
+- Les pages de repli (404, démarrage) n'existent qu'en français et en anglais.
+- Un site existant sur `theme-entreprise` change d'apparence à la mise à jour
+  (annoncé dans le changeset).

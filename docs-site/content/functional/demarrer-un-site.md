@@ -31,7 +31,15 @@ statique). Les pages de gabarit (accueil, à propos) ne portent pas de fil de
 commentaires ; les articles gardent le réglage du site.
 
 **Sans choix explicite, c'est la vitrine** qui est installée — y compris avec
-`npm create cogenta --yes`. Le préréglage `blank`, en dernier dans la liste, reste
+`npm create cogenta --yes`. La vitrine présente une entreprise d'ingénierie fictive
+(capteurs, plateforme de supervision, services terrain pour les réseaux d'énergie,
+d'eau et de rail) : six solutions, quatre références, des offres d'emploi, des
+actualités et dix pages, dont les mentions légales, la politique de confidentialité et
+les crédits photos. **Son contenu est rédigé en français et en anglais** et suit la
+langue principale du site, adresses comprises (`/references/…` en français,
+`/case-studies/…` en anglais). Les photos sont de vraies photographies sous licence
+libre, créditées sur la page dédiée : à remplacer par les vôtres, en retirant la
+ligne correspondante des crédits. Le préréglage `blank`, en dernier dans la liste, reste
 un schéma vide pour qui veut tout concevoir lui-même : tant qu'aucune page
 d'accueil n'existe, l'adresse `/` affiche une page « Votre site est en ligne » qui
 indique où aller, et disparaît dès qu'une page dont le slug est `home` est publiée.

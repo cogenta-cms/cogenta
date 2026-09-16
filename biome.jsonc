@@ -10,7 +10,16 @@
     // design* — CommonJS, forbidden imports, unresolvable specifiers — because
     // that is what the theme installation check exists to refuse. Linting them
     // would report the very things the tests assert are present.
-    "includes": ["**", "!**/dist", "!**/.turbo", "!**/coverage", "!**/test/fixtures"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/.turbo",
+      "!**/coverage",
+      "!**/test/fixtures",
+      // Sources of bundled demo images (L36): throwaway pages rendered once in a
+      // browser to make PNGs, never served, so accessibility rules do not apply.
+      "!**/scripts/vitrine-assets"
+    ]
   },
   "formatter": {
     "enabled": true,

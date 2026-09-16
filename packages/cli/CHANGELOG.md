@@ -1,5 +1,56 @@
 # @cogenta/cli
 
+## 0.15.1
+
+### Patch Changes
+
+- Search and replace across content, previewed before it writes anything
+  
+  `@cogenta/schema` gains `planEntryReplacement`: a pure function that says where
+  a phrase appears in an entry — text fields, rich text span by span, and the
+  text inside blocks — and what it would become, naming the entry by its current
+  title. It leaves alone what is not
+  text: slugs, ids, relations, media references, marks and link hrefs.
+  
+  `@cogenta/api` gains `POST /api/content/-/replace`, a preview unless `apply` is
+  sent. It searches only collections the actor may edit, applies through the
+  store's ordinary update (new version, reindex, content events), re-reads each
+  entry at the moment of writing so one edited in between is left alone, and says
+  when a preview stopped early.
+  
+  `cogenta serve` records every entry an applied replacement wrote in the audit
+  log, with the phrase and its replacement. It also now records a visibility
+  change (`content.visibility`), which fell through unrecorded since `schema@2.2`.
+- Updated dependencies [`aef3a40`]:
+  - @cogenta/schema@0.7.0
+  - @cogenta/api@2.7.0
+  - @cogenta/agents@0.8.3
+  - @cogenta/auth@0.5.7
+  - @cogenta/blocks@1.1.2
+  - @cogenta/export@0.2.8
+  - @cogenta/import@0.2.9
+  - @cogenta/plugins@0.8.2
+  - @cogenta/seo@0.3.8
+  - @cogenta/starters@0.1.4
+  - @cogenta/widgets@0.2.2
+  - @cogenta/agents-builtin@0.6.3
+  - @cogenta/channels@0.3.10
+  - @cogenta/mcp@0.3.9
+  - @cogenta/render@0.3.4
+  - @cogenta/theme-association@0.5.2
+  - @cogenta/theme-blog@0.5.2
+  - @cogenta/theme-canonical@1.3.2
+  - @cogenta/theme-docs@0.5.2
+  - @cogenta/theme-ecommerce@1.3.2
+  - @cogenta/theme-entreprise@1.3.2
+  - @cogenta/theme-kit@0.5.2
+  - @cogenta/theme-magazine@1.3.2
+  - @cogenta/theme-portfolio@1.3.2
+  - @cogenta/theme-restaurant@0.5.2
+  - @cogenta/theme-saas@0.5.2
+  - @cogenta/commerce@0.5.5
+  - @cogenta/forms@0.2.10
+
 ## 0.15.0
 
 ### Minor Changes

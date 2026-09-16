@@ -1,5 +1,20 @@
 # create-cogenta
 
+## 0.6.6
+
+### Patch Changes
+
+- Updated dependencies [`aef3a40`]:
+  - @cogenta/schema@0.7.0
+  - @cogenta/api@2.7.0
+  - @cogenta/cli@0.15.1
+  - @cogenta/agents@0.8.3
+  - @cogenta/auth@0.5.7
+  - @cogenta/blocks@1.1.2
+  - @cogenta/starters@0.1.4
+  - @cogenta/render@0.3.4
+  - @cogenta/theme-canonical@1.3.2
+
 ## 0.6.5
 
 ### Patch Changes

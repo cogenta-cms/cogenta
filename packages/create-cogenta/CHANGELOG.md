@@ -1,5 +1,12 @@
 # create-cogenta
 
+## 0.6.5
+
+### Patch Changes
+
+- Updated dependencies [`5c6ee1e`]:
+  - @cogenta/cli@0.15.0
+
 ## 0.6.4
 
 ### Patch Changes

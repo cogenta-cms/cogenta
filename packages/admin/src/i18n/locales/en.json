@@ -4581,6 +4581,20 @@
     },
     "deleteTitle": "Delete “{{name}}”?",
     "deleteHelp": "The widget and its settings are deleted. To take it off the site without losing its settings, hide it instead.",
+    "preview": {
+      "heading": "Preview",
+      "page": "Page",
+      "home": "Home",
+      "viewport": "Screen width",
+      "desktop": "Desktop",
+      "tablet": "Tablet",
+      "mobile": "Mobile",
+      "open": "Open in a tab",
+      "frameTitle": "Site preview",
+      "show": "Show the preview",
+      "hide": "Hide the preview",
+      "help": "The site's own page, reloaded after every change. A widget hidden on this page does not show here: switch pages to see it."
+    },
     "samples": {
       "text": "Write a few lines here.",
       "heading": "A heading",

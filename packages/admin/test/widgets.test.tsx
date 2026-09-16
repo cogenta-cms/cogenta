@@ -158,6 +158,41 @@ describe('Widgets screen', () => {
     expect(widgetWrites.map((write) => write.method)).toEqual(['DUPLICATE', 'DELETE'])
   })
 
+  it('previews the site itself and reloads it after a change', async () => {
+    open(['admin'])
+    await screen.findByRole('region', { name: 'Barre latérale' })
+
+    const preview = screen.getByRole('region', { name: 'Aperçu' })
+    const frame = within(preview).getByTitle('Aperçu du site')
+    expect(frame.getAttribute('src')).toBe('/?cg-preview=0')
+    // The pages offered are the ones the site's own sitemap advertises.
+    const pages = within(preview).getByLabelText('Page')
+    await waitFor(() =>
+      expect([...(pages as HTMLSelectElement).options].map((option) => option.value)).toEqual([
+        '/',
+        '/blog/bread-at-home',
+        '/about',
+      ]),
+    )
+
+    const sidebar = area('Barre latérale')
+    fireEvent.click(within(sidebar).getAllByRole('button', { name: 'Masquer' })[0] as HTMLElement)
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('region', { name: 'Aperçu' }))
+          .getByTitle('Aperçu du site')
+          .getAttribute('src'),
+      ).toBe('/?cg-preview=1'),
+    )
+
+    fireEvent.change(pages, { target: { value: '/about' } })
+    expect(
+      within(screen.getByRole('region', { name: 'Aperçu' }))
+        .getByTitle('Aperçu du site')
+        .getAttribute('src'),
+    ).toBe('/about?cg-preview=1')
+  })
+
   it('tells a non-admin that widgets are managed by an administrator', async () => {
     open(['editor'])
     expect(await screen.findByText('Seul un administrateur peut gérer les widgets.')).toBeDefined()

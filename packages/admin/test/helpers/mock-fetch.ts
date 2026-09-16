@@ -9725,6 +9725,18 @@ export function installMockFetch(
         }
       }
 
+      // `/sitemap.xml` — the site's own list of public pages, which the
+      // Widgets screen reads to offer real pages to preview (L30).
+      if (url.endsWith('/sitemap.xml')) {
+        const origin = window.location.origin
+        return new Response(
+          `<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>${origin}/</loc></url>` +
+            `<url><loc>${origin}/blog/bread-at-home</loc></url>` +
+            `<url><loc>${origin}/about</loc></url></urlset>`,
+          { status: 200, headers: { 'content-type': 'application/xml' } },
+        )
+      }
+
       // `/api/widgets` (L30) — a stateful stand-in for the widget router:
       // admin-only, positions kept contiguous, a quote with no text refused
       // with the vocabulary's own code so the editor's error path is real.

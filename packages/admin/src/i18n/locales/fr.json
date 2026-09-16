@@ -4581,6 +4581,20 @@
     },
     "deleteTitle": "Supprimer « {{name}} » ?",
     "deleteHelp": "Le widget et ses réglages sont supprimés. Pour le retirer du site sans perdre ses réglages, masquez-le plutôt.",
+    "preview": {
+      "heading": "Aperçu",
+      "page": "Page",
+      "home": "Accueil",
+      "viewport": "Largeur d'écran",
+      "desktop": "Ordinateur",
+      "tablet": "Tablette",
+      "mobile": "Mobile",
+      "open": "Ouvrir dans un onglet",
+      "frameTitle": "Aperçu du site",
+      "show": "Afficher l'aperçu",
+      "hide": "Masquer l'aperçu",
+      "help": "La vraie page du site, rechargée après chaque modification. Un widget masqué sur cette page n'y apparaît pas : changez de page pour le voir."
+    },
     "samples": {
       "text": "Écrivez ici quelques lignes.",
       "heading": "Un titre",

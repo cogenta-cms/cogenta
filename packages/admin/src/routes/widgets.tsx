@@ -26,6 +26,7 @@ import {
   WIDGET_GROUPS,
   type WidgetSources,
 } from '../widgets/widget-catalog.js'
+import { loadPreviewTargets, type PreviewTarget, WidgetPreview } from '../widgets/widget-preview.js'
 import { WidgetSettingsForm } from '../widgets/widget-settings-form.js'
 
 /**
@@ -75,6 +76,11 @@ export function WidgetsRoute(): JSX.Element {
   const [deleting, setDeleting] = useState<Widget | null>(null)
   const [dragged, setDragged] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
+  // The preview is the site itself, reloaded after every write (`version`).
+  const [previewOpen, setPreviewOpen] = useState(true)
+  const [previewTargets, setPreviewTargets] = useState<readonly PreviewTarget[]>([])
+  const [previewPath, setPreviewPath] = useState('/')
+  const [previewVersion, setPreviewVersion] = useState(0)
 
   const load = useCallback(async () => {
     if (token === null) return
@@ -96,6 +102,16 @@ export function WidgetsRoute(): JSX.Element {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+    void loadPreviewTargets(t('widgets.preview.home')).then((targets) => {
+      if (!cancelled) setPreviewTargets(targets)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [t])
 
   const sources: WidgetSources = useMemo(() => {
     const document = schema.status === 'ready' ? schema.schema : null
@@ -132,6 +148,7 @@ export function WidgetsRoute(): JSX.Element {
     try {
       await run()
       setStatus(done)
+      setPreviewVersion((version) => version + 1)
       await load()
     } catch (caught) {
       setActionError(describeApiError(caught, t('widgets.actionError')).message)
@@ -189,6 +206,7 @@ export function WidgetsRoute(): JSX.Element {
       }
       setEditor(null)
       setDraft(null)
+      setPreviewVersion((version) => version + 1)
       await load()
     } catch (caught) {
       const described = describeApiError(caught, t('widgets.actionError'))
@@ -253,9 +271,20 @@ export function WidgetsRoute(): JSX.Element {
         title={t('widgets.heading')}
         description={t('widgets.description')}
         actions={
-          <a className="text-sm underline" href="/" target="_blank" rel="noreferrer">
-            {t('widgets.viewSite')}
-          </a>
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              aria-pressed={previewOpen}
+              onClick={() => setPreviewOpen(!previewOpen)}
+            >
+              {previewOpen ? t('widgets.preview.hide') : t('widgets.preview.show')}
+            </Button>
+            <a className="text-sm underline" href="/" target="_blank" rel="noreferrer">
+              {t('widgets.viewSite')}
+            </a>
+          </div>
         }
       />
       {loadError !== null && (
@@ -275,7 +304,11 @@ export function WidgetsRoute(): JSX.Element {
       {state === null ? (
         loadError === null && <p>{t('common.loading')}</p>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
+        <div
+          className={`grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] ${
+            previewOpen ? 'xl:grid-cols-[17rem_minmax(0,1fr)_minmax(22rem,34rem)]' : ''
+          }`}
+        >
           <aside
             aria-labelledby="widgets-library"
             className="flex flex-col gap-4 self-start rounded-xl border border-border bg-card p-4 lg:sticky lg:top-4"
@@ -559,6 +592,15 @@ export function WidgetsRoute(): JSX.Element {
               )
             })}
           </div>
+
+          {previewOpen && (
+            <WidgetPreview
+              version={previewVersion}
+              targets={previewTargets}
+              path={previewPath}
+              onPathChange={setPreviewPath}
+            />
+          )}
         </div>
       )}
 

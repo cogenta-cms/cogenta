@@ -76,6 +76,46 @@ describe('the plugin-starter runtime code', () => {
     expect(JSON.parse(written).readTitle).toBe('Bienvenue')
   })
 
+  it('renders the block and the widget it provides, as a tree a host can check', async () => {
+    const resolved = await loadPlugin(packageRoot)
+    const code = await readPluginCode(resolved.packageRoot, resolved.manifest)
+    const db = await createSqliteHandle({ url: ':memory:' })
+    await ensurePluginTables(db)
+    const disableStore = createPluginDisableStore(db)
+
+    // No capability granted: rendering a block needs none — it is handed the
+    // values a person typed, and nothing else.
+    const block = await runPlugin(resolved.manifest, code, [], {
+      disableStore,
+      invoke: 'onRenderBlock',
+      input: { type: 'callout', values: { message: 'Ouverture lundi.', tone: 'warning' } },
+    })
+
+    expect(block.ok).toBe(true)
+    expect(block.value).toEqual({
+      kind: 'element',
+      tag: 'aside',
+      attrs: { class: 'cg-callout cg-callout--warning' },
+      children: [
+        {
+          kind: 'element',
+          tag: 'p',
+          attrs: {},
+          children: [{ kind: 'text', value: 'Ouverture lundi.' }],
+        },
+      ],
+    })
+
+    const widget = await runPlugin(resolved.manifest, code, [], {
+      disableStore,
+      invoke: 'onRenderWidget',
+      input: { type: 'keyFigure', values: { value: '31 200', caption: 'abonnés' } },
+    })
+
+    expect(widget.ok).toBe(true)
+    expect((widget.value as { tag: string }).tag).toBe('div')
+  })
+
   it('has no method for a capability the manifest never declared — absent, not refused', async () => {
     const resolved = await loadPlugin(packageRoot)
     const db = await createSqliteHandle({ url: ':memory:' })

@@ -8,7 +8,57 @@
     "storage.write:plugins/plugin-starter"
   ],
   "provides": {
-    "tools": ["plugin-starter.hello"]
+    "tools": [
+      "plugin-starter.hello"
+    ],
+    "blocks": [
+      {
+        "name": "callout",
+        "label": "Encadré",
+        "fallback": "quote",
+        "fields": {
+          "message": {
+            "kind": "text",
+            "required": true,
+            "label": "Message",
+            "options": {
+              "max": 300
+            }
+          },
+          "tone": {
+            "kind": "select",
+            "label": "Ton",
+            "options": {
+              "options": [
+                "info",
+                "warning"
+              ]
+            }
+          }
+        },
+        "fallbackFrom": {
+          "text": "message"
+        }
+      }
+    ],
+    "widgets": [
+      {
+        "name": "keyFigure",
+        "label": "Chiffre clé",
+        "fields": {
+          "value": {
+            "kind": "text",
+            "required": true,
+            "label": "Chiffre"
+          },
+          "caption": {
+            "kind": "text",
+            "required": true,
+            "label": "Légende"
+          }
+        }
+      }
+    ]
   },
   "main": "plugin.js",
   "runtime": "server",

@@ -17,7 +17,39 @@
 // A classic script has no top-level `await` — do async work inside a
 // handler, which may be `async`, rather than around this object.
 
+// A block and a widget this plugin adds to a site (L32) are rendered by the
+// two handlers below. They return a TREE, never a string of HTML: the host
+// checks every tag and attribute against an allowlist before the markup
+// reaches a page, so a `<script>` or an `onclick` is refused outright rather
+// than escaped into something else. These two helpers are the whole of what
+// building one takes.
+const el = (tag, attrs, children) => ({
+  kind: 'element',
+  tag,
+  attrs: attrs ?? {},
+  children: children ?? [],
+})
+const txt = (value) => ({ kind: 'text', value: String(value ?? '') })
+
 ;({
+  /**
+   * The `callout` block the manifest declares. `input.values` holds exactly
+   * the fields it declared; nothing else is granted, and nothing else is
+   * needed.
+   */
+  onRenderBlock: (input) =>
+    el('aside', { class: `cg-callout cg-callout--${input.values.tone ?? 'info'}` }, [
+      el('p', {}, [txt(input.values.message)]),
+    ]),
+
+  /** And the `keyFigure` widget, drawn wherever a person placed it. */
+  onRenderWidget: (input) =>
+    el('div', { class: 'cg-key-figure' }, [
+      el('strong', { class: 'cg-key-figure__value' }, [txt(input.values.value)]),
+      txt(' '),
+      el('span', { class: 'cg-key-figure__caption' }, [txt(input.values.caption)]),
+    ]),
+
   /** Reads one entry and records that it ran, in its own storage prefix. */
   greet: async (input) => {
     const entry = await sdk.content.read({ id: input.id })

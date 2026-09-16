@@ -379,12 +379,121 @@ A capability only ever reaches the sandbox through a real grant row: there is no
 that hands a plugin a capability for one run, and `grant` refuses a capability the
 manifest never requested.
 
+## Adding a block to a page, and a widget to an area (L32)
+
+This is the one people ask for first: *my plugin should let an editor put something new on
+a page.* It can.
+
+### The rule that makes it safe
+
+A block your plugin provides **never joins contract B's frozen vocabulary**. It is
+registered beside it, and it declares a `fallback` — a vocabulary block to draw in its
+place when your plugin is not there. That is what stops a plugin from taking a page
+hostage: uninstall it and the page degrades, it does not empty.
+
+Because your block's data will not satisfy the fallback's own schema, the manifest also
+says where the fallback's fields come from. Without that map, "it falls back to `quote`"
+would mean "it disappears".
+
+```json
+"provides": {
+  "blocks": [
+    {
+      "name": "callout",
+      "label": "Encadré",
+      "fallback": "quote",
+      "fields": {
+        "message": { "kind": "text", "required": true, "label": "Message" },
+        "tone": { "kind": "select", "options": { "options": ["info", "warning"] } }
+      },
+      "fallbackFrom": { "text": "message" }
+    }
+  ],
+  "widgets": [
+    {
+      "name": "keyFigure",
+      "label": "Chiffre clé",
+      "fields": {
+        "value": { "kind": "text", "required": true, "label": "Chiffre" },
+        "caption": { "kind": "text", "required": true, "label": "Légende" }
+      }
+    }
+  ]
+}
+```
+
+A field's `kind` is one of contract B's own (`text`, `richText`, `number`, `boolean`,
+`media`, `relation`, `select`, `color`, `json`) plus `list`, a repeating group whose `of`
+says what one item holds. `label` is what the person filling it in reads, so write it in
+their language rather than leaving them with `leftLabel`.
+
+A **widget** declares no fallback, on purpose: a widget is chrome, not content. One that
+cannot render is simply not drawn, its settings stay in the database, and reinstalling the
+plugin brings it back exactly as it was.
+
+### Rendering it
+
+Two handlers, and they return a **tree** — never a string of HTML:
+
+```js
+const el = (tag, attrs, children) => ({ kind: 'element', tag, attrs: attrs ?? {}, children: children ?? [] })
+const txt = (value) => ({ kind: 'text', value: String(value ?? '') })
+
+;({
+  onRenderBlock: (input) =>
+    el('aside', { class: `cg-callout cg-callout--${input.values.tone ?? 'info'}` }, [
+      el('p', {}, [txt(input.values.message)]),
+    ]),
+
+  onRenderWidget: (input) =>
+    el('div', { class: 'cg-key-figure' }, [
+      el('strong', {}, [txt(input.values.value)]),
+      txt(' '),
+      el('span', {}, [txt(input.values.caption)]),
+    ]),
+})
+```
+
+`input.values` holds exactly the fields you declared, plus `input.locale`. Rendering needs
+no capability at all — a block that only draws what a person typed asks for nothing.
+
+### What the host will refuse
+
+Your tree is checked before it reaches a page, and a block that fails the check is
+**dropped in favour of its fallback** rather than repaired:
+
+- tags outside a structural allowlist — no `script`, `style`, `iframe`, `object`, `link`,
+  and no form controls;
+- attributes outside an allowlist — `class` yes, `id` no (a duplicate id breaks a page's
+  own anchors), and nothing starting with `on`;
+- `href`/`src`/`poster` pointing at `javascript:` or a non-image `data:`;
+- more than 24 levels of nesting, 2000 nodes, or 100 000 characters of text.
+
+There is no way to emit raw markup, by construction: the tree has no escape hatch, and a
+string in a text node is escaped when it is serialised.
+
+### What it costs
+
+Your handler runs in a **separate process under Node's permission model** — no filesystem,
+no `child_process`, an empty environment — and the result is cached against your plugin,
+its version, the block's stored values and the locale. Editing the block changes the cache
+key, so a stale render cannot survive an edit; a busy page does not fork a process per
+visit.
+
+### And in the admin
+
+Nothing to do. `GET /api/plugins/blocks` and `/api/plugins/widgets` tell the admin what you
+declared; your block appears in the page builder's insertion panel (searchable by label and
+by type name), your widget in the library under « Extensions », and both get a settings form
+generated from the fields you declared, with the labels you wrote.
+
 ## The starter template
 
 [`examples/plugin-starter/`](../examples/plugin-starter/) is a real, minimal, tested
 plugin package — copy it as a starting point. Its own test suite
 (`examples/plugin-starter/test/manifest.test.ts` and `test/runtime.test.ts`) proves, for
 real: the manifest passes
-`definePlugin`'s validation, and the entry code actually runs inside the real isolated
-worker and returns the real content it reads. If either ever breaks, CI fails — the
+`definePlugin`'s validation, the entry code actually runs inside the real isolated
+sandbox and returns the real content it reads, and the block and widget it provides render
+the exact trees this guide shows. If either ever breaks, CI fails — the
 same "cannot rot" guarantee this project holds every other documented example to.

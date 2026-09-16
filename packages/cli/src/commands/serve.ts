@@ -371,6 +371,7 @@ import { applySecurity, type SecurityConfig } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
+import { createPluginRuntime } from './plugin-runtime.js'
 import { createSampleDataEngine } from './sample-data.js'
 import { renderSearchPage } from './search-page.js'
 import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
@@ -6890,6 +6891,51 @@ export async function runServe(options: ServeOptions): Promise<number> {
     siteUrl: loaded.config.site.url,
     logger,
   })
+  // The plugins this site has installed, and the events they asked for
+  // (L31 step 2). Off entirely with `plugins.enabled: false`; a site with no
+  // `plugins/` directory builds an empty runtime and pays nothing for it.
+  const pluginRuntime = loaded.config.plugins.enabled
+    ? await createPluginRuntime({
+        projectRoot,
+        dir: loaded.config.plugins.dir,
+        db: selection.instance,
+        storage: storageSelection.instance,
+        logger,
+        // The published face of one entry, the same thing a visitor sees —
+        // a plugin reading drafts would be reading something no reader can.
+        readEntry: async (collectionName, id) => {
+          const collection = collections.find((item) => item.name === collectionName)
+          if (collection === undefined) return null
+          return createContentStore({
+            db: selection.instance,
+            collection,
+            defaultLocale: loaded.config.site.defaultLocale,
+          }).read(id)
+        },
+      })
+    : null
+  if (pluginRuntime !== null && pluginRuntime.plugins.length > 0) {
+    logger.info('plugins loaded', {
+      plugins: pluginRuntime.plugins.length,
+      subscribers: pluginRuntime.subscribers,
+      refused: pluginRuntime.failures.length,
+    })
+  }
+  // Both sinks see the same event, and neither can stop the other: a webhook
+  // endpoint that is down must not cost a plugin its notification, and a
+  // plugin that throws must not cost the webhook its delivery.
+  const contentEventSinks = [
+    webhooks.emit,
+    pluginRuntime !== null && pluginRuntime.subscribers > 0
+      ? pluginRuntime.dispatchContentEvent
+      : null,
+  ].filter((sink): sink is (event: ContentLifecycleEvent) => Promise<void> => sink !== null)
+  const onContentEvent =
+    contentEventSinks.length === 0
+      ? null
+      : async (event: ContentLifecycleEvent): Promise<void> => {
+          for (const sink of contentEventSinks) await sink(event)
+        }
   // L18. Never fatal: everything inside degrades to "off" with a log line
   // rather than stopping the site from serving (R2).
   const searchIndex = await createSearchIndex({ db: selection.instance })
@@ -7179,7 +7225,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     // The signed outbound webhook channel, connected to the content lifecycle
     // for the first time (L14 task 1). `null` when the site configured no
     // endpoint, or configured one without a signing secret.
-    onContentEvent: webhooks.emit,
+    onContentEvent,
     onSecurityEvent: webhooks.send,
     requestQuota: rateLimitSelection.instance,
     // Same mail this site's `cogenta users reset-password --email` already

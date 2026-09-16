@@ -40,6 +40,7 @@ export {
 export type {
   PluginBlockProvision,
   PluginCapabilityName,
+  PluginEventName,
   PluginManifest,
   PluginManifestIssue,
   PluginProvides,
@@ -49,6 +50,7 @@ export {
   DEFAULT_PLUGIN_MAIN,
   definePlugin,
   PLUGIN_CAPABILITY_NAMES,
+  PLUGIN_EVENT_NAMES,
   PLUGIN_RUNTIMES,
 } from './manifest.js'
 export type {

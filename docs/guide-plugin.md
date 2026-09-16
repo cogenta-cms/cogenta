@@ -236,6 +236,38 @@ stays absent until a human explicitly approves it. Don't assume a permission bum
 takes effect immediately — write your plugin so the absence of a not-yet-approved
 capability degrades gracefully rather than crashing.
 
+## Reacting to what happens on the site (L31)
+
+A plugin subscribes to content lifecycle events in its manifest, and exposes one
+handler named `onContentEvent`:
+
+```js
+// plugin.manifest.mjs
+provides: { eventSubscriptions: ['content.publish'] },
+```
+
+```js
+// plugin.js
+;({
+  onContentEvent: async (event) => {
+    // event: { event, collection, id, locale, status, url, occurredAt… }
+  },
+})
+```
+
+The three events are `content.publish`, `content.unpublish` and `content.delete` — the
+same closed set the site's outbound webhooks use, and subscribing to anything else is
+refused when the manifest is validated. They carry identity and location, never the
+content body: read what you need through a granted `content.read`.
+
+An event fires after the write has landed, and a plugin can never break it: one that
+throws, times out or has been disabled is logged and skipped, and the publish that
+triggered it stays published. A plugin that exceeds its time or memory budget is
+disabled until a human re-enables it — an event handler is not a place to do slow work.
+
+Your code is read once, when the site starts: editing a plugin means restarting the
+site, the same rule its schema file already follows.
+
 ## Where a plugin lives on a site (L31)
 
 One directory per plugin under `plugins/` at the root of the site, each holding its

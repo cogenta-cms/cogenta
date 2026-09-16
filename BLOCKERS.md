@@ -817,10 +817,13 @@ tête, **résolu en partie le 2026-09-16 (L31 étape 1)** : `cogenta plugin run`
 désormais réellement `runPlugin`, sur un plugin installé dans `plugins/<nom>/`, dont le
 code est lu depuis le fichier que son manifeste nomme, avec les capacités réellement
 accordées (`cogenta plugin grant`) et les vrais gestionnaires de `content.read`,
-`storage.*` et `http.fetch`. Ce qui reste vrai : **`cogenta serve` n'appelle toujours pas
-`runPlugin`** — un plugin ne réagit à aucun événement, ne sert aucune route et n'a aucune
-tâche planifiée, faute de point d'extension (L31 étape 2). Les magasins d'usage et de
-désactivation se remplissent donc à la main, pas encore sous le trafic d'un site. L'écran « Extensions installées » (tâche 1) lit
+`storage.*` et `http.fetch`. **Résolu plus avant le 2026-09-16 (L31 étape 2)** : `cogenta serve` appelle
+`runPlugin` sur chaque événement de contenu (`content.publish`/`unpublish`/`delete`) pour
+les plugins qui les déclarent, ce qu'une publication réelle en HTTP prouve
+(`packages/cli/test/serve-plugins.test.ts`). Les magasins d'usage et de désactivation se
+remplissent donc sous le trafic d'un vrai site. Ce qui reste vrai : un plugin ne sert
+encore **aucune route publique** et n'a **aucune tâche planifiée** (L31 étape 2, suite), et
+`provides.blocks`/`provides.tools` restent déclaratifs. L'écran « Extensions installées » (tâche 1) lit
 donc un `PluginUsageStore` et un `PluginDisableStore` réels, câblés et testés de bout en
 bout, mais qui resteront vides sur un vrai déploiement tant qu'aucun pipeline
 d'exécution de plugin n'existe — l'écran le dit honnêtement (« Jamais exécutée ») plutôt

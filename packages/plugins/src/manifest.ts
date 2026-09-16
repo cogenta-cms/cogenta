@@ -55,6 +55,22 @@ export interface PluginProvides {
   readonly eventSubscriptions?: readonly string[]
 }
 
+/**
+ * The content lifecycle events a plugin may subscribe to (L31 step 2).
+ *
+ * The same closed set `@cogenta/schema`'s `withLifecycleEvents` emits — named
+ * here rather than imported, because this package deliberately depends on
+ * `@cogenta/core` alone. A subscription to anything else is refused at
+ * validation: a plugin waiting for an event no site ever emits would simply
+ * never run, and never know why.
+ */
+export const PLUGIN_EVENT_NAMES = [
+  'content.publish',
+  'content.unpublish',
+  'content.delete',
+] as const
+export type PluginEventName = (typeof PLUGIN_EVENT_NAMES)[number]
+
 export const PLUGIN_RUNTIMES = ['server'] as const
 export type PluginRuntime = (typeof PLUGIN_RUNTIMES)[number]
 
@@ -274,6 +290,14 @@ function collectIssues(input: PluginManifest): PluginManifestIssue[] {
     issues.push({ path: 'engine', message: 'must be a semver range such as "^1.0.0"' })
   }
   checkMain(input.main, issues)
+  for (const [index, event] of (input.provides?.eventSubscriptions ?? []).entries()) {
+    if (!PLUGIN_EVENT_NAMES.includes(event as PluginEventName)) {
+      issues.push({
+        path: `provides.eventSubscriptions[${index}]`,
+        message: `unknown event "${event}" — one of ${PLUGIN_EVENT_NAMES.join(', ')}`,
+      })
+    }
+  }
   if (!PLUGIN_RUNTIMES.includes(input.runtime)) {
     issues.push({ path: 'runtime', message: `must be one of: ${PLUGIN_RUNTIMES.join(', ')}` })
   }

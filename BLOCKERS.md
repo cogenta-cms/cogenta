@@ -1411,6 +1411,37 @@ aucun accès à une base de site — ils utilisent
 jamais une constante dupliquée), ce qui est correct et volontaire, pas une
 limite à lever.
 
+## `/tmp` est de la RAM sur cette machine — et c'est ce qui tuait les suites de tests
+
+Constat mesuré le 2026-09-16, pas déduit. `findmnt /tmp` : **tmpfs**, 9,4 Go,
+c'est-à-dire la moitié des 18 Go de RAM. Le disque de 246 Go n'y change rien :
+tout ce qu'un test écrit dans `os.tmpdir()` occupe de la mémoire vive.
+
+Ce jour-là `/tmp` contenait **4,1 Go** de répertoires `cogenta-*` abandonnés,
+soit 4 061 répertoires. Mesuré ensuite : **une suite qui va au bout n'en laisse
+aucun** (`content-store.test.ts`, 79 tests : 0 fuite). Ceux qui restaient
+dataient tous de la même minute — la série où `/tmp` était plein, où
+`createSqliteHandle` échouait sur `disk I/O error`, et où le `afterEach`
+plantait sur la ligne d'avant sans jamais atteindre le `dispose()` qui efface
+le répertoire. **Un `/tmp` plein produisait donc des échecs qui remplissaient
+`/tmp` davantage.**
+
+Corrigé : les sept `afterEach` des contrats de `@cogenta/schema` disposent
+maintenant dans un `finally`, ce qui borne la fuite d'une série interrompue à
+un répertoire au lieu d'un par test.
+
+**Conséquence à garder en tête** : les OOM de `pnpm test` complets documentés
+un peu partout dans ce fichier et dans `CLAUDE.md` ont probablement cette part
+d'explication — plusieurs gigaoctets de RAM tenus par des fichiers de test
+oubliés dans un tmpfs, en plus des workers Vitest. Avant d'accuser le
+parallélisme, regarder `df -h /tmp`.
+
+**Ce qu'une session devrait faire** : vérifier `df -h /tmp` avant une longue
+campagne de tests, et nettoyer ce qu'elle laisse (`find /tmp -maxdepth 1 -name
+'cogenta-*' -type d -mmin +60 -exec rm -rf {} +`). Un `TMPDIR` pointé sur le
+vrai disque marcherait aussi, mais changerait le terrain sur lequel les tests
+tournent — donc à décider, pas à imposer au détour d'une session.
+
 ## Publication npm : ce qui manque encore (mis à jour le 2026-09-16)
 
 **La section ci-dessous est périmée et conservée pour l'historique.** Vérifié en

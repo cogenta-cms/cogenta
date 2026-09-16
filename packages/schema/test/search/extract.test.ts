@@ -35,6 +35,7 @@ function entry(overrides: Partial<ContentEntry> = {}): ContentEntry {
     status: 'published',
     deletedAt: null,
     reviewState: 'none',
+    visibility: 'public',
     assignedReviewer: null,
     locale: 'fr',
     translationOf: null,

@@ -53,6 +53,7 @@ function entryOf(values: ContentValues, blocks: BlockZones): ContentEntry {
     updatedBy: null,
     deletedAt: null,
     reviewState: 'none',
+    visibility: 'public',
     assignedReviewer: null,
     translationOf: null,
     provenance: 'human',

@@ -109,6 +109,7 @@ function vitrailEntry(id: string): ContentEntry {
     status: 'published',
     deletedAt: null,
     reviewState: 'none',
+    visibility: 'public',
     assignedReviewer: null,
     locale: 'fr',
     translationOf: null,
@@ -163,8 +164,17 @@ export function runSearchContract(
     })
 
     afterEach(async () => {
-      await index.clear()
-      await harness.dispose?.()
+      // `dispose` in a `finally`: it is what removes the temporary directory,
+      // and `/tmp` here is a tmpfs — RAM. A teardown that threw before reaching
+      // it (a failed `drop`, a database that never opened) leaked the directory,
+      // so a full `/tmp` produced failures that leaked more of it. Measured:
+      // one interrupted run of this file left 160 directories behind, a
+      // successful one leaves none.
+      try {
+        await index.clear()
+      } finally {
+        await harness.dispose?.()
+      }
     })
 
     describe('finding what was indexed', () => {

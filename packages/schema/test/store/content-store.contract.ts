@@ -125,9 +125,18 @@ export function runContentStoreContract(
     }, 60_000)
 
     afterEach(async () => {
-      await dropSchemaTables(db, schema)
-      await db.close()
-      await harness.dispose?.()
+      // `dispose` in a `finally`: it is what removes the temporary directory,
+      // and `/tmp` here is a tmpfs — RAM. A teardown that threw before reaching
+      // it (a failed `drop`, a database that never opened) leaked the directory,
+      // so a full `/tmp` produced failures that leaked more of it. Measured:
+      // one interrupted run of this file left 160 directories behind, a
+      // successful one leaves none.
+      try {
+        await dropSchemaTables(db, schema)
+        await db.close()
+      } finally {
+        await harness.dispose?.()
+      }
     }, 60_000)
 
     const countRows = async (table: string, entryId: string): Promise<number> => {

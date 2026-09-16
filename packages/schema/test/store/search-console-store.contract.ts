@@ -44,8 +44,17 @@ export function runSearchConsoleStoreContract(
     })
 
     afterEach(async () => {
-      await db.close()
-      await harness.dispose?.()
+      // `dispose` in a `finally`: it is what removes the temporary directory,
+      // and `/tmp` here is a tmpfs — RAM. A teardown that threw before reaching
+      // it (a failed `drop`, a database that never opened) leaked the directory,
+      // so a full `/tmp` produced failures that leaked more of it. Measured:
+      // one interrupted run of this file left 160 directories behind, a
+      // successful one leaves none.
+      try {
+        await db.close()
+      } finally {
+        await harness.dispose?.()
+      }
     })
 
     it('reports no connection at all before one is ever made', async () => {

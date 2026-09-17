@@ -149,9 +149,8 @@ réellement installés en français et en anglais, capturés en bureau, mobile e
 
 ### Reste ouvert
 
-- **Le formulaire de commentaires de `theme-kit` est en anglais en dur**, sur tous les
-  sites francophones qui l'affichent (articles de blog par exemple) : défaut préexistant,
-  hors de ce lot, à corriger ensuite.
+- ~~Le formulaire de commentaires de `theme-kit` est en anglais en dur~~ — **corrigé le
+  2026-09-17**, voir « Pages visiteur dans la langue du site » ci-dessous.
 - Les pages de repli (404, démarrage) n'existent qu'en français et en anglais.
 - Un site existant sur `theme-entreprise` change d'apparence à la mise à jour
   (annoncé dans le changeset).
@@ -217,3 +216,26 @@ textes simples d'un bloc (pas un texte riche, un élément de liste ni l'auteur 
 témoignage — ils s'éditent dans le panneau) ; les libellés écrits par l'auteur d'un
 modèle de site (« Starts », « Street address » dans l'association) restent dans sa langue ; une liste de contenus montre des
 entrées, qui se modifient dans leur collection.
+
+## Pages visiteur dans la langue du site (2026-09-17)
+
+Demandé après la publication : « corrige le formulaire de commentaires en anglais ».
+En le corrigeant, trois défauts de la même famille :
+
+1. **La section commentaires** (`renderCommentsSection`, `@cogenta/theme-kit`) : titre,
+   champs, boutons, messages et date passent par `THEME_STRINGS` dans la langue de la
+   page (la date au format de la langue, plus celui du serveur) ; la traduction de la
+   page est transmise, donc un thème qui surcharge un libellé est suivi.
+2. **Après l'envoi d'un commentaire, le visiteur ne voyait rien** : le routeur redirigeait
+   vers `?comment=pending` et la page n'en faisait rien. Un message dit désormais
+   « Merci, votre commentaire sera publié après relecture » (ou pourquoi l'envoi a
+   échoué), la redirection ramène à `#cg-comments`, et les dix thèmes le stylent comme le
+   message d'un formulaire. Un commentaire classé spam se lit « en attente de relecture »
+   et un piège à robots déclenché ne se lit que « n'a pas pu être envoyé » : ne pas
+   apprendre à un robot ce qui l'a arrêté.
+3. **Les formulaires publics (`/forms/{nom}`) et la recherche (`/search`)** étaient en
+   anglais (« Send », « Nothing matched that search. ») et relayaient le message anglais
+   de l'API ; le message est désormais choisi par code d'erreur, dans la langue du site.
+
+Laissé tel quel, volontairement : le libellé du champ piège d'un widget formulaire est
+masqué et `aria-hidden` — aucun humain ne le lit, et le traduire toucherait le contrat D.

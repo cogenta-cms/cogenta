@@ -30,6 +30,7 @@ import {
   type ChromeInput,
   type ChromeLink,
   type ChromeNavLink,
+  type CommentNotice,
   buildCollectionListQuery as collectionListQuery,
   createThemeTranslator,
   entryExcerpt,
@@ -262,6 +263,8 @@ export interface ThemeRenderOptions {
   readonly unlockFailed?: boolean
   /** True when the attempts ran out — a different thing to tell a reader. */
   readonly unlockThrottled?: boolean
+  /** What became of the comment this visitor just sent (`?comment=`, `&reason=`), shown above the thread. */
+  readonly commentNotice?: CommentNotice
   /**
    * The path served at `/` (fiche 23 task 4) — a real, honest replacement
    * for the `/home` fallback this file used to hardcode.
@@ -1866,6 +1869,8 @@ async function renderEntryPage(
           collection: collection.name,
           entryId: entry.id,
           locale: entry.locale,
+          t: themeContext.t,
+          ...(options.commentNotice === undefined ? {} : { notice: options.commentNotice }),
           pagePath: pathname,
           ...(commentsOptions.honeypotField === undefined
             ? {}

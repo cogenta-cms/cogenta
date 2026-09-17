@@ -48,12 +48,16 @@ const COLLECTIONS: readonly CollectionDefinition[] = [
   },
 ]
 
-async function project(): Promise<string> {
+async function project(siteLocale?: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'cogenta-search-e2e-'))
   await writeFile(
     join(root, 'cogenta.config.mjs'),
     `export default {
-  site: { name: 'Test site', url: 'https://example.com' },
+  site: { name: 'Test site', url: 'https://example.com'${
+    siteLocale === undefined
+      ? ''
+      : `, locales: [${JSON.stringify(siteLocale)}], defaultLocale: ${JSON.stringify(siteLocale)}`
+  } },
   database: { url: ${JSON.stringify(join(root, 'site.db'))} },
   cache: { path: ${JSON.stringify(join(root, 'cache'))} },
   storage: { path: ${JSON.stringify(join(root, 'media'))} },
@@ -237,6 +241,22 @@ describe('cogenta serve — GET /api/search (L10 task 3)', () => {
       const html = await (await fetch(`${server.base}/search?q=anything`)).text()
       expect(html).toContain('Independent news from Port Calder')
       expect(html).toContain('Published by the Harbor Press Cooperative.')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('writes the public search page in the language of a French site', async () => {
+    // L36 audit: `/search` said "Search" and "Nothing matched that search."
+    const root = await project('fr')
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const html = await (await fetch(`${server.base}/search?q=vitrail`)).text()
+      expect(html).toContain('Résultats pour « vitrail »')
+      expect(html).toContain('0 résultat')
+      expect(html).toContain('Aucun résultat pour cette recherche.')
+      expect(html).toContain('>Rechercher</button>')
+      expect(html).not.toContain('Nothing matched')
     } finally {
       await server.stop()
     }

@@ -1,4 +1,5 @@
 import { type Attributes, type HtmlElement, h, text } from './html.js'
+import { createThemeTranslator } from './strings.js'
 
 /**
  * The comment thread and its submission form (fiche 15 task 6, ADR-0025).
@@ -19,6 +20,10 @@ import { type Attributes, type HtmlElement, h, text } from './html.js'
  * a structural property of this function rather than a habit to remember —
  * and, since this module is shared, a property every theme package gets for
  * free rather than one it has to reimplement correctly on its own.
+ *
+ * Every word a visitor reads comes from `THEME_STRINGS` in the page's own
+ * language, and the date is written the way that language writes it: the
+ * section was English on every French site until the L36 audit.
  */
 
 export interface PublicComment {
@@ -46,6 +51,50 @@ export interface CommentsSectionOptions {
   readonly honeypotField?: string
   /** Server time this page was rendered, ms since epoch — the minimum-fill-delay hidden field. */
   readonly renderedAt: number
+  /**
+   * What happened to the comment this visitor just sent, read from the
+   * `?comment=` the comments router redirects back with. Absent: nothing was
+   * just sent. A comment held as spam reads `pending`, never a distinct
+   * notice — telling a bot what tripped it is what the router avoids too.
+   */
+  readonly notice?: CommentNotice
+  /** The page's translator, with the theme's own overrides; built from `locale` when absent. */
+  readonly t?: (key: string, values?: Readonly<Record<string, string | number>>) => string
+}
+
+export type CommentNotice = 'approved' | 'pending' | 'invalid' | 'rateLimited' | 'closed' | 'error'
+
+/**
+ * The notice for a redirect's `?comment=` and `&reason=`, or `undefined` when
+ * the query names nothing this section knows. The reason is an error code of
+ * `@cogenta/comments`; a code that would teach a bot something (a tripped
+ * honeypot, a form sent too fast) reads as the generic error.
+ */
+export function commentNoticeFor(
+  outcome: string | null,
+  reason: string | null,
+): CommentNotice | undefined {
+  switch (outcome) {
+    case 'approved':
+      return 'approved'
+    case 'pending':
+    case 'spam':
+      return 'pending'
+    case 'error':
+      break
+    default:
+      return undefined
+  }
+  switch (reason) {
+    case 'COMMENT_BODY_INVALID':
+      return 'invalid'
+    case 'COMMENT_RATE_LIMITED':
+      return 'rateLimited'
+    case 'COMMENT_TARGET_CLOSED':
+      return 'closed'
+    default:
+      return 'error'
+  }
 }
 
 interface CommentNode extends PublicComment {
@@ -68,7 +117,7 @@ function buildTree(comments: readonly PublicComment[]): readonly CommentNode[] {
   return attach(null)
 }
 
-function renderComment(node: CommentNode): HtmlElement {
+function renderComment(node: CommentNode, locale: string): HtmlElement {
   return h(
     'li',
     { class: 'cg-comment', id: `comment-${node.id}` },
@@ -82,15 +131,30 @@ function renderComment(node: CommentNode): HtmlElement {
         h(
           'time',
           { class: 'cg-comment__date', datetime: node.createdAt },
-          text(new Date(node.createdAt).toLocaleDateString()),
+          text(formatDate(node.createdAt, locale)),
         ),
       ),
       h('p', { class: 'cg-comment__body' }, text(node.body)),
     ),
     node.replies.length === 0
       ? null
-      : h('ol', { class: 'cg-comment__replies' }, node.replies.map(renderComment)),
+      : h(
+          'ol',
+          { class: 'cg-comment__replies' },
+          node.replies.map((reply) => renderComment(reply, locale)),
+        ),
   )
+}
+
+/** `12 March 2026` / `12 mars 2026` — a date is read in the page's language, not the server's. */
+function formatDate(iso: string, locale: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  try {
+    return date.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })
+  } catch {
+    return date.toISOString().slice(0, 10)
+  }
 }
 
 function hidden(name: string, value: string): HtmlElement {
@@ -98,7 +162,11 @@ function hidden(name: string, value: string): HtmlElement {
 }
 
 /** The submission form — a plain HTML `<form method="post">`, no JavaScript required (fiche 15 task 6). */
-function renderForm(options: CommentsSectionOptions, parentId?: string): HtmlElement {
+function renderForm(
+  options: CommentsSectionOptions,
+  t: NonNullable<CommentsSectionOptions['t']>,
+  parentId?: string,
+): HtmlElement {
   const honeypot = options.honeypotField ?? 'website'
   const formId = parentId === undefined ? 'cg-comment-form' : `cg-comment-form-${parentId}`
   return h(
@@ -122,7 +190,7 @@ function renderForm(options: CommentsSectionOptions, parentId?: string): HtmlEle
     h(
       'div',
       { class: 'cg-comment__honeypot', 'aria-hidden': 'true' as unknown as boolean },
-      h('label', { for: `${formId}-hp` }, text('Leave this field empty')),
+      h('label', { for: `${formId}-hp` }, text(t('form.honeypot'))),
       h('input', {
         id: `${formId}-hp`,
         type: 'text',
@@ -134,7 +202,7 @@ function renderForm(options: CommentsSectionOptions, parentId?: string): HtmlEle
     h(
       'p',
       {},
-      h('label', { for: `${formId}-name` }, text('Name')),
+      h('label', { for: `${formId}-name` }, text(t('comments.name'))),
       h('input', {
         id: `${formId}-name`,
         type: 'text',
@@ -146,25 +214,33 @@ function renderForm(options: CommentsSectionOptions, parentId?: string): HtmlEle
     h(
       'p',
       {},
-      h('label', { for: `${formId}-email` }, text('E-mail (not published)')),
+      h('label', { for: `${formId}-email` }, text(t('comments.email'))),
       h('input', { id: `${formId}-email`, type: 'email', name: 'email', required: true }),
     ),
     h(
       'p',
       {},
-      h('label', { for: `${formId}-url` }, text('Website (optional)')),
+      h('label', { for: `${formId}-url` }, text(t('comments.website'))),
       h('input', { id: `${formId}-url`, type: 'url', name: 'authorUrl' }),
     ),
     h(
       'p',
       {},
-      h('label', { for: `${formId}-body` }, text(parentId === undefined ? 'Comment' : 'Reply')),
+      h(
+        'label',
+        { for: `${formId}-body` },
+        text(t(parentId === undefined ? 'comments.body' : 'comments.replyBody')),
+      ),
       h('textarea', { id: `${formId}-body`, name: 'body', required: true, rows: 5 }),
     ),
     h(
       'p',
       {},
-      h('button', { type: 'submit' }, text(parentId === undefined ? 'Post comment' : 'Post reply')),
+      h(
+        'button',
+        { type: 'submit' },
+        text(t(parentId === undefined ? 'comments.submit' : 'comments.submitReply')),
+      ),
     ),
   )
 }
@@ -176,17 +252,36 @@ function renderForm(options: CommentsSectionOptions, parentId?: string): HtmlEle
  * property of the route the same way `/search`'s results are.
  */
 export function renderCommentsSection(options: CommentsSectionOptions): HtmlElement {
+  const locale = options.locale ?? 'en'
+  const t = options.t ?? createThemeTranslator(locale)
   const tree = buildTree(options.comments)
   const headingAttrs: Attributes = { id: 'cg-comments-heading' }
+  const notice = options.notice
   return h(
     'section',
-    { class: 'cg-comments', 'aria-labelledby': 'cg-comments-heading' },
-    h('h2', headingAttrs, text(`Comments (${options.comments.length})`)),
+    // `id` is where the comments router sends a visitor back after sending,
+    // so the notice below is on screen rather than a page's length away.
+    { id: 'cg-comments', class: 'cg-comments', 'aria-labelledby': 'cg-comments-heading' },
+    h('h2', headingAttrs, text(t('comments.heading', { count: options.comments.length }))),
+    notice === undefined
+      ? null
+      : h(
+          'p',
+          {
+            class: `cg-comments__notice cg-comments__notice--${notice}`,
+            role: notice === 'approved' || notice === 'pending' ? 'status' : 'alert',
+          },
+          text(t(`comments.notice.${notice}`)),
+        ),
     tree.length === 0
-      ? h('p', { class: 'cg-comments__empty' }, text('No comments yet.'))
-      : h('ol', { class: 'cg-comments__list' }, tree.map(renderComment)),
+      ? h('p', { class: 'cg-comments__empty' }, text(t('comments.empty')))
+      : h(
+          'ol',
+          { class: 'cg-comments__list' },
+          tree.map((node) => renderComment(node, locale)),
+        ),
     options.open
-      ? renderForm(options)
-      : h('p', { class: 'cg-comments__closed' }, text('Comments are closed on this page.')),
+      ? renderForm(options, t)
+      : h('p', { class: 'cg-comments__closed' }, text(t('comments.closed'))),
   )
 }

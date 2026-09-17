@@ -200,14 +200,17 @@ export function createCommentsRouter(options: CommentsRouterOptions): CommentsRo
       const outcome = (result.body as { readonly status?: string } | undefined)?.status ?? 'ok'
       return {
         status: 303,
-        headers: { location: `${redirectTo}?comment=${encodeURIComponent(outcome)}` },
+        // `#cg-comments`: back where the notice is, not at the top of a long page.
+        headers: { location: `${redirectTo}?comment=${encodeURIComponent(outcome)}#cg-comments` },
         body: null,
       }
     } catch (error) {
       const code = isCogentaError(error) ? error.code : 'INTERNAL'
       return {
         status: 303,
-        headers: { location: `${redirectTo}?comment=error&reason=${encodeURIComponent(code)}` },
+        headers: {
+          location: `${redirectTo}?comment=error&reason=${encodeURIComponent(code)}#cg-comments`,
+        },
         body: null,
       }
     }

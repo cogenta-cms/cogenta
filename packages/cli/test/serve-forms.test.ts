@@ -10,12 +10,16 @@ import { createUser, loginWithMfaSetup, startServer } from './helpers/serve-harn
  * stored and notified, and the anti-abuse defences actually hold.
  */
 
-async function project(): Promise<string> {
+async function project(siteLocale?: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'cogenta-forms-'))
+  const locales =
+    siteLocale === undefined
+      ? ''
+      : `, locales: [${JSON.stringify(siteLocale)}], defaultLocale: ${JSON.stringify(siteLocale)}`
   await writeFile(
     join(root, 'cogenta.config.mjs'),
     `export default {
-  site: { name: 'Test site', url: 'https://example.com' },
+  site: { name: 'Test site', url: 'https://example.com'${locales} },
   database: { url: ${JSON.stringify(join(root, 'site.db'))} },
   cache: { path: ${JSON.stringify(join(root, 'cache'))} },
   storage: { path: ${JSON.stringify(join(root, 'media'))} },
@@ -81,6 +85,38 @@ function staleTs(): string {
 }
 
 describe('cogenta serve — /api/forms and /forms/{name}', () => {
+  it('explains a refused submission in the language of a French site', async () => {
+    // L36 audit: the page said "Send" and relayed the API's English refusal.
+    const root = await project('fr')
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      await createContactForm(server.base, token)
+
+      const page = await (await fetch(`${server.base}/forms/contact`)).text()
+      expect(page).toContain('>Envoyer</button>')
+
+      const submit = await fetch(`${server.base}/api/forms/contact/submit`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        redirect: 'manual',
+        body: new URLSearchParams({
+          _gotcha: '',
+          _ts: staleTs(),
+          email: 'not-an-email',
+          message: 'Un message à garder.',
+        }),
+      })
+      expect(submit.status).toBe(400)
+      const html = await submit.text()
+      expect(html).toContain('Certaines réponses sont à revoir')
+      expect(html).toContain('Ce champ demande votre attention.')
+      expect(html).toContain('Un message à garder.')
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('lets an admin build a form, over a real server', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

@@ -517,7 +517,8 @@ img {
 
 .cg-search__error,
 .cg-form__error,
-.cg-form__field-error {
+.cg-form__field-error,
+.cg-comments__notice {
   color: var(--cs-ink);
   font-weight: var(--cs-weight-semibold);
 }

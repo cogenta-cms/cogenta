@@ -1099,7 +1099,8 @@ a.cg-search__title:hover {
 
 .cg-search__error,
 .cg-form__error,
-.cg-form__field-error {
+.cg-form__field-error,
+.cg-comments__notice {
   color: var(--cg-ink);
   font-weight: var(--cg-weight-semibold);
 }

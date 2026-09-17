@@ -136,7 +136,7 @@ describe('CommentsRouter — public POST /api/comments', () => {
       baseRequest({ body: validForm({ redirectTo: '/blog/hello-world' }), ip: '203.0.113.6' }),
     )
     expect(response.status).toBe(303)
-    expect(response.headers?.location).toBe('/blog/hello-world?comment=pending')
+    expect(response.headers?.location).toBe('/blog/hello-world?comment=pending#cg-comments')
     expect(response.body).toBeNull()
   })
 
@@ -199,7 +199,7 @@ describe('CommentsRouter — public POST /api/comments', () => {
     )
     expect(response.status).toBe(303)
     expect(response.headers?.location).toBe(
-      '/blog/hello-world?comment=error&reason=COMMENT_SPAM_DETECTED',
+      '/blog/hello-world?comment=error&reason=COMMENT_SPAM_DETECTED#cg-comments',
     )
   })
 

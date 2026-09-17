@@ -69,7 +69,8 @@
    rule in ink, never through a hue a skin cannot change. */
 .cg-search__error,
 .cg-form__error,
-.cg-form__field-error {
+.cg-form__field-error,
+.cg-comments__notice {
   padding-inline-start: var(--cg-s4);
   border-inline-start: 4px solid var(--cg-ink);
   color: var(--cg-ink);

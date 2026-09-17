@@ -151,17 +151,57 @@ const SEARCH_PAGE_FLOOR_CSS = `:where(.cg-search-page) > :where(*){box-sizing:bo
 :where(.cg-search__excerpt){margin:.375rem 0 0;color:var(--cogenta-color-muted-fg);font-size:.9375rem;line-height:1.5}
 :where(.cg-search__meta){margin:.375rem 0 0;color:var(--cogenta-color-muted-fg);font-family:var(--cogenta-font-sans);font-size:.8125rem}`
 
+/**
+ * The page's own words, in the site's language (L36 audit: `/search` was
+ * English on a French site). Search failures are said in these words too,
+ * rather than relaying the API's English message to a visitor.
+ */
+interface SearchPageStrings {
+  readonly search: string
+  readonly resultsFor: string
+  readonly empty: string
+  readonly failed: string
+  readonly count: (n: number) => string
+}
+
+const SEARCH_PAGE_STRINGS: Readonly<Record<'en' | 'fr', SearchPageStrings>> = {
+  en: {
+    search: 'Search',
+    resultsFor: 'Search results for “{query}”',
+    empty: 'Nothing matched that search.',
+    failed: 'The search could not be completed. Please try again in a moment.',
+    count: (n) => `${n} ${n === 1 ? 'result' : 'results'}`,
+  },
+  fr: {
+    search: 'Rechercher',
+    resultsFor: 'Résultats pour « {query} »',
+    empty: 'Aucun résultat pour cette recherche.',
+    failed: 'La recherche n’a pas pu aboutir. Réessayez dans un instant.',
+    count: (n) => `${n} ${n <= 1 ? 'résultat' : 'résultats'}`,
+  },
+}
+
+function searchPageStrings(locale: string): SearchPageStrings {
+  return locale.toLowerCase().startsWith('fr') ? SEARCH_PAGE_STRINGS.fr : SEARCH_PAGE_STRINGS.en
+}
+
 /** The form on its own, so an empty query still gets a usable page. */
-function searchForm(query: string): string {
+function searchForm(query: string, strings: SearchPageStrings): string {
   return `<form class="cg-search__form" action="/search" method="get" role="search">
-<label for="cg-search-q">Search</label>
+<label for="cg-search-q">${escapeHtmlText(strings.search)}</label>
 <input id="cg-search-q" type="search" name="q" value="${escapeHtmlAttribute(query)}" required>
-<button type="submit">Search</button>
+<button type="submit">${escapeHtmlText(strings.search)}</button>
 </form>`
 }
 
-function resultList(results: readonly ResolvedHit[], locale: string): string {
-  if (results.length === 0) return `<p class="cg-search__empty">Nothing matched that search.</p>`
+function resultList(
+  results: readonly ResolvedHit[],
+  locale: string,
+  strings: SearchPageStrings,
+): string {
+  if (results.length === 0) {
+    return `<p class="cg-search__empty">${escapeHtmlText(strings.empty)}</p>`
+  }
   const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: 'long' })
   return `<ol class="cg-search__results">
 ${results
@@ -194,6 +234,7 @@ export async function renderSearchPage(
   context: AccessContext,
 ): Promise<string> {
   const trimmed = query.trim()
+  const strings = searchPageStrings(options.site.defaultLocale)
 
   let results: readonly ResolvedHit[] = []
   let failure: string | null = null
@@ -207,29 +248,29 @@ export async function renderSearchPage(
       const body = response.body as { readonly data: readonly SearchHit[] }
       results = await resolveHits(body.data, options, context)
     } else {
-      // The router's own message, never a rewritten one: it already says what
-      // failed and what to do about it, and inventing a second wording here
-      // is how the two drift apart.
-      const body = response.body as { readonly error?: { readonly message?: string } }
-      failure = body.error?.message ?? 'The search could not be completed.'
+      // The API's message is written for an API caller, in English; a
+      // visitor reads the page's own sentence in the site's language.
+      failure = strings.failed
     }
   }
 
   const heading =
-    trimmed.length === 0 ? 'Search' : `Search results for “${escapeHtmlText(trimmed)}”`
+    trimmed.length === 0
+      ? escapeHtmlText(strings.search)
+      : escapeHtmlText(strings.resultsFor.replace('{query}', trimmed))
 
   // The count rides in the title, so it sits wherever a theme puts the title.
   const count =
     trimmed.length === 0 || failure !== null
       ? ''
-      : ` <span class="cg-search__count">${results.length} ${results.length === 1 ? 'result' : 'results'}</span>`
+      : ` <span class="cg-search__count">${escapeHtmlText(strings.count(results.length))}</span>`
 
   const main =
     failure !== null
       ? `<p class="cg-search__error" role="alert">${escapeHtmlText(failure)}</p>`
       : trimmed.length === 0
         ? ''
-        : resultList(results, options.site.defaultLocale)
+        : resultList(results, options.site.defaultLocale, strings)
 
   // The real site chrome (`renderPageChrome`, `theme-render.ts`) — the same
   // skip link, header and footer every collection page renders, not a
@@ -246,7 +287,7 @@ export async function renderSearchPage(
 <meta name="robots" content="noindex, follow" />`,
       bodyHtml: `<main class="cg-main cg-search-page" id="cg-main">
 <h1 class="cg-page__title">${heading}${count}</h1>
-${searchForm(trimmed)}
+${searchForm(trimmed, strings)}
 ${main}
 </main>
 <style>${SEARCH_PAGE_FLOOR_CSS}</style>`,

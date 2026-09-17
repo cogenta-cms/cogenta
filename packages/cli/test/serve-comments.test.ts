@@ -33,12 +33,16 @@ const COLLECTIONS: readonly CollectionDefinition[] = [
   },
 ]
 
-async function project(): Promise<string> {
+async function project(siteLocale?: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'cogenta-comments-e2e-'))
+  const locales =
+    siteLocale === undefined
+      ? ''
+      : `, locales: [${JSON.stringify(siteLocale)}], defaultLocale: ${JSON.stringify(siteLocale)}`
   await writeFile(
     join(root, 'cogenta.config.mjs'),
     `export default {
-  site: { name: 'Test site', url: 'https://example.com' },
+  site: { name: 'Test site', url: 'https://example.com'${locales} },
   database: { url: ${JSON.stringify(join(root, 'site.db'))} },
   cache: { path: ${JSON.stringify(join(root, 'cache'))} },
   storage: { path: ${JSON.stringify(join(root, 'media'))} },
@@ -337,7 +341,57 @@ describe('cogenta serve — POST /api/comments (fiche 15, ADR-0025)', () => {
         }),
       })
       expect(response.status).toBe(303)
-      expect(response.headers.get('location')).toBe('/hello-world?comment=pending')
+      expect(response.headers.get('location')).toBe('/hello-world?comment=pending#cg-comments')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('speaks French on a French site, and tells a visitor their comment awaits review', async () => {
+    // L36 audit: the section and its form were English on every French site,
+    // and a visitor sent back to the page after posting saw nothing at all.
+    const root = await project('fr')
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+      const pageId = await create(server.base, token, 'page', {
+        title: 'Bonjour',
+        slug: 'bonjour',
+      })
+      await publish(server.base, token, 'page', pageId)
+
+      const page = await (await fetch(`${server.base}/bonjour`)).text()
+      expect(page).toContain('Commentaires (0)')
+      expect(page).toContain('Publier le commentaire')
+      expect(page).not.toContain('Post comment')
+
+      const sent = await fetch(`${server.base}/api/comments`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        redirect: 'manual',
+        body: new URLSearchParams({
+          collection: 'page',
+          entryId: pageId,
+          locale: 'fr',
+          name: 'Camille',
+          email: 'camille@example.com',
+          body: 'Un commentaire tout à fait ordinaire.',
+          website: '',
+          _ts: String(Date.now() - 5_000),
+          redirectTo: '/bonjour',
+        }),
+      })
+      expect(sent.status).toBe(303)
+      const location = sent.headers.get('location') ?? ''
+      expect(location).toBe('/bonjour?comment=pending#cg-comments')
+
+      const back = await (await fetch(`${server.base}${location.split('#')[0]}`)).text()
+      expect(back).toContain('Merci, votre commentaire sera publié après relecture.')
     } finally {
       await server.stop()
     }

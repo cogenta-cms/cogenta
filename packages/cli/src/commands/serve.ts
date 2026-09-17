@@ -343,7 +343,7 @@ import {
   type SitemapUrl,
 } from '@cogenta/seo'
 import type { PublicComment } from '@cogenta/theme-canonical'
-import type { ChromeLink, WidgetAreas } from '@cogenta/theme-kit'
+import { type ChromeLink, commentNoticeFor, type WidgetAreas } from '@cogenta/theme-kit'
 import {
   createWidgetStore,
   type ExtraWidgetTypes,
@@ -5270,7 +5270,11 @@ export function createRequestListener(
 
           const definition = await site.formStore.definitions.readByName(formName)
           const errorBody = response.body as {
-            readonly error?: { readonly message?: string; readonly field?: string }
+            readonly error?: {
+              readonly code?: string
+              readonly message?: string
+              readonly field?: string
+            }
           }
           const formPageOptions = {
             site: site.site,
@@ -5312,8 +5316,9 @@ export function createRequestListener(
               : await renderFormPage(
                   definition,
                   {
-                    errorMessage:
-                      errorBody.error?.message ?? 'This submission could not be accepted.',
+                    // The code picks the visitor's message in the site's
+                    // language; the API's own English text is for API callers.
+                    errorCode: errorBody.error?.code ?? 'FORM_SUBMISSION_FAILED',
                     errorField: errorBody.error?.field ?? null,
                     values: { ...accumulatedFromBody, ...postedFields },
                     ...(stepsCount > 1
@@ -7146,7 +7151,15 @@ export function createRequestListener(
                 unlockThrottled: url.searchParams.get('unlock') === 'slow',
               }),
         }
-        const html = await renderRequestedPage(url.pathname, renderOptions, context)
+        const commentNotice = commentNoticeFor(
+          url.searchParams.get('comment'),
+          url.searchParams.get('reason'),
+        )
+        const html = await renderRequestedPage(
+          url.pathname,
+          commentNotice === undefined ? renderOptions : { ...renderOptions, commentNotice },
+          context,
+        )
         if (html !== null) {
           res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
           res.end(html)

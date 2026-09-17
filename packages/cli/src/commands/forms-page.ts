@@ -39,6 +39,73 @@ import {
  * renders one page at a time and never itself decides what "next" means.
  */
 
+/**
+ * What a visitor reads around a form's own fields, in the site's language.
+ * The labels, choices and confirmation are the form author's; these are the
+ * page's (L36 audit: a French site's form said "Send" and relayed the API's
+ * English refusals verbatim).
+ */
+interface FormPageStrings {
+  readonly send: string
+  readonly next: string
+  readonly honeypot: string
+  readonly fieldError: string
+  readonly consentRequired: string
+  readonly alreadyUploaded: string
+  readonly notFoundTitle: string
+  readonly notFoundBody: string
+  readonly errors: Readonly<Record<string, string>>
+  readonly errorFallback: string
+}
+
+const FORM_PAGE_STRINGS: Readonly<Record<'en' | 'fr', FormPageStrings>> = {
+  en: {
+    send: 'Send',
+    next: 'Next',
+    honeypot: 'Leave this field empty',
+    fieldError: 'This field needs your attention.',
+    consentRequired: 'Consent is required to submit this form.',
+    alreadyUploaded: 'Already uploaded: {filename}. Choose a new file only to replace it.',
+    notFoundTitle: 'Not found',
+    notFoundBody: 'This form does not exist, or is not accepting submissions.',
+    errors: {
+      FORM_SUBMISSION_INVALID: 'Some answers need your attention: check the fields marked below.',
+      FORM_CONSENT_REQUIRED: 'Consent is required to submit this form.',
+      FORM_FILE_REJECTED: 'This file cannot be accepted: check its type and size.',
+      FORM_RATE_LIMITED: 'Too many submissions in a short time: please try again in a few minutes.',
+      FORM_CAPTCHA_REQUIRED: 'Please complete the verification before sending.',
+      FORM_CAPTCHA_FAILED: 'The verification did not succeed: please try again.',
+      FORM_DISABLED: 'This form is not accepting submissions at the moment.',
+    },
+    errorFallback: 'Your answers could not be sent. Please try again in a moment.',
+  },
+  fr: {
+    send: 'Envoyer',
+    next: 'Suivant',
+    honeypot: 'Laissez ce champ vide',
+    fieldError: 'Ce champ demande votre attention.',
+    consentRequired: 'Votre consentement est nécessaire pour envoyer ce formulaire.',
+    alreadyUploaded:
+      'Fichier déjà envoyé : {filename}. N’en choisissez un autre que pour le remplacer.',
+    notFoundTitle: 'Introuvable',
+    notFoundBody: 'Ce formulaire n’existe pas, ou n’accepte plus de réponses.',
+    errors: {
+      FORM_SUBMISSION_INVALID: 'Certaines réponses sont à revoir : vérifiez les champs signalés.',
+      FORM_CONSENT_REQUIRED: 'Votre consentement est nécessaire pour envoyer ce formulaire.',
+      FORM_FILE_REJECTED: 'Ce fichier ne peut pas être accepté : vérifiez son type et sa taille.',
+      FORM_RATE_LIMITED: 'Trop d’envois à la suite : réessayez dans quelques minutes.',
+      FORM_CAPTCHA_REQUIRED: 'Merci de compléter la vérification avant d’envoyer.',
+      FORM_CAPTCHA_FAILED: 'La vérification n’a pas abouti : réessayez.',
+      FORM_DISABLED: 'Ce formulaire n’accepte pas de réponses pour le moment.',
+    },
+    errorFallback: 'Vos réponses n’ont pas pu être envoyées. Réessayez dans un instant.',
+  },
+}
+
+function formPageStrings(locale: string): FormPageStrings {
+  return locale.toLowerCase().startsWith('fr') ? FORM_PAGE_STRINGS.fr : FORM_PAGE_STRINGS.en
+}
+
 export interface FormPageSite {
   readonly name: string
   readonly url: string
@@ -71,6 +138,13 @@ export interface FormPageOptions {
 export interface FormPageState {
   /** `?submitted=1` — the default confirmation view, when the form has no `redirectTo`. */
   readonly submitted?: boolean
+  /**
+   * The refusal's error code (`FORM_*`), which picks the message the visitor
+   * reads in the site's language. A tripped honeypot or a form sent too fast
+   * reads as the generic message: naming it would teach a bot what tripped.
+   */
+  readonly errorCode?: string | null
+  /** A message to show as is, when there is no code to translate. */
   readonly errorMessage?: string | null
   readonly errorField?: string | null
   /** The visitor's own values, from the request that just failed (or that a step just answered) — never lost. */
@@ -103,18 +177,27 @@ function fieldHasError(state: FormPageState, field: FormFieldDefinition): boolea
   return state.errorField === field.name
 }
 
-function fieldWrapper(field: FormFieldDefinition, hasError: boolean, input: string): string {
+function fieldWrapper(
+  field: FormFieldDefinition,
+  hasError: boolean,
+  input: string,
+  strings: FormPageStrings,
+): string {
   const id = `cg-form-field-${field.name}`
   const errorId = `${id}-error`
   return `<div class="cg-form__field">
 <label for="${id}">${escapeHtmlText(labelFor(field))}</label>
 ${input}
 ${field.help !== undefined ? `<p class="cg-form__help">${escapeHtmlText(field.help)}</p>` : ''}
-${hasError ? `<p id="${errorId}" class="cg-form__field-error" role="alert">This field needs your attention.</p>` : ''}
+${hasError ? `<p id="${errorId}" class="cg-form__field-error" role="alert">${escapeHtmlText(strings.fieldError)}</p>` : ''}
 </div>`
 }
 
-function renderField(field: FormFieldDefinition, state: FormPageState): string {
+function renderField(
+  field: FormFieldDefinition,
+  state: FormPageState,
+  strings: FormPageStrings,
+): string {
   const hasError = fieldHasError(state, field)
   const id = `cg-form-field-${field.name}`
   const errorId = `${id}-error`
@@ -177,19 +260,20 @@ function renderField(field: FormFieldDefinition, state: FormPageState): string {
       // or accepted earlier in this very flow before another field failed).
       const already = state.values?.[field.name]
       const note = isFormFileValue(already)
-        ? `<p class="cg-form__help">Already uploaded: ${escapeHtmlText(already.filename)}. Choose a new file only to replace it.</p>`
+        ? `<p class="cg-form__help">${escapeHtmlText(strings.alreadyUploaded.replace('{filename}', already.filename))}</p>`
         : ''
       return fieldWrapper(
         field,
         hasError,
         `<input type="file" id="${id}" name="${name}"${invalid}${describedBy}>${note}`,
+        strings,
       )
     }
     case 'consent': {
       const isChecked = fieldValueText(state, field.name) === 'true' ? ' checked' : ''
       return `<div class="cg-form__field cg-form__field--consent">
 <label><input type="checkbox" id="${id}" name="${name}" value="true"${required}${invalid}${describedBy}${isChecked}> ${escapeHtmlText(field.consentText ?? field.label)}</label>
-${hasError ? `<p id="${errorId}" class="cg-form__field-error" role="alert">Consent is required to submit this form.</p>` : ''}
+${hasError ? `<p id="${errorId}" class="cg-form__field-error" role="alert">${escapeHtmlText(strings.consentRequired)}</p>` : ''}
 </div>`
     }
     default: {
@@ -197,7 +281,7 @@ ${hasError ? `<p id="${errorId}" class="cg-form__field-error" role="alert">Conse
     }
   }
 
-  return fieldWrapper(field, hasError, input)
+  return fieldWrapper(field, hasError, input, strings)
 }
 
 function confirmationPage(
@@ -275,17 +359,22 @@ export function renderFormPage(
   context: AccessContext,
 ): Promise<string> {
   if (state.submitted === true) return confirmationPage(definition, options, context)
+  const strings = formPageStrings(options.site.defaultLocale)
 
   const stepIndex = state.step ?? 0
   const { fields: stepFields, isFinalStep } = stepFieldsOf(definition, stepIndex)
   const isMultiStep = definition.steps.length > 1
 
+  const errorText =
+    state.errorCode != null
+      ? (strings.errors[state.errorCode] ?? strings.errorFallback)
+      : state.errorMessage
   const errorBanner =
-    state.errorMessage != null
-      ? `<p class="cg-form__error" role="alert">${escapeHtmlText(state.errorMessage)}</p>`
+    errorText != null
+      ? `<p class="cg-form__error" role="alert">${escapeHtmlText(errorText)}</p>`
       : ''
 
-  const fields = stepFields.map((field) => renderField(field, state)).join('\n')
+  const fields = stepFields.map((field) => renderField(field, state, strings)).join('\n')
 
   const ts = state.ts ?? String(options.now())
   const needsMultipart = stepFields.some((field) => field.kind === 'file')
@@ -301,14 +390,14 @@ export function renderFormPage(
 <div class="cf-turnstile" data-sitekey="${escapeHtmlAttribute(definition.captcha.siteKey ?? '')}"></div>`
       : ''
 
-  const submitLabel = isFinalStep ? 'Send' : 'Next'
+  const submitLabel = escapeHtmlText(isFinalStep ? strings.send : strings.next)
 
   const body = `${errorBanner}
 <form class="cg-form" method="post" action="/api/forms/${encodeURIComponent(definition.name)}/submit"${needsMultipart ? ' enctype="multipart/form-data"' : ''}>
 ${fields}
 ${stepHiddenFields}
 <div class="cg-form__honeypot" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;">
-<label for="cg-form-hp">Leave this field empty</label>
+<label for="cg-form-hp">${escapeHtmlText(strings.honeypot)}</label>
 <input type="text" id="cg-form-hp" name="${HONEYPOT_FIELD}" tabindex="-1" autocomplete="off" value="">
 </div>
 <input type="hidden" name="${TIMESTAMP_FIELD}" value="${escapeHtmlAttribute(ts)}">
@@ -323,9 +412,10 @@ export function renderFormNotFoundPage(
   options: FormPageOptions,
   context: AccessContext,
 ): Promise<string> {
+  const strings = formPageStrings(options.site.defaultLocale)
   return shell(
-    'Not found',
-    '<p>This form does not exist, or is not accepting submissions.</p>',
+    strings.notFoundTitle,
+    `<p>${escapeHtmlText(strings.notFoundBody)}</p>`,
     options,
     context,
   )

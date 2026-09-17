@@ -1,5 +1,119 @@
 # @cogenta/cli
 
+## 0.18.0
+
+### Minor Changes
+
+- Sort a list by a date the collection declares itself (L40, contract A `schema@2.4`,
+  ADR-0038)
+  
+  `SortOrder.field` accepts the name of a declared `date`/`datetime` field beside `id`,
+  `createdAt` and `updatedAt` — which is what makes "the next events" a list a site can
+  actually show. Entries with no date are **always last**, in both directions, by an order
+  written out explicitly (`case when … is null`) rather than left to each engine's own null
+  placement; the cursor carries a nullable value, so the tail of empty dates pages like the
+  rest. Any other field is refused by name, with the collection said in the message.
+  
+  In a stored filter, the exact tokens `"$now"` and `"$today"` are resolved by the API at
+  every request and never stored resolved — a "from now on" list saved today must still be
+  true tomorrow. A page whose blocks depend on the clock has its public cache lifetime
+  capped at an hour.
+  
+  Two defects found by a dialect review and fixed here: a cursor was minted from the entry
+  rather than from the row the database ordered, which silently dropped rows in the working
+  state when a pending draft moved a date; and a date cleared to an empty string is now
+  stored as no date at all, which also fixes clearing a date field from the admin.
+  
+  Strictly additive: a caller that sorts by a system column gets exactly the ordering and
+  the cursor it got before.
+
+- The seven agents of priority 2 and 3 (L5 task 10, contract C `tools@1.8`)
+  
+  Média, Traduction, Modération, Analytics, Migration, Accessibilité and Conformité, all
+  specified in `docs/lots/L5-agents-priorite-2-3.md` and seeded **disabled by default**.
+  Each one reports what a pure function computed — `auditMediaLibrary`,
+  `findTranslationGaps`, `triageComments`, `readAudienceSignals`, `findMigrationResidue`,
+  `auditAccessibility`, `auditCompliance` — and asks a model only to order and word those
+  findings. None of them holds a publish or a delete tool: the runtime cannot grant what a
+  declaration does not list.
+  
+  Contract C gains, by the bottom and without touching a single existing signature:
+  `media.list` (under the existing `media.read`), `comments.list`/`comments.decide` (new
+  `comments.moderate`) and `analytics.summary` (new `analytics.read`). `comments.decide`
+  never deletes — refusing a comment is a status, and its `revert` puts back the exact
+  status and note the comment had.
+
+- Lift five limits that were documented rather than fixed
+  
+  - **Search and replace** now finds a phrase cut in two by a formatting run: a paragraph's
+    spans are joined to search, and the text is written back into the spans it came from —
+    every span keeps its marks and its key, and a replacement straddling a boundary takes
+    the formatting of the span it starts in.
+  - A replacement can be **undone as a whole**: the report carries the version each entry
+    stood at before the write, restored through the ordinary restore route.
+  - **Mirroring an image** (left-right, top-bottom) joins the quarter turns, on both driver
+    tiers, with the focal point carried through it. `sharp` mirrors before it rotates
+    whatever the call order, so the axis is compensated — the two tiers produce the same
+    pixels, which a contract test pins.
+  - **An embed preview can be refreshed** without waiting out its thirty days
+    (`refresh: true`), for a title that changed at the source.
+  - **The 404 and start pages** speak Spanish, German, Italian, Portuguese and Dutch beside
+    English and French, matched on the language subtag.
+  
+  Kept, with their reasons: Mastodon embeds (an arbitrary instance host is the SSRF the
+  closed oEmbed list exists to prevent), free-angle rotation (it interpolates, and both
+  tiers would have to produce identical pixels), and inline editing of rich text in the page
+  builder.
+
+- The writing assistant, the site planner and image generation follow the providers saved in
+  the admin
+  
+  They read `config.llm` only, so a site whose keys were saved from `/admin/providers` — the
+  path the admin itself offers — had a superagent that answered and an assistant that said
+  "no AI provider configured". All three now resolve their provider from the admin's
+  encrypted provider store first, choosing by the superagent's own declared preference,
+  falling back to any enabled provider and then to `config.llm`, **read on every call**: a
+  key saved, changed or disabled takes effect on the next request, with no restart. The
+  assistant route asks for the current toolset per request rather than the one built at
+  boot, and `/api/site-plans` reports whether planning is available the same way.
+  
+  Also fixed: a site seeded before the agent-identity prompt was rewritten kept the old
+  builtin template, whose `{{purpose}}` placeholder the tool no longer supplies — so
+  "generate an identity" failed on every such site. A builtin template whose text is exactly
+  one a previous version shipped is refreshed; one anybody edited is left alone.
+
+### Patch Changes
+
+- Updated dependencies [`8bd7c89`, `8bd7c89`, `8bd7c89`, `8bd7c89`]:
+  - @cogenta/schema@0.10.0
+  - @cogenta/api@2.10.0
+  - @cogenta/starters@0.3.0
+  - @cogenta/agents@0.9.0
+  - @cogenta/agents-builtin@0.7.0
+  - @cogenta/render@0.5.0
+  - @cogenta/auth@0.5.11
+  - @cogenta/blocks@1.1.6
+  - @cogenta/export@0.2.12
+  - @cogenta/import@0.2.14
+  - @cogenta/plugins@0.8.6
+  - @cogenta/seo@0.3.12
+  - @cogenta/widgets@0.2.6
+  - @cogenta/channels@0.3.14
+  - @cogenta/mcp@0.3.13
+  - @cogenta/theme-association@0.5.7
+  - @cogenta/theme-blog@0.5.7
+  - @cogenta/theme-canonical@1.3.7
+  - @cogenta/theme-docs@0.5.7
+  - @cogenta/theme-ecommerce@1.3.7
+  - @cogenta/theme-entreprise@1.4.3
+  - @cogenta/theme-kit@0.7.1
+  - @cogenta/theme-magazine@1.3.7
+  - @cogenta/theme-portfolio@1.3.7
+  - @cogenta/theme-restaurant@0.5.7
+  - @cogenta/theme-saas@0.5.7
+  - @cogenta/commerce@0.5.9
+  - @cogenta/forms@0.2.14
+
 ## 0.17.0
 
 ### Minor Changes

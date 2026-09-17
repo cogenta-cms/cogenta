@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/starters",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "The starter content packs Cogenta seeds a new site with: collections, taxonomies, demo entries, menus, site settings and demo media per site type.",
   "license": "MPL-2.0",
   "type": "module",

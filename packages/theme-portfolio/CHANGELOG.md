@@ -1,5 +1,14 @@
 # @cogenta/theme-portfolio
 
+## 1.3.7
+
+### Patch Changes
+
+- Updated dependencies [`8bd7c89`]:
+  - @cogenta/render@0.5.0
+  - @cogenta/blocks@1.1.6
+  - @cogenta/theme-kit@0.7.1
+
 ## 1.3.6
 
 ### Patch Changes

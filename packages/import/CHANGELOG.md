@@ -1,5 +1,14 @@
 # @cogenta/import
 
+## 0.2.14
+
+### Patch Changes
+
+- Updated dependencies [`8bd7c89`, `8bd7c89`]:
+  - @cogenta/schema@0.10.0
+  - @cogenta/auth@0.5.11
+  - @cogenta/blocks@1.1.6
+
 ## 0.2.13
 
 ### Patch Changes

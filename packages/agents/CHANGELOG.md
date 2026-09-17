@@ -1,5 +1,48 @@
 # @cogenta/agents
 
+## 0.9.0
+
+### Minor Changes
+
+- The seven agents of priority 2 and 3 (L5 task 10, contract C `tools@1.8`)
+  
+  Média, Traduction, Modération, Analytics, Migration, Accessibilité and Conformité, all
+  specified in `docs/lots/L5-agents-priorite-2-3.md` and seeded **disabled by default**.
+  Each one reports what a pure function computed — `auditMediaLibrary`,
+  `findTranslationGaps`, `triageComments`, `readAudienceSignals`, `findMigrationResidue`,
+  `auditAccessibility`, `auditCompliance` — and asks a model only to order and word those
+  findings. None of them holds a publish or a delete tool: the runtime cannot grant what a
+  declaration does not list.
+  
+  Contract C gains, by the bottom and without touching a single existing signature:
+  `media.list` (under the existing `media.read`), `comments.list`/`comments.decide` (new
+  `comments.moderate`) and `analytics.summary` (new `analytics.read`). `comments.decide`
+  never deletes — refusing a comment is a status, and its `revert` puts back the exact
+  status and note the comment had.
+
+### Patch Changes
+
+- The writing assistant, the site planner and image generation follow the providers saved in
+  the admin
+  
+  They read `config.llm` only, so a site whose keys were saved from `/admin/providers` — the
+  path the admin itself offers — had a superagent that answered and an assistant that said
+  "no AI provider configured". All three now resolve their provider from the admin's
+  encrypted provider store first, choosing by the superagent's own declared preference,
+  falling back to any enabled provider and then to `config.llm`, **read on every call**: a
+  key saved, changed or disabled takes effect on the next request, with no restart. The
+  assistant route asks for the current toolset per request rather than the one built at
+  boot, and `/api/site-plans` reports whether planning is available the same way.
+  
+  Also fixed: a site seeded before the agent-identity prompt was rewritten kept the old
+  builtin template, whose `{{purpose}}` placeholder the tool no longer supplies — so
+  "generate an identity" failed on every such site. A builtin template whose text is exactly
+  one a previous version shipped is refreshed; one anybody edited is left alone.
+- Updated dependencies [`8bd7c89`, `8bd7c89`]:
+  - @cogenta/schema@0.10.0
+  - @cogenta/render@0.5.0
+  - @cogenta/blocks@1.1.6
+
 ## 0.8.6
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @cogenta/seo
 
+## 0.3.12
+
+### Patch Changes
+
+- Updated dependencies [`8bd7c89`, `8bd7c89`]:
+  - @cogenta/schema@0.10.0
+
 ## 0.3.11
 
 ### Patch Changes

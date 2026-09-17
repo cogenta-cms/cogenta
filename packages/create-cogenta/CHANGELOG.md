@@ -1,5 +1,20 @@
 # create-cogenta
 
+## 0.7.3
+
+### Patch Changes
+
+- Updated dependencies [`8bd7c89`, `8bd7c89`, `8bd7c89`, `8bd7c89`]:
+  - @cogenta/schema@0.10.0
+  - @cogenta/api@2.10.0
+  - @cogenta/cli@0.18.0
+  - @cogenta/starters@0.3.0
+  - @cogenta/agents@0.9.0
+  - @cogenta/render@0.5.0
+  - @cogenta/auth@0.5.11
+  - @cogenta/blocks@1.1.6
+  - @cogenta/theme-canonical@1.3.7
+
 ## 0.7.2
 
 ### Patch Changes

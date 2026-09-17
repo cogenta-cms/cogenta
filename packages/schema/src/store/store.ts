@@ -828,6 +828,42 @@ export function createContentStore<TValues extends ContentValues = ContentValues
    * tell a guarded write that changed nothing from one that changed a row:
    * the difference between "I published it" and "someone else already did".
    */
+  /**
+   * Refuses a value a `unique` field already holds in this locale, before the
+   * index does (L36 audit): the database's own refusal reached an editor as
+   * a 500 naming no field. The index stays the enforcement point under a
+   * concurrent write; this names the field for the common case.
+   */
+  async function assertUniqueFree(
+    tx: SqlExecutor,
+    columns: Readonly<Record<string, unknown>>,
+    locale: SqlFragment | string,
+    exceptId: string,
+  ): Promise<void> {
+    for (const [name, field] of Object.entries(collection.fields)) {
+      if (field.unique !== true || isColumnless(field)) continue
+      const value = columns[name]
+      if (value === undefined || value === null || value === '') continue
+      const found = await tx.query<Row>(
+        sql`select ${identifier('id', dialect)} from ${entries}
+            where ${identifier('locale', dialect)} = ${locale}
+              and ${identifier(columnFor(name), dialect)} = ${value}
+              and ${identifier('id', dialect)} <> ${exceptId}
+            limit ${sqlLimit(1)}`,
+      )
+      if (found.rows.length === 0) continue
+      const slug = field.kind === 'slug'
+      throw new CogentaError({
+        code: slug ? 'CONTENT_SLUG_TAKEN' : 'CONTENT_INVALID',
+        message: `"${String(value)}" is already used by another entry for "${name}".`,
+        hint: slug
+          ? 'Choose another slug: two entries in the same language cannot share an address.'
+          : `"${name}" is unique: choose a value no other entry holds.`,
+        details: { collection: collection.name, field: name },
+      })
+    }
+  }
+
   async function writeLiveColumns(
     tx: SqlExecutor,
     id: string,
@@ -835,6 +871,12 @@ export function createContentStore<TValues extends ContentValues = ContentValues
     system: Record<string, unknown>,
     guard?: SqlFragment,
   ): Promise<number> {
+    await assertUniqueFree(
+      tx,
+      columns,
+      sql`(select ${identifier('locale', dialect)} from ${entries} where ${identifier('id', dialect)} = ${id})`,
+      id,
+    )
     const assignments: SqlFragment[] = []
 
     for (const [name, value] of Object.entries(system)) {
@@ -1092,6 +1134,7 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       columns.push(columnFor(name))
       bound.push(value)
     }
+    await assertUniqueFree(tx, normalised.columns, input.locale ?? defaultLocale, id)
 
     await tx.query(
       sql`insert into ${entries} (${joinFragments(

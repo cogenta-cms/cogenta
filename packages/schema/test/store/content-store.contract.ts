@@ -238,6 +238,35 @@ export function runContentStoreContract(
       })
     })
 
+    describe('unique fields', () => {
+      // L36 audit: the index's own refusal reached an editor as a 500 that
+      // named no field.
+      it('refuses a slug another entry holds in the same language, naming the field', async () => {
+        await articles.create({ values: { title: 'Un', slug: 'contact' } })
+        await expect(
+          articles.create({ values: { title: 'Deux', slug: 'contact' } }),
+        ).rejects.toMatchObject({ code: 'CONTENT_SLUG_TAKEN', details: { field: 'slug' } })
+      })
+
+      it('lets two languages share a slug, and an entry keep its own', async () => {
+        const french = await articles.create({ values: { title: 'Un', slug: 'contact' } })
+        await expect(
+          articles.create({ locale: 'en', values: { title: 'One', slug: 'contact' } }),
+        ).resolves.toMatchObject({ locale: 'en' })
+        await expect(
+          articles.update(french.id, { values: { title: 'Un, revu', slug: 'contact' } }),
+        ).resolves.toMatchObject({ values: { slug: 'contact' } })
+      })
+
+      it('refuses an update that takes a slug already in use', async () => {
+        await articles.create({ values: { title: 'Un', slug: 'contact' } })
+        const other = await articles.create({ values: { title: 'Deux', slug: 'deux' } })
+        await expect(
+          articles.update(other.id, { values: { slug: 'contact' } }),
+        ).rejects.toMatchObject({ code: 'CONTENT_SLUG_TAKEN' })
+      })
+    })
+
     describe('relations', () => {
       it('stores a to-one relation in a column and a to-many in a join table', async () => {
         const writer = await authors.create({ values: { name: 'Colette' }, status: 'published' })

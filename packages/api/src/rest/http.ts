@@ -53,6 +53,7 @@ export interface RestErrorBody {
 const FIELD_NAMING_CODES: ReadonlySet<ErrorCode> = new Set([
   'CONTENT_INVALID',
   'CONTENT_SLUG_INVALID',
+  'CONTENT_SLUG_TAKEN',
   // Forms (ADR-0026): lets the public, no-JavaScript page mark exactly the
   // one field that failed with `aria-invalid`/`aria-describedby`, rather
   // than a form-wide error banner a screen reader user has to hunt for.

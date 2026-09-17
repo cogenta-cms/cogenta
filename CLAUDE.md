@@ -242,11 +242,13 @@ pnpm changeset                # décrit un changement publiable
   pour plus tard, non actée : ajouter un environnement GitHub protégé (reviewer
   requis) sur l'étape de publication pour rendre cette confirmation structurelle
   plutôt que dépendante de la mémoire d'une session.
-- **Trusted Publisher OIDC n'est pas configuré pour tous les paquets** — une
-  tentative de publication échoue en 404 (pas 401/403, piège documenté dans
-  `release.yml`) pour tout paquet dont ce lien n'a jamais été fait à la main sur
-  npmjs.com par l'humain, publié ou non : au 2026-09-06, `analytics`, `comments`,
-  `commerce`, `export`, `forms`, `observability`, `theme-association`, `theme-blog`,
-  `theme-docs`, `theme-ecommerce`, `theme-entreprise`, `theme-kit`, `theme-magazine`,
-  `theme-portfolio`, `theme-restaurant`, `theme-saas` en ont besoin — aucun
-  contournement possible sans cet accès humain.
+- **Trusted Publisher OIDC : configuré pour tous les paquets** (vérifié le
+  2026-09-17). Ce rappel disait l'inverse et listait seize paquets à lier à la
+  main sur npmjs.com ; la publication du 2026-09-17 à 20 h 38 a publié les
+  trente et un paquets d'une release par la CI seule, en OIDC, y compris ceux
+  que cette liste nommait (`theme-kit`, `commerce`, `export`, `forms`, les dix
+  thèmes). Le piège du **404 trompeur** (un refus d'autorisation qui ressemble à
+  « paquet introuvable ») reste vrai pour un paquet **entièrement nouveau** :
+  son lien se crée sur sa page npm, et un paquet sans version n'a pas de page —
+  c'est `scripts/publish-missing.sh`, depuis une machine authentifiée, qui fait
+  ce tout premier envoi.

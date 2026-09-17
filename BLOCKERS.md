@@ -74,16 +74,23 @@ Même limite pour le bouton « tester la connexion » de l'écran Paiement.
 `docs/hebergement-mutualise.md` décrit la procédure ; personne ne l'a jouée sur
 un vrai cPanel. Accès humain, pas du travail en attente.
 
-### 1.4 Trusted Publisher OIDC — seize paquets à lier à la main
+### 1.4 Trusted Publisher OIDC — ~~seize paquets à lier à la main~~ **levé**
 
-La publication npm fonctionne (vérifié : les 35 paquets sont en ligne, et la
-dernière publication est passée par la CI le 2026-09-17). Mais `release.yml`
-publie **uniquement** par OIDC, et ce lien se configure à la main sur npmjs.com,
-paquet par paquet. Sans lui la republication échoue en **404** (un code trompeur
-qui masque un refus d'autorisation, npm/cli#8544). Restent à lier : `analytics`,
-`comments`, `commerce`, `export`, `forms`, `observability`, `theme-association`,
-`theme-blog`, `theme-docs`, `theme-ecommerce`, `theme-entreprise`, `theme-kit`,
-`theme-magazine`, `theme-portfolio`, `theme-restaurant`, `theme-saas`.
+Cette section affirmait que seize paquets n'avaient jamais reçu leur lien
+« Trusted Publisher » sur npmjs.com, et qu'une publication par la CI y échouerait
+en 404. **Ce n'est plus vrai, vérifié le 2026-09-17** : la publication de 20 h 38
+a publié par OIDC, sans intervention humaine, exactement les paquets que cette
+liste nommait —
+
+```
+@cogenta/theme-kit  0.7.1   20:42      @cogenta/commerce  0.5.9   20:38
+@cogenta/export     0.2.12  20:40      @cogenta/forms     0.2.14  20:39
+@cogenta/theme-saas 0.5.7   20:45      (et les neuf autres thèmes)
+```
+
+et `analytics`, `observability`, `comments` l'avaient été à 13 h 33 lors de la
+publication précédente du même jour. Les trente et un paquets d'une release
+passent donc aujourd'hui par la CI seule. À ne plus recopier.
 
 ### 1.5 DeepSeek : le compte n'a plus de crédit (constaté le 2026-09-17)
 

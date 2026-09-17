@@ -19,6 +19,7 @@
 .cg-mentions__caption,
 .cg-tiers__name,
 .cg-embed__label,
+.cg-story__topic,
 .cg-prose h4,
 .cg-comments > h2 {
   font-family: var(--cg-font-ui);
@@ -265,6 +266,26 @@
   margin-block-start: 1em;
 }
 
+/*
+ * The drop cap: the first letter of an essay's opening paragraph, two lines
+ * deep, set only where the browser can set a true initial letter — a
+ * float-based imitation drifts off the baseline grid, so there is none. An
+ * essay's body is always a single synthetic `prose` block built from its one
+ * `richText` field (`@cogenta/cli`'s `theme-render.ts`), so the first
+ * paragraph here is unambiguously the essay's opening: no `data-opening`
+ * marker is needed the way `@cogenta/theme-magazine` needs one for a body
+ * that may open on a figure block instead.
+ */
+@supports (initial-letter: 2) or (-webkit-initial-letter: 2) {
+  .cg-article .cg-prose > p:first-child::first-letter {
+    -webkit-initial-letter: 2;
+    initial-letter: 2;
+    margin-inline-end: 0.08em;
+    color: var(--cg-ink);
+    font-weight: var(--cg-weight-semibold);
+  }
+}
+
 .cg-prose h2 {
   font-size: var(--cg-size-subheading);
   font-weight: var(--cg-weight-medium);
@@ -477,14 +498,16 @@
 }
 
 .cg-index__link,
-.cg-shelf__link {
+.cg-story__link,
+.cg-digest__link {
   color: var(--cg-ink);
   text-decoration-color: transparent;
   text-underline-offset: 0.18em;
 }
 
 .cg-index__link:hover,
-.cg-shelf__link:hover {
+.cg-story__link:hover,
+.cg-digest__link:hover {
   color: var(--cg-ink);
   text-decoration-color: var(--cg-accent);
 }
@@ -598,39 +621,61 @@
 }
 
 /* --------------------------------------------------------------------------
-   collectionList, grid and carousel layouts: the shelf.
+   The story: one shared card, four settings — the lead of a front, a
+   secondary beside it, a brief in a rail's column, a card in a strip.
    -------------------------------------------------------------------------- */
 
-.cg-shelf {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
-  gap: var(--cg-s10) var(--cg-col-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.cg-shelf__item {
+.cg-story {
   display: flex;
   flex-direction: column;
   min-inline-size: 0;
-  padding-block-start: var(--cg-s4);
-  border-block-start: var(--cg-rule) solid var(--cg-line);
 }
 
-.cg-shelf__media {
+.cg-story__media {
   display: block;
   margin-block-end: var(--cg-s4);
 }
 
-.cg-shelf__image {
+.cg-story__image {
   inline-size: 100%;
   aspect-ratio: 3 / 2;
   border-radius: var(--cg-radius);
 }
 
-.cg-shelf__date {
-  margin-block-end: var(--cg-s2);
+.cg-story__topic {
+  margin: 0 0 var(--cg-s2);
+  color: var(--cg-ink-muted);
+}
+
+.cg-story__title {
+  font-weight: var(--cg-weight-book);
+  line-height: var(--cg-leading-heading);
+}
+
+.cg-story--lead .cg-story__title,
+.cg-story--secondary .cg-story__title {
+  font-size: var(--cg-size-heading);
+}
+
+.cg-story--brief .cg-story__title,
+.cg-story--strip .cg-story__title {
+  font-size: var(--cg-size-entry);
+}
+
+.cg-story__standfirst {
+  margin: var(--cg-s3) 0 0;
+  max-inline-size: 42ch;
+  line-height: 1.55;
+  color: var(--cg-ink-muted);
+}
+
+.cg-story--lead .cg-story__standfirst {
+  font-size: var(--cg-size-lead);
+  max-inline-size: var(--cg-measure-short);
+}
+
+.cg-story__meta {
+  margin: var(--cg-s3) 0 0;
   font-family: var(--cg-font-ui);
   font-size: var(--cg-text-sm);
   line-height: var(--cg-leading-ui);
@@ -638,33 +683,143 @@
   font-variant-numeric: lining-nums tabular-nums;
 }
 
-.cg-shelf__title {
-  font-size: var(--cg-size-entry);
-  font-weight: var(--cg-weight-book);
-  line-height: var(--cg-leading-heading);
+/* --------------------------------------------------------------------------
+   The front: the newest essay large, the next few underneath.
+   -------------------------------------------------------------------------- */
+
+.cg-front__lead {
+  padding-block-end: var(--cg-s8);
+  border-block-end: var(--cg-rule) solid var(--cg-line);
 }
 
-.cg-shelf__excerpt {
-  margin: var(--cg-s3) 0 0;
-  line-height: 1.55;
-  color: var(--cg-ink-muted);
+.cg-front__secondaries {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: var(--cg-s10) var(--cg-col-gap);
+  margin: var(--cg-s8) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-front__item {
+  padding-block-start: var(--cg-s4);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
 }
 
 @media (min-width: 64rem) {
-  .cg-shelf[data-count="2"] {
+  .cg-front__secondaries {
+    grid-column: 1 / -1;
+    margin-block-start: var(--cg-s10);
+  }
+
+  /* A single secondary, the common case for a lightly-populated subject or
+     tag, keeps to one modest card instead of stretching across the row (or
+     the auto-fill base rule leaving empty tracks beside it) — a term with
+     two essays should not read as an unfinished front page. */
+  .cg-front[data-secondaries="1"] .cg-front__secondaries {
+    grid-template-columns: minmax(0, 26rem);
+  }
+
+  .cg-front[data-secondaries="2"] .cg-front__secondaries {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .cg-shelf[data-count="3"] {
+  .cg-front[data-secondaries="3"] .cg-front__secondaries {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .cg-shelf[data-count="4"] {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* The lead reads exactly as the essay's own header does: a topic and a
+     large title on the text line, the standfirst under it, the picture full
+     width beneath — so the front of a subject and the essay it opens on
+     share one grammar. Two levels of subgrid carry the twelve columns down
+     from `.cg-container` to the lead card itself. */
+  .cg-front {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+  }
+
+  .cg-front__lead {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+    padding-block-end: var(--cg-s10);
+  }
+
+  .cg-front__lead .cg-story--lead {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+  }
+
+  .cg-front__lead .cg-story__topic {
+    grid-column: 4 / -1;
+  }
+
+  .cg-front__lead .cg-story__title {
+    grid-column: 4 / span 8;
+    max-inline-size: 20ch;
+    font-size: var(--cg-size-title);
+  }
+
+  .cg-front__lead .cg-story__standfirst {
+    grid-column: 4 / span 7;
+  }
+
+  .cg-front__lead .cg-story__media {
+    grid-column: 4 / -1;
+    margin-block-start: var(--cg-s8);
   }
 }
 
-.cg-collection__viewport {
+/* --------------------------------------------------------------------------
+   The rail: the newest essay large beside a column of the rest.
+   -------------------------------------------------------------------------- */
+
+.cg-rail__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-s6);
+  margin: var(--cg-s8) 0 0;
+  padding: var(--cg-s8) 0 0;
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+  list-style: none;
+}
+
+.cg-rail__item {
+  padding-block-start: var(--cg-s6);
+  border-block-start: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-rail__item:first-child {
+  padding-block-start: 0;
+  border-block-start: none;
+}
+
+@media (min-width: 64rem) {
+  .cg-rail {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+  }
+
+  .cg-rail__lead {
+    grid-column: 1 / span 7;
+  }
+
+  .cg-rail__list {
+    grid-column: 9 / -1;
+    margin-block-start: 0;
+    padding-block-start: 0;
+    border-block-start: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The strip: essays side by side, scrolling on a narrow screen.
+   -------------------------------------------------------------------------- */
+
+.cg-strip {
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   scroll-snap-type: inline mandatory;
@@ -672,14 +827,78 @@
   padding-block-end: var(--cg-s4);
 }
 
-.cg-collection[data-layout="carousel"] .cg-shelf {
+.cg-strip__items {
+  display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: min(82%, 21rem);
-  grid-template-columns: none;
+  grid-auto-columns: min(78%, 19rem);
+  gap: var(--cg-col-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.cg-collection[data-layout="carousel"] .cg-shelf__item {
+.cg-strip__item {
   scroll-snap-align: start;
+  padding-inline-start: var(--cg-s6);
+  border-inline-start: var(--cg-rule) solid var(--cg-line);
+}
+
+/* --------------------------------------------------------------------------
+   The digest: a short, ungrouped list for a curated handful of essays.
+   -------------------------------------------------------------------------- */
+
+.cg-digest {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-digest__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-s2) var(--cg-s6);
+  padding-block: var(--cg-s5);
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-digest:first-child .cg-digest__row:first-child {
+  padding-block-start: 0;
+}
+
+.cg-digest__date {
+  flex: none;
+  inline-size: 5.5rem;
+  margin: 0;
+  font-family: var(--cg-font-ui);
+  font-size: var(--cg-text-sm);
+  line-height: var(--cg-leading-heading);
+  color: var(--cg-ink-muted);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-digest__body {
+  flex: 1 1 16rem;
+  min-inline-size: 0;
+}
+
+.cg-digest__title {
+  font-size: var(--cg-size-entry);
+  font-weight: var(--cg-weight-book);
+  line-height: var(--cg-leading-heading);
+}
+
+.cg-digest__excerpt {
+  display: none;
+  margin: var(--cg-s1) 0 0;
+  color: var(--cg-ink-muted);
+}
+
+@media (min-width: 40rem) {
+  .cg-digest__excerpt {
+    display: block;
+  }
 }
 
 /* --------------------------------------------------------------------------

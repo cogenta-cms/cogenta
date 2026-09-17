@@ -2,6 +2,7 @@ import {
   type Attributes,
   blockHeadingTag,
   type Child,
+  type ContentEntry,
   type HtmlElement,
   h,
   heading,
@@ -90,4 +91,31 @@ export function dayMonth(iso: string, locale: string): string | null {
 export function yearOf(iso: string): string | null {
   const date = parse(iso)
   return date === null ? null : String(date.getUTCFullYear())
+}
+
+/**
+ * A taxonomy field stores a term id, never a label: a value shaped like one
+ * is not something a reader can be shown. Same guard, same reasoning, as
+ * `@cogenta/theme-magazine`'s own `entryKicker`.
+ */
+const TERM_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * The small-caps label a story card sets above its title, read from
+ * whichever of the usual field names a collection declares: `topic` first
+ * (this theme's own word for it), then the plain-text names other schemas
+ * use. Never invented, and never a term id — a `category`/`tags` field is a
+ * taxonomy relation on this theme's own blueprint, storing an id no reader
+ * should ever see, which is exactly what the guard above refuses.
+ */
+const TOPIC_FIELDS = ['topic', 'kicker', 'category', 'subject', 'section'] as const
+
+export function entryTopic(entry: ContentEntry): string | undefined {
+  for (const field of TOPIC_FIELDS) {
+    const value = entry[field]
+    if (typeof value === 'string' && value.trim() !== '' && !TERM_ID.test(value.trim())) {
+      return value
+    }
+  }
+  return undefined
 }

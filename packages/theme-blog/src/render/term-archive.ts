@@ -1,49 +1,27 @@
 import { type HtmlElement, h, renderArchiveIntro, type TermArchiveInput } from '@cogenta/theme-kit'
-import { dayMonth, yearOf } from './layout.js'
+import { renderStory, storyFromArchive } from './story.js'
 
 /**
- * The taxonomy-term archive (contract D `theme@1.3`), set as the same index
- * the `collectionList` block's `list` layout draws: the date in the margin,
- * the year once at the head of each year, the title and the summary on the
- * text line. An archive of a topic reads as a chapter of the site's table of
- * contents, never as a second listing style to keep in step.
+ * The taxonomy-term archive (contract D `theme@1.3`), set as the front of a
+ * subject: the newest essay large, with its standfirst, and the rest
+ * underneath as a row of smaller cards — the same front a `collectionList`
+ * block opens the home page with, so a subject page reads as one more
+ * chapter of the same publication rather than a plainer fallback.
  *
- * `TermArchiveEntry` carries no picture, so every row is a row of text. The
- * taxonomy's name is the kicker above the term, the breadcrumb and the
- * sub-terms sit in the margin, and an empty topic says so in one line.
+ * The term is the page's title, set large under the taxonomy's name as a
+ * small-caps kicker. `TermArchiveEntry` carries no picture, so the front is
+ * set entirely in type here — which is exactly how this theme's own index
+ * already reads a row with nothing to show a picture in.
+ *
+ * Every visible word that is not content comes from `input.labels`, already
+ * in the page's language.
  */
+const SECONDARIES = 3
+
 export function renderTermArchive(input: TermArchiveInput): HtmlElement {
-  let previousYear: string | null = null
-  const rows = input.entries.map((entry) => {
-    const year = entry.publishedAt === null ? null : yearOf(entry.publishedAt)
-    const day = entry.publishedAt === null ? null : dayMonth(entry.publishedAt, input.locale)
-    const showYear = year !== null && year !== previousYear
-    previousYear = year ?? previousYear
-    return h(
-      'li',
-      { class: 'cg-index__row', 'data-media': 'none' },
-      h(
-        'p',
-        { class: 'cg-index__margin' },
-        showYear ? h('span', { class: 'cg-index__year' }, year) : null,
-        entry.publishedAt === null || day === null
-          ? null
-          : h('time', { class: 'cg-index__date', datetime: entry.publishedAt }, day),
-      ),
-      h(
-        'div',
-        { class: 'cg-index__body' },
-        h(
-          'h2',
-          { class: 'cg-index__title' },
-          entry.href === null
-            ? entry.title
-            : h('a', { class: 'cg-index__link', href: entry.href }, entry.title),
-        ),
-        entry.summary === null ? null : h('p', { class: 'cg-index__excerpt' }, entry.summary),
-      ),
-    )
-  })
+  const stories = input.entries.map((entry) => storyFromArchive(entry, input.locale))
+  const [lead, ...rest] = stories
+  const secondaries = rest.slice(0, SECONDARIES)
 
   return h(
     'main',
@@ -79,13 +57,39 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
     ),
     h(
       'section',
-      { class: 'cg-section cg-collection', 'data-layout': 'list' },
+      { class: 'cg-section cg-collection', 'data-form': 'front' },
       h(
         'div',
         { class: 'cg-container cg-collection__inner' },
-        rows.length === 0
+        lead === undefined
           ? h('p', { class: 'cg-collection__empty' }, input.labels.empty)
-          : h('ol', { class: 'cg-index' }, rows),
+          : h(
+              'div',
+              { class: 'cg-front', 'data-secondaries': String(secondaries.length) },
+              h(
+                'div',
+                { class: 'cg-front__lead' },
+                renderStory(lead, { tag: 'h2', variant: 'lead', standfirst: true, date: true }),
+              ),
+              secondaries.length === 0
+                ? null
+                : h(
+                    'ul',
+                    { class: 'cg-front__secondaries' },
+                    secondaries.map((story) =>
+                      h(
+                        'li',
+                        { class: 'cg-front__item' },
+                        renderStory(story, {
+                          tag: 'h2',
+                          variant: 'secondary',
+                          standfirst: true,
+                          date: true,
+                        }),
+                      ),
+                    ),
+                  ),
+            ),
         pager(input),
       ),
     ),

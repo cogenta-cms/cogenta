@@ -83,6 +83,18 @@ export const post = defineCollection({
     slug: f.slug({ from: 'title', unique: true }),
     body: f.richText({ required: true }),
     excerpt: f.text({ max: 300, multiline: true }),
+    // Read by `entryTopic` (`@cogenta/theme-blog`) for the small-caps label
+    // a listing card sets above its title. A plain-text field, not the
+    // `category` relation: a taxonomy term stores an id, never a label a
+    // reader can be shown — the same reasoning as `@cogenta/theme-magazine`'s
+    // own `kicker` field.
+    topic: f.text({
+      max: 60,
+      admin: {
+        label: 'Topic',
+        help: 'The short label a listing card sets above its title, such as a subject narrower than the category.',
+      },
+    }),
     // Read by `entryImage` (`@cogenta/theme-kit`) for the index, the shelf
     // and the essay's own header. Optional: most letters have no picture.
     coverImage: f.media({ accept: ['image'] }),
@@ -221,6 +233,8 @@ export interface BlogDemoPost {
   readonly publishedAt: string
   /** A `DemoMediaSpec.name` for the cover, when this piece has one. */
   readonly cover?: string
+  /** The short label a listing card sets above the title, when this piece has one. */
+  readonly topic?: string
   readonly categorySlug: string
   readonly tagSlugs: readonly string[]
   readonly body: (copy: BlogCopyContext) => RichTextDocument
@@ -264,6 +278,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
     title: 'Why I still draft in plain text',
     slug: 'plain-text-editor',
+    topic: 'Drafts',
     excerpt:
       'Nine writing apps in eight years, and the one file format that outlasted every one of them.',
     publishedAt: '2024-02-11T08:30:00.000Z',
@@ -314,6 +329,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
     title: 'The long way to the library',
     slug: 'the-long-way-to-the-library',
+    topic: 'Libraries',
     excerpt:
       'Forty minutes on foot instead of twelve on the bus, twice a week, and what the extra half hour turned out to be for.',
     publishedAt: '2024-05-19T07:15:00.000Z',
@@ -372,6 +388,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
     title: 'Letter: what a commonplace book is for',
     slug: 'letter-commonplace-book',
+    topic: 'Notebooks',
     excerpt:
       'A reader asked how I keep the passages I want to remember from the books I read. The answer involves a pencil and a lot of empty pages.',
     publishedAt: '2024-08-04T06:45:00.000Z',
@@ -412,6 +429,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
     title: 'What the second draft is for',
     slug: 'what-the-second-draft-is-for',
+    topic: 'Revision',
     excerpt:
       'A first draft tells you what a piece is about. The second is where you find out what it is for, and most of the work is deciding what it can live without.',
     publishedAt: '2024-10-20T08:00:00.000Z',
@@ -547,6 +565,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
     title: 'Books I reread every winter',
     slug: 'books-i-reread-every-winter',
+    topic: 'Rereading',
     excerpt:
       'Five books that come off the shelf in the first week of January, and why rereading has become more useful to me than reading something new.',
     publishedAt: '2025-01-12T09:10:00.000Z',
@@ -608,6 +627,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
     title: 'A desk with almost nothing on it',
     slug: 'a-desk-with-almost-nothing-on-it',
+    topic: 'Habits',
     excerpt:
       'Every version of my desk that lasted more than a few weeks had fewer things on it than the one before.',
     publishedAt: '2025-04-06T08:20:00.000Z',
@@ -656,6 +676,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
     title: 'Forty notebooks',
     slug: 'forty-notebooks',
+    topic: 'Notebooks',
     excerpt:
       'Fourteen years of notebooks fill a shelf and a half. This autumn I read all forty in order, and they turned out to contain something other than ideas.',
     publishedAt: '2025-11-09T08:05:00.000Z',
@@ -782,6 +803,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
     title: 'Letter: the slow week',
     slug: 'letter-the-slow-week',
+    topic: 'Habits',
     excerpt:
       'Snow closed the line to York for five days, and the unplanned mornings turned into the most rested writing I have done this year.',
     publishedAt: '2026-02-15T07:30:00.000Z',
@@ -823,6 +845,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
     title: 'Reading on the 7:52',
     slug: 'reading-on-the-752',
+    topic: 'Trains',
     excerpt:
       'Three mornings a week, twenty-five minutes from Leeds to York. Over six years that train has become the best reading room I know, for reasons that have little to do with the view.',
     publishedAt: '2026-05-31T08:40:00.000Z',
@@ -940,6 +963,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
   {
     title: 'Letter: what I read in August',
     slug: 'letter-what-i-read-in-august',
+    topic: 'Rereading',
     excerpt:
       'A month with fewer trains and more time in the garden: three books finished, one abandoned, and a note on reading slowly in the heat.',
     publishedAt: '2026-08-30T07:00:00.000Z',
@@ -1075,6 +1099,16 @@ export function buildBlogDemoPages(
           sort: { field: 'createdAt', direction: 'asc' },
           limit: 3,
           layout: 'grid',
+        },
+        {
+          _key: 'demo-home-strip',
+          _type: 'collectionList',
+          _version: BLOCK_VERSION,
+          title: 'A few more essays',
+          collection: 'post',
+          sort: { field: 'createdAt', direction: 'desc' },
+          limit: 6,
+          layout: 'carousel',
         },
         {
           _key: 'demo-home-subjects',
@@ -1473,6 +1507,7 @@ async function seedBlogDemoContent(ctx: SeedContext): Promise<void> {
         publishedAt: demo.publishedAt,
         category: categoryIdBySlug.get(demo.categorySlug) ?? null,
         tags: demo.tagSlugs.map((slug) => tagIdBySlug.get(slug)).filter((id) => id !== undefined),
+        ...(demo.topic === undefined ? {} : { topic: demo.topic }),
         ...(cover === undefined ? {} : { coverImage: cover }),
       },
     })

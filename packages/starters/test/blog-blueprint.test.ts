@@ -176,13 +176,14 @@ describe('blog blueprint, content model and demo writing', () => {
     }
   })
 
-  it('seeds a home page of a featured essay, the index, an epigraph, a shelf, the subjects and the letter', () => {
+  it('seeds a home page of a featured essay, the index, an epigraph, a shelf, a strip, the subjects and the letter', () => {
     const [home] = buildBlogDemoPages(MEDIA)
     expect(home?.slug).toBe('home')
     expect(home?.blocks.map((block) => block._type)).toEqual([
       'hero',
       'collectionList',
       'quote',
+      'collectionList',
       'collectionList',
       'featureGrid',
       'cta',

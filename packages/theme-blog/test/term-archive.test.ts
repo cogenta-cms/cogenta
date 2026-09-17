@@ -52,7 +52,7 @@ const BASE: TermArchiveInput = {
 
 const html = (input: TermArchiveInput = BASE): string => serialize(renderTermArchive(input))
 
-describe('renderTermArchive, a chapter of the index', () => {
+describe('renderTermArchive, a topic set as a front', () => {
   it('is a real <main id="cg-main">, the mandatory skip-link target', () => {
     expect(html()).toMatch(/^<main class="cg-main cg-archive" id="cg-main">/)
   })
@@ -64,41 +64,62 @@ describe('renderTermArchive, a chapter of the index', () => {
     expect(out.match(/<h1/g)).toHaveLength(1)
   })
 
-  it('lists the entries as the same index the collectionList list layout draws, as h2 titles', () => {
+  it('composes the newest entry as a lead and the rest as a row of secondaries, like the home front', () => {
     const out = html()
-    expect(out).toContain('<section class="cg-section cg-collection" data-layout="list">')
-    expect(out).toContain('<ol class="cg-index">')
-    expect(out.match(/<li class="cg-index__row" data-media="none">/g)).toHaveLength(4)
-    expect(out.match(/<h2 class="cg-index__title">/g)).toHaveLength(4)
-    expect(out).not.toMatch(/<img/)
+    expect(out).toContain('<section class="cg-section cg-collection" data-form="front">')
+    expect(out).toContain('<div class="cg-front" data-secondaries="3">')
+    expect(out.match(/cg-story--lead/g)).toHaveLength(1)
+    expect(out.match(/<li class="cg-front__item">/g)).toHaveLength(3)
   })
 
-  it('shows the year once, on the first entry of each year', () => {
+  it('gives the lead its standfirst and its full date, since a topic page reads by day', () => {
     const out = html()
-    expect(out.match(/<span class="cg-index__year">2026<\/span>/g)).toHaveLength(1)
-    expect(out.match(/<span class="cg-index__year">2025<\/span>/g)).toHaveLength(1)
-  })
-
-  it('sets the day and month in the margin as a machine-readable date', () => {
-    expect(html()).toContain(
-      '<time class="cg-index__date" datetime="2026-05-31T08:40:00.000Z">May 31</time>',
+    const lead = out.slice(out.indexOf('cg-front__lead'), out.indexOf('cg-front__secondaries'))
+    expect(lead).toContain(
+      '<h2 class="cg-story__title"><a class="cg-story__link" href="/en/blog/reading-on-the-752">Reading on the 7:52</a></h2>',
     )
+    expect(lead).toContain(
+      '<p class="cg-story__standfirst">Three mornings a week, twenty-five minutes from Leeds to York.</p>',
+    )
+    expect(lead).toContain('<time datetime="2026-05-31T08:40:00.000Z">May 31, 2026</time>')
   })
 
-  it('renders an entry with no date without an empty time element', () => {
+  it('renders an entry with no summary or no date without an empty element', () => {
     const out = html()
-    expect(out).toContain(
-      '<p class="cg-index__margin"></p><div class="cg-index__body"><h2 class="cg-index__title"><a class="cg-index__link" href="/en/blog/undated">An undated note</a>',
+    const letter = out.slice(
+      out.indexOf('Letter: the slow week') - 40,
+      out.indexOf('Books I reread'),
     )
+    expect(letter).not.toContain('cg-story__standfirst')
+    const undated = out.slice(out.indexOf('An undated note') - 40)
+    expect(undated).not.toContain('<time')
   })
 
   it('renders an unreachable entry as text, never a dead link', () => {
-    expect(html()).toContain('<h2 class="cg-index__title">Books I reread every winter</h2>')
+    expect(html()).toContain('<h2 class="cg-story__title">Books I reread every winter</h2>')
   })
 
-  it('renders a summary only when the entry has one', () => {
+  it('invents no picture and no topic for an entry: a term archive row carries neither', () => {
     const out = html()
-    expect(out.match(/cg-index__excerpt/g)).toHaveLength(2)
+    expect(out).not.toContain('<img')
+    expect(out).not.toContain('cg-story__topic')
+  })
+
+  it('caps the secondaries row at three, whatever the term holds', () => {
+    const many: TermArchiveInput = {
+      ...BASE,
+      entries: [
+        ...BASE.entries,
+        {
+          title: 'A fifth note',
+          href: '/en/blog/a-fifth-note',
+          summary: null,
+          collection: 'post',
+          publishedAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+    }
+    expect(html(many)).toContain('data-secondaries="3"')
   })
 
   it('renders the empty state honestly when nothing is classified', () => {
@@ -106,7 +127,7 @@ describe('renderTermArchive, a chapter of the index', () => {
     expect(out).toContain(
       '<p class="cg-collection__empty">Nothing published under this topic yet.</p>',
     )
-    expect(out).not.toContain('cg-index')
+    expect(out).not.toContain('cg-front')
   })
 
   it('renders a breadcrumb only when there are ancestors', () => {

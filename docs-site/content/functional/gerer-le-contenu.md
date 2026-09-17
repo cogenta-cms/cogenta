@@ -226,6 +226,18 @@ enregistrées pour éviter tout décalage de mise en page au chargement. Elle
 exige une session authentifiée : ce n'est pas un dossier public, même si les
 images qu'elle sert à une page publiée le sont via une URL dédiée.
 
+### Recadrer ou pivoter une image
+
+Dans la fiche d'une image, **Recadrer ou pivoter** ouvre l'éditeur : pivotez par quarts de
+tour, choisissez un cadre libre ou des proportions (carré, 4:3, 3:2, 16:9), déplacez-le et
+redimensionnez-le à la souris — ou au clavier, flèches pour déplacer, Maj + flèches pour
+redimensionner — puis **Appliquer**. Toutes les pages qui utilisent l'image la montrent
+retouchée, sans rien republier, et le point focal suit la retouche.
+
+Rien n'est perdu : l'original est conservé, chaque nouvelle retouche repart de lui (la qualité
+ne se dégrade pas d'une retouche à l'autre), et **Rétablir l'original** le remet en place.
+Remplacer le fichier abandonne cet original, puisque le nouveau fichier en devient un.
+
 ## Menus, commentaires, formulaires
 
 `/menus` construit la navigation du site à partir d'entrées réelles (un lien

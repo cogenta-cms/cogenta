@@ -165,6 +165,62 @@ export function runImageContract(
       })
     })
 
+    describe('rotation (L39)', () => {
+      /** The colour that dominates the top-left quarter of a picture. */
+      function topLeft(variant: RenderedVariant): string {
+        const decoded = decodePng(variant.bytes)
+        return nearestName(
+          averageColour(decoded, {
+            left: 0,
+            top: 0,
+            width: Math.floor(decoded.width / 2),
+            height: Math.floor(decoded.height / 2),
+          }),
+          PALETTE,
+        )
+      }
+
+      const operation = (
+        rotate: 0 | 90 | 180 | 270,
+        crop: null | { left: number; top: number; width: number; height: number } = null,
+      ) => ({
+        rotate,
+        crop,
+        resize: null,
+        format: 'png' as const,
+        quality: 90,
+      })
+
+      it(
+        'turns the picture clockwise by quarter turns',
+        async () => {
+          // red | green over blue | yellow
+          const source = quadrantPng(200)
+          expect(topLeft(await transformer.transform(source, operation(90)))).toBe('blue')
+          expect(topLeft(await transformer.transform(source, operation(180)))).toBe('yellow')
+          expect(topLeft(await transformer.transform(source, operation(270)))).toBe('green')
+          expect(topLeft(await transformer.transform(source, operation(0)))).toBe('red')
+        },
+        SLOW,
+      )
+
+      it(
+        'crops in the rotated picture’s coordinates, and swaps a landscape’s sides',
+        async () => {
+          // After a quarter turn the top-right quarter is what was top-left: red.
+          const cropped = await transformer.transform(
+            quadrantPng(200),
+            operation(90, { left: 100, top: 0, width: 100, height: 100 }),
+          )
+          expect(nearestName(averageColour(decodePng(cropped.bytes)), PALETTE)).toBe('red')
+
+          const turned = await transformer.transform(gradientPng(300, 100), operation(90))
+          expect([turned.width, turned.height]).toEqual([100, 300])
+        },
+        SLOW,
+      )
+    })
+
     describe('focal point cropping', () => {
       /** The colour that dominates the top half of a crop of the quadrant image. */
       async function topHalfColour(request: VariantRequest): Promise<string> {

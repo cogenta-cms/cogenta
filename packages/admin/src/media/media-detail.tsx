@@ -14,7 +14,9 @@ import {
   updateMedia,
 } from '../api/media-client.js'
 import { formatDateTime } from '../lib/format.js'
+import { Button } from '../ui/index.js'
 import { FocalPointEditor } from './focal-point-editor.js'
+import { ImageEditor } from './image-editor.js'
 
 /** `1.2 KB`, `3.4 MB` — binary units, one decimal past the first, matching what a file manager shows. */
 function formatBytes(bytes: number): string {
@@ -75,6 +77,7 @@ export function MediaDetail({
   const [folderError, setFolderError] = useState<string | null>(null)
 
   const [replacing, setReplacing] = useState(false)
+  const [editingImage, setEditingImage] = useState(false)
   const [replaceError, setReplaceError] = useState<string | null>(null)
 
   const [copied, setCopied] = useState(false)
@@ -232,15 +235,44 @@ export function MediaDetail({
 
   return (
     <div className="media-detail flex flex-col gap-4">
-      {asset.kind === 'image' && (
-        <FocalPointEditor
-          token={token}
-          id={asset.id}
-          alt={asset.alt}
-          focal={asset.focal}
-          onChange={(focal) => onChange({ ...asset, focal })}
-        />
-      )}
+      {asset.kind === 'image' &&
+        (editingImage ? (
+          <ImageEditor
+            token={token}
+            asset={asset}
+            onDone={(updated) => {
+              setEditingImage(false)
+              onChange(updated)
+            }}
+            onCancel={() => setEditingImage(false)}
+          />
+        ) : (
+          <>
+            <FocalPointEditor
+              token={token}
+              id={asset.id}
+              alt={asset.alt}
+              focal={asset.focal}
+              version={asset.contentHash}
+              onChange={(focal) => onChange({ ...asset, focal })}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setEditingImage(true)}
+              >
+                {t('imageEditor.open')}
+              </Button>
+              {asset.edited === true && (
+                <span className="text-sm text-muted-foreground">
+                  {t('imageEditor.editedBadge')}
+                </span>
+              )}
+            </div>
+          </>
+        ))}
 
       <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         {asset.width !== null && asset.height !== null && (

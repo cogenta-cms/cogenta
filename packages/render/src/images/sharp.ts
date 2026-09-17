@@ -32,6 +32,7 @@ interface SharpMetadataLike {
 
 interface SharpInstanceLike {
   metadata(): Promise<SharpMetadataLike>
+  rotate(angle: number): SharpInstanceLike
   extract(rect: { left: number; top: number; width: number; height: number }): SharpInstanceLike
   resize(options: { width: number; height: number; fit: 'fill' }): SharpInstanceLike
   flatten(options: { background: string }): SharpInstanceLike
@@ -102,6 +103,11 @@ export function createSharpTransformer(sharp: SharpFactory): ImageTransformer {
       }
 
       const { crop, resize } = operation
+      // Rotation first: sharp applies operations in call order, and the crop
+      // rectangle is expressed in the rotated picture's coordinates.
+      if (operation.rotate !== undefined && operation.rotate !== 0) {
+        pipeline = pipeline.rotate(operation.rotate)
+      }
       if (crop !== null) pipeline = pipeline.extract(crop)
       if (resize !== null) {
         // `fill` on purpose: the crop rectangle already carries the aspect

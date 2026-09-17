@@ -14,11 +14,14 @@ export function FocalPointEditor({
   id,
   alt,
   focal,
+  version,
   disabled = false,
   onChange,
 }: {
   readonly token: string
   readonly id: string
+  /** The asset's `contentHash`: the picture changes when it is cropped or replaced. */
+  readonly version?: string
   readonly alt: string
   readonly focal: FocalPoint | null
   readonly disabled?: boolean
@@ -32,7 +35,7 @@ export function FocalPointEditor({
     let cancelled = false
     let objectUrl: string | null = null
 
-    fetchMediaBlobUrl(token, id)
+    fetchMediaBlobUrl(token, id, version === undefined ? {} : { version })
       .then((created) => {
         if (cancelled) {
           URL.revokeObjectURL(created)
@@ -49,7 +52,7 @@ export function FocalPointEditor({
       cancelled = true
       if (objectUrl !== null) URL.revokeObjectURL(objectUrl)
     }
-  }, [token, id, t])
+  }, [token, id, version, t])
 
   async function place(event: MouseEvent<HTMLImageElement>): Promise<void> {
     if (disabled) return

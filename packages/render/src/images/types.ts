@@ -108,7 +108,16 @@ export interface Rect extends Size {
  * order, on every tier. No option here is a hint: a driver that reinterprets one
  * makes the two tiers disagree.
  */
+/** A quarter turn, clockwise. */
+export type QuarterTurn = 0 | 90 | 180 | 270
+
 export interface TransformOperation {
+  /**
+   * Applied first, clockwise, before `crop`: a crop rectangle is expressed in
+   * the rotated picture's coordinates (L39, the media library's editor).
+   * Absent or `0`: no rotation, as before.
+   */
+  readonly rotate?: QuarterTurn
   readonly crop: Rect | null
   readonly resize: Size | null
   readonly format: ImageFormat

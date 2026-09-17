@@ -5233,5 +5233,31 @@
     "unknownProvider": "Service non reconnu : choisissez « Autre » pour afficher un lien vers ce contenu.",
     "previewLabel": "Aperçu du contenu intégré",
     "byline": "{{provider}} · {{author}}"
+  },
+  "imageEditor": {
+    "open": "Recadrer ou pivoter",
+    "editedBadge": "Image retouchée — l’original est conservé.",
+    "heading": "Recadrer ou pivoter l’image",
+    "rotateLeft": "↺ Pivoter à gauche",
+    "rotateRight": "↻ Pivoter à droite",
+    "ratioLabel": "Proportions du cadre",
+    "ratio": {
+      "free": "Libre",
+      "1x1": "Carré",
+      "4x3": "4:3",
+      "3x2": "3:2",
+      "16x9": "16:9"
+    },
+    "frameLabel": "Cadre de recadrage",
+    "frameValue": "À {{x}} % du bord gauche et {{y}} % du haut, {{width}} % de large, {{height}} % de haut",
+    "hint": "Faites glisser le cadre ou ses coins. Au clavier : flèches pour déplacer, Maj + flèches pour redimensionner. La retouche part toujours de l’image d’origine, qui reste conservée.",
+    "resultSize": "Image obtenue : {{width}} × {{height}} pixels",
+    "apply": "Appliquer",
+    "applying": "Application…",
+    "restore": "Rétablir l’original",
+    "loadError": "L’image n’a pas pu être chargée pour la retouche.",
+    "applyError": "La retouche n’a pas pu être appliquée.",
+    "restoreError": "L’original n’a pas pu être rétabli.",
+    "previewLabel": "Aperçu de l’image à retoucher"
   }
 }

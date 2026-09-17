@@ -27,6 +27,16 @@ import {
   type RestResponse,
 } from './http.js'
 import {
+  focalBeforeEdit,
+  focalThroughEdit,
+  type ImageEdit,
+  isIdentityEdit,
+  lastEditKey,
+  originalCopyKey,
+  parseImageEdit,
+  parseStoredEdit,
+} from './media-edit.js'
+import {
   type ImageSize,
   ingestMediaUpload,
   type MediaImageProcessor,
@@ -507,6 +517,14 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
         if (method !== 'POST') return methodNotAllowed(['POST'])
         return replace(id, request, actor)
       }
+      if (sub === 'edit') {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        return editImage(id, request, actor)
+      }
+      if (sub === 'restore') {
+        if (method !== 'POST') return methodNotAllowed(['POST'])
+        return restoreImage(id, actor)
+      }
       if (sub === 'move') {
         if (method !== 'POST') return methodNotAllowed(['POST'])
         return moveAsset(id, request, actor)
@@ -748,7 +766,10 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     requireActor(actor)
     const asset = await store.get(id)
     if (asset === null) throw notFound(id)
-    return jsonResponse(200, { data: asset })
+    // `edited` (L39): whether a crop or rotation can be undone.
+    return jsonResponse(200, {
+      data: { ...asset, edited: await storage.exists(originalCopyKey(id)) },
+    })
   }
 
   async function update(id: string, request: RestRequest, actor: Actor): Promise<RestResponse> {
@@ -827,8 +848,28 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     // key that never changes would let the old bytes keep serving from any
     // cache that already holds them, for up to a year, however hard the
     // database row changed underneath it (the piège this task exists for).
+    const updated = await swapOriginal(existing, bytes, mimeType, file.filename)
+    // A new file is a new original: an edit made to the old one no longer
+    // has anything to go back to.
+    await dropOriginalCopy(id)
+
+    return jsonResponse(200, { data: updated })
+  }
+
+  /**
+   * Puts `bytes` behind an existing id: a new storage key and content hash
+   * (caches of the old bytes are bypassed), fresh variants, the old original
+   * and variants removed. Shared by replacing a file and by editing one (L39).
+   */
+  async function swapOriginal(
+    existing: MediaAsset,
+    bytes: Buffer,
+    mimeType: string,
+    filename: string,
+  ): Promise<MediaAsset> {
+    const id = existing.id
     const contentHash = hashBytes(bytes)
-    const storageKey = storageKeyFor(`${id}/${contentHash}`, file.filename)
+    const storageKey = storageKeyFor(`${id}/${contentHash}`, filename)
     await storage.put(storageKey, bytes, { contentType: mimeType })
 
     const oldStorageKey = existing.storageKey
@@ -870,12 +911,110 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     // logo from leaking storage forever. Best-effort: an old blob a delete
     // fails to remove is a storage cost, never a correctness problem — the
     // row already points at the new key.
-    await storage.delete(oldStorageKey).catch(() => undefined)
+    // The same bytes land under the same key: that key is the new original
+    // too, and deleting "the old one" would delete the file itself.
+    if (oldStorageKey !== storageKey) await storage.delete(oldStorageKey).catch(() => undefined)
+    const newVariantNames = new Set(
+      intrinsic === null || options.images === undefined
+        ? []
+        : options.images.variantNames(intrinsic),
+    )
     for (const name of oldVariantNames) {
+      if (newVariantNames.has(name) && written.includes(variantKeyFor(id, name))) continue
       await storage.delete(variantKeyFor(id, name)).catch(() => undefined)
     }
+    return updated
+  }
 
-    return jsonResponse(200, { data: updated })
+  async function dropOriginalCopy(id: string): Promise<void> {
+    await storage.delete(originalCopyKey(id)).catch(() => undefined)
+    await storage.delete(lastEditKey(id)).catch(() => undefined)
+  }
+
+  async function readLastEdit(id: string): Promise<ImageEdit | null> {
+    if (!(await storage.exists(lastEditKey(id)))) return null
+    return parseStoredEdit((await readStorageBytes(storage, lastEditKey(id))).toString('utf8'))
+  }
+
+  /**
+   * `POST /api/media/{id}/edit` (L39) — turns and crops an image in place,
+   * from its untouched original: the first edit keeps a copy of it, every
+   * later one starts from that copy again, so edits never compound.
+   */
+  async function editImage(id: string, request: RestRequest, actor: Actor): Promise<RestResponse> {
+    requireActor(actor)
+    const existing = await store.get(id)
+    if (existing === null) throw notFound(id)
+    if (existing.kind !== 'image') {
+      throw new CogentaError({
+        code: 'MEDIA_INVALID',
+        message: 'Only an image can be cropped or rotated.',
+        hint: 'Edit the file elsewhere and replace it.',
+      })
+    }
+    const processor = options.images
+    if (processor?.edit === undefined) {
+      throw new CogentaError({
+        code: 'MEDIA_EDIT_UNAVAILABLE',
+        message: 'This site has no image driver able to crop or rotate.',
+        hint: 'Run `cogenta doctor` to see which image driver loaded.',
+      })
+    }
+    const edit = parseImageEdit(request.body)
+
+    const copyKey = originalCopyKey(id)
+    const hasCopy = await storage.exists(copyKey)
+    const original = await readStorageBytes(storage, hasCopy ? copyKey : existing.storageKey)
+    const originalType = hasCopy
+      ? ((await storage.head(copyKey))?.contentType ?? existing.mimeType)
+      : existing.mimeType
+    const previous = hasCopy ? await readLastEdit(id) : null
+    // The focal point was set on what the editor saw — the previous edit, if
+    // any. Carried back to the original, then through this edit.
+    const originalFocal =
+      previous === null ? existing.focal : focalBeforeEdit(existing.focal, previous)
+
+    if (isIdentityEdit(edit)) {
+      if (!hasCopy) return jsonResponse(200, { data: { ...existing, edited: false } })
+      return restoreFrom(existing, original, originalType, originalFocal)
+    }
+
+    const result = await processor.edit(original, edit)
+    if (!hasCopy) await storage.put(copyKey, original, { contentType: originalType })
+    await storage.put(lastEditKey(id), Buffer.from(JSON.stringify(edit)), {
+      contentType: 'application/json',
+    })
+    await swapOriginal(existing, Buffer.from(result.bytes), result.contentType, existing.filename)
+    const updated = await store.update(id, { focal: focalThroughEdit(originalFocal, edit) })
+    return jsonResponse(200, { data: { ...updated, edited: true } })
+  }
+
+  async function restoreFrom(
+    existing: MediaAsset,
+    original: Buffer,
+    originalType: string,
+    originalFocal: MediaAsset['focal'],
+  ): Promise<RestResponse> {
+    await swapOriginal(existing, original, originalType, existing.filename)
+    await dropOriginalCopy(existing.id)
+    const updated = await store.update(existing.id, { focal: originalFocal })
+    return jsonResponse(200, { data: { ...updated, edited: false } })
+  }
+
+  /** `POST /api/media/{id}/restore` (L39) — puts the untouched original back. */
+  async function restoreImage(id: string, actor: Actor): Promise<RestResponse> {
+    requireActor(actor)
+    const existing = await store.get(id)
+    if (existing === null) throw notFound(id)
+    const copyKey = originalCopyKey(id)
+    if (!(await storage.exists(copyKey))) {
+      return jsonResponse(200, { data: { ...existing, edited: false } })
+    }
+    const original = await readStorageBytes(storage, copyKey)
+    const originalType = (await storage.head(copyKey))?.contentType ?? existing.mimeType
+    const previous = await readLastEdit(id)
+    const originalFocal = previous === null ? null : focalBeforeEdit(existing.focal, previous)
+    return restoreFrom(existing, original, originalType, originalFocal)
   }
 
   /** `GET /api/media/{id}/exif` — read-only, image-only, JPEG-only (fiche 11 task 6). */
@@ -931,6 +1070,7 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     const asset = await store.get(id)
     if (asset === null) throw notFound(id)
     await deleteAssetFiles(asset)
+    await dropOriginalCopy(id)
     await store.delete(id)
     return jsonResponse(204, null)
   }

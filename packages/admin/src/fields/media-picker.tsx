@@ -217,6 +217,7 @@ export function MediaPicker({
                     id={asset.id}
                     alt={asset.alt}
                     previewable={asset.kind === 'image'}
+                    version={asset.contentHash}
                   />
                 )}
                 <span className="media-picker__filename">
@@ -486,6 +487,7 @@ function BrowsePanel({
                     id={asset.id}
                     alt={asset.alt}
                     previewable={asset.kind === 'image'}
+                    version={asset.contentHash}
                   />
                   <span className="media-grid__filename">{asset.filename}</span>
                 </button>

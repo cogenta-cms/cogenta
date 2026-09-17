@@ -687,6 +687,7 @@ export function MediaRoute(): JSX.Element {
                         id={asset.id}
                         alt={asset.alt}
                         previewable={asset.kind === 'image'}
+                        version={asset.contentHash}
                       />
                       <span className="w-full truncate text-xs">{asset.filename}</span>
                     </button>

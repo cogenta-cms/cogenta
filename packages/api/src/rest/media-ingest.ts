@@ -12,6 +12,7 @@ import {
   sniffImageFormat,
   stripGpsFromJpeg,
 } from '@cogenta/core'
+import type { ImageEdit } from './media-edit.js'
 
 /**
  * The core of a media upload — sniff the real type, scrub GPS, write the
@@ -59,6 +60,15 @@ export interface MediaImageProcessor {
   variants(bytes: Uint8Array, intrinsic: ImageSize): Promise<readonly UploadedImageVariant[]>
   /** The names `variants()` would produce for this size — see `media-router.ts`'s copy of this doc for why it exists. */
   variantNames(intrinsic: ImageSize): readonly string[]
+  /**
+   * Turns and crops an image (L39), keeping its format when it is JPEG, PNG or
+   * WebP. Absent: the host's image driver cannot, and the edit route answers
+   * `MEDIA_EDIT_UNAVAILABLE`.
+   */
+  edit?(
+    bytes: Uint8Array,
+    edit: ImageEdit,
+  ): Promise<{ readonly bytes: Uint8Array; readonly contentType: string }>
 }
 
 export interface IngestMediaUploadDeps {

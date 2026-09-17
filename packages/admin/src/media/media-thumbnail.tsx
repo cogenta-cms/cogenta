@@ -12,11 +12,14 @@ export function MediaThumbnail({
   id,
   alt,
   previewable,
+  version,
 }: {
   readonly token: string
   readonly id: string
   readonly alt: string
   readonly previewable: boolean
+  /** The asset's `contentHash`, so an edited or replaced file is not served from the browser's cache. */
+  readonly version?: string
 }): JSX.Element {
   const [url, setUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
@@ -26,7 +29,7 @@ export function MediaThumbnail({
     let cancelled = false
     let objectUrl: string | null = null
 
-    fetchMediaBlobUrl(token, id)
+    fetchMediaBlobUrl(token, id, version === undefined ? {} : { version })
       .then((created) => {
         if (cancelled) {
           URL.revokeObjectURL(created)
@@ -43,7 +46,7 @@ export function MediaThumbnail({
       cancelled = true
       if (objectUrl !== null) URL.revokeObjectURL(objectUrl)
     }
-  }, [token, id, previewable])
+  }, [token, id, previewable, version])
 
   if (!previewable || failed) {
     return <span className="media-thumbnail media-thumbnail--placeholder" aria-hidden="true" />

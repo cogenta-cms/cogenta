@@ -5233,5 +5233,31 @@
     "unknownProvider": "Service not recognised: choose “Other” to show a link to this content.",
     "previewLabel": "Embedded content preview",
     "byline": "{{provider}} · {{author}}"
+  },
+  "imageEditor": {
+    "open": "Crop or rotate",
+    "editedBadge": "Edited image — the original is kept.",
+    "heading": "Crop or rotate the image",
+    "rotateLeft": "↺ Rotate left",
+    "rotateRight": "↻ Rotate right",
+    "ratioLabel": "Frame proportions",
+    "ratio": {
+      "free": "Free",
+      "1x1": "Square",
+      "4x3": "4:3",
+      "3x2": "3:2",
+      "16x9": "16:9"
+    },
+    "frameLabel": "Crop frame",
+    "frameValue": "{{x}}% from the left and {{y}}% from the top, {{width}}% wide, {{height}}% high",
+    "hint": "Drag the frame or its corners. With the keyboard: arrows to move, Shift + arrows to resize. An edit always starts from the original image, which is kept.",
+    "resultSize": "Resulting image: {{width}} × {{height}} pixels",
+    "apply": "Apply",
+    "applying": "Applying…",
+    "restore": "Restore the original",
+    "loadError": "The image could not be loaded for editing.",
+    "applyError": "The edit could not be applied.",
+    "restoreError": "The original could not be restored.",
+    "previewLabel": "Preview of the image being edited"
   }
 }

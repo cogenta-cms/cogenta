@@ -159,6 +159,7 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
 
   MEDIA_NOT_FOUND: 404,
   MEDIA_INVALID: 400,
+  MEDIA_EDIT_UNAVAILABLE: 501,
   MEDIA_TYPE_REJECTED: 400,
 
   // Media folders (fiche 46) — same statuses as the taxonomy tree's

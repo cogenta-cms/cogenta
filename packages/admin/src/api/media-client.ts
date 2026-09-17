@@ -32,6 +32,8 @@ export interface MediaAsset {
   readonly folderId: string | null
   readonly createdAt: string
   readonly createdBy: string | null
+  /** L39: whether a crop or rotation was applied and can be undone. Present on a single-asset read. */
+  readonly edited?: boolean
 }
 
 export interface MediaPage {
@@ -510,8 +512,21 @@ export async function deleteMediaFolder(token: string, id: string): Promise<void
  * through, instead of the file route being made unauthenticated to work
  * around it.
  */
-export async function fetchMediaBlobUrl(token: string, id: string): Promise<string> {
-  const response = await fetch(`${API_BASE}/api/media/${encodeURIComponent(id)}/file`, {
+export async function fetchMediaBlobUrl(
+  token: string,
+  id: string,
+  options: {
+    /** The asset's `contentHash`: the file is cached for an hour, and an edited file keeps its URL. */
+    readonly version?: string
+    /** L39: the untouched original of an edited image. */
+    readonly original?: boolean
+  } = {},
+): Promise<string> {
+  const query = new URLSearchParams()
+  if (options.version !== undefined) query.set('v', options.version)
+  if (options.original === true) query.set('original', '1')
+  const suffix = query.size === 0 ? '' : `?${query.toString()}`
+  const response = await fetch(`${API_BASE}/api/media/${encodeURIComponent(id)}/file${suffix}`, {
     headers: authHeader(token),
   })
   if (!response.ok) {
@@ -588,4 +603,30 @@ export interface ImageGenerationStatus {
 /** Asked before anything is drawn, so an unconfigured site shows no panel at all rather than a form that only fails once used. */
 export async function getImageGenerationStatus(token: string): Promise<ImageGenerationStatus> {
   return request<ImageGenerationStatus>('/api/media/generate', { headers: authHeader(token) })
+}
+
+/** L39: a quarter turn, and a crop in fractions of the turned picture. */
+export interface ImageEdit {
+  readonly rotate: 0 | 90 | 180 | 270
+  readonly crop: {
+    readonly x: number
+    readonly y: number
+    readonly width: number
+    readonly height: number
+  } | null
+}
+
+export function editMedia(token: string, id: string, edit: ImageEdit): Promise<MediaAsset> {
+  return request(`/api/media/${encodeURIComponent(id)}/edit`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(edit),
+  })
+}
+
+export function restoreMedia(token: string, id: string): Promise<MediaAsset> {
+  return request(`/api/media/${encodeURIComponent(id)}/restore`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
 }

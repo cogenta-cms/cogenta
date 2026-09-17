@@ -108,8 +108,45 @@ export function createMediaImageProcessor(
     },
 
     variantNames: (intrinsic) => variantWidthsFor(intrinsic).map((width) => variantName(width)),
+
+    // L39: a quarter turn, then a crop in fractions of the turned picture,
+    // in the original's format when the web can show it as it is.
+    edit: async (bytes, edit) => {
+      const metadata = await transformer.metadata(bytes)
+      const sideways = edit.rotate === 90 || edit.rotate === 270
+      const width = sideways ? metadata.height : metadata.width
+      const height = sideways ? metadata.width : metadata.height
+      const crop =
+        edit.crop === null
+          ? null
+          : (() => {
+              const left = Math.min(width - 1, Math.round(edit.crop.x * width))
+              const top = Math.min(height - 1, Math.round(edit.crop.y * height))
+              return {
+                left,
+                top,
+                width: Math.max(1, Math.min(width - left, Math.round(edit.crop.width * width))),
+                height: Math.max(1, Math.min(height - top, Math.round(edit.crop.height * height))),
+              }
+            })()
+      const format: ImageFormat = KEPT_FORMATS.has(metadata.format)
+        ? metadata.format
+        : VARIANT_FORMAT
+      const rendered = await transformer.transform(bytes, {
+        rotate: edit.rotate,
+        crop,
+        resize: null,
+        format,
+        // An edited original is re-read for every variant: kept close to lossless.
+        quality: Math.max(quality, 92),
+      })
+      return { bytes: rendered.bytes, contentType: rendered.contentType }
+    },
   }
 }
+
+/** The formats an edited image keeps; anything else is written as WebP. */
+const KEPT_FORMATS: ReadonlySet<ImageFormat> = new Set(['jpeg', 'png', 'webp'])
 
 /**
  * The processor for the driver this host can actually run, or `null`.

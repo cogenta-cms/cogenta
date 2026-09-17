@@ -183,6 +183,7 @@ export const ERROR_CODES = [
   // Media
   'MEDIA_NOT_FOUND',
   'MEDIA_INVALID',
+  'MEDIA_EDIT_UNAVAILABLE',
   'MEDIA_TYPE_REJECTED',
 
   // Media folders (fiche 46) — same materialised-path tree shape as

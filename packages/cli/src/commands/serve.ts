@@ -117,6 +117,7 @@ import {
   type NoticeRouter,
   type ObservabilityRouter,
   type OpsStatusRouter,
+  originalCopyKey,
   type PatternRouter,
   type PermissionLayer,
   type PromptTemplatesRouter,
@@ -4526,6 +4527,7 @@ async function serveMediaFile(
   id: string,
   req: IncomingMessage,
   res: ServerResponse,
+  wantsOriginal = false,
 ): Promise<void> {
   if (req.method !== 'GET') {
     res.writeHead(405, { allow: 'GET' }).end()
@@ -4542,9 +4544,17 @@ async function serveMediaFile(
     return
   }
 
-  const stream = await site.storage.get(asset.storageKey)
+  // `?original=1` (L39): the untouched original of a cropped or rotated
+  // image, which the admin's editor works from. The current file otherwise.
+  const copyKey = originalCopyKey(id)
+  const original = wantsOriginal && (await site.storage.exists(copyKey))
+  const key = original ? copyKey : asset.storageKey
+  const contentType = original
+    ? ((await site.storage.head(copyKey))?.contentType ?? asset.mimeType)
+    : asset.mimeType
+  const stream = await site.storage.get(key)
   res.writeHead(200, {
-    'content-type': asset.mimeType,
+    'content-type': contentType,
     'cache-control': 'private, max-age=3600',
   })
   stream.on('error', () => res.destroy())
@@ -5033,7 +5043,14 @@ export function createRequestListener(
 
       const fileMatch = /^\/api\/media\/([^/]+)\/file$/u.exec(url.pathname)
       if (fileMatch !== null) {
-        await serveMediaFile(site, actor, decodeURIComponent(fileMatch[1] ?? ''), req, res)
+        await serveMediaFile(
+          site,
+          actor,
+          decodeURIComponent(fileMatch[1] ?? ''),
+          req,
+          res,
+          url.searchParams.get('original') === '1',
+        )
         return
       }
 

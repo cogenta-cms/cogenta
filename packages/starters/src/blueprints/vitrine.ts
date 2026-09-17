@@ -11,6 +11,7 @@ import {
   validateCollectionSet,
   validateTaxonomySet,
 } from '@cogenta/schema'
+import { ICON_NAMES } from '@cogenta/theme-kit'
 import { coverArt, heroArt, logoArt, type Palette } from '../demo-art/compositions.js'
 import {
   type BlueprintContentPack,
@@ -105,7 +106,8 @@ export function vitrineSchema(copy: VitrineCopy): VitrineSchema {
       slug: f.slug({ from: 'name', unique: true }),
       description: f.text({ max: 400, multiline: true }),
       body: f.richText(),
-      icon: f.text({ max: 64, admin: { label: schema.fields.icon, help: schema.fields.iconHelp } }),
+      // A choice among the symbols every theme draws, not a name to remember (L36 audit).
+      icon: f.select({ options: [...ICON_NAMES], admin: { label: schema.fields.icon } }),
       coverImage: f.media({ accept: ['image'] }),
       ...SEO_FIELDS,
     },

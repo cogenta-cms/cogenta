@@ -21,8 +21,6 @@ export const VITRINE_COPY_FR: VitrineCopy = {
     },
     fields: {
       icon: 'Icône',
-      iconHelp:
-        'Un nom de symbole reconnu par le thème (par exemple « bolt », « shield », « chart »).',
       client: 'Client',
       location: 'Lieu',
       keyFigure: 'Chiffre clé',

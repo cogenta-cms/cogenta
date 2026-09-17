@@ -114,7 +114,6 @@ export interface VitrineCopy {
     readonly fields: Readonly<
       Record<
         | 'icon'
-        | 'iconHelp'
         | 'client'
         | 'location'
         | 'keyFigure'

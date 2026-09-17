@@ -1,6 +1,8 @@
 # L40 — Trier et filtrer par la date propre à une collection
 
-> Quatrième point de la série engagée le 2026-09-17. **Conçu, pas codé** : il touche le
+> Quatrième point de la série engagée le 2026-09-17. **Reporté par l'utilisateur le 2026-09-17**
+> (« option C ») : la conception et l'ADR restent prêtes pour le jour où on le reprend.
+> **Conçu, pas codé** : il touche le
 > contrat A (le tri du magasin) et l'interprétation du filtre d'un bloc du contrat B, donc
 > l'ADR ci-dessous doit être validée et insérée d'abord (`docs/03-decisions.md` est protégé).
 

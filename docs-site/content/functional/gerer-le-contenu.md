@@ -43,6 +43,24 @@ brouillon, pas de traduction séparée par langue, juste un libellé par langue
 sur le même terme (« Cuisine » et « Cooking » sont un seul concept, pas deux
 entrées liées).
 
+## Les pages d'auteur
+
+Chaque auteur a une page publique qui liste ce qu'il a publié, à l'adresse
+`/archive/author/<son-nom>` — la page « auteur » de WordPress. Le nom de l'auteur, sous un
+article, y mène.
+
+Une page d'auteur existe à deux conditions :
+
+- le compte a renseigné un **nom public** dans son profil (sa bio et son portrait
+  s'affichent alors en tête de la page) ;
+- il a **publié au moins un contenu daté** — un article, une actualité, tout ce qui a une
+  date de publication. Les pages du site (mentions légales, accueil) ne font de personne
+  un auteur.
+
+Sinon, l'adresse répond « page introuvable » et le nom reste un simple texte : on ne peut
+pas se servir de ces adresses pour deviner les comptes du site. Deux personnes du même nom
+ont chacune leur page. Les pages d'auteur figurent dans le plan du site (`/sitemap.xml`).
+
 ## Le workflow de relecture
 
 Optionnel, activé par collection. Quand il l'est, une entrée passe par

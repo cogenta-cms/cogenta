@@ -1,4 +1,4 @@
-import { type HtmlElement, h, type TermArchiveInput } from '@cogenta/theme-kit'
+import { type HtmlElement, h, renderArchiveIntro, type TermArchiveInput } from '@cogenta/theme-kit'
 
 /**
  * The taxonomy-term archive (contract D `theme@1.3`), set in the shop's own
@@ -48,6 +48,7 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
               ),
             ),
         h('h1', { class: 'ce-page-head__title' }, input.term.label),
+        renderArchiveIntro(input),
       ),
     ),
     input.children.length === 0

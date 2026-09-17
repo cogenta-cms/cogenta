@@ -692,7 +692,7 @@ defineAgent({
 > **Figé en `theme@1.3` le 2026-09-02, monté en `theme@1.4` le 2026-09-05 (L25 D2), puis en
 > `theme@1.5` le 2026-09-14 (L27, `PageEntryMeta.fields`), puis en `theme@1.6` le 2026-09-15
 > (L30, zones de widgets), puis en `theme@1.7` le 2026-09-16 (L32, blocs et widgets de
-> plugin, ADR-0036).**
+> plugin, ADR-0036), puis en `theme@1.8` le 2026-09-17 (L37, archives d'auteur).**
 > Ajouter une entrée à `ctx` est mineur ; en modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
@@ -1205,6 +1205,34 @@ la dégradation que le contrat B promet depuis L3. Côté widgets, aucun thème 
 écrire : `renderWidgetArea` rend le nœud du membre `plugin` comme n'importe quel autre corps.
 Un nœud n'est jamais une chaîne HTML : c'est un arbre theme-kit, sans échappatoire `raw()`.
 
+### Archives d'auteur — `PageEntryAuthor.href`, `TermArchiveInput.intro` — theme@1.8
+
+Ajouté en L37, **optionnel et additif**. Un auteur qui a un nom public et au moins un
+contenu daté publié a une page d'archive (`/archive/author/{slug}`), rendue par le même
+`renderTermArchive` que les archives de termes et de dates :
+
+```ts
+interface PageEntryAuthor {
+  readonly name: string
+  readonly href?: string          // la page de l'auteur, quand elle existe
+}
+
+interface TermArchiveInput {
+  /* … */
+  readonly intro?: TermArchiveIntro   // absent sur une archive de terme ou de date
+}
+
+interface TermArchiveIntro {
+  readonly text?: string              // la bio que le compte a renseignée
+  readonly image?: ImageSource        // son portrait, déjà résolu par l'hôte
+}
+```
+
+Un thème honore les deux par une ligne chacun : `authorNode(entry.author, attrs)` pour la
+signature (un lien quand `href` est présent, un `span` sinon) et `renderArchiveIntro(input)`
+sous le titre de l'archive (`@cogenta/theme-kit`). Un thème qui les ignore **n'est pas
+cassé** : la signature reste un texte, et l'archive d'un auteur s'affiche sans sa bio.
+
 ### Versionnement
 
 `theme@1.x`. Ajouter une entrée à `ctx` est mineur. En modifier une est majeur.
@@ -1228,6 +1256,11 @@ ne renseigne aucun des nouveaux champs produit un rendu octet pour octet identiq
 l'ignore et rend exactement comme avant. Motif : une fiche produit ou un plat de
 restaurant ne pouvait afficher ni son prix ni sa disponibilité (gap noté au rapport de
 clôture de L25). Test : `packages/cli/test/entry-field-values.test.ts`.
+
+**`theme@1.8` (L37, 2026-09-17)** — strictement additif : `PageEntryAuthor.href` et
+`TermArchiveInput.intro`, tous deux optionnels. Un thème `1.7` les ignore et rend
+exactement comme avant ; un hôte qui ne les renseigne pas produit le même rendu. Test :
+`packages/cli/test/serve-author-archive.test.ts`, `packages/theme-kit/test/author.test.ts`.
 
 ---
 

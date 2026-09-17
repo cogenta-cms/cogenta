@@ -322,6 +322,7 @@ import {
   type SearchDriver,
   SITE_SETTINGS_SITE_SCOPE,
   type SiteSettingsStore,
+  slugify,
   type TaxonomyDefinition,
   type TaxonomyStore,
   type TaxonomyTerm,
@@ -440,7 +441,11 @@ import {
   seoSiteFor,
 } from './seo.js'
 import { createSitePlanning } from './site-plan.js'
-import { renderTermArchivePage, type TermArchiveResolution } from './term-archive-page.js'
+import {
+  authorArchiveKicker,
+  renderTermArchivePage,
+  type TermArchiveResolution,
+} from './term-archive-page.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
 import { exportThemeZip, importThemeZip } from './theme-export.js'
 import {
@@ -1067,7 +1072,11 @@ interface Site {
     taxonomyName: string,
     termSlug: string,
   ) => Promise<TermArchiveResolution | null>
-  /** Every term archive URL worth listing in `/sitemap.xml` — terms with nothing published under them are left out. */
+  /** `/archive/author/{slug}` → the author and their archive (L37), or `null` when the slug names none. */
+  readonly resolveAuthorArchive: (slug: string) => Promise<AuthorArchiveResolution | null>
+  /** The link a byline carries, or `null` when its author has no archive page. */
+  readonly authorArchiveHref: (userId: string) => Promise<string | null>
+  /** Every term and author archive URL worth listing in `/sitemap.xml` — archives with nothing published are left out. */
   readonly termSitemapUrls: () => Promise<readonly SitemapUrl[]>
   /**
    * One taxonomy term, resolved to a label and a route — the same lookup
@@ -2412,6 +2421,117 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     return urls
   }
 
+  /**
+   * Author archives (L37), `/archive/author/{slug}` — WordPress's author page.
+   *
+   * An account has one only when it has **said who it is** (a display name,
+   * fiche 17) **and published something dated**: a routed collection that
+   * declares `publishedAt`, where a byline means something. Anything else is
+   * a 404, so the URL space cannot be used to list the site's accounts, and a
+   * site's legal pages never make an administrator an "author".
+   *
+   * Under `/archive/` rather than `/author/`: the magazine blueprint declares a
+   * taxonomy named `author`, whose term archives already answer `/author/…`.
+   */
+  const authorCollections = collections.filter(
+    (collection) =>
+      collection.routing !== undefined && collection.fields['publishedAt'] !== undefined,
+  )
+
+  /** Slugs of every account with a public name, oldest account first keeping the plain one. */
+  const authorSlugs = async (): Promise<ReadonlyMap<string, string>> => {
+    const users = (await auth.users.list())
+      .filter((user) => user.displayName !== null && user.displayName.trim() !== '')
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    const taken = new Set<string>()
+    const slugs = new Map<string, string>()
+    for (const user of users) {
+      const base = slugify(user.displayName ?? '') || 'author'
+      const slug = taken.has(base) ? `${base}-${user.id.slice(-6).toLowerCase()}` : base
+      taken.add(slug)
+      slugs.set(user.id, slug)
+    }
+    return slugs
+  }
+
+  const entriesByAuthor = async (
+    userId: string,
+  ): Promise<readonly { readonly collection: string; readonly id: string }[]> => {
+    const dialect = db.dialect
+    const idColumn = identifier('id', dialect)
+    const createdAtColumn = identifier('created_at', dialect)
+    const found: { collection: string; id: string; createdAt: string }[] = []
+    for (const collection of authorCollections) {
+      const rows = await db.query<{ id: unknown; created_at: unknown }>(
+        sql`select ${idColumn}, ${createdAtColumn}
+            from ${identifier(entriesTable(collection.name), dialect)}
+            where ${identifier('created_by', dialect)} = ${userId}
+              and ${identifier('deleted_at', dialect)} is null
+              and ${identifier('status', dialect)} = ${'published'}`,
+      )
+      for (const row of rows.rows) {
+        found.push({
+          collection: collection.name,
+          id: String(row.id),
+          createdAt: String(row.created_at),
+        })
+      }
+    }
+    found.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    return found.slice(0, ARCHIVE_SCAN_CAP).map(({ collection, id }) => ({ collection, id }))
+  }
+
+  const authorArchivePath = (slug: string): string => `/archive/author/${encodeURIComponent(slug)}`
+
+  /** The author's archive, or `null` when the slug names no account that has one. */
+  const resolveAuthorArchive = async (slug: string): Promise<AuthorArchiveResolution | null> => {
+    if (authorCollections.length === 0) return null
+    for (const [userId, candidate] of await authorSlugs()) {
+      if (candidate !== slug) continue
+      const user = await auth.users.byId(userId)
+      if (user === null || user.displayName === null) return null
+      const entries = await entriesByAuthor(userId)
+      if (entries.length === 0) return null
+      return {
+        userId,
+        name: user.displayName,
+        bio: user.bio === null || user.bio.trim() === '' ? null : user.bio.trim(),
+        avatarMediaId: user.avatarMediaId,
+        resolution: {
+          taxonomyName: 'author',
+          basePath: authorArchivePath(slug),
+          term: { slug: authorArchivePath(slug), label: user.displayName },
+          ancestors: [],
+          children: [],
+          entries,
+        },
+      }
+    }
+    return null
+  }
+
+  /** The byline's link: the archive path when this account has one, `null` otherwise. */
+  const authorArchiveHref = async (userId: string): Promise<string | null> => {
+    if (authorCollections.length === 0) return null
+    const slug = (await authorSlugs()).get(userId)
+    if (slug === undefined) return null
+    return (await entriesByAuthor(userId)).length === 0 ? null : authorArchivePath(slug)
+  }
+
+  const authorSitemapUrls = async (): Promise<readonly SitemapUrl[]> => {
+    if (authorCollections.length === 0) return []
+    const urls: SitemapUrl[] = []
+    for (const [userId, slug] of await authorSlugs()) {
+      if ((await entriesByAuthor(userId)).length === 0) continue
+      urls.push({
+        loc: new URL(authorArchivePath(slug), site.url).toString(),
+        changefreq: 'weekly',
+        priority: 0.4,
+      })
+    }
+    return urls
+  }
+
   // Widget areas (L30): one fixed table, and the stored widgets kept for a
   // few seconds so a busy page does not read them on every request. An
   // admin write drops the copy at once; another replica sees it within the
@@ -3082,8 +3202,10 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           },
         }),
     resolveTermArchive,
+    resolveAuthorArchive,
+    authorArchiveHref,
     resolveTaxonomyTerm: resolveMenuTerm,
-    termSitemapUrls,
+    termSitemapUrls: async () => [...(await termSitemapUrls()), ...(await authorSitemapUrls())],
     security: options.security,
     health: options.health,
     tickScheduledPublishing: () => scheduledPublishQueue.tick(),
@@ -3554,9 +3676,20 @@ async function chromeExtrasForSite(site: Site, locale: string): Promise<ChromeEx
 async function authorForSite(
   site: Site,
   userId: string,
-): Promise<{ readonly name: string } | null> {
+): Promise<{ readonly name: string; readonly href?: string } | null> {
   const user = await site.auth.users.byId(userId)
-  return user === null || user.displayName === null ? null : { name: user.displayName }
+  if (user === null || user.displayName === null) return null
+  const href = await site.authorArchiveHref(userId)
+  return href === null ? { name: user.displayName } : { name: user.displayName, href }
+}
+
+/** What `resolveAuthorArchive` found: the archive to render and what the page says about its author. */
+export interface AuthorArchiveResolution {
+  readonly userId: string
+  readonly name: string
+  readonly bio: string | null
+  readonly avatarMediaId: string | null
+  readonly resolution: TermArchiveResolution
 }
 
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
@@ -7226,6 +7359,74 @@ export function createRequestListener(
                 res.end(archive)
                 return
               }
+            }
+          }
+        }
+
+        // Author archives (L37), `/archive/author/{slug}`: what a byline links
+        // to. Tried before date archives — a slug is never a four-digit year
+        // for a real name, and an unknown slug falls through to them.
+        {
+          const authorMatch = /^\/archive\/author\/([^/]+)$/u.exec(url.pathname)
+          const found =
+            authorMatch === null
+              ? null
+              : await site.resolveAuthorArchive(decodeURIComponent(authorMatch[1] as string))
+          if (found !== null) {
+            // An author none of whose entries this visitor may read has no
+            // page for them: the list would be empty and the name a leak.
+            let visible = false
+            for (const reference of found.resolution.entries) {
+              if ((await site.gateway.read(reference.collection, reference.id, context)) !== null) {
+                visible = true
+                break
+              }
+            }
+            const requested = Number.parseInt(url.searchParams.get('page') ?? '1', 10)
+            const archive = !visible
+              ? null
+              : await renderTermArchivePage(
+                  {
+                    ...found.resolution,
+                    taxonomyName: authorArchiveKicker(site.site.defaultLocale),
+                    intro: {
+                      ...(found.bio === null ? {} : { text: found.bio }),
+                      ...(found.avatarMediaId === null
+                        ? {}
+                        : { imageMediaId: found.avatarMediaId }),
+                    },
+                  },
+                  Number.isFinite(requested) ? requested : 0,
+                  {
+                    collections: site.collections,
+                    gateway: site.gateway,
+                    site: site.site,
+                    styles: await site.resolveStyles(),
+                    menus: { menuRouter: site.menuRouter },
+                    branding: () => brandingForSite(site),
+                    activeTheme: () => activeThemeForSite(site),
+                    seo: () => readSeoRenderDefaults(site.siteSettingsStore),
+                    identity: () => identityForSite(site),
+                    loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
+                    chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
+                    widgets: await widgetsForSite(
+                      site,
+                      {
+                        context: {
+                          path: url.pathname,
+                          kind: 'other',
+                          locale: site.site.defaultLocale,
+                        },
+                      },
+                      context,
+                    ),
+                  },
+                  context,
+                )
+            if (archive !== null) {
+              res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+              res.end(archive)
+              return
             }
           }
         }

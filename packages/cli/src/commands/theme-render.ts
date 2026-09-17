@@ -379,7 +379,9 @@ export interface ThemeRenderOptions {
    * answer for a caller with no user store wired at all (a bare test
    * harness, `renderThemeGalleryPreview`'s synthetic page).
    */
-  readonly authorFor?: (userId: string) => Promise<{ readonly name: string } | null>
+  readonly authorFor?: (
+    userId: string,
+  ) => Promise<{ readonly name: string; readonly href?: string } | null>
   /**
    * One taxonomy term, resolved to a label and a route — the same shape
    * `resolveMenuTerm` (`serve.ts`) already answers for a menu item pointing

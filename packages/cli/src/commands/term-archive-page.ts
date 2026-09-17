@@ -1,5 +1,5 @@
 import type { AccessContext, ContentGateway } from '@cogenta/api'
-import type { MediaAsset } from '@cogenta/render'
+import { describeMedia, type MediaAsset } from '@cogenta/render'
 import { buildPath, type CollectionDefinition, type ContentEntry } from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
 import type { WidgetAreas } from '@cogenta/theme-kit'
@@ -9,12 +9,14 @@ import {
   serialize,
   type TermArchiveEntry,
   type TermArchiveInput,
+  type TermArchiveIntro,
   type TermArchiveLabels,
 } from '@cogenta/theme-kit'
 import type { SeoRenderDefaults } from './seo.js'
 import { resolveTheme, type ThemeModule } from './theme-registry.js'
 import type { BrandingSettings, ChromeExtras } from './theme-render.js'
 import {
+  DEFAULT_IMAGE_ENDPOINT,
   entryTitle,
   type PageChromeMenus,
   renderPageChrome,
@@ -64,6 +66,13 @@ export interface TermArchiveResolution {
    * the query's).
    */
   readonly entries: readonly { readonly collection: string; readonly id: string }[]
+  /** An author archive's portrait and bio (L37), resolved to an image here. Absent on a term or date archive. */
+  readonly intro?: { readonly text?: string; readonly imageMediaId?: string }
+}
+
+/** The kicker over an author archive's title, in the page's language. */
+export function authorArchiveKicker(locale: string): string {
+  return locale.toLowerCase().startsWith('fr') ? 'Auteur' : 'Author'
 }
 
 export interface TermArchivePageOptions {
@@ -218,6 +227,36 @@ function headFor(input: TermArchiveInput, options: TermArchivePageOptions, page:
     .join('\n')
 }
 
+async function introFor(
+  resolution: TermArchiveResolution,
+  options: TermArchivePageOptions,
+): Promise<{ readonly intro?: TermArchiveIntro }> {
+  const intro = resolution.intro
+  if (intro === undefined) return {}
+  let image: TermArchiveIntro['image']
+  if (intro.imageMediaId !== undefined && options.loadMedia !== undefined) {
+    const asset = (await options.loadMedia([intro.imageMediaId])).get(intro.imageMediaId)
+    if (asset !== undefined && asset.kind === 'image') {
+      image = describeMedia(
+        asset,
+        {},
+        {
+          endpoint: DEFAULT_IMAGE_ENDPOINT,
+          mediaEndpoint: DEFAULT_IMAGE_ENDPOINT,
+        },
+      )
+    }
+  }
+  const text = intro.text
+  if (text === undefined && image === undefined) return {}
+  return {
+    intro: {
+      ...(text === undefined ? {} : { text }),
+      ...(image === undefined ? {} : { image }),
+    },
+  }
+}
+
 /**
  * Renders the archive page, or `null` when the requested page number is past
  * the end — which the caller turns into the same 404 any other unresolvable
@@ -280,6 +319,7 @@ export async function renderTermArchivePage(
       previousHref: page > 1 ? hrefFor(resolution.term.slug, page - 1) : null,
       nextHref: page < totalPages ? hrefFor(resolution.term.slug, page + 1) : null,
     },
+    ...(await introFor(resolution, options)),
     locale,
     labels: archiveLabels(locale),
   }

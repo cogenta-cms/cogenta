@@ -18,6 +18,10 @@
  * list with that theme's own chrome around it.
  */
 
+import type { ImageSource } from './contract.js'
+import { type HtmlElement, h } from './html.js'
+import { renderImageSource } from './media.js'
+
 export interface TermArchiveLink {
   readonly label: string
   readonly href: string
@@ -56,6 +60,12 @@ export interface TermArchiveInput {
     readonly previousHref: string | null
     readonly nextHref: string | null
   }
+  /**
+   * `theme@1.8`: what an author's archive says about its author — their bio and
+   * portrait, both volunteered on their profile. Absent on a term or date
+   * archive, and on an author who wrote neither. `renderArchiveIntro` draws it.
+   */
+  readonly intro?: TermArchiveIntro
   /** Locale of the page, for a theme that formats dates. */
   readonly locale: string
   /**
@@ -71,6 +81,12 @@ export interface TermArchiveInput {
   readonly labels: TermArchiveLabels
 }
 
+export interface TermArchiveIntro {
+  readonly text?: string
+  /** Already resolved by the host; its `alt` is the author's name. */
+  readonly image?: ImageSource
+}
+
 export interface TermArchiveLabels {
   /** Shown instead of the list when the term classifies nothing published. */
   readonly empty: string
@@ -82,4 +98,22 @@ export interface TermArchiveLabels {
   readonly pagination: string
   /** `aria-label` of the sub-term list. */
   readonly subterms: string
+}
+
+/**
+ * The intro of an archive — an author's portrait and bio — or `null` when
+ * there is none, so a theme adds one line under its title and a term archive
+ * renders exactly as before.
+ */
+export function renderArchiveIntro(input: TermArchiveInput): HtmlElement | null {
+  const intro = input.intro
+  if (intro === undefined || (intro.text === undefined && intro.image === undefined)) return null
+  return h(
+    'div',
+    { class: 'cg-archive__intro' },
+    intro.image === undefined
+      ? null
+      : renderImageSource(intro.image, { className: 'cg-archive__portrait', sizes: '6rem' }),
+    intro.text === undefined ? null : h('p', { class: 'cg-archive__bio' }, intro.text),
+  )
 }

@@ -1,4 +1,5 @@
 import {
+  authorNode,
   type HtmlElement,
   h,
   type PageContent,
@@ -152,7 +153,7 @@ function pageMeta(entry: PageEntryMeta, ctx: RenderContext): HtmlElement | null 
   const parts: HtmlElement[] = [
     h('time', { datetime: entry.publishedAt }, formatDate(entry.publishedAt, ctx.locale)),
   ]
-  if (entry.author !== undefined) parts.push(h('span', {}, entry.author.name))
+  if (entry.author !== undefined) parts.push(authorNode(entry.author))
   if (entry.readingMinutes !== undefined) {
     parts.push(h('span', {}, ctx.t('entry.readingTime', { minutes: entry.readingMinutes })))
   }

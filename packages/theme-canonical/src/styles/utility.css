@@ -294,3 +294,23 @@
 .cg-comment__form p {
   margin-block-end: var(--cg-s5);
 }
+
+/* An author's archive (theme@1.8): their portrait and bio under the title. */
+.cg-archive__intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  max-inline-size: 42rem;
+  margin-block: 0 2rem;
+}
+
+.cg-archive__portrait {
+  flex: none;
+  inline-size: 5rem;
+  block-size: 5rem;
+  object-fit: cover;
+}
+
+.cg-archive__bio {
+  margin: 0;
+}

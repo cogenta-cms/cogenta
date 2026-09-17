@@ -1,4 +1,5 @@
 import {
+  authorNode,
   type HtmlElement,
   h,
   type PageContent,
@@ -68,7 +69,11 @@ export function renderPageHead(page: PageContent, ctx: RenderContext): HtmlEleme
       entry?.excerpt === undefined ? null : h('p', { class: 'cs-page-head__lead' }, entry.excerpt),
       entry?.author === undefined
         ? null
-        : h('p', { class: 'cs-page-head__author' }, entry.author.name),
+        : h(
+            'p',
+            { class: 'cs-page-head__author' },
+            entry.author.href === undefined ? entry.author.name : authorNode(entry.author),
+          ),
       entry?.image === undefined
         ? null
         : h(

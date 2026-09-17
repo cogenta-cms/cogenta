@@ -15,6 +15,22 @@ import { type PageContent, pageHasOwnHeading } from './page.js'
 
 export interface PageEntryAuthor {
   readonly name: string
+  /**
+   * `theme@1.8`: the author's archive page (`/archive/author/{slug}`), when
+   * they have one — a public name and at least one published dated entry.
+   * Absent otherwise: a name with no page behind it is not a link.
+   */
+  readonly href?: string
+}
+
+/** The byline as a link when the author has a page, as text otherwise — one rule for every theme. */
+export function authorNode(
+  author: PageEntryAuthor,
+  attributes: Readonly<Record<string, string>> = {},
+): HtmlElement {
+  return author.href === undefined
+    ? h('span', attributes, author.name)
+    : h('a', { ...attributes, href: author.href, rel: 'author' }, author.name)
 }
 
 /**
@@ -87,7 +103,7 @@ function renderMeta(entry: PageEntryMeta, ctx: RenderContext): HtmlElement | nul
     )
   }
   if (entry.author !== undefined) {
-    parts.push(h('span', { class: 'cg-entry-header__author' }, entry.author.name))
+    parts.push(authorNode(entry.author, { class: 'cg-entry-header__author' }))
   }
   if (entry.readingMinutes !== undefined) {
     parts.push(

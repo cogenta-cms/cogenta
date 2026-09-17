@@ -1,5 +1,6 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
 import {
+  authorNode,
   type HtmlElement,
   h,
   type PageContent,
@@ -110,7 +111,15 @@ function renderByline(entry: PageEntryMeta, terms: ArticleTerms): HtmlElement | 
     )
   }
   if (entry.author === undefined) return null
-  return h('ul', { class: 'cg-byline' }, h('li', { class: 'cg-byline__name' }, entry.author.name))
+  return h(
+    'ul',
+    { class: 'cg-byline' },
+    h(
+      'li',
+      { class: 'cg-byline__name' },
+      entry.author.href === undefined ? entry.author.name : authorNode(entry.author),
+    ),
+  )
 }
 
 function renderMeta(

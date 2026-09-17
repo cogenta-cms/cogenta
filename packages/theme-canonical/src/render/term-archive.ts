@@ -1,4 +1,4 @@
-import { type HtmlElement, h, type TermArchiveInput } from '@cogenta/theme-kit'
+import { type HtmlElement, h, renderArchiveIntro, type TermArchiveInput } from '@cogenta/theme-kit'
 import { arrowWords } from './arrow-link.js'
 import { formatEntryDate } from './dates.js'
 
@@ -58,6 +58,7 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
             ),
           ),
       h('h1', { class: 'cg-page__title' }, input.term.label),
+      renderArchiveIntro(input),
       input.children.length === 0
         ? null
         : h(

@@ -1,4 +1,5 @@
 import {
+  authorNode,
   type HtmlElement,
   h,
   type PageContent,
@@ -67,7 +68,7 @@ function renderMeta(entry: PageEntryMeta, ctx: RenderContext): HtmlElement | nul
         : h('time', { class: 'cg-article-head__date', datetime: entry.publishedAt }, date),
       entry.author === undefined
         ? null
-        : h('span', { class: 'cg-article-head__author' }, entry.author.name),
+        : authorNode(entry.author, { class: 'cg-article-head__author' }),
       minutes === undefined
         ? null
         : h(

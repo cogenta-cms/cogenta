@@ -1,6 +1,7 @@
 import {
   type HtmlElement,
   h,
+  renderArchiveIntro,
   type TermArchiveEntry,
   type TermArchiveInput,
 } from '@cogenta/theme-kit'
@@ -79,6 +80,7 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
             ),
         h('p', { class: 'cg-archive__kicker' }, taxonomyLabel(input.taxonomyName, input.locale)),
         h('h1', { class: 'cg-archive__title' }, input.term.label),
+        renderArchiveIntro(input),
         input.children.length === 0
           ? null
           : h(

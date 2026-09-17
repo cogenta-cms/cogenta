@@ -1,5 +1,39 @@
 # @cogenta/cli
 
+## 0.16.1
+
+### Patch Changes
+
+- Comments, public forms and search speak the site's language
+  
+  The comment section and its form were English on every site: `renderCommentsSection`
+  now reads every word from `THEME_STRINGS` (French and English), writes dates in
+  the page's language, accepts the page's own translator (`t`) and shows what
+  became of a comment just sent (`notice`: published, awaiting review, or why it
+  failed). `commentNoticeFor` reads that from the redirect; a comment held as spam
+  reads as awaiting review, and a tripped honeypot only as a failure.
+  
+  `@cogenta/comments` sends a no-JavaScript submission back to `#cg-comments`,
+  where the notice is. `cogenta serve` passes the notice and the page translator,
+  and writes `/forms/{name}` and `/search` in the site's language: buttons, field
+  errors, and refusals chosen by error code rather than the API's English message.
+  Every theme styles the notice as it styles a form's message.
+- Updated dependencies [`b5eef37`]:
+  - @cogenta/theme-kit@0.6.0
+  - @cogenta/comments@0.2.7
+  - @cogenta/theme-canonical@1.3.5
+  - @cogenta/theme-association@0.5.5
+  - @cogenta/theme-blog@0.5.5
+  - @cogenta/theme-docs@0.5.5
+  - @cogenta/theme-ecommerce@1.3.5
+  - @cogenta/theme-entreprise@1.4.1
+  - @cogenta/theme-magazine@1.3.5
+  - @cogenta/theme-portfolio@1.3.5
+  - @cogenta/theme-restaurant@0.5.5
+  - @cogenta/theme-saas@0.5.5
+  - @cogenta/starters@0.2.1
+  - @cogenta/import@0.2.12
+
 ## 0.16.0
 
 ### Minor Changes

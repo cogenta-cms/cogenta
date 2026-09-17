@@ -1,5 +1,15 @@
 # create-cogenta
 
+## 0.7.1
+
+### Patch Changes
+
+- Updated dependencies [`b5eef37`]:
+  - @cogenta/comments@0.2.7
+  - @cogenta/cli@0.16.1
+  - @cogenta/theme-canonical@1.3.5
+  - @cogenta/starters@0.2.1
+
 ## 0.7.0
 
 ### Minor Changes

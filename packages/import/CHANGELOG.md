@@ -1,5 +1,12 @@
 # @cogenta/import
 
+## 0.2.12
+
+### Patch Changes
+
+- Updated dependencies [`b5eef37`]:
+  - @cogenta/comments@0.2.7
+
 ## 0.2.11
 
 ### Patch Changes

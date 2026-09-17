@@ -1,5 +1,41 @@
 # @cogenta/theme-saas
 
+## 0.5.6
+
+### Patch Changes
+
+- Author archives: a byline now leads to its author's page
+  
+  `cogenta serve` answers `/archive/author/{slug}` with what an author published, their bio
+  and portrait on top, through the same archive rendering as term and date archives. Only an
+  account with a public name and at least one published dated entry has one; any other slug
+  is a 404, so the addresses never list a site's accounts. Author archives are in the sitemap.
+  
+  Contract D `theme@1.8`, additive: `PageEntryAuthor.href` and `TermArchiveInput.intro`, with
+  `authorNode` and `renderArchiveIntro` in `@cogenta/theme-kit`. Every theme links its byline
+  and shows the intro; a theme that ignores both renders exactly as before.
+
+- Embed previews: an embedded video shows its title and thumbnail, without calling the provider for the visitor
+  
+  An embed address is resolved through the provider's fixed oEmbed endpoint (YouTube, Vimeo,
+  Dailymotion, Spotify, SoundCloud, Bluesky) — never an address a user supplied, redirects
+  refused, thumbnails only from the provider's image hosts, as an image, under 2 MB. What it
+  says is cached (`@cogenta/schema`'s `cogenta_embed_previews` table), and its thumbnail is
+  copied into the site's storage and served at `/_cogenta/embeds/{hash}`.
+  
+  `@cogenta/api` adds `resolveEmbed`, `createEmbedPreviewService` and `POST /api/embeds/resolve`
+  — for accounts that can update a collection, 30 a minute each — and `@cogenta/core` the
+  `EMBED_URL_INVALID` and `EMBED_RATE_LIMITED` codes. A thumbnail is stored under the hash of its
+  bytes, so variants of one address share one file. `cogenta serve` loads
+  the page's previews before rendering and resolves missing ones in the background — a render
+  never waits on the network. Contract D `theme@1.9`, additive: `RenderContext.embedPreview`,
+  with `embedFrameTitle` and `renderEmbedPreview` in `@cogenta/theme-kit`; every theme names its
+  player by the title and shows the preview on its consent card. Contract B is unchanged.
+- Updated dependencies [`da25802`, `4747d81`, `2a34b50`]:
+  - @cogenta/theme-kit@0.7.0
+  - @cogenta/render@0.4.0
+  - @cogenta/blocks@1.1.5
+
 ## 0.5.5
 
 ### Patch Changes

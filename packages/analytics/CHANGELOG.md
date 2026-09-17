@@ -1,5 +1,12 @@
 # @cogenta/analytics
 
+## 0.3.7
+
+### Patch Changes
+
+- Updated dependencies [`4747d81`, `2a34b50`]:
+  - @cogenta/core@0.12.0
+
 ## 0.3.6
 
 ### Patch Changes

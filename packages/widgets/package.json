@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/widgets",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Widget areas for Cogenta sites: the widget vocabulary, its validation, visibility rules and storage.",
   "license": "MPL-2.0",
   "type": "module",

@@ -1,5 +1,14 @@
 # @cogenta/widgets
 
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies [`4747d81`, `2a34b50`]:
+  - @cogenta/core@0.12.0
+  - @cogenta/schema@0.9.0
+  - @cogenta/blocks@1.1.5
+
 ## 0.2.4
 
 ### Patch Changes

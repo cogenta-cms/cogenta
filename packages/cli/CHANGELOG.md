@@ -1,5 +1,88 @@
 # @cogenta/cli
 
+## 0.17.0
+
+### Minor Changes
+
+- Author archives: a byline now leads to its author's page
+  
+  `cogenta serve` answers `/archive/author/{slug}` with what an author published, their bio
+  and portrait on top, through the same archive rendering as term and date archives. Only an
+  account with a public name and at least one published dated entry has one; any other slug
+  is a 404, so the addresses never list a site's accounts. Author archives are in the sitemap.
+  
+  Contract D `theme@1.8`, additive: `PageEntryAuthor.href` and `TermArchiveInput.intro`, with
+  `authorNode` and `renderArchiveIntro` in `@cogenta/theme-kit`. Every theme links its byline
+  and shows the intro; a theme that ignores both renders exactly as before.
+
+- Embed previews: an embedded video shows its title and thumbnail, without calling the provider for the visitor
+  
+  An embed address is resolved through the provider's fixed oEmbed endpoint (YouTube, Vimeo,
+  Dailymotion, Spotify, SoundCloud, Bluesky) — never an address a user supplied, redirects
+  refused, thumbnails only from the provider's image hosts, as an image, under 2 MB. What it
+  says is cached (`@cogenta/schema`'s `cogenta_embed_previews` table), and its thumbnail is
+  copied into the site's storage and served at `/_cogenta/embeds/{hash}`.
+  
+  `@cogenta/api` adds `resolveEmbed`, `createEmbedPreviewService` and `POST /api/embeds/resolve`
+  — for accounts that can update a collection, 30 a minute each — and `@cogenta/core` the
+  `EMBED_URL_INVALID` and `EMBED_RATE_LIMITED` codes. A thumbnail is stored under the hash of its
+  bytes, so variants of one address share one file. `cogenta serve` loads
+  the page's previews before rendering and resolves missing ones in the background — a render
+  never waits on the network. Contract D `theme@1.9`, additive: `RenderContext.embedPreview`,
+  with `embedFrameTitle` and `renderEmbedPreview` in `@cogenta/theme-kit`; every theme names its
+  player by the title and shows the preview on its consent card. Contract B is unchanged.
+
+- Crop and rotate an image in the media library, without losing its original
+  
+  `@cogenta/render`'s `TransformOperation` gains `rotate` (quarter turns, applied before the
+  crop), on both the native and the WebAssembly image drivers. `@cogenta/api` adds
+  `POST /api/media/{id}/edit` and `POST /api/media/{id}/restore`: the first edit keeps a copy
+  of the untouched original, every edit starts from it again, and restoring puts it back; the
+  focal point follows. A single-asset read says whether the image is `edited`, and
+  `GET /api/media/{id}/file?original=1` serves the original. `MediaImageProcessor` gains an
+  optional `edit`, implemented by `cogenta serve`; without it the route answers the new
+  `MEDIA_EDIT_UNAVAILABLE` (501).
+  
+  Fixed on the way: replacing an image twice with the same file deleted it (the second write
+  landed on the key it then removed as "the old one"), and replacing it with one of the same
+  size deleted the variants it had just written.
+
+### Patch Changes
+
+- Updated dependencies [`da25802`, `4747d81`, `2a34b50`]:
+  - @cogenta/theme-kit@0.7.0
+  - @cogenta/theme-canonical@1.3.6
+  - @cogenta/theme-association@0.5.6
+  - @cogenta/theme-blog@0.5.6
+  - @cogenta/theme-docs@0.5.6
+  - @cogenta/theme-ecommerce@1.3.6
+  - @cogenta/theme-entreprise@1.4.2
+  - @cogenta/theme-magazine@1.3.6
+  - @cogenta/theme-portfolio@1.3.6
+  - @cogenta/theme-restaurant@0.5.6
+  - @cogenta/theme-saas@0.5.6
+  - @cogenta/core@0.12.0
+  - @cogenta/schema@0.9.0
+  - @cogenta/api@2.9.0
+  - @cogenta/render@0.4.0
+  - @cogenta/starters@0.2.2
+  - @cogenta/agents@0.8.6
+  - @cogenta/agents-builtin@0.6.6
+  - @cogenta/analytics@0.3.7
+  - @cogenta/auth@0.5.10
+  - @cogenta/blocks@1.1.5
+  - @cogenta/channels@0.3.13
+  - @cogenta/comments@0.2.8
+  - @cogenta/commerce@0.5.8
+  - @cogenta/export@0.2.11
+  - @cogenta/forms@0.2.13
+  - @cogenta/import@0.2.13
+  - @cogenta/mcp@0.3.12
+  - @cogenta/observability@0.2.7
+  - @cogenta/plugins@0.8.5
+  - @cogenta/seo@0.3.11
+  - @cogenta/widgets@0.2.5
+
 ## 0.16.1
 
 ### Patch Changes

@@ -1,5 +1,41 @@
 # @cogenta/core
 
+## 0.12.0
+
+### Minor Changes
+
+- Embed previews: an embedded video shows its title and thumbnail, without calling the provider for the visitor
+  
+  An embed address is resolved through the provider's fixed oEmbed endpoint (YouTube, Vimeo,
+  Dailymotion, Spotify, SoundCloud, Bluesky) — never an address a user supplied, redirects
+  refused, thumbnails only from the provider's image hosts, as an image, under 2 MB. What it
+  says is cached (`@cogenta/schema`'s `cogenta_embed_previews` table), and its thumbnail is
+  copied into the site's storage and served at `/_cogenta/embeds/{hash}`.
+  
+  `@cogenta/api` adds `resolveEmbed`, `createEmbedPreviewService` and `POST /api/embeds/resolve`
+  — for accounts that can update a collection, 30 a minute each — and `@cogenta/core` the
+  `EMBED_URL_INVALID` and `EMBED_RATE_LIMITED` codes. A thumbnail is stored under the hash of its
+  bytes, so variants of one address share one file. `cogenta serve` loads
+  the page's previews before rendering and resolves missing ones in the background — a render
+  never waits on the network. Contract D `theme@1.9`, additive: `RenderContext.embedPreview`,
+  with `embedFrameTitle` and `renderEmbedPreview` in `@cogenta/theme-kit`; every theme names its
+  player by the title and shows the preview on its consent card. Contract B is unchanged.
+
+- Crop and rotate an image in the media library, without losing its original
+  
+  `@cogenta/render`'s `TransformOperation` gains `rotate` (quarter turns, applied before the
+  crop), on both the native and the WebAssembly image drivers. `@cogenta/api` adds
+  `POST /api/media/{id}/edit` and `POST /api/media/{id}/restore`: the first edit keeps a copy
+  of the untouched original, every edit starts from it again, and restoring puts it back; the
+  focal point follows. A single-asset read says whether the image is `edited`, and
+  `GET /api/media/{id}/file?original=1` serves the original. `MediaImageProcessor` gains an
+  optional `edit`, implemented by `cogenta serve`; without it the route answers the new
+  `MEDIA_EDIT_UNAVAILABLE` (501).
+  
+  Fixed on the way: replacing an image twice with the same file deleted it (the second write
+  landed on the key it then removed as "the old one"), and replacing it with one of the same
+  size deleted the variants it had just written.
+
 ## 0.11.0
 
 ### Minor Changes

@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-entreprise",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "A management consultancy theme for Cogenta: an editorial twelve-column grid, Newsreader and Hanken Grotesk, hairlines instead of boxes, a designed dark mode, and zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

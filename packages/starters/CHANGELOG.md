@@ -1,5 +1,18 @@
 # @cogenta/starters
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [`da25802`, `4747d81`, `2a34b50`]:
+  - @cogenta/theme-kit@0.7.0
+  - @cogenta/core@0.12.0
+  - @cogenta/schema@0.9.0
+  - @cogenta/api@2.9.0
+  - @cogenta/render@0.4.0
+  - @cogenta/blocks@1.1.5
+  - @cogenta/widgets@0.2.5
+
 ## 0.2.1
 
 ### Patch Changes

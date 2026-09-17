@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/observability",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "OpenTelemetry request tracing, structured-log capture and a local recent-events buffer for the admin's Exploitation screen.",
   "license": "MPL-2.0",
   "type": "module",

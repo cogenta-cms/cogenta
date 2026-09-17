@@ -1,5 +1,16 @@
 # @cogenta/fleet
 
+## 0.1.19
+
+### Patch Changes
+
+- Updated dependencies [`4747d81`, `2a34b50`]:
+  - @cogenta/core@0.12.0
+  - @cogenta/agents-builtin@0.6.6
+  - @cogenta/auth@0.5.10
+  - @cogenta/channels@0.3.13
+  - @cogenta/plugins@0.8.5
+
 ## 0.1.18
 
 ### Patch Changes

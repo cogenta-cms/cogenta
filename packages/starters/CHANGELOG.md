@@ -1,5 +1,62 @@
 # @cogenta/starters
 
+## 0.2.0
+
+### Minor Changes
+
+- The showcase blueprint is now an engineering company, written in French and in English
+  
+  `vitrine` presents a fictional company that designs sensors, a monitoring
+  platform and field services for electricity, water and rail networks. It seeds
+  six solutions, four case studies filed by sector, three testimonials, four job
+  openings, four articles (schedulable, so they appear in the editorial calendar)
+  and ten pages, including legal notice, privacy policy and photo credits.
+  
+  The copy exists in French and in English and follows the site's default
+  locale, addresses included (`/references/…` in French, `/case-studies/…` in
+  English): `@cogenta/starters` gains `contentPackFor(id, locale)`, which
+  `create-cogenta` now uses when it scaffolds and when it resets a playground.
+  
+  Every photograph is a real one from Wikimedia Commons under CC0, the public
+  domain or a Creative Commons Attribution licence, credited on the site's own
+  credits page; the previous generated images are removed. Client logos and the
+  product screenshots are drawn for the blueprint.
+  
+  Breaking for code importing the blueprint's internals: the `VITRINE_*`
+  constants and the `service` collection are replaced by `vitrineSchema(copy)`,
+  `buildVitrineDemoPages(copy, context)`, `vitrineMenus`, `vitrineWidgets`,
+  `vitrineSiteSettings`, `vitrineMediaSpecs` and `createVitrineContentPack`.
+
+### Patch Changes
+
+- theme-entreprise takes the register of an engineering company
+  
+  Visible change for every site using this theme: Geist replaces Newsreader and
+  Hanken Grotesk, Geist Mono sets labels, indices and figures, the palette moves
+  to a cool grey paper, a blue-black ink and a signal green. A hero with a
+  photograph is now full bleed, its title over a flat ink veil (no gradient);
+  `stats` becomes an ink band; a `mediaFigure` set wide spans the grid with its
+  caption beneath; a list entry that declares `keyFigure` (and `keyFigureLabel`)
+  shows it under its summary. No contract changes (`theme@1.7`), no markup
+  removed.
+  
+  `create-cogenta` closes comments on the collections a blueprint names in the
+  new `commentsDisabledOn` of its content pack; `vitrine` names solutions, case
+  studies, jobs and articles, so a company site never ends a page with a comment
+  form.
+
+- The showcase site's solution icon is a choice, not a name to remember
+  
+  The field listed the symbols to type in its help text; it is now a select over
+  `@cogenta/theme-kit`'s `ICON_NAMES`, the icons every theme draws.
+- Updated dependencies [`01deb2a`, `db6ee94`]:
+  - @cogenta/schema@0.8.0
+  - @cogenta/api@2.8.1
+  - @cogenta/blocks@1.1.4
+  - @cogenta/widgets@0.2.4
+  - @cogenta/render@0.3.6
+  - @cogenta/theme-kit@0.5.4
+
 ## 0.1.5
 
 ### Patch Changes

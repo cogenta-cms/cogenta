@@ -1,5 +1,69 @@
 # create-cogenta
 
+## 0.7.0
+
+### Minor Changes
+
+- The installer proposes the showcase site by default
+  
+  Every default — including `npm create cogenta --yes` and a `--config` file that
+  names no blueprint — now installs `vitrine`: a complete site with its theme,
+  home page and demo content. It is first in the list; `blank`, the empty schema,
+  moves last and says it is for developers. `DEFAULT_BLUEPRINT_ID` is now
+  `'vitrine'`; the new `FALLBACK_BLUEPRINT_ID` (`'blank'`) is what an unknown
+  blueprint id, or a programmatic `scaffoldSite` call naming none, resolves to.
+
+- The showcase blueprint is now an engineering company, written in French and in English
+  
+  `vitrine` presents a fictional company that designs sensors, a monitoring
+  platform and field services for electricity, water and rail networks. It seeds
+  six solutions, four case studies filed by sector, three testimonials, four job
+  openings, four articles (schedulable, so they appear in the editorial calendar)
+  and ten pages, including legal notice, privacy policy and photo credits.
+  
+  The copy exists in French and in English and follows the site's default
+  locale, addresses included (`/references/…` in French, `/case-studies/…` in
+  English): `@cogenta/starters` gains `contentPackFor(id, locale)`, which
+  `create-cogenta` now uses when it scaffolds and when it resets a playground.
+  
+  Every photograph is a real one from Wikimedia Commons under CC0, the public
+  domain or a Creative Commons Attribution licence, credited on the site's own
+  credits page; the previous generated images are removed. Client logos and the
+  product screenshots are drawn for the blueprint.
+  
+  Breaking for code importing the blueprint's internals: the `VITRINE_*`
+  constants and the `service` collection are replaced by `vitrineSchema(copy)`,
+  `buildVitrineDemoPages(copy, context)`, `vitrineMenus`, `vitrineWidgets`,
+  `vitrineSiteSettings`, `vitrineMediaSpecs` and `createVitrineContentPack`.
+
+### Patch Changes
+
+- theme-entreprise takes the register of an engineering company
+  
+  Visible change for every site using this theme: Geist replaces Newsreader and
+  Hanken Grotesk, Geist Mono sets labels, indices and figures, the palette moves
+  to a cool grey paper, a blue-black ink and a signal green. A hero with a
+  photograph is now full bleed, its title over a flat ink veil (no gradient);
+  `stats` becomes an ink band; a `mediaFigure` set wide spans the grid with its
+  caption beneath; a list entry that declares `keyFigure` (and `keyFigureLabel`)
+  shows it under its summary. No contract changes (`theme@1.7`), no markup
+  removed.
+  
+  `create-cogenta` closes comments on the collections a blueprint names in the
+  new `commentsDisabledOn` of its content pack; `vitrine` names solutions, case
+  studies, jobs and articles, so a company site never ends a page with a comment
+  form.
+- Updated dependencies [`01deb2a`, `582a970`, `b9fe631`, `2dce4a6`, `db6ee94`, `60ed551`, `08cd9d3`]:
+  - @cogenta/schema@0.8.0
+  - @cogenta/api@2.8.1
+  - @cogenta/cli@0.16.0
+  - @cogenta/starters@0.2.0
+  - @cogenta/agents@0.8.5
+  - @cogenta/auth@0.5.9
+  - @cogenta/blocks@1.1.4
+  - @cogenta/render@0.3.6
+  - @cogenta/theme-canonical@1.3.4
+
 ## 0.6.7
 
 ### Patch Changes

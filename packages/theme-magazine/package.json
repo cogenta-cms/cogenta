@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-magazine",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "A news and culture magazine theme for Cogenta: a dated masthead, an asymmetric front page with column rules, section rails and long-form article pages, zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

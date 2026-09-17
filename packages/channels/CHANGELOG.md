@@ -1,5 +1,12 @@
 # @cogenta/channels
 
+## 0.3.12
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/agents@0.8.5
+
 ## 0.3.11
 
 ### Patch Changes

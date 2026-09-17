@@ -1,5 +1,14 @@
 # @cogenta/theme-restaurant
 
+## 0.5.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/blocks@1.1.4
+  - @cogenta/render@0.3.6
+  - @cogenta/theme-kit@0.5.4
+
 ## 0.5.3
 
 ### Patch Changes

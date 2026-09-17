@@ -1,5 +1,12 @@
 # @cogenta/blocks
 
+## 1.1.4
+
+### Patch Changes
+
+- Updated dependencies [`01deb2a`, `db6ee94`]:
+  - @cogenta/schema@0.8.0
+
 ## 1.1.3
 
 ### Patch Changes

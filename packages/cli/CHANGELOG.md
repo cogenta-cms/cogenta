@@ -1,5 +1,79 @@
 # @cogenta/cli
 
+## 0.16.0
+
+### Minor Changes
+
+- A dead link shows a page, and a site with no home page says it works
+  
+  Every URL a site could not answer used to return the API's JSON error to the
+  visitor, unless someone had created a page at `site.notFoundPath`. `cogenta
+  serve` now renders its own not-found page in the active theme's chrome (header,
+  footer, stylesheet, a way home and a search field), with a `404` status. A site
+  entry at `notFoundPath` still takes precedence, and `/api/*` still answers JSON.
+  
+  `/` with nothing behind it — a site installed a minute ago — now shows a short
+  welcome page pointing to the administration (`200`, `noindex`), instead of an
+  error. It disappears as soon as a home page exists. Both pages speak French or
+  English according to the site's default locale.
+
+### Patch Changes
+
+- A block saved with an emptied field no longer breaks the public page
+  
+  Block data was stored exactly as a form sent it and never checked. A hero whose
+  image had been removed (`media: null`), a feature card with no link, a list
+  block with an empty sort (`{}`) or a quote with no portrait were accepted, and
+  the page then answered with an internal error.
+  
+  `@cogenta/schema` gains `pruneEmptyBlockData`, and the content store now keeps
+  an emptied optional field as absent — what contract B means and every theme
+  expects — never inside a rich-text node. `@cogenta/api` checks every block of a
+  create or an update against the block registry and answers `BLOCK_INVALID`
+  (400) naming the block and the field, instead of storing it; a block type the
+  registry does not know is still left to its own renderer. `cogenta serve`
+  reads block data already stored with empty values the same way.
+
+- The page builder preview survives a block just placed
+  
+  A content list with no collection chosen yet answered 400 and an embed with no
+  address 500, so the preview broke the moment either block was added. The draft
+  render now leaves out the blocks contract B refuses and shows the rest of the
+  page; a save still refuses them.
+  
+  Content created through the API without a locale now takes the site's default
+  language: `cogenta serve` built its content stores without it, so a French
+  site's agents and headless clients created English entries.
+- Updated dependencies [`01deb2a`, `b9fe631`, `db6ee94`, `60ed551`, `08cd9d3`]:
+  - @cogenta/schema@0.8.0
+  - @cogenta/api@2.8.1
+  - @cogenta/theme-entreprise@1.4.0
+  - @cogenta/starters@0.2.0
+  - @cogenta/agents@0.8.5
+  - @cogenta/auth@0.5.9
+  - @cogenta/blocks@1.1.4
+  - @cogenta/export@0.2.10
+  - @cogenta/import@0.2.11
+  - @cogenta/plugins@0.8.4
+  - @cogenta/seo@0.3.10
+  - @cogenta/widgets@0.2.4
+  - @cogenta/agents-builtin@0.6.5
+  - @cogenta/channels@0.3.12
+  - @cogenta/mcp@0.3.11
+  - @cogenta/render@0.3.6
+  - @cogenta/theme-association@0.5.4
+  - @cogenta/theme-blog@0.5.4
+  - @cogenta/theme-canonical@1.3.4
+  - @cogenta/theme-docs@0.5.4
+  - @cogenta/theme-ecommerce@1.3.4
+  - @cogenta/theme-kit@0.5.4
+  - @cogenta/theme-magazine@1.3.4
+  - @cogenta/theme-portfolio@1.3.4
+  - @cogenta/theme-restaurant@0.5.4
+  - @cogenta/theme-saas@0.5.4
+  - @cogenta/commerce@0.5.7
+  - @cogenta/forms@0.2.12
+
 ## 0.15.2
 
 ### Patch Changes

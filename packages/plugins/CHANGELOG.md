@@ -1,5 +1,13 @@
 # @cogenta/plugins
 
+## 0.8.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/agents@0.8.5
+  - @cogenta/render@0.3.6
+
 ## 0.8.3
 
 ### Patch Changes

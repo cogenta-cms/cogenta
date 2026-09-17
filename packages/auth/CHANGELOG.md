@@ -1,5 +1,12 @@
 # @cogenta/auth
 
+## 0.5.9
+
+### Patch Changes
+
+- Updated dependencies [`01deb2a`, `db6ee94`]:
+  - @cogenta/schema@0.8.0
+
 ## 0.5.8
 
 ### Patch Changes

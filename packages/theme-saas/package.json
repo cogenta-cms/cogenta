@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-saas",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "A B2B software theme for Cogenta: Geist and Geist Mono, white and a structured grey scale with one signal blue, framed product screenshots, a ruled plan comparison, a designed dark mode and zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",

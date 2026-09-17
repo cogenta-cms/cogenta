@@ -316,6 +316,42 @@ describe('the page builder preview renders the real page, not a lookalike (L16 t
     }
   }, 30_000)
 
+  it('still previews the page while a block just placed is incomplete', async () => {
+    // L36 audit: a list with no collection chosen yet answered 400 and an
+    // embed with no address 500, so the preview broke the moment either
+    // block was added.
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'editor@example.com',
+        'correct horse battery staple',
+      )
+      const id = await seed(server.base, token)
+
+      const preview = await renderDraft(server.base, token, {
+        collection: 'page',
+        entryId: id,
+        blocks: {
+          body: [
+            ...BLOCKS.body,
+            { key: 'b-list', type: 'collectionList', data: { layout: 'grid' } },
+            { key: 'b-embed', type: 'embed', data: { provider: 'youtube', url: '' } },
+          ],
+        },
+      })
+
+      expect(preview.status).toBe(200)
+      expect(preview.html).toContain('data-block-key="b-hero"')
+      expect(preview.html).toContain('data-block-key="b-cta"')
+      expect(preview.html).not.toContain('data-block-key="b-list"')
+    } finally {
+      await server.stop()
+    }
+  }, 30_000)
+
   it('marks every block with its key, so the builder can map a click back to one', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

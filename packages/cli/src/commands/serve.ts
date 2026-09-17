@@ -1552,7 +1552,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     // `siblings` is what lets `delete()` enforce `restrict` in application
     // code (ADR-0022): trashing is an UPDATE, so the foreign key has nothing
     // left to refuse at that moment.
-    const created = createContentStore({ db, collection, siblings: collections })
+    const created = createContentStore({
+      db,
+      collection,
+      siblings: collections,
+      defaultLocale: site.defaultLocale,
+    })
     const guarded = readOnly ? withReadOnlyStore(created) : created
     // Writes the redirect a slug rename on a *published* entry owes (fiche 12
     // task 3). Placed right after the read-only guard, for the same reason

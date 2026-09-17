@@ -9,6 +9,7 @@ import {
 import {
   type BlockRegistry,
   type RichTextDocument,
+  safeParseBlock,
   type VocabularyBlock,
   vocabularyRegistry,
 } from '@cogenta/blocks'
@@ -1376,7 +1377,42 @@ export async function renderDraftPage(
     entry.locale ?? undefined,
   )
 
-  return renderEntryPage(pathname, collection, entry, options, context)
+  try {
+    return await renderEntryPage(pathname, collection, entry, options, context)
+  } catch (error) {
+    // A block the editor has just placed is often incomplete — a list with
+    // no collection chosen yet, an embed with no address — and a theme may
+    // not be able to draw it. The preview then shows the rest of the page
+    // rather than an error (L36 audit). Only the preview: a write is refused
+    // for the same blocks, so a published page never holds one.
+    const finished = withoutUnfinishedBlocks(draft.blocks, options.blocks ?? vocabularyRegistry)
+    if (finished === null) throw error
+    return renderEntryPage(pathname, collection, { ...entry, blocks: finished }, options, context)
+  }
+}
+
+/** The zones without the blocks contract B refuses, or `null` when every block is valid. */
+function withoutUnfinishedBlocks(zones: BlockZones, registry: BlockRegistry): BlockZones | null {
+  let dropped = false
+  const kept: Record<string, BlockZones[string]> = {}
+  for (const [zone, blocks] of Object.entries(zones)) {
+    kept[zone] = blocks.filter((block) => {
+      const definition = registry.get(block.type)
+      if (definition === undefined) return true
+      const outcome = safeParseBlock(
+        {
+          ...pruneEmptyBlockData(block.data),
+          _key: block.key,
+          _type: block.type,
+          _version: definition.version,
+        },
+        registry,
+      )
+      if (!outcome.ok) dropped = true
+      return outcome.ok
+    })
+  }
+  return dropped ? kept : null
 }
 
 /** ~200 words/minute, rounded up — `PageContent.entry.readingMinutes` (contract D `theme@1.4`). `0` (no text at all) is not a reading time, so it is left unset instead. */

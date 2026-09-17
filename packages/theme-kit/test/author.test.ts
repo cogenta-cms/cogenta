@@ -43,9 +43,9 @@ const ARCHIVE: TermArchiveInput = {
 
 describe('an archive intro', () => {
   it('draws the bio of an author archive', () => {
-    const html = serialize(
-      renderArchiveIntro({ ...ARCHIVE, intro: { text: 'Ingénieure réseaux.' } }) ?? '',
-    )
+    const intro = renderArchiveIntro({ ...ARCHIVE, intro: { text: 'Ingénieure réseaux.' } })
+    expect(intro).not.toBeNull()
+    const html = intro === null ? '' : serialize(intro)
     expect(html).toContain('<div class="cg-archive__intro">')
     expect(html).toContain('<p class="cg-archive__bio">Ingénieure réseaux.</p>')
   })

@@ -23,7 +23,7 @@ import {
   type MediaImageProcessor,
   type MediaRouter,
 } from '../../src/rest/media-router.js'
-import { ANONYMOUS } from '../../src/types.js'
+import { type Actor, ANONYMOUS } from '../../src/types.js'
 
 /**
  * L39: an image is turned and cropped in place, always from its untouched
@@ -96,7 +96,7 @@ async function fileOf(id: string): Promise<Buffer> {
   return Buffer.concat(chunks)
 }
 
-const post = (router: MediaRouter, path: string, body?: unknown, actor = EDITOR) =>
+const post = (router: MediaRouter, path: string, body?: unknown, actor: Actor = EDITOR) =>
   router.handle({ method: 'POST', path, query: {}, body }, actor)
 
 describe('the focal point through an edit', () => {

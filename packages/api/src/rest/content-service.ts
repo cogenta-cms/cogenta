@@ -1,4 +1,5 @@
 import { hashPassword } from '@cogenta/auth'
+import { type BlockRegistry, safeParseBlock, vocabularyRegistry } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
 import {
   type CollectionDefinition,
@@ -14,6 +15,7 @@ import {
   type EntryState,
   enrichWordDiffs,
   planEntryReplacement,
+  pruneEmptyBlockData,
   type ReplaceOptions,
   type RouteMatch,
   resolveUrl,
@@ -64,6 +66,12 @@ export interface ContentServiceOptions {
   readonly limits?: Partial<QueryLimits>
   /** Locales and redirect table used to turn a URL into an entry. */
   readonly routing?: RoutingOptions
+  /**
+   * The blocks a write is checked against (L36 audit). Defaults to contract
+   * B's vocabulary; a block type the registry does not know — one a plugin
+   * provides — is left to its own renderer's fallback, never refused here.
+   */
+  readonly blocks?: BlockRegistry
 }
 
 export interface ContentPage {
@@ -158,6 +166,36 @@ const DEFAULT_REPLACE_LIMIT = 50
 const MAX_REPLACE_LIMIT = 500
 /** Rows read per underlying page while the search walks a collection. */
 const REPLACE_SCAN_PAGE = 100
+
+/**
+ * Refuses a write whose blocks contract B would not accept (L36 audit).
+ *
+ * Nothing checked block data on the way in: a hero whose image had been
+ * cleared (`media: null`) was stored as sent and crashed the public page on
+ * the next request. The data is checked as the store will keep it — empty
+ * values a form leaves behind removed first (`pruneEmptyBlockData`) — so an
+ * optional field left empty passes, and a required one reads as missing,
+ * with the block and the field named in the error.
+ */
+function assertBlocksValid(zones: CreateInput['blocks'], registry: BlockRegistry): void {
+  if (zones === undefined) return
+  for (const blocks of Object.values(zones)) {
+    for (const block of blocks) {
+      const definition = registry.get(block.type)
+      if (definition === undefined) continue
+      const outcome = safeParseBlock(
+        {
+          ...pruneEmptyBlockData(block.data ?? {}),
+          _key: block.key !== undefined && block.key !== '' ? block.key : 'new',
+          _type: block.type,
+          _version: definition.version,
+        },
+        registry,
+      )
+      if (!outcome.ok) throw outcome.error
+    }
+  }
+}
 
 export interface ContentService {
   readonly limits: QueryLimits
@@ -929,6 +967,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     create: async (context, name, input, readOptions) => {
       const target = collection(name)
       permissions.assert('create', target, context)
+      assertBlocksValid(input.blocks, options.blocks ?? vocabularyRegistry)
 
       const entry = await store(target).create(input)
       return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
@@ -937,6 +976,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     update: async (context, name, id, input, readOptions) => {
       const target = collection(name)
       await assertOwnAware(target, 'update', context, id)
+      assertBlocksValid(input.blocks, options.blocks ?? vocabularyRegistry)
 
       const entry = await store(target).update(id, input)
       return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })

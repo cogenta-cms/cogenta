@@ -20,6 +20,7 @@ import {
   type CollectionDefinition,
   type ContentEntry,
   matchPath,
+  pruneEmptyBlockData,
   relationsOf,
 } from '@cogenta/schema'
 import type { SeoImage } from '@cogenta/seo'
@@ -783,7 +784,10 @@ function toVocabularyBlocks(
           _key: block.key,
           _type: block.type,
           _version: '1.0.0',
-          ...block.data,
+          // A cleared field saved before writes were checked (L36 audit), or
+          // an unsaved draft in the builder's preview: empty values read as
+          // absent, the way every theme expects them.
+          ...pruneEmptyBlockData(block.data),
         }) as VocabularyBlock,
     )
   }

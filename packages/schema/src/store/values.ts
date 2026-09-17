@@ -1,6 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
 import type { CollectionDefinition, FieldDefinition } from '../types.js'
+import { pruneEmptyBlockData } from './block-data.js'
 import type { BlockZones, ContentBlock, ContentValues } from './types.js'
 
 /**
@@ -279,7 +280,7 @@ export function normaliseBlocks(
       }
       seen.add(key)
 
-      return { key, type: block.type, data: block.data ?? {} }
+      return { key, type: block.type, data: pruneEmptyBlockData(block.data ?? {}) }
     })
   }
 

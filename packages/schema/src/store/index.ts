@@ -35,6 +35,7 @@ export {
   adminThemeTemplateById,
   DEFAULT_ADMIN_THEME_TEMPLATE_ID,
 } from './admin-theme-templates.js'
+export { pruneEmptyBlockData } from './block-data.js'
 export {
   booleanColumn,
   booleanValue,

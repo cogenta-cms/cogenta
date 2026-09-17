@@ -1129,6 +1129,147 @@ export function runContentStoreContract(
         expect([...seen].sort()).toEqual([...created].sort())
       })
 
+      /**
+       * `schema@2.4` (ADR-0038): ordering by a date the collection declares
+       * itself, which is what a "next events" list needs. The empty values are
+       * the whole difficulty — the three engines place them differently, so
+       * the order is written out rather than left to them.
+       */
+      it('sorts by a declared date, with the entries that have none always last', async () => {
+        const dated = async (releasedOn: string | undefined, title: string): Promise<string> => {
+          const entry = await articles.create({
+            values: { title, ...(releasedOn === undefined ? {} : { releasedOn }) },
+            status: 'published',
+          })
+          return entry.id
+        }
+        const early = await dated('2026-01-05', 'early')
+        const late = await dated('2026-12-24', 'late')
+        const middle = await dated('2026-06-30', 'middle')
+        const undatedA = await dated(undefined, 'undated A')
+        const undatedB = await dated(undefined, 'undated B')
+
+        const ascending = await articles.list({ sort: { field: 'releasedOn', direction: 'asc' } })
+        expect(ascending.items.slice(0, 3).map((entry) => entry.id)).toEqual([early, middle, late])
+        expect(
+          ascending.items
+            .slice(3)
+            .map((entry) => entry.id)
+            .sort(),
+        ).toEqual([undatedA, undatedB].sort())
+
+        const descending = await articles.list({ sort: { field: 'releasedOn', direction: 'desc' } })
+        expect(descending.items.slice(0, 3).map((entry) => entry.id)).toEqual([late, middle, early])
+        // Last in both directions: "no date" is not "the smallest date".
+        expect(
+          descending.items
+            .slice(3)
+            .map((entry) => entry.id)
+            .sort(),
+        ).toEqual([undatedA, undatedB].sort())
+      })
+
+      it('pages through a declared date and its tail of empty values, once each', async () => {
+        const created: string[] = []
+        for (const [index, releasedOn] of [
+          '2026-01-05',
+          undefined,
+          '2026-03-05',
+          undefined,
+          '2026-02-05',
+          undefined,
+        ].entries()) {
+          const entry = await articles.create({
+            values: {
+              title: `entry ${index}`,
+              ...(releasedOn === undefined ? {} : { releasedOn }),
+            },
+            status: 'published',
+          })
+          created.push(entry.id)
+        }
+
+        const seen: string[] = []
+        let cursor: string | null = null
+        do {
+          const page: Awaited<ReturnType<typeof articles.list>> = await articles.list({
+            limit: 2,
+            sort: { field: 'releasedOn', direction: 'asc' },
+            ...(cursor === null ? {} : { cursor }),
+          })
+          seen.push(...page.items.map((item) => item.id))
+          cursor = page.nextCursor
+        } while (cursor !== null)
+
+        expect(new Set(seen).size).toBe(seen.length)
+        expect([...seen].sort()).toEqual([...created].sort())
+      })
+
+      /**
+       * The defect `db-dialect-specialist` found and reproduced: in the
+       * working state an entry's values come from its newest version
+       * snapshot, while `order by` sorted the live column. A cursor minted
+       * from the entry therefore named a position the ordering never had,
+       * and every row after it vanished.
+       */
+      it('pages through the working state without losing a row when a draft moves the date', async () => {
+        const created: string[] = []
+        for (const [index, releasedOn] of [
+          '2026-01-05',
+          '2026-02-05',
+          '2026-03-05',
+          '2026-04-05',
+        ].entries()) {
+          const entry = await articles.create({
+            values: { title: `dated ${index}`, releasedOn },
+            status: 'published',
+          })
+          created.push(entry.id)
+        }
+        // A pending draft that moves one entry's date far into the future,
+        // without touching the published row it is ordered by.
+        const second = created[1] as string
+        await articles.update(second, { values: { releasedOn: '2027-12-31' } })
+
+        const seen: string[] = []
+        let cursor: string | null = null
+        do {
+          const page: Awaited<ReturnType<typeof articles.list>> = await articles.list({
+            state: 'working',
+            limit: 2,
+            sort: { field: 'releasedOn', direction: 'asc' },
+            ...(cursor === null ? {} : { cursor }),
+          })
+          seen.push(...page.items.map((item) => item.id))
+          cursor = page.nextCursor
+        } while (cursor !== null)
+
+        expect(new Set(seen).size).toBe(seen.length)
+        expect([...seen].sort()).toEqual([...created].sort())
+      })
+
+      it('stores a date cleared to an empty string as no date at all', async () => {
+        const entry = await articles.create({
+          values: { title: 'dated', releasedOn: '2026-05-05' },
+          status: 'published',
+        })
+
+        const cleared = await articles.update(entry.id, { values: { releasedOn: '' } })
+
+        // Not `''`: a value that would sort *before* every real date and make
+        // the ordering disagree with the cursor.
+        expect(cleared.values['releasedOn']).toBeNull()
+      })
+
+      it('refuses to sort by a field that is not a declared date of this collection', async () => {
+        await expect(
+          articles.list({ sort: { field: 'rating', direction: 'asc' } }),
+        ).rejects.toMatchObject({ code: 'CONTENT_INVALID' })
+        await expect(
+          articles.list({ sort: { field: 'nothing_here', direction: 'asc' } }),
+        ).rejects.toMatchObject({ code: 'CONTENT_INVALID' })
+      })
+
       it('refuses a cursor taken under a different ordering', async () => {
         await publishMany(3)
         const page = await articles.list({ limit: 1 })

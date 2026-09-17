@@ -26,7 +26,16 @@ import { type PageChromeOptions, renderPageChrome } from './theme-render.js'
  *   page exists.
  */
 
-type FallbackLocale = 'en' | 'fr'
+/**
+ * The languages these two pages speak.
+ *
+ * They were English and French only, which meant a Spanish or German site
+ * showed its very first page — and its 404 — in a language its visitors may
+ * not read. A site whose language is none of these still gets English rather
+ * than nothing: a floor, matched on the language subtag so `de-AT` reads
+ * German.
+ */
+type FallbackLocale = 'en' | 'fr' | 'es' | 'de' | 'it' | 'pt' | 'nl'
 
 const STRINGS: Readonly<Record<FallbackLocale, Readonly<Record<string, string>>>> = {
   en: {
@@ -67,10 +76,113 @@ const STRINGS: Readonly<Record<FallbackLocale, Readonly<Record<string, string>>>
     welcomeStep3: 'Choisissez un thème dans Apparence, puis complétez menus et réglages.',
     admin: 'Ouvrir l’administration',
   },
+  es: {
+    notFoundEyebrow: 'Error 404',
+    notFoundTitle: 'No se encuentra esta página',
+    notFoundBody:
+      'Puede que el enlace esté anticuado o que la página se haya movido. Prueba a buscar o vuelve a empezar desde la portada.',
+    home: 'Volver a la portada',
+    searchLabel: 'Buscar en este sitio',
+    searchPlaceholder: 'Buscar…',
+    searchButton: 'Buscar',
+    welcomeEyebrow: 'Cogenta',
+    welcomeTitle: 'Tu sitio ya está en línea',
+    welcomeBody:
+      'Todavía no tiene portada. Esta página ocupa su lugar y desaparece en cuanto exista una.',
+    welcomeStepsLabel: 'Para empezar',
+    welcomeStep1: 'Entra en la administración con la cuenta creada durante la instalación.',
+    welcomeStep2: 'Crea una página cuyo slug sea «home»: pasará a ser esta dirección.',
+    welcomeStep3: 'Elige un tema en Apariencia y luego completa los menús y los ajustes.',
+    admin: 'Abrir la administración',
+  },
+  de: {
+    notFoundEyebrow: 'Fehler 404',
+    notFoundTitle: 'Diese Seite wurde nicht gefunden',
+    notFoundBody:
+      'Der Link ist womöglich veraltet, oder die Seite wurde verschoben. Versuchen Sie eine Suche oder beginnen Sie auf der Startseite.',
+    home: 'Zurück zur Startseite',
+    searchLabel: 'Diese Website durchsuchen',
+    searchPlaceholder: 'Suchen…',
+    searchButton: 'Suchen',
+    welcomeEyebrow: 'Cogenta',
+    welcomeTitle: 'Ihre Website läuft',
+    welcomeBody:
+      'Sie hat noch keine Startseite. Diese Seite vertritt sie und verschwindet, sobald es eine gibt.',
+    welcomeStepsLabel: 'Nächste Schritte',
+    welcomeStep1:
+      'Melden Sie sich mit dem bei der Installation angelegten Konto in der Verwaltung an.',
+    welcomeStep2: 'Legen Sie eine Seite mit dem Slug „home“ an: Sie wird zu dieser Adresse.',
+    welcomeStep3:
+      'Wählen Sie unter Darstellung ein Theme und füllen Sie dann Menüs und Einstellungen aus.',
+    admin: 'Verwaltung öffnen',
+  },
+  it: {
+    notFoundEyebrow: 'Errore 404',
+    notFoundTitle: 'Questa pagina non è stata trovata',
+    notFoundBody:
+      'Il collegamento potrebbe essere vecchio, oppure la pagina è stata spostata. Prova una ricerca o riparti dalla home.',
+    home: 'Torna alla home',
+    searchLabel: 'Cerca in questo sito',
+    searchPlaceholder: 'Cerca…',
+    searchButton: 'Cerca',
+    welcomeEyebrow: 'Cogenta',
+    welcomeTitle: 'Il tuo sito è online',
+    welcomeBody:
+      'Non ha ancora una home page. Questa pagina la sostituisce e sparisce non appena ne esiste una.',
+    welcomeStepsLabel: 'Per iniziare',
+    welcomeStep1: "Accedi all'amministrazione con l'account creato durante l'installazione.",
+    welcomeStep2: 'Crea una pagina con slug «home»: diventerà questo indirizzo.',
+    welcomeStep3: 'Scegli un tema in Aspetto, poi completa menu e impostazioni.',
+    admin: "Apri l'amministrazione",
+  },
+  pt: {
+    notFoundEyebrow: 'Erro 404',
+    notFoundTitle: 'Não encontrámos esta página',
+    notFoundBody:
+      'A ligação pode estar desatualizada ou a página foi movida. Experimente pesquisar ou recomece pela página inicial.',
+    home: 'Voltar à página inicial',
+    searchLabel: 'Pesquisar neste site',
+    searchPlaceholder: 'Pesquisar…',
+    searchButton: 'Pesquisar',
+    welcomeEyebrow: 'Cogenta',
+    welcomeTitle: 'O seu site está no ar',
+    welcomeBody:
+      'Ainda não tem página inicial. Esta página fica no lugar dela e desaparece assim que existir uma.',
+    welcomeStepsLabel: 'Para começar',
+    welcomeStep1: 'Entre na administração com a conta criada durante a instalação.',
+    welcomeStep2: 'Crie uma página cujo slug seja «home»: passa a ser este endereço.',
+    welcomeStep3: 'Escolha um tema em Aparência e depois preencha menus e definições.',
+    admin: 'Abrir a administração',
+  },
+  nl: {
+    notFoundEyebrow: 'Fout 404',
+    notFoundTitle: 'Deze pagina is niet gevonden',
+    notFoundBody:
+      'De link is misschien verouderd, of de pagina is verplaatst. Probeer een zoekopdracht, of begin opnieuw op de startpagina.',
+    home: 'Terug naar de startpagina',
+    searchLabel: 'Zoek op deze site',
+    searchPlaceholder: 'Zoeken…',
+    searchButton: 'Zoeken',
+    welcomeEyebrow: 'Cogenta',
+    welcomeTitle: 'Je site staat online',
+    welcomeBody:
+      'Er is nog geen startpagina. Deze pagina neemt die plaats in en verdwijnt zodra er een is.',
+    welcomeStepsLabel: 'Om te beginnen',
+    welcomeStep1: 'Meld je aan bij het beheer met het account dat bij de installatie is gemaakt.',
+    welcomeStep2: 'Maak een pagina met de slug “home”: die wordt dit adres.',
+    welcomeStep3: 'Kies een thema onder Weergave en vul daarna menu’s en instellingen in.',
+    admin: 'Beheer openen',
+  },
 }
 
 function stringsFor(locale: string): Readonly<Record<string, string>> {
-  return STRINGS[locale.toLowerCase().startsWith('fr') ? 'fr' : 'en']
+  // The language subtag only: `fr-CA`, `de-AT` and `pt-BR` all read the
+  // language they are written in, and anything else reads English.
+  const language = locale.toLowerCase().split(/[-_]/u)[0] ?? ''
+  const known = (STRINGS as Readonly<Record<string, Readonly<Record<string, string>> | undefined>>)[
+    language
+  ]
+  return known ?? STRINGS.en
 }
 
 /**

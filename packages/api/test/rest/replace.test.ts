@@ -64,6 +64,36 @@ describe('POST /-/replace', () => {
     expect(after?.version).toBe((before?.version ?? 0) + 1)
   })
 
+  /**
+   * L34's group undo. The number it reports is the one thing that has to be
+   * exact: the version the entry stood at **before** the write, read before
+   * it, not derived from the new one afterwards.
+   */
+  it('reports, per entry, the version to restore to — read before the write, absent on a preview', async () => {
+    const store = harness.store(ARTICLE)
+    const entry = await store.create({ values: { title: 'Cogenta arrive' } })
+    // A second edit first, so "the version before" is not simply 1 and an
+    // off-by-one would be visible.
+    await store.update(entry.id, { values: { title: 'Cogenta arrive vraiment' } })
+    const before = await store.read(entry.id, { state: 'working' })
+
+    const preview = await replace({ find: 'Cogenta', replace: 'Kogenta' })
+    expect(preview['undo']).toBeUndefined()
+
+    const applied = await replace({ find: 'Cogenta', replace: 'Kogenta', apply: true })
+
+    expect(applied['undo']).toEqual([
+      { collection: ARTICLE.name, entryId: entry.id, version: before?.version },
+    ])
+    // And it really is a position to go back to: restoring it puts the text
+    // back, through the ordinary restore path.
+    const undo = (applied['undo'] as readonly { version: number }[])[0]
+    await store.restore(entry.id, undo?.version ?? 0)
+    expect((await store.read(entry.id, { state: 'working' }))?.values['title']).toBe(
+      'Cogenta arrive vraiment',
+    )
+  })
+
   it('leaves alone an entry that moved between the preview and the application', async () => {
     const store = harness.store(ARTICLE)
     const entry = await store.create({ values: { title: 'Cogenta arrive' } })

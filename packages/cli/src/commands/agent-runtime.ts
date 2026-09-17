@@ -4,14 +4,19 @@ import {
   type AgentProviderRegistryLike,
   type AgentRunner,
   type AgentSkillStore,
+  type AnalyticsSummaryPort,
   type ApprovalQueue,
   type CollectionFieldSummary,
   type CollectionSchemaSummary,
+  type CommentModerationPort,
   type ContentBrowseAccessContext,
   type ContentBrowseServiceLike,
   type ContentSchemaServiceLike,
   type ContentServiceLike,
   createAgentRunner,
+  createAnalyticsSummaryTool,
+  createCommentsDecideTool,
+  createCommentsListTool,
   createContentCollectionsTool,
   createContentDeleteTool,
   createContentListTool,
@@ -27,6 +32,7 @@ import {
   createFilePromptTemplateStore,
   createFileProviderConfigStore,
   createKillSwitch,
+  createMediaListTool,
   createMediaReadTool,
   createMediaStoreImageTool,
   createMediaWriteTool,
@@ -136,6 +142,15 @@ export interface BuildAgentRuntimeOptions {
   }
   readonly contentService: ContentService
   readonly mediaStore: MediaStore
+  /**
+   * L5 task 10 — the moderation queue and the audience figures, as ports
+   * rather than packages (`@cogenta/agents` describes what it needs, it does
+   * not import `@cogenta/comments` or `@cogenta/analytics`). Absent means the
+   * matching tools are simply not registered, so an agent that declares one
+   * finds it missing rather than failing mid-run (R2).
+   */
+  readonly comments?: CommentModerationPort
+  readonly analytics?: AnalyticsSummaryPort
   /**
    * Where `media.store_generated_image` puts a file. Absent means the tool is
    * not registered at all — a host with no storage driver cannot keep an
@@ -505,6 +520,8 @@ function buildToolRegistry(options: {
     readonly provenanceDetail: Readonly<Record<string, unknown>>
   }) => Promise<{ readonly id: string; readonly filename: string; readonly byteLength: number }>
   readonly mediaStore: MediaStore
+  readonly comments?: CommentModerationPort
+  readonly analytics?: AnalyticsSummaryPort
   readonly projectRoot: string
   readonly collections: readonly CollectionDefinition[]
   readonly notFoundLog: NotFoundLogReader
@@ -573,6 +590,10 @@ function buildToolRegistry(options: {
     createContentPublishTool(contentServiceLike),
     createContentDeleteTool(contentServiceLike),
     createMediaReadTool(options.mediaStore),
+    // L5 task 10 — the Média agent's starting point: `media.read` reads one
+    // asset by id, so without this an agent could only audit files it
+    // already knew about. Same permission, reading either way.
+    createMediaListTool(options.mediaStore),
     createMediaWriteTool(options.mediaStore),
     // The one path from a generated candidate to a real file in the library.
     // `sideEffects: true` + `reversible: false` means `withAutonomy` forces a
@@ -596,6 +617,12 @@ function buildToolRegistry(options: {
     // not just its entries.
     createContentSchemaTool(contentSchemaServiceLike),
     createRedirectCreateTool(options.redirects),
+    // L5 task 10 — the Modération and Analytics agents. Registered only when
+    // the host really has a queue / a measurement to offer.
+    ...(options.comments === undefined
+      ? []
+      : [createCommentsListTool(options.comments), createCommentsDecideTool(options.comments)]),
+    ...(options.analytics === undefined ? [] : [createAnalyticsSummaryTool(options.analytics)]),
     ...options.mcpDefinitions,
     // L26 task 5 — "Cogenta Theme Creator"'s only tool. `sideEffects: false`,
     // no write path at any autonomy level (see the tool's own doc comment).
@@ -824,6 +851,8 @@ export async function buildAgentRuntime(
     collections: options.collections,
     notFoundLog: options.notFoundLog,
     redirects: options.redirects,
+    ...(options.comments === undefined ? {} : { comments: options.comments }),
+    ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
     ...(options.themeCreator === undefined ? {} : { themeCreator: options.themeCreator }),
     ...(options.themeSandbox === undefined ? {} : { themeSandbox: options.themeSandbox }),
     ...(options.pluginSandbox === undefined ? {} : { pluginSandbox: options.pluginSandbox }),

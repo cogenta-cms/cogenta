@@ -240,16 +240,19 @@ function list(
   collection: 'event' | 'programme',
   options: { readonly title?: string; readonly layout: 'list' | 'grid'; readonly limit: number },
 ): VocabularyBlock {
+  // An event list is ordered by the event's own date and cut at "now" (L40,
+  // ADR-0038) — so a charity's "Coming up" really is what is coming up, and an
+  // evening that has happened leaves the page by itself. A programme has no
+  // date: it keeps the insertion order the seed writes it in.
+  const dated = collection === 'event'
   return {
     _key: key,
     _type: 'collectionList',
     _version: BLOCK_VERSION,
     ...(options.title === undefined ? {} : { title: options.title }),
     collection,
-    // Insertion order: the seed writes programmes in the order the charity
-    // presents them and events in date order; the theme sorts events by date
-    // again, so an event added later still lands on its day.
-    sort: { field: 'id', direction: 'asc' },
+    sort: dated ? { field: 'date', direction: 'asc' } : { field: 'id', direction: 'asc' },
+    ...(dated ? { filter: { date: { gte: '$now' } } } : {}),
     limit: options.limit,
     layout: options.layout,
   } as VocabularyBlock

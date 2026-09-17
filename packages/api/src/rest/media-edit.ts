@@ -17,8 +17,13 @@ export interface EditCrop {
   readonly height: number
 }
 
+/** A mirror, applied after the turn — the eighth orientation a picture can take without resampling. */
+export type EditMirror = 'horizontal' | 'vertical'
+
 export interface ImageEdit {
   readonly rotate: QuarterTurn
+  /** Absent: no mirror. Applied after `rotate`, so a crop is expressed on the picture as shown. */
+  readonly mirror?: EditMirror
   /** `null`: the whole rotated picture. */
   readonly crop: EditCrop | null
 }
@@ -28,6 +33,7 @@ const EPSILON = 1e-6
 const editSchema = z
   .object({
     rotate: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]),
+    mirror: z.enum(['horizontal', 'vertical']).nullable().optional(),
     crop: z
       .object({
         x: z.number().min(0).max(1),
@@ -50,15 +56,16 @@ export function parseImageEdit(body: unknown): ImageEdit {
     throw new CogentaError({
       code: 'MEDIA_INVALID',
       message: 'An image edit is a quarter turn and an optional crop inside the picture.',
-      hint: 'Send { "rotate": 0 | 90 | 180 | 270, "crop": { "x", "y", "width", "height" } } with fractions of the rotated picture.',
+      hint: 'Send { "rotate": 0 | 90 | 180 | 270, "mirror": "horizontal" | "vertical", "crop": { "x", "y", "width", "height" } } with fractions of the rotated picture.',
     })
   }
-  return { rotate: result.data.rotate, crop }
+  const mirror = result.data.mirror ?? undefined
+  return { rotate: result.data.rotate, ...(mirror === undefined ? {} : { mirror }), crop }
 }
 
-/** Whether an edit changes nothing — the whole picture, unturned. */
+/** Whether an edit changes nothing — the whole picture, unturned and unmirrored. */
 export function isIdentityEdit(edit: ImageEdit): boolean {
-  if (edit.rotate !== 0) return false
+  if (edit.rotate !== 0 || edit.mirror !== undefined) return false
   const crop = edit.crop
   return (
     crop === null ||
@@ -74,6 +81,12 @@ export function originalCopyKey(id: string): string {
 /** The edit last applied, kept beside the original so a focal point can be carried back to it. */
 export function lastEditKey(id: string): string {
   return `media-originals/${id}/edit.json`
+}
+
+function mirrorPoint(point: FocalPoint, mirror: EditMirror | undefined): FocalPoint {
+  if (mirror === undefined) return point
+  // Its own inverse, which is why the same function serves both directions.
+  return mirror === 'horizontal' ? { x: 1 - point.x, y: point.y } : { x: point.x, y: 1 - point.y }
 }
 
 function rotatePoint(point: FocalPoint, rotate: QuarterTurn): FocalPoint {
@@ -94,7 +107,7 @@ const inverseTurn: Readonly<Record<QuarterTurn, QuarterTurn>> = { 0: 0, 90: 270,
 /** The focal point of the original, carried through `edit`; `null` when the crop leaves it out. */
 export function focalThroughEdit(focal: FocalPoint | null, edit: ImageEdit): FocalPoint | null {
   if (focal === null) return null
-  const turned = rotatePoint(focal, edit.rotate)
+  const turned = mirrorPoint(rotatePoint(focal, edit.rotate), edit.mirror)
   const crop = edit.crop
   if (crop === null) return turned
   const x = (turned.x - crop.x) / crop.width
@@ -109,7 +122,8 @@ export function focalBeforeEdit(focal: FocalPoint | null, edit: ImageEdit): Foca
   const crop = edit.crop
   const uncropped =
     crop === null ? focal : { x: crop.x + focal.x * crop.width, y: crop.y + focal.y * crop.height }
-  return rotatePoint(uncropped, inverseTurn[edit.rotate])
+  // Undone in the reverse order it was applied: mirror, then turn.
+  return rotatePoint(mirrorPoint(uncropped, edit.mirror), inverseTurn[edit.rotate])
 }
 
 export function parseStoredEdit(raw: string): ImageEdit | null {

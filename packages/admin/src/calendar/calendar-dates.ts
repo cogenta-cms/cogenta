@@ -47,6 +47,24 @@ export function monthGrid(year: number, month: number, weekStart: 0 | 1): readon
   return days
 }
 
+/**
+ * The seven local days of the week `reference` falls in.
+ *
+ * The week view exists because a month is the wrong unit for the week someone
+ * is actually working on: with forty-two cells on screen, four entries on
+ * Thursday are a stack of truncated titles. Same grid, same drag, seven cells.
+ */
+export function weekGrid(reference: Date, weekStart: 0 | 1): readonly Date[] {
+  const offset = (reference.getDay() - weekStart + 7) % 7
+  const days: Date[] = []
+  for (let index = 0; index < 7; index += 1) {
+    days.push(
+      new Date(reference.getFullYear(), reference.getMonth(), reference.getDate() - offset + index),
+    )
+  }
+  return days
+}
+
 /** The instants bounding a grid, `[from, to)`, as the calendar route wants them. */
 export function gridWindow(days: readonly Date[]): { readonly from: string; readonly to: string } {
   const first = days[0] ?? new Date()

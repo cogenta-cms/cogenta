@@ -20,14 +20,42 @@ import { encodeCursor } from '@cogenta/schema'
 
 /** The position of an entry in an ordering, as an opaque cursor. */
 export function cursorFor(entry: ContentEntry, sort: SortOrder): string {
+  // Mirrors `createContentStore`'s own `sortValueOf`: a declared date
+  // (`schema@2.4`) can be empty, and `null` is the position in the tail of
+  // empties the store orders last. Reading it from `values` here is what keeps
+  // a cursor this layer mints interchangeable with one the store minted.
   const value =
     sort.field === 'createdAt'
       ? entry.createdAt
       : sort.field === 'updatedAt'
         ? entry.updatedAt
-        : entry.id
+        : sort.field === 'id'
+          ? entry.id
+          : declaredValue(entry, sort.field)
 
   return encodeCursor({ field: sort.field, direction: sort.direction, value, id: entry.id })
+}
+
+function declaredValue(entry: ContentEntry, field: string): string | null {
+  const raw = (entry.values as Readonly<Record<string, unknown>>)[field]
+  return typeof raw === 'string' && raw !== '' ? raw : null
+}
+
+/**
+ * Whether this layer may mint a cursor for this ordering at all.
+ *
+ * On a published entry, `values` come from the very columns the store
+ * ordered by, so a cursor built here means the same thing as one built there.
+ * In the **working** state they do not: the values come from the newest
+ * version snapshot, so a pending draft that moves a date would produce a
+ * position the ordering never had — and every row after it would silently
+ * disappear (reproduced by `db-dialect-specialist` on the store's own
+ * cursor, fixed there, and refused here rather than reproduced a second
+ * time). Ordering by a system column stays available in every state.
+ */
+export function canPageBy(sort: SortOrder, state: 'published' | 'working'): boolean {
+  if (state === 'published') return true
+  return sort.field === 'id' || sort.field === 'createdAt' || sort.field === 'updatedAt'
 }
 
 export interface ScanRequest<TEntry> {

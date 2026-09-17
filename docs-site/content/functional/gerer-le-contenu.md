@@ -32,6 +32,13 @@ pour le constructeur de page. Un bloc ne stocke jamais de HTML ni de style —
 seulement de la donnée sémantique (contrat B) — ce qui est ce qui permet à un
 changement de thème de ne jamais perdre de contenu.
 
+Un bloc **Liste de contenus** se trie aussi par une **date propre à la
+collection listée** — la date d'un événement, pas celle de sa saisie — et une
+case **« Seulement à venir »** apparaît alors : la liste ne montre que ce qui
+n'est pas encore passé, recalculé à chaque visite. Une entrée sans date reste
+en dernier, jamais en tête. C'est ce qui permet à une page « Agenda » de se
+tenir à jour sans que personne y touche.
+
 ## Classer avec les taxonomies
 
 `/taxonomies` gère les taxonomies natives du site (catégories, tags — ou
@@ -49,7 +56,9 @@ Le bloc **Contenu externe** affiche une vidéo YouTube, Vimeo ou Dailymotion, un
 ou SoundCloud, une publication Bluesky ou Mastodon. Collez l'adresse du contenu telle que le
 service l'affiche : Cogenta reconnaît le service, règle les proportions si vous ne les avez pas
 choisies, et montre un aperçu (titre, auteur, miniature). Si le service ne répond pas, rien
-n'est bloqué : choisissez le service et les proportions vous-même.
+n'est bloqué : choisissez le service et les proportions vous-même. Un aperçu est conservé un
+mois ; si le titre a changé chez le service entre-temps, **Actualiser l'aperçu** le redemande
+tout de suite.
 
 Tant que **« Demander le consentement avant de charger »** est coché, le visiteur voit une
 carte à la place du lecteur, avec le titre et la miniature du contenu. Cette miniature est une
@@ -125,7 +134,8 @@ date choisie, puis se publie seule. Cela demande que sa collection ait un champ
 fournis — et le droit de **publier** sur cette collection.
 
 **Contenu → Calendrier éditorial** (`/calendar`) montre ce qui sort, et quand,
-sur un mois : les parutions programmées (liseré bleu) et celles déjà en ligne
+sur un **mois** ou sur une **semaine** (deux boutons, en haut de la grille —
+la semaine est la bonne vue quand plusieurs parutions tombent le même jour) : les parutions programmées (liseré bleu) et celles déjà en ligne
 (liseré vert), chacune sur le jour où elle sort *dans votre fuseau horaire*.
 À droite, **À programmer** liste les brouillons des collections qui ont une
 date de publication.
@@ -191,8 +201,14 @@ Ce qu'il faut savoir :
   recherche pour les suivantes. Si le remplacement **contient** l'expression
   (« Cogenta » → « Cogenta SA »), l'écran prévient qu'une nouvelle recherche
   retrouverait les mêmes entrées ;
-- une occurrence **coupée par une mise en forme** (« Cogen**ta** ») n'est pas
-  trouvée : la recoller réécrirait la mise en forme de la phrase.
+- une occurrence **coupée par une mise en forme** (« Cogen**ta** ») est
+  trouvée : le paragraphe est lu d'un bloc, et le remplacement prend la mise en
+  forme du début de l'occurrence — le reste de la phrase garde exactement la
+  sienne ;
+- **Annuler ce remplacement**, juste après l'avoir appliqué, remet chaque
+  entrée à la version qu'elle avait avant : une par une, comme si vous étiez
+  passé par leur onglet *Historique*. Une entrée modifiée depuis est comptée à
+  part et laissée telle quelle — sa version reste dans son historique.
 
 ## La corbeille
 
@@ -229,7 +245,8 @@ images qu'elle sert à une page publiée le sont via une URL dédiée.
 ### Recadrer ou pivoter une image
 
 Dans la fiche d'une image, **Recadrer ou pivoter** ouvre l'éditeur : pivotez par quarts de
-tour, choisissez un cadre libre ou des proportions (carré, 4:3, 3:2, 16:9), déplacez-le et
+tour, **retournez** l'image en miroir (gauche-droite ou haut-bas), choisissez un cadre libre
+ou des proportions (carré, 4:3, 3:2, 16:9), déplacez-le et
 redimensionnez-le à la souris — ou au clavier, flèches pour déplacer, Maj + flèches pour
 redimensionner — puis **Appliquer**. Toutes les pages qui utilisent l'image la montrent
 retouchée, sans rien republier, et le point focal suit la retouche.

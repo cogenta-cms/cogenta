@@ -693,6 +693,12 @@ export interface ReplaceReport {
   readonly truncated: boolean
   readonly entries: readonly EntryReplacementPlan[]
   readonly skipped?: readonly { readonly entryId: string; readonly reason: string }[]
+  /** Where each entry stood before the replacement wrote to it — what "undo all of it" restores to. */
+  readonly undo?: readonly {
+    readonly collection: string
+    readonly entryId: string
+    readonly version: number
+  }[]
 }
 
 export interface ReplaceInput {

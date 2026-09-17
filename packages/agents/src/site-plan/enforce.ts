@@ -25,8 +25,15 @@ import type {
  */
 const TOPIC_NAMES: Readonly<Record<ConstraintTopic, RegExp>> = {
   blog: /^(?:blog|posts?|articles?|actualites?|news|billets?|breves?)$/,
+  // Only what *sells*. A `produit` or `tarif` collection used to be listed
+  // here, and a real brief showed why that is wrong: a bakery that writes
+  // "pas de boutique en ligne" in the same document that asks to "présenter
+  // nos pains […] avec prix indicatifs" had its whole catalogue removed from
+  // the plan. A contract A collection cannot sell anything — money lives in
+  // contract E, which no proposed collection can reach — so a showcase of
+  // products is exactly what a site that refuses online sales still needs.
   ecommerce:
-    /^(?:products?|produits?|orders?|commandes?|carts?|paniers?|checkouts?|shops?|boutiques?|prices?|tarifs?|payments?|paiements?|invoices?|factures?)$/,
+    /^(?:orders?|commandes?|carts?|paniers?|checkouts?|shops?|boutiques?|payments?|paiements?|invoices?|factures?)$/,
   comments: /^(?:comments?|commentaires?|avis)$/,
   membership: /^(?:members?|membres?|adherents?|accounts?|comptes?|subscriptions?|abonnes?)$/,
   forum: /^(?:forums?|threads?|topics?|sujets?|messages?|discussions?)$/,

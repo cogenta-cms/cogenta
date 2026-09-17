@@ -115,6 +115,64 @@ async function sizeOf(bytes: Uint8Array): Promise<{ width: number; height: numbe
 }
 
 describe('cogenta serve — cropping and rotating an image (L39)', () => {
+  /**
+   * The mirror (L39, widened). What matters on a real server is the round
+   * trip: the edit is accepted, the stored file really changes, the asset is
+   * marked edited, and restoring brings back the original byte for byte.
+   */
+  it('mirrors the stored file, keeps its size, and restores the original afterwards', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await signIn(root, server.base)
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+      const asset = await upload(server.base, token, makePng(400, 200))
+      const original = Buffer.from(
+        await (await fetch(`${server.base}/api/media/${asset.id}/file`, { headers })).arrayBuffer(),
+      )
+
+      const mirrored = await fetch(`${server.base}/api/media/${asset.id}/edit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ rotate: 0, mirror: 'horizontal', crop: null }),
+      })
+      expect(mirrored.status).toBe(200)
+      const mirroredAsset = ((await mirrored.json()) as { data: Asset & { edited: boolean } }).data
+      // A mirror moves pixels, never the frame: same size, and edited.
+      expect([mirroredAsset.width, mirroredAsset.height, mirroredAsset.edited]).toEqual([
+        400,
+        200,
+        true,
+      ])
+
+      const served = Buffer.from(
+        await (await fetch(`${server.base}/api/media/${asset.id}/file`, { headers })).arrayBuffer(),
+      )
+      expect(await sizeOf(new Uint8Array(served))).toEqual({ width: 400, height: 200 })
+      // The gradient of `makePng` is left-to-right, so mirroring it really
+      // changes the bytes — this is what distinguishes an applied mirror from
+      // an accepted-and-ignored one.
+      expect(served.equals(original)).toBe(false)
+
+      const refused = await fetch(`${server.base}/api/media/${asset.id}/edit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ rotate: 0, mirror: 'diagonal', crop: null }),
+      })
+      // `MEDIA_INVALID` — an axis that is not one of the two is a bad request,
+      // refused before a single pixel is read.
+      expect(refused.status).toBe(400)
+
+      await fetch(`${server.base}/api/media/${asset.id}/restore`, { method: 'POST', headers })
+      const back = Buffer.from(
+        await (await fetch(`${server.base}/api/media/${asset.id}/file`, { headers })).arrayBuffer(),
+      )
+      expect(back.equals(original)).toBe(true)
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
   it('turns and crops the stored file, then restores the original', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

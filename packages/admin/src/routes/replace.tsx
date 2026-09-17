@@ -2,7 +2,7 @@ import type { TFunction } from 'i18next'
 import { type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { type ReplaceReport, replaceContent } from '../api/content-client.js'
+import { type ReplaceReport, replaceContent, restoreVersion } from '../api/content-client.js'
 import { describeApiError } from '../api/describe-error.js'
 import { useAuth } from '../auth/auth-context.js'
 import { Badge, Button, Card, CardBody, Field, Input, Notice, PageHeader } from '../ui/index.js'
@@ -48,6 +48,15 @@ export function ReplaceRoute(): JSX.Element {
   const [wholeWord, setWholeWord] = useState(false)
   const [preview, setPreview] = useState<ReplaceReport | null>(null)
   const [result, setResult] = useState<ReplaceReport | null>(null)
+  // L34 left "pas d'annulation groupée" open: undoing a brand rename across
+  // forty entries meant opening forty History tabs. Each entry is restored to
+  // the exact version it stood at before the replacement, through the very
+  // same restore route the History tab uses — one real version per entry, no
+  // second write path. Offered while the report is on screen: leaving the
+  // screen does not lose anything, the History tab still has every version.
+  const [undone, setUndone] = useState<{ readonly done: number; readonly failed: number } | null>(
+    null,
+  )
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,6 +83,28 @@ export function ReplaceRoute(): JSX.Element {
       .finally(() => setBusy(false))
   }
 
+  const undoAll = async (): Promise<void> => {
+    const positions = result?.undo ?? []
+    if (token === null || positions.length === 0) return
+    setBusy(true)
+    setError(null)
+    let done = 0
+    let failed = 0
+    for (const position of positions) {
+      try {
+        await restoreVersion(token, position.collection, position.entryId, position.version)
+        done += 1
+      } catch {
+        // One entry someone has edited since must not stop the others: it is
+        // reported, and its own History tab still holds the version.
+        failed += 1
+      }
+    }
+    setUndone({ done, failed })
+    setResult(null)
+    setBusy(false)
+  }
+
   const apply = (): void => {
     if (token === null) return
     if (!confirming) {
@@ -85,6 +116,7 @@ export function ReplaceRoute(): JSX.Element {
     replaceContent(token, { ...options, apply: true })
       .then((report) => {
         setResult(report)
+        setUndone(null)
         setPreview(null)
         setConfirming(false)
       })
@@ -194,6 +226,27 @@ export function ReplaceRoute(): JSX.Element {
             <p className="m-0 mt-1">
               {t('replace.skipped', { count: result.skipped?.length ?? 0 })}
             </p>
+          )}
+          {(result.undo ?? []).length > 0 && (
+            <p className="m-0 mt-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void undoAll()}
+              >
+                {t('replace.undoAll', { count: result.undo?.length ?? 0 })}
+              </Button>
+            </p>
+          )}
+        </Notice>
+      )}
+
+      {undone !== null && (
+        <Notice tone={undone.failed === 0 ? 'success' : 'warning'} live="polite">
+          <p className="m-0">{t('replace.undone', { count: undone.done })}</p>
+          {undone.failed > 0 && (
+            <p className="m-0 mt-1">{t('replace.undoFailed', { count: undone.failed })}</p>
           )}
         </Notice>
       )}

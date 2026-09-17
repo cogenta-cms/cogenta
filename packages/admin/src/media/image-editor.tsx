@@ -70,6 +70,7 @@ export function ImageEditor({
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [rotate, setRotate] = useState<ImageEdit['rotate']>(0)
+  const [mirror, setMirror] = useState<ImageEdit['mirror']>(undefined)
   const [crop, setCrop] = useState<CropRect>(FULL_CROP)
   const [ratio, setRatio] = useState<RatioPreset>('free')
   const [busy, setBusy] = useState(false)
@@ -126,13 +127,29 @@ export function ImageEditor({
     context.setTransform(1, 0, 0, 1, 0, 0)
     context.clearRect(0, 0, size.width, size.height)
     context.translate(size.width / 2, size.height / 2)
+    // Mirror after the turn, exactly as the server applies it — the preview
+    // would otherwise show a different picture from the one written.
+    if (mirror === 'horizontal') context.scale(-1, 1)
+    if (mirror === 'vertical') context.scale(1, -1)
     context.rotate((rotate * Math.PI) / 180)
     context.drawImage(image, -image.naturalWidth / 2, -image.naturalHeight / 2)
-  }, [image, rotate, size])
+  }, [image, rotate, mirror, size])
 
   function turn(delta: 90 | -90): void {
     setRotate((current) => ((current + delta + 360) % 360) as ImageEdit['rotate'])
     // A frame drawn on the old orientation means nothing on the new one.
+    setCrop(FULL_CROP)
+    setRatio('free')
+  }
+
+  /**
+   * A mirror is its own opposite, so the same button both sets and clears it;
+   * mirroring across the other axis replaces it rather than stacking, because
+   * "horizontal then vertical" is simply a half turn, which the turn buttons
+   * already do.
+   */
+  function flip(axis: 'horizontal' | 'vertical'): void {
+    setMirror((current) => (current === axis ? undefined : axis))
     setCrop(FULL_CROP)
     setRatio('free')
   }
@@ -197,7 +214,13 @@ export function ImageEditor({
     try {
       const whole = clampRect(crop)
       const isWhole = whole.x === 0 && whole.y === 0 && whole.width === 1 && whole.height === 1
-      onDone(await editMedia(token, asset.id, { rotate, crop: isWhole ? null : whole }))
+      onDone(
+        await editMedia(token, asset.id, {
+          rotate,
+          ...(mirror === undefined ? {} : { mirror }),
+          crop: isWhole ? null : whole,
+        }),
+      )
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('imageEditor.applyError'))
     } finally {
@@ -239,6 +262,26 @@ export function ImageEditor({
           onClick={() => turn(90)}
         >
           {t('imageEditor.rotateRight')}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={mirror === 'horizontal' ? 'primary' : 'secondary'}
+          aria-pressed={mirror === 'horizontal'}
+          disabled={busy}
+          onClick={() => flip('horizontal')}
+        >
+          {t('imageEditor.mirrorHorizontal')}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={mirror === 'vertical' ? 'primary' : 'secondary'}
+          aria-pressed={mirror === 'vertical'}
+          disabled={busy}
+          onClick={() => flip('vertical')}
+        >
+          {t('imageEditor.mirrorVertical')}
         </Button>
       </div>
 

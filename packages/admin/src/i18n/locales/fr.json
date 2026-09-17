@@ -4090,6 +4090,7 @@
         "full": "Pleine largeur"
       }
     },
+    "upcomingOnly": "Seulement à venir",
     "listedEntriesHint": "Les éléments de cette liste sont des entrées de « {{collection}} ».",
     "listedEntriesLink": "Modifier les {{collection}}"
   },
@@ -4957,6 +4958,12 @@
     "occurrences_other": "{{count}} occurrences",
     "done_one": "{{count}} entrée modifiée. Chaque modification est une nouvelle version, restaurable depuis l'historique de l'entrée.",
     "done_other": "{{count}} entrées modifiées. Chaque modification est une nouvelle version, restaurable depuis l'historique de l'entrée.",
+    "undoAll_one": "Annuler ce remplacement ({{count}} entrée)",
+    "undoAll_other": "Annuler ce remplacement ({{count}} entrées)",
+    "undone_one": "Remplacement annulé sur {{count}} entrée.",
+    "undone_other": "Remplacement annulé sur {{count}} entrées.",
+    "undoFailed_one": "{{count}} entrée n’a pas pu être remise en place : quelqu’un l’a modifiée depuis. Son onglet Historique garde la version.",
+    "undoFailed_other": "{{count}} entrées n’ont pas pu être remises en place : quelqu’un les a modifiées depuis. Leur onglet Historique garde la version.",
     "skipped_one": "{{count}} entrée laissée intacte : elle a été modifiée entre l'aperçu et le remplacement.",
     "skipped_other": "{{count}} entrées laissées intactes : elles ont été modifiées entre l'aperçu et le remplacement.",
     "failed": "Le remplacement n'a pas pu être fait.",
@@ -4967,8 +4974,12 @@
   "calendar": {
     "heading": "Calendrier éditorial",
     "description": "Ce qui sort, et quand. Glissez une parution programmée ou un brouillon sur un jour pour le programmer, ou ouvrez-le pour choisir la date et l'heure.",
+    "viewMonth": "Mois",
+    "viewWeek": "Semaine",
     "previous": "Mois précédent",
     "next": "Mois suivant",
+    "previousWeek": "Semaine précédente",
+    "nextWeek": "Semaine suivante",
     "today": "Aujourd'hui",
     "legendScheduled": "Programmé",
     "legendPublished": "Publié",
@@ -5231,6 +5242,7 @@
     "failed": "Aperçu indisponible : le service n’a pas répondu. Choisissez le service et les proportions vous-même.",
     "noPreview": "{{provider}} n’a pas d’aperçu automatique : le lien s’affichera tel quel.",
     "unknownProvider": "Service non reconnu : choisissez « Autre » pour afficher un lien vers ce contenu.",
+    "refresh": "Actualiser l’aperçu",
     "previewLabel": "Aperçu du contenu intégré",
     "byline": "{{provider}} · {{author}}"
   },
@@ -5240,6 +5252,8 @@
     "heading": "Recadrer ou pivoter l’image",
     "rotateLeft": "↺ Pivoter à gauche",
     "rotateRight": "↻ Pivoter à droite",
+    "mirrorHorizontal": "Miroir gauche-droite",
+    "mirrorVertical": "Miroir haut-bas",
     "ratioLabel": "Proportions du cadre",
     "ratio": {
       "free": "Libre",

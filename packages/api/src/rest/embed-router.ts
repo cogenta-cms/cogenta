@@ -75,11 +75,18 @@ export function createEmbedRouter(options: EmbedRouterOptions): EmbedRouter {
           }
         }
         const body = request.body
-        const url =
-          body !== null && typeof body === 'object'
-            ? (body as Record<string, unknown>)['url']
-            : undefined
-        return jsonResponse(200, { data: await options.service.resolve(url as string) })
+        const fields =
+          body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+        const url = fields['url']
+        // `refresh: true` spends a provider call on an address the cache
+        // already holds — the way an editor updates a title that changed at
+        // the source without waiting out the thirty days. It costs the same
+        // rate-limit token as any other resolution, which is what keeps it
+        // from becoming a way to hammer a provider.
+        const refresh = fields['refresh'] === true
+        return jsonResponse(200, {
+          data: await options.service.resolve(url as string, { refresh }),
+        })
       } catch (error) {
         return errorResponse(error)
       }

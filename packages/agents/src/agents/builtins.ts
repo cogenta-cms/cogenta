@@ -39,6 +39,27 @@ export const CONTENT_WATCH_AGENT_NAME = 'Content Watch'
 export const SITE_MONITOR_AGENT_NAME = 'Site Monitor'
 export const THEME_CREATOR_AGENT_NAME = 'Cogenta Theme Creator'
 export const PLUGIN_BUILDER_AGENT_NAME = 'Cogenta Plugin Builder'
+/**
+ * L5 task 10 — the seven agents of priority 2 and 3, specified in
+ * `docs/lots/L5-agents-priorite-2-3.md` and seeded here so they are really
+ * enableable from `/admin/agents` rather than only declared in
+ * `@cogenta/agents-builtin`.
+ *
+ * All seven are **disabled by default** and all seven share one shape: what
+ * they report is computed by a pure function of `@cogenta/agents-builtin`
+ * (`auditMediaLibrary`, `findTranslationGaps`, `triageComments`,
+ * `readAudienceSignals`, `findMigrationResidue`, `auditAccessibility`,
+ * `auditCompliance`), and the model only orders and words those findings.
+ * That is the answer to the failure L5 names as fatal — "le faux positif tue
+ * l'agent" — and it is why none of them is given a publish or delete tool.
+ */
+export const MEDIA_AGENT_NAME = 'Media Librarian'
+export const TRANSLATION_AGENT_NAME = 'Translation Watch'
+export const MODERATION_AGENT_NAME = 'Comment Moderator'
+export const ANALYTICS_AGENT_NAME = 'Audience Reader'
+export const MIGRATION_AGENT_NAME = 'Migration Finisher'
+export const ACCESSIBILITY_AGENT_NAME = 'Accessibility Auditor'
+export const COMPLIANCE_AGENT_NAME = 'Compliance Checker'
 
 /** Passed to `AgentDeclarationInput.model` — every seed prefers the same provider/model names an operator is most likely to configure first; `agents/orchestrator.ts` never fails to resolve a provider just because the *name* differs from what the site has enabled, it only needs `providers/store.ts` to have configured at least one. */
 const DEFAULT_MODEL = { preferred: 'anthropic', fallback: 'openai' } as const
@@ -173,6 +194,154 @@ export function builtinAgentSeeds(): readonly AgentDeclarationInput[] {
       autonomy: { default: 'propose' },
       budget: { tokensPerDay: 120_000, callsPerHour: 20 },
       enabled: true,
+    },
+    {
+      name: MEDIA_AGENT_NAME,
+      identity: {
+        role: 'Keeps the media library usable: writes the alt text a screen reader needs, names the files nothing references any more, and the images far heavier than the size they are shown at.',
+        objectives: [
+          'Call media.list, then content.collections/content.list to learn which assets entries actually reference.',
+          'Write alt text with media.write only for images that have none and are not marked decorative — a decorative image keeps an empty alt on purpose.',
+          'Report an unused or oversized file; never delete one, and say so rather than implying it was removed.',
+        ],
+        style: 'Plain and concrete: what a reader misses, not the name of the attribute.',
+      },
+      model: DEFAULT_MODEL,
+      tools: [
+        'media.list',
+        'media.read',
+        'media.write',
+        'content.collections',
+        'content.list',
+        'content.read',
+      ],
+      autonomy: { default: 'propose' },
+      budget: { tokensPerDay: 60_000, callsPerHour: 15 },
+      triggers: [{ on: 'schedule', cron: '0 5 * * 1' }],
+      enabled: false,
+    },
+    {
+      name: TRANSLATION_AGENT_NAME,
+      identity: {
+        role: 'Watches a multilingual site for what is missing: an entry with no version in a declared locale, or a translation last written before its source changed.',
+        objectives: [
+          'Use content.collections/content.schema/content.list to find translation families and the locales this site declares.',
+          'Translate into a draft with content.write_draft — never publish, and never change a slug that is already published.',
+          'Say how many entries are still untranslated, not only the ones handled in this run.',
+        ],
+        style: 'Factual; one line per entry, grouped by language.',
+      },
+      model: DEFAULT_MODEL,
+      tools: [
+        'content.collections',
+        'content.schema',
+        'content.list',
+        'content.read',
+        'content.write_draft',
+      ],
+      autonomy: { default: 'propose' },
+      budget: { tokensPerDay: 80_000, callsPerHour: 15 },
+      triggers: [{ on: 'schedule', cron: '0 5 * * 2' }],
+      enabled: false,
+    },
+    {
+      name: MODERATION_AGENT_NAME,
+      identity: {
+        role: "Keeps the comment queue moving without deciding what a human should decide: it applies only what the site's own anti-spam pass already settled, and explains the rest.",
+        objectives: [
+          'Call comments.list and read the verdict each comment already carries.',
+          'Use comments.decide only on the clear cases — approve what the checks found clean, refuse what they flagged as spam. The host refuses anything else.',
+          'Leave every doubtful comment pending and say, in one line each, what you saw in it.',
+        ],
+        style:
+          'Short and neutral. Judge the message, never the person, and never quote an e-mail address.',
+      },
+      model: DEFAULT_MODEL,
+      tools: ['comments.list', 'comments.decide', 'content.read'],
+      autonomy: { default: 'observe' },
+      budget: { tokensPerDay: 40_000, callsPerHour: 30 },
+      triggers: [{ on: 'schedule', cron: '0 * * * *' }],
+      enabled: false,
+    },
+    {
+      name: ANALYTICS_AGENT_NAME,
+      identity: {
+        role: "Reads this site's own audience figures and says what actually changed. It has no write tool at all.",
+        objectives: [
+          'Call analytics.summary for two comparable windows and logs.read_not_found for the addresses people ask for in vain.',
+          'Report only changes that are both large in proportion and real in volume — never turn two views into a percentage.',
+          'Never state a number the tools did not return.',
+        ],
+        style: 'Three sentences first, then the figures. No speculation dressed as fact.',
+      },
+      model: DEFAULT_MODEL,
+      tools: ['analytics.summary', 'content.list', 'content.read', 'logs.read_not_found'],
+      autonomy: { default: 'observe' },
+      budget: { tokensPerDay: 40_000, callsPerHour: 10 },
+      triggers: [{ on: 'schedule', cron: '0 6 * * 1' }],
+      enabled: false,
+    },
+    {
+      name: MIGRATION_AGENT_NAME,
+      identity: {
+        role: 'Finishes what an import started: links still pointing at the old domain, images still loaded from it, entries with no excerpt.',
+        objectives: [
+          'Look only at entries an import wrote (provenance "imported").',
+          'Propose a redirect with redirects.create for an old address whose path really moved — reversible and audited.',
+          'Write missing excerpts as drafts; never touch an imported slug, which is exactly what the migration preserved.',
+        ],
+        style: 'Grouped by kind of leftover, with counts.',
+      },
+      model: DEFAULT_MODEL,
+      tools: [
+        'content.collections',
+        'content.schema',
+        'content.list',
+        'content.read',
+        'content.write_draft',
+        'redirects.create',
+      ],
+      autonomy: { default: 'propose' },
+      budget: { tokensPerDay: 60_000, callsPerHour: 15 },
+      triggers: [{ on: 'schedule', cron: '0 5 1 * *' }],
+      enabled: false,
+    },
+    {
+      name: ACCESSIBILITY_AGENT_NAME,
+      identity: {
+        role: "Audits the HTML a visitor really receives — language, heading order, alt text, link wording, form labels — plus the theme's colour contrast, computed with the WCAG formula.",
+        objectives: [
+          "Fetch the site's own pages with http.fetch and audit what came back, never what the CMS believes it produced.",
+          'Propose better link wording or alt text; never decide that an insufficient contrast passes.',
+          'Open every report by saying which criteria a machine cannot check, so a clean report is never read as "this site is accessible".',
+        ],
+        style:
+          'By severity: what blocks use of the page, what makes it painful, what could be better.',
+      },
+      model: DEFAULT_MODEL,
+      tools: ['http.fetch', 'content.list', 'content.read', 'media.list'],
+      autonomy: { default: 'propose' },
+      budget: { tokensPerDay: 60_000, callsPerHour: 15 },
+      triggers: [{ on: 'schedule', cron: '0 4 1 * *' }],
+      enabled: false,
+    },
+    {
+      name: COMPLIANCE_AGENT_NAME,
+      identity: {
+        role: 'Checks what a site must be able to show: its legal pages, its retention settings, and whether content written by a machine says so.',
+        objectives: [
+          'Read the configuration with site.config_read and the published pages with content.list/content.read.',
+          'Name each gap in one sentence a non-lawyer understands, and what would close it.',
+          'Say in every report that a checklist is not legal advice, and change no setting — there is no write tool here.',
+        ],
+        style: 'What is missing, why it matters, what to do. No raw legal text.',
+      },
+      model: DEFAULT_MODEL,
+      tools: ['site.config_read', 'content.collections', 'content.list', 'content.read'],
+      autonomy: { default: 'observe' },
+      budget: { tokensPerDay: 40_000, callsPerHour: 10 },
+      triggers: [{ on: 'schedule', cron: '0 4 1 * *' }],
+      enabled: false,
     },
   ]
 }

@@ -524,6 +524,25 @@ export type {
 } from './tools/core/agent-delegate.js'
 export { agentDelegateToolName, createAgentDelegateTool } from './tools/core/agent-delegate.js'
 export type {
+  AnalyticsSummaryOutput,
+  AnalyticsSummaryPort,
+  AnalyticsWindowSummary,
+} from './tools/core/analytics.js'
+export { createAnalyticsSummaryTool } from './tools/core/analytics.js'
+export type {
+  CommentDecisionReceipt,
+  CommentModerationPort,
+  CommentSummary,
+  CommentsDecideOutput,
+  CommentsListOutput,
+  ModeratableStatus,
+} from './tools/core/comments.js'
+export {
+  assertDecisionAllowed,
+  createCommentsDecideTool,
+  createCommentsListTool,
+} from './tools/core/comments.js'
+export type {
   ContentAccessContext,
   ContentReadOptions,
   ContentServiceLike,
@@ -568,6 +587,8 @@ export {
   createMediaStoreImageTool,
   createMediaWriteTool,
 } from './tools/core/media.js'
+export type { MediaListOutput } from './tools/core/media-list.js'
+export { createMediaListTool } from './tools/core/media-list.js'
 export type { NotFoundLogReader } from './tools/core/not-found-log.js'
 export { createNotFoundLogReadTool } from './tools/core/not-found-log.js'
 export type { RedirectWriter } from './tools/core/redirects.js'

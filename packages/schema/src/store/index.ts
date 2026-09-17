@@ -280,6 +280,7 @@ export type {
   SortField,
   SortOrder,
   StatusCounts,
+  SystemSortField,
   TrashFilter,
   TrashOptions,
   UpdateInput,

@@ -109,8 +109,9 @@ export function createMediaImageProcessor(
 
     variantNames: (intrinsic) => variantWidthsFor(intrinsic).map((width) => variantName(width)),
 
-    // L39: a quarter turn, then a crop in fractions of the turned picture,
-    // in the original's format when the web can show it as it is.
+    // L39: a quarter turn, an optional mirror, then a crop in fractions of
+    // the picture as the editor shows it, in the original's format when the
+    // web can show it as it is.
     edit: async (bytes, edit) => {
       const metadata = await transformer.metadata(bytes)
       const sideways = edit.rotate === 90 || edit.rotate === 270
@@ -134,6 +135,7 @@ export function createMediaImageProcessor(
         : VARIANT_FORMAT
       const rendered = await transformer.transform(bytes, {
         rotate: edit.rotate,
+        ...(edit.mirror === undefined ? {} : { mirror: edit.mirror }),
         crop,
         resize: null,
         format,

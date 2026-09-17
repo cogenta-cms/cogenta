@@ -5,7 +5,6 @@ import type {
   ContentEntry,
   ContentStatus,
   ContentStore,
-  ContentValues,
   EntryState,
   ListOptions,
   Page,
@@ -15,10 +14,12 @@ import type {
 } from '@cogenta/schema'
 import { isSystemFieldName } from '@cogenta/schema'
 import {
+  canPageBy,
   cursorFor,
   entryState,
   grantedEntryId,
   matchesFilter,
+  resolveRelativeFilter,
   roleState,
   scanPages,
   visibilityGateFor,
@@ -181,8 +182,19 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
 
     const limit = boundedLimit(request.limit)
     const sort = sortOf(collection, request.sort)
-    const filter = request.filter
+    // `$now`/`$today` become this request's instant before anything reads the
+    // filter — once here, so the pushdown and the in-memory pass can never
+    // disagree about what "now" was (ADR-0038).
+    const filter =
+      request.filter === undefined ? undefined : resolveRelativeFilter(request.filter, new Date())
     const pushed = pushdown(collection, filter)
+
+    if (!canPageBy(sort, state)) {
+      throw queryInvalid(
+        `Unpublished entries of "${collection.name}" cannot be ordered by "${sort.field}".`,
+        'A draft may carry a different date from the entry it is a draft of, so a cursor on it would skip rows. Order by id, createdAt or updatedAt here.',
+      )
+    }
 
     const visible = visibilityGateFor(permissions, collection, context)
     const scan = await scanPages<ContentEntry>({
@@ -353,14 +365,21 @@ function sortOf(collection: CollectionDefinition, requested: QueryRequest['sort'
   const first = requested?.[0]
   if (first === undefined) return { field: 'id', direction: 'desc' }
 
-  const field = SORT_FIELDS[first.field]
-  if (field === undefined) {
+  const system = SORT_FIELDS[first.field]
+  if (system !== undefined) return { field: system, direction: first.direction }
+
+  // A date the collection declares (`schema@2.4`, ADR-0038). Checked against
+  // the real definition here rather than passed through, because GraphQL
+  // answers a typed schema: a name that is not a date of this collection is a
+  // query error, not a store error surfaced as a 500.
+  const declared = collection.fields[first.field]
+  if (declared === undefined || (declared.kind !== 'date' && declared.kind !== 'datetime')) {
     throw queryInvalid(
       `"${collection.name}" cannot be ordered by that field.`,
-      'Order by id, createdAt or updatedAt: a cursor is only total on a column that is never null.',
+      'Order by id, createdAt, updatedAt, or a date this collection declares: a cursor needs a total order.',
     )
   }
-  return { field, direction: first.direction }
+  return { field: first.field, direction: first.direction }
 }
 
 /**

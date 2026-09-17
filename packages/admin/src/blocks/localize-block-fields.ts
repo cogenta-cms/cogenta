@@ -21,12 +21,42 @@ function optionKey(value: string): string {
   return value.replaceAll(':', 'x')
 }
 
+/**
+ * The dates a collection declares itself, offered beside the three system
+ * columns in a list's "Trier par" (L40, ADR-0038). Nothing else: a cursor
+ * needs a total order, and only a `date`/`datetime` column has one the store
+ * can page through.
+ */
+export function dateFieldsOf(collection: CollectionSummary | undefined): readonly SchemaField[] {
+  if (collection === undefined) return []
+  return collection.fields.filter((field) => field.kind === 'date' || field.kind === 'datetime')
+}
+
 function localizeOptions(
   options: Readonly<Record<string, unknown>>,
   t: TFunction,
   collections: readonly CollectionSummary[],
+  listed?: CollectionSummary,
 ): Readonly<Record<string, unknown>> {
   let next: Record<string, unknown> = { ...options }
+  if (next['dateSortPicker'] === true) {
+    next = {
+      ...next,
+      options: [
+        ...((next['options'] as readonly OptionChoice[] | undefined) ?? []).map((choice) => ({
+          value: choice.value,
+          label:
+            choice.label ??
+            t(`blockOptions.${optionKey(choice.value)}`, { defaultValue: choice.value }),
+        })),
+        ...dateFieldsOf(listed).map((field) => ({
+          value: field.name,
+          label: field.admin?.label ?? field.name,
+        })),
+      ],
+    }
+    return next
+  }
   if (next['collectionPicker'] === true) {
     next = {
       ...next,
@@ -50,7 +80,7 @@ function localizeOptions(
     next = {
       ...next,
       items: (next['items'] as readonly ItemFieldDefinition[]).map((item) =>
-        localizeItemField(item, t, collections),
+        localizeItemField(item, t, collections, listed),
       ),
     }
   }
@@ -70,6 +100,7 @@ function localizeItemField(
   item: ItemFieldDefinition,
   t: TFunction,
   collections: readonly CollectionSummary[],
+  listed?: CollectionSummary,
 ): ItemFieldDefinition {
   const help = item.admin?.help ?? helpFor(item.name, t)
   return {
@@ -79,7 +110,7 @@ function localizeItemField(
       label: item.admin?.label ?? labelFor(item.name, t),
       ...(help === undefined ? {} : { help }),
     },
-    options: localizeOptions(item.options, t, collections),
+    options: localizeOptions(item.options, t, collections, listed),
   }
 }
 
@@ -87,6 +118,8 @@ export function localizeBlockField(
   field: SchemaField,
   t: TFunction,
   collections: readonly CollectionSummary[],
+  /** The collection a `collectionList` block is listing right now, when it names one. */
+  listed?: CollectionSummary,
 ): SchemaField {
   const help = field.admin?.help ?? helpFor(field.name, t)
   return {
@@ -96,7 +129,7 @@ export function localizeBlockField(
       label: field.admin?.label ?? labelFor(field.name, t),
       ...(help === undefined ? {} : { help }),
     },
-    options: localizeOptions(field.options, t, collections),
+    options: localizeOptions(field.options, t, collections, listed),
   }
 }
 

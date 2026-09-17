@@ -41,6 +41,9 @@ export function EmbedAssist({
   // The latest data, so a resolution that lands late fills what is there now.
   const latest = useRef(data)
   latest.current = data
+  // Bumped by "refresh": a preview is kept thirty days, and a title changed at
+  // the source would otherwise take until then to appear (L38's open point).
+  const [refreshedAt, setRefreshedAt] = useState(0)
 
   useEffect(() => {
     if (token === null || !isWebAddress(url)) {
@@ -50,7 +53,7 @@ export function EmbedAssist({
     let cancelled = false
     const timer = setTimeout(() => {
       setState({ kind: 'loading' })
-      resolveEmbed(token, url.trim())
+      resolveEmbed(token, url.trim(), refreshedAt === 0 ? {} : { refresh: true })
         .then((preview) => {
           if (cancelled) return
           setState({ kind: 'done', preview })
@@ -79,7 +82,7 @@ export function EmbedAssist({
     // `onChange` is a new function on every render of the form, so it is read
     // through `latest`-style closure rather than listed: the address and the
     // session are what a resolution depends on.
-  }, [url, token, disabled])
+  }, [url, token, disabled, refreshedAt])
 
   if (state.kind === 'idle') return null
   if (state.kind === 'loading') {
@@ -125,6 +128,14 @@ export function EmbedAssist({
               })}
         </span>
       </figcaption>
+      <button
+        type="button"
+        className="self-start text-sm underline"
+        disabled={disabled}
+        onClick={() => setRefreshedAt(Date.now())}
+      >
+        {t('embedAssist.refresh')}
+      </button>
     </figure>
   )
 }

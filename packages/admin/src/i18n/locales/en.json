@@ -4090,6 +4090,7 @@
         "full": "Full-bleed"
       }
     },
+    "upcomingOnly": "Only what is still to come",
     "listedEntriesHint": "The items of this list are entries of “{{collection}}”.",
     "listedEntriesLink": "Edit {{collection}}"
   },
@@ -4957,6 +4958,12 @@
     "occurrences_other": "{{count}} occurrences",
     "done_one": "{{count}} entry changed. Each change is a new version, restorable from the entry's history.",
     "done_other": "{{count}} entries changed. Each change is a new version, restorable from the entry's history.",
+    "undoAll_one": "Undo this replacement ({{count}} entry)",
+    "undoAll_other": "Undo this replacement ({{count}} entries)",
+    "undone_one": "Replacement undone on {{count}} entry.",
+    "undone_other": "Replacement undone on {{count}} entries.",
+    "undoFailed_one": "{{count}} entry could not be put back: someone has edited it since. Its History tab still holds the version.",
+    "undoFailed_other": "{{count}} entries could not be put back: someone has edited them since. Their History tab still holds the version.",
     "skipped_one": "{{count}} entry left alone: it was edited between the preview and the replacement.",
     "skipped_other": "{{count}} entries left alone: they were edited between the preview and the replacement.",
     "failed": "The replacement could not be made.",
@@ -4967,8 +4974,12 @@
   "calendar": {
     "heading": "Editorial calendar",
     "description": "What comes out, and when. Drag a scheduled entry or a draft onto a day to schedule it, or open it to pick the date and time.",
+    "viewMonth": "Month",
+    "viewWeek": "Week",
     "previous": "Previous month",
     "next": "Next month",
+    "previousWeek": "Previous week",
+    "nextWeek": "Next week",
     "today": "Today",
     "legendScheduled": "Scheduled",
     "legendPublished": "Published",
@@ -5231,6 +5242,7 @@
     "failed": "No preview: the service did not answer. Choose the service and the proportions yourself.",
     "noPreview": "{{provider}} has no automatic preview: the link will be shown as it is.",
     "unknownProvider": "Service not recognised: choose “Other” to show a link to this content.",
+    "refresh": "Refresh this preview",
     "previewLabel": "Embedded content preview",
     "byline": "{{provider}} · {{author}}"
   },
@@ -5240,6 +5252,8 @@
     "heading": "Crop or rotate the image",
     "rotateLeft": "↺ Rotate left",
     "rotateRight": "↻ Rotate right",
+    "mirrorHorizontal": "Mirror left-right",
+    "mirrorVertical": "Mirror top-bottom",
     "ratioLabel": "Frame proportions",
     "ratio": {
       "free": "Free",

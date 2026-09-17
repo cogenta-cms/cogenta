@@ -127,12 +127,16 @@ describe('a document that tries to redirect the agent', () => {
       result.brief.constraints.filter((e) => e.kind === 'exclusion').map((e) => e.topic),
     ).toContain('ecommerce')
 
+    // `checkout`, not `product`: a catalogue is what a site that refuses
+    // online sales still shows (see `enforce.ts`'s own note on the bakery
+    // brief that proved it), so what the constraint has to remove is the
+    // part that actually sells.
     const proposal: ContentModelProposal = {
       collections: [
         {
           definition: {
-            name: 'product',
-            labels: { singular: 'Product', plural: 'Products' },
+            name: 'checkout',
+            labels: { singular: 'Checkout', plural: 'Checkouts' },
             fields: {},
             permissions: { read: ['public'] },
           },

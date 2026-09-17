@@ -1,26 +1,28 @@
 import {
+  type AgentDeclarationStore,
   type AssistToolset,
   type AssistUsageTracker,
   createAssistToolset,
   createAssistUsageTracker,
   createHashingEmbeddingProvider,
-  createImageProviderRegistry,
-  createProviderRegistry,
   createReferenceDocumentStore,
   createSemanticSearch,
   createVectorRegistry,
   type EmbeddingProvider,
   extractDocumentText,
+  type GeneratedImage,
+  type ImageGenerationOptions,
   type ImageProviderClient,
+  type ImageRequest,
   ingestReferenceDocument,
   MAX_DOCUMENT_BYTES,
   type PromptTemplateStore,
-  type ProviderClient,
+  type ProviderConfigStore,
   REFERENCE_DOCUMENT_COLLECTION,
   type ReferenceDocumentRecord,
   removeReferenceDocumentVectors,
-  resolveProviderTuningDefaults,
   type SemanticSearch,
+  SUPERAGENT_NAME,
   type VectorRecord,
   type VectorStore,
 } from '@cogenta/agents'
@@ -32,6 +34,12 @@ import type {
   SiteSettingsStore,
 } from '@cogenta/schema'
 import { SITE_SETTINGS_SITE_SCOPE, searchDocumentFor } from '@cogenta/schema'
+import { resolveImageClient } from './image-library.js'
+import {
+  createLiveProviderClient,
+  createTextProviderSource,
+  type LiveProviderClient,
+} from './text-provider-source.js'
 
 /**
  * Where L18 is actually wired into a running site.
@@ -96,7 +104,13 @@ export interface AssistantDocumentService {
 }
 
 export interface AssistantAssembly {
+  /** What was available at startup — `summary` describes it. */
   readonly toolset: AssistToolset
+  /**
+   * What is available now: re-reads the admin's provider store, so a key
+   * saved or disabled there changes the answer without a restart.
+   */
+  currentToolset(): Promise<AssistToolset>
   /** Absent when semantic search is not available on this site. */
   readonly search?: SemanticSearch
   /** Absent for the same reason. Used to keep the index in step with the content. */
@@ -128,6 +142,14 @@ export interface BuildAssistantOptions {
   readonly siteId: string
   /** Fiche 45 — shared with `buildAgentRuntime`'s own instance over the same on-disk directory. Absent means every `assist.*` tool keeps its hard-coded instruction text, unchanged (R2/fiche 45 §4). */
   readonly promptTemplates?: PromptTemplateStore
+  /**
+   * The admin's provider store — read before `config.llm`/`config.imageGeneration`,
+   * on every request, so a key saved from the Providers screen switches the
+   * assistant on without a restart. Absent means the config file alone decides.
+   */
+  readonly providerStore?: ProviderConfigStore
+  /** Whose declared model preference (the superagent's) picks among the store's providers. */
+  readonly agentStore?: AgentDeclarationStore
 }
 
 /** The one site setting this task adds — a record of collection name → included, absent meaning included (opt-out, so an existing site's behaviour before this task does not change). */
@@ -147,75 +169,92 @@ export async function isAssistantCollectionEnabled(
   return map[collectionName] !== false
 }
 
-/**
- * The text client, or nothing.
- *
- * Fiche 56 widened `provider` to a free string validated by
- * `createProviderRegistry` itself (a catalog id, or any id paired with a
- * `baseUrl` for a custom OpenAI-compatible endpoint) — so this no longer
- * duplicates that check against a fixed 3-name list (the exact
- * desynchronisation trap `CONTRACT_C_PERMISSIONS` already taught this
- * codebase to avoid). A provider this build cannot resolve, or whose API key
- * is missing, produces `undefined` and a warning — never a throw. An
- * operator who mistyped a provider name should get a site that works with
- * the assistant off, plus a log line saying exactly that.
- */
-async function textProvider(options: BuildAssistantOptions): Promise<ProviderClient | undefined> {
-  const llm = options.config.llm
-  if (llm === undefined) return undefined
-
-  if (llm.apiKey === undefined) {
-    options.logger.warn(
-      'LLM provider configured with no API key, the writing assistant stays off',
-      {
-        provider: llm.provider,
-        variable: 'COGENTA_LLM_API_KEY',
-      },
-    )
-    return undefined
-  }
-
-  try {
-    const defaults = await resolveProviderTuningDefaults(options.settings)
-    const registry = createProviderRegistry(
-      {
-        [llm.provider]: {
-          apiKey: llm.apiKey,
-          model: llm.model,
-          ...(llm.baseUrl === undefined ? {} : { baseUrl: llm.baseUrl }),
-        },
-      },
-      defaults,
-    )
-    return registry.get(llm.provider)
-  } catch (error) {
-    options.logger.warn('LLM provider could not be resolved, the writing assistant stays off', {
-      provider: llm.provider,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return undefined
-  }
+interface LiveAssistProviders {
+  readonly text: LiveProviderClient
+  readonly images: ImageProviderClient
+  hasText(): boolean
+  hasImages(): boolean
+  refresh(): Promise<void>
 }
 
-function imageProvider(options: BuildAssistantOptions): ImageProviderClient | undefined {
-  const images = options.config.imageGeneration
-  if (images === undefined) return undefined
-  if (images.apiKey === undefined) {
-    options.logger.warn('image provider configured with no API key, image generation stays off', {
-      provider: images.provider,
-      variable: 'COGENTA_IMAGE_API_KEY',
-    })
-    return undefined
+/**
+ * The text and image clients, as objects that outlive a key change.
+ *
+ * Both used to be read from `cogenta.config.mjs` alone, once, at startup — so
+ * keys saved from the admin's Providers screen (where the admin tells the
+ * operator to put them) never reached the writing assistant. Both now read
+ * the provider store first, the config file second, on every `refresh` and
+ * every call (`text-provider-source.ts`, `resolveImageClient`).
+ */
+async function createLiveAssistProviders(
+  options: BuildAssistantOptions,
+): Promise<LiveAssistProviders> {
+  const source = createTextProviderSource({
+    config: options.config,
+    settings: options.settings,
+    logger: options.logger,
+    agentName: SUPERAGENT_NAME,
+    ...(options.providerStore === undefined ? {} : { providerStore: options.providerStore }),
+    ...(options.agentStore === undefined ? {} : { agentStore: options.agentStore }),
+  })
+  const text = createLiveProviderClient(source)
+
+  const resolveImages = async (): Promise<ImageProviderClient | undefined> => {
+    try {
+      return await resolveImageClient({
+        ...(options.providerStore === undefined ? {} : { providerStore: options.providerStore }),
+        ...(options.config.imageGeneration === undefined
+          ? {}
+          : { config: options.config.imageGeneration }),
+      })
+    } catch (error) {
+      options.logger.warn('image provider could not be resolved, image generation stays off', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return undefined
+    }
   }
 
-  const registry = createImageProviderRegistry({
-    [images.provider]: {
-      apiKey: images.apiKey,
-      model: images.model,
-      ...(images.baseUrl === undefined ? {} : { baseUrl: images.baseUrl }),
+  let image: ImageProviderClient | undefined
+  let textResolved = false
+  const images: ImageProviderClient = {
+    get name() {
+      return image?.name ?? ''
     },
-  })
-  return registry.get(images.provider)
+    get model() {
+      return image?.model ?? ''
+    },
+    async generate(
+      request: ImageRequest,
+      generateOptions?: ImageGenerationOptions,
+    ): Promise<readonly GeneratedImage[]> {
+      image = await resolveImages()
+      if (image === undefined) {
+        throw new CogentaError({
+          code: 'ASSIST_UNAVAILABLE',
+          message: 'No image provider is configured for this site any more.',
+          hint: "Give a provider an image model from the admin's Providers screen.",
+        })
+      }
+      return image.generate(request, generateOptions)
+    },
+  }
+
+  const refresh = async (): Promise<void> => {
+    const [resolvedText, resolvedImage] = await Promise.all([source.resolve(), resolveImages()])
+    text.update(resolvedText)
+    textResolved = resolvedText !== undefined
+    image = resolvedImage
+  }
+  await refresh()
+
+  return {
+    text,
+    images,
+    hasText: () => textResolved,
+    hasImages: () => image !== undefined,
+    refresh,
+  }
 }
 
 /**
@@ -241,8 +280,6 @@ function embeddingProvider(options: BuildAssistantOptions): EmbeddingProvider | 
 
 export async function buildAssistant(options: BuildAssistantOptions): Promise<AssistantAssembly> {
   const { config, logger } = options
-  const provider = await textProvider(options)
-  const images = imageProvider(options)
   const embeddings = embeddingProvider(options)
 
   let store: VectorStore | undefined
@@ -276,29 +313,59 @@ export async function buildAssistant(options: BuildAssistantOptions): Promise<As
           ...(options.fullText === undefined ? {} : { fullText: options.fullText }),
         })
 
-  // Fiche 30 task 3. Only present when a text provider is present — a site
-  // with no AI provider has nothing to meter (R2), and `createAssistToolset`
-  // itself would drop a tracker handed to it anyway once `runtime` is
-  // `undefined`, so building one unconditionally would just be dead weight.
-  const usage: AssistUsageTracker | undefined =
-    provider === undefined
-      ? undefined
-      : createAssistUsageTracker({
-          limits: { monthlyTokenLimit: config.assistant.monthlyTokenLimit },
-        })
+  const providers = await createLiveAssistProviders(options)
 
-  const toolset = createAssistToolset({
-    site: { name: config.site.name, locales: config.site.locales },
-    ...(provider === undefined ? {} : { provider }),
-    ...(images === undefined ? {} : { imageProvider: images }),
-    ...(search === undefined ? {} : { search }),
-    ...(store === undefined || embeddings === undefined ? {} : { vectors: { store, embeddings } }),
-    ...(usage === undefined ? {} : { usage }),
-    ...(options.promptTemplates === undefined ? {} : { promptTemplates: options.promptTemplates }),
+  // Fiche 30 task 3. Built once and shared by every variant below, so the
+  // monthly count survives a provider being switched off and on again;
+  // `createAssistToolset` drops it from a variant with no text provider.
+  const usage: AssistUsageTracker = createAssistUsageTracker({
+    limits: { monthlyTokenLimit: config.assistant.monthlyTokenLimit },
   })
 
+  const variant = (withText: boolean, withImages: boolean): AssistToolset =>
+    createAssistToolset({
+      site: { name: config.site.name, locales: config.site.locales },
+      ...(withText ? { provider: providers.text, usage } : {}),
+      ...(withImages ? { imageProvider: providers.images } : {}),
+      ...(search === undefined ? {} : { search }),
+      ...(store === undefined || embeddings === undefined
+        ? {}
+        : { vectors: { store, embeddings } }),
+      ...(options.promptTemplates === undefined
+        ? {}
+        : { promptTemplates: options.promptTemplates }),
+    })
+  // Every combination is built up front — a toolset is a list of closures,
+  // not a connection — and `refresh` only picks among them.
+  const variants = {
+    both: variant(true, true),
+    text: variant(true, false),
+    images: variant(false, true),
+    neither: variant(false, false),
+  }
+  const current = (): AssistToolset =>
+    providers.hasText()
+      ? providers.hasImages()
+        ? variants.both
+        : variants.text
+      : providers.hasImages()
+        ? variants.images
+        : variants.neither
+
+  // The runtime captured the model name when it was built; the live client
+  // knows the one the next call will really use.
+  const snapshot = (): AssistToolset => {
+    const chosen = current()
+    return providers.hasText() ? { ...chosen, model: providers.text.model } : chosen
+  }
+  const toolset = snapshot()
+  const currentToolset = async (): Promise<AssistToolset> => {
+    await providers.refresh()
+    return snapshot()
+  }
+
   const summary = toolset.available
-    ? `assistant: ${toolset.tools.length} tool(s), text provider: ${provider?.name ?? 'none'}, image provider: ${images?.name ?? 'none'}, vector driver: ${vectorDriver}`
+    ? `assistant: ${toolset.tools.length} tool(s), text provider: ${providers.hasText() ? providers.text.name : 'none'}, image provider: ${providers.hasImages() ? providers.images.name : 'none'}, vector driver: ${vectorDriver}`
     : 'assistant: off (no AI provider configured)'
 
   const isEnabled = (collectionName: string): Promise<boolean> =>
@@ -400,6 +467,7 @@ export async function buildAssistant(options: BuildAssistantOptions): Promise<As
 
   return {
     toolset,
+    currentToolset,
     ...(search === undefined ? {} : { search }),
     ...(store === undefined || embeddings === undefined
       ? {}

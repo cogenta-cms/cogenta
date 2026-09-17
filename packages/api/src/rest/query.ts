@@ -57,6 +57,9 @@ type QueryInput = Readonly<Record<string, string | readonly string[] | undefined
 
 const SORT_FIELDS = ['id', 'createdAt', 'updatedAt'] as const
 
+/** The shape a declared field name has; never a filter on what exists — that is the store's answer. */
+const FIELD_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/u
+
 export function single(query: QueryInput, key: string): string | undefined {
   const raw = query[key]
   if (raw === undefined || typeof raw === 'string') return raw
@@ -126,9 +129,11 @@ export function parsePositiveInteger(query: QueryInput, key: string): number {
 }
 
 /**
- * Ordering is restricted to the three columns that are never null, because a
- * keyset cursor over a nullable column has no total order and would silently
- * skip rows — the opposite of the stability the spec asks for.
+ * Ordering is the three system columns, or a date the collection declares
+ * itself (`schema@2.4`, ADR-0038) — the store is what knows which names those
+ * are, and it refuses any other with a message naming the collection. What is
+ * checked here is only the *shape* of the name: a field name reaching SQL must
+ * not be an arbitrary string.
  */
 function parseSort(query: QueryInput): SortOrder {
   const raw = single(query, 'sort')
@@ -136,11 +141,11 @@ function parseSort(query: QueryInput): SortOrder {
 
   const [field = '', direction = 'asc'] = raw.split(':')
 
-  if (!(SORT_FIELDS as readonly string[]).includes(field)) {
+  if (!(SORT_FIELDS as readonly string[]).includes(field) && !FIELD_NAME.test(field)) {
     throw queryError(
       'sort',
       'names a field this API cannot order by',
-      `Sort on one of: ${SORT_FIELDS.join(', ')}.`,
+      `Sort on ${SORT_FIELDS.join(', ')}, or on a date this collection declares.`,
     )
   }
   if (direction !== 'asc' && direction !== 'desc') {

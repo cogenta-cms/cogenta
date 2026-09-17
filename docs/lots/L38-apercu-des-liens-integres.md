@@ -110,3 +110,18 @@ pas l'aperçu. La lecture du cache normalise désormais aussi ; un test couvre l
 - Un aperçu est gardé trente jours ; un titre changé chez le service met jusque-là à apparaître.
 - Les miniatures remplacées ne sont pas supprimées du stockage (une par adresse, écrasée au
   même nom quand l'extension ne change pas).
+
+
+## Limite levée le 2026-09-17 — actualiser un aperçu sans attendre trente jours
+
+Un aperçu reste valable trente jours, ce qui est le bon défaut pour un visiteur et le mauvais
+pour un rédacteur dont le titre vient de changer chez le service. Le bloc porte maintenant
+« Actualiser l'aperçu » : `POST /api/embeds/resolve` accepte `refresh: true`, qui redemande au
+service quoi qu'en dise le cache. Ce n'est pas une fenêtre de fraîcheur plus courte — un
+visiteur lit toujours le cache — mais une seconde porte, réservée aux comptes qui peuvent
+modifier du contenu et décomptée du même quota de trente résolutions par minute.
+
+**Mastodon reste exclu, et c'est une limite de sécurité, pas un oubli** : une instance par
+domaine veut dire une adresse arbitraire à appeler côté serveur, c'est-à-dire exactement le
+SSRF que la liste fermée d'adresses oEmbed existe pour empêcher. L'ouvrir demanderait un
+registre d'instances validé par un humain, pas un assouplissement du résolveur.

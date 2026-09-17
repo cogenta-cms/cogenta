@@ -132,3 +132,21 @@ inverse rendant le contenu d'origine.
   exactement ce que l'aperçu cherche à éviter.
 - **Pas de portée par collection dans l'écran** : la route accepte
   `collections`, l'écran cherche partout où l'on peut modifier.
+
+
+## Limites levées le 2026-09-17
+
+- **Une occurrence coupée par une mise en forme est désormais trouvée.** Un paragraphe de
+  texte riche est lu comme une seule chaîne — ses spans sont joints pour *chercher*, et le
+  texte est réécrit dans les spans d'origine : tout ce qui est hors d'un remplacement garde
+  son span, ses marques et sa clé. Un remplacement à cheval sur une frontière est écrit dans
+  le span où la correspondance commence, donc il prend la mise en forme de ce span-là — un
+  choix, énoncé plutôt que subi, et couvert par deux tests.
+- **L'annulation groupée existe.** Le rapport d'application porte, pour chaque entrée, la
+  **version exacte d'avant l'écriture** ; l'écran propose « Annuler ce remplacement », qui
+  restaure chaque entrée par la route de restauration ordinaire — une vraie version par
+  entrée, jamais un second chemin d'écriture. Une entrée modifiée entre-temps est comptée à
+  part, et son onglet Historique garde toujours sa version.
+
+Reste volontairement en dehors : les expressions régulières (une recherche que l'auteur ne
+peut pas relire avant d'appliquer n'est pas une recherche qu'il faut offrir en masse).

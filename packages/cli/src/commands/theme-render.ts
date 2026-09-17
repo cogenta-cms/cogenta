@@ -3,9 +3,13 @@ import {
   type ContentGateway,
   collectDependencies,
   type EmbedPreviewView,
+  type FieldCondition,
   type Filter,
+  type FilterOperator,
   type MenuRouter,
   type QueryRequest,
+  RELATIVE_NOW,
+  RELATIVE_TODAY,
 } from '@cogenta/api'
 import {
   type BlockRegistry,
@@ -94,15 +98,56 @@ function toThemeEntry(entry: ContentEntry, collection: string): ThemeContentEntr
   }
 }
 
+/**
+ * A block's stored filter, as the API's filter vocabulary.
+ *
+ * A plain value is equality, as it always was. A value that is an object with
+ * exactly one comparison key (`{ gte: '$now' }`) is that comparison — which is
+ * how a list says "only what is still to come" without the contract B block
+ * gaining a field: the filter has always been an opaque JSON object, and this
+ * only reads more of it (ADR-0038). Anything else stays a literal, so a JSON
+ * value that happens to be an object is never mistaken for an operator.
+ */
+const FILTER_OPERATORS: ReadonlySet<string> = new Set([
+  'eq',
+  'ne',
+  'lt',
+  'lte',
+  'gt',
+  'gte',
+  'in',
+  'contains',
+  'exists',
+])
+
+function toCondition(field: string, value: unknown): FieldCondition {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    const entries = Object.entries(value as Record<string, unknown>)
+    const single = entries.length === 1 ? entries[0] : undefined
+    if (single !== undefined && FILTER_OPERATORS.has(single[0])) {
+      return { field, operator: single[0] as FilterOperator, value: single[1] }
+    }
+  }
+  return { field, operator: 'eq', value }
+}
+
 function toApiFilter(flat: Readonly<Record<string, unknown>> | undefined): Filter | undefined {
   if (flat === undefined) return undefined
-  const conditions = Object.entries(flat).map(([field, value]) => ({
-    field,
-    operator: 'eq' as const,
-    value,
-  }))
+  const conditions = Object.entries(flat).map(([field, value]) => toCondition(field, value))
   if (conditions.length === 0) return undefined
   return conditions.length === 1 ? conditions[0] : { and: conditions }
+}
+
+/** Whether a stored block filter carries one of the two relative tokens the API resolves per request. */
+function dependsOnClock(flat: Readonly<Record<string, unknown>> | undefined): boolean {
+  if (flat === undefined) return false
+  return Object.values(flat).some((value) => {
+    if (value === RELATIVE_NOW || value === RELATIVE_TODAY) return true
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+    return Object.values(value as Record<string, unknown>).some(
+      (inner) => inner === RELATIVE_NOW || inner === RELATIVE_TODAY,
+    )
+  })
 }
 
 function toApiQueryRequest(request: ThemeQueryRequest): QueryRequest {
@@ -145,6 +190,13 @@ async function listAsTheme(
 export const DEFAULT_IMAGE_ENDPOINT = '/_image'
 
 export interface ThemeRenderOptions {
+  /**
+   * Called when a block on this page filters on `$now`/`$today` (ADR-0038).
+   * The host caps the page's public cache lifetime accordingly: a list of
+   * "what is still to come" that a CDN keeps for a day is a list of what was
+   * still to come yesterday.
+   */
+  readonly onClockDependent?: () => void
   /**
    * The widget areas of the page being rendered (L30), resolved by the host
    * (`widget-resolve.ts`). Absent: no widget anywhere, as before widgets.
@@ -1616,6 +1668,9 @@ async function renderEntryPage(
   for (const block of blocks) {
     if (block._type !== 'collectionList') continue
     const themeQuery = collectionListQuery(block)
+    if (options.onClockDependent !== undefined && dependsOnClock(themeQuery.filter)) {
+      options.onClockDependent()
+    }
     const results = await options.gateway.list(toApiQueryRequest(themeQuery), context)
     fetchedEntries[block._key] = results.items.map((found) =>
       toThemeEntry(found, themeQuery.collection),

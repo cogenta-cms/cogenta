@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
-import { installMockFetch, replaceCalls, VALID_TOKEN } from './helpers/mock-fetch.js'
+import { installMockFetch, replaceCalls, restoreCalls, VALID_TOKEN } from './helpers/mock-fetch.js'
 
 /**
  * « Rechercher et remplacer » (L34) — the screen's single rule, asserted: it
@@ -12,6 +12,7 @@ const TOKEN_STORAGE_KEY = 'cogenta.session.token'
 
 beforeEach(() => {
   replaceCalls.splice(0, replaceCalls.length)
+  restoreCalls.splice(0, restoreCalls.length)
   localStorage.clear()
   localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
   installMockFetch({ roles: ['editor'] })
@@ -54,6 +55,24 @@ describe('search and replace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirmer le remplacement' }))
     await waitFor(() => expect(replaceCalls.filter((call) => call.apply)).toHaveLength(1))
     expect(await screen.findByText(/1 entrée modifiée/u)).toBeDefined()
+  })
+
+  it('undoes a whole replacement, entry by entry, through the ordinary restore route', async () => {
+    fireEvent.change(await screen.findByLabelText('Rechercher'), { target: { value: 'Cogenta' } })
+    fireEvent.change(screen.getByLabelText('Remplacer par'), { target: { value: 'Kogenta' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remplacer partout' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer le remplacement' }))
+
+    const undo = await screen.findByRole('button', { name: /Annuler ce remplacement/u })
+    fireEvent.click(undo)
+
+    // Each entry goes back to the exact version it stood at before the write,
+    // through the same route the History tab uses — never a second write path.
+    await waitFor(() =>
+      expect(restoreCalls).toEqual([{ collection: 'article', id: 'entry-1', version: 4 }]),
+    )
+    expect(await screen.findByText(/Remplacement annulé sur 1 entrée/u)).toBeDefined()
   })
 
   it('throws the preview away the moment the search changes', async () => {

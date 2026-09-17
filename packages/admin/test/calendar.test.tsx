@@ -84,6 +84,58 @@ describe('the editorial calendar', () => {
     expect(scheduleCalls[0]?.publishedAt).toBe(expected.toISOString())
   })
 
+  /**
+   * L35 left "pas de vue semaine" open. What matters is that it is the *same*
+   * grid and the same writes, over seven days instead of forty-two — so a
+   * scheduled entry of this week is still there, and still draggable.
+   */
+  it('switches to a week of seven days, keeps the entry, and comes back to the month', async () => {
+    const chip = await screen.findByRole('button', { name: /Second article/u })
+    const monthDays = document.querySelectorAll('[data-day]').length
+    expect(monthDays).toBe(42)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Semaine' }))
+
+    await waitFor(() => expect(document.querySelectorAll('[data-day]').length).toBe(7))
+    expect(screen.getByRole('button', { name: 'Semaine' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    )
+    // An entry two days out belongs to this week: it is still on its own day.
+    const inWeek = await screen.findByRole('button', { name: /Second article/u })
+    expect(inWeek.closest('[data-day]')?.getAttribute('data-day')).toBe(dayKey(inTwoDays()))
+    expect(chip).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mois' }))
+    await waitFor(() => expect(document.querySelectorAll('[data-day]').length).toBe(42))
+  })
+
+  it('moves a week at a time in the week view, and one month at a time in the month view', async () => {
+    await screen.findByRole('button', { name: /Second article/u })
+    // The period title is the one heading that announces itself politely.
+    const heading = (): string =>
+      screen
+        .getAllByRole('heading', { level: 2 })
+        .find((node) => node.getAttribute('aria-live') === 'polite')?.textContent ?? ''
+
+    const monthTitle = heading()
+    fireEvent.click(screen.getByRole('button', { name: 'Mois suivant' }))
+    expect(heading()).not.toBe(monthTitle)
+
+    fireEvent.click(screen.getByRole('button', { name: "Aujourd'hui" }))
+    expect(heading()).toBe(monthTitle)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Semaine' }))
+    await waitFor(() => expect(document.querySelectorAll('[data-day]').length).toBe(7))
+    const weekTitle = heading()
+    // A week title is a range of days, not a month name.
+    expect(weekTitle).toContain('–')
+
+    // The buttons say what they move, and what they move follows the view.
+    fireEvent.click(screen.getByRole('button', { name: 'Semaine suivante' }))
+    await waitFor(() => expect(heading()).not.toBe(weekTitle))
+    expect(document.querySelectorAll('[data-day]').length).toBe(7)
+  })
+
   it('does not offer to move what is already published', async () => {
     const published = await screen.findByRole('button', { name: /First article/u })
     expect(published.getAttribute('draggable')).toBe('false')

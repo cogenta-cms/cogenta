@@ -361,9 +361,11 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
         options: { options: [], collectionPicker: true },
       }),
       objectField('sort', [
+        // The three system columns, plus the dates this collection declares
+        // itself, filled in when the form renders (L40, ADR-0038).
         itemField('field', 'select', {
           required: true,
-          options: selectOptions(['createdAt', 'updatedAt', 'id']),
+          options: { ...selectOptions(['createdAt', 'updatedAt', 'id']), dateSortPicker: true },
         }),
         itemField('direction', 'select', {
           required: true,

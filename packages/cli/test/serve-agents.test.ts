@@ -118,7 +118,7 @@ afterEach(async () => {
 })
 
 describe('cogenta serve — /api/agents with no LLM provider configured (R2)', () => {
-  it('lists the five seeded built-ins, the superagent and theme creator enabled, the three examples disabled', async () => {
+  it('lists every seeded built-in, and leaves the seven of L5 task 10 disabled', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })
     await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
@@ -143,8 +143,23 @@ describe('cogenta serve — /api/agents with no LLM provider configured (R2)', (
     // sixth, "Cogenta Plugin Builder": enabled, because writing into a
     // sandbox is not writing to the site — it holds no tool that installs
     // anything, and its autonomy is pinned to `propose`.
-    expect(body.data).toHaveLength(6)
+    // L5 task 10 adds seven more — Média, Traduction, Modération, Analytics,
+    // Migration, Accessibilité, Conformité — all disabled by default, since a
+    // site that never enables one must behave exactly as it did before they
+    // existed (R2).
+    expect(body.data).toHaveLength(13)
     const byName = new Map(body.data.map((a) => [a.name, a]))
+    for (const name of [
+      'Media Librarian',
+      'Translation Watch',
+      'Comment Moderator',
+      'Audience Reader',
+      'Migration Finisher',
+      'Accessibility Auditor',
+      'Compliance Checker',
+    ]) {
+      expect(byName.get(name), name).toMatchObject({ enabled: false, builtin: true })
+    }
     expect(byName.get('Cogenta Agent')).toMatchObject({ enabled: true, builtin: true })
     expect(byName.get('Security Scanner')).toMatchObject({ enabled: false, builtin: true })
     expect(byName.get('Content Watch')).toMatchObject({ enabled: false, builtin: true })

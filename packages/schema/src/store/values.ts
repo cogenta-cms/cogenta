@@ -69,6 +69,13 @@ export function encodeFieldValue(
   }
 
   if (definition.kind === 'date' || definition.kind === 'datetime') {
+    // An empty string is "no date", never a date. It is what a cleared date
+    // input sends (`DateField`'s own value when a person empties it), and it
+    // used to be refused with a 422 — so clearing a date was impossible from
+    // the admin. It also had to stop being storable: `schema@2.4` orders by
+    // this column and treats an absent value as "last", while `''` would sort
+    // *first* and make a cursor skip rows (found by `db-dialect-specialist`).
+    if (typeof value === 'string' && value.trim() === '') return null
     // Stored as an ISO-8601 string in UTC on every dialect: see `columns.ts`.
     const date = value instanceof Date ? value : new Date(String(value))
     if (Number.isNaN(date.getTime())) {
@@ -164,7 +171,16 @@ export function normaliseValues(
     const provided = Object.hasOwn(input, name)
     if (!provided && options.partial) continue
 
-    const raw = provided ? input[name] : definition.default
+    const supplied = provided ? input[name] : definition.default
+    // An empty string on a date field is "no date", handled *here* rather than
+    // only at encoding time so that a required date cleared to `''` is still
+    // refused as missing rather than slipping through as null.
+    const raw =
+      (definition.kind === 'date' || definition.kind === 'datetime') &&
+      typeof supplied === 'string' &&
+      supplied.trim() === ''
+        ? null
+        : supplied
     // A `taxonomy` field is joined exactly like a `relation` (ADR-0022): a
     // to-many one lives in a join table and holds an ordered list of ids.
     const joined = definition.kind === 'relation' || definition.kind === 'taxonomy'

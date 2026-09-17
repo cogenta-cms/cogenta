@@ -7,6 +7,7 @@ import {
   monthGrid,
   moveToDay,
   toLocalInputValue,
+  weekGrid,
   weekStartFor,
 } from '../src/calendar/calendar-dates.js'
 
@@ -62,5 +63,31 @@ describe('the date field', () => {
     expect(toLocalInputValue(date)).toBe('2026-10-03T08:05')
     expect(fromLocalInputValue('2026-10-03T08:05')?.getTime()).toBe(date.getTime())
     expect(fromLocalInputValue('')).toBeNull()
+  })
+})
+
+describe('weekGrid', () => {
+  it('gives the seven days of the week a date falls in, starting on the right day', () => {
+    // 2026-09-17 is a Thursday.
+    const thursday = new Date(2026, 8, 17)
+
+    const mondayFirst = weekGrid(thursday, 1)
+    expect(mondayFirst).toHaveLength(7)
+    expect(mondayFirst[0]?.getDate()).toBe(14)
+    expect(mondayFirst.at(-1)?.getDate()).toBe(20)
+
+    const sundayFirst = weekGrid(thursday, 0)
+    expect(sundayFirst[0]?.getDate()).toBe(13)
+    expect(sundayFirst.at(-1)?.getDate()).toBe(19)
+  })
+
+  it('spans a month boundary rather than stopping at it', () => {
+    // 2026-10-01 is a Thursday: its week starts in September.
+    const days = weekGrid(new Date(2026, 9, 1), 1)
+
+    expect(days[0]?.getMonth()).toBe(8)
+    expect(days[0]?.getDate()).toBe(28)
+    expect(days.at(-1)?.getMonth()).toBe(9)
+    expect(days.at(-1)?.getDate()).toBe(4)
   })
 })

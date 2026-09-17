@@ -17,7 +17,12 @@ import type { SortField, SortOrder } from './types.js'
 export interface Cursor {
   readonly field: SortField
   readonly direction: 'asc' | 'desc'
-  readonly value: string
+  /**
+   * `null` when the last row handed out had no value for the sort field —
+   * only possible on a declared date (`schema@2.4`), and the position that
+   * makes the tail of empty values pageable rather than restarting it.
+   */
+  readonly value: string | null
   readonly id: string
 }
 
@@ -43,7 +48,10 @@ export function decodeCursor(raw: string, expected: SortOrder): Cursor {
   if (typeof parsed !== 'object' || parsed === null) throw invalid('it is not a cursor')
   const candidate = parsed as Partial<Cursor>
 
-  if (typeof candidate.value !== 'string' || typeof candidate.id !== 'string') {
+  if (
+    (typeof candidate.value !== 'string' && candidate.value !== null) ||
+    typeof candidate.id !== 'string'
+  ) {
     throw invalid('it is missing its position')
   }
 

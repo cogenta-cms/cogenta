@@ -104,6 +104,65 @@ describe('planning a replacement', () => {
     expect(written[0]?.markDefs[0]?.href).toBe('https://cogenta.example/docs')
   })
 
+  it('finds a phrase cut in two by a formatting run, and writes it into the span it starts in', () => {
+    // "Cogen|ta" — the last two letters are bold. Span by span, this was
+    // invisible; it is exactly the occurrence a person finds afterwards.
+    const body = [
+      {
+        _key: 'b1',
+        _type: 'block',
+        style: 'normal',
+        markDefs: [],
+        children: [
+          { _key: 's1', _type: 'span', text: 'Bienvenue chez Cogen', marks: [] },
+          { _key: 's2', _type: 'span', text: 'ta', marks: ['strong'] },
+          { _key: 's3', _type: 'span', text: ', depuis 2024.', marks: [] },
+        ],
+      },
+    ]
+
+    const plan = planEntryReplacement(article, entry({ values: { title: 'x', body } as never }), {
+      find: 'Cogenta',
+      replace: 'Cogenta SA',
+    })
+
+    const written = plan.values?.['body'] as typeof body
+    expect(written[0]?.children.map((span) => span.text)).toEqual([
+      'Bienvenue chez Cogenta SA',
+      '',
+      ', depuis 2024.',
+    ])
+    // Every span keeps its key and its marks: only the text moved.
+    expect(written[0]?.children.map((span) => span._key)).toEqual(['s1', 's2', 's3'])
+    expect(written[0]?.children[1]?.marks).toEqual(['strong'])
+    expect(plan.occurrences).toBe(1)
+  })
+
+  it('counts a split occurrence once, and shows the paragraph as a whole in the preview', () => {
+    const body = [
+      {
+        _key: 'b1',
+        _type: 'block',
+        style: 'normal',
+        markDefs: [],
+        children: [
+          { _key: 's1', _type: 'span', text: 'Cogen', marks: [] },
+          { _key: 's2', _type: 'span', text: 'ta et Cogenta', marks: ['em'] },
+        ],
+      },
+    ]
+
+    const plan = planEntryReplacement(article, entry({ values: { title: 'x', body } as never }), {
+      find: 'Cogenta',
+      replace: 'Kogenta',
+    })
+
+    expect(plan.occurrences).toBe(2)
+    const hit = plan.hits.find((candidate) => candidate.path.endsWith('children'))
+    expect(hit?.before).toBe('Cogenta et Cogenta')
+    expect(hit?.after).toBe('Kogenta et Kogenta')
+  })
+
   it('reaches the text inside blocks, where a page actually lives', () => {
     const plan = planEntryReplacement(
       article,

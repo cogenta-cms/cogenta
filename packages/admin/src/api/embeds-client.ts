@@ -18,11 +18,16 @@ export interface EmbedPreview {
   readonly thumbnailHeight: number | null
 }
 
-export function resolveEmbed(token: string, url: string): Promise<EmbedPreview> {
+export function resolveEmbed(
+  token: string,
+  url: string,
+  /** `refresh: true` asks the provider again even when the site has a fresh copy — for a title that changed at the source. */
+  options: { readonly refresh?: boolean } = {},
+): Promise<EmbedPreview> {
   return request('/api/embeds/resolve', {
     method: 'POST',
     headers: authHeader(token),
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, ...(options.refresh === true ? { refresh: true } : {}) }),
   })
 }
 

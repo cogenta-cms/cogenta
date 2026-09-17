@@ -95,6 +95,38 @@ describe('the embed preview service', () => {
     expect(await service.thumbnail('../../etc/passwd')).toBeNull()
   })
 
+  /**
+   * L38 kept a preview for thirty days, which is right for a visitor and
+   * wrong for an editor whose title just changed at the source. `refresh`
+   * is that second door — and it has to really bypass a cache that is still
+   * fresh, or it is decoration.
+   */
+  it('asks the provider again on refresh, even with a fresh copy in the cache', async () => {
+    const first = await service.resolve(VIDEO)
+    expect(calls).toHaveLength(2)
+    // Still fresh: an ordinary call must not spend anything.
+    await service.resolve(VIDEO)
+    expect(calls).toHaveLength(2)
+
+    // The title changed at the source, which is exactly why this exists.
+    answer = () =>
+      Response.json({
+        title: 'Inspection, remastered',
+        author_name: 'Norvane',
+        width: 560,
+        height: 315,
+        thumbnail_url: 'https://i.ytimg.com/vi/abc123/hqdefault.jpg',
+      })
+
+    const refreshed = await service.resolve(VIDEO, { refresh: true })
+
+    expect(calls.length).toBeGreaterThan(2)
+    expect(refreshed.title).toBe('Inspection, remastered')
+    expect(first.title).toBe('Inspection')
+    // And the cache now holds the new answer for every visitor.
+    expect((await service.cached([VIDEO])).get(VIDEO)?.title).toBe('Inspection, remastered')
+  })
+
   it('remembers a failure for a day, then asks again', async () => {
     answer = () => new Response('gone', { status: 404 })
     expect((await service.resolve(VIDEO)).status).toBe('failed')
@@ -162,6 +194,31 @@ describe('POST /api/embeds/resolve', () => {
 
     const invalid = await router.handle({ ...request, body: { url: 'ftp://x' } }, editor)
     expect(invalid.status).toBe(400)
+  })
+
+  it('counts a refresh against the same quota as any other resolution', async () => {
+    const router = createEmbedRouter({
+      service,
+      canResolve: (context) => context.actor.roles.includes('editor'),
+      rateLimit: createMemoryRateLimiter(),
+      limit: { count: 2, windowMs: 60_000 },
+    })
+    const editor: AccessContext = { actor: { id: 'u2', roles: ['editor'] } }
+    const refresh = {
+      method: 'POST',
+      path: '/api/embeds/resolve',
+      query: {},
+      body: { url: VIDEO, refresh: true },
+    }
+
+    expect((await router.handle(refresh, editor)).status).toBe(200)
+    // A refresh really calls the provider, even though the first call cached it.
+    const afterFirst = calls.length
+    expect((await router.handle(refresh, editor)).status).toBe(200)
+    expect(calls.length).toBeGreaterThan(afterFirst)
+    // Third one in the window: refused, like any other resolution.
+    const limited = await router.handle(refresh, editor)
+    expect(limited.status).toBe(429)
   })
 
   it('refuses a signed-in account that edits nothing, and bounds each account', async () => {

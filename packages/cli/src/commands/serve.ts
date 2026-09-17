@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import {
+  assertDecisionAllowed,
   createFileAgentDeclarationStore,
   createFilePromptTemplateStore,
   createFileProviderConfigStore,
@@ -14,6 +15,7 @@ import {
   type ImageProviderClient,
   type PromptTemplateStore,
   type ProviderClient,
+  SUPERAGENT_NAME,
   type ThemeCreatorTargetTheme,
 } from '@cogenta/agents'
 import {
@@ -405,7 +407,13 @@ import {
   renderWelcomePage,
 } from './fallback-pages.js'
 import { renderFormNotFoundPage, renderFormPage } from './forms-page.js'
-import { applySecurity, isSecure, type SecurityConfig } from './http-security.js'
+import {
+  applySecurity,
+  clockDependentCacheControl,
+  hasCredentials,
+  isSecure,
+  type SecurityConfig,
+} from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
@@ -454,6 +462,7 @@ import {
   renderTermArchivePage,
   type TermArchiveResolution,
 } from './term-archive-page.js'
+import { createTextProviderSource } from './text-provider-source.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
 import { exportThemeZip, importThemeZip } from './theme-export.js'
 import {
@@ -1463,6 +1472,7 @@ async function themeCssForActive(options: AssembleSiteOptions): Promise<string |
 
 async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const { db, collections, site, storage, logger } = options
+  const assistantAssembly = options.assistant
   const readOnly = options.readOnly ?? false
   const styles = options.styles ?? null
   const taxonomies = options.taxonomies ?? []
@@ -2063,6 +2073,84 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           collections,
           notFoundLog,
           redirects,
+          // L5 task 10 — the moderation queue and the audience figures, as
+          // the narrow ports `@cogenta/agents` describes. Built from the
+          // very stores the comment router and the analytics router already
+          // use, never a second instance.
+          comments: {
+            pending: async (limit) =>
+              (await commentsStore.list({ status: 'pending', limit })).items.map((comment) => ({
+                id: comment.id,
+                collection: comment.collection,
+                entryId: comment.entryId,
+                authorName: comment.authorName,
+                body: comment.body,
+                status: comment.status,
+                // A comment posted before the moderation pass existed carries
+                // nothing: "not checked" reads as "not flagged", which is what
+                // leaves it in the queue for a human rather than acting on it.
+                flagged: comment.moderation.flagged ?? false,
+                severity: comment.moderation.severity ?? 'none',
+                reason: comment.moderation.reason ?? '',
+                createdAt: comment.createdAt,
+              })),
+            decide: async (id, status, reason) => {
+              const comment = await commentsStore.get(id)
+              if (comment === null) {
+                throw new CogentaError({
+                  code: 'COMMENT_NOT_FOUND',
+                  message: `No comment "${id}".`,
+                  hint: 'It may have been decided already.',
+                })
+              }
+              // The refusal the tool's own documentation promises, applied
+              // where the real record is — never in the prompt.
+              const flagged = comment.moderation.flagged ?? false
+              const severity = comment.moderation.severity ?? 'none'
+              assertDecisionAllowed({ flagged, severity }, status)
+              await commentsStore.setStatus(id, status, null)
+              await commentsStore.setModeration(id, { flagged, severity, reason })
+              return {
+                id,
+                previousStatus: comment.status,
+                previousReason: comment.moderation.reason ?? '',
+              }
+            },
+            // R6 — what makes `comments.decide` reversible for real: the
+            // comment goes back to the status and the note it had, never to a
+            // guessed `pending`.
+            restore: async (receipt) => {
+              const comment = await commentsStore.get(receipt.id)
+              if (comment === null) return
+              await commentsStore.setStatus(
+                receipt.id,
+                receipt.previousStatus as 'pending' | 'approved' | 'spam' | 'trash',
+                null,
+              )
+              await commentsStore.setModeration(receipt.id, {
+                flagged: comment.moderation.flagged ?? false,
+                severity: comment.moderation.severity ?? 'none',
+                reason: receipt.previousReason,
+              })
+            },
+          },
+          analytics: {
+            summary: async (days) => {
+              const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+              const summary = await analyticsStore.getSummary({ since })
+              return {
+                since: summary.since,
+                until: summary.until,
+                totalViews: summary.totalViews,
+                uniqueVisitors: summary.uniqueVisitors,
+                topPages: summary.topPages.map((page) => ({
+                  path: page.path,
+                  views: page.views,
+                })),
+                previousTotalViews: summary.previousTotalViews,
+              }
+            },
+          },
           // L26 task 5 — "Cogenta Theme Creator"'s tool. Absent, exactly
           // like `options.theme?.generator`, whenever no LLM provider is
           // configured.
@@ -3084,6 +3172,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(options.requestQuota === undefined ? {} : { requestQuota: options.requestQuota }),
     assistantRouter: createAssistantRouter({
       toolset: (options.assistant?.toolset ?? EMPTY_TOOLSET) as AssistToolsetLike,
+      ...(assistantAssembly === undefined
+        ? {}
+        : {
+            currentToolset: async (): Promise<AssistToolsetLike> =>
+              (await assistantAssembly.currentToolset()) as AssistToolsetLike,
+          }),
       collections,
       permissions,
       site,
@@ -7412,13 +7506,29 @@ export function createRequestListener(
           url.searchParams.get('comment'),
           url.searchParams.get('reason'),
         )
+        let clockDependent = false
         const html = await renderRequestedPage(
           url.pathname,
-          commentNotice === undefined ? renderOptions : { ...renderOptions, commentNotice },
+          {
+            ...renderOptions,
+            ...(commentNotice === undefined ? {} : { commentNotice }),
+            onClockDependent: () => {
+              clockDependent = true
+            },
+          },
           context,
         )
         if (html !== null) {
-          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+          res.writeHead(200, {
+            'content-type': 'text/html; charset=utf-8',
+            // A page listing "what is still to come" cannot be kept as long as
+            // a page whose content only changes when someone edits it
+            // (ADR-0038). Only tightened here, never loosened: a request with
+            // credentials keeps the `private, no-store` `applySecurity` gave it.
+            ...(clockDependent && !hasCredentials(req)
+              ? { 'cache-control': clockDependentCacheControl(site.security) }
+              : {}),
+          })
           res.end(html)
           return
         }
@@ -8366,7 +8476,22 @@ export async function runServe(options: ServeOptions): Promise<number> {
     dir: join(projectRoot, '.cogenta', 'agents-runtime', 'prompt-templates'),
   })
   await ensureBuiltinPromptTemplates(promptTemplates)
+  // The directory `buildAgentRuntime` reads its providers and agent
+  // declarations from — computed once, here, so no reader can drift from it.
+  const agentsRuntimeDataDir = join(projectRoot, '.cogenta', 'agents-runtime')
+  // One reader of the admin's encrypted provider files, shared by every AI
+  // feature built outside the agent runtime (assistant, site planner, theme
+  // generator): a key saved from `/admin/providers` must reach all of them.
+  const providerStore = createFileProviderConfigStore({
+    dir: join(agentsRuntimeDataDir, PROVIDERS_SUBDIR),
+    signingKey: loaded.config.auth.signingKey,
+  })
+  const agentDeclarations = createFileAgentDeclarationStore({
+    dir: join(agentsRuntimeDataDir, AGENTS_SUBDIR),
+  })
   const assistant = await buildAssistant({
+    providerStore,
+    agentStore: agentDeclarations,
     config: loaded.config,
     db: selection.instance,
     logger,
@@ -8480,10 +8605,6 @@ export async function runServe(options: ServeOptions): Promise<number> {
     },
   })
 
-  // The same directory `agentsRuntimeConfig` below points `buildAgentRuntime`
-  // at — computed once, here, so the two can never drift apart.
-  const agentsRuntimeDataDir = join(projectRoot, '.cogenta', 'agents-runtime')
-
   // L26 task 5 — shared ingredients for `theme`'s own AI `generator` and for
   // `theme.propose_theme`'s registration below, resolved once from the same
   // provider store/`availableThemes()` (never a second, independently-built
@@ -8499,17 +8620,12 @@ export async function runServe(options: ServeOptions): Promise<number> {
     config: loaded.config,
     development: options.development ?? false,
     readOnly: options.readOnly ?? false,
-    providerStore: createFileProviderConfigStore({
-      dir: join(agentsRuntimeDataDir, PROVIDERS_SUBDIR),
-      signingKey: loaded.config.auth.signingKey,
-    }),
+    providerStore,
     // So the theme generator follows the "Cogenta Theme Creator" agent's own
     // admin-configured model preference instead of a hardcoded guess at it —
     // a second reader of the exact same files `buildAgentRuntime` reads for
     // that agent's declaration, same pattern as `providerStore` above.
-    agentStore: createFileAgentDeclarationStore({
-      dir: join(agentsRuntimeDataDir, AGENTS_SUBDIR),
-    }),
+    agentStore: agentDeclarations,
     logger,
     // What this site actually stores. A theme renders the site's content, so
     // a theme writer that has to guess collection names invents them — and an
@@ -8623,6 +8739,14 @@ export async function runServe(options: ServeOptions): Promise<number> {
         }
       : {}),
     sitePlans: await createSitePlanning({
+      providers: createTextProviderSource({
+        config: loaded.config,
+        settings: assistantSettings,
+        logger,
+        providerStore,
+        agentStore: agentDeclarations,
+        agentName: SUPERAGENT_NAME,
+      }),
       projectRoot,
       db: selection.instance,
       collections,

@@ -91,6 +91,11 @@ export interface SitePlannerLike {
   >
   /** The draft, flattened into the units a human decides on. */
   sections(draft: SitePlanDraftLike): readonly PlanSectionLike[]
+  /**
+   * Whether a model can be reached right now. Absent means always: a host
+   * whose provider can be configured while it runs answers per request.
+   */
+  available?(): Promise<boolean>
 }
 
 export interface AppliedPlanReport {
@@ -203,7 +208,7 @@ function noPlanner(): CogentaError {
   return new CogentaError({
     code: 'SITE_PLAN_NO_PROVIDER',
     message: 'No LLM provider is configured, so a document cannot be analysed here.',
-    hint: 'Add an `llm` section to cogenta.config.mjs with a provider and a key, then restart. Everything else in this admin works without one.',
+    hint: "Configure a provider from the admin's Providers screen (or an `llm` section in cogenta.config.mjs). Everything else in this admin works without one.",
   })
 }
 
@@ -299,6 +304,8 @@ export function createSitePlanRouter(options: SitePlanRouterOptions): SitePlanRo
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
   const now = options.now ?? ((): Date => new Date())
   const maxDocuments = options.maxDocuments ?? DEFAULT_MAX_DOCUMENTS
+  const plannerAvailable = async (): Promise<boolean> =>
+    options.planner !== undefined && (await options.planner.available?.()) !== false
 
   return {
     handle: async (request, actor) => {
@@ -324,12 +331,12 @@ export function createSitePlanRouter(options: SitePlanRouterOptions): SitePlanRo
               // Said out loud rather than inferred from an empty list: a
               // screen that cannot explain why it is empty is a screen
               // people file bugs against.
-              plannerAvailable: options.planner !== undefined,
+              plannerAvailable: await plannerAvailable(),
             })
           }
           // POST /api/site-plans — read the documents and propose.
           if (method === 'POST') {
-            if (options.planner === undefined) throw noPlanner()
+            if (options.planner === undefined || !(await plannerAvailable())) throw noPlanner()
             const documents = requireDocuments(request.body, maxDocuments)
             const siteName = (request.body as { siteName?: unknown } | undefined)?.siteName
             const proposed = await options.planner.propose({

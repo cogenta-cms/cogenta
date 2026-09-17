@@ -108,12 +108,15 @@ export const SortDirectionEnum = new GraphQLEnumType({
 })
 
 /**
- * Ordering is limited to columns that are never null.
+ * GraphQL orders by the three system columns only.
  *
- * A cursor is a position in an ordering; on a nullable column the ordering is
- * partial and the cursor can skip a row. This is the same restriction the store
- * enforces, surfaced in the schema so it fails at validation instead of at
- * execution.
+ * The store learned to order by a date a collection declares (`schema@2.4`,
+ * ADR-0038) and REST exposes it — GraphQL does not, and that is a stated
+ * limit rather than an oversight: a typed schema would need this enum built
+ * per collection (the declared dates of `event` are not those of `article`),
+ * which changes how the schema is generated. Until that is worth doing, a
+ * GraphQL client that needs "the next events" asks REST, which validates the
+ * field against the collection it is really listing.
  */
 export const SortFieldEnum = new GraphQLEnumType({
   name: 'EntrySortField',

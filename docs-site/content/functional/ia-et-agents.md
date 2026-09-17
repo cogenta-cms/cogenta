@@ -60,6 +60,29 @@ de ses permissions — la même taxonomie fermée que les outils du contrat C
 (« lire le contenu », « publier », « modifier les réglages », …), jamais un
 accès générique.
 
+### Les agents livrés avec le site, et ce qu'ils font
+
+Treize agents sont semés à l'installation. Deux sont actifs (le superagent
+« Cogenta Agent » et « Cogenta Theme Creator ») ; **tous les autres sont
+désactivés**, et un site qui n'en active aucun se comporte exactement comme
+avant qu'ils existent.
+
+Les sept derniers arrivés partagent une règle qui vaut d'être connue : **ce
+qu'ils signalent est calculé, pas inventé**. Une fonction du code trouve les
+constats ; le modèle ne fait que les classer par importance et les écrire dans
+une langue lisible. C'est ce qui fait qu'ils ne noient pas leur lecteur sous de
+faux positifs — le défaut qui fait désactiver un agent en une semaine.
+
+| Agent | Ce qu'il regarde | Ce qu'il peut écrire |
+|---|---|---|
+| **Media Librarian** | images sans texte alternatif, fichiers que plus aucune page n'utilise, images trop lourdes pour leur affichage | le texte alternatif d'une image ; **jamais** une suppression de fichier |
+| **Translation Watch** | une entrée sans version dans une langue déclarée, une traduction plus ancienne que sa source | une traduction en brouillon ; jamais une publication, jamais un slug |
+| **Comment Moderator** | la file de modération, avec le verdict anti-spam déjà calculé | approuver ou refuser un commentaire **tranché** par ce verdict ; un commentaire douteux reste en attente, et rien n'est jamais supprimé |
+| **Audience Reader** | l'audience du site sur deux périodes comparables, et les adresses demandées en vain | rien du tout : aucun outil d'écriture |
+| **Migration Finisher** | ce qu'un import a laissé (liens vers l'ancien domaine, images encore chargées de là-bas, extraits manquants) | une redirection réversible, un extrait en brouillon ; jamais un slug importé |
+| **Accessibility Auditor** | le HTML réellement servi (langue, ordre des titres, alt, intitulés de lien, étiquettes de formulaire) et le contraste des couleurs du thème | un meilleur intitulé, un meilleur alt ; il dit toujours ce qu'une machine ne peut pas vérifier |
+| **Compliance Checker** | pages légales, durées de conservation, contenu généré dont la provenance ne nomme ni l'agent ni le modèle | rien : il ne modifie aucun réglage, et rappelle qu'une liste de contrôle n'est pas un conseil juridique |
+
 ### Ce qui change avec le lot en cours (à vérifier contre la version que vous utilisez)
 
 Au moment où cette page est écrite, un chantier en cours (« le runtime

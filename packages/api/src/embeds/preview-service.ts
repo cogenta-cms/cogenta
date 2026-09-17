@@ -46,8 +46,17 @@ export interface EmbedPreviewServiceOptions {
 }
 
 export interface EmbedPreviewService {
-  /** Resolves `url` unless a fresh record exists. Throws `EMBED_URL_INVALID` for a non-HTTP(S) address. */
-  resolve(url: string): Promise<EmbedPreviewView>
+  /**
+   * Resolves `url` unless a fresh record exists. Throws `EMBED_URL_INVALID`
+   * for a non-HTTP(S) address.
+   *
+   * `refresh: true` asks the provider again whatever the cache holds — what
+   * an editor needs when a title changed at the source and thirty days is too
+   * long to wait (L38's own open point). It is a deliberate second door, not
+   * a shorter freshness window: every *visitor* still reads the cache, and
+   * only an account that may edit content can spend a provider call.
+   */
+  resolve(url: string, options?: { readonly refresh?: boolean }): Promise<EmbedPreviewView>
   /** What the cache already knows, without the network. */
   cached(urls: readonly string[]): Promise<ReadonlyMap<string, EmbedPreviewView>>
   /** Whether `url` should be resolved: never resolved, or resolved too long ago. */
@@ -129,14 +138,15 @@ export function createEmbedPreviewService(
   }
 
   return {
-    async resolve(raw) {
+    async resolve(raw, resolveOptions) {
       const url = parseEmbedUrl(raw)
       const address = url.toString()
       const provider = detectEmbedProvider(url)
       if (!isResolvableProvider(provider)) return unsupported(address, provider)
 
       const cached = await options.store.get(address)
-      if (cached !== null && isFresh(cached)) return view(cached)
+      if (cached !== null && isFresh(cached) && resolveOptions?.refresh !== true)
+        return view(cached)
 
       const resolved = await resolveEmbed(address, provider, { fetch: fetcher })
       let thumbnailKey: string | null = null

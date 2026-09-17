@@ -48,6 +48,32 @@ describe('enforcing an exclusion on a proposed content model', () => {
     }
   })
 
+  it('keeps a catalogue when the document rules out selling online, and still removes what sells', () => {
+    // A real brief found this: a bakery wrote "Pas de boutique en ligne" and
+    // "Présenter nos pains […] avec prix indicatifs" in the same document,
+    // and the whole `produit` collection was removed from its plan.
+    const noShop: DetectedConstraint = {
+      kind: 'exclusion',
+      topic: 'ecommerce',
+      quote: 'Pas de boutique en ligne : la vente se fait uniquement sur place.',
+      source: 'boulangerie-brief.md',
+    }
+
+    const kept = enforceOnContentModel(proposal('produit', 'tarif', 'page'), [noShop])
+    expect(kept.proposal.collections.map((c) => c.definition.name)).toEqual([
+      'produit',
+      'tarif',
+      'page',
+    ])
+    expect(kept.violations).toEqual([])
+
+    for (const name of ['commande', 'panier', 'boutique', 'facture', 'paiement']) {
+      const removed = enforceOnContentModel(proposal(name, 'page'), [noShop])
+      expect(removed.proposal.collections.map((c) => c.definition.name)).toEqual(['page'])
+      expect(removed.violations).toHaveLength(1)
+    }
+  })
+
   it('leaves a proposal that respects the constraint completely untouched', () => {
     const input = proposal('dish', 'page')
 

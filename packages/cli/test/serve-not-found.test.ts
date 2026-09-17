@@ -34,7 +34,7 @@ const COLLECTIONS: readonly CollectionDefinition[] = [
   },
 ]
 
-async function project(notFoundPath?: string): Promise<string> {
+async function project(notFoundPath?: string, defaultLocale?: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'cogenta-404-e2e-'))
   await writeFile(
     join(root, 'cogenta.config.mjs'),
@@ -42,8 +42,10 @@ async function project(notFoundPath?: string): Promise<string> {
   site: {
     name: 'Test site',
     url: 'https://example.com'${
-      notFoundPath === undefined ? '' : `,\n    notFoundPath: ${JSON.stringify(notFoundPath)}`
-    }
+      defaultLocale === undefined
+        ? ''
+        : `,\n    locales: ${JSON.stringify([defaultLocale])},\n    defaultLocale: ${JSON.stringify(defaultLocale)}`
+    }${notFoundPath === undefined ? '' : `,\n    notFoundPath: ${JSON.stringify(notFoundPath)}`}
   },
   database: { url: ${JSON.stringify(join(root, 'site.db'))} },
   cache: { path: ${JSON.stringify(join(root, 'cache'))} },
@@ -131,6 +133,22 @@ describe('a site 404 page', () => {
 
     await server.stop()
   })
+
+  it('speaks the site’s own language, and falls back to English for one it does not know', async () => {
+    const german = await project(undefined, 'de-AT')
+    const germanServer = await startServer(german, { registry: activeServers })
+    const germanHtml = await (await fetch(`${germanServer.base}/no-such-page`)).text()
+    // `de-AT` reads German: the language subtag decides, not an exact match.
+    expect(germanHtml).toContain('Diese Seite wurde nicht gefunden')
+    await germanServer.stop()
+
+    const icelandic = await project(undefined, 'is')
+    const icelandicServer = await startServer(icelandic, { registry: activeServers })
+    const icelandicHtml = await (await fetch(`${icelandicServer.base}/no-such-page`)).text()
+    // Not a language these pages speak — English rather than nothing.
+    expect(icelandicHtml).toContain('This page could not be found')
+    await icelandicServer.stop()
+  }, 60_000)
 
   it('welcomes a visitor at the root of a site that has no home page yet', async () => {
     const root = await project()

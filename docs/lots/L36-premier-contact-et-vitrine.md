@@ -239,3 +239,12 @@ En le corrigeant, trois défauts de la même famille :
 
 Laissé tel quel, volontairement : le libellé du champ piège d'un widget formulaire est
 masqué et `aria-hidden` — aucun humain ne le lit, et le traduire toucherait le contrat D.
+
+
+## Limite levée le 2026-09-17 — les pages de secours parlent sept langues
+
+La page 404 et la page de démarrage étaient en français et en anglais : un site espagnol ou
+allemand montrait sa toute première page dans une langue que ses visiteurs ne lisent
+peut-être pas. Elles parlent désormais aussi espagnol, allemand, italien, portugais et
+néerlandais, choisies sur la **sous-étiquette de langue** (`de-AT` lit l'allemand,
+`pt-BR` le portugais) ; une langue inconnue de cette liste lit l'anglais plutôt que rien.

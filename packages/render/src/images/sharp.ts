@@ -33,6 +33,9 @@ interface SharpMetadataLike {
 interface SharpInstanceLike {
   metadata(): Promise<SharpMetadataLike>
   rotate(angle: number): SharpInstanceLike
+  /** Mirror left-to-right. `flip()` is the top-to-bottom one — sharp's own naming. */
+  flop(): SharpInstanceLike
+  flip(): SharpInstanceLike
   extract(rect: { left: number; top: number; width: number; height: number }): SharpInstanceLike
   resize(options: { width: number; height: number; fit: 'fill' }): SharpInstanceLike
   flatten(options: { background: string }): SharpInstanceLike
@@ -107,6 +110,20 @@ export function createSharpTransformer(sharp: SharpFactory): ImageTransformer {
       // rectangle is expressed in the rotated picture's coordinates.
       if (operation.rotate !== undefined && operation.rotate !== 0) {
         pipeline = pipeline.rotate(operation.rotate)
+      }
+      // Mirror after the turn, before the crop — the order the crop
+      // rectangle's coordinates assume, and the order the WASM tier applies.
+      //
+      // sharp does **not** honour call order here: its pipeline mirrors
+      // before it rotates, whatever sequence the calls arrive in (proved by
+      // the contract test, which read `yellow` where `red` was expected).
+      // Mirroring before a quarter turn is the same as mirroring across the
+      // other axis after it, so the axis is swapped for 90 and 270 rather
+      // than letting the two tiers produce different pixels.
+      if (operation.mirror !== undefined) {
+        const quarter = operation.rotate === 90 || operation.rotate === 270
+        const horizontal = (operation.mirror === 'horizontal') !== quarter
+        pipeline = horizontal ? pipeline.flop() : pipeline.flip()
       }
       if (crop !== null) pipeline = pipeline.extract(crop)
       if (resize !== null) {

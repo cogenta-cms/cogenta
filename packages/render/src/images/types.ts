@@ -111,6 +111,17 @@ export interface Rect extends Size {
 /** A quarter turn, clockwise. */
 export type QuarterTurn = 0 | 90 | 180 | 270
 
+/**
+ * A mirror, applied after the turn and before the crop.
+ *
+ * Quarter turns and a mirror together cover the eight ways a picture can be
+ * re-oriented without resampling a single pixel — which is why they are one
+ * closed set here and a free angle is not: an arbitrary rotation interpolates,
+ * needs a background colour behind the corners it exposes, and would have to
+ * produce the *same* pixels on both tiers to keep the contract suite honest.
+ */
+export type Mirror = 'horizontal' | 'vertical'
+
 export interface TransformOperation {
   /**
    * Applied first, clockwise, before `crop`: a crop rectangle is expressed in
@@ -118,6 +129,12 @@ export interface TransformOperation {
    * Absent or `0`: no rotation, as before.
    */
   readonly rotate?: QuarterTurn
+  /**
+   * Applied after `rotate`, before `crop` — so a crop rectangle is expressed
+   * in the coordinates of the picture as the editor shows it. Absent: no
+   * mirror, as before.
+   */
+  readonly mirror?: Mirror
   readonly crop: Rect | null
   readonly resize: Size | null
   readonly format: ImageFormat

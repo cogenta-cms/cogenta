@@ -234,10 +234,11 @@ describe('a site plan waiting on a live site', () => {
         data: { sections: { items: { id: string }[] }[] }
       }
     ).data.sections
-    // With no planner configured the server cannot flatten the draft into
-    // sections, so this site reviews by the ids it knows. A site with a
-    // provider gets them from the API; the decision rules are the same.
-    expect(sections).toEqual([])
+    // Flattening a draft into sections needs no model: a plan left by the
+    // installer is reviewable section by section on a site with no provider.
+    expect(sections.flatMap((section) => section.items.map((item) => item.id))).toEqual(
+      expect.arrayContaining(['brief:locales', 'contentModel:dish', 'pages:contact']),
+    )
 
     const decisions = {
       'brief:locales': 'accepted',

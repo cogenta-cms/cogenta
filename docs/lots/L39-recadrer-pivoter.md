@@ -82,3 +82,20 @@ empreinte.
 - Rotation par quarts de tour seulement (pas d'angle libre ni de miroir).
 - Le point focal d'une image retouchée est gardé dans les coordonnées de l'image retouchée ;
   les paramètres de la dernière retouche (à côté de l'original) permettent de le ramener.
+
+
+## Limite levée le 2026-09-17 — le miroir
+
+Un quart de tour et un miroir couvrent ensemble les **huit** orientations qu'une image peut
+prendre sans qu'un seul pixel soit rééchantillonné. Le miroir (gauche-droite, haut-bas)
+s'applique après la rotation et avant le recadrage, sur les deux niveaux de driver, et le
+point focal est transporté à travers lui comme il l'était à travers la rotation.
+
+**Un vrai piège trouvé en le faisant** : `sharp` n'honore pas l'ordre des appels — son
+pipeline applique le miroir *avant* la rotation quoi qu'on lui demande. Le test de contrat
+l'a montré (« yellow » là où « red » était attendu). L'axe est donc inversé pour 90° et 270°
+côté natif, ce qui fait produire aux deux niveaux exactement les mêmes pixels.
+
+**L'angle libre reste écarté, avec sa raison** : une rotation arbitraire interpole, exige une
+couleur de fond derrière les coins qu'elle découvre, et devrait rendre les *mêmes* pixels sur
+les deux niveaux pour que la suite de contrat reste honnête. C'est un lot, pas une option.

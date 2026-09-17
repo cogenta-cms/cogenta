@@ -123,8 +123,21 @@ export interface PublishInput {
   readonly at?: Date
 }
 
-/** Ordering is limited to columns that are never null, so a cursor is total. */
-export type SortField = 'id' | 'createdAt' | 'updatedAt'
+/** The three columns that can never be null, so a cursor on them is total. */
+export type SystemSortField = 'id' | 'createdAt' | 'updatedAt'
+
+/**
+ * A system column, or — since `schema@2.4` (ADR-0038) — the name of a declared
+ * `date`/`datetime` field of this collection.
+ *
+ * A declared date *can* be empty, which is why it was excluded for so long: a
+ * cursor needs a total order. The order is made total here instead of being
+ * assumed — entries with no value are always last, whatever the direction,
+ * written out explicitly (`case when … is null`) so the three engines agree
+ * rather than each applying its own null placement — and the cursor carries a
+ * nullable value so the tail of empties is itself pageable.
+ */
+export type SortField = SystemSortField | (string & {})
 
 export interface SortOrder {
   readonly field: SortField

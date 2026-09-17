@@ -514,12 +514,20 @@ describe('association blueprint, honest actions and navigation', () => {
     expect(ASSOCIATION_MENUS.footer).toEqual([])
   })
 
-  it('sorts every list on a field contract B allows', () => {
+  it('sorts every list on a field contract A can order by', () => {
     const lists = everyBlock().filter((block) => block._type === 'collectionList')
     expect(lists.length).toBeGreaterThan(10)
     for (const block of lists) {
       if (block._type !== 'collectionList') continue
-      expect(['id', 'createdAt', 'updatedAt']).toContain(block.sort?.field)
+      // `date` is the event's own declared datetime (L40, ADR-0038) — the
+      // three system columns, or a date the listed collection declares.
+      expect(['id', 'createdAt', 'updatedAt', 'date']).toContain(block.sort?.field)
+      if (block.collection === 'event') {
+        expect(block.sort?.field).toBe('date')
+        // Resolved by the API at every request, never a date frozen at scaffold
+        // time: a demo site left running still shows what is coming up.
+        expect(block.filter).toEqual({ date: { gte: '$now' } })
+      }
     }
   })
 

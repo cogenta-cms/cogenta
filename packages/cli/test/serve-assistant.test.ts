@@ -749,3 +749,92 @@ describe('cogenta serve — editing a prompt template changes assist.* behaviour
     expect(system).not.toContain('Rewrite the passage in the DATA block.')
   })
 })
+
+describe('cogenta serve — a provider saved from the admin reaches the assistant and the planner', () => {
+  const liveServers: AbortController[] = []
+  const liveFakes: FakeAnthropic[] = []
+
+  afterEach(async () => {
+    for (const controller of liveServers.splice(0)) controller.abort()
+    for (const fake of liveFakes.splice(0)) await fake.close()
+  })
+
+  it('switches the writing assistant and site planning on without a restart, and off again when the provider is disabled', async () => {
+    const fake = await startFakeAnthropic([
+      {
+        content: [{ type: 'text', text: 'Rewritten by the saved provider.' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    ])
+    liveFakes.push(fake)
+
+    // No `llm` section: the only way in is the admin's Providers screen.
+    const root = await project()
+    const server = await startServer(root, { registry: liveServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin', 'editor'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+    const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+    const capabilities = async (): Promise<{ available: boolean; tools: { tool: string }[] }> => {
+      const response = await fetch(`${server.base}/api/assistant`, { headers })
+      return (
+        (await response.json()) as { data: { available: boolean; tools: { tool: string }[] } }
+      ).data
+    }
+    const plannerAvailable = async (): Promise<boolean> => {
+      const response = await fetch(`${server.base}/api/site-plans`, { headers })
+      return ((await response.json()) as { plannerAvailable: boolean }).plannerAvailable
+    }
+
+    expect((await capabilities()).tools.map((tool) => tool.tool)).not.toContain('assist.rewrite')
+    expect(await plannerAvailable()).toBe(false)
+
+    const saved = await fetch(`${server.base}/api/providers`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        provider: 'anthropic',
+        apiKey: 'sk-ant-test-key-live',
+        model: 'claude-test',
+        baseUrl: fake.url,
+      }),
+    })
+    expect(saved.status).toBe(201)
+
+    const after = await capabilities()
+    expect(after.available).toBe(true)
+    expect(after.tools.map((tool) => tool.tool)).toContain('assist.rewrite')
+    expect(await plannerAvailable()).toBe(true)
+
+    const run = await fetch(`${server.base}/api/assistant/run`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ tool: 'assist.rewrite', input: { text: 'a sentence to rewrite' } }),
+    })
+    expect(run.status).toBe(200)
+    const runBody = (await run.json()) as { data: { suggestions: readonly string[] } }
+    expect(runBody.data.suggestions).toEqual(['Rewritten by the saved provider.'])
+    expect(fake.requests).toHaveLength(1)
+
+    const disabled = await fetch(`${server.base}/api/providers/anthropic`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ enabled: false }),
+    })
+    expect(disabled.status).toBe(200)
+
+    expect((await capabilities()).tools.map((tool) => tool.tool)).not.toContain('assist.rewrite')
+    expect(await plannerAvailable()).toBe(false)
+    const refused = await fetch(`${server.base}/api/assistant/run`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ tool: 'assist.rewrite', input: { text: 'again' } }),
+    })
+    expect(refused.status).not.toBe(200)
+    expect(fake.requests).toHaveLength(1)
+  })
+})

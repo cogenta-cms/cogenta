@@ -150,3 +150,44 @@ function compare(actual: unknown, expected: unknown): number | undefined {
   }
   return undefined
 }
+
+/**
+ * The two relative tokens a stored filter may carry (`schema@2.4`, ADR-0038).
+ *
+ * A `collectionList` block's filter is *data*: it is written once and read at
+ * every render, so "from now on" cannot be a value — a date resolved when the
+ * page was saved would quietly become a date in the past. These two tokens are
+ * resolved here, per request, and never stored resolved.
+ *
+ * Exact strings only. A value that merely contains `$now` is a literal, which
+ * is what keeps this from turning into a template language nobody asked for.
+ */
+export const RELATIVE_NOW = '$now'
+export const RELATIVE_TODAY = '$today'
+
+/** `true` when this filter depends on the clock — a page built from it cannot be cached indefinitely. */
+export function isRelativeFilter(filter: Filter | undefined): boolean {
+  if (filter === undefined) return false
+  if ('and' in filter) return filter.and.some(isRelativeFilter)
+  if ('or' in filter) return filter.or.some(isRelativeFilter)
+  return filter.value === RELATIVE_NOW || filter.value === RELATIVE_TODAY
+}
+
+/**
+ * The same filter with `$now`/`$today` replaced by the instant of this request:
+ * `$now` by a full ISO-8601 timestamp (a `datetime` field), `$today` by its date
+ * half (a `date` field, stored as `YYYY-MM-DD`). Anything else is returned
+ * unchanged, including a filter that carries neither token.
+ */
+export function resolveRelativeFilter(filter: Filter, now: Date): Filter {
+  if ('and' in filter) {
+    return { and: filter.and.map((child) => resolveRelativeFilter(child, now)) }
+  }
+  if ('or' in filter) {
+    return { or: filter.or.map((child) => resolveRelativeFilter(child, now)) }
+  }
+  const iso = now.toISOString()
+  if (filter.value === RELATIVE_NOW) return { ...filter, value: iso }
+  if (filter.value === RELATIVE_TODAY) return { ...filter, value: iso.slice(0, 10) }
+  return filter
+}

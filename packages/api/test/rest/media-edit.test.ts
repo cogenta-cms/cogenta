@@ -216,3 +216,32 @@ describe('replacing a file with the very same bytes', () => {
     expect((await fileOf(id)).equals(PNG)).toBe(true)
   })
 })
+
+describe('mirroring (L39, widened)', () => {
+  it('accepts a mirror, refuses anything that is not one of the two axes', () => {
+    expect(parseImageEdit({ rotate: 0, mirror: 'horizontal', crop: null })).toEqual({
+      rotate: 0,
+      mirror: 'horizontal',
+      crop: null,
+    })
+    expect(() => parseImageEdit({ rotate: 0, mirror: 'diagonal', crop: null })).toThrowError(
+      /quarter turn/u,
+    )
+  })
+
+  it('is not the identity, even with no turn and no crop', () => {
+    expect(isIdentityEdit({ rotate: 0, crop: null })).toBe(true)
+    expect(isIdentityEdit({ rotate: 0, mirror: 'vertical', crop: null })).toBe(false)
+  })
+
+  it('carries a focal point through a mirror, and back again exactly', () => {
+    const focal = { x: 0.2, y: 0.8 }
+    const edit = { rotate: 90 as const, mirror: 'horizontal' as const, crop: null }
+
+    const through = focalThroughEdit(focal, edit)
+    expect(through).not.toBeNull()
+    // Turned a quarter clockwise, then mirrored left-to-right.
+    expect(through).toEqual({ x: 1 - (1 - 0.8), y: 0.2 })
+    expect(focalBeforeEdit(through, edit)).toEqual(focal)
+  })
+})

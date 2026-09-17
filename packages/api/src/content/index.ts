@@ -21,9 +21,15 @@ export {
   grantedEntryId,
   roleState,
 } from './draft-access.js'
-export { matchesFilter } from './filter.js'
+export {
+  isRelativeFilter,
+  matchesFilter,
+  RELATIVE_NOW,
+  RELATIVE_TODAY,
+  resolveRelativeFilter,
+} from './filter.js'
 export type { ScanRequest, ScanResult } from './pagination.js'
-export { cursorFor, scanPages } from './pagination.js'
+export { canPageBy, cursorFor, scanPages } from './pagination.js'
 export type {
   ExpansionOptions,
   ExpansionSource,

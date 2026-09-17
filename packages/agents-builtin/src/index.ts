@@ -1,3 +1,29 @@
+export { accessibilityAgent } from './accessibility/agent.js'
+export type { AccessibilityFinding, AccessibilityIssue } from './accessibility/audit.js'
+export {
+  auditAccessibility,
+  auditContrast,
+  contrastRatio,
+  relativeLuminance,
+} from './accessibility/audit.js'
+export { analyticsAgent } from './analytics/agent.js'
+export type {
+  AudienceFinding,
+  AudienceIssue,
+  AudienceOptions,
+  AudiencePage,
+  AudienceWindow,
+} from './analytics/signals.js'
+export { readAudienceSignals } from './analytics/signals.js'
+export { complianceAgent } from './compliance/agent.js'
+export type {
+  ComplianceEmbed,
+  ComplianceEntry,
+  ComplianceFinding,
+  ComplianceInput,
+  ComplianceIssue,
+} from './compliance/audit.js'
+export { auditCompliance } from './compliance/audit.js'
 export { contentAgent } from './content/agent.js'
 export type { ContentDraftToolOptions } from './content/provenance.js'
 export { createContentDraftTool } from './content/provenance.js'
@@ -20,6 +46,25 @@ export type {
 } from './developer/patch-tool.js'
 export { createCodePatchTool } from './developer/patch-tool.js'
 export { imageCreatorAgent } from './image-creator/agent.js'
+export { mediaAgent } from './media/agent.js'
+export type {
+  MediaAuditAsset,
+  MediaAuditOptions,
+  MediaFinding,
+  MediaIssue,
+} from './media/audit.js'
+export { auditMediaLibrary } from './media/audit.js'
+export { migrationAgent } from './migration/agent.js'
+export type {
+  MigrationEntry,
+  MigrationFinding,
+  MigrationIssue,
+  MigrationOptions,
+} from './migration/residue.js'
+export { findMigrationResidue, redirectsFor } from './migration/residue.js'
+export { moderationAgent } from './moderation/agent.js'
+export type { ModerationDecision, ModerationTriage } from './moderation/triage.js'
+export { triageComments } from './moderation/triage.js'
 export { performanceAgent } from './performance/agent.js'
 export { compareToBudget } from './performance/budget.js'
 export type { CruxFormFactor, QueryCruxOptions } from './performance/crux-client.js'
@@ -148,3 +193,11 @@ export type {
   WriteSandboxFileToolOptions,
 } from './theme-creator/write-sandbox-file-tool.js'
 export { createWriteSandboxFileTool } from './theme-creator/write-sandbox-file-tool.js'
+export { translationAgent } from './translation/agent.js'
+export type {
+  TranslationFamily,
+  TranslationGap,
+  TranslationIssue,
+  TranslationMember,
+} from './translation/gaps.js'
+export { findTranslationGaps } from './translation/gaps.js'

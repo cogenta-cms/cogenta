@@ -5,7 +5,8 @@ import { defaultValueFor } from '../fields/default-value.js'
 import { FieldInput } from '../fields/field-input.js'
 import { useSchema } from '../schema/schema-context.js'
 import { EmbedAssist } from './embed-assist.js'
-import { localizeBlockField } from './localize-block-fields.js'
+import { dateFieldsOf, localizeBlockField } from './localize-block-fields.js'
+import { readUpcomingOnly, withUpcomingOnly } from './upcoming-filter.js'
 import type { BlockDefinition } from './vocabulary.js'
 
 /**
@@ -35,14 +36,23 @@ export function BlockForm({
   const { t } = useTranslation()
   const schemaState = useSchema()
   const collections = schemaState.status === 'ready' ? schemaState.schema.collections : []
-  const fields = useMemo(
-    () => definition.fields.map((field) => localizeBlockField(field, t, collections)),
-    [definition, t, collections],
-  )
   const listed =
     definition.name === 'collectionList' && typeof data['collection'] === 'string'
       ? collections.find((collection) => collection.name === data['collection'])
       : undefined
+  const fields = useMemo(
+    () => definition.fields.map((field) => localizeBlockField(field, t, collections, listed)),
+    [definition, t, collections, listed],
+  )
+  // "Only what is still to come" needs a date to compare against, and the one
+  // the list is already ordered by is the only one that makes the two agree
+  // (L40, ADR-0038).
+  const sortedBy = (data['sort'] as { field?: unknown } | undefined)?.field
+  const upcomingField =
+    typeof sortedBy === 'string' && dateFieldsOf(listed).some((field) => field.name === sortedBy)
+      ? sortedBy
+      : undefined
+  const upcoming = upcomingField === undefined ? false : readUpcomingOnly(data, upcomingField)
 
   return (
     <>
@@ -56,6 +66,20 @@ export function BlockForm({
           disabled={disabled}
         />
       ))}
+      {upcomingField !== undefined && (
+        <label className="flex items-center gap-2 text-sm" htmlFor={`${idPrefix}-upcoming`}>
+          <input
+            id={`${idPrefix}-upcoming`}
+            type="checkbox"
+            checked={upcoming}
+            disabled={disabled}
+            onChange={(event) =>
+              onChange(withUpcomingOnly(data, upcomingField, event.target.checked))
+            }
+          />
+          {t('builder.upcomingOnly')}
+        </label>
+      )}
       {definition.name === 'embed' && (
         <EmbedAssist data={data} onChange={onChange} disabled={disabled} />
       )}

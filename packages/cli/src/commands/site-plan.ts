@@ -2,19 +2,13 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   type ApprovedPlan,
-  createAnthropicClient,
   createFileSitePlanStore,
-  createGoogleClient,
-  createOpenAiClient,
   describeExistingSite,
   type ExistingEntryCounts,
   type ExistingSiteSnapshot,
   extractDocumentText,
-  type ProviderClient,
-  type ProviderTuningDefaults,
   proposeSitePlan,
   resolveApprovedPlan,
-  resolveProviderTuningDefaults,
   type SitePlanDraft,
   summarisePlan,
 } from '@cogenta/agents'
@@ -29,14 +23,13 @@ import {
   type CollectionDefinition,
   createContentStore,
   createSchemaTables,
-  createSiteSettingsStore,
   createTaxonomyStore,
   createThemeStore,
-  ensureSiteSettingsTables,
   ensureThemeTable,
   type TaxonomyDefinition,
 } from '@cogenta/schema'
 import { findSchemaFile } from './serve.js'
+import type { TextProviderSource } from './text-provider-source.js'
 import { DEFAULT_THEME_NAME } from './theme-registry.js'
 
 /**
@@ -60,23 +53,6 @@ import { DEFAULT_THEME_NAME } from './theme-registry.js'
  */
 
 const PLAN_DIRECTORY = join('.cogenta', 'site-plans')
-
-function providerClient(
-  llm: NonNullable<CogentaConfig['llm']>,
-  apiKey: string,
-  defaults: ProviderTuningDefaults,
-): ProviderClient | undefined {
-  const config = {
-    apiKey,
-    model: llm.model,
-    ...(llm.baseUrl === undefined ? {} : { baseUrl: llm.baseUrl }),
-    defaults,
-  }
-  if (llm.provider === 'anthropic') return createAnthropicClient(config)
-  if (llm.provider === 'openai') return createOpenAiClient(config)
-  if (llm.provider === 'google') return createGoogleClient(config)
-  return undefined
-}
 
 /** Fiche 60 task 2's four inputs `describeExistingSite` needs, resolved on this site. */
 export interface ExistingSiteContext {
@@ -146,13 +122,22 @@ export async function buildExistingSiteSnapshot(
 }
 
 function createPlanner(
-  client: ProviderClient,
-  model: string,
+  source: TextProviderSource,
   siteName: string,
   siteContext: ExistingSiteContext,
 ): SitePlannerLike {
   return {
+    available: async () => (await source.resolve()) !== undefined,
     async propose(input) {
+      const resolved = await source.resolve()
+      if (resolved === undefined) {
+        return {
+          ok: false,
+          stage: 'provider',
+          reason: "no AI provider is configured — add one from the admin's Providers screen",
+        }
+      }
+      const { client, model } = resolved
       const documents = input.documents.map((document) =>
         extractDocumentText({
           filename: document.filename,
@@ -192,8 +177,8 @@ export interface SitePlanApplierOptions {
    * would create the tables and then write a file nothing reads.
    */
   readonly schemaPath?: string
-  /** Named in the provenance of anything this writes. */
-  readonly model?: string
+  /** Named in the provenance of anything this writes — a function when the model can change while the site runs. */
+  readonly model?: string | (() => Promise<string | undefined>)
 }
 
 /**
@@ -244,6 +229,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         input.decisions,
       )
 
+      const model = typeof options.model === 'function' ? await options.model() : options.model
       const schemaPath = options.schemaPath
       if (schemaPath !== undefined) assertSerialisableSchema(options.collections, schemaPath)
 
@@ -352,7 +338,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
             provenance: 'generated',
             provenanceDetail: {
               agent: 'site-planner',
-              ...(options.model === undefined ? {} : { model: options.model }),
+              ...(model === undefined ? {} : { model }),
               at: new Date().toISOString(),
             },
             values: entry.values,
@@ -417,7 +403,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
                 provenance: 'generated',
                 provenanceDetail: {
                   agent: 'site-planner',
-                  ...(options.model === undefined ? {} : { model: options.model }),
+                  ...(model === undefined ? {} : { model }),
                   at: new Date().toISOString(),
                 },
                 values,
@@ -499,6 +485,11 @@ export interface SitePlanningOptions {
   readonly taxonomies?: readonly TaxonomyDefinition[]
   readonly config: CogentaConfig
   readonly logger: Logger
+  /**
+   * Where the planner finds its model — the admin's provider store, then
+   * `config.llm`, read per request. Absent means no planner at all.
+   */
+  readonly providers?: TextProviderSource
   /** A read-only instance can propose and review, never apply. */
   readonly readOnly?: boolean
   /**
@@ -531,18 +522,7 @@ export async function createSitePlanning(
 ): Promise<SitePlanRouterOptions> {
   const store = createFileSitePlanStore(join(options.projectRoot, PLAN_DIRECTORY))
   const llm = options.config.llm
-  const apiKey = llm?.apiKey
-
-  let client: ProviderClient | undefined
-  if (llm !== undefined && apiKey !== undefined && apiKey !== '') {
-    await ensureSiteSettingsTables(options.db)
-    const defaults = await resolveProviderTuningDefaults(
-      createSiteSettingsStore({ db: options.db }),
-    )
-    client = providerClient(llm, apiKey, defaults)
-  }
-
-  if (client !== undefined && llm !== undefined && llm.model === '') {
+  if (llm !== undefined && llm.apiKey !== undefined && llm.apiKey !== '' && llm.model === '') {
     throw new CogentaError({
       code: 'CONFIG_INVALID',
       message: 'An LLM provider is configured with no model.',
@@ -567,10 +547,10 @@ export async function createSitePlanning(
 
   return {
     store,
-    ...(client === undefined || llm === undefined
+    ...(options.providers === undefined
       ? {}
       : {
-          planner: createPlanner(client, llm.model, options.config.site.name, {
+          planner: createPlanner(options.providers, options.config.site.name, {
             db: options.db,
             collections: options.collections,
             taxonomies: options.taxonomies ?? [],
@@ -589,7 +569,11 @@ export async function createSitePlanning(
             defaultLocale: options.config.site.defaultLocale,
             logger: options.logger,
             ...(schemaPath === undefined ? {} : { schemaPath }),
-            ...(llm === undefined ? {} : { model: llm.model }),
+            ...(options.providers === undefined
+              ? {}
+              : {
+                  model: async () => (await options.providers?.resolve())?.model,
+                }),
           }),
         }),
   }

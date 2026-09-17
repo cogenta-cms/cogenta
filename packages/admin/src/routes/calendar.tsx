@@ -17,6 +17,7 @@ import {
   moveToDay,
   startOfDay,
   toLocalInputValue,
+  weekGrid,
   weekStartFor,
 } from '../calendar/calendar-dates.js'
 import { useSchema } from '../schema/schema-context.js'
@@ -67,6 +68,12 @@ export function CalendarRoute(): JSX.Element {
     const today = new Date()
     return { year: today.getFullYear(), month: today.getMonth() }
   })
+  // L35 left "pas de vue semaine" open. A month is the wrong unit for the week
+  // someone is working on — four entries on one Thursday become a stack of
+  // truncated titles in a 42-cell grid — so the same grid, the same drag and
+  // the same dialog run over seven days when asked.
+  const [view, setView] = useState<'month' | 'week'>('month')
+  const [weekAnchor, setWeekAnchor] = useState(() => new Date())
   const [report, setReport] = useState<CalendarReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -77,8 +84,11 @@ export function CalendarRoute(): JSX.Element {
 
   const weekStart = weekStartFor(i18n.language)
   const days = useMemo(
-    () => monthGrid(month.year, month.month, weekStart),
-    [month.year, month.month, weekStart],
+    () =>
+      view === 'month'
+        ? monthGrid(month.year, month.month, weekStart)
+        : weekGrid(weekAnchor, weekStart),
+    [view, month.year, month.month, weekAnchor, weekStart],
   )
 
   const load = useCallback(async (): Promise<void> => {
@@ -120,6 +130,17 @@ export function CalendarRoute(): JSX.Element {
     month: 'long',
     year: 'numeric',
   }).format(new Date(month.year, month.month, 1))
+  const dayRangeFormat = new Intl.DateTimeFormat(i18n.language, {
+    day: 'numeric',
+    month: 'long',
+  })
+  const periodTitle =
+    view === 'month'
+      ? monthTitle
+      : `${dayRangeFormat.format(days[0] ?? weekAnchor)} – ${new Intl.DateTimeFormat(
+          i18n.language,
+          { day: 'numeric', month: 'long', year: 'numeric' },
+        ).format(days.at(-1) ?? weekAnchor)}`
   const weekdayFormat = new Intl.DateTimeFormat(i18n.language, { weekday: 'short' })
   const dayLabelFormat = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'full' })
   const timeFormat = new Intl.DateTimeFormat(i18n.language, { timeStyle: 'short' })
@@ -128,7 +149,14 @@ export function CalendarRoute(): JSX.Element {
     timeStyle: 'short',
   })
 
-  const shiftMonth = (delta: number): void => {
+  const shiftPeriod = (delta: number): void => {
+    if (view === 'week') {
+      setWeekAnchor(
+        (current) =>
+          new Date(current.getFullYear(), current.getMonth(), current.getDate() + delta * 7),
+      )
+      return
+    }
     setMonth((current) => {
       const next = new Date(current.year, current.month + delta, 1)
       return { year: next.getFullYear(), month: next.getMonth() }
@@ -252,11 +280,27 @@ export function CalendarRoute(): JSX.Element {
           <CardBody className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="m-0 text-lg font-semibold first-letter:uppercase" aria-live="polite">
-                {monthTitle}
+                {periodTitle}
               </h2>
               <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" variant="secondary" onClick={() => shiftMonth(-1)}>
-                  {t('calendar.previous')}
+                <Button
+                  type="button"
+                  variant={view === 'month' ? 'primary' : 'secondary'}
+                  aria-pressed={view === 'month'}
+                  onClick={() => setView('month')}
+                >
+                  {t('calendar.viewMonth')}
+                </Button>
+                <Button
+                  type="button"
+                  variant={view === 'week' ? 'primary' : 'secondary'}
+                  aria-pressed={view === 'week'}
+                  onClick={() => setView('week')}
+                >
+                  {t('calendar.viewWeek')}
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => shiftPeriod(-1)}>
+                  {t(view === 'week' ? 'calendar.previousWeek' : 'calendar.previous')}
                 </Button>
                 <Button
                   type="button"
@@ -264,12 +308,13 @@ export function CalendarRoute(): JSX.Element {
                   onClick={() => {
                     const now = new Date()
                     setMonth({ year: now.getFullYear(), month: now.getMonth() })
+                    setWeekAnchor(now)
                   }}
                 >
                   {t('calendar.today')}
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => shiftMonth(1)}>
-                  {t('calendar.next')}
+                <Button type="button" variant="secondary" onClick={() => shiftPeriod(1)}>
+                  {t(view === 'week' ? 'calendar.nextWeek' : 'calendar.next')}
                 </Button>
               </div>
             </div>
@@ -294,7 +339,9 @@ export function CalendarRoute(): JSX.Element {
                   const key = dayKey(day)
                   const items = byDay.get(key) ?? []
                   const past = day.getTime() < today
-                  const inMonth = day.getMonth() === month.month
+                  // Every day of a week view belongs to the period on screen;
+                  // only a month grid has days spilling from its neighbours.
+                  const inMonth = view === 'week' || day.getMonth() === month.month
                   return (
                     <section
                       key={key}

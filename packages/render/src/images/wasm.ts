@@ -34,6 +34,8 @@ interface VipsImageLike {
   rot90(): VipsImageLike
   rot180(): VipsImageLike
   rot270(): VipsImageLike
+  /** libvips takes the direction as a string in the WASM binding, like every other enum. */
+  flip(direction: 'horizontal' | 'vertical'): VipsImageLike
   crop(left: number, top: number, width: number, height: number): VipsImageLike
   resize(scale: number, options?: { vscale?: number }): VipsImageLike
   flatten(options?: { background?: readonly number[] }): VipsImageLike
@@ -119,6 +121,7 @@ export function createWasmTransformer(vips: VipsLike): ImageTransformer {
         if (operation.rotate === 90) image = keep(image.rot90())
         if (operation.rotate === 180) image = keep(image.rot180())
         if (operation.rotate === 270) image = keep(image.rot270())
+        if (operation.mirror !== undefined) image = keep(image.flip(operation.mirror))
         if (crop !== null) image = keep(image.crop(crop.left, crop.top, crop.width, crop.height))
         if (resize !== null) {
           image = keep(

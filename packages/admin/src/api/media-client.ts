@@ -608,6 +608,8 @@ export async function getImageGenerationStatus(token: string): Promise<ImageGene
 /** L39: a quarter turn, and a crop in fractions of the turned picture. */
 export interface ImageEdit {
   readonly rotate: 0 | 90 | 180 | 270
+  /** Applied after the turn. Absent: no mirror. */
+  readonly mirror?: 'horizontal' | 'vertical'
   readonly crop: {
     readonly x: number
     readonly y: number

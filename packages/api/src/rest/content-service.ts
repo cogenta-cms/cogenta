@@ -26,11 +26,13 @@ import {
 } from '@cogenta/schema'
 import {
   assertUnpublishedReadable,
+  canPageBy,
   cursorFor,
   draftGateFor,
   type ExpansionSource,
   entryVisible,
   matchesFilter,
+  resolveRelativeFilter,
   type SerialisedEntry,
   scanPages,
   serialiseEntry,
@@ -126,6 +128,23 @@ export interface ReplaceReport {
   readonly entries: readonly EntryReplacementPlan[]
   /** Entries the apply step left alone because they moved under it. */
   readonly skipped?: readonly { readonly entryId: string; readonly reason: string }[]
+  /**
+   * Where each entry stood **before** this replacement wrote to it — the
+   * version `POST /api/content/{collection}/{id}/restore` puts it back to.
+   *
+   * L34 left "pas d'annulation groupée" open: undoing a rename of a brand
+   * across forty entries meant opening forty History tabs. This carries the
+   * exact position to return to for each one, so the screen that applied the
+   * replacement can offer to undo all of it — through the ordinary restore
+   * path, one real version at a time, never a second write mechanism.
+   *
+   * Present only on an applied replacement.
+   */
+  readonly undo?: readonly {
+    readonly collection: string
+    readonly entryId: string
+    readonly version: number
+  }[]
 }
 
 /** A window of the editorial calendar (L35): `[from, to)`, as instants. */
@@ -665,12 +684,26 @@ export function createContentService(options: ContentServiceOptions): ContentSer
         stateFor(target, context, 'working')
       }
 
+      if (!canPageBy(query.sort, state)) {
+        throw new CogentaError({
+          code: 'CONTENT_INVALID',
+          message: `Unpublished entries of "${target.name}" cannot be ordered by "${query.sort.field}".`,
+          hint: 'A draft may carry a different date from the entry it is a draft of, so a cursor on it would skip rows. Order by id, createdAt or updatedAt here, or list the published entries.',
+          details: { collection: target.name, field: query.sort.field },
+        })
+      }
+
       const gate = draftGate(target, context, state)
       // One predicate, so the draft gate takes part in the same walk as the
       // filter: an entry a preview grant does not cover is not "hidden after
       // paging", it never counts towards the page or the cursor at all.
+      // `$now`/`$today` resolved once, here, for the whole walk: a scan that
+      // spans several store pages must not compare its first rows against one
+      // instant and its last rows against another (ADR-0038).
+      const filter =
+        query.filter === undefined ? undefined : resolveRelativeFilter(query.filter, new Date())
       const accept = (entry: ContentEntry): boolean =>
-        gate(entry) && (query.filter === undefined || matchesFilter(query.filter, entry))
+        gate(entry) && (filter === undefined || matchesFilter(filter, entry))
 
       const entries = store(target)
       const scan = await scanPages<ContentEntry>({
@@ -789,6 +822,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       // that, which is the whole reason this tool exists.
       const applied: EntryReplacementPlan[] = []
       const skipped: { readonly entryId: string; readonly reason: string }[] = []
+      const undo: { collection: string; entryId: string; version: number }[] = []
       for (const plan of plans) {
         const target = options.collections.find((candidate) => candidate.name === plan.collection)
         if (target === undefined) continue
@@ -805,6 +839,13 @@ export function createContentService(options: ContentServiceOptions): ContentSer
           skipped.push({ entryId: plan.entryId, reason: 'changed' })
           continue
         }
+        // Read before the write, so the number is the version this entry
+        // really stood at — not one derived by arithmetic from the new one.
+        undo.push({
+          collection: plan.collection,
+          entryId: plan.entryId,
+          version: current.version,
+        })
         await store(target).update(plan.entryId, {
           ...(fresh.values === undefined ? {} : { values: fresh.values }),
           ...(fresh.blocks === undefined ? {} : { blocks: fresh.blocks }),
@@ -813,7 +854,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
         applied.push(fresh)
       }
 
-      return { applied: true, scanned, truncated, entries: applied, skipped }
+      return { applied: true, scanned, truncated, entries: applied, skipped, undo }
     },
 
     calendar: async (context, input) => {

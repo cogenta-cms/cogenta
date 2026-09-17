@@ -22,6 +22,10 @@
 > **Monté en `schema@2.3` le 2026-09-16** (ADR-0037 — visibilité par entrée), montée
 > **mineure et strictement additive** : voir « Champs système » ci-dessous. Annoncée
 > d'abord par erreur comme `schema@2.2`, numéro déjà pris par la fiche 42 ; corrigé.
+> **Monté en `schema@2.4` le 2026-09-17** (ADR-0038 — trier par une date déclarée),
+> montée **mineure et strictement additive** : `SortOrder.field` accepte en plus le
+> nom d'un champ `date`/`datetime` déclaré par la collection, voir « Tri et
+> pagination » ci-dessous.
 
 ### Définition d'un type
 
@@ -297,6 +301,36 @@ Ceci ne change ni la forme de `CollectionDefinition.permissions` ni celle de
 version — c'est le point de décision de `PermissionLayer`, pas le vocabulaire du
 schéma, qui gagne une seconde source.
 
+### Tri et pagination (`schema@2.4`, ADR-0038)
+
+La pagination est **par curseur, jamais par offset** : un curseur est une position
+dans l'ordre (la valeur triée et l'identifiant de la dernière ligne rendue), donc une
+écriture concurrente ne décale rien.
+
+`SortOrder.field` accepte :
+
+- `id`, `createdAt`, `updatedAt` — les trois colonnes jamais vides ;
+- **depuis `schema@2.4`**, le nom d'un champ `date` ou `datetime` **déclaré par la
+  collection** : c'est ce qui permet de lister « les prochains événements » par la date
+  de l'événement plutôt que par sa date de saisie.
+
+Une date déclarée peut être vide, ce qu'un curseur ne tolère pas sans règle explicite.
+Deux garanties, identiques sur SQLite, Postgres et MySQL/MariaDB :
+
+1. **Une entrée sans valeur est toujours en dernier**, dans les deux sens. L'ordre est
+   écrit à la main (`case when <colonne> is null then 1 else 0 end`) plutôt que laissé
+   au moteur, qui range les valeurs vides différemment d'un dialecte à l'autre.
+2. **Le curseur porte `value: string | null`** : la queue des entrées sans valeur se
+   parcourt comme le reste, par identifiant.
+
+Tout autre nom de champ est refusé (`CONTENT_INVALID`) : un tri sur un texte qu'un
+rédacteur retape est un curseur qui saute des lignes en silence.
+
+Côté API, le filtre d'une requête accepte deux **jetons relatifs**, `"$now"` et
+`"$today"`, résolus à chaque requête par la couche API et **jamais stockés résolus** —
+une liste « à partir de maintenant » enregistrée dans un bloc doit rester vraie demain.
+Une page qui en dépend voit sa durée de cache publique plafonnée à une heure.
+
 ### Migrations
 
 Le schéma génère les migrations. Une migration porte : une version, une direction
@@ -333,6 +367,12 @@ historique de relecture à perdre.
 ADR** — même traitement que `tools@1.1`/`document.extract` : un ajout par le bas à une
 taxonomie ouverte. Aucune signature existante modifiée ; un document stocké avant ce
 changement reste valide à l'identique.
+
+`schema@2.3 → 2.4` (ADR-0038, 2026-09-17) : `SortOrder.field` accepte le nom d'un
+champ `date`/`datetime` déclaré, en plus de `id`/`createdAt`/`updatedAt` ; le curseur
+porte une valeur `string | null`. **Strictement additive** : un appelant qui trie par
+une des trois colonnes système obtient exactement le même ordre et le même curseur
+qu'avant. Aucune migration : rien n'est ajouté au schéma physique.
 
 `schema@2.2 → 2.3` (ADR-0037, 2026-09-16) : ajout du champ système `visibility`
 (orthogonal à `status`) et de l'empreinte de mot de passe, jamais lisible ; nouvelles
@@ -652,6 +692,20 @@ vérifié lexicalement **et** sur le vrai système de fichiers, liens symbolique
 **Il n'existe volontairement aucun outil d'installation** : installer ce qu'un bac à sable
 contient est une action humaine, depuis l'écran Plugins ou la CLI, et un plugin installé ne
 détient aucune capacité tant qu'un humain n'en accorde pas une.
+
+**`tools@1.8` le 2026-09-17** (L5 tâche 10, les sept agents de priorité 2 et 3) : la
+taxonomie gagne `comments.moderate` et `analytics.read`, et trois outils rejoignent des
+permissions existantes.
+
+| Outil | Permission | Effets |
+|---|---|---|
+| `media.list` | `media.read` (existante) | `sideEffects: false` — parcourt la médiathèque, ce que `media.read` (un média par identifiant) ne permettait pas. Même relation que `content.list` à `content.read`. |
+| `comments.list` | `comments.moderate` (**nouvelle**) | `sideEffects: false` — la file d'attente de modération, avec le verdict anti-spam que le site a déjà calculé à la soumission. |
+| `comments.decide` | `comments.moderate` (**nouvelle**) | `sideEffects: true`, `reversible: true` — approuve ou refuse un commentaire en attente ; son `revert` restaure le statut et la note exacts d'avant. **Aucune suppression** : refuser est un statut, supprimer ne l'est pas. L'hôte refuse par ailleurs une décision qui contredit le verdict déterministe (`assertDecisionAllowed`). |
+| `analytics.summary` | `analytics.read` (**nouvelle**) | `sideEffects: false` — les compteurs d'audience du site pour une fenêtre de jours, et le total de la fenêtre précédente. La mesure étant sans cookie ni identifiant (fiche 27), il n'existe aucun chemin par lequel cet outil nommerait un visiteur. |
+
+Aucune signature d'outil existante n'est touchée : un ajout par le bas, mineur au même
+titre que `document.extract` en `tools@1.1`.
 
 `theme.write_sandbox` (ajoutée en `tools@1.6`, fiche 73 tâche 7) autorise un agent à
 écrire un fichier de code de thème réel — mais seulement dans un bac à sable isolé

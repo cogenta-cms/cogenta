@@ -55,6 +55,61 @@ describe('buildManifest', () => {
     expect(manifest.some((t) => t.spec.name === 'content.publish')).toBe(false)
   })
 
+  /**
+   * L5 task 10's two new permissions (`comments.moderate`, `analytics.read`).
+   * Their point is that they are *separate*: an agent that moderates comments
+   * must not read the audience, and neither follows from `content.read`.
+   */
+  it('keeps the two permissions of L5 task 10 apart, and out of an agent that lists neither', async () => {
+    const moderate = defineTool({
+      name: 'comments.decide',
+      version: '1.0.0',
+      description: 'Decide one comment.',
+      input: z.object({ id: z.string() }),
+      output: z.object({ id: z.string() }),
+      permissions: ['comments.moderate'],
+      sideEffects: true,
+      reversible: true,
+      cost: 'low' as const,
+      execute: async (input) => ({ id: input.id }),
+      revert: async () => undefined,
+    })
+    const audience = defineTool({
+      name: 'analytics.summary',
+      version: '1.0.0',
+      description: 'Read the audience.',
+      input: z.object({}),
+      output: z.object({ totalViews: z.number() }),
+      permissions: ['analytics.read'],
+      sideEffects: false,
+      reversible: false,
+      cost: 'low' as const,
+      execute: async () => ({ totalViews: 1 }),
+    })
+    const registry = createToolRegistry([publish, scan, moderate, audience])
+
+    // The moderation agent: it gets its own tool and *not* the audience one.
+    // (A manifest carries no permission list — the model never sees one; what
+    // it carries is the tools the declaration allowed, which is the grant.)
+    const moderation = buildManifest(registry, ['comments.decide'], CONTEXT)
+    expect(moderation.map((tool) => tool.spec.name)).toEqual(['comments.decide'])
+    expect(moderation[0]?.reversible).toBe(true)
+    expect(moderate.permissions).toEqual(['comments.moderate'])
+
+    // The audience reader: read-only, and no way to touch a comment.
+    const reader = buildManifest(registry, ['analytics.summary'], CONTEXT)
+    expect(reader.map((tool) => tool.spec.name)).toEqual(['analytics.summary'])
+    expect(reader.some((tool) => tool.spec.name.startsWith('comments.'))).toBe(false)
+
+    // An agent that lists neither has neither — the registry holding them
+    // changes nothing (R4: the declaration is the grant).
+    const neither = buildManifest(registry, ['deps.scan'], CONTEXT)
+    expect(neither.map((tool) => tool.spec.name)).toEqual(['deps.scan'])
+    // And the two permissions are genuinely distinct, not one renamed twice.
+    expect(audience.permissions).toEqual(['analytics.read'])
+    expect(moderate.permissions).not.toEqual(audience.permissions)
+  })
+
   it('throws TOOL_UNKNOWN, at build time, when an allowed name is not in the registry', () => {
     const registry = createToolRegistry([publish])
     expect(() => buildManifest(registry, ['content.publish', 'ghost.tool'], CONTEXT)).toThrowError(

@@ -115,3 +115,15 @@ supprimé.
   l'interface du contrat A.
 - **Pas de glisser au clavier** : l'alternative clavier est la boîte de
   dialogue, comme pour le page builder.
+
+
+## Limite levée le 2026-09-17 — la vue semaine
+
+Le même écran bascule entre mois et semaine : même grille à sept colonnes, même glisser,
+même boîte de dialogue, mais sept jours au lieu de quarante-deux. C'est la vue dont on a
+besoin quand quatre parutions tombent le même jeudi et deviennent une pile de titres
+tronqués dans une case de grille mensuelle. La navigation avance d'une semaine plutôt que
+d'un mois, et « Aujourd'hui » ramène les deux vues sur la date du jour.
+
+Reste ouvert : le filtre de date vit toujours au-dessus du magasin — une plage dans
+`ListOptions` serait une modification du contrat A.

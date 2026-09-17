@@ -205,6 +205,29 @@ export function runImageContract(
       )
 
       it(
+        'mirrors the picture, and does it after the turn on both tiers',
+        async () => {
+          // red | green over blue | yellow
+          const source = quadrantPng(200)
+          const mirrored = async (
+            rotate: 0 | 90 | 180 | 270,
+            mirror: 'horizontal' | 'vertical',
+          ): Promise<string> =>
+            topLeft(await transformer.transform(source, { ...operation(rotate), mirror }))
+
+          // Left-to-right: the top-left quarter becomes what was top-right.
+          expect(await mirrored(0, 'horizontal')).toBe('green')
+          // Top-to-bottom: it becomes what was bottom-left.
+          expect(await mirrored(0, 'vertical')).toBe('blue')
+          // After a quarter turn the top-left is blue; mirrored left-to-right
+          // it is what the turn put top-right, red. If a tier mirrored first
+          // it would answer yellow, which is what this pins.
+          expect(await mirrored(90, 'horizontal')).toBe('red')
+        },
+        SLOW,
+      )
+
+      it(
         'crops in the rotated picture’s coordinates, and swaps a landscape’s sides',
         async () => {
           // After a quarter turn the top-right quarter is what was top-left: red.

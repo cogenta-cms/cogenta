@@ -225,6 +225,9 @@ export const scheduleCalls: { id: string; status: string; publishedAt: unknown }
 /** Every `POST /api/content/-/replace` the mock received, in order (L34). */
 export const replaceCalls: { find: string; replace: string; apply: boolean }[] = []
 
+/** Every version a screen asked to restore — what proves a group undo really goes through the ordinary restore route. */
+export const restoreCalls: { collection: string; id: string; version: number }[] = []
+
 /** What `POST .../visibility` has been told, by entry id (`schema@2.3`). */
 export const mockEntryVisibility = new Map<string, string>()
 
@@ -5627,6 +5630,11 @@ export function installMockFetch(
           action === 'restore' &&
           method === 'POST'
         ) {
+          restoreCalls.push({
+            collection,
+            id,
+            version: Number((body as { version?: unknown } | undefined)?.version ?? 0),
+          })
           const entry = MOCK_ENTRIES.find((candidate) => candidate.id === id)
           if (entry === undefined) {
             return json(404, {
@@ -7113,7 +7121,16 @@ export function installMockFetch(
                 },
               ]
         return json(200, {
-          data: { applied: input.apply === true, scanned: 3, truncated: false, entries },
+          data: {
+            applied: input.apply === true,
+            scanned: 3,
+            truncated: false,
+            entries,
+            // L34's group undo: where each entry stood before the write.
+            ...(input.apply === true && entries.length > 0
+              ? { undo: [{ collection: 'article', entryId: 'entry-1', version: 4 }] }
+              : {}),
+          },
         })
       }
 

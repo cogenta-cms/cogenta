@@ -30,6 +30,21 @@ const ALWAYS: Readonly<Record<string, string>> = Object.freeze({
   'referrer-policy': 'strict-origin-when-cross-origin',
 })
 
+/**
+ * The longest a shared cache may keep a page whose content depends on the
+ * clock — a `collectionList` filtered on `$now`/`$today` (ADR-0038). An hour
+ * is short enough that "the next event" is never long stale, and long enough
+ * that a CDN still absorbs a burst.
+ */
+export const CLOCK_DEPENDENT_MAX_AGE_SECONDS = 3600
+
+/** The page cache-control for such a page: never longer than the cap above. */
+export function clockDependentCacheControl(security: SecurityConfig): string {
+  if (security.pageMaxAge === 0) return 'no-store'
+  const seconds = Math.min(security.pageMaxAge, CLOCK_DEPENDENT_MAX_AGE_SECONDS)
+  return `public, max-age=0, s-maxage=${seconds}, must-revalidate`
+}
+
 /** Which cache-control a path class gets. */
 export function cacheControlFor(pathname: string, security: SecurityConfig): string | null {
   // Never store an API response: they are per-actor by construction — the same
@@ -125,7 +140,7 @@ function baseHeadersFor(
 }
 
 /** True when the request carries something that makes its answer actor-specific. */
-function hasCredentials(req: IncomingMessage): boolean {
+export function hasCredentials(req: IncomingMessage): boolean {
   return headerOf(req, 'authorization') !== undefined || headerOf(req, 'cookie') !== undefined
 }
 

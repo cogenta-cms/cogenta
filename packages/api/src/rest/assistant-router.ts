@@ -139,6 +139,12 @@ export interface AssistDocumentServiceLike {
 
 export interface AssistantRouterOptions {
   readonly toolset: AssistToolsetLike
+  /**
+   * When present, asked on every request instead of reading `toolset`: the
+   * host may re-read its provider configuration, so a key saved from the
+   * admin switches the assistant on (or off) without a restart.
+   */
+  readonly currentToolset?: () => Promise<AssistToolsetLike>
   /** Used to answer "may this actor use the assistant at all?". */
   readonly collections: readonly CollectionDefinition[]
   readonly permissions: PermissionLayer
@@ -191,7 +197,10 @@ function methodNotAllowed(allowed: readonly string[]): RestResponse {
 export function createAssistantRouter(options: AssistantRouterOptions): AssistantRouter {
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
   const logger = options.logger ?? SILENT_LOGGER
-  const byName = new Map(options.toolset.tools.map((tool) => [tool.name, tool]))
+  const toolsetNow = (): Promise<AssistToolsetLike> =>
+    options.currentToolset === undefined
+      ? Promise.resolve(options.toolset)
+      : options.currentToolset()
 
   /**
    * The one gate. An actor may ask the assistant for a suggestion when they may
@@ -222,6 +231,7 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
   }
 
   async function capabilities(): Promise<RestResponse> {
+    const toolset = await toolsetNow()
     // 200, always. "No provider configured" is an answer, not a failure — the
     // whole degradation story of this lot depends on this not being an error.
     const vector =
@@ -238,11 +248,11 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
 
     return jsonResponse(200, {
       data: {
-        available: options.toolset.available,
-        ...(options.toolset.reason === undefined ? {} : { reason: options.toolset.reason }),
-        tools: options.toolset.capabilities,
-        ...(options.toolset.model === undefined ? {} : { model: options.toolset.model }),
-        ...(options.toolset.usage === undefined ? {} : { usage: options.toolset.usage.usage() }),
+        available: toolset.available,
+        ...(toolset.reason === undefined ? {} : { reason: toolset.reason }),
+        tools: toolset.capabilities,
+        ...(toolset.model === undefined ? {} : { model: toolset.model }),
+        ...(toolset.usage === undefined ? {} : { usage: toolset.usage.usage() }),
         ...(vector === undefined ? {} : { vector }),
       },
     })
@@ -251,7 +261,8 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
   async function run(request: RestRequest, context: AccessContext): Promise<RestResponse> {
     assertMayUseAssistant(context)
 
-    if (!options.toolset.available) {
+    const toolset = await toolsetNow()
+    if (!toolset.available) {
       throw new CogentaError({
         code: 'ASSIST_UNAVAILABLE',
         message: 'No AI provider is configured for this site.',
@@ -263,7 +274,7 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
     // refuses cleanly rather than spending one more token to find out which
     // tool was asked for (fiche 30 task 3 — "un plafond qui refuse est
     // indispensable").
-    if (options.toolset.usage !== undefined && !options.toolset.usage.checkBudget().allowed) {
+    if (toolset.usage !== undefined && !toolset.usage.checkBudget().allowed) {
       throw new CogentaError({
         code: 'ASSIST_BUDGET_EXCEEDED',
         message: "This site's monthly assistant budget has been reached.",
@@ -289,7 +300,7 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
       })
     }
 
-    const tool = byName.get(name)
+    const tool = toolset.tools.find((candidate) => candidate.name === name)
     if (tool === undefined) {
       throw new CogentaError({
         code: 'TOOL_UNKNOWN',

@@ -20,12 +20,19 @@ import type { CollectionDefinition } from './types.js'
  * - **never an id, a relation, a media reference, a number or a boolean**:
  *   they are not text, they are links and values.
  *
- * Rich text is walked `span` by `span`. Concatenating the spans of a
- * paragraph to run one replacement over the whole string would lose the
- * marks, the links and the keys that make it rich text. The cost is stated in
- * the lot: an occurrence split across two spans ("Cogen|ta", cut by a bold
- * run) is not found, because finding it would mean rewriting how the sentence
- * is formatted.
+ * Rich text is read **paragraph by paragraph**, not span by span. A phrase
+ * cut in two by a formatting run — "Cogen|ta", where the last two letters are
+ * bold — used to be invisible to this tool, which is exactly the occurrence a
+ * person notices afterwards and has to fix by hand (L34's own stated cost,
+ * lifted here).
+ *
+ * The spans are joined to *find*, and written back into the spans they came
+ * from: everything outside a match keeps its own span, its marks and its key,
+ * and a replacement that straddles a boundary is written into the span where
+ * the match began. That last part is a real choice and it is worth stating —
+ * the replacement takes the formatting of its first span, so "Cogen|**ta**"
+ * becomes "Cogenta SA" in the plain run rather than half-bold. Nothing else
+ * in the paragraph changes.
  */
 
 export interface ReplaceOptions {
@@ -113,6 +120,70 @@ interface Walked {
  * own fields, so the only honest rule is "every string that is not an
  * identifier".
  */
+/**
+ * The spans of one rich-text node, rewritten as if their texts were one
+ * string. `null` when this is not such a node — the caller then walks it the
+ * ordinary way.
+ */
+function replaceAcrossSpans(
+  children: readonly unknown[],
+  matcher: RegExp,
+  replacement: string,
+): {
+  readonly texts: readonly string[]
+  readonly before: string
+  readonly occurrences: number
+} | null {
+  const texts: string[] = []
+  for (const child of children) {
+    if (typeof child !== 'object' || child === null) return null
+    const text = (child as Record<string, unknown>)['text']
+    if (typeof text !== 'string') return null
+    texts.push(text)
+  }
+  if (texts.length === 0) return null
+
+  const joined = texts.join('')
+  matcher.lastIndex = 0
+  const matches = [...joined.matchAll(matcher)]
+  if (matches.length === 0) return null
+
+  const starts: number[] = []
+  let offset = 0
+  for (const text of texts) {
+    starts.push(offset)
+    offset += text.length
+  }
+
+  const out = texts.map(() => '')
+  const keepSlice = (from: number, to: number): void => {
+    for (const [index, text] of texts.entries()) {
+      const begin = Math.max(from, starts[index] as number)
+      const end = Math.min(to, (starts[index] as number) + text.length)
+      if (end > begin) out[index] += joined.slice(begin, end)
+    }
+  }
+  // The span a position belongs to: the last one that starts at or before it,
+  // so a match beginning exactly on a boundary lands in the span it is inside.
+  const spanAt = (position: number): number => {
+    for (let index = texts.length - 1; index >= 0; index -= 1) {
+      if (position >= (starts[index] as number)) return index
+    }
+    return 0
+  }
+
+  let cursor = 0
+  for (const match of matches) {
+    const start = match.index
+    keepSlice(cursor, start)
+    out[spanAt(start)] += replacement
+    cursor = start + match[0].length
+  }
+  keepSlice(cursor, joined.length)
+
+  return { texts: out, before: joined, occurrences: matches.length }
+}
+
 function walk(value: unknown, matcher: RegExp, replacement: string, path: string): Walked {
   if (typeof value === 'string') {
     const occurrences = countIn(value, matcher)
@@ -135,7 +206,24 @@ function walk(value: unknown, matcher: RegExp, replacement: string, path: string
   if (typeof value === 'object' && value !== null) {
     const hits: ReplacementHit[] = []
     const next: Record<string, unknown> = {}
+    const children = (value as Record<string, unknown>)['children']
+    const acrossSpans = Array.isArray(children)
+      ? replaceAcrossSpans(children, matcher, replacement)
+      : null
+    if (acrossSpans !== null && Array.isArray(children)) {
+      next['children'] = children.map((child, index) => ({
+        ...(child as Record<string, unknown>),
+        text: acrossSpans.texts[index] ?? '',
+      }))
+      hits.push({
+        path: `${path === '' ? '' : `${path}.`}children`,
+        before: acrossSpans.before,
+        after: acrossSpans.texts.join(''),
+        occurrences: acrossSpans.occurrences,
+      })
+    }
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      if (key === 'children' && acrossSpans !== null) continue
       // Keys that name something rather than say something. `_key`, `_type`,
       // `href` and `id` are identity and links: replacing inside them would
       // break a mark, a relation or a URL while looking like a text edit.

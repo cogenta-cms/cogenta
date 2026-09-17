@@ -125,9 +125,37 @@ describe('ensureBuiltinAgents', () => {
     ).toBe(false)
   })
 
-  it('only ever seeds exactly six agents', async () => {
+  it('seeds the six original agents plus the seven of priority 2-3, and no more', async () => {
     await ensureBuiltinAgents(store)
-    expect(await store.list()).toHaveLength(6)
+    expect(await store.list()).toHaveLength(13)
+  })
+
+  it('leaves every priority 2-3 agent disabled, with no publish or delete tool (L5 task 10)', async () => {
+    await ensureBuiltinAgents(store)
+    const added = (await store.list()).filter((agent) =>
+      [
+        'Media Librarian',
+        'Translation Watch',
+        'Comment Moderator',
+        'Audience Reader',
+        'Migration Finisher',
+        'Accessibility Auditor',
+        'Compliance Checker',
+      ].includes(agent.name),
+    )
+
+    expect(added).toHaveLength(7)
+    for (const agent of added) {
+      expect(agent.enabled, agent.name).toBe(false)
+      // Structural, not a promise in a prompt: the runtime can only grant
+      // what a declaration lists (R4).
+      expect(agent.tools, agent.name).not.toContain('content.publish')
+      expect(agent.tools, agent.name).not.toContain('content.delete')
+      expect(
+        agent.tools.some((tool) => tool.endsWith('.delete')),
+        agent.name,
+      ).toBe(false)
+    }
   })
 
   it('seeds the plugin builder, which may only propose (L31 step 4)', async () => {

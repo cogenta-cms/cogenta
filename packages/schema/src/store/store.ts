@@ -39,6 +39,7 @@ import type {
   PurgeReport,
   ReadOptions,
   ResolveLocaleOptions,
+  SortField,
   SortOrder,
   StatusCounts,
   TrashFilter,
@@ -978,11 +979,46 @@ export function createContentStore<TValues extends ContentValues = ContentValues
   // ------------------------------------------------------------ pagination
 
   function sortOrder(options: ListOptions): SortOrder {
-    return options.sort ?? DEFAULT_SORT
+    const order = options.sort ?? DEFAULT_SORT
+    // Validated here rather than trusted: a field name reaches this from a
+    // query string, and one that is not a declared date has no total order to
+    // page through (ADR-0038).
+    sortColumnName(order.field)
+    return order
+  }
+
+  /**
+   * The column a sort field names — a system column, or a declared
+   * `date`/`datetime` field of this collection (`schema@2.4`).
+   *
+   * Only those two kinds: they are stored as ISO-8601 text (`columns.ts`), so
+   * they sort lexicographically in the same order they sort chronologically,
+   * which is what a keyset cursor needs. A `number` or a `text` field would
+   * sort too, but ordering on a value an editor retypes is a cursor that
+   * silently skips rows — not a feature to add by accident.
+   */
+  function sortColumnName(field: SortField): string {
+    const system = (SORT_COLUMNS as Readonly<Record<string, string>>)[field]
+    if (system !== undefined) return system
+    const declared = collection.fields[field]
+    if (declared !== undefined && (declared.kind === 'date' || declared.kind === 'datetime')) {
+      return columnFor(field)
+    }
+    throw new CogentaError({
+      code: 'CONTENT_INVALID',
+      message: `"${collection.name}" cannot be sorted by "${String(field)}".`,
+      hint: 'Sort by id, createdAt, updatedAt, or a declared date/datetime field of this collection.',
+      details: { collection: collection.name, field: String(field) },
+    })
+  }
+
+  /** Whether this ordering can hold empty values — a declared date can, the three system columns cannot. */
+  function sortIsNullable(field: SortField): boolean {
+    return (SORT_COLUMNS as Readonly<Record<string, string>>)[field] === undefined
   }
 
   function keysetPredicate(cursor: Cursor): SqlFragment {
-    const column = identifier(SORT_COLUMNS[cursor.field], dialect)
+    const column = identifier(sortColumnName(cursor.field), dialect)
     const id = identifier('id', dialect)
     const comparison = cursor.direction === 'asc' ? '>' : '<'
 
@@ -993,8 +1029,18 @@ export function createContentStore<TValues extends ContentValues = ContentValues
     if (cursor.field === 'id') {
       return sql`${id} ${rawOperator(comparison)} ${cursor.id}`
     }
-    return sql`(${column} ${rawOperator(comparison)} ${cursor.value}
+
+    // The tail of empty values, which `orderClause` always puts last: once
+    // there, what follows is only further empties, by id.
+    if (cursor.value === null) {
+      return sql`(${column} is null and ${id} ${rawOperator(comparison)} ${cursor.id})`
+    }
+
+    const after = sql`(${column} ${rawOperator(comparison)} ${cursor.value}
                 or (${column} = ${cursor.value} and ${id} ${rawOperator(comparison)} ${cursor.id}))`
+    // Still on a value, so everything with no value at all is yet to come —
+    // including in descending order, where empties are last too (ADR-0038).
+    return sortIsNullable(cursor.field) ? sql`(${after} or ${column} is null)` : after
   }
 
   function rawOperator(comparison: '<' | '>'): SqlFragment {
@@ -1004,20 +1050,42 @@ export function createContentStore<TValues extends ContentValues = ContentValues
 
   function orderClause(order: SortOrder): SqlFragment {
     const direction = order.direction === 'asc' ? sql`asc` : sql`desc`
-    const column = identifier(SORT_COLUMNS[order.field], dialect)
+    const column = identifier(sortColumnName(order.field), dialect)
     // The id is always the tie-breaker: two rows created in the same
     // millisecond must still have one stable order, or a cursor could skip one.
-    return sql`${column} ${direction}, ${identifier('id', dialect)} ${direction}`
+    const tail = sql`${column} ${direction}, ${identifier('id', dialect)} ${direction}`
+    if (!sortIsNullable(order.field)) return tail
+    // Written out rather than left to the engine: Postgres puts nulls last
+    // ascending and first descending, MySQL and SQLite do the opposite. An
+    // expression both understand makes "an entry with no date comes last"
+    // true everywhere, in both directions (ADR-0038).
+    return sql`case when ${column} is null then 1 else 0 end asc, ${tail}`
   }
 
-  function cursorFor(entry: ContentEntry<TValues>, order: SortOrder): string {
-    const value =
-      order.field === 'id'
-        ? entry.id
-        : order.field === 'createdAt'
-          ? entry.createdAt
-          : entry.updatedAt
-    return encodeCursor({ field: order.field, direction: order.direction, value, id: entry.id })
+  /**
+   * The value a cursor records, read from **the row the database ordered**,
+   * never from the entry built on top of it.
+   *
+   * That distinction is the whole correctness of a cursor on a declared
+   * field, and getting it wrong lost rows silently: in `state: 'working'` an
+   * entry's `values` come from the newest *version* snapshot, while
+   * `order by` sorted the live column — so a pending draft that moves a date
+   * made the next page ask for a position the ordering never had, and every
+   * row after it disappeared. Found by `db-dialect-specialist`, reproduced on
+   * a real file-backed SQLite database, covered by a contract test.
+   */
+  function sortValueOfRow(row: Row, field: SortField): string | null {
+    const raw = row[sortColumnName(field)]
+    return typeof raw === 'string' && raw !== '' ? raw : null
+  }
+
+  function cursorFor(row: Row, order: SortOrder): string {
+    return encodeCursor({
+      field: order.field,
+      direction: order.direction,
+      value: sortValueOfRow(row, order.field),
+      id: text(row['id']),
+    })
   }
 
   // ------------------------------------------------------------- workflow
@@ -1598,13 +1666,14 @@ export function createContentStore<TValues extends ContentValues = ContentValues
         for (const row of rows) items.push(await workingEntry(db, row))
       }
 
-      const last = items.at(-1)
+      // The *row*, not the entry: see `cursorFor`'s own comment.
+      const lastRow = rows.at(-1)
       const hasMore = found.rows.length > size
 
       return {
         items,
         hasMore,
-        nextCursor: hasMore && last !== undefined ? cursorFor(last, order) : null,
+        nextCursor: hasMore && lastRow !== undefined ? cursorFor(lastRow, order) : null,
       }
     },
 

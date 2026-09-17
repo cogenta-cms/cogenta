@@ -64,6 +64,16 @@ function withAxis(
   return kept.length === 0 ? undefined : (Object.fromEntries(kept) as BlockVariant)
 }
 
+/**
+ * `background: 'image'` names no image — contract B carries no source for it —
+ * and every shipped theme renders it exactly as `muted` (L36 audit). Offering
+ * it promised an image picker that does not exist, so it is shown only on a
+ * block that already holds it, where hiding it would misreport the value.
+ */
+function offered(axis: VariantAxis, option: string, variant: BlockVariant | undefined): boolean {
+  return !(axis === 'background' && option === 'image' && variant?.background !== 'image')
+}
+
 export function BlockVariantControl({
   variant,
   disabled = false,
@@ -93,11 +103,13 @@ export function BlockVariantControl({
               onChange={(event) => onChange(withAxis(variant, axis, event.target.value))}
             >
               <option value="">{t('builder.variant.default')}</option>
-              {options.map((option) => (
-                <option key={option} value={option}>
-                  {t(`builder.variant.${axis}.${option}`)}
-                </option>
-              ))}
+              {options
+                .filter((option) => offered(axis, option, variant))
+                .map((option) => (
+                  <option key={option} value={option}>
+                    {t(`builder.variant.${axis}.${option}`)}
+                  </option>
+                ))}
             </Select>
           )}
         </Field>

@@ -118,6 +118,76 @@ function listField(
   })
 }
 
+/**
+ * A structured value edited as its own fields rather than as JSON (L36
+ * audit): the stored shape is unchanged, only the editor differs.
+ */
+function objectField(
+  name: string,
+  items: readonly ItemFieldDefinition[],
+  opts: { required?: boolean } = {},
+): SchemaField {
+  return field(name, 'json', {
+    ...(opts.required === undefined ? {} : { required: opts.required }),
+    options: { object: true, items },
+  })
+}
+
+/** The symbol names every theme's icon set resolves (`@cogenta/theme-kit`'s `ICON_NAMES`). */
+const ICON_NAMES = [
+  'check',
+  'star',
+  'bolt',
+  'shield',
+  'chart',
+  'users',
+  'user',
+  'globe',
+  'clock',
+  'heart',
+  'leaf',
+  'mail',
+  'phone',
+  'map-pin',
+  'calendar',
+  'book',
+  'code',
+  'cloud',
+  'lock',
+  'search',
+  'settings',
+  'sparkles',
+  'truck',
+  'credit-card',
+  'gift',
+  'coffee',
+  'utensils',
+  'wine',
+  'camera',
+  'pen',
+  'layers',
+  'rocket',
+  'trending-up',
+  'award',
+  'smile',
+  'sun',
+  'moon',
+  'arrow-right',
+  'arrow-up-right',
+  'external-link',
+  'download',
+  'play',
+  'quote',
+  'tag',
+  'briefcase',
+  'home',
+  'message',
+  'bell',
+  'refresh',
+  'image',
+  'zap',
+] as const
+
 function selectOptions(values: readonly string[]): { options: { value: string }[] } {
   return { options: values.map((value) => ({ value })) }
 }
@@ -185,7 +255,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
       listField(
         'items',
         [
-          itemField('icon', 'text'),
+          itemField('icon', 'select', { options: selectOptions(ICON_NAMES) }),
           itemField('title', 'text', { required: true }),
           itemField('text', 'text'),
           itemField('link', 'link'),
@@ -285,10 +355,23 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
     label: 'Liste de contenus',
     fields: [
       field('title', 'text', { localized: true }),
-      field('collection', 'text', { required: true }),
+      // Filled with the site's own collections when the form renders.
+      field('collection', 'select', {
+        required: true,
+        options: { options: [], collectionPicker: true },
+      }),
+      objectField('sort', [
+        itemField('field', 'select', {
+          required: true,
+          options: selectOptions(['createdAt', 'updatedAt', 'id']),
+        }),
+        itemField('direction', 'select', {
+          required: true,
+          options: selectOptions(['desc', 'asc']),
+        }),
+      ]),
+      field('limit', 'number', { options: { min: 1, max: 100 } }),
       field('filter', 'json'),
-      field('sort', 'json'),
-      field('limit', 'number'),
       field('layout', 'select', {
         required: true,
         options: selectOptions(['list', 'grid', 'carousel']),
@@ -311,10 +394,17 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
     label: 'Témoignage',
     fields: [
       field('quote', 'richText', { required: true, localized: true }),
-      // Mirrors `testimonialAttributionSchema` ({name, role?, avatar?}) opaquely,
-      // same choice as `collectionList`'s `filter`/`sort` — a single nested
-      // object has no admin editor of its own yet.
-      field('attribution', 'json', { required: true }),
+      // Mirrors `testimonialAttributionSchema` ({name, role?, avatar?}), now
+      // edited as its own three fields (L36 audit) rather than as JSON.
+      objectField(
+        'attribution',
+        [
+          itemField('name', 'text', { required: true }),
+          itemField('role', 'text'),
+          itemField('avatar', 'media'),
+        ],
+        { required: true },
+      ),
     ],
   },
   {
@@ -328,14 +418,17 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
           itemField('name', 'text', { required: true }),
           itemField('price', 'text', { required: true }),
           itemField('interval', 'text'),
-          // Array of strings — opaque JSON, same reasoning as
-          // `testimonial.attribution` above. `sample: []` is valid on the
-          // real side too: `features` has no `.min()`, only `.max(20)`.
-          itemField('features', 'json', { required: true, options: { sample: [] } }),
-          // A nested Action object, `.optional()` on the real side — never
-          // included in a generated sample (see the test's own skip-if-not-
-          // required rule), so it needs no sample value here.
-          itemField('action', 'json'),
+          // An array of strings, edited one line per feature (L36 audit).
+          // `sample: []` is valid on the real side too: `features` has no
+          // `.min()`, only `.max(20)`.
+          itemField('features', 'json', {
+            required: true,
+            options: { stringList: true, sample: [] },
+          }),
+          // A nested Action object, `.optional()` on the real side, edited as
+          // its own fields; never included in a generated sample (see the
+          // test's own skip-if-not-required rule).
+          itemField('action', 'json', { options: { object: true, items: ACTION_ITEM_FIELDS } }),
           itemField('highlighted', 'boolean'),
         ],
         { required: true, localized: true, min: 1 },
@@ -451,6 +544,25 @@ export function allBlockDefinitions(): readonly BlockDefinition[] {
 
 export function blockDefinition(type: string): BlockDefinition | undefined {
   return allBlockDefinitions().find((block) => block.name === type)
+}
+
+/**
+ * What a block holds the moment it is placed: every required choice set to
+ * its first option (L36 audit — a new list asked for a layout, a new embed
+ * for a service, before anything could be previewed). Text stays empty: a
+ * title is the editor's to write.
+ */
+export function startingBlockData(type: string): Readonly<Record<string, unknown>> {
+  const definition = blockDefinition(type)
+  if (definition === undefined) return {}
+  const data: Record<string, unknown> = {}
+  for (const candidate of definition.fields) {
+    const choices = candidate.options['options']
+    if (candidate.kind !== 'select' || !candidate.required || !Array.isArray(choices)) continue
+    const first = (choices as readonly { value?: unknown }[])[0]
+    if (typeof first?.value === 'string') data[candidate.name] = first.value
+  }
+  return data
 }
 
 let counter = 0

@@ -32,6 +32,11 @@ const CATEGORY_BY_BLOCK: Readonly<Record<string, BlockCategory>> = {
   featureGrid: 'listing',
   stats: 'listing',
   collectionList: 'listing',
+  testimonial: 'text',
+  accordion: 'text',
+  pricingTable: 'highlight',
+  statCounter: 'listing',
+  logoStrip: 'media',
 }
 
 export interface LibraryEntry {

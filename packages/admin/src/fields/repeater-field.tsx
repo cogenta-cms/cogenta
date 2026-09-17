@@ -5,8 +5,7 @@ import '../styles/fields.css'
 import { cn } from '../ui/cn.js'
 import { Button } from '../ui/index.js'
 import { defaultValueFor } from './default-value.js'
-import { FieldInput } from './field-input.js'
-import { LinkTargetField, type LinkTargetValue } from './link-target-field.js'
+import { ItemFieldInput } from './item-field-input.js'
 import type { FieldProps } from './types.js'
 
 /**
@@ -199,37 +198,16 @@ export function RepeaterField({
                         itemField.visibleWhen === undefined ||
                         itemField.visibleWhen.equals.includes(item[itemField.visibleWhen.field]),
                     )
-                    .map((itemField) =>
-                      itemField.kind === 'link' ? (
-                        <LinkTargetField
-                          key={itemField.name}
-                          id={`${itemId}-${itemField.name}`}
-                          label={itemField.admin?.label ?? itemField.name}
-                          required={itemField.required}
-                          value={item[itemField.name] as LinkTargetValue}
-                          onChange={(next) => updateAt(index, itemField.name, next)}
-                          disabled={disabled}
-                        />
-                      ) : (
-                        <FieldInput
-                          key={itemField.name}
-                          id={`${itemId}-${itemField.name}`}
-                          field={{
-                            name: itemField.name,
-                            kind: itemField.kind,
-                            required: itemField.required,
-                            localized: itemField.localized,
-                            unique: false,
-                            hasCustomValidation: false,
-                            options: itemField.options,
-                            ...(itemField.admin === undefined ? {} : { admin: itemField.admin }),
-                          }}
-                          value={item[itemField.name] ?? defaultValueFor(itemField.kind)}
-                          onChange={(next) => updateAt(index, itemField.name, next)}
-                          disabled={disabled}
-                        />
-                      ),
-                    )}
+                    .map((itemField) => (
+                      <ItemFieldInput
+                        key={itemField.name}
+                        id={`${itemId}-${itemField.name}`}
+                        itemField={itemField}
+                        value={item[itemField.name]}
+                        onChange={(next) => updateAt(index, itemField.name, next)}
+                        disabled={disabled}
+                      />
+                    ))}
                 </div>
               </li>
             )
@@ -249,15 +227,25 @@ export function RepeaterField({
           >
             {t('fields.repeaterAdd')}
           </Button>
-          {options.min !== undefined && belowMin && (
-            <span className={cn('repeater-field__hint')}>
-              {t('fields.repeaterMin', { count: options.min })}
-            </span>
-          )}
-          {options.max !== undefined && (
+          {/* One sentence for a bounded list, rather than two hints squeezed
+              beside the button in a narrow panel (L36 audit). */}
+          {options.min !== undefined && belowMin && options.max !== undefined ? (
             <span className="repeater-field__hint">
-              {t('fields.repeaterMax', { count: options.max })}
+              {t('fields.repeaterRange', { min: options.min, max: options.max })}
             </span>
+          ) : (
+            <>
+              {options.min !== undefined && belowMin && (
+                <span className={cn('repeater-field__hint')}>
+                  {t('fields.repeaterMin', { count: options.min })}
+                </span>
+              )}
+              {options.max !== undefined && (
+                <span className="repeater-field__hint">
+                  {t('fields.repeaterMax', { count: options.max })}
+                </span>
+              )}
+            </>
           )}
         </div>
       )}

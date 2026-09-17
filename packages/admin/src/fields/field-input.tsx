@@ -7,15 +7,18 @@ import { BooleanField } from './boolean-field.js'
 import { ColorField } from './color-field.js'
 import { DateField } from './date-field.js'
 import { DatetimeField } from './datetime-field.js'
+import { FieldWrapper } from './field-wrapper.js'
 import { GeoField } from './geo-field.js'
 import { JsonField } from './json-field.js'
 import { MediaField } from './media-field.js'
 import { NumberField } from './number-field.js'
+import { ObjectField } from './object-field.js'
 import { RelationField } from './relation-field.js'
 import { RepeaterField } from './repeater-field.js'
 import { RichTextField } from './rich-text-field.js'
 import { SelectField } from './select-field.js'
 import { SlugField } from './slug-field.js'
+import { StringListField } from './string-list-field.js'
 import { TaxonomyField } from './taxonomy-field.js'
 import { TextField } from './text-field.js'
 
@@ -54,17 +57,29 @@ export function FieldInput(props: FieldInputProps): JSX.Element {
       return <ColorField {...props} value={props.value as string} />
     case 'geo':
       return <GeoField {...props} value={props.value as { lat: number; lng: number } | null} />
-    case 'json':
-      // A `json` field whose `options.list` marks it as an `f.list(...)`'s
+    case 'json': // A `json` field whose `options.list` marks it as an `f.list(...)`'s
       // compiled form (`packages/admin/src/blocks/vocabulary.ts`) gets the
       // repeater built from `options.items`; a genuine `json` field — the
       // top-level kind, or `collectionList`'s `filter`/`sort` — keeps the
       // textarea, which is the right editor for arbitrary JSON (task 4).
-      return (props.field.options as { readonly list?: boolean }).list === true ? (
-        <RepeaterField {...props} />
-      ) : (
-        <JsonField {...props} />
-      )
+      {
+        const shape = props.field.options as {
+          readonly list?: boolean
+          readonly object?: boolean
+          readonly stringList?: boolean
+        }
+        // A list names itself like any other field (L36 audit: a block's
+        // buttons or questions appeared as bare items, with no heading).
+        if (shape.list === true)
+          return (
+            <FieldWrapper id={props.id} field={props.field} error={props.error ?? null}>
+              <RepeaterField {...props} />
+            </FieldWrapper>
+          )
+        if (shape.object === true) return <ObjectField {...props} />
+        if (shape.stringList === true) return <StringListField {...props} />
+        return <JsonField {...props} />
+      }
     case 'richText':
       return <RichTextField {...props} value={props.value as RichTextDocument | undefined} />
     case 'media':

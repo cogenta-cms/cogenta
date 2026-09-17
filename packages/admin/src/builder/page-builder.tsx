@@ -74,6 +74,7 @@ export function PageBuilder({
   blocks,
   onBlocksChange,
   disabled = false,
+  focus,
 }: {
   readonly token: string
   readonly collection: string
@@ -83,6 +84,8 @@ export function PageBuilder({
   readonly blocks: readonly ContentBlock[]
   onBlocksChange(blocks: readonly ContentBlock[]): void
   readonly disabled?: boolean
+  /** A block to select and open, e.g. the one a refused save names; `at` makes a repeat request distinct. */
+  readonly focus?: { readonly key: string; readonly at: number }
 }): JSX.Element {
   const { t } = useTranslation()
 
@@ -141,6 +144,12 @@ export function PageBuilder({
     setHistory(reset(blocks))
     setSelectedKeys(new Set())
   }, [blocks])
+
+  useEffect(() => {
+    if (focus === undefined) return
+    setSelectedKeys(new Set([focus.key]))
+    setDetailPanelOpen(true)
+  }, [focus])
 
   const present = history.present
 
@@ -485,9 +494,12 @@ export function PageBuilder({
           // explicitly hidden via the toolbar toggle) drops the column from
           // the grid template entirely rather than holding a
           // placeholder-sized slot.
+          // 26rem on a wide screen (L36 audit): at 20rem a button's
+          // label wrapped one word per line and the rich-text toolbar
+          // folded into three rows.
           showDetailPanel
-            ? 'lg:grid-cols-[16rem_minmax(0,1fr)_20rem]'
-            : 'lg:grid-cols-[16rem_minmax(0,1fr)]',
+            ? 'lg:grid-cols-[15rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[16rem_minmax(0,1fr)_26rem]'
+            : 'lg:grid-cols-[15rem_minmax(0,1fr)] 2xl:grid-cols-[16rem_minmax(0,1fr)]',
         )}
       >
         <div className="flex flex-col gap-4">

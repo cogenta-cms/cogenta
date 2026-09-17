@@ -2,7 +2,13 @@ import { type JSX, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ContentBlock } from '../api/content-client.js'
 import { BlockForm } from '../blocks/block-form.js'
-import { allBlockDefinitions, blockDefinition, freshBlockKey } from '../blocks/vocabulary.js'
+import { blockLabel } from '../blocks/localize-block-fields.js'
+import {
+  allBlockDefinitions,
+  blockDefinition,
+  freshBlockKey,
+  startingBlockData,
+} from '../blocks/vocabulary.js'
 import { FieldWrapper } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
@@ -46,7 +52,7 @@ export function BlocksField({
   function addBlock(type: string): void {
     const definition = blockDefinition(type)
     if (definition === undefined) return
-    onChange([...blocks, { key: freshBlockKey(), type, data: {} }])
+    onChange([...blocks, { key: freshBlockKey(), type, data: startingBlockData(type) }])
   }
 
   return (
@@ -59,7 +65,9 @@ export function BlocksField({
             <li key={block.key} className="blocks-field__item">
               <div className="blocks-field__item-header">
                 <span>
-                  {definition?.label ?? t('fields.blocksUnknownLabel', { type: block.type })}
+                  {definition === undefined
+                    ? t('fields.blocksUnknownLabel', { type: block.type })
+                    : blockLabel(definition, t)}
                 </span>
                 <div className="blocks-field__item-controls">
                   <button
@@ -120,7 +128,7 @@ export function BlocksField({
             </option>
             {allBlockDefinitions().map((definition) => (
               <option key={definition.name} value={definition.name}>
-                {definition.label}
+                {blockLabel(definition, t)}
               </option>
             ))}
           </select>

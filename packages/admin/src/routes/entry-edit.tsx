@@ -33,7 +33,12 @@ import { ClassifyPanel } from '../assist/classify-panel.js'
 import { FaqSchemaPanel } from '../assist/faq-schema-panel.js'
 import { ModerationCheck } from '../assist/moderation-check.js'
 import { useAuth } from '../auth/auth-context.js'
-import { blockDefinition, freshBlockKey } from '../blocks/vocabulary.js'
+import {
+  describeBlockRefusal,
+  findBlockProblems,
+  withoutUntouchedBlocks,
+} from '../blocks/validate-blocks.js'
+import { blockDefinition, freshBlockKey, startingBlockData } from '../blocks/vocabulary.js'
 import { PageBuilder } from '../builder/page-builder.js'
 import type { AutosaveRecord, AutosaveSnapshot } from '../collections/autosave.js'
 import {
@@ -222,10 +227,22 @@ export function EntryEditRoute(): JSX.Element {
   const autoFilledSlugRef = useRef<Record<string, string>>({})
   const [blocks, setBlocks] = useState<BlockZones>({})
   const [locale, setLocale] = useState(defaultLocale)
+  // The schema arrives after the first render when this screen is opened
+  // directly, so a new entry must take the site's language once it is known
+  // — never the 'en' placeholder (L36 audit: a French site's pages were
+  // created in English).
+  useEffect(() => {
+    if (isNew && newTranslation?.locale === undefined) setLocale(defaultLocale)
+  }, [isNew, newTranslation?.locale, defaultLocale])
   const [translationOf, setTranslationOf] = useState<string | null>(null)
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ApiErrorDescription | null>(null)
+  /** The block a refused save points at, for the builder to select (L36 audit). */
+  const [blockFocus, setBlockFocus] = useState<{
+    readonly key: string
+    readonly at: number
+  } | null>(null)
   const [saved, setSaved] = useState(false)
   const [previewing, setPreviewing] = useState(false)
   const [previewError, setPreviewError] = useState<ApiErrorDescription | null>(null)
@@ -428,7 +445,7 @@ export function EntryEditRoute(): JSX.Element {
     // entry's own unrecognised block type.
     const starting: ContentBlock[] = defaultBlockTypes
       .filter((type) => blockDefinition(type) !== undefined)
-      .map((type) => ({ key: freshBlockKey(), type, data: {} }))
+      .map((type) => ({ key: freshBlockKey(), type, data: startingBlockData(type) }))
     if (starting.length === 0) return
 
     setBlocks((current) => {
@@ -586,6 +603,21 @@ export function EntryEditRoute(): JSX.Element {
       return false
     }
 
+    const blocksToSave = isNew ? withoutUntouchedBlocks(blocks) : blocks
+    const blockProblems = Object.values(blocksToSave).flatMap((zone) => findBlockProblems(zone, t))
+    const firstProblem = blockProblems[0]
+    if (firstProblem !== undefined) {
+      setSaved(false)
+      setError({
+        message: `${t('blockValidation.notSaved')} ${firstProblem.message}`,
+        ...(blockProblems.length > 1
+          ? { hint: t('blockValidation.more', { count: blockProblems.length - 1 }) }
+          : {}),
+      })
+      setBlockFocus({ key: firstProblem.key, at: Date.now() })
+      return false
+    }
+
     setSaving(true)
     setError(null)
     setSaved(false)
@@ -613,7 +645,7 @@ export function EntryEditRoute(): JSX.Element {
     try {
       if (isNew) {
         const entry = await createEntry(token, name, values, {
-          blocks,
+          blocks: blocksToSave,
           locale,
           ...(translationOf === null ? {} : { translationOf }),
           ...assistOptions,
@@ -658,10 +690,26 @@ export function EntryEditRoute(): JSX.Element {
         return false
       }
       if (caught instanceof ApiError && caught.field !== undefined) {
-        const fieldErrors = { ...errors, [caught.field]: caught.message }
+        // A taken slug is the one refusal an editor meets every week; it is
+        // said in the admin's language rather than the API's (L36 audit).
+        const message =
+          caught.code === 'CONTENT_SLUG_TAKEN'
+            ? t('entryEdit.validation.slugTaken')
+            : caught.message
+        const fieldErrors = { ...errors, [caught.field]: message }
         setErrors(fieldErrors)
         focusFirstError(fieldErrors)
         return false
+      }
+      if (caught instanceof ApiError && caught.code === 'BLOCK_INVALID') {
+        const refusal = Object.values(blocks)
+          .map((zone) => describeBlockRefusal(caught.message, zone, t))
+          .find((found) => found !== null)
+        if (refusal !== undefined && refusal !== null) {
+          setError({ message: `${t('blockValidation.notSaved')} ${refusal.message}` })
+          setBlockFocus({ key: refusal.key, at: Date.now() })
+          return false
+        }
       }
       setError(describeApiError(caught, t('entryEdit.saveError')))
       return false
@@ -1731,16 +1779,10 @@ export function EntryEditRoute(): JSX.Element {
                 blocks={blocks[builderZone] ?? []}
                 onBlocksChange={(next) => setBlockZone(builderZone, next)}
                 disabled={!canWrite}
+                {...(blockFocus === null ? {} : { focus: blockFocus })}
               />
             )}
 
-            {error !== null && (
-              <p role="alert" className="entry-form__error">
-                {error.message}
-                {error.hint !== undefined && ` ${error.hint}`}
-              </p>
-            )}
-            {saved && <p role="status">{t('entryEdit.saved')}</p>}
             {autosave.savedAt !== null && !saved && (
               // Deliberately worded as a local safety net, not as "saved": an
               // editor who reads "saved" and closes the tab must not discover
@@ -1752,6 +1794,15 @@ export function EntryEditRoute(): JSX.Element {
 
             {canWrite && (
               <div className="sticky bottom-0 -mx-1 border-t border-border bg-background px-1 py-3">
+                {/* In the bar that stays on screen: below a tall page builder,
+                    a refusal written after it was never seen (L36 audit). */}
+                {error !== null && (
+                  <p role="alert" className="entry-form__error">
+                    {error.message}
+                    {error.hint !== undefined && ` ${error.hint}`}
+                  </p>
+                )}
+                {saved && <p role="status">{t('entryEdit.saved')}</p>}
                 <button type="submit" disabled={saving}>
                   {isNew ? t('entryEdit.createButton') : t('entryEdit.saveButton')}
                 </button>

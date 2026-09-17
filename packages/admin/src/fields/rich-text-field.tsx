@@ -48,9 +48,14 @@ export function RichTextField({
         onChange={onChange}
         session={session}
       />
-      <p className="field__word-count">
-        {t('fields.wordCount', { count: words, minutes: readingTimeMinutes(words) })}
-      </p>
+      {/* The editor already counts words and characters; only the reading
+          time is added here (L36 audit: two word counts, one under the
+          other). */}
+      {words > 0 && (
+        <p className="field__word-count">
+          {t('fields.readingTime', { minutes: readingTimeMinutes(words) })}
+        </p>
+      )}
     </FieldWrapper>
   )
 }

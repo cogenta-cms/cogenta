@@ -42,6 +42,7 @@ describe('the insertion panel’s block library (L16 task 4)', () => {
     expect(media.map((entry) => entry.definition.name).sort()).toEqual([
       'embed',
       'gallery',
+      'logoStrip',
       'logos',
       'mediaFigure',
     ])
@@ -49,7 +50,11 @@ describe('the insertion panel’s block library (L16 task 4)', () => {
 
   it('combines the query and the category rather than choosing between them', () => {
     expect(searchLibrary('logos', 'text')).toEqual([])
-    expect(searchLibrary('logos', 'media').map((entry) => entry.definition.name)).toEqual(['logos'])
+    expect(
+      searchLibrary('logos', 'media')
+        .map((entry) => entry.definition.name)
+        .sort(),
+    ).toEqual(['logoStrip', 'logos'])
   })
 
   it('shows everything for an empty query rather than nothing', () => {

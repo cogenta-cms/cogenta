@@ -34,6 +34,8 @@ export interface MediaPickerProps {
   readonly value: readonly string[]
   onChange(ids: readonly string[]): void
   readonly disabled?: boolean
+  /** The field's name, announced for the group; the drop hint otherwise (L36 audit). */
+  readonly label?: string
 }
 
 const PAGE_SIZE = 24
@@ -50,6 +52,7 @@ export function MediaPicker({
   value,
   onChange,
   disabled = false,
+  label,
 }: MediaPickerProps): JSX.Element {
   const { t } = useTranslation()
   const [resolved, setResolved] = useState<Readonly<Record<string, MediaAsset | 'unresolved'>>>({})
@@ -164,7 +167,7 @@ export function MediaPicker({
       // exists as a real button below, so it is a convenience, never the
       // only path (fiche 03: "le glisser-déposer ne doit jamais être le
       // seul chemin").
-      aria-label={t('fields.mediaDropHint')}
+      aria-label={label ?? t('fields.mediaDropHint')}
       className={cn('media-picker', dragOver && 'media-picker--drag-over')}
       onDragOver={(event) => {
         if (disabled) return

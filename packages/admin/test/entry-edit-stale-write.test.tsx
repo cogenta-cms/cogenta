@@ -97,7 +97,7 @@ describe('the stale-write conflict notice', () => {
       }),
     )
 
-    const title = screen.getByLabelText('title', { exact: false }) as HTMLInputElement
+    const title = screen.getByLabelText('Titre', { exact: false }) as HTMLInputElement
     fireEvent.change(title, { target: { value: 'My own edit' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
@@ -153,7 +153,7 @@ describe('the stale-write conflict notice', () => {
       }),
     )
 
-    const title = screen.getByLabelText('title', { exact: false }) as HTMLInputElement
+    const title = screen.getByLabelText('Titre', { exact: false }) as HTMLInputElement
     fireEvent.change(title, { target: { value: 'My own edit' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 

@@ -11,6 +11,26 @@ interface SelectChoice {
 /** Options short enough that a search box would only add a step, not save one. */
 const SEARCH_THRESHOLD = 10
 
+/**
+ * A choice list the admin knows every value of — the theme icons, image
+ * ratios — shown in the admin's language (L36 audit: a site's icon field
+ * listed `bolt`, `shield`). A list with any unknown or labelled value, such
+ * as currencies, is shown as declared.
+ */
+function namedChoices(
+  choices: readonly SelectChoice[],
+  t: (key: string) => string,
+  exists: (key: string) => boolean,
+): readonly SelectChoice[] {
+  const key = (value: string) => `blockOptions.${value.replaceAll(':', 'x')}`
+  if (!Array.isArray(choices) || choices.length === 0) return choices
+  const known = choices.every(
+    (choice) =>
+      typeof choice.value === 'string' && choice.label === undefined && exists(key(choice.value)),
+  )
+  return known ? choices.map((choice) => ({ ...choice, label: t(key(choice.value)) })) : choices
+}
+
 function labelFor(choice: SelectChoice): string {
   return choice.label ?? choice.value
 }
@@ -123,10 +143,12 @@ export function SelectField({
   disabled = false,
   error,
 }: FieldProps<string | readonly string[]>): JSX.Element {
-  const options = field.options as {
+  const { t, i18n } = useTranslation()
+  const declared = field.options as {
     readonly options: readonly SelectChoice[]
     readonly many?: boolean
   }
+  const options = { ...declared, options: namedChoices(declared.options, t, i18n.exists) }
   const invalid = error !== undefined && error !== null
 
   if (options.many === true) {
@@ -164,7 +186,10 @@ export function SelectField({
         aria-describedby={invalid ? fieldErrorId(id) : undefined}
         onChange={(event) => onChange(event.target.value)}
       >
-        <option value="" disabled hidden>
+        {/* An optional choice can be cleared again (L36 audit): a hidden,
+            disabled placeholder left a button style or an icon impossible to
+            unset once picked. */}
+        <option value="" disabled={field.required} hidden={field.required}>
           —
         </option>
         {options.options.map((choice) => (

@@ -51,7 +51,11 @@ export function FieldWrapper({
   // author chose (`field.name` is not an i18n key). A field that already
   // declares `admin.label` is untouched — 100% backward compatible for a
   // site already configured.
-  const label = field.admin?.label ?? humanizeFieldName(field.name)
+  // A common name (`title`, `coverImage`) reads in the admin's language (L36
+  // audit: a French site's forms said "Title", "Slug", "Cover Image").
+  const label =
+    field.admin?.label ??
+    t(`fieldNames.${field.name}`, { defaultValue: humanizeFieldName(field.name) })
 
   const max = typeof field.options.max === 'number' ? field.options.max : undefined
   const length = typeof value === 'string' ? value.length : undefined

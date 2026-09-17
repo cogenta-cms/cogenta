@@ -1,6 +1,7 @@
 import type { JSX, MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ContentBlock } from '../api/content-client.js'
+import { blockLabel } from '../blocks/localize-block-fields.js'
 import { blockDefinition } from '../blocks/vocabulary.js'
 import { cn } from '../ui/cn.js'
 import { Button } from '../ui/index.js'
@@ -99,7 +100,10 @@ export function BlockOutline({
       >
         {blocks.map((block, index) => {
           const definition = blockDefinition(block.type)
-          const label = definition?.label ?? t('fields.blocksUnknownLabel', { type: block.type })
+          const label =
+            definition === undefined
+              ? t('fields.blocksUnknownLabel', { type: block.type })
+              : blockLabel(definition, t)
           const selected = selectedKeys.has(block.key)
           const locked = lockedKeys.has(block.key)
           return (
@@ -122,7 +126,7 @@ export function BlockOutline({
                 if (added !== '') onInsert(added, index)
               }}
               className={cn(
-                'group flex items-start gap-1 rounded-md border px-2 py-1.5 transition-colors',
+                'group flex flex-wrap items-center gap-1 rounded-md border px-2 py-1.5 transition-colors',
                 selected ? 'border-primary bg-accent' : 'border-input bg-card',
               )}
             >
@@ -133,7 +137,7 @@ export function BlockOutline({
                 }
                 aria-current={selected ? 'true' : undefined}
                 className={cn(
-                  'min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 py-1 text-left font-sans text-sm',
+                  'min-w-32 flex-1 cursor-pointer border-0 bg-transparent p-0 py-1 text-left font-sans text-sm',
                   'text-card-foreground focus-visible:outline-2 focus-visible:outline-offset-2',
                   'focus-visible:outline-ring',
                 )}
@@ -163,7 +167,8 @@ export function BlockOutline({
                */}
               <div
                 className={cn(
-                  'shrink-0 items-center gap-1',
+                  // Wraps under a long name rather than squeezing it (L36 audit).
+                  'ml-auto shrink-0 items-center gap-1',
                   selected ? 'flex' : 'hidden group-hover:flex group-focus-within:flex',
                 )}
               >

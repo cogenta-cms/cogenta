@@ -96,10 +96,10 @@ describe('field render order (fiche 44 task 1)', () => {
     )
 
     // Fiche 35 audit T02 — none of these fields declares `admin.label`, so
-    // this is now the humanised fallback (`field-wrapper.tsx`), not the raw
-    // schema names this test used to assert; the order itself, which is
-    // what this test is actually about, is unchanged.
-    expect(fieldLabels(container)).toEqual(['Title', 'Body', 'Excerpt', 'Cover Image'])
+    // this is the fallback (`field-wrapper.tsx`): a common name in the
+    // admin's language since the L36 audit; the order itself, which is what
+    // this test is actually about, is unchanged.
+    expect(fieldLabels(container)).toEqual(['Titre', 'Contenu', 'Extrait', 'Image de couverture'])
   })
 })
 
@@ -183,7 +183,7 @@ describe('R2 — the AI button, with and without a provider', () => {
     )
 
     expect(screen.queryByRole('button', { name: "Générer l'extrait avec l'IA" })).toBeNull()
-    fireEvent.change(screen.getByLabelText('Excerpt'), { target: { value: 'Edited by hand.' } })
+    fireEvent.change(screen.getByLabelText('Extrait'), { target: { value: 'Edited by hand.' } })
     expect(onChange).toHaveBeenCalledWith('excerpt', 'Edited by hand.')
   })
 

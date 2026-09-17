@@ -1,5 +1,5 @@
 import type { ContentBlock } from '../api/content-client.js'
-import { blockDefinition, freshBlockKey } from '../blocks/vocabulary.js'
+import { blockDefinition, freshBlockKey, startingBlockData } from '../blocks/vocabulary.js'
 
 /**
  * Every layout action the builder can take, as pure functions on the block
@@ -61,7 +61,11 @@ export function insertBlock(
   if (blockDefinition(type) === undefined) return { blocks, key: null }
   const key = freshBlockKey()
   const next = [...blocks]
-  next.splice(Math.max(0, Math.min(at, blocks.length)), 0, { key, type, data: {} })
+  next.splice(Math.max(0, Math.min(at, blocks.length)), 0, {
+    key,
+    type,
+    data: startingBlockData(type),
+  })
   return { blocks: next, key }
 }
 

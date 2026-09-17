@@ -400,7 +400,14 @@ export function SeoPanel({
           {imageField !== undefined && (
             <FieldInput
               id="seo-image"
-              field={imageField}
+              field={{
+                ...imageField,
+                admin: {
+                  ...imageField.admin,
+                  label: t('fieldNames.seoImage'),
+                  help: t('seo.imageHelp'),
+                },
+              }}
               value={values['seoImage'] ?? null}
               onChange={(value) => onChange('seoImage', value)}
               disabled={disabled}

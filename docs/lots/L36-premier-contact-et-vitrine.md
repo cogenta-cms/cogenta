@@ -155,3 +155,65 @@ réellement installés en français et en anglais, capturés en bureau, mobile e
 - Les pages de repli (404, démarrage) n'existent qu'en français et en anglais.
 - Un site existant sur `theme-entreprise` change d'apparence à la mise à jour
   (annoncé dans le changeset).
+
+## Audit du page builder sur la vitrine installée (2026-09-17)
+
+Demandé après la clôture : « vérifie qu'on peut vraiment tout modifier via le page
+builder — image, texte, blocs — et que c'est cohérent, pas de loupé ». Fait sur un vrai
+site vitrine installé en français, dans un vrai navigateur : les dix-sept blocs posés sur
+une page vide, puis chaque sorte de champ modifiée sur l'accueil (texte, image changée
+depuis la médiathèque, liste d'éléments ajoutée/retirée/déplacée/dupliquée, listes de
+choix, lien vers une URL et vers une entrée, objet imbriqué, texte riche, apparence),
+blocs déplacés, annuler/rétablir, enregistrement, relecture des données stockées et de
+la page publique.
+
+**Défauts trouvés et corrigés :**
+
+1. **Une page enregistrée avec un champ vidé cassait la page publique** (erreur 500) :
+   les données de bloc n'étaient jamais vérifiées à l'écriture. Vide = absent
+   (`pruneEmptyBlockData`), et l'API refuse un bloc invalide (`BLOCK_INVALID`).
+2. **L'aperçu tombait en erreur** dès qu'on posait une liste de contenus (400) ou un
+   contenu externe (500), encore incomplets : il montre désormais le reste de la page.
+3. **Un refus d'enregistrement était invisible et illisible** — écrit sous le builder, en
+   anglais, dans les termes du contrat (`actions.0.target: Invalid input … R3`). L'admin
+   vérifie les blocs avant d'envoyer, dit « Bloc 12 « Appel à action » — Boutons ›
+   élément 1 › Destination : indiquez une adresse ou choisissez une entrée », sélectionne
+   le bloc, et affiche le message dans la barre d'enregistrement. Un test croise cette
+   vérification avec le validateur du contrat B : elle ne refuse jamais ce que le
+   serveur accepterait.
+4. **Le formulaire de bloc parlait le langage du contrat** : `eyebrow`, `emphasis`,
+   `primary`, `16:9`, noms des blocs en français même dans un admin anglais. Libellés,
+   choix, aides et noms de bloc sont traduits (français et anglais, test de couverture).
+5. **Les listes d'éléments n'avaient pas de titre** (« Boutons », « Questions ») ;
+   un objet (l'auteur d'un témoignage, le tri d'une liste) et une liste de textes (les
+   avantages d'une offre) s'éditaient en JSON brut ; l'icône et la collection d'une liste
+   se tapaient à la main. Champs dédiés, listes de choix, et un lien « Modifier les
+   Références » depuis une liste de contenus (ses éléments sont des entrées, pas des
+   blocs).
+6. **Un bloc posé laissait ses choix obligatoires vides** (disposition, service) : il
+   reçoit le premier choix.
+7. Un choix optionnel ne pouvait plus être désélectionné ; le fond « Image » de
+   l'apparence ne permet de choisir aucune image et chaque thème le rend comme
+   « Atténué » (retiré du choix, gardé s'il est déjà posé) ; cinq blocs rangés par
+   défaut dans « Listes » ; la ligne du bloc sélectionné écrasait son nom mot par mot ;
+   « ~1 min de lecture » sous un texte vide ; le champ image s'annonçait « Déposer un
+   fichier ici » aux lecteurs d'écran.
+8. **Les formulaires de contenu affichaient « Title », « Slug », « Cover Image »** sur un
+   site français : les noms de champs courants sont traduits pour tous les modèles de
+   site. L'icône d'une solution devient une liste de choix.
+9. Hors builder, trouvé en chemin : **une page créée depuis l'admin ouvert directement
+   sur « Nouveau » était enregistrée en anglais** sur un site français (le formulaire
+   gardait `en` en attendant le schéma), et **une entrée créée par l'API sans langue
+   aussi** (agents, MCP, clients headless).
+10. **Un slug déjà pris répondait 500** (`DB_UNREACHABLE`, le refus brut de l'index) sans
+    nommer de champ : 409 `CONTENT_SLUG_TAKEN` sur le champ, message en français sous
+    l'adresse.
+11. **Une page neuve ne pouvait plus être créée sans remplir son bloc de départ** (un
+    « Texte » vide, refusé depuis le contrôle des blocs) : un bloc de départ resté intact
+    n'est pas enregistré à la création.
+
+**Limites qui restent, assumées :** l'édition directe dans l'aperçu ne couvre que les
+textes simples d'un bloc (pas un texte riche, un élément de liste ni l'auteur d'un
+témoignage — ils s'éditent dans le panneau) ; les libellés écrits par l'auteur d'un
+modèle de site (« Starts », « Street address » dans l'association) restent dans sa langue ; une liste de contenus montre des
+entrées, qui se modifient dans leur collection.

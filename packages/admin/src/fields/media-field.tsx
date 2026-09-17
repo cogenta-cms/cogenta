@@ -1,6 +1,8 @@
 import type { JSX } from 'react'
+import { useTranslation } from 'react-i18next'
 import { MEDIA_KINDS, type MediaKind } from '../api/media-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { humanizeFieldName } from '../lib/humanize-field-name.js'
 import { FieldWrapper } from './field-wrapper.js'
 import { MediaPicker } from './media-picker.js'
 import type { FieldProps } from './types.js'
@@ -23,6 +25,7 @@ export function MediaField({
   disabled = false,
   error: fieldError,
 }: FieldProps<unknown>): JSX.Element {
+  const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
 
@@ -63,6 +66,10 @@ export function MediaField({
         value={normalised}
         onChange={handleChange}
         disabled={disabled}
+        label={
+          field.admin?.label ??
+          t(`fieldNames.${field.name}`, { defaultValue: humanizeFieldName(field.name) })
+        }
       />
     </FieldWrapper>
   )

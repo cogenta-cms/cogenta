@@ -92,7 +92,7 @@ describe('choosing between the field form and the visual builder', () => {
     await screen.findByTitle('Aperçu de la page')
 
     // `title` is still edited by the form — the builder has no opinion on it.
-    expect((screen.getByLabelText('title', { exact: false }) as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText('Titre', { exact: false }) as HTMLInputElement).value).toBe(
       'First article',
     )
     // `body` is not shown twice: the form's own blocks editor stands down.

@@ -31,7 +31,7 @@ describe('editing an existing entry', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
-    const title = screen.getByLabelText('title', { exact: false }) as HTMLInputElement
+    const title = screen.getByLabelText('Titre', { exact: false }) as HTMLInputElement
     expect(title.value).toBe('First article')
 
     fireEvent.change(title, { target: { value: 'Updated title' } })
@@ -214,7 +214,7 @@ describe('duplicating an entry', () => {
 
     await waitFor(() => expect(window.location.pathname).toBe('/collections/article/entry-1-copy'))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
-    expect((screen.getByLabelText('title', { exact: false }) as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText('Titre', { exact: false }) as HTMLInputElement).value).toBe(
       'First article',
     )
   })
@@ -305,7 +305,7 @@ describe('multilingual editing', () => {
 
     expect(screen.getByText('fr')).toBeDefined()
     expect(screen.getByText('(nouvelle traduction)', { exact: false })).toBeDefined()
-    expect((screen.getByLabelText('title', { exact: false }) as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText('Titre', { exact: false }) as HTMLInputElement).value).toBe(
       'First article',
     )
   })
@@ -374,6 +374,30 @@ describe('the "Assistant" and "Traductions" accordions when their feature is off
 })
 
 describe('creating a new entry', () => {
+  it("creates the entry in the site's language when the screen is opened directly", async () => {
+    // L36 audit: opened by URL, this screen rendered before the schema
+    // arrived and kept its 'en' placeholder, so a French site's pages were
+    // created in English.
+    installMockFetch({ siteLocales: ['fr', 'en'] })
+    window.history.pushState(null, '', '/collections/article/new')
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Nouveau : Article' })
+
+    fireEvent.change(await screen.findByLabelText(/^Titre\s*\*?$/), {
+      target: { value: 'Un article' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Créer' }))
+
+    const created = await waitFor(() => {
+      const call = vi
+        .mocked(globalThis.fetch)
+        .mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
+      expect(call).toBeDefined()
+      return call
+    })
+    expect(JSON.parse(String((created?.[1] as RequestInit).body)).locale).toBe('fr')
+  })
+
   it('shows the "Nouveau" link for a role that can create, and lands on the new entry after saving', async () => {
     render(<App />)
     await goToArticles()
@@ -381,7 +405,7 @@ describe('creating a new entry', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'Nouveau' }))
     await screen.findByRole('heading', { name: 'Nouveau : Article' })
 
-    fireEvent.change(screen.getByLabelText('title', { exact: false }), {
+    fireEvent.change(screen.getByLabelText(/^Titre\s*\*?$/), {
       target: { value: 'Brand new article' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Créer' }))
@@ -432,7 +456,7 @@ describe('autosaving a draft in progress', () => {
     try {
       await openFirstArticle()
 
-      fireEvent.change(screen.getByLabelText('title', { exact: false }), {
+      fireEvent.change(screen.getByLabelText('Titre', { exact: false }), {
         target: { value: 'Half a sentence' },
       })
       await act(async () => {
@@ -457,7 +481,7 @@ describe('autosaving a draft in progress', () => {
     try {
       await openFirstArticle()
 
-      fireEvent.change(screen.getByLabelText('title', { exact: false }), {
+      fireEvent.change(screen.getByLabelText('Titre', { exact: false }), {
         target: { value: 'Half a sentence' },
       })
       await act(async () => {
@@ -481,12 +505,12 @@ describe('autosaving a draft in progress', () => {
     await openFirstArticle()
 
     // Never applied on its own — what the server holds is still what is shown.
-    expect((screen.getByLabelText('title', { exact: false }) as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText('Titre', { exact: false }) as HTMLInputElement).value).toBe(
       'First article',
     )
 
     fireEvent.click(await screen.findByRole('button', { name: 'Les restaurer' }))
-    expect((screen.getByLabelText('title', { exact: false }) as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText('Titre', { exact: false }) as HTMLInputElement).value).toBe(
       'Recovered from a crashed tab',
     )
   })

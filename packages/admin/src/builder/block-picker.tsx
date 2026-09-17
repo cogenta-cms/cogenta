@@ -1,9 +1,10 @@
 import { type JSX, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { blockLabel } from '../blocks/localize-block-fields.js'
 import { cn } from '../ui/cn.js'
 import { Button, Input, Label } from '../ui/index.js'
 import type { BlockCategory } from './block-library.js'
-import { BLOCK_CATEGORIES, searchLibrary } from './block-library.js'
+import { BLOCK_CATEGORIES, blockLibrary, searchLibrary } from './block-library.js'
 import { BLOCK_TYPE_MIME } from './preview-dom.js'
 
 /**
@@ -27,7 +28,11 @@ export function BlockPicker({
   const searchId = useId()
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<BlockCategory | null>(null)
-  const results = searchLibrary(query, category)
+  const library = blockLibrary().map((entry) => ({
+    ...entry,
+    definition: { ...entry.definition, label: blockLabel(entry.definition, t) },
+  }))
+  const results = searchLibrary(query, category, library)
 
   return (
     <div className="flex flex-col gap-3">

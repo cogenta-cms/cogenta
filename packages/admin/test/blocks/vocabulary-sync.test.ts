@@ -146,8 +146,33 @@ describe('the admin copy of contract B matches the real vocabulary', () => {
           })
         } else {
           it(`"${adminField.name}" is the same simple kind on both sides`, () => {
-            expect(adminField.kind).toBe(contractField?.kind)
+            // A collection name is a plain text on the contract side, picked
+            // from the site's own collections in the admin (L36 audit): same
+            // stored value, a different editor.
+            const picker =
+              (adminField.options as { readonly collectionPicker?: boolean }).collectionPicker ===
+              true
+            expect(picker ? 'text' : adminField.kind).toBe(contractField?.kind)
           })
+
+          const objectShape = adminField.options as {
+            readonly object?: boolean
+            readonly items?: readonly ItemFieldDefinition[]
+          }
+          if (objectShape.object === true && objectShape.items !== undefined) {
+            const objectItems = objectShape.items
+            it(`"${adminField.name}" edits an object contract B accepts`, () => {
+              const sample: Record<string, unknown> = {}
+              for (const itemField of objectItems) {
+                if (itemField.required) sample[itemField.name] = sampleForItemField(itemField)
+              }
+              const result = contractField?.zod.safeParse(sample)
+              expect(
+                result?.success,
+                result?.success === false ? JSON.stringify(result.error.issues) : undefined,
+              ).toBe(true)
+            })
+          }
         }
       }
     })

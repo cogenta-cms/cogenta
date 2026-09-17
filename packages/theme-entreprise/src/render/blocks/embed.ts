@@ -1,5 +1,12 @@
 import type { EmbedBlock } from '@cogenta/blocks'
-import { aspectRatio, type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import {
+  aspectRatio,
+  embedFrameTitle,
+  type HtmlElement,
+  h,
+  type RenderContext,
+  renderEmbedPreview,
+} from '@cogenta/theme-kit'
 import { section } from '../layout.js'
 
 /**
@@ -60,6 +67,7 @@ function consentNotice(block: EmbedBlock, ctx: RenderContext, reason: string): H
   return h(
     'div',
     { class: 'cg-embed__notice' },
+    renderEmbedPreview(ctx, block.url, 'cg-embed'),
     h('p', { class: 'cg-embed__provider', 'aria-hidden': 'true' }, block.provider),
     h('p', { class: 'cg-embed__reason' }, reason),
     h(
@@ -106,7 +114,7 @@ export function renderEmbed(block: EmbedBlock, ctx: RenderContext): HtmlElement 
             src: source,
             // An iframe with no accessible name is announced as "frame" and
             // nothing else (WCAG 4.1.2).
-            title: ctx.t('embed.title', { provider: block.provider }),
+            title: embedFrameTitle(ctx, block.provider, block.url),
             loading: 'lazy',
             referrerpolicy: 'strict-origin-when-cross-origin',
             allow:

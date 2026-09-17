@@ -5225,5 +5225,13 @@
     "url": "Adresse web",
     "subtitle": "Sous-titre",
     "seoImage": "Image pour les réseaux sociaux"
+  },
+  "embedAssist": {
+    "loading": "Recherche de l’aperçu…",
+    "failed": "Aperçu indisponible : le service n’a pas répondu. Choisissez le service et les proportions vous-même.",
+    "noPreview": "{{provider}} n’a pas d’aperçu automatique : le lien s’affichera tel quel.",
+    "unknownProvider": "Service non reconnu : choisissez « Autre » pour afficher un lien vers ce contenu.",
+    "previewLabel": "Aperçu du contenu intégré",
+    "byline": "{{provider}} · {{author}}"
   }
 }

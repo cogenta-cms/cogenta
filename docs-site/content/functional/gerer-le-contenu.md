@@ -43,6 +43,20 @@ brouillon, pas de traduction séparée par langue, juste un libellé par langue
 sur le même terme (« Cuisine » et « Cooking » sont un seul concept, pas deux
 entrées liées).
 
+## Intégrer une vidéo, un son ou une publication
+
+Le bloc **Contenu externe** affiche une vidéo YouTube, Vimeo ou Dailymotion, un titre Spotify
+ou SoundCloud, une publication Bluesky ou Mastodon. Collez l'adresse du contenu telle que le
+service l'affiche : Cogenta reconnaît le service, règle les proportions si vous ne les avez pas
+choisies, et montre un aperçu (titre, auteur, miniature). Si le service ne répond pas, rien
+n'est bloqué : choisissez le service et les proportions vous-même.
+
+Tant que **« Demander le consentement avant de charger »** est coché, le visiteur voit une
+carte à la place du lecteur, avec le titre et la miniature du contenu. Cette miniature est une
+copie conservée par votre site : l'afficher ne transmet rien au service. Le lecteur lui-même
+n'est chargé qu'une fois le lien suivi. Mastodon et les services non reconnus n'ont pas
+d'aperçu automatique (un lien vers le contenu est affiché).
+
 ## Les pages d'auteur
 
 Chaque auteur a une page publique qui liste ce qu'il a publié, à l'adresse

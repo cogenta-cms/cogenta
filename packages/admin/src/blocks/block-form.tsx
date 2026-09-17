@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { defaultValueFor } from '../fields/default-value.js'
 import { FieldInput } from '../fields/field-input.js'
 import { useSchema } from '../schema/schema-context.js'
+import { EmbedAssist } from './embed-assist.js'
 import { localizeBlockField } from './localize-block-fields.js'
 import type { BlockDefinition } from './vocabulary.js'
 
@@ -55,6 +56,9 @@ export function BlockForm({
           disabled={disabled}
         />
       ))}
+      {definition.name === 'embed' && (
+        <EmbedAssist data={data} onChange={onChange} disabled={disabled} />
+      )}
       {listed !== undefined && (
         <p className="m-0 text-sm">
           {t('builder.listedEntriesHint', { collection: listed.labels.plural })}{' '}

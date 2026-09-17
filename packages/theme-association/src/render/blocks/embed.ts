@@ -1,5 +1,12 @@
 import type { EmbedBlock } from '@cogenta/blocks'
-import { aspectRatio, type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import {
+  aspectRatio,
+  embedFrameTitle,
+  type HtmlElement,
+  h,
+  type RenderContext,
+  renderEmbedPreview,
+} from '@cogenta/theme-kit'
 import { arrowWords, section } from '../layout.js'
 
 /**
@@ -55,6 +62,7 @@ function notice(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElem
   return h(
     'div',
     { class: 'ca-embed__notice' },
+    renderEmbedPreview(ctx, block.url, 'ca-embed'),
     h('p', { class: 'ca-embed__label' }, ctx.t('embed.label')),
     h('p', { class: 'ca-embed__reason' }, reason),
     h(
@@ -104,7 +112,7 @@ export function renderEmbed(block: EmbedBlock, ctx: RenderContext): HtmlElement 
             src: source,
             // A frame with no accessible name is announced as "frame" and
             // nothing else (WCAG 4.1.2).
-            title: ctx.t('embed.title', { provider: block.provider }),
+            title: embedFrameTitle(ctx, block.provider, block.url),
             loading: 'lazy',
             referrerpolicy: 'strict-origin-when-cross-origin',
             allow:

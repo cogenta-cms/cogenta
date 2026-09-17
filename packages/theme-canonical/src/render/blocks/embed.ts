@@ -1,4 +1,5 @@
 import type { EmbedBlock } from '@cogenta/blocks'
+import { embedFrameTitle, renderEmbedPreview } from '@cogenta/theme-kit'
 import type { RenderContext } from '../../theme-contract.js'
 import { arrowWords } from '../arrow-link.js'
 import { type HtmlElement, h } from '../html.js'
@@ -61,6 +62,7 @@ function consentCard(block: EmbedBlock, ctx: RenderContext, reason: string): Htm
   return h(
     'div',
     { class: 'cg-embed__placeholder' },
+    renderEmbedPreview(ctx, block.url, 'cg-embed'),
     h('p', { class: 'cg-embed__notice' }, reason),
     h(
       'a',
@@ -102,7 +104,7 @@ export function renderEmbed(block: EmbedBlock, ctx: RenderContext): HtmlElement 
           src: source,
           // An iframe with no accessible name is announced as "frame" and
           // nothing else. WCAG 4.1.2, and the single most common embed defect.
-          title: ctx.t('embed.title', { provider: block.provider }),
+          title: embedFrameTitle(ctx, block.provider, block.url),
           loading: 'lazy',
           referrerpolicy: 'strict-origin-when-cross-origin',
           allow: 'accelerometer; clipboard-write; encrypted-media; picture-in-picture; fullscreen',

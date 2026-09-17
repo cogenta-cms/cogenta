@@ -139,6 +139,10 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   PATTERN_UNKNOWN: 404,
   PATTERN_INVALID: 400,
 
+  // Embed previews (L38)
+  EMBED_URL_INVALID: 400,
+  EMBED_RATE_LIMITED: 429,
+
   // Role permission overrides (fiche 63, ADR-0028)
   ROLE_PERMISSION_TARGET_UNKNOWN: 404,
   ROLE_PERMISSION_INVALID: 400,

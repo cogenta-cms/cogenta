@@ -69,6 +69,14 @@ export {
   enrichWordDiffs,
   extractPlainText,
 } from './diff.js'
+export {
+  createEmbedPreviewStore,
+  type EmbedPreviewRecord,
+  type EmbedPreviewStatus,
+  type EmbedPreviewStore,
+  embedPreviewHash,
+} from './embed-preview-store.js'
+export { EMBED_PREVIEW_TABLE, ensureEmbedPreviewTable } from './embed-preview-tables.js'
 export type {
   ContentLifecycleEvent,
   ContentLifecycleEventName,

@@ -46,6 +46,8 @@ import {
   createAuthRouter,
   createContentGateway,
   createContentService,
+  createEmbedPreviewService,
+  createEmbedRouter,
   createFormsRouter,
   createHealthRouter,
   createImportRouter,
@@ -92,6 +94,9 @@ import {
   createUsersRouter,
   createWidgetRouter,
   DEFAULT_UNLOCK_LIFETIME_SECONDS,
+  type EmbedPreviewService,
+  type EmbedPreviewView,
+  type EmbedRouter,
   errorResponse,
   executeGraphQL,
   type ForgotPasswordEvent,
@@ -282,6 +287,7 @@ import {
   countTaxonomyUsage,
   createAdminThemeStore,
   createContentStore,
+  createEmbedPreviewStore,
   createMaintenanceStore,
   createMenuStore,
   createNotFoundLogStore,
@@ -299,6 +305,7 @@ import {
   createTaxonomyStore,
   DEFAULT_TRASH_RETAIN_DAYS,
   ensureAdminThemeTable,
+  ensureEmbedPreviewTable,
   ensureMaintenanceTable,
   ensureMenuTables,
   ensurePatternTables,
@@ -720,6 +727,9 @@ interface Site {
   readonly marketplaceRouter: MarketplaceRouter
   /** `/api/menus/*` — navigation menus. Not schema-declared like a taxonomy: created and edited entirely at runtime, so this is always mounted, empty until the admin (or the API) creates the first one. */
   readonly menuRouter: MenuRouter
+  /** The embed preview cache (L38): resolved by an editor's paste or in the background, read by every render. */
+  readonly embedPreviews: EmbedPreviewService
+  readonly embedRouter: EmbedRouter
   /**
    * `/api/patterns/*` — the page builder's motif/model library (fiche 43
    * sub-chantier A). Not schema-declared either: one fixed table, the same
@@ -1147,6 +1157,8 @@ function webauthnConfigFor(site: { readonly name: string; readonly url: string }
 }
 
 interface AssembleSiteOptions {
+  /** Test seam for the embed preview resolver (L38); the real `fetch` otherwise. */
+  readonly embedsFetch?: typeof fetch
   readonly db: DatabaseHandle
   /** Passed through to `Site.imageClient` — see that field for why it is a function rather than a client. */
   readonly imageClient?: () => Promise<ImageProviderClient | undefined>
@@ -2532,6 +2544,15 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     return urls
   }
 
+  // Embed previews (L38): a fixed cache table, and the service an editor's
+  // paste and a render's background refresh both go through.
+  await ensureEmbedPreviewTable(db)
+  const embedPreviews = createEmbedPreviewService({
+    store: createEmbedPreviewStore(db),
+    storage,
+    ...(options.embedsFetch === undefined ? {} : { fetch: options.embedsFetch }),
+  })
+
   // Widget areas (L30): one fixed table, and the stored widgets kept for a
   // few seconds so a busy page does not read them on every request. An
   // admin write drops the copy at once; another replica sees it within the
@@ -2811,6 +2832,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       usageStore: pluginUsage,
       grantStore: marketplaceGrants,
       describeCapability,
+    }),
+    embedPreviews,
+    embedRouter: createEmbedRouter({
+      service: embedPreviews,
+      canResolve: (context) =>
+        collections.some((collection) => permissions.can('update', collection, context).allowed),
+      rateLimit: options.requestQuota ?? createMemoryRateLimiter(),
     }),
     menuRouter: createMenuRouter({
       store: menuStore,
@@ -3673,6 +3701,46 @@ async function chromeExtrasForSite(site: Site, locale: string): Promise<ChromeEx
  * that names nobody, or that would have to name an email, is worse than no
  * byline at all.
  */
+/** How many embed addresses one process resolves in the background at once. */
+const EMBED_REFRESH_CONCURRENCY = 4
+const embedRefreshInFlight = new WeakMap<Site, Set<string>>()
+
+/**
+ * The embed previews a render reads (L38): the cache as it is, and a refresh
+ * started in the background for any address that is missing or stale. The
+ * render never waits for it — the next visit shows what it found.
+ */
+function embedPreviewsForSite(site: Site): {
+  cached(urls: readonly string[]): Promise<ReadonlyMap<string, EmbedPreviewView>>
+  refreshInBackground(urls: readonly string[]): void
+} {
+  return {
+    cached: (urls) => site.embedPreviews.cached(urls),
+    refreshInBackground: (urls) => {
+      let inFlight = embedRefreshInFlight.get(site)
+      if (inFlight === undefined) {
+        inFlight = new Set()
+        embedRefreshInFlight.set(site, inFlight)
+      }
+      const running = inFlight
+      for (const url of new Set(urls)) {
+        if (running.has(url) || running.size >= EMBED_REFRESH_CONCURRENCY) continue
+        running.add(url)
+        void (async () => {
+          try {
+            if (await site.embedPreviews.needsResolving(url)) await site.embedPreviews.resolve(url)
+          } catch {
+            // A preview is a convenience: an address that cannot be resolved
+            // keeps rendering exactly as it did, and is retried later.
+          } finally {
+            running.delete(url)
+          }
+        })()
+      }
+    },
+  }
+}
+
 async function authorForSite(
   site: Site,
   userId: string,
@@ -4892,6 +4960,32 @@ export function createRequestListener(
         return
       }
 
+      // An embed's thumbnail (L38), copied from its provider once and served
+      // from here: a visitor's browser loads it without contacting the
+      // provider, which is what lets a theme show it before consent.
+      {
+        const thumbnailMatch = /^\/_cogenta\/embeds\/([0-9a-f]{64})$/u.exec(url.pathname)
+        if (thumbnailMatch !== null) {
+          if (req.method !== 'GET') {
+            res.writeHead(405, { allow: 'GET' }).end()
+            return
+          }
+          const thumbnail = await site.embedPreviews.thumbnail(thumbnailMatch[1] as string)
+          if (thumbnail === null) {
+            res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found')
+            return
+          }
+          res.writeHead(200, {
+            'content-type': thumbnail.type,
+            'cache-control': 'public, max-age=86400',
+            'x-content-type-options': 'nosniff',
+          })
+          thumbnail.body.on('error', () => res.destroy())
+          thumbnail.body.pipe(res)
+          return
+        }
+      }
+
       if (url.pathname.startsWith('/api/auth/')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
@@ -5021,6 +5115,16 @@ export function createRequestListener(
       // A menu is not schema-declared like a taxonomy, but it gets its own
       // mount for the same reason: it is not a collection, and its router owns
       // its own (fixed, not per-site-configurable) permission door.
+      // Embed previews (L38): signed-in accounts only, checked by the router.
+      if (url.pathname.startsWith('/api/embeds')) {
+        const body = req.method === 'POST' ? await readBody(req) : undefined
+        writeRestResponse(
+          res,
+          await site.embedRouter.handle(toRestRequest(req, url, body), context),
+        )
+        return
+      }
+
       if (url.pathname.startsWith('/api/menus')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
@@ -5798,6 +5902,7 @@ export function createRequestListener(
             chromeExtras: (locale) => chromeExtrasForSite(site, locale),
             widgets: (request: WidgetRenderRequest) => widgetsForSite(site, request, context),
             authorFor: (userId) => authorForSite(site, userId),
+            embedPreviews: embedPreviewsForSite(site),
             resolveTerm: site.resolveTaxonomyTerm,
             // L32 — the appearance preview shows the real page, plugin
             // blocks included, or it is not a preview of the real page.
@@ -6751,6 +6856,7 @@ export function createRequestListener(
               chromeExtras: (locale) => chromeExtrasForSite(site, locale),
               widgets: (request: WidgetRenderRequest) => widgetsForSite(site, request, context),
               authorFor: (userId) => authorForSite(site, userId),
+              embedPreviews: embedPreviewsForSite(site),
               resolveTerm: site.resolveTaxonomyTerm,
               // L32 — a preview that did not render a plugin's block would
               // show a person editing it nothing at all, which is the one
@@ -7246,6 +7352,7 @@ export function createRequestListener(
           chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
           widgets: (request: WidgetRenderRequest) => widgetsForSite(site, request, context),
           authorFor: (userId: string) => authorForSite(site, userId),
+          embedPreviews: embedPreviewsForSite(site),
           resolveTerm: site.resolveTaxonomyTerm,
           // Fiche 35 task 6's admin bar. Its renderer was written, and this
           // flag — the one dispatch that is supposed to set it — never was,
@@ -7746,6 +7853,8 @@ export interface ServeOptions {
   readonly updatesAutoCheckTickMs?: number
   /** Test seam: replaces the real `fetch` to registry.npmjs.org with a scripted one — every update test in `packages/cli/test/` uses this rather than hitting the real network. */
   readonly updatesFetchImpl?: typeof fetch
+  /** Test seam: replaces the real `fetch` the embed preview resolver (L38) calls providers with. */
+  readonly embedsFetchImpl?: typeof fetch
   /** Test seam: replaces the real `npm install` child process — no test in this repository actually installs an npm package. */
   readonly updatesRunInstall?: RunPackageInstall
 }
@@ -8402,6 +8511,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
 
   const site = await assembleSite({
     db: selection.instance,
+    ...(options.embedsFetchImpl === undefined ? {} : { embedsFetch: options.embedsFetchImpl }),
     assistant,
     searchIndex,
     collections,

@@ -2,6 +2,7 @@ import {
   type AccessContext,
   type ContentGateway,
   collectDependencies,
+  type EmbedPreviewView,
   type Filter,
   type MenuRouter,
   type QueryRequest,
@@ -33,6 +34,7 @@ import {
   type CommentNotice,
   buildCollectionListQuery as collectionListQuery,
   createThemeTranslator,
+  type EmbedPreview,
   entryExcerpt,
   entryImage,
   escapeAttribute,
@@ -263,6 +265,16 @@ export interface ThemeRenderOptions {
   readonly unlockFailed?: boolean
   /** True when the attempts ran out — a different thing to tell a reader. */
   readonly unlockThrottled?: boolean
+  /**
+   * Embed previews (L38, contract D `theme@1.9`): what the cache knows about
+   * the page's embed addresses, read before rendering. `refreshInBackground`
+   * is told every address and must never be awaited by a render — resolving
+   * calls a provider. Absent: embeds render as they did before `1.9`.
+   */
+  readonly embedPreviews?: {
+    cached(urls: readonly string[]): Promise<ReadonlyMap<string, EmbedPreviewView>>
+    refreshInBackground?(urls: readonly string[]): void
+  }
   /** What became of the comment this visitor just sent (`?comment=`, `&reason=`), shown above the thread. */
   readonly commentNotice?: CommentNotice
   /**
@@ -1420,6 +1432,28 @@ function withoutUnfinishedBlocks(zones: BlockZones, registry: BlockRegistry): Bl
   return dropped ? kept : null
 }
 
+/** A cached preview as contract D hands it to a theme: only what is known, the thumbnail as the site's own image. */
+function toEmbedPreview(found: EmbedPreviewView): EmbedPreview {
+  return {
+    ...(found.title === null ? {} : { title: found.title }),
+    ...(found.authorName === null ? {} : { authorName: found.authorName }),
+    ...(found.thumbnailPath === null
+      ? {}
+      : {
+          thumbnail: {
+            kind: 'image' as const,
+            src: found.thumbnailPath,
+            srcset: '',
+            width: found.thumbnailWidth ?? 480,
+            height: found.thumbnailHeight ?? 270,
+            // Decorative: the title is written right beside it.
+            alt: '',
+            focal: null,
+          },
+        }),
+  }
+}
+
 /** ~200 words/minute, rounded up — `PageContent.entry.readingMinutes` (contract D `theme@1.4`). `0` (no text at all) is not a reading time, so it is left unset instead. */
 function richTextWordCount(document: RichTextDocument): number {
   let words = 0
@@ -1637,6 +1671,18 @@ async function renderEntryPage(
 
   const imageEndpoint = options.imageEndpoint ?? DEFAULT_IMAGE_ENDPOINT
 
+  // Embed previews (L38): read from the cache, never fetched here.
+  const embedPreviews = new Map<string, EmbedPreview>()
+  const embedUrls = blocks.flatMap((block) =>
+    block._type === 'embed' && typeof block.url === 'string' ? [block.url] : [],
+  )
+  if (options.embedPreviews !== undefined && embedUrls.length > 0) {
+    for (const [url, found] of await options.embedPreviews.cached(embedUrls)) {
+      embedPreviews.set(url, toEmbedPreview(found))
+    }
+    options.embedPreviews.refreshInBackground?.(embedUrls)
+  }
+
   const link = (target: LinkTargetInput): string => {
     if (typeof target === 'string') return target
     if ('path' in target) return target.path
@@ -1683,6 +1729,7 @@ async function renderEntryPage(
     },
     url: new URL(pathname, options.site.url),
     t: createThemeTranslator(entry.locale),
+    embedPreview: (url) => embedPreviews.get(url),
     // The real `srcset`, from `@cogenta/render`'s own `describeMedia` (L10
     // task 5). Pure and synchronous, as contract D requires: the asset was
     // loaded before this render started, and this only builds URLs against

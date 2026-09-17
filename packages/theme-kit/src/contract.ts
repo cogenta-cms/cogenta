@@ -119,4 +119,23 @@ export interface RenderContext {
    * promised since L3. `providedBlockNode` is the one line that honours it.
    */
   readonly blockNodes?: Readonly<Record<string, HtmlElement>>
+
+  /**
+   * What an embed block's address says about itself (contract D `theme@1.9`,
+   * additive): the title and author its provider gave, and a thumbnail the
+   * site serves from its own storage — never the provider's image, so showing
+   * it before consent sends the visitor nowhere. `undefined` when the host has
+   * no preview for the address, or does not offer this at all: the block then
+   * renders exactly as it did before `1.9`.
+   *
+   * Pure and synchronous, like `image`: the host loaded the page's previews
+   * before rendering started.
+   */
+  embedPreview?(url: string): EmbedPreview | undefined
+}
+
+export interface EmbedPreview {
+  readonly title?: string
+  readonly authorName?: string
+  readonly thumbnail?: ImageSource
 }

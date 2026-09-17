@@ -692,7 +692,8 @@ defineAgent({
 > **Figé en `theme@1.3` le 2026-09-02, monté en `theme@1.4` le 2026-09-05 (L25 D2), puis en
 > `theme@1.5` le 2026-09-14 (L27, `PageEntryMeta.fields`), puis en `theme@1.6` le 2026-09-15
 > (L30, zones de widgets), puis en `theme@1.7` le 2026-09-16 (L32, blocs et widgets de
-> plugin, ADR-0036), puis en `theme@1.8` le 2026-09-17 (L37, archives d'auteur).**
+> plugin, ADR-0036), puis en `theme@1.8` le 2026-09-17 (L37, archives d'auteur), puis en `theme@1.9` le même
+> jour (L38, aperçu des contenus intégrés).**
 > Ajouter une entrée à `ctx` est mineur ; en modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
@@ -1233,6 +1234,31 @@ signature (un lien quand `href` est présent, un `span` sinon) et `renderArchive
 sous le titre de l'archive (`@cogenta/theme-kit`). Un thème qui les ignore **n'est pas
 cassé** : la signature reste un texte, et l'archive d'un auteur s'affiche sans sa bio.
 
+### Aperçu des contenus intégrés — `RenderContext.embedPreview` — theme@1.9
+
+Ajouté en L38, **optionnel et additif**. Ce qu'une adresse de bloc `embed` dit d'elle-même
+— titre, auteur, miniature — n'est pas une donnée du bloc (le contrat B ne bouge pas) : c'est
+un cache que l'hôte remplit en interrogeant le service, et qu'il pré-charge avant le rendu.
+
+```ts
+interface RenderContext {
+  /* … */
+  embedPreview?(url: string): EmbedPreview | undefined
+}
+
+interface EmbedPreview {
+  readonly title?: string
+  readonly authorName?: string
+  readonly thumbnail?: ImageSource   // servie par le site (/_cogenta/embeds/…), jamais par le service
+}
+```
+
+La miniature est une copie servie par le site : un thème peut l'afficher **avant le
+consentement** sans que le navigateur du visiteur contacte le service. `embedFrameTitle` et
+`renderEmbedPreview` (`@cogenta/theme-kit`) donnent le titre accessible du lecteur et
+l'aperçu de la carte de consentement. Un thème qui ignore `embedPreview` rend le bloc comme
+avant `1.9` ; un hôte qui ne le fournit pas aussi.
+
 ### Versionnement
 
 `theme@1.x`. Ajouter une entrée à `ctx` est mineur. En modifier une est majeur.
@@ -1261,6 +1287,10 @@ clôture de L25). Test : `packages/cli/test/entry-field-values.test.ts`.
 `TermArchiveInput.intro`, tous deux optionnels. Un thème `1.7` les ignore et rend
 exactement comme avant ; un hôte qui ne les renseigne pas produit le même rendu. Test :
 `packages/cli/test/serve-author-archive.test.ts`, `packages/theme-kit/test/author.test.ts`.
+
+**`theme@1.9` (L38, 2026-09-17)** — strictement additif : `RenderContext.embedPreview`,
+optionnel. Un thème `1.8` l'ignore et rend exactement comme avant. Test :
+`packages/cli/test/serve-embed-previews.test.ts`.
 
 ---
 

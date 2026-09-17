@@ -1128,3 +1128,29 @@ a.cg-search__title:hover {
 .cg-archive__bio {
   margin: 0;
 }
+
+/* An embed's preview (theme@1.9): the thumbnail the site serves itself, the
+   title and author its provider gave — shown before consent, safely. */
+.ce-embed__preview {
+  margin-block-end: 1rem;
+}
+
+.ce-embed__thumbnail {
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 40rem;
+  block-size: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.ce-embed__title {
+  margin: 0.75rem 0 0;
+  font-weight: 600;
+}
+
+.ce-embed__author {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--ce-ink-muted);
+}

@@ -78,6 +78,10 @@ export const ERROR_CODES = [
   'PATTERN_UNKNOWN',
   'PATTERN_INVALID',
 
+  // Embed previews (L38)
+  'EMBED_URL_INVALID',
+  'EMBED_RATE_LIMITED',
+
   // Blocks
   'BLOCK_UNKNOWN',
   'BLOCK_INVALID',

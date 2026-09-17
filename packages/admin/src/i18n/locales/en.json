@@ -5225,5 +5225,13 @@
     "url": "Web address",
     "subtitle": "Subtitle",
     "seoImage": "Social sharing image"
+  },
+  "embedAssist": {
+    "loading": "Looking up the preview…",
+    "failed": "No preview: the service did not answer. Choose the service and the proportions yourself.",
+    "noPreview": "{{provider}} has no automatic preview: the link will be shown as it is.",
+    "unknownProvider": "Service not recognised: choose “Other” to show a link to this content.",
+    "previewLabel": "Embedded content preview",
+    "byline": "{{provider}} · {{author}}"
   }
 }

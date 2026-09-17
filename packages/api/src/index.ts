@@ -9,6 +9,8 @@
 
 export * from './access/index.js'
 export * from './content/index.js'
+export * from './embeds/oembed.js'
+export * from './embeds/preview-service.js'
 export * from './graphql/index.js'
 export * from './notices/index.js'
 export * from './rest/index.js'

@@ -124,6 +124,12 @@ export interface StartServerOptions {
   readonly updatesAutoCheckTickMs?: number
   /** Replaces the real `fetch` to registry.npmjs.org in every update-system call — see `ServeOptions.updatesFetchImpl`. */
   readonly updatesFetchImpl?: typeof fetch
+  /**
+   * The `fetch` the embed preview resolver (L38) calls providers with. Every
+   * test server gets an offline one unless it passes its own: a page holding
+   * an embed must never make a test reach YouTube.
+   */
+  readonly embedsFetchImpl?: typeof fetch
   /** Replaces the real `npm install` child process the update system would otherwise run — see `ServeOptions.updatesRunInstall`. */
   readonly updatesRunInstall?: RunPackageInstall
 }
@@ -175,6 +181,8 @@ export async function startServer(
     ...(options.updatesAutoCheckTickMs === undefined
       ? {}
       : { updatesAutoCheckTickMs: options.updatesAutoCheckTickMs }),
+    embedsFetchImpl:
+      options.embedsFetchImpl ?? (async () => new Response('offline in tests', { status: 503 })),
     ...(options.updatesFetchImpl === undefined
       ? {}
       : { updatesFetchImpl: options.updatesFetchImpl }),

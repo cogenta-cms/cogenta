@@ -1,5 +1,12 @@
 import type { EmbedBlock } from '@cogenta/blocks'
-import { aspectRatio, type HtmlElement, h, type RenderContext } from '@cogenta/theme-kit'
+import {
+  aspectRatio,
+  embedFrameTitle,
+  type HtmlElement,
+  h,
+  type RenderContext,
+  renderEmbedPreview,
+} from '@cogenta/theme-kit'
 
 /**
  * A recorded walkthrough, a talk, a post: embedded in the hairline frame.
@@ -48,6 +55,7 @@ function notice(block: EmbedBlock, ctx: RenderContext, reason: string): HtmlElem
   return h(
     'div',
     { class: 'cd-embed__notice' },
+    renderEmbedPreview(ctx, block.url, 'cd-embed'),
     h('p', { class: 'cd-embed__reason' }, reason),
     h(
       'a',
@@ -90,7 +98,7 @@ export function renderEmbed(block: EmbedBlock, ctx: RenderContext): HtmlElement 
           : h('iframe', {
               class: 'cd-embed__iframe',
               src: source,
-              title: ctx.t('embed.title', { provider: block.provider }),
+              title: embedFrameTitle(ctx, block.provider, block.url),
               loading: 'lazy',
               referrerpolicy: 'strict-origin-when-cross-origin',
               allow:

@@ -946,3 +946,29 @@ img {
 .cg-archive__bio {
   margin: 0;
 }
+
+/* An embed's preview (theme@1.9): the thumbnail the site serves itself, the
+   title and author its provider gave — shown before consent, safely. */
+.cg-embed__preview {
+  margin-block-end: 1rem;
+}
+
+.cg-embed__thumbnail {
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 40rem;
+  block-size: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.cg-embed__title {
+  margin: 0.75rem 0 0;
+  font-weight: 600;
+}
+
+.cg-embed__author {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--cg-ink-muted);
+}

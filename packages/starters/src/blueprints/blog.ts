@@ -280,6 +280,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
     title: 'Why I still draft in plain text',
     slug: 'plain-text-editor',
     topic: 'Drafts',
+    cover: 'typing',
     excerpt:
       'Nine writing apps in eight years, and the one file format that outlasted every one of them.',
     publishedAt: '2024-02-11T08:30:00.000Z',
@@ -331,6 +332,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
     title: 'The long way to the library',
     slug: 'the-long-way-to-the-library',
     topic: 'Libraries',
+    cover: 'library',
     excerpt:
       'Forty minutes on foot instead of twelve on the bus, twice a week, and what the extra half hour turned out to be for.',
     publishedAt: '2024-05-19T07:15:00.000Z',
@@ -567,6 +569,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
     title: 'Books I reread every winter',
     slug: 'books-i-reread-every-winter',
     topic: 'Rereading',
+    cover: 'pour-over',
     excerpt:
       'Five books that come off the shelf in the first week of January, and why rereading has become more useful to me than reading something new.',
     publishedAt: '2025-01-12T09:10:00.000Z',
@@ -1321,10 +1324,14 @@ function blogPalette(): Palette {
 }
 
 /**
- * Five photographs, all bundled (`assets/photos/blog/`), each cropped once
+ * Seven photographs, all bundled (`assets/photos/blog/`), each cropped once
  * to remove anything a reader would try and fail to read. `spec` is the
  * procedural fallback `seedDemoMedia` would use if a file were ever missing;
  * with every file present it is never rendered.
+ *
+ * One per essay (a "Letter" stays text-only by design — a personal letter is
+ * not a produced piece the way an essay is), so the front of the site is
+ * never carrying the same photograph in three places at once.
  */
 export const BLOG_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
@@ -1356,6 +1363,18 @@ export const BLOG_MEDIA_SPECS: readonly DemoMediaSpec[] = [
     spec: coverArt(blogPalette(), 5),
     alt: 'Water pouring into coffee grounds inside a paper filter cone during a pour-over',
     photo: 'blog/pour-over.jpg',
+  },
+  {
+    name: 'typing',
+    spec: coverArt(blogPalette(), 6),
+    alt: 'A close view of two hands typing on a laptop keyboard, one wearing a wedding ring',
+    photo: 'blog/typing.jpg',
+  },
+  {
+    name: 'library',
+    spec: coverArt(blogPalette(), 7),
+    alt: 'The red-brick facade of a small public library, its door framed by an arch and two lamps',
+    photo: 'blog/library.jpg',
   },
 ]
 

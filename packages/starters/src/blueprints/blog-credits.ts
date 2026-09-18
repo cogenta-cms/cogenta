@@ -65,4 +65,19 @@ export const BLOG_PHOTO_CREDITS: readonly PhotoCredit[] = [
     licenceUrl: 'https://creativecommons.org/licenses/by/2.0/',
     source: 'https://www.flickr.com/photos/195403219@N08/52135390054',
   },
+  {
+    file: 'typing.jpg',
+    title: 'Hands Typing on Laptop Keyboard',
+    author: 'Image Catalog',
+    licence: 'CC0 1.0',
+    source: 'https://www.flickr.com/photos/132795455@N08/21713977623',
+  },
+  {
+    file: 'library.jpg',
+    title: 'Ashby Public Library',
+    author: 'liz west',
+    licence: 'CC BY 2.0',
+    licenceUrl: 'https://creativecommons.org/licenses/by/2.0/',
+    source: 'https://www.flickr.com/photos/53133240@N00/4128511674',
+  },
 ]

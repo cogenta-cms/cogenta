@@ -106,12 +106,13 @@ describe('blog blueprint, content model and demo writing', () => {
     expect(years.size).toBeGreaterThanOrEqual(3)
   })
 
-  it('gives a picture to some essays only, every one of them a bundled photograph', () => {
-    const covered = BLOG_DEMO_POSTS.filter((demo) => demo.cover !== undefined)
-    expect(covered.length).toBeGreaterThan(0)
-    expect(covered.length).toBeLessThan(BLOG_DEMO_POSTS.length / 2)
+  it('gives every essay a picture and every letter none, each a bundled photograph', () => {
     const names = new Set(BLOG_MEDIA_SPECS.map((spec) => spec.name))
-    for (const demo of covered) expect(names.has(demo.cover as string), demo.slug).toBe(true)
+    for (const demo of BLOG_DEMO_POSTS) {
+      const isLetter = demo.title.startsWith('Letter:')
+      expect(demo.cover !== undefined, demo.slug).toBe(!isLetter)
+      if (demo.cover !== undefined) expect(names.has(demo.cover), demo.slug).toBe(true)
+    }
   })
 
   it('files every essay under a category and at least one tag the blueprint declares', () => {

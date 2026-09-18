@@ -149,7 +149,7 @@ describe('scaffoldSite, blog blueprint', () => {
     })
   })
 
-  it('seeds the home, about, archive and newsletter pages, published', async () => {
+  it('seeds the home, about, archive, newsletter and photo-credits pages, published', async () => {
     await withDatabase(async (db) => {
       const pages = await createContentStore({ db, collection: page }).list()
       expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual([
@@ -157,6 +157,7 @@ describe('scaffoldSite, blog blueprint', () => {
         'archive',
         'home',
         'newsletter',
+        'photo-credits',
       ])
       expect(pages.items.every((entry) => entry.status === 'published')).toBe(true)
     })

@@ -13,6 +13,7 @@ import {
   validateTaxonomySet,
 } from '@cogenta/schema'
 import { coverArt, type Palette } from '../demo-art/compositions.js'
+import { BLOG_PHOTO_CREDITS } from './blog-credits.js'
 import {
   type BlueprintContentPack,
   type RecommendedAgentHint,
@@ -1275,6 +1276,26 @@ export function buildBlogDemoPages(
         },
       ],
     },
+    {
+      title: 'Photo credits',
+      slug: 'photo-credits',
+      blocks: [
+        {
+          _key: 'demo-credits-prose',
+          _type: 'prose',
+          _version: BLOCK_VERSION,
+          body: [
+            p(
+              'Every photograph on this site is real, not generated, and is used under the licence ' +
+                'its photographer chose. Cropped and resized; nothing else changed.',
+            ),
+            ...BLOG_PHOTO_CREDITS.map((credit) =>
+              bullet(`${credit.title} · ${credit.author} · ${credit.licence} · ${credit.source}`),
+            ),
+          ],
+        },
+      ],
+    },
   ]
 }
 
@@ -1309,31 +1330,31 @@ export const BLOG_MEDIA_SPECS: readonly DemoMediaSpec[] = [
   {
     name: 'notebook-and-coffee',
     spec: coverArt(blogPalette(), 1),
-    alt: 'An open lined notebook with a pen across it, beside a cup of black coffee',
+    alt: 'A closed notebook and a kraft envelope beside a latte and a pen on a wooden table',
     photo: 'blog/notebook-and-coffee.jpg',
   },
   {
     name: 'desk',
     spec: coverArt(blogPalette(), 2),
-    alt: 'A white desk by a window with a closed laptop, two notebooks and a small plant',
+    alt: 'A pale desk by a curtained window with an open laptop and a small plant',
     photo: 'blog/desk-setup.jpg',
   },
   {
     name: 'notebooks',
     spec: coverArt(blogPalette(), 3),
-    alt: 'A tall stack of worn notebooks with cloth and leather covers on a wooden desk',
+    alt: 'A tall stack of worn notebooks bound with elastic bands on a wooden bench',
     photo: 'blog/notebooks.jpg',
   },
   {
     name: 'platform',
     spec: coverArt(blogPalette(), 4),
-    alt: 'Commuters with backpacks waiting on a station platform beside a train',
+    alt: 'An empty train platform lit by sunrise, with a train approaching in the distance',
     photo: 'blog/platform.jpg',
   },
   {
     name: 'pour-over',
     spec: coverArt(blogPalette(), 5),
-    alt: 'A ceramic coffee dripper on a glass pour-over jug against a pale wall',
+    alt: 'Water pouring into coffee grounds inside a paper filter cone during a pour-over',
     photo: 'blog/pour-over.jpg',
   },
 ]
@@ -1349,6 +1370,7 @@ export const BLOG_MENUS: BlueprintMenus = {
     { label: 'About', url: '/about' },
     { label: 'The Sunday letter', url: '/newsletter' },
     { label: 'Feed', url: '/feed.xml' },
+    { label: 'Photo credits', url: '/photo-credits' },
   ],
   headerAction: { label: 'Subscribe', url: '/newsletter' },
 }

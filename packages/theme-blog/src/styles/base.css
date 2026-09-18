@@ -195,13 +195,13 @@ img {
 
 .cg-head {
   padding-block-start: var(--cg-s4);
-  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
+  border-block-start: var(--cg-rule-strong) solid var(--cg-line-ink);
   margin-block-end: var(--cg-s8);
 }
 
 .cg-head__title {
-  font-size: var(--cg-size-subheading);
-  font-weight: var(--cg-weight-regular);
+  font-size: var(--cg-size-heading);
+  font-weight: var(--cg-weight-semibold);
   line-height: var(--cg-leading-heading);
   letter-spacing: var(--cg-tracking-heading);
 }

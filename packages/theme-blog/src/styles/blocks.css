@@ -50,10 +50,6 @@
   letter-spacing: var(--cg-tracking-display);
 }
 
-.cg-hero__media {
-  order: 3;
-}
-
 .cg-hero__image {
   inline-size: 100%;
   aspect-ratio: 3 / 2;
@@ -61,7 +57,6 @@
 }
 
 .cg-hero__aside {
-  order: 4;
   margin-block-start: var(--cg-s6);
 }
 
@@ -71,6 +66,58 @@
   font-size: var(--cg-size-lead);
   line-height: var(--cg-leading-snug);
   color: var(--cg-ink-muted);
+}
+
+/*
+ * With a picture, the essay opens the way its own printed edition would:
+ * the photograph fills the page edge to edge, and the title is set on it,
+ * not beside it — the one moment on the site where an image carries the
+ * whole width. The tint is a flat, uniform tone (`color-mix`, never a
+ * gradient, per the studio charter) over the full frame, exactly the
+ * amount `@cogenta/theme-entreprise` uses for the same purpose in its own
+ * hero, in blog's own ink rather than that theme's near-black.
+ */
+.cg-hero[data-media="present"] {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: flex-end;
+  min-block-size: min(72svh, 38rem);
+  padding-block: var(--cg-s16) clamp(var(--cg-s10), 6vw, var(--cg-s16));
+}
+
+.cg-hero[data-media="present"] .cg-hero__inner {
+  inline-size: 100%;
+}
+
+.cg-hero[data-media="present"] .cg-hero__media {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+
+.cg-hero[data-media="present"] .cg-hero__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--cg-hero-scrim) 40%, transparent);
+}
+
+.cg-hero[data-media="present"] .cg-hero__image {
+  block-size: 100%;
+  aspect-ratio: auto;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+.cg-hero[data-media="present"] .cg-hero__eyebrow {
+  color: var(--cg-hero-ink);
+  border-block-start-color: color-mix(in oklab, var(--cg-hero-ink) 45%, transparent);
+}
+
+.cg-hero[data-media="present"] .cg-hero__title,
+.cg-hero[data-media="present"] .cg-hero__subtitle {
+  color: var(--cg-hero-ink);
 }
 
 @media (min-width: 64rem) {
@@ -89,13 +136,12 @@
     margin-block-start: 0;
   }
 
-  .cg-hero__media {
-    grid-column: 4 / -1;
-    grid-row: 3;
-  }
-
   .cg-hero[data-media="none"] .cg-hero__aside {
     grid-column: 4 / span 6;
+  }
+
+  .cg-hero[data-media="present"] {
+    min-block-size: min(78svh, 44rem);
   }
 
   .cg-hero[data-media="present"] .cg-hero__subtitle {
@@ -131,12 +177,12 @@
 }
 
 .cg-article-head__topic-link {
-  color: var(--cg-ink);
+  color: var(--cg-accent);
   text-decoration-color: transparent;
 }
 
 .cg-article-head__topic-link:hover {
-  color: var(--cg-accent);
+  color: var(--cg-accent-hover);
   text-decoration-color: currentColor;
 }
 
@@ -644,7 +690,7 @@
 
 .cg-story__topic {
   margin: 0 0 var(--cg-s2);
-  color: var(--cg-ink-muted);
+  color: var(--cg-accent);
 }
 
 .cg-story__title {

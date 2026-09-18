@@ -210,6 +210,12 @@
   --cg-action-hover: var(--cogenta-color-accent);
   --cg-action-hover-fg: var(--cogenta-color-accent-fg);
 
+  /* The hero's photo overlay: always a dark tint and always a pale ink,
+     whichever scheme the page itself is in — the same reasoning as a
+     printed page's own ink, which does not invert when the room goes dark. */
+  --cg-hero-scrim: var(--cogenta-color-fg);
+  --cg-hero-ink: var(--cogenta-color-bg);
+
   --cg-image-brightness: 1;
 }
 
@@ -289,6 +295,15 @@
     --cg-action-hover-fg: light-dark(
       var(--cogenta-color-accent-fg),
       oklch(from var(--cogenta-color-accent) 0.2 calc(c * 0.5) h)
+    );
+
+    --cg-hero-scrim: light-dark(
+      var(--cogenta-color-fg),
+      oklch(from var(--cogenta-color-fg) 0.24 calc(c * 0.9) h)
+    );
+    --cg-hero-ink: light-dark(
+      var(--cogenta-color-bg),
+      oklch(from var(--cogenta-color-bg) 0.95 c h)
     );
   }
 }

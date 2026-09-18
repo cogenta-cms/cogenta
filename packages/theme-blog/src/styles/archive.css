@@ -38,7 +38,7 @@
 
 .cg-archive__kicker {
   margin: 0 0 var(--cg-s3);
-  color: var(--cg-ink-muted);
+  color: var(--cg-accent);
 }
 
 .cg-archive__title {

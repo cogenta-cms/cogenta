@@ -209,7 +209,13 @@ function frontStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
   )
 }
 
-/** The rail: the newest essay large beside a column of the rest. */
+/**
+ * The rail: the newest essay large beside a column of the rest. The column's
+ * own items carry no standfirst — a headline and a date, the way a rail of
+ * links reads elsewhere on this theme — so a lead with little of its own to
+ * show (no picture, a short excerpt) is never dwarfed by a taller column
+ * beside it, flex letting the two size to their own content.
+ */
 function railStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
   const [lead, ...rest] = stories
   return h(
@@ -238,7 +244,7 @@ function railStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
             h(
               'li',
               { class: 'cg-rail__item' },
-              renderStory(story, { tag, variant: 'brief', standfirst: true, date: true }),
+              renderStory(story, { tag, variant: 'brief', date: true }),
             ),
           ),
         ),

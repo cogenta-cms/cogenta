@@ -186,13 +186,14 @@ describe('collectionList, grid layout with a title: the rail', () => {
     expect(out.match(/<li class="cg-rail__item">/g)).toHaveLength(3)
   })
 
-  it('gives the lead its date and standfirst, and the column entries theirs — never a picture', () => {
+  it('gives the lead its date and standfirst; the column entries a headline and a date only', () => {
     const out = rail()
     const lead = out.slice(out.indexOf('cg-rail__lead'), out.indexOf('cg-rail__list'))
     expect(lead).toContain('<time datetime="2026-05-31T08:40:00.000Z">May 31, 2026</time>')
     expect(lead).toContain('cg-story__standfirst')
     const column = out.slice(out.indexOf('cg-rail__list'))
     expect(column).not.toContain('<img')
+    expect(column).not.toContain('cg-story__standfirst')
     expect(column).toContain('cg-story--brief')
   })
 })

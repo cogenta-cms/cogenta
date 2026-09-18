@@ -843,18 +843,28 @@
 }
 
 @media (min-width: 64rem) {
+  /*
+   * Flex, not the page's own subgrid: a CSS Grid row is exactly as tall as
+   * its tallest cell whatever `align-items` says, so a lead with no
+   * standfirst or image would still leave the column beside it standing in
+   * a blank run of the page. Flex gives each column its own height, and
+   * `--cg-col`/`--cg-col-gap` (the same tokens the subgrid itself is built
+   * from) keep the two columns on the exact lines a 7/4 split would draw.
+   */
   .cg-rail {
-    display: grid;
-    grid-template-columns: subgrid;
-    grid-column: 1 / -1;
+    display: flex;
+    align-items: flex-start;
+    gap: calc(var(--cg-col) + var(--cg-col-gap) * 2);
   }
 
   .cg-rail__lead {
-    grid-column: 1 / span 7;
+    flex: 0 0 calc(var(--cg-col) * 7 + var(--cg-col-gap) * 6);
+    min-inline-size: 0;
   }
 
   .cg-rail__list {
-    grid-column: 9 / -1;
+    flex: 1 1 0%;
+    min-inline-size: 0;
     margin-block-start: 0;
     padding-block-start: 0;
     border-block-start: none;

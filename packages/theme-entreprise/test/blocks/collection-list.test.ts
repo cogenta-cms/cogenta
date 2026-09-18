@@ -119,4 +119,82 @@ describe('collectionList', () => {
       limit: 5,
     })
   })
+
+  it("prints a case study's client and location under its title, from its own fields", () => {
+    const caseStudy: ContentEntry = {
+      ...(ENTRIES[0] as ContentEntry),
+      id: '0192f0c2-0000-7000-8000-000000000010',
+      client: 'Ardenne Énergies',
+      location: 'Charleville-Mézières',
+    }
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, [caseStudy]))
+    expect(html).toContain(
+      '<p class="cg-entry__attribution">Ardenne Énergies · Charleville-Mézières</p>',
+    )
+  })
+
+  it('carries no attribution line for an entry with neither field', () => {
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, ENTRIES))
+    expect(html).not.toContain('cg-entry__attribution')
+  })
+})
+
+describe('collectionList, a careers listing', () => {
+  const JOBS: readonly ContentEntry[] = [
+    {
+      id: '0192f0c2-0000-7000-8000-000000000020',
+      collection: 'job',
+      locale: 'en',
+      status: 'published',
+      title: 'Senior Field Engineer',
+      team: 'Engineering',
+      location: 'Lyon',
+      contract: 'Permanent',
+      excerpt: 'Commission and maintain sensor networks across the eastern sites.',
+    },
+    {
+      id: '0192f0c2-0000-7000-8000-000000000021',
+      collection: 'job',
+      locale: 'en',
+      status: 'published',
+      // No title, no team, no location: only `contract` marks this as a job.
+      contract: 'Contract',
+    },
+  ]
+
+  it('is read from the entries, not the layout: any entry with a team or a contract is a job', () => {
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, JOBS))
+    expect(html).toContain('data-shape="positions"')
+    expect(html.match(/<li class="cg-position">/g)).toHaveLength(2)
+    expect(html).not.toContain('cg-entry')
+  })
+
+  it('never carries an ordinal or a key figure — neither means anything on a job', () => {
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, JOBS))
+    expect(html).not.toContain('cg-entry__index')
+    expect(html).not.toContain('cg-entry__figure')
+  })
+
+  it('sets the team, location and contract as one meta line, only the parts an entry declares', () => {
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, JOBS))
+    expect(html).toContain('<p class="cg-position__meta">Engineering · Lyon · Permanent</p>')
+    expect(html).toContain('<p class="cg-position__meta">Contract</p>')
+  })
+
+  it('gives every row an explicit "Apply", never the arrow standing alone for it', () => {
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, JOBS))
+    expect(html.match(/<a class="cg-position__apply" href="[^"]+">Apply<span/g)).toHaveLength(2)
+  })
+
+  it("keeps a job untitled by `entryTitle`'s own fallback, same as any other entry", () => {
+    const html = serialize(renderCollectionList(BLOCKS.collectionList, ctx, JOBS))
+    expect(html).toContain('entry.untitled')
+  })
+
+  it("reads apply in French from the site's own locale", () => {
+    const html = serialize(
+      renderCollectionList(BLOCKS.collectionList, { ...ctx, locale: 'fr' }, JOBS),
+    )
+    expect(html).toContain('>Postuler<')
+  })
 })

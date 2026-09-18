@@ -670,6 +670,18 @@
   color: var(--cg-ink-muted);
 }
 
+/* A case study's credit line: whose result this was, read from the entry's
+   own client/location fields rather than left to the summary's prose. */
+.cg-entry__attribution {
+  margin: var(--cg-s2) 0 0;
+  font-family: var(--cg-font-label);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-label);
+  text-transform: uppercase;
+  color: var(--cg-ink-subtle);
+}
+
 /* The arrow sits after the title's last word, inside the same link. As an
    inline-block it does not inherit the title's underline. */
 .cg-entry__arrow {
@@ -696,6 +708,113 @@
   font-family: var(--cg-font-display);
   font-size: var(--cg-text-xl);
   color: var(--cg-ink-muted);
+}
+
+/* --------------------------------------------------------------------------
+   collectionList, positions: a careers listing.
+
+   A job has no photograph and nothing an ordinal number or a key figure
+   would mean, so it never borrows the editorial card: the layout an editor
+   chose still picks `list`/`grid`/`carousel` elsewhere in the vocabulary,
+   but a list of openings reads as a plain vertical list regardless — a
+   photo grid or a row that scrolls sideways serves a case study, not a
+   reader comparing which role to apply to.
+   -------------------------------------------------------------------------- */
+
+.cg-collection[data-shape="positions"] .cg-collection__items {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.cg-collection[data-shape="positions"] .cg-collection__viewport {
+  overflow: visible;
+  scroll-snap-type: none;
+}
+
+.cg-position {
+  padding-block: var(--cg-s6);
+  border-block-end: var(--cg-rule) solid var(--cg-line);
+}
+
+.cg-position:first-child {
+  padding-block-start: 0;
+}
+
+.cg-position__title {
+  font-size: var(--cg-text-xl);
+  line-height: 1.18;
+}
+
+.cg-position__link {
+  color: var(--cg-ink);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.18em;
+  transition: text-decoration-color var(--cg-duration) var(--cg-ease);
+}
+
+.cg-position:hover .cg-position__link,
+.cg-position__link:focus-visible {
+  text-decoration-color: currentColor;
+}
+
+.cg-position__meta {
+  margin: var(--cg-s2) 0 0;
+  font-family: var(--cg-font-label);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-label);
+  text-transform: uppercase;
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--cg-ink-subtle);
+}
+
+.cg-position__summary {
+  margin: var(--cg-s3) 0 0;
+  max-inline-size: 60ch;
+  color: var(--cg-ink-muted);
+}
+
+.cg-position__apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin: var(--cg-s4) 0 0;
+  color: var(--cg-accent);
+  font-family: var(--cg-font-label);
+  font-size: var(--cg-text-xs);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-label);
+  text-transform: uppercase;
+}
+
+.cg-position__arrow {
+  display: inline-block;
+  font-size: 0.85em;
+}
+
+@media (min-width: 48rem) {
+  .cg-position {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--cg-col-gap);
+    align-items: start;
+  }
+
+  .cg-position__title,
+  .cg-position__meta,
+  .cg-position__summary {
+    grid-column: 1;
+  }
+
+  .cg-position__apply {
+    grid-column: 2;
+    grid-row: 1;
+    margin-block-start: 0.3em;
+    white-space: nowrap;
+  }
 }
 
 /* list: alternating case-study rows. */

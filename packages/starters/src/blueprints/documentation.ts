@@ -93,6 +93,7 @@ export function productNames(siteName: string | undefined): ProductNames {
 
 export const docPage = defineCollection({
   name: 'doc_page',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Doc page', plural: 'Doc pages' },
   routing: { pattern: '/docs/:slug' },
   fields: {

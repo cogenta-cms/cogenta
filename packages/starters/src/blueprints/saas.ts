@@ -90,6 +90,7 @@ const EDITORIAL_PERMISSIONS = {
 
 export const feature = defineCollection({
   name: 'feature',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Feature', plural: 'Features' },
   routing: { pattern: '/features/:slug' },
   fields: {
@@ -126,6 +127,7 @@ export const feature = defineCollection({
 
 export const changelog = defineCollection({
   name: 'changelog',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Changelog entry', plural: 'Changelog' },
   routing: { pattern: '/changelog/:slug' },
   fields: {

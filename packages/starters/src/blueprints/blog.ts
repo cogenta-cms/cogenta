@@ -119,6 +119,7 @@ export const post = defineCollection({
 
 export const page = defineCollection({
   name: 'page',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Page', plural: 'Pages' },
   routing: { pattern: '/:slug' },
   fields: {

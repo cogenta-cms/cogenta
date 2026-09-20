@@ -85,6 +85,7 @@ const PERMISSIONS = {
  */
 export const event = defineCollection({
   name: 'event',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Event', plural: 'Events' },
   routing: { pattern: '/events/:slug' },
   fields: {
@@ -115,6 +116,7 @@ export const event = defineCollection({
 /** A programme: something the charity runs every week or every season. */
 export const programme = defineCollection({
   name: 'programme',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Programme', plural: 'Programmes' },
   routing: { pattern: '/what-we-do/:slug' },
   fields: {

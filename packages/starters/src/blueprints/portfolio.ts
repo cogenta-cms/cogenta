@@ -94,6 +94,7 @@ export const team: TaxonomyDefinition = defineTaxonomy({
 
 export const project = defineCollection({
   name: 'project',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Project', plural: 'Projects' },
   routing: { pattern: '/work/:slug' },
   fields: {

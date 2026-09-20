@@ -111,6 +111,7 @@ export function vitrineSchema(copy: VitrineCopy): VitrineSchema {
 
   const solution = defineCollection({
     name: 'solution',
+    versioning: { drafts: true, history: true },
     labels: schema.labels.solution,
     routing: { pattern: schema.routes.solution },
     fields: {
@@ -129,6 +130,7 @@ export function vitrineSchema(copy: VitrineCopy): VitrineSchema {
 
   const caseStudy = defineCollection({
     name: 'case_study',
+    versioning: { drafts: true, history: true },
     labels: schema.labels.caseStudy,
     routing: { pattern: schema.routes.caseStudy },
     fields: {
@@ -150,6 +152,7 @@ export function vitrineSchema(copy: VitrineCopy): VitrineSchema {
 
   const testimonial = defineCollection({
     name: 'testimonial',
+    versioning: { drafts: true, history: true },
     labels: schema.labels.testimonial,
     fields: {
       authorName: f.text({ required: true, max: 120 }),
@@ -162,6 +165,7 @@ export function vitrineSchema(copy: VitrineCopy): VitrineSchema {
 
   const job = defineCollection({
     name: 'job',
+    versioning: { drafts: true, history: true },
     labels: schema.labels.job,
     routing: { pattern: schema.routes.job },
     fields: {
@@ -180,6 +184,7 @@ export function vitrineSchema(copy: VitrineCopy): VitrineSchema {
 
   const post = defineCollection({
     name: 'post',
+    versioning: { drafts: true, history: true },
     labels: schema.labels.post,
     routing: { pattern: schema.routes.post },
     fields: {

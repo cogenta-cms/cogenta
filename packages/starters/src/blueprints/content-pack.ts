@@ -191,6 +191,12 @@ export function definePageCollection(routingPattern: string): CollectionDefiniti
     name: 'page',
     labels: { singular: 'Page', plural: 'Pages' },
     routing: { pattern: routingPattern },
+    // Both halves, because both are missing without this line: no `drafts`
+    // means every save of a live page goes straight to the public site, and
+    // no `history` means the store keeps its bare minimum of two versions —
+    // so the admin's History tab shows at most two, and restoring an old one
+    // evicts it.
+    versioning: { drafts: true, history: true },
     fields: {
       title: f.text({ required: true, max: 200 }),
       slug: f.slug({ from: 'title', unique: true }),

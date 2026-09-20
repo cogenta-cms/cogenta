@@ -49,6 +49,34 @@ describe('every blueprint we ship', () => {
     })
   }
 
+  /**
+   * A collection an editor publishes needs the two halves of versioning that
+   * make editing published work survivable, and both live in one object:
+   *
+   * - `drafts`, without which every save of a published entry goes straight
+   *   to the public page — there is no such thing as an unpublished edit;
+   * - `history`, without which the store keeps its bare minimum of two
+   *   versions, so the admin's History tab shows at most two and restoring
+   *   an old one evicts it.
+   *
+   * The contract makes both opt-in per collection, deliberately (unlimited
+   * history is a slow leak). What was not deliberate: of the twenty-five
+   * publishable collections the nine blueprints ship, exactly one declared
+   * them — `blog`'s `post`. Every other shipped site had a History tab that
+   * could not hold a history, and no way to draft a change to a live page.
+   */
+  for (const [blueprint, pack] of Object.entries(BLUEPRINT_CONTENT_PACKS)) {
+    for (const collection of pack.collections) {
+      // Only what an editor publishes: a collection with no `publish` is not
+      // something a reader ever sees a live version of.
+      if (rolesFor(collection, 'publish').length === 0) continue
+      it(`keeps drafts and history on "${collection.name}" of ${blueprint}`, () => {
+        expect(collection.versioning?.drafts).toBe(true)
+        expect(collection.versioning?.history).toBe(true)
+      })
+    }
+  }
+
   // The rule above is only worth as much as its reading of an undeclared
   // action, so this pins that reading rather than trusting it.
   it('reads an undeclared action as granting nothing, which is what makes the rule above matter', () => {

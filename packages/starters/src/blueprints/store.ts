@@ -62,6 +62,7 @@ const PERMISSIONS = {
 
 export const product = defineCollection({
   name: 'product',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Product', plural: 'Products' },
   routing: { pattern: '/shop/:slug' },
   fields: {
@@ -104,6 +105,7 @@ export const product = defineCollection({
 
 export const category = defineCollection({
   name: 'category',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Category', plural: 'Categories' },
   routing: { pattern: '/category/:slug' },
   fields: {

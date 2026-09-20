@@ -86,6 +86,7 @@ export const author: TaxonomyDefinition = defineTaxonomy({
 
 export const article = defineCollection({
   name: 'article',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Article', plural: 'Articles' },
   routing: { pattern: '/articles/:slug' },
   fields: {

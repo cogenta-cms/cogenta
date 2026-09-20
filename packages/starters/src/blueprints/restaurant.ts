@@ -61,6 +61,7 @@ const PERMISSIONS = {
 
 export const menuItem = defineCollection({
   name: 'menu_item',
+  versioning: { drafts: true, history: true },
   labels: { singular: 'Dish', plural: 'Menu' },
   routing: { pattern: '/menu/:slug' },
   fields: {

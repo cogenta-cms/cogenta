@@ -1,6 +1,5 @@
 ---
 '@cogenta/api': minor
-'@cogenta/admin': patch
 ---
 
 Open the image editor on the crop that is currently applied.
@@ -17,5 +16,9 @@ currently applied. The parameters were written to storage on every edit and
 read only inside the media router.
 
 `GET /api/media/{id}` now returns `lastEdit` beside `edited`, on the
-single-asset read where `edited` already lives, and the editor opens on those
-values. An image nobody has edited is unchanged: no `lastEdit`, default frame.
+single-asset read where `edited` already lives, and the admin's image editor
+opens on those values. An image nobody has edited is unchanged: no
+`lastEdit`, default frame.
+
+(`@cogenta/admin` is private and never published, so it carries no changeset
+of its own — the admin-side half of this change ships with the site build.)

@@ -476,6 +476,16 @@ export function createMenuRouter(options: MenuRouterOptions): MenuRouter {
       if (method === 'PATCH' || method === 'PUT') {
         assertWriteAccess(context)
         const body = asRecord(request.body)
+        // "Not accepted here" used to mean "dropped without a word": the
+        // answer was `200`, `parent` was unchanged, and a caller — a script,
+        // an agent, the admin itself one day — had every reason to believe
+        // the item had moved. Refusing costs one branch and says where to go.
+        if (Object.hasOwn(body, 'parent')) {
+          throw invalidBody(
+            'A menu item is not re-parented by editing it.',
+            `Send POST /api/menus/${menuId}/items/${itemId}/move with the new parent.`,
+          )
+        }
         const item = await store.updateItem(itemId, {
           ...(Object.hasOwn(body, 'label') ? { label: requiredItemLabel(body) } : {}),
           ...(Object.hasOwn(body, 'kind') ? { kind: requiredKind(body) } : {}),

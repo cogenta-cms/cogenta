@@ -712,6 +712,39 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     },
   }
 
+  /**
+   * Two fields this route will never apply, refused rather than dropped.
+   *
+   * Both used to be read by nobody: a caller sent `password`, got `201` and a
+   * *different*, generated password in the response, and then could not sign in
+   * with the one they chose. `displayName` came back `null`. Nothing said so.
+   *
+   * Neither is an oversight to fix by starting to honour them. Setting somebody
+   * else's password is deliberately absent from this whole file — the header
+   * says why: an admin who could do it silently could sign in as them, and every
+   * audit entry afterwards would name the wrong person. A display name belongs
+   * to the person it names, through their own profile. So the answer is to say
+   * that, with the route that does work.
+   */
+  function refuseFieldsThisRouteCannotApply(body: Record<string, unknown>): void {
+    if (body['password'] !== undefined) {
+      throw new CogentaError({
+        code: 'QUERY_INVALID',
+        message: 'An account is not created with a password chosen by somebody else.',
+        hint: 'Create it with `invite: true` and let them set their own, or use the password this route generates and returns.',
+        details: { field: 'password' },
+      })
+    }
+    if (body['displayName'] !== undefined) {
+      throw new CogentaError({
+        code: 'QUERY_INVALID',
+        message: 'A display name is set by the person it names, not at account creation.',
+        hint: 'They can set it on their own profile once they sign in.',
+        details: { field: 'displayName' },
+      })
+    }
+  }
+
   async function collectionRoute(
     request: RestRequest,
     actor: Actor,
@@ -790,6 +823,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
       const email = stringField(body, 'email')
       const roles = rolesField(body, 'roles')
       const invite = booleanField(body, 'invite', false)
+      refuseFieldsThisRouteCannotApply(body)
 
       if (invite && options.onInvite !== undefined) {
         const user = await auth.users.create({ email, roles, status: 'invited' })

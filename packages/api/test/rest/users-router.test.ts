@@ -267,6 +267,42 @@ describe('POST /api/users', () => {
     expect(JSON.stringify(reread.body)).not.toContain(password)
   })
 
+  // Both used to be read by nobody: `201`, a *different* generated password in
+  // the response, `displayName: null`, and an admin who believed they had set
+  // both. Signing in with the chosen password then failed with 401, which is
+  // where the surprise landed.
+  it('refuses a password chosen for somebody else, and says what to do instead', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const response = await router().handle(
+      request('POST', '/api/users', {
+        email: 'new@example.com',
+        roles: ['editor'],
+        password: 'Passw0rd!Passw0rd!',
+      }),
+      actorFor(admin.id, ['admin']),
+    )
+
+    expect(response.status).toBe(400)
+    expect(JSON.stringify(response.body)).toContain('invite')
+    // And nothing was created on the way to refusing.
+    expect((await auth.users.list()).some((user) => user.email === 'new@example.com')).toBe(false)
+  })
+
+  it('refuses a display name set on somebody else at creation', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const response = await router().handle(
+      request('POST', '/api/users', {
+        email: 'new@example.com',
+        roles: ['editor'],
+        displayName: 'QA editor',
+      }),
+      actorFor(admin.id, ['admin']),
+    )
+
+    expect(response.status).toBe(400)
+    expect((await auth.users.list()).some((user) => user.email === 'new@example.com')).toBe(false)
+  })
+
   it('refuses an account with no role at all', async () => {
     const admin = await makeUser('root@example.com', ['admin'])
     const response = await router().handle(

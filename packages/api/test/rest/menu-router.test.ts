@@ -440,6 +440,33 @@ describe('createMenuRouter', () => {
       return { menuId, first, second, third }
     }
 
+    // The route has always declined to re-parent — for a good reason, written
+    // beside it: re-parenting rewrites a whole subtree's materialised path,
+    // which correcting a label must never do by accident. It declined by
+    // dropping the field and answering 200, so the caller believed it moved.
+    it('refuses a parent sent to the edit route, names the one that moves, and moves nothing', async () => {
+      const { menuId, first, second } = await menuWithThreeItems()
+
+      const patched = await router.handle(
+        {
+          method: 'PATCH',
+          path: `/api/menus/${menuId}/items/${second.id}`,
+          query: {},
+          body: { parent: first.id },
+        },
+        asAdmin,
+      )
+
+      expect(patched.status).toBe(400)
+      expect(JSON.stringify(patched.body)).toContain('/move')
+
+      const reread = await router.handle(
+        { method: 'GET', path: `/api/menus/${menuId}/items/${second.id}`, query: {}, body: null },
+        asAdmin,
+      )
+      expect((reread.body as { data: { parent: string | null } }).data.parent).toBeNull()
+    })
+
     it('rewrites the whole batch in one call, and the order tied is what a fresh read gives back', async () => {
       const { menuId, first, second, third } = await menuWithThreeItems()
 

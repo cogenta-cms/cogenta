@@ -5,6 +5,7 @@ import {
   buildMetaTags,
   isIndexable,
   isPublished,
+  isPublishedEntry,
   isSeoNoindexed,
   type LinkSuggestion,
   type MetadataOptions,
@@ -481,7 +482,16 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
 
     const totalUrls = collectionReports.reduce((sum, report) => sum + report.urlCount, 0)
 
-    const publishedResources = allResources.filter((resource) => isPublished(resource.entry))
+    // `isPublishedEntry`, not `isPublished`: this scan lists as the signed-in
+    // admin so it can see collections the public role cannot, and the
+    // gateway derives the face from the permission layer — there is no
+    // `state:` argument to ask for the published one, by design. So every
+    // entry with an unpublished edit arrives in its working face, and
+    // `isPublished` (which refuses that face, rightly, for anything it would
+    // render) answered false for all of them: zero published entries beside
+    // a sitemap of fifteen URLs in the same response, and every content
+    // check below silently scanning an empty array.
+    const publishedResources = allResources.filter((resource) => isPublishedEntry(resource.entry))
     const noindexCount = publishedResources.filter((resource) => isSeoNoindexed(resource)).length
 
     const missingDescriptionCount: { collection: string; id: string }[] = []

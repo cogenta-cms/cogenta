@@ -312,6 +312,58 @@ describe('/api/seo', () => {
       expect(data.content.publishedCount).toBe(1)
     })
 
+    /**
+     * The case the test above never reaches: an entry that is published *and*
+     * has an unpublished edit.
+     *
+     * This scan lists as the signed-in admin, so it can see collections the
+     * public role cannot — and the gateway derives the face from the
+     * permission layer, with no `state:` argument to ask for the published
+     * one. So such an entry arrives in its working face, and the gate used
+     * here refused that face for every one of them: zero published entries
+     * beside a non-empty sitemap in the same response, with every content
+     * check below scanning an empty array as a result.
+     */
+    it('still counts an entry that is published but has an unpublished edit', async () => {
+      const created = await articleStore.create({
+        values: { title: 'Hello world', slug: 'hello-world' },
+      })
+      await articleStore.publish(created.id)
+      await articleStore.update(created.id, { values: { title: 'Hello world, revised' } })
+
+      const response = await ask('GET', '/api/seo/diagnostics', undefined, actor('admin'))
+      const data = (response.body as { data: SeoDiagnostics }).data
+      expect(data.sitemap.totalUrls).toBe(1)
+      expect(data.content.publishedCount).toBe(1)
+    })
+
+    /**
+     * And the consequence that mattered more than the number: every content
+     * check is computed over the same set, so an empty set made the whole
+     * "content quality" panel inert — missing descriptions, over-long titles
+     * and duplicate titles all reporting zero whatever the site contained.
+     */
+    it('keeps checking content quality on an entry with an unpublished edit', async () => {
+      const first = await articleStore.create({
+        values: { title: 'The very same title', slug: 'one' },
+      })
+      const second = await articleStore.create({
+        values: { title: 'The very same title', slug: 'two' },
+      })
+      // A distinct slug each, since it is unique — UUIDv7 ids are time
+      // ordered and share a prefix, so deriving one from the id gives two
+      // entries the same value.
+      for (const [index, entry] of [first, second].entries()) {
+        await articleStore.publish(entry.id)
+        await articleStore.update(entry.id, { values: { slug: `edited-${index}` } })
+      }
+
+      const response = await ask('GET', '/api/seo/diagnostics', undefined, actor('admin'))
+      const data = (response.body as { data: SeoDiagnostics }).data
+      expect(data.content.publishedCount).toBe(2)
+      expect(data.content.duplicateTitles.length).toBeGreaterThan(0)
+    })
+
     it('never regresses the L10 isPublished bug: a published entry with no publishedAt field still counts', async () => {
       // `seo_route_article` declares no `publishedAt` field at all — exactly the
       // shape that made every page `noindex` and every sitemap empty before L10

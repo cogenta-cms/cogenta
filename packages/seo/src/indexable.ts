@@ -18,6 +18,30 @@ export interface IndexableOptions {
   readonly now?: Date
 }
 
+/**
+ * Whether the **entry** is published, whichever face of it the caller is
+ * holding.
+ *
+ * `isPublished` below answers a different question — whether *this face* may
+ * be rendered — and refuses the working face outright, because shipping it
+ * would publish the paragraph an editor typed a minute ago. That is right
+ * for a feed, a sitemap or a page render, and wrong for a caller that is
+ * deliberately holding the working face and asking about the entry behind
+ * it.
+ *
+ * The SEO diagnostic is exactly that caller: it lists as the signed-in
+ * admin so it can see collections the public role cannot, which means every
+ * entry with an unpublished edit comes back in its working face. Asking
+ * `isPublished` there reported zero published entries on a site whose
+ * sitemap listed fifteen URLs in the same response — and silently emptied
+ * every content check built on that set, so missing descriptions, over-long
+ * titles and duplicate titles all reported zero too.
+ */
+export function isPublishedEntry(entry: ContentEntry, options: IndexableOptions = {}): boolean {
+  if (entry.status !== 'published') return false
+  return publicationDateHasPassed(entry, options)
+}
+
 export function isPublished(entry: ContentEntry, options: IndexableOptions = {}): boolean {
   // `scheduled` and `archived` are both "not public right now", and `draft`
   // never was. Only one of the four statuses means published (contract A).
@@ -42,6 +66,11 @@ export function isPublished(entry: ContentEntry, options: IndexableOptions = {})
   // only refines it with *when*. With no date there is nothing to refine, and
   // nothing can have been scheduled either — a future date cannot be stored in
   // a field the collection does not declare.
+  return publicationDateHasPassed(entry, options)
+}
+
+/** Shared by both questions above: the `publishedAt` half of "is it out yet". */
+function publicationDateHasPassed(entry: ContentEntry, options: IndexableOptions): boolean {
   if (entry.publishedAt === null) return true
 
   // A published status with a future `publishedAt` is a scheduled entry whose

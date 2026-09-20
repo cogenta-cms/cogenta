@@ -4561,6 +4561,52 @@ async function recordAdminThemeAudit(
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 
+/**
+ * The site-shaping writes that were not being journalled at all: menus and
+ * their items, widget placements, redirects, and the active public theme.
+ *
+ * Settings, media, API keys, role permissions and the admin template each
+ * had their own recorder; these four never did, so an audit log a person
+ * opens to answer "who changed the navigation" was silent on it. Found by
+ * an audit that made one of each and compared the newest journal entry
+ * before and after (2026-09-19).
+ *
+ * One recorder rather than four near-copies: unlike the others, these have
+ * nothing route-specific to read out of the response — the action name and
+ * the resource path are the whole entry. A `GET` writes nothing, a failed
+ * write writes nothing, and a failed journal write never undoes the change
+ * it was describing, exactly the restraint every recorder above takes.
+ */
+async function recordSiteShapeAudit(
+  site: Site,
+  actor: AccessContext['actor'],
+  method: string,
+  pathname: string,
+  action: 'menu.write' | 'widget.write' | 'redirect.write' | 'theme.write',
+  response: RestResponse,
+  logger: Logger,
+): Promise<void> {
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return
+  if (response.status < 200 || response.status >= 300) return
+
+  // The id the write landed on, when the router names one back. A DELETE
+  // answers 204 with no body, so the path is what identifies it there.
+  const id = (response.body as { readonly data?: { readonly id?: unknown } } | null)?.data?.id
+
+  await site.auth.audit
+    .record({
+      actorId: actor.id,
+      actorRoles: actor.roles,
+      action,
+      diff: {
+        method,
+        path: pathname,
+        ...(typeof id === 'string' ? { id } : {}),
+      },
+    })
+    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
 function writeRestResponse(res: ServerResponse, response: RestResponse): void {
   res.writeHead(response.status, response.headers)
   // A string body (the audit log's CSV export, fiche 21 task 2) is written
@@ -5299,7 +5345,17 @@ export function createRequestListener(
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.menuRouter.handle(request, context))
+        const response = await site.menuRouter.handle(request, context)
+        writeRestResponse(res, response)
+        await recordSiteShapeAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          'menu.write',
+          response,
+          logger,
+        )
         return
       }
 
@@ -5546,7 +5602,17 @@ export function createRequestListener(
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.widgetRouter.handle(request, context))
+        const response = await site.widgetRouter.handle(request, context)
+        writeRestResponse(res, response)
+        await recordSiteShapeAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          'widget.write',
+          response,
+          logger,
+        )
         return
       }
 
@@ -5554,7 +5620,17 @@ export function createRequestListener(
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.redirectRouter.handle(request, context))
+        const response = await site.redirectRouter.handle(request, context)
+        writeRestResponse(res, response)
+        await recordSiteShapeAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          'redirect.write',
+          response,
+          logger,
+        )
         return
       }
 
@@ -6834,7 +6910,17 @@ export function createRequestListener(
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.themeRouter.handle(request, context.actor))
+        const response = await site.themeRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        await recordSiteShapeAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          'theme.write',
+          response,
+          logger,
+        )
         return
       }
 

@@ -439,13 +439,21 @@ export function createRedirectRouter(options: RedirectRouterOptions): RedirectRo
       const to = optionalPath(body, 'to')
       const status = optionalStatus(body)
       const reason = optionalReason(body)
+      const from = requiredField(body, 'from', '{ "from": "/old-page", "to": "/new-page" }')
+
+      // One path has one rule: `store.add` treats a second rule leaving the
+      // same path as a replace, deliberately and by its own documentation.
+      // What it did not do was say so — a `201` with a fresh identifier reads
+      // as "you now have two", and a second POST to the same `from` quietly
+      // changed where the first one pointed. `200` is what a replace is.
+      const replaced = (await store.list()).some((rule) => rule.from === normalisePath(from))
       const record = await store.add({
-        from: requiredField(body, 'from', '{ "from": "/old-page", "to": "/new-page" }'),
+        from,
         ...(to === undefined ? {} : { to }),
         ...(status === undefined ? {} : { status }),
         ...(reason === undefined ? {} : { reason }),
       })
-      return jsonResponse(201, { data: serialise(record) })
+      return jsonResponse(replaced ? 200 : 201, { data: serialise(record) })
     }
 
     if (method === 'PATCH') {

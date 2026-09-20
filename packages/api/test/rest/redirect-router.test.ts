@@ -121,6 +121,29 @@ describe('the redirect transport', () => {
       expect(dataOf<Redirect[]>(listed)).toHaveLength(1)
     })
 
+    // One path has one rule, on purpose: a second rule leaving the same path
+    // replaces the first. Both POSTs used to answer `201` with a fresh
+    // identifier, which reads as "you now have two" — and the first rule's
+    // destination had silently changed under whoever wrote it.
+    it('answers 200, not 201, when a second rule replaces one that already left that path', async () => {
+      const first = await router.handle(
+        request('POST', { body: { from: '/old-pricing', to: '/pricing' } }),
+        asAdmin,
+      )
+      expect(first.status).toBe(201)
+
+      const second = await router.handle(
+        request('POST', { body: { from: '/old-pricing', to: '/security', status: 302 } }),
+        asAdmin,
+      )
+      expect(second.status).toBe(200)
+      expect(dataOf<Redirect>(second).to).toBe('/security')
+
+      // Still one rule, which is the behaviour this status code now describes.
+      const listed = await router.handle(request('GET'), asAdmin)
+      expect(dataOf<Redirect[]>(listed)).toHaveLength(1)
+    })
+
     it('accepts an explicit 302 and reason', async () => {
       const created = await router.handle(
         request('POST', {

@@ -148,32 +148,16 @@ export function toBlockZoneEntry(block: VocabularyBlock): {
 export const SEO_FIELDS = {
   seoTitle: f.text({
     max: 60,
-    admin: {
-      label: 'SEO title',
-      help: 'Overrides the browser tab title and the title shown in search results. Leave blank to use the page title.',
-    },
   }),
   seoDescription: f.text({
     max: 160,
     multiline: true,
-    admin: {
-      label: 'SEO description',
-      help: 'The summary shown under the title in search results. Leave blank to derive one from the content.',
-    },
   }),
   seoImage: f.media({
     accept: ['image'],
-    admin: {
-      label: 'SEO image',
-      help: 'Used for social previews (Open Graph, Twitter Card). Leave blank to fall back to the page content.',
-    },
   }),
   seoNoindex: f.boolean({
     default: false,
-    admin: {
-      label: 'Hide from search engines',
-      help: 'Adds a "noindex" instruction and removes this entry from the sitemap.',
-    },
   }),
 } as const
 

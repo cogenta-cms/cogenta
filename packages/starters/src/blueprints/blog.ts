@@ -91,10 +91,6 @@ export const post = defineCollection({
     // own `kicker` field.
     topic: f.text({
       max: 60,
-      admin: {
-        label: 'Topic',
-        help: 'The short label a listing card sets above its title, such as a subject narrower than the category.',
-      },
     }),
     // Read by `entryImage` (`@cogenta/theme-kit`) for the index, the shelf
     // and the essay's own header. Optional: most letters have no picture.

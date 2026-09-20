@@ -114,10 +114,6 @@ export const project = defineCollection({
     }),
     discipline: f.text({
       max: 60,
-      admin: {
-        label: 'Discipline',
-        help: 'The one discipline set under the cover in lists, such as "Identity".',
-      },
     }),
     // Read by `entryImage` (`@cogenta/theme-kit`) for every listing and as the
     // lead visual of the project page. Drawn at 3:2, subject in the middle.

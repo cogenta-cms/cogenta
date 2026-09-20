@@ -1,6 +1,7 @@
 import type { JSX, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { humanizeFieldName } from '../lib/humanize-field-name.js'
+import { fieldHelp, fieldLabel } from '../schema/field-label.js'
 import type { SchemaField } from '../schema/types.js'
 import '../styles/fields.css'
 
@@ -53,9 +54,13 @@ export function FieldWrapper({
   // site already configured.
   // A common name (`title`, `coverImage`) reads in the admin's language (L36
   // audit: a French site's forms said "Title", "Slug", "Cover Image").
-  const label =
-    field.admin?.label ??
-    t(`fieldNames.${field.name}`, { defaultValue: humanizeFieldName(field.name) })
+  // The same three-source rule the version diff and the columns panel use
+  // (`schema/field-label.ts`), so a field cannot be called one thing on one
+  // screen and another elsewhere. The humanised fallback stays this form's
+  // own: a field nobody has named reads better as "Internal code" in a
+  // label than as `internalCode`, and only a form has the room for it.
+  const label = fieldLabel(field.name, t, field, humanizeFieldName(field.name))
+  const help = fieldHelp(field.name, t, field)
 
   const max = typeof field.options.max === 'number' ? field.options.max : undefined
   const length = typeof value === 'string' ? value.length : undefined
@@ -97,7 +102,7 @@ export function FieldWrapper({
           {error}
         </p>
       )}
-      {field.admin?.help !== undefined && <p className="field__help">{field.admin.help}</p>}
+      {help !== undefined && <p className="field__help">{help}</p>}
     </div>
   )
 }

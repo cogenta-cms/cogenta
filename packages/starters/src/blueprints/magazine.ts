@@ -94,10 +94,6 @@ export const article = defineCollection({
     slug: f.slug({ from: 'title', unique: true }),
     kicker: f.text({
       max: 60,
-      admin: {
-        label: 'Kicker',
-        help: 'The short label set above the headline in lists: a topic, a form such as "Art review", or a columnist’s name.',
-      },
     }),
     excerpt: f.text({
       max: 300,

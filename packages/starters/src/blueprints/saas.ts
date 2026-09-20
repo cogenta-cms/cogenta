@@ -106,10 +106,6 @@ export const feature = defineCollection({
     }),
     icon: f.text({
       max: 64,
-      admin: {
-        label: 'Icon',
-        help: 'One of the symbol names @cogenta/theme-kit recognises (for example "layers", "shield", "cloud", "lock", "chart", "code").',
-      },
     }),
     coverImage: f.media({
       accept: ['image'],

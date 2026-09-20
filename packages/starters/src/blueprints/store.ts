@@ -90,10 +90,6 @@ export const product = defineCollection({
     }),
     orderLink: f.text({
       max: 400,
-      admin: {
-        label: 'Where to order',
-        help: 'An email link (mailto:), a payment link or a marketplace page. The product page shows it as the order button.',
-      },
     }),
     photo: f.media({ accept: ['image'] }),
     blocks: f.blocks(),

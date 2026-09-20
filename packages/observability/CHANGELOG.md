@@ -1,5 +1,12 @@
 # @cogenta/observability
 
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [[`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba)]:
+  - @cogenta/core@0.12.1
+
 ## 0.2.7
 
 ### Patch Changes

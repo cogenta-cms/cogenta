@@ -1,5 +1,22 @@
 # create-cogenta
 
+## 0.7.4
+
+### Patch Changes
+
+- Updated dependencies [[`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba), [`80735af`](https://github.com/cogenta-cms/cogenta/commit/80735af7b536e80050cb9708f435f21935805020), [`95fdc8d`](https://github.com/cogenta-cms/cogenta/commit/95fdc8df7d3105bcfdcae7ab060246866a78dae9), [`afa9229`](https://github.com/cogenta-cms/cogenta/commit/afa9229126640355f3034d0d662cc4f3097a8d95), [`dea8093`](https://github.com/cogenta-cms/cogenta/commit/dea809374a43c1b2328858e2e190e27f7d5651ff), [`797d8e8`](https://github.com/cogenta-cms/cogenta/commit/797d8e8d1397d4fe3236689db88ac1d92a3b5c2d), [`8f85628`](https://github.com/cogenta-cms/cogenta/commit/8f856289c373b75ba754e06aa615e352797fcd2e), [`c10f21f`](https://github.com/cogenta-cms/cogenta/commit/c10f21f90482ea06636ca8b44ae76222aabfdafe), [`8c894db`](https://github.com/cogenta-cms/cogenta/commit/8c894dba796f01b589f151537ba24490fe668aae), [`dfad74b`](https://github.com/cogenta-cms/cogenta/commit/dfad74b535f06159b61efbb1a941c27839eca85d), [`74f715a`](https://github.com/cogenta-cms/cogenta/commit/74f715a07d0e1fe398e8ffb44c66af08e9251ce7), [`a25568a`](https://github.com/cogenta-cms/cogenta/commit/a25568a91ec7b8f134e81f688d584b01ac20cdc5), [`22f0dd8`](https://github.com/cogenta-cms/cogenta/commit/22f0dd8f372b119f1a4fac181de45fdc18230182), [`cf158d8`](https://github.com/cogenta-cms/cogenta/commit/cf158d838033f7f2e54d7a16ae1b924d3a92b669), [`410ca4c`](https://github.com/cogenta-cms/cogenta/commit/410ca4c56a77b52bf7a335bbb31ab7af90cb9d60), [`9a0cff5`](https://github.com/cogenta-cms/cogenta/commit/9a0cff523622e5649869398c2fbf1f31f0521785), [`d1df23d`](https://github.com/cogenta-cms/cogenta/commit/d1df23d88dee1a60ffa02e4e9b48525c7894257a), [`f0ae47b`](https://github.com/cogenta-cms/cogenta/commit/f0ae47b43d6af765d7142fda176d79c7c82ee4b9), [`c44b988`](https://github.com/cogenta-cms/cogenta/commit/c44b9882247c7d0b0a12f1492930af06428408f2), [`8b7f6aa`](https://github.com/cogenta-cms/cogenta/commit/8b7f6aa826eebf14a1e859ab61d4a365bccb25ba), [`99c21a0`](https://github.com/cogenta-cms/cogenta/commit/99c21a0ac93a49064b77cf9ba08cfe15815f1782), [`8bbcc4f`](https://github.com/cogenta-cms/cogenta/commit/8bbcc4ff883051241cbf06f65b59458ecb7d9f57), [`276a22e`](https://github.com/cogenta-cms/cogenta/commit/276a22e6e06f2110191c872f11bb6a0b0ab80e4e), [`ccf489d`](https://github.com/cogenta-cms/cogenta/commit/ccf489d67a1ba81b4f0aa5ccbbcecc30f671f1d6), [`efa8125`](https://github.com/cogenta-cms/cogenta/commit/efa81251c0512c118fca91dca0929c65ac61367e), [`b89ba68`](https://github.com/cogenta-cms/cogenta/commit/b89ba68f508ff209744cb31a507c59be6c00f722), [`3159fc3`](https://github.com/cogenta-cms/cogenta/commit/3159fc3ec1ea2cd913fbe012163093500786a6a6), [`ea2d505`](https://github.com/cogenta-cms/cogenta/commit/ea2d505c2204996eed5737596de7863dd5eda188), [`0bd4e72`](https://github.com/cogenta-cms/cogenta/commit/0bd4e72d937d0b522315a401225dd4741508fd50), [`38ff019`](https://github.com/cogenta-cms/cogenta/commit/38ff0195daf6e0d5e0f118b33363df6b8733809b)]:
+  - @cogenta/core@0.12.1
+  - @cogenta/cli@0.19.0
+  - @cogenta/starters@0.4.0
+  - @cogenta/api@2.11.0
+  - @cogenta/theme-canonical@1.3.8
+  - @cogenta/schema@0.11.0
+  - @cogenta/agents@0.9.1
+  - @cogenta/auth@0.5.12
+  - @cogenta/blocks@1.1.7
+  - @cogenta/comments@0.2.9
+  - @cogenta/render@0.5.1
+
 ## 0.7.3
 
 ### Patch Changes

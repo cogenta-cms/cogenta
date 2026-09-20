@@ -31,6 +31,28 @@ function detectLanguage(): SupportedLanguage {
   return isSupportedLanguage(browserLanguage) ? browserLanguage : DEFAULT_LANGUAGE
 }
 
+/**
+ * The interface language this account chose, applied wherever they sign in.
+ *
+ * `detectLanguage` reads this browser's `localStorage` and then
+ * `navigator.language`, which is right for a first visit and wrong for a
+ * second browser: the preference saved on the account — the only way to
+ * change this language at all, through the Profile screen — was ignored
+ * there, so a person who had chosen English signed in to French.
+ *
+ * The account wins over the cached copy rather than the other way round:
+ * `localStorage` exists so the first paint is in the right language, and
+ * the account is what the person actually stated. `null`, an unsupported
+ * value, or a server too old to answer leave the language untouched.
+ */
+export function applyAccountLanguage(locale: string | null): void {
+  if (locale === null) return
+  const trimmed = locale.trim().toLowerCase()
+  if (!isSupportedLanguage(trimmed)) return
+  if (localStorage.getItem(LANGUAGE_STORAGE_KEY) === trimmed) return
+  setLanguage(trimmed)
+}
+
 export function setLanguage(language: SupportedLanguage): void {
   localStorage.setItem(LANGUAGE_STORAGE_KEY, language)
   void i18next.changeLanguage(language)

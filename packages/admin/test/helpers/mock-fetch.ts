@@ -1249,10 +1249,19 @@ export function installMockFetch(
      * by the plain `preview` branch below.
      */
     readonly previewSigningKeyMissing?: boolean
+    /** The interface language stored on the signed-in account (fiche 17 task 3). */
+    readonly accountLocale?: string | null
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
-  const user = options.roles === undefined ? USER : { ...USER, roles: options.roles }
+  const user =
+    options.roles === undefined && options.accountLocale === undefined
+      ? USER
+      : {
+          ...USER,
+          ...(options.roles === undefined ? {} : { roles: options.roles }),
+          ...(options.accountLocale === undefined ? {} : { locale: options.accountLocale }),
+        }
   const session = () => ({
     status: 'session',
     session: { id: 'session-1', token: VALID_TOKEN, expiresAt: '2030-01-01T00:00:00.000Z' },
@@ -2429,6 +2438,9 @@ export function installMockFetch(
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       mfa: { totp: false, passkeys: 0 },
+      // `GET /api/users/me` reads this list, not the session `user` above,
+      // so the account's own stored language has to live here to be seen.
+      ...(options.accountLocale === undefined ? {} : { locale: options.accountLocale }),
     },
     {
       id: 'user-2',

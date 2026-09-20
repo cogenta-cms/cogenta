@@ -11,8 +11,10 @@ import {
 import { getAssistCapabilities } from '../api/assist-client.js'
 import { getPluginBlocks, getPluginWidgets } from '../api/plugins-client.js'
 import { getShellStatus, type ShellStatus } from '../api/shell-status-client.js'
+import { readUser } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { registerPluginBlocks } from '../blocks/vocabulary.js'
+import { applyAccountLanguage } from '../i18n/index.js'
 import { registerPluginWidgets } from '../widgets/widget-catalog.js'
 
 /**
@@ -99,7 +101,7 @@ export function ChromeStatusProvider({ children }: { readonly children: ReactNod
     const current = tokenRef.current
     if (current === null) return
     try {
-      const [shellStatus, capabilities, blocks, widgets] = await Promise.all([
+      const [shellStatus, capabilities, blocks, widgets, me] = await Promise.all([
         getShellStatus(current),
         getAssistCapabilities(current),
         // L32 — what this site's plugins add to the block list. A site with
@@ -107,7 +109,15 @@ export function ChromeStatusProvider({ children }: { readonly children: ReactNod
         // route answers 404, and the catch below leaves the vocabulary alone.
         getPluginBlocks(current).catch(() => ({ blocks: [] })),
         getPluginWidgets(current).catch(() => ({ widgets: [] })),
+        // The account's own interface language (fiche 17 task 3). Stored
+        // server-side, and until now read by nothing but the Profile screen's
+        // own form: signing in from a second browser ignored it entirely,
+        // because `detectLanguage` only ever looked at this browser's
+        // `localStorage` and then at `navigator.language`. A server too old
+        // to answer leaves the language exactly as it was.
+        readUser(current, 'me').catch(() => null),
       ])
+      if (me !== null) applyAccountLanguage(me.locale ?? null)
       registerPluginBlocks(blocks.blocks)
       registerPluginWidgets(widgets.widgets)
       setState({

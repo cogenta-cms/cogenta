@@ -86,6 +86,43 @@ export function toggleBlock(editor: Editor, kind: BlockKind): void {
   })
 }
 
+/**
+ * `Enter` on an empty list item leaves the list, the way every editor does.
+ *
+ * Without this, `Enter` split the item and made another empty one: the only
+ * way out was the toolbar's "Paragraph" button, and anything typed after a
+ * list stayed inside it. Worse, the empty items were saved as they stood —
+ * `listItem: "bullet"` with `text: ""` — and rendered on the public site as
+ * empty `<li></li>`, which a screen reader announces as list items with no
+ * content.
+ *
+ * The list model is flat (a `list-item` carrying `listType`/`level`, never a
+ * wrapper), so leaving is exactly what `toggleBlock` already does to an
+ * active list: back to a paragraph, with the list properties unset.
+ *
+ * Returns whether it handled the key, so the caller knows not to let the
+ * editor insert its own break.
+ */
+export function exitListOnEmptyItem(editor: Editor): boolean {
+  const { selection } = editor
+  if (selection === null || !Range.isCollapsed(selection)) return false
+
+  const [match] = Editor.nodes(editor, { at: selection, match: isTextBlockNode })
+  if (match === undefined) return false
+
+  const [node, path] = match
+  if (!isTextBlockNode(node) || node.type !== 'list-item') return false
+  // Only an *empty* item leaves: `Enter` in the middle of a written one must
+  // still make the next bullet.
+  if (Editor.string(editor, path) !== '') return false
+
+  Editor.withoutNormalizing(editor, () => {
+    Transforms.setNodes<CustomElement>(editor, { type: 'paragraph' }, { at: path })
+    Transforms.unsetNodes(editor, ['listType', 'level'], { at: path })
+  })
+  return true
+}
+
 export function insertLink(editor: Editor, href: string): void {
   const { selection } = editor
   if (selection === null || Editor.string(editor, selection) === '') return

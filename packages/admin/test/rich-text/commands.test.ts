@@ -4,6 +4,7 @@ import {
   activeBlockKind,
   activeLink,
   clearSlashQuery,
+  exitListOnEmptyItem,
   insertInternalLink,
   insertMedia,
   insertThematicBreak,
@@ -249,5 +250,64 @@ describe('clearSlashQuery', () => {
     clearSlashQuery(editor)
 
     expect(editor.children).toEqual([{ type: 'paragraph', children: [{ text: '' }] }])
+  })
+})
+
+/**
+ * `Enter` on an empty list item leaves the list, the way every editor does.
+ *
+ * Without it, `Enter` split the item and made another empty bullet: the only
+ * way out was the toolbar's "Paragraph" button, so everything typed after a
+ * list stayed inside it. The empty items were then saved as they stood and
+ * rendered as empty `<li>` on the public page.
+ */
+describe('exitListOnEmptyItem', () => {
+  function editorWithList(texts: readonly string[]): ReturnType<typeof withInlines> {
+    const editor = withInlines(createEditor())
+    editor.children = texts.map((text) => ({
+      type: 'list-item',
+      listType: 'bullet',
+      level: 1,
+      children: [{ text }],
+    })) as CustomElement[]
+    const last = texts.length - 1
+    Transforms.select(editor, {
+      anchor: { path: [last, 0], offset: (texts[last] ?? '').length },
+      focus: { path: [last, 0], offset: (texts[last] ?? '').length },
+    })
+    return editor
+  }
+
+  it('turns an empty item back into a paragraph, and says it handled the key', () => {
+    const editor = editorWithList(['Premier point', ''])
+
+    expect(exitListOnEmptyItem(editor)).toBe(true)
+    expect(editor.children[1]).toEqual({ type: 'paragraph', children: [{ text: '' }] })
+    // The written item above is untouched — only the empty one leaves.
+    expect(editor.children[0]).toMatchObject({ type: 'list-item', listType: 'bullet' })
+  })
+
+  it('leaves a written item alone, so Enter still makes the next bullet', () => {
+    const editor = editorWithList(['Premier point'])
+
+    expect(exitListOnEmptyItem(editor)).toBe(false)
+    expect(editor.children[0]).toMatchObject({ type: 'list-item', listType: 'bullet' })
+  })
+
+  it('does nothing outside a list', () => {
+    const editor = editorWithParagraph('')
+    Transforms.collapse(editor, { edge: 'start' })
+
+    expect(exitListOnEmptyItem(editor)).toBe(false)
+    expect(editor.children[0]).toMatchObject({ type: 'paragraph' })
+  })
+
+  it('drops the list properties, not just the type — a paragraph carrying a listType is neither', () => {
+    const editor = editorWithList([''])
+    exitListOnEmptyItem(editor)
+
+    const block = editor.children[0] as Record<string, unknown>
+    expect(block.listType).toBeUndefined()
+    expect(block.level).toBeUndefined()
   })
 })

@@ -81,6 +81,12 @@ function levelOf(node: TextBlock): number {
  * list items. A nested list lives *inside* the preceding `<li>` — putting it
  * beside one produces a list whose items do not match what is announced.
  */
+/** Nothing but whitespace across every span — see `buildList` for why that is not drawn. */
+function isEmptyItem(node: RichTextNode): boolean {
+  if (node._type !== 'block') return false
+  return node.children.every((span) => span.text.trim() === '')
+}
+
 function buildList(
   ctx: RenderContext,
   nodes: RichTextDocument,
@@ -111,7 +117,14 @@ function buildList(
       continue
     }
 
-    items.push(h('li', {}, ...renderChildren(ctx, node)))
+    // An item with nothing in it is not rendered. Pressing Enter twice at
+    // the end of a list used to leave one behind, and it reached the page as
+    // an empty `<li>` — which a screen reader announces as a list item with
+    // no content, and which shifts every visible bullet down by one. The
+    // stored document keeps it: this decides what is worth drawing, it does
+    // not delete what somebody wrote.
+    const children = renderChildren(ctx, node)
+    if (!isEmptyItem(node)) items.push(h('li', {}, ...children))
     index += 1
   }
 

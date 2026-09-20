@@ -109,3 +109,41 @@ describe('renderRichText — fiche 42 task 2 (strikethrough, thematic break)', (
     expect(() => serializeAll(renderRichText(ctx, document))).not.toThrow()
   })
 })
+
+/**
+ * Pressing Enter twice at the end of a list used to leave an empty item
+ * behind, saved as `listItem: "bullet"` with `text: ""` and rendered as an
+ * empty `<li>` — which a screen reader announces as a list item with no
+ * content. The editor no longer makes them; this is what happens to the ones
+ * already stored, on pages nobody will reopen.
+ */
+describe('renderRichText — a list item with nothing in it', () => {
+  function bullet(text: string): RichTextDocument[number] {
+    return {
+      _key: `k-${text || 'empty'}`,
+      _type: 'block',
+      style: 'normal',
+      listItem: 'bullet',
+      level: 1,
+      markDefs: [],
+      children: [{ _key: `s-${text || 'empty'}`, _type: 'span', text, marks: [] }],
+    }
+  }
+
+  it('draws the items that say something and drops the ones that do not', () => {
+    const html = serializeAll(
+      renderRichText(ctx, [bullet('Une page par trajet.'), bullet(''), bullet('   ')]),
+    )
+
+    expect(html).toContain('<li>Une page par trajet.</li>')
+    expect(html).not.toContain('<li></li>')
+    expect((html.match(/<li>/g) ?? []).length).toBe(1)
+  })
+
+  it('still renders the list itself, rather than dropping it with its empty items', () => {
+    const html = serializeAll(renderRichText(ctx, [bullet('Seul point.'), bullet('')]))
+
+    expect(html).toContain('<ul>')
+    expect(html).toContain('Seul point.')
+  })
+})

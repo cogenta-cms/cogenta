@@ -16,7 +16,13 @@ import { MediaThumbnail } from '../media/media-thumbnail.js'
 import '../styles/rich-text.css'
 import { cn } from '../ui/cn.js'
 import { FullscreenExitIcon, FullscreenIcon } from '../ui/icons.js'
-import { clearSlashQuery, insertThematicBreak, slashQueryAt, toggleBlock } from './commands.js'
+import {
+  clearSlashQuery,
+  exitListOnEmptyItem,
+  insertThematicBreak,
+  slashQueryAt,
+  toggleBlock,
+} from './commands.js'
 import { portableTextToSlate, slateToPortableText } from './convert.js'
 import { ImageInsertModal } from './image-picker.js'
 import type { RichTextDocument } from './portable-text.js'
@@ -275,6 +281,15 @@ export function RichTextEditor({
     if (slash !== null && event.key === 'Escape') {
       event.preventDefault()
       setSlash(null)
+      return
+    }
+
+    // After the slash menu, never before: while it is open `Enter` picks an
+    // item. On an empty list item otherwise, `Enter` leaves the list rather
+    // than making one more empty bullet — which used to be the only thing it
+    // could do, and those bullets were saved and published as empty `<li>`.
+    if (event.key === 'Enter' && !event.shiftKey && exitListOnEmptyItem(editor)) {
+      event.preventDefault()
     }
   }
 

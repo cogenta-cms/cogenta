@@ -38,8 +38,16 @@ export interface SearchReference {
 export interface SearchQuery {
   readonly text: string
   readonly locale: string
-  /** Defaults to `published`: the safe answer when a caller says nothing. */
-  readonly status?: ContentStatus
+  /**
+   * Defaults to `published`: the safe answer when a caller says nothing.
+   *
+   * A list widens the scope to several states at once — what an admin
+   * screen's "all statuses" means, and the only way to say it: this filter
+   * is never absent, only widened. A caller that passes more than
+   * `published` must have been cleared by `canReadUnpublished` first; the
+   * index does not check, and never has, for any status.
+   */
+  readonly status?: ContentStatus | readonly ContentStatus[]
   /** Restricts to these collections. Absent means every indexed collection. */
   readonly collections?: readonly string[]
   readonly limit?: number

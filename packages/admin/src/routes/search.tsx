@@ -11,7 +11,7 @@ import { listOrders, type Order } from '../api/commerce-client.js'
 import { listMarketplaceItems, type MarketplaceCatalogItem } from '../api/marketplace-client.js'
 import { listMedia, type MediaAsset } from '../api/media-client.js'
 import { listMenus, type Menu } from '../api/menu-client.js'
-import { type SearchHit, searchContent } from '../api/search-client.js'
+import { type SearchHit, searchContentWidest } from '../api/search-client.js'
 import { listTerms, type Term } from '../api/taxonomy-client.js'
 import { type AdminUser, listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -131,7 +131,7 @@ export function SearchRoute(): JSX.Element {
         extensionsResult,
         ...taxonomyResults
       ] = await Promise.allSettled([
-        searchContent(token, freeText, {
+        searchContentWidest(token, freeText, {
           limit: CONTENT_PAGE_SIZE,
           ...(effectiveStatus === undefined ? {} : { status: effectiveStatus }),
           ...(effectiveCollection === undefined ? {} : { collections: [effectiveCollection] }),

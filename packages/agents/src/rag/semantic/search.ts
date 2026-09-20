@@ -15,7 +15,8 @@ export interface FullTextSearchLike {
   search(query: {
     readonly text: string
     readonly locale: string
-    readonly status?: string
+    /** One state, or the several a permitted caller asked for — mirrors `SearchQuery.status`. */
+    readonly status?: string | readonly string[]
     readonly collections?: readonly string[]
     readonly limit?: number
   }): Promise<{

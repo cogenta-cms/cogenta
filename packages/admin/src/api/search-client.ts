@@ -1,4 +1,4 @@
-import { authHeader, requestBody } from './http.js'
+import { ApiError, authHeader, requestBody } from './http.js'
 
 /**
  * `GET /api/search` — the full-text index (L10 task 3).
@@ -52,6 +52,36 @@ export interface SearchOptions {
   readonly locale?: string
   readonly limit?: number
   readonly offset?: number
+}
+
+/**
+ * The same search, asking for every state the server will allow.
+ *
+ * "All statuses" in this screen's own filter used to send no `status` at
+ * all, and no `status` means `published` — the safe default for a caller
+ * that says nothing. So the filter offered every state and delivered the one
+ * an anonymous visitor sees, and an editor could not find their own draft
+ * through it.
+ *
+ * Asked for, then fallen back from, rather than decided here: whether these
+ * roles reach drafts is a per-collection decision the permission layer makes
+ * (R4 — a client that re-derived it would be a second, drifting copy of the
+ * rule). A refusal simply means this actor gets what they always got.
+ */
+export async function searchContentWidest(
+  token: string,
+  query: string,
+  options: SearchOptions = {},
+): Promise<SearchResults> {
+  if (options.status !== undefined) return searchContent(token, query, options)
+  try {
+    return await searchContent(token, query, { ...options, status: 'any' })
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'FORBIDDEN') {
+      return searchContent(token, query, options)
+    }
+    throw error
+  }
 }
 
 export async function searchContent(

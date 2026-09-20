@@ -126,14 +126,27 @@ export function createSearchRouter(options: SearchRouterOptions): SearchRouter {
     )
   }
 
-  function parseStatus(request: RestRequest): ContentStatus | undefined {
+  /**
+   * `?status=` — one state, or `any` for every one of them.
+   *
+   * `any` exists because an admin screen's "all statuses" filter had no way
+   * to say so: omitting the parameter means `published` (the safe default
+   * for a caller that says nothing), so the filter promised every state and
+   * delivered the one an anonymous visitor sees. An editor could not find
+   * their own draft through it.
+   *
+   * It is not a way around the gate: `any` is checked by exactly the same
+   * `canReadUnpublished` that guards `status=draft`, just below.
+   */
+  function parseStatus(request: RestRequest): ContentStatus | readonly ContentStatus[] | undefined {
     const raw = single(request.query, 'status')
     if (raw === undefined) return undefined
+    if (raw === 'any') return CONTENT_STATUSES
     if (!(CONTENT_STATUSES as readonly string[]).includes(raw)) {
       throw queryError(
         'status',
         'is not a content status',
-        `Use one of: ${CONTENT_STATUSES.join(', ')}.`,
+        `Use one of: ${CONTENT_STATUSES.join(', ')}, or "any" for every state.`,
       )
     }
     return raw as ContentStatus
@@ -175,7 +188,9 @@ export function createSearchRouter(options: SearchRouterOptions): SearchRouter {
     const scope = scopeFor(parseCollections(request), context)
     const status = parseStatus(request)
 
-    if (status !== undefined && status !== 'published') {
+    // Anything but exactly `published` is a widening, list or scalar alike.
+    const widensBeyondPublished = status !== undefined && status !== 'published'
+    if (widensBeyondPublished) {
       for (const target of scope) {
         const decision = options.permissions.canReadUnpublished(target, context)
         if (!decision.allowed) {

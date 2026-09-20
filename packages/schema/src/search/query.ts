@@ -27,7 +27,7 @@ const MAX_TITLE_LENGTH = 500
 export interface NormalisedQuery {
   readonly tokens: readonly string[]
   readonly locale: string
-  readonly status: ContentStatus
+  readonly status: ContentStatus | readonly ContentStatus[]
   readonly collections: readonly string[]
   readonly size: number
   readonly offset: number

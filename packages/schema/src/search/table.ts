@@ -71,13 +71,24 @@ export function scopeFilters(
   dialect: DatabaseDialect,
   scope: {
     readonly locale: string
-    readonly status: string
+    /** The one status in scope, or the several a permitted caller asked for. */
+    readonly status: string | readonly string[]
     readonly collections?: readonly string[]
   },
 ): SqlFragment[] {
+  // A list rather than an absence: the state predicate is never dropped, only
+  // widened, and only for a caller the router already checked
+  // `canReadUnpublished` for. An empty list would widen it to everything by
+  // accident, so it reads as "nothing matches" instead.
+  const statuses = typeof scope.status === 'string' ? [scope.status] : [...scope.status]
+  const statusFilter =
+    statuses.length === 1
+      ? sql`${identifier(SEARCH_COLUMNS.status, dialect)} = ${statuses[0] ?? ''}`
+      : sql`${identifier(SEARCH_COLUMNS.status, dialect)} in (${valueList(statuses.length === 0 ? [''] : statuses)})`
+
   const filters: SqlFragment[] = [
     sql`${identifier(SEARCH_COLUMNS.locale, dialect)} = ${scope.locale}`,
-    sql`${identifier(SEARCH_COLUMNS.status, dialect)} = ${scope.status}`,
+    statusFilter,
   ]
 
   if (scope.collections !== undefined && scope.collections.length > 0) {

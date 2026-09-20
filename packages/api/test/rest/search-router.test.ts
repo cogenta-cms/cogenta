@@ -130,6 +130,33 @@ describe('GET /api/search', () => {
     expect(titlesOf(drafts).every((title) => title.endsWith('draft'))).toBe(true)
   })
 
+  /**
+   * The admin's "all statuses" filter had no way to say so: omitting
+   * `status` means `published`, the safe default for a caller that says
+   * nothing, so a filter offering every state delivered the one an anonymous
+   * visitor sees and an editor could not find their own draft through it.
+   */
+  it('finds published and draft together when an editor asks for every status', async () => {
+    const response = await ask({ q: 'cathedral', status: 'any' }, actor('editor'))
+    expect(response.status).toBe(200)
+
+    const endings = new Set(titlesOf(response).map((title) => title.split(' ').at(-1)))
+    expect(endings.has('published')).toBe(true)
+    expect(endings.has('draft')).toBe(true)
+  })
+
+  /** `any` is a widening like `draft` is, and meets the very same gate. */
+  it('refuses every status to a role that may not read drafts', async () => {
+    const response = await ask({ q: 'cathedral', status: 'any' })
+    expect(response.status).toBe(403)
+    expect((response.body as { error: { code: string } }).error.code).toBe('FORBIDDEN')
+  })
+
+  it('still answers published only when nothing is asked for', async () => {
+    const response = await ask({ q: 'cathedral' }, actor('editor'))
+    expect(titlesOf(response).every((title) => title.endsWith('published'))).toBe(true)
+  })
+
   it('refuses a draft search from a role that may not read drafts', async () => {
     const response = await ask({ q: 'cathedral', status: 'draft' })
     expect(response.status).toBe(403)

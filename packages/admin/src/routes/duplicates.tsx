@@ -6,6 +6,8 @@ import { getAssistCapabilities, runFindDuplicates } from '../api/assist-client.j
 import { ApiError } from '../api/client.js'
 import { listEntries } from '../api/content-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { plainTextOfRichText } from '../collections/word-count.js'
+import type { RichTextDocument } from '../rich-text/portable-text.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary } from '../schema/types.js'
@@ -195,11 +197,40 @@ export function DuplicatesRoute(): JSX.Element | null {
   )
 }
 
-/** Something recognisable to compare against, same idea as `trash.tsx`'s `titleOf`. */
-function textOf(values: Readonly<Record<string, unknown>>): string {
-  for (const key of ['title', 'body', 'name', 'slug']) {
+/** The fields worth comparing, in the order a reader would meet them. */
+const COMPARED_FIELDS = ['title', 'name', 'slug', 'excerpt', 'summary', 'body'] as const
+
+/**
+ * Everything this entry has to say, for `assist.find_duplicates` to compare.
+ *
+ * It used to be the title and nothing else, through two defects that
+ * compounded: the loop returned at the first field that matched, so `title`
+ * always won and `body` was never reached — and `body` is a portable-text
+ * document, an array, so the `typeof value === 'string'` test could not have
+ * been true for it in any case.
+ *
+ * Measured on the real screen: a word-for-word copy of a 4 742-character
+ * essay came back "no near-duplicate found", while the same call carrying
+ * the body found it at 0.9984. A duplicate finder that reads only titles
+ * finds only duplicate titles.
+ *
+ * Every field is now joined rather than the first one taken, and a rich-text
+ * document goes through `plainTextOfRichText` — the same walk the word count
+ * uses, which reads `children[].text` instead of stringifying the document
+ * and counting `_key` and `_type` as words.
+ */
+export function textOf(values: Readonly<Record<string, unknown>>): string {
+  const parts: string[] = []
+  for (const key of COMPARED_FIELDS) {
     const value = values[key]
-    if (typeof value === 'string' && value !== '') return value
+    if (typeof value === 'string') {
+      if (value !== '') parts.push(value)
+      continue
+    }
+    if (Array.isArray(value)) {
+      const text = plainTextOfRichText(value as RichTextDocument)
+      if (text !== '') parts.push(text)
+    }
   }
-  return ''
+  return parts.join('\n\n')
 }

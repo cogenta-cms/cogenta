@@ -131,6 +131,53 @@ describe('createWidgetRouter', () => {
     expect(changes).toBe(0)
   })
 
+  // A widget in an area no theme declares is invisible for good: nothing
+  // renders it, and the Widgets screen has no column to put it in. Both of
+  // these used to succeed.
+  it('refuses an area the active theme does not declare, on create and on move', async () => {
+    const created = await call('POST', '/api/widgets', asAdmin, {
+      area: 'nope',
+      type: 'recentEntries',
+      settings: { collection: 'article', count: 3 },
+    })
+    expect(created.status).toBe(422)
+    expect(created.json.error?.code).toBe('WIDGET_INVALID')
+
+    const real = await call('POST', '/api/widgets', asAdmin, {
+      area: 'sidebar',
+      type: 'recentEntries',
+      settings: { collection: 'article', count: 3 },
+    })
+    expect(real.status).toBe(201)
+
+    const moved = await call('POST', `/api/widgets/${real.json.data?.id}/move`, asAdmin, {
+      area: 'nope',
+      position: 0,
+    })
+    expect(moved.status).toBe(422)
+  })
+
+  // Answering 200 to a move that did not happen is worse than refusing it:
+  // the caller believes the widget is somewhere it is not.
+  it('refuses an area sent to the edit route, and names the one that moves a widget', async () => {
+    const real = await call('POST', '/api/widgets', asAdmin, {
+      area: 'sidebar',
+      type: 'recentEntries',
+      settings: { collection: 'article', count: 3 },
+    })
+    expect(real.status).toBe(201)
+
+    const patched = await call('PATCH', `/api/widgets/${real.json.data?.id}`, asAdmin, {
+      area: 'footer-1',
+    })
+    expect(patched.status).toBe(422)
+    expect(JSON.stringify(patched.json)).toContain('/move')
+
+    // And it really did not move.
+    const reread = await call('GET', `/api/widgets/${real.json.data?.id}`, asAdmin)
+    expect(reread.json.data?.['area']).toBe('sidebar')
+  })
+
   it('answers an unknown widget with 404 and a wrong method with 405', async () => {
     expect(
       (

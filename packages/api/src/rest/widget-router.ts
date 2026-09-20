@@ -166,6 +166,29 @@ export function createWidgetRouter(options: WidgetRouterOptions): WidgetRouter {
     const method = request.method.toUpperCase()
     const actorId = context.actor.id
 
+    /**
+     * A widget in an area the active theme does not declare is invisible for
+     * good: nothing renders it, and the Widgets screen has no column to show
+     * it in. `POST` with `area: "nope"` answered `201` and `move` answered
+     * `200`, while this router already knew the real list — `GET /api/widgets`
+     * returns it on every request.
+     *
+     * Read per request rather than captured once, the same as the listing:
+     * switching theme changes which areas exist, and a widget parked in an
+     * area the previous theme had is a real state this refuses to *create*,
+     * never one it goes back and deletes.
+     */
+    async function assertDeclaredArea(area: string): Promise<void> {
+      const declared = await options.areas()
+      if (declared.some((candidate) => candidate.id === area)) return
+      throw new CogentaError({
+        code: 'WIDGET_INVALID',
+        message: `The active theme declares no widget area "${area}".`,
+        hint: `Areas on offer right now: ${declared.map((candidate) => candidate.id).join(', ')}.`,
+        details: { field: 'area' },
+      })
+    }
+
     if (segments.length === 0) {
       if (method === 'GET') {
         const [areas, widgets] = await Promise.all([options.areas(), store.list()])
@@ -176,8 +199,10 @@ export function createWidgetRouter(options: WidgetRouterOptions): WidgetRouter {
         const title = optionalString(body, 'title')
         const position = integer(body, 'position', false)
         const enabled = optionalBoolean(body, 'enabled')
+        const area = requiredString(body, 'area')
+        await assertDeclaredArea(area)
         const created = await store.create({
-          area: requiredString(body, 'area'),
+          area,
           type: requiredString(body, 'type'),
           ...(title === undefined ? {} : { title }),
           ...(body['settings'] === undefined ? {} : { settings: body['settings'] }),
@@ -215,6 +240,18 @@ export function createWidgetRouter(options: WidgetRouterOptions): WidgetRouter {
       }
       if (method === 'PATCH') {
         const body = bodyOf(request)
+        // `area` is not one of the fields this route writes, and answering
+        // `200` to a request carrying it told a caller their widget had
+        // moved when it had not. Moving is its own route, because it also
+        // needs a position.
+        if (body['area'] !== undefined) {
+          throw new CogentaError({
+            code: 'WIDGET_INVALID',
+            message: 'A widget is not moved by editing it.',
+            hint: `Send POST /api/widgets/${id}/move with an area and a position.`,
+            details: { field: 'area' },
+          })
+        }
         const title = optionalString(body, 'title')
         const enabled = optionalBoolean(body, 'enabled')
         const updated: Widget = await store.update(id, {
@@ -237,8 +274,10 @@ export function createWidgetRouter(options: WidgetRouterOptions): WidgetRouter {
     if (segments.length === 2 && segments[1] === 'move') {
       if (method !== 'POST') return methodNotAllowed(['POST'])
       const body = bodyOf(request)
+      const area = requiredString(body, 'area')
+      await assertDeclaredArea(area)
       const moved = await store.move(id, {
-        area: requiredString(body, 'area'),
+        area,
         position: integer(body, 'position', true) as number,
         updatedBy: actorId,
       })

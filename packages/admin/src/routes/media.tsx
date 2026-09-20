@@ -841,11 +841,11 @@ export function MediaRoute(): JSX.Element {
                       <strong>{entry.asset?.filename ?? entry.id}</strong>
                       <ul className="m-0 flex flex-col gap-0.5 pl-4">
                         {entry.report.matches.map((match) => (
-                          <li key={`${match.collection}-${match.entryId}-${match.field}`}>
+                          <li key={`${match.collection}-${match.entryId}-${match.at}`}>
                             {t('media.usageItem', {
                               collection: match.collection,
-                              entryId: match.entryId,
-                              field: match.field,
+                              title: match.title,
+                              at: match.at,
                             })}
                           </li>
                         ))}

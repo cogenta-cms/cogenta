@@ -30,6 +30,15 @@ function fileDropDataTransfer(files: readonly File[]): DataTransfer {
   return { types: ['Files'], files } as unknown as DataTransfer
 }
 
+/** One reference, in the shape `findMediaUsage` really sends: a title to recognise, and where inside the entry. */
+const USAGE_MATCH = {
+  collection: 'article',
+  entryId: 'entry-1',
+  locale: 'fr',
+  title: 'Le pain de seigle',
+  at: 'cover',
+} as const
+
 describe('media library', () => {
   it('lists no media initially, and shows one after an upload', async () => {
     render(<App />)
@@ -119,7 +128,10 @@ describe('media library', () => {
 
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
 
+    // Two clicks: the first one only arms the confirmation. See the
+    // "deleting one asset" suite below for why that question exists.
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmer la suppression' }))
 
     await waitFor(() => expect(screen.getByText('Aucun média.')).toBeDefined())
   })
@@ -249,9 +261,9 @@ describe('media library folders', () => {
     installMockFetch({
       mediaSeedCount: 3,
       mediaUsage: {
-        'media-seed-1': [{ collection: 'article', entryId: 'entry-1', field: 'cover' }],
-        'media-seed-2': [{ collection: 'article', entryId: 'entry-1', field: 'cover' }],
-        'media-seed-3': [{ collection: 'article', entryId: 'entry-1', field: 'cover' }],
+        'media-seed-1': [USAGE_MATCH],
+        'media-seed-2': [USAGE_MATCH],
+        'media-seed-3': [USAGE_MATCH],
       },
     })
     render(<App />)
@@ -265,7 +277,66 @@ describe('media library folders', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer (2)' }))
 
     await screen.findByText(/2 des fichiers sélectionnés sont encore référencés/)
-    expect(screen.getAllByText(/article · entry-1 · cover/)).toHaveLength(2)
+    expect(screen.getAllByText(/article · Le pain de seigle · cover/)).toHaveLength(2)
+  })
+
+  // The same question the bulk delete above has asked since fiche 05, on the
+  // single-asset button, which deleted on one click with none. The pages
+  // that lost their picture were the ones this screen was already listing.
+  describe('deleting one asset', () => {
+    async function openFirstAsset(): Promise<void> {
+      await goToMedia()
+      fireEvent.click(
+        (await screen.findAllByRole('button', { name: /seed-\d+\.png/ }))[0] as HTMLElement,
+      )
+    }
+
+    it('never deletes on the first click: it asks, naming the content that would lose the picture', async () => {
+      installMockFetch({ mediaSeedCount: 1, mediaUsage: { 'media-seed-1': [USAGE_MATCH] } })
+      render(<App />)
+      await openFirstAsset()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Supprimer' }))
+
+      await screen.findByText(/utilisé par 1 contenu/)
+      // The panel is still open on the asset: deleting it closes the panel,
+      // so its heading standing here is the proof the first click deleted
+      // nothing.
+      expect(screen.getByRole('heading', { name: /seed-\d+\.png/ })).toBeDefined()
+    })
+
+    it('deletes on the second click, once the warning has been shown', async () => {
+      installMockFetch({ mediaSeedCount: 1, mediaUsage: { 'media-seed-1': [USAGE_MATCH] } })
+      render(<App />)
+      await openFirstAsset()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Supprimer' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmer la suppression' }))
+
+      await waitFor(() => {
+        expect(screen.queryAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(0)
+      })
+    })
+
+    it('still asks for an unused asset, saying the deletion is permanent rather than naming content', async () => {
+      installMockFetch({ mediaSeedCount: 1 })
+      render(<App />)
+      await openFirstAsset()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Supprimer' }))
+
+      await screen.findByText(/Cette suppression est définitive/)
+      expect(screen.queryByText(/utilisé par/)).toBeNull()
+    })
+
+    it('names the entry by its title, never by its identifier', async () => {
+      installMockFetch({ mediaSeedCount: 1, mediaUsage: { 'media-seed-1': [USAGE_MATCH] } })
+      render(<App />)
+      await openFirstAsset()
+
+      await screen.findByText(/article · Le pain de seigle · cover/)
+      expect(screen.queryByText(/entry-1/)).toBeNull()
+    })
   })
 })
 

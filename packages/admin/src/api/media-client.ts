@@ -86,10 +86,27 @@ export interface UpdateMediaInput {
   readonly tags?: readonly string[]
 }
 
+/**
+ * One place a medium is referenced, exactly as `@cogenta/schema`'s
+ * `findMediaUsage` reports it over the wire.
+ *
+ * Hand-declared rather than imported: the admin talks to the API over HTTP
+ * and does not depend on the server packages. That makes this a boundary
+ * TypeScript cannot check — and it was wrong. It declared a `field` the
+ * server has never sent (so every row rendered an empty segment and an
+ * orphan separator) and omitted the `title` the server does send (so every
+ * row named its entry by raw UUID). Both are visible to an editor deciding
+ * whether a file is safe to delete, which is the one moment this list exists
+ * for.
+ */
 export interface MediaUsageMatch {
   readonly collection: string
   readonly entryId: string
-  readonly field: string
+  readonly locale: string
+  /** The entry's own title — what an editor recognises, never the id. */
+  readonly title: string
+  /** Where inside the entry: a field name, or `blocks.<zone>[<i>].<type>`. */
+  readonly at: string
 }
 
 export interface MediaUsageReport {

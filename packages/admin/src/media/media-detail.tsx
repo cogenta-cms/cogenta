@@ -84,6 +84,17 @@ export function MediaDetail({
 
   const [usage, setUsage] = useState<MediaUsageReport | null>(null)
   const [usageError, setUsageError] = useState(false)
+  /**
+   * Deleting one asset asks the same question deleting thirty already did.
+   *
+   * `POST /api/media/-/bulk-delete` has had a confirmation naming what the
+   * selection would orphan since fiche 05; this button deleted on a single
+   * click, with no question at all — and the pages that lost their picture
+   * were the ones this very screen was already listing under "Usage".
+   * Deliberately the two-click, in-place confirmation the plugin screens use
+   * rather than a modal: the warning has to be read next to that list.
+   */
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [exif, setExif] = useState<ExifData | null>(null)
 
   useEffect(() => {
@@ -96,6 +107,10 @@ export function MediaDetail({
     let cancelled = false
     setUsage(null)
     setUsageError(false)
+    // Selecting another asset must never arrive with the previous one's
+    // confirmation already armed: the next click would delete a file the
+    // person never asked about.
+    setConfirmingDelete(false)
     getMediaUsage(token, asset.id)
       .then((report) => {
         if (!cancelled) setUsage(report)
@@ -385,11 +400,11 @@ export function MediaDetail({
         {usage !== null && usage.matches.length > 0 && (
           <ul className="m-0 flex flex-col gap-1 p-0 text-sm">
             {usage.matches.map((match) => (
-              <li key={`${match.collection}-${match.entryId}-${match.field}`} className="list-none">
+              <li key={`${match.collection}-${match.entryId}-${match.at}`} className="list-none">
                 {t('media.usageItem', {
                   collection: match.collection,
-                  entryId: match.entryId,
-                  field: match.field,
+                  title: match.title,
+                  at: match.at,
                 })}
               </li>
             ))}
@@ -462,8 +477,30 @@ export function MediaDetail({
         </button>
       </form>
 
-      <button type="button" disabled={deleting} onClick={() => void remove()}>
-        {deleting ? t('media.deleting') : t('media.deleteButton')}
+      {confirmingDelete && (
+        <p role="alert" className="text-sm">
+          {usage !== null && usage.matches.length > 0
+            ? t('media.deleteUsageWarning', { count: usage.matches.length })
+            : t('media.deleteConfirmBody')}
+        </p>
+      )}
+
+      <button
+        type="button"
+        disabled={deleting}
+        onClick={() => {
+          if (!confirmingDelete) {
+            setConfirmingDelete(true)
+            return
+          }
+          void remove()
+        }}
+      >
+        {deleting
+          ? t('media.deleting')
+          : confirmingDelete
+            ? t('media.deleteConfirmAction')
+            : t('media.deleteButton')}
       </button>
     </div>
   )

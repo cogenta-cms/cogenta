@@ -1156,10 +1156,21 @@ export function installMockFetch(
      * same empty-by-default a site with no `usage` source wired configures
      * on the real router.
      */
+    // The shape here is the one `findMediaUsage` really puts on the wire:
+    // `locale`, `title` and `at`. It used to say `field`, a property the
+    // server has never sent — so this double agreed with the admin's own
+    // wrong type instead of contradicting it, and the screen rendered a raw
+    // UUID and an orphan separator with every test passing.
     readonly mediaUsage?: Readonly<
       Record<
         string,
-        readonly { readonly collection: string; readonly entryId: string; readonly field: string }[]
+        readonly {
+          readonly collection: string
+          readonly entryId: string
+          readonly locale: string
+          readonly title: string
+          readonly at: string
+        }[]
       >
     >
     /**

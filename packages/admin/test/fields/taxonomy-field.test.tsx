@@ -282,6 +282,44 @@ describe('TaxonomyField', () => {
     expect(requestBody).toMatchObject({ slug: 'local', parent: 'term-cuisine' })
   })
 
+  /**
+   * This field is rendered inside the entry screen's own `<form>`, and its
+   * quick-create used to be a `<form>` of its own — invalid HTML, and
+   * measurably broken: on a real page `#main-content form form` counted 2,
+   * the submit never reached the handler, the label cleared and no term was
+   * created. No request, no error, nothing in Taxonomies. The same
+   * `createTerm` call has always worked from the Taxonomies screen, whose
+   * form sits in a modal and nests inside nothing.
+   *
+   * Every other test here renders this field on its own, which is why none
+   * of them could see it: standalone, there is no outer form to nest inside.
+   * So this asserts the structural property instead of the symptom — the
+   * field contributes no `<form>`, wherever it is put — which is also the
+   * only half of this that jsdom can judge, since React builds the DOM
+   * through the API rather than the HTML parser.
+   */
+  it('renders no form of its own, since it always lives inside one', async () => {
+    localStorage.setItem('cogenta.session.token', TOKEN)
+    stubFetch((url) => {
+      if (url.includes('/api/taxonomies/topic')) return jsonResponse(200, { data: [CUISINE] })
+      return null
+    })
+
+    const { container } = render(
+      <AuthProvider>
+        <SchemaProvider>
+          <TaxonomyField id="topics" field={field()} value={[]} onChange={vi.fn()} />
+        </SchemaProvider>
+      </AuthProvider>,
+    )
+    await screen.findByLabelText('Libellé du nouveau terme')
+
+    expect(container.querySelectorAll('form')).toHaveLength(0)
+    // A submit button here would be owned by the entry's form and would save
+    // the whole entry instead of adding a term.
+    expect(screen.getByRole('button', { name: 'Ajouter' }).getAttribute('type')).toBe('button')
+  })
+
   it('offers no quick-create control to a role that may not create terms', async () => {
     localStorage.setItem('cogenta.session.token', TOKEN)
     stubFetch((url) => {

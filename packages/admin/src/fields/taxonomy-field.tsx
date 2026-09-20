@@ -1,4 +1,4 @@
-import { type FormEvent, type JSX, useEffect, useMemo, useState } from 'react'
+import { type JSX, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import { createTerm, listTerms, type Term } from '../api/taxonomy-client.js'
@@ -116,8 +116,7 @@ export function TaxonomyField({
   const parentContext =
     selected.length > 0 ? byId.get(selected[selected.length - 1] ?? '') : undefined
 
-  async function createQuickTerm(event: FormEvent): Promise<void> {
-    event.preventDefault()
+  async function createQuickTerm(): Promise<void> {
     if (token === null || newLabel.trim() === '') return
 
     setCreating(true)
@@ -191,10 +190,21 @@ export function TaxonomyField({
       )}
 
       {mayCreate && (
-        <form
-          onSubmit={(event) => void createQuickTerm(event)}
-          aria-label={t('fields.taxonomyQuickCreate')}
-        >
+        // A `div`, not a `form`. This field is rendered inside the entry
+        // screen's own `<form>`, and a nested one is invalid HTML: the
+        // quick-create submit never reached this handler, so the label
+        // cleared and no term was ever created — silently, with no request
+        // and no error. Measured on a real page as `#main-content form form`
+        // = 2. The same `createTerm` call has always worked from the
+        // Taxonomies screen, whose form is inside a modal and so nests
+        // nothing.
+        //
+        // Enter still creates, because a one-field form should: it is bound
+        // on the input rather than inherited from a form element.
+        <fieldset>
+          <legend className="mb-1 p-0 text-sm font-medium">
+            {t('fields.taxonomyQuickCreate')}
+          </legend>
           {parentContext !== undefined && (
             <p className="field__placeholder">
               {t('fields.taxonomyCreateUnderParent', { parent: labelOf(parentContext) })}
@@ -207,8 +217,19 @@ export function TaxonomyField({
             value={newLabel}
             disabled={disabled || creating}
             onChange={(event) => setNewLabel(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return
+              // Never let it reach the entry form, which would save the whole
+              // entry instead of adding a term.
+              event.preventDefault()
+              void createQuickTerm()
+            }}
           />
-          <button type="submit" disabled={disabled || creating || newLabel.trim() === ''}>
+          <button
+            type="button"
+            disabled={disabled || creating || newLabel.trim() === ''}
+            onClick={() => void createQuickTerm()}
+          >
             {t('fields.taxonomyCreate')}
           </button>
           {createError !== null && (
@@ -216,7 +237,7 @@ export function TaxonomyField({
               {createError}
             </p>
           )}
-        </form>
+        </fieldset>
       )}
     </FieldWrapper>
   )

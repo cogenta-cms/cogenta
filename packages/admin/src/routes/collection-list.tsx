@@ -992,8 +992,17 @@ export function CollectionListRoute(): JSX.Element {
                         </TableCell>
                       )}
                       <TableCell>
+                        {/* Capped and breakable: a title is free-form text a
+                            person typed, and the field itself allows 200
+                            characters with no space in them. Without this the
+                            column is as wide as the longest title, which is
+                            how one entry used to make every other column
+                            unreadable. `anywhere` rather than `break-word`
+                            because only the former lowers the cell's
+                            min-content width, which is the number the table
+                            actually lays out against. */}
                         <Link
-                          className="font-medium text-primary hover:underline"
+                          className="block max-w-[28rem] font-medium text-primary [overflow-wrap:anywhere] hover:underline"
                           to={`/collections/${encodeURIComponent(name)}/${encodeURIComponent(entry.id)}`}
                         >
                           {titleOf(entry, collection)}

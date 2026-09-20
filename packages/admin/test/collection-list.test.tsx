@@ -297,7 +297,10 @@ describe('CollectionListRoute', () => {
     await screen.findByText('First article')
 
     fireEvent.click(screen.getByText('Colonnes'))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'summary' }))
+    // Named for a reader, stored for the schema: the checkbox says "Résumé",
+    // the preference still records the field's own name.
+    expect(screen.queryByRole('checkbox', { name: 'summary' })).toBeNull()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Résumé' }))
 
     expect(await screen.findByText('A summary worth reading')).toBeDefined()
     const saved = JSON.parse(localStorage.getItem('cogenta.tablePrefs.article') ?? '{}') as {

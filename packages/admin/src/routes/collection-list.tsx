@@ -17,9 +17,11 @@ import { type ApiErrorDescription, describeApiError } from '../api/describe-erro
 import { type SearchHit, searchContent } from '../api/search-client.js'
 import { listTerms, type Term } from '../api/taxonomy-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { plainTextOfRichText, truncateAtWordBoundary } from '../collections/word-count.js'
 import { downloadCsv, toCsv } from '../lib/csv.js'
 import { titleOf } from '../lib/entry-title.js'
 import { loadTablePrefs, PAGE_SIZES, saveTablePrefs } from '../lib/table-prefs.js'
+import { fieldLabel } from '../schema/field-label.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary, SchemaField } from '../schema/types.js'
@@ -57,11 +59,47 @@ interface BulkReport {
 }
 
 /** A value from a declared field, rendered as plain text for an extra table column (task 6). */
-function renderFieldValue(value: unknown): string {
+/**
+ * What a value *is*, not what `JSON.stringify` makes of it.
+ *
+ * This used to take the value alone, so an added column showed whatever the
+ * column happened to hold: a rich text body as its raw Portable Text JSON, a
+ * `publishedAt` as `2026-08-30T07:00:00.000Z` in a table whose own "Modifié"
+ * column two cells to the left read "30 août 2026, 09:00", a boolean as
+ * `true`. The field definition was right there at the call site the whole
+ * time; it just was not passed.
+ *
+ * Reference kinds (taxonomy, relation, media) still show their id. Turning
+ * one into a name means fetching what it points at, which is a request this
+ * list does not make today — worth doing, not worth faking with a truncated
+ * UUID that looks like a name.
+ */
+export function renderFieldValue(
+  value: unknown,
+  field: SchemaField | undefined,
+  formatDate: (iso: string) => string,
+  t: (key: string) => string,
+): string {
   if (value === null || value === undefined || value === '') return '—'
+
+  if (field !== undefined) {
+    if ((field.kind === 'date' || field.kind === 'datetime') && typeof value === 'string') {
+      return formatDate(value)
+    }
+    if (field.kind === 'boolean' && typeof value === 'boolean') {
+      return t(value ? 'common.yes' : 'common.no')
+    }
+    if (field.kind === 'richText') {
+      const text = plainTextOfRichText(value as Parameters<typeof plainTextOfRichText>[0])
+      return text === '' ? '—' : truncateAtWordBoundary(text, 120)
+    }
+  }
+
   if (typeof value === 'string') return value
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  if (Array.isArray(value)) return value.map((item) => renderFieldValue(item)).join(', ')
+  if (Array.isArray(value)) {
+    return value.map((item) => renderFieldValue(item, field, formatDate, t)).join(', ')
+  }
   return JSON.stringify(value)
 }
 
@@ -779,7 +817,7 @@ export function CollectionListRoute(): JSX.Element {
                     checked={(prefs.columns ?? []).includes(field.name)}
                     onChange={(event) => toggleColumn(field.name, event.target.checked)}
                   />
-                  {field.admin?.label ?? field.name}
+                  {fieldLabel(field.name, t, field)}
                 </label>
               ))}
             </fieldset>
@@ -1016,7 +1054,7 @@ export function CollectionListRoute(): JSX.Element {
                       </TableCell>
                       {activeExtraColumns.map((field) => (
                         <TableCell key={field.name}>
-                          {renderFieldValue(entry.values[field.name])}
+                          {renderFieldValue(entry.values[field.name], field, formatDateTime, t)}
                         </TableCell>
                       ))}
                       <TableCell>

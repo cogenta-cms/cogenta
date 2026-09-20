@@ -1,16 +1,27 @@
 import { createReadStream, createWriteStream } from 'node:fs'
 import process from 'node:process'
 import { createInterface } from 'node:readline'
+import { collectDependencies } from '@cogenta/api'
 import {
   CogentaError,
+  createDatabaseMediaStore,
   createDatabaseRegistry,
   createLogger,
+  createStorageRegistry,
   type DatabaseHandle,
   isCogentaError,
   type Logger,
   loadConfig,
+  type MediaStore,
+  type StorageDriver,
 } from '@cogenta/core'
-import { exportContent, type ImportReport, importContent } from '@cogenta/export'
+import {
+  type ExportResult,
+  exportContent,
+  exportMediaArchive,
+  type ImportReport,
+  importContent,
+} from '@cogenta/export'
 import {
   type CollectionDefinition,
   type ContentStore,
@@ -34,6 +45,22 @@ export interface ExportOptions {
   readonly out: Output
   readonly stderr: Writer
   readonly collections?: readonly string[]
+  /**
+   * Where to also write a ZIP of the referenced media's real bytes.
+   *
+   * Absent by default, and that default is the right one: the NDJSON already
+   * carries a `media-ref` per medium, which is everything the target needs
+   * whenever it shares the source's storage or had it restored alongside —
+   * by far the common case (a staging copy, a migration to another database
+   * engine, a re-import into the same install). Carrying the bytes doubles
+   * the size of the export for nothing in that case, and an export is also
+   * the artefact people hand to a partner.
+   *
+   * Ask for the archive when the target does *not* have the storage: a move
+   * to another host, another bucket, or a hand-off to someone who has only
+   * the files you gave them.
+   */
+  readonly mediaArchive?: string
 }
 
 export interface ImportContentOptions {
@@ -46,13 +73,20 @@ export interface ImportContentOptions {
 }
 
 const EXPORT_USAGE = `Usage
-  cogenta export <file.ndjson> [--collections a,b,c]
+  cogenta export <file.ndjson> [--collections a,b,c] [--media-archive <file.zip>]
 
-Exports content — entries, taxonomy terms, menus and redirects — as one
-NDJSON file, \`export@1.0\` (fiche 26, task 1). The CLI runs as the site's own
-operator, so every collection is included unless \`--collections\` narrows it;
-an HTTP caller instead goes through \`/api/export\`, which never sees a
-collection the requesting actor may not read.
+Exports content — entries, taxonomy terms, menus, redirects and a reference to
+every medium they point at — as one NDJSON file, \`export@1.0\` (fiche 26, task
+1). The CLI runs as the site's own operator, so every collection is included
+unless \`--collections\` narrows it; an HTTP caller instead goes through
+\`/api/export\`, which never sees a collection the requesting actor may not
+read.
+
+Media are exported **by reference** by default: each one's id, filename, type
+and storage key, which is all the target needs when it shares this site's
+storage or has had it restored alongside. Pass \`--media-archive\` to also write
+a ZIP of the real bytes — for a move to another host or bucket, or a hand-off
+to someone who has only the files you give them.
 `
 
 const IMPORT_CONTENT_USAGE = `Usage
@@ -71,6 +105,11 @@ interface Assembled {
   readonly taxonomyStoreFor: (taxonomy: TaxonomyDefinition) => TaxonomyStore
   readonly menus: ReturnType<typeof createMenuStore>
   readonly redirects: ReturnType<typeof createRedirectStore>
+  readonly media: MediaStore
+  readonly storage: () => Promise<{
+    readonly instance: StorageDriver
+    readonly dispose: () => Promise<void>
+  }>
   readonly site: { readonly name: string; readonly url: string }
   readonly dispose: () => Promise<void>
 }
@@ -91,6 +130,11 @@ async function assemble(
   await createSchemaTables(db, collections, taxonomies)
   await ensureMenuTables(db)
   await createRedirectStore({ db }).ensureTable()
+  const media = createDatabaseMediaStore({ db })
+  // The media store creates its table on first use; `list` is the cheapest
+  // call that does so without writing, and an export of a site that has
+  // never uploaded anything must not fail on a missing table.
+  await media.list({ limit: 1 })
 
   const contentStores = new Map<string, ContentStore>()
   const taxonomyStores = new Map<string, TaxonomyStore>()
@@ -134,6 +178,14 @@ async function assemble(
     },
     menus: createMenuStore({ db }),
     redirects: createRedirectStore({ db }),
+    media,
+    // Resolved lazily: only `--media-archive` reads the bytes, and a plain
+    // export must not fail because an S3 bucket it never touches is
+    // unreachable.
+    storage: async () => {
+      const selection = await createStorageRegistry({ logger }).select(loaded.config.storage)
+      return { instance: selection.instance, dispose: selection.dispose }
+    },
     site: { name: loaded.config.site.name, url: loaded.config.site.url },
     dispose: dbSelection.dispose,
   }
@@ -159,6 +211,7 @@ export async function runExport(options: ExportOptions): Promise<number> {
 
   try {
     const site = await assemble(options, logger)
+    const collectionsByName = new Map(site.collections.map((item) => [item.name, item]))
     try {
       const stream = createWriteStream(options.file, { mode: 0o600 })
       const generator = exportContent({
@@ -170,17 +223,31 @@ export async function runExport(options: ExportOptions): Promise<number> {
         taxonomyStoreFor: site.taxonomyStoreFor,
         menus: site.menus,
         redirects: site.redirects,
+        media: site.media,
+        // Most of a site's pictures sit in contract B blocks, not in declared
+        // `f.media()` fields, and `@cogenta/export` cannot see them: reading
+        // block data means reading the block vocabulary, which it does not
+        // depend on (R9). This process does. `collectDependencies` is the
+        // same walk `/api/content` uses to declare a response's dependencies,
+        // so the export carries exactly what the API already considers this
+        // entry to reference.
+        mediaIn: (entry, collection) =>
+          collectDependencies([{ ...entry, collection: collection.name }], {
+            collection: (name) => collectionsByName.get(name),
+          }).media,
         ...(options.collections === undefined
           ? {}
           : { selection: { collections: options.collections } }),
       })
+      let result: ExportResult | undefined
       for (;;) {
         const step = await generator.next()
         if (step.done === true) {
+          result = step.value
           out.heading('Export complete')
           out.line(`${options.file}`)
           out.line(
-            `${step.value.counts.entries} entries, ${step.value.counts.terms} terms, ${step.value.counts.menus} menus, ${step.value.counts.redirects} redirects, ${step.value.counts.mediaRefs} media references`,
+            `${result.counts.entries} entries, ${result.counts.terms} terms, ${result.counts.menus} menus, ${result.counts.redirects} redirects, ${result.counts.mediaRefs} media references`,
           )
           break
         }
@@ -191,6 +258,10 @@ export async function runExport(options: ExportOptions): Promise<number> {
       await new Promise<void>((resolve, reject) => {
         stream.end((error: unknown) => (error ? reject(error) : resolve()))
       })
+
+      if (options.mediaArchive !== undefined && result !== undefined) {
+        await writeMediaArchive(options.mediaArchive, site, result.mediaIds, out)
+      }
       return 0
     } finally {
       await site.dispose()
@@ -200,9 +271,47 @@ export async function runExport(options: ExportOptions): Promise<number> {
   }
 }
 
+/**
+ * `--media-archive`: the referenced media's real bytes, streamed into a ZIP
+ * beside the NDJSON rather than inside it. Two files on purpose — the content
+ * export stays a text file a person can read, diff and grep, which it stops
+ * being the moment a JPEG is base64'd into it.
+ */
+async function writeMediaArchive(
+  path: string,
+  site: Assembled,
+  ids: readonly string[],
+  out: Output,
+): Promise<void> {
+  const storage = await site.storage()
+  try {
+    const stream = createWriteStream(path, { mode: 0o600 })
+    let assets = 0
+    await exportMediaArchive({
+      media: site.media,
+      storage: storage.instance,
+      ids,
+      onAsset: () => {
+        assets += 1
+      },
+      write: (chunk) =>
+        new Promise((resolve, reject) => {
+          stream.write(chunk, (error) => (error ? reject(error) : resolve()))
+        }),
+    })
+    await new Promise<void>((resolve, reject) => {
+      stream.end((error: unknown) => (error ? reject(error) : resolve()))
+    })
+    out.line(`${path}`)
+    out.line(`${assets} media files archived`)
+  } finally {
+    await storage.dispose()
+  }
+}
+
 function formatImportReport(report: ImportReport): string {
   const lines = [
-    `entries: ${report.entries}, terms: ${report.terms}, menus: ${report.menus}, menu items: ${report.menuItems}, redirects: ${report.redirects}`,
+    `entries: ${report.entries}, terms: ${report.terms}, menus: ${report.menus}, menu items: ${report.menuItems}, redirects: ${report.redirects}, media: ${report.mediaRefs}`,
     `skipped (already existed): ${report.skipped}`,
   ]
   if (report.errors.length > 0) {
@@ -231,6 +340,7 @@ export async function runImportContent(options: ImportContentOptions): Promise<n
         taxonomyStoreFor: site.taxonomyStoreFor,
         menus: site.menus,
         redirects: site.redirects,
+        media: site.media,
       })
       out.heading('Import complete')
       out.line(formatImportReport(report))

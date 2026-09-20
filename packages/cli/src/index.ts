@@ -125,6 +125,7 @@ Options
   --name <plugin name>    plugin sandbox new: the name the plugin will carry
   --overwrite             plugin sandbox deploy: replace an installed plugin, keeping a copy
   --collections <a,b,c>   export: only these collections (default: all)
+  --media-archive <file>  export: also write a ZIP of the referenced media's bytes
   --dir <path>            backup / update: where to write/read backups (default .cogenta/backups)
   --passphrase <text>     backup create / restore: encrypt or decrypt the backup
   --confirm-breaking      update apply: proceed even though a contract-risk warning was found
@@ -208,6 +209,7 @@ export async function run(options: RunOptions): Promise<number> {
         description: { type: 'string' },
         external: { type: 'boolean' },
         collections: { type: 'string' },
+        'media-archive': { type: 'string' },
         dir: { type: 'string' },
         passphrase: { type: 'string' },
         'confirm-breaking': { type: 'boolean' },
@@ -321,6 +323,9 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
       ...(typeof parsed.values.collections === 'string'
         ? { collections: parsed.values.collections.split(',').map((name) => name.trim()) }
+        : {}),
+      ...(typeof parsed.values['media-archive'] === 'string'
+        ? { mediaArchive: parsed.values['media-archive'] }
         : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })

@@ -1,4 +1,4 @@
-import { CogentaError } from '@cogenta/core'
+import { CogentaError, type MediaKind, type MediaProvenance } from '@cogenta/core'
 import type {
   BlockZones,
   ContentStatus,
@@ -130,7 +130,20 @@ export interface ExportRedirectRecord {
   readonly reason: string
 }
 
-/** A reference to a medium used by an exported entry — never the bytes (task 1 vs task 2). */
+/**
+ * A reference to a medium used by an exported entry — never the bytes (task 1
+ * vs task 2).
+ *
+ * Everything below `storageKey` is optional because it was added after
+ * `export@1.0` shipped: a file written before it carries only the first five
+ * fields, and a reader has to keep accepting that file. They are here because
+ * re-creating the asset in the target from the first five alone would have to
+ * invent the rest — and two of them must never be invented. `alt` is the text
+ * a screen reader announces, and losing it on every import is an
+ * accessibility regression nobody would see; `provenance` is the one field
+ * the EU AI Act makes mandatory, and defaulting a generated image to `human`
+ * would make it say the opposite of the truth.
+ */
 export interface ExportMediaRefRecord {
   readonly kind: 'media-ref'
   readonly id: string
@@ -138,6 +151,13 @@ export interface ExportMediaRefRecord {
   readonly mimeType: string
   readonly size: number
   readonly storageKey: string
+  /** `image` / `video` / `audio` / `file`. Derived from `mimeType` when an older file omits it. */
+  readonly mediaKind?: MediaKind
+  readonly alt?: string
+  readonly width?: number | null
+  readonly height?: number | null
+  readonly provenance?: MediaProvenance
+  readonly provenanceDetail?: Readonly<Record<string, unknown>> | null
 }
 
 export type ExportRecord =

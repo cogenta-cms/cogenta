@@ -9,6 +9,28 @@ export interface MediaExportOptions {
 }
 
 /**
+ * The one place a `media-ref` record is built, so the references stream and
+ * the archive's own `manifest.json` can never describe the same asset
+ * differently.
+ */
+export function mediaRefRecord(asset: MediaAsset): ExportMediaRefRecord {
+  return {
+    kind: 'media-ref',
+    id: asset.id,
+    filename: asset.filename,
+    mimeType: asset.mimeType,
+    size: asset.size,
+    storageKey: asset.storageKey,
+    mediaKind: asset.kind,
+    alt: asset.alt,
+    width: asset.width,
+    height: asset.height,
+    provenance: asset.provenance,
+    provenanceDetail: asset.provenanceDetail,
+  }
+}
+
+/**
  * Task 2, "references seules" mode: one NDJSON line per medium, naming its
  * storage key rather than its bytes. Cheap, and correct whenever the target
  * site shares (or restores) the same storage — a media archive (below) is
@@ -17,16 +39,12 @@ export interface MediaExportOptions {
 export async function* exportMediaReferences(options: MediaExportOptions): AsyncGenerator<string> {
   for (const id of options.ids) {
     const asset = await options.media.get(id)
+    // An id an entry still points at but the library no longer holds is
+    // already broken in the source; saying nothing about it here is what
+    // lets the rest of the export through. `cogenta export` reports the
+    // difference between the ids found and the records written.
     if (asset === null) continue
-    const record: ExportMediaRefRecord = {
-      kind: 'media-ref',
-      id: asset.id,
-      filename: asset.filename,
-      mimeType: asset.mimeType,
-      size: asset.size,
-      storageKey: asset.storageKey,
-    }
-    yield encodeRecord(record)
+    yield encodeRecord(mediaRefRecord(asset))
   }
 }
 
@@ -64,14 +82,7 @@ export async function exportMediaArchive(options: MediaArchiveOptions): Promise<
       })
     }
     options.onAsset?.(asset)
-    manifest.push({
-      kind: 'media-ref',
-      id: asset.id,
-      filename: asset.filename,
-      mimeType: asset.mimeType,
-      size: asset.size,
-      storageKey: asset.storageKey,
-    })
+    manifest.push(mediaRefRecord(asset))
 
     const body = await options.storage.get(asset.storageKey)
     await zip.addFile(`media/${asset.id}/${asset.filename}`, body)

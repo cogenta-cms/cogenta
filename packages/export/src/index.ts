@@ -60,6 +60,7 @@ export {
   exportMediaReferences,
   type MediaArchiveOptions,
   type MediaExportOptions,
+  mediaRefRecord,
 } from './media-export.js'
 export {
   type ApplyRestoreOptions,

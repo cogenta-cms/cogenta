@@ -1,4 +1,4 @@
-import { CogentaError } from '@cogenta/core'
+import { CogentaError, type MediaKind, type MediaStore } from '@cogenta/core'
 import type {
   CollectionDefinition,
   ContentStore,
@@ -17,6 +17,18 @@ export interface ImportContentOptions {
   readonly menus?: MenuStore
   readonly redirects?: RedirectStore
   /**
+   * The target's media library. Given one, a `media-ref` record re-creates
+   * the asset row — same id, same storage key — so the entries that point at
+   * it resolve. Without one, `media-ref` records are skipped, which is the
+   * behaviour every caller had before they were ever written.
+   *
+   * It re-creates the *row*, never the bytes: the reference mode of an export
+   * says where a medium lives, not what it contains. That is correct when the
+   * two sites share storage or the storage was restored alongside; when it is
+   * not, the caller wants the media archive instead.
+   */
+  readonly media?: MediaStore
+  /**
    * `'skip'` (the default): a record whose id already exists in the target is
    * left alone and counted in `report.skipped`. `'fail'` stops the whole
    * import at the first collision — appropriate for "restore a content
@@ -32,6 +44,8 @@ export interface ImportReport {
   readonly menus: number
   readonly menuItems: number
   readonly redirects: number
+  /** Media asset rows re-created from `media-ref` records. */
+  readonly mediaRefs: number
   readonly skipped: number
   readonly errors: readonly {
     readonly kind: string
@@ -46,10 +60,34 @@ function emptyReport(): {
   menus: number
   menuItems: number
   redirects: number
+  mediaRefs: number
   skipped: number
   errors: { kind: string; id: string; message: string }[]
 } {
-  return { entries: 0, terms: 0, menus: 0, menuItems: 0, redirects: 0, skipped: 0, errors: [] }
+  return {
+    entries: 0,
+    terms: 0,
+    menus: 0,
+    menuItems: 0,
+    redirects: 0,
+    mediaRefs: 0,
+    skipped: 0,
+    errors: [],
+  }
+}
+
+/**
+ * What kind of medium a file is, when the export predates the record
+ * carrying it. Read from the recorded MIME type rather than the filename:
+ * the store type was itself settled from the bytes at upload time (L10's
+ * security review), so the MIME type is the closest thing to the truth this
+ * side of the bytes.
+ */
+function mediaKindFromMimeType(mimeType: string): MediaKind {
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+  if (mimeType.startsWith('audio/')) return 'audio'
+  return 'file'
 }
 
 /**
@@ -238,6 +276,47 @@ export async function importContent(
           ...(record.locale === null ? {} : { locale: record.locale }),
         })
         report.redirects += 1
+        return
+      }
+      case 'media-ref': {
+        // Without a media store this is the no-op every caller written
+        // before `media-ref` records existed already relied on.
+        if (options.media === undefined) return
+        const existing = await options.media.get(record.id)
+        if (existing !== null) {
+          if (onConflict === 'fail') {
+            throw new CogentaError({
+              code: 'RESTORE_CONFLICT',
+              message: `Media asset "${record.id}" already exists in the target.`,
+              hint: 'Import into an empty site, or pass onConflict: "skip".',
+              details: { id: record.id },
+            })
+          }
+          // Left exactly as the target has it: the target's own row is the
+          // one its storage matches, and overwriting it would point a live
+          // asset at a key that may not exist here.
+          report.skipped += 1
+          return
+        }
+        await options.media.create({
+          id: record.id,
+          kind: record.mediaKind ?? mediaKindFromMimeType(record.mimeType),
+          filename: record.filename,
+          mimeType: record.mimeType,
+          size: record.size,
+          storageKey: record.storageKey,
+          alt: record.alt ?? '',
+          ...(record.width === undefined ? {} : { width: record.width }),
+          ...(record.height === undefined ? {} : { height: record.height }),
+          // Only ever passed on when the record carried it: the store's own
+          // default is `human`, and a record with nothing to say about
+          // provenance was written by a site that had nothing to say either.
+          ...(record.provenance === undefined ? {} : { provenance: record.provenance }),
+          ...(record.provenanceDetail === undefined || record.provenanceDetail === null
+            ? {}
+            : { provenanceDetail: record.provenanceDetail }),
+        })
+        report.mediaRefs += 1
         return
       }
       default:

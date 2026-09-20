@@ -1,6 +1,7 @@
-import type { DatabaseHandle } from '@cogenta/core'
+import type { DatabaseHandle, MediaStore } from '@cogenta/core'
 import {
   type CollectionDefinition,
+  type ContentEntry,
   type ContentStore,
   type MenuStore,
   orderByDependency,
@@ -20,6 +21,7 @@ import {
   type ExportVersionRecord,
   encodeRecord,
 } from './format.js'
+import { exportMediaReferences } from './media-export.js'
 
 export interface ExportContentOptions {
   readonly db: DatabaseHandle
@@ -30,6 +32,38 @@ export interface ExportContentOptions {
   readonly taxonomyStoreFor: (taxonomy: TaxonomyDefinition) => TaxonomyStore
   readonly menus?: MenuStore
   readonly redirects?: RedirectStore
+  /**
+   * The media library the exported entries point at. Given one, the stream
+   * ends with a `media-ref` record per referenced medium, which is what lets
+   * an import re-create the asset rows instead of leaving every imported
+   * entry holding an identifier the target cannot resolve.
+   *
+   * Optional because an export is still a valid export without it — a caller
+   * that means to ship the bytes instead reads `ExportResult.mediaIds` and
+   * calls `exportMediaArchive`. What is *not* optional is that the counter
+   * matches the file: without a store, `counts.mediaRefs` is zero, because
+   * zero records were written.
+   */
+  readonly media?: MediaStore
+  /**
+   * Extra media ids carried by one entry, beyond the `f.media()` fields this
+   * package can see on its own.
+   *
+   * Most of a real site's pictures live inside contract B blocks and rich
+   * text, not in declared media fields — a `hero`, a `gallery`, a
+   * `mediaFigure`. Finding those means reading the block vocabulary, and
+   * `@cogenta/export` deliberately depends on neither `@cogenta/blocks` nor
+   * `@cogenta/api` (R9). So the caller, which already knows both, is asked
+   * instead: `cogenta export` passes a resolver backed by the very same
+   * `collectDependencies` the REST layer uses to declare a response's
+   * dependencies, and the ids come back here to be written as `media-ref`
+   * records like any other.
+   *
+   * Absent, the export still works and still carries every declared media
+   * field — it just under-reports, which is the behaviour this hook exists
+   * to let a caller fix.
+   */
+  readonly mediaIn?: (entry: ContentEntry, collection: CollectionDefinition) => readonly string[]
   readonly selection?: ExportSelection
   /**
    * A read is exported only when this returns `true` (R4 — the same rule
@@ -46,8 +80,23 @@ export interface ExportContentOptions {
 }
 
 export interface ExportResult {
+  /**
+   * What the stream really contains. `mediaRefs` counts records written, not
+   * media found: the two differ when no media store was supplied, or when an
+   * entry points at an asset the library no longer holds.
+   */
   readonly counts: ExportManifestRecord['counts']
-  /** Media ids referenced by an exported `media` field — task 2's input. */
+  /**
+   * Media ids referenced by an exported `media` field — task 2's input, and
+   * still returned when no store was given so a caller can archive the bytes
+   * separately.
+   *
+   * Covers the `f.media()` fields a collection declares, plus whatever
+   * `mediaIn` reported for each entry — which is how block and rich-text
+   * media get in, since finding those needs the block registry this package
+   * deliberately does not depend on. Without a `mediaIn`, this is declared
+   * media fields only, and undercounts a real site by roughly half.
+   */
   readonly mediaIds: readonly string[]
 }
 
@@ -179,6 +228,12 @@ export async function* exportContent(
         for (const field of mediaFields) {
           for (const id of mediaIdsOf(entry.values[field])) mediaSeen.add(id)
         }
+        // Whatever the caller can see that this package cannot: block and
+        // rich-text media. See `mediaIn`'s own comment for why it is asked
+        // rather than resolved here.
+        if (options.mediaIn !== undefined) {
+          for (const id of options.mediaIn(entry, collection)) mediaSeen.add(id)
+        }
 
         if (selection.includeHistory === true) {
           const history = await store.history(entry.id, { trashed: 'include' })
@@ -254,6 +309,18 @@ export async function* exportContent(
     }
   }
 
-  counts.mediaRefs = mediaSeen.size
-  return { counts, mediaIds: [...mediaSeen] }
+  // Last, not first: the ids are only known once every entry has been read,
+  // and this stream is written in one forward pass rather than buffered. It
+  // costs nothing at import time — a `media` field holds a plain identifier,
+  // so an entry read before its medium is not a broken reference, only an
+  // unresolved one for the rest of the file.
+  const mediaIds = [...mediaSeen]
+  if (options.media !== undefined) {
+    for await (const line of exportMediaReferences({ media: options.media, ids: mediaIds })) {
+      counts.mediaRefs += 1
+      yield line
+    }
+  }
+
+  return { counts, mediaIds }
 }

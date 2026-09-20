@@ -103,6 +103,9 @@ describe('exportMediaReferences / exportMediaArchive', () => {
       bytes.toString('utf8'),
     )
     const manifest = JSON.parse((await readAll('manifest.json')).toString('utf8'))
+    // The archive's manifest and the NDJSON references stream are built by
+    // the same `mediaRefRecord`, so what an archive says about an asset and
+    // what a reference says about it can never drift apart.
     expect(manifest).toEqual([
       {
         kind: 'media-ref',
@@ -111,6 +114,12 @@ describe('exportMediaReferences / exportMediaArchive', () => {
         mimeType: 'image/jpeg',
         size: bytes.length,
         storageKey: 'media/photo.jpg',
+        mediaKind: 'image',
+        alt: 'A photo',
+        width: null,
+        height: null,
+        provenance: 'human',
+        provenanceDetail: null,
       },
     ])
     await zip.close()

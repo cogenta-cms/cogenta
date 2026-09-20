@@ -86,6 +86,70 @@ async function publishHome(base: string, token: string): Promise<void> {
   expect(published.status).toBe(200)
 }
 
+describe('the site title an editor sets', () => {
+  it('reaches the public page, without a restart', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'admin@example.com', 'correct-horse-battery', ['admin', 'editor'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'admin@example.com',
+        'correct-horse-battery',
+      )
+      await publishHome(server.base, token)
+
+      // The name from `cogenta.config.mjs` until an editor says otherwise.
+      expect(await (await fetch(`${server.base}/home`)).text()).toContain('Home Site')
+
+      const written = await fetch(`${server.base}/api/settings`, {
+        method: 'PATCH',
+        headers: auth(token),
+        body: JSON.stringify({ key: 'general.title', value: 'Le Titre Choisi' }),
+      })
+      expect(written.status).toBe(200)
+
+      // Same process, no restart: the next request already says so.
+      const html = await (await fetch(`${server.base}/home`)).text()
+      expect(html).toContain('Le Titre Choisi')
+      expect(html).toContain('og:site_name" content="Le Titre Choisi"')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
+  it('falls back to the configured name when the setting is cleared', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'admin@example.com', 'correct-horse-battery', ['admin', 'editor'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'admin@example.com',
+        'correct-horse-battery',
+      )
+      await publishHome(server.base, token)
+
+      await fetch(`${server.base}/api/settings`, {
+        method: 'PATCH',
+        headers: auth(token),
+        body: JSON.stringify({ key: 'general.title', value: 'Provisoire' }),
+      })
+      await fetch(`${server.base}/api/settings`, {
+        method: 'PATCH',
+        headers: auth(token),
+        body: JSON.stringify({ key: 'general.title', value: '' }),
+      })
+
+      const html = await (await fetch(`${server.base}/home`)).text()
+      expect(html).toContain('Home Site')
+      expect(html).not.toContain('Provisoire')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+})
+
 describe('the home page, reached either way', () => {
   it('places the same widgets whether a visitor arrives at / or at its own path', async () => {
     const root = await project()

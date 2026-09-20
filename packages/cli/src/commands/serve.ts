@@ -3590,7 +3590,7 @@ async function commentsForEntry(
  */
 async function fallbackPageOptions(site: Site): Promise<FallbackPageOptions> {
   return {
-    site: site.site,
+    site: await renderSiteFor(site),
     locale: site.site.defaultLocale,
     styles: await site.resolveStyles(),
     menus: { menuRouter: site.menuRouter },
@@ -3601,6 +3601,31 @@ async function fallbackPageOptions(site: Site): Promise<FallbackPageOptions> {
     loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
     seo: () => readSeoRenderDefaults(site.siteSettingsStore),
   }
+}
+
+/**
+ * The site descriptor a public render should use: the config's, with `name`
+ * replaced by the `general.title` setting whenever one is stored.
+ *
+ * The setting's own help text promises the browser tab and search results,
+ * and it reached neither: `<title>`, `og:site_name`, the `%site%` token of
+ * the SEO template and the theme's banner all read `site.name` from
+ * `cogenta.config.mjs`, which an editor cannot change. The only thing that
+ * ever read `general.title` was the admin's own footer.
+ *
+ * Read per render, like `brandingForSite` and `chromeExtrasForSite` beside
+ * it and for the same reason: changing the title in the admin must show on
+ * the next page, with no restart.
+ *
+ * Not applied to the theme gallery preview (which pins its own fictional
+ * name) or to widget-area resolution (which renders no title), and never to
+ * the config the WebAuthn relying party is built from — a credential is
+ * bound to that name, and an editable setting has no business moving it.
+ */
+async function renderSiteFor(site: Site): Promise<Site['site']> {
+  const stored = await site.siteSettingsStore.get('general.title', SITE_SETTINGS_SITE_SCOPE)
+  const title = typeof stored?.value === 'string' ? stored.value.trim() : ''
+  return title === '' ? site.site : { ...site.site, name: title }
 }
 
 async function brandingForSite(site: Site): Promise<BrandingSettings> {
@@ -5718,7 +5743,7 @@ export function createRequestListener(
             ).data
             const definition = await site.formStore.definitions.readByName(formName)
             const formPageOptions = {
-              site: site.site,
+              site: await renderSiteFor(site),
               styles: await site.resolveStyles(),
               now: Date.now,
               menus: { menuRouter: site.menuRouter },
@@ -5760,7 +5785,7 @@ export function createRequestListener(
             }
           }
           const formPageOptions = {
-            site: site.site,
+            site: await renderSiteFor(site),
             styles: await site.resolveStyles(),
             now: Date.now,
             menus: { menuRouter: site.menuRouter },
@@ -6130,7 +6155,7 @@ export function createRequestListener(
           {
             collections: site.collections,
             gateway: site.gateway,
-            site: site.site,
+            site: await renderSiteFor(site),
             styles: previewStyles,
             loadMedia: (ids) => loadRenderMedia(site, ids),
             // A preview is never a real visit, and never cacheable.
@@ -7072,7 +7097,7 @@ export function createRequestListener(
             {
               collections: site.collections,
               gateway: site.gateway,
-              site: site.site,
+              site: await renderSiteFor(site),
               styles: site.styles,
               loadMedia: (ids) => loadRenderMedia(site, ids),
               // Present so the preview's `<body>` stays byte-identical to the
@@ -7491,7 +7516,7 @@ export function createRequestListener(
             router: site.searchRouter,
             gateway: site.gateway,
             collections: site.collections,
-            site: site.site,
+            site: await renderSiteFor(site),
             styles: await site.resolveStyles(),
             menus: { menuRouter: site.menuRouter },
             branding: () => brandingForSite(site),
@@ -7525,7 +7550,7 @@ export function createRequestListener(
           const formName = formPageMatch[1] as string
           const definition = await site.formStore.definitions.readByName(formName)
           const formPageOptions = {
-            site: site.site,
+            site: await renderSiteFor(site),
             styles: await site.resolveStyles(),
             now: Date.now,
             menus: { menuRouter: site.menuRouter },
@@ -7567,7 +7592,7 @@ export function createRequestListener(
         const renderOptions = {
           collections: site.collections,
           gateway: site.gateway,
-          site: site.site,
+          site: await renderSiteFor(site),
           // Live, not the startup snapshot — a saved appearance override
           // must show up on the very next page view (fiche 14).
           styles: await site.resolveStyles(),
@@ -7719,7 +7744,7 @@ export function createRequestListener(
                 {
                   collections: site.collections,
                   gateway: site.gateway,
-                  site: site.site,
+                  site: await renderSiteFor(site),
                   styles: await site.resolveStyles(),
                   menus: { menuRouter: site.menuRouter },
                   branding: () => brandingForSite(site),
@@ -7794,7 +7819,7 @@ export function createRequestListener(
                   {
                     collections: site.collections,
                     gateway: site.gateway,
-                    site: site.site,
+                    site: await renderSiteFor(site),
                     styles: await site.resolveStyles(),
                     menus: { menuRouter: site.menuRouter },
                     branding: () => brandingForSite(site),
@@ -7896,7 +7921,7 @@ export function createRequestListener(
               {
                 collections: site.collections,
                 gateway: site.gateway,
-                site: site.site,
+                site: await renderSiteFor(site),
                 styles: await site.resolveStyles(),
                 menus: { menuRouter: site.menuRouter },
                 branding: () => brandingForSite(site),

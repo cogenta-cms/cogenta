@@ -20,6 +20,7 @@ import { useAuth } from '../auth/auth-context.js'
 import { grantsForRole, knownRoleNames } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { SchemaDocument } from '../schema/types.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import {
   Badge,
   Button,
@@ -99,6 +100,7 @@ function parseSortChoice(value: SortChoice): {
  */
 export function UsersRoute(): JSX.Element {
   const { t, i18n } = useTranslation()
+  const formatWhen = useDateTimeFormatter()
   const auth = useAuth()
   const schemaState = useSchema()
   const schema = schemaState.status === 'ready' ? schemaState.schema : null
@@ -666,7 +668,9 @@ export function UsersRoute(): JSX.Element {
                     </div>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    {user.lastSignInAt ?? t('users.neverSignedIn')}
+                    {user.lastSignInAt === null
+                      ? t('users.neverSignedIn')
+                      : formatWhen(user.lastSignInAt)}
                   </TableCell>
                   <TableCell>
                     {/* Short, generic visible labels — the full email lives
@@ -1024,6 +1028,7 @@ export function SessionList({
   readonly sessions: readonly UserSession[]
   onRevoke(sessionId: string): void
 }): JSX.Element {
+  const formatWhen = useDateTimeFormatter()
   const { t } = useTranslation()
 
   if (sessions.length === 0) return <p>{t('users.noSessions')}</p>
@@ -1042,7 +1047,7 @@ export function SessionList({
               <span className="text-sm">
                 {session.label ?? t('users.unnamedSession')} —{' '}
                 {t('users.sessionDevice', { browser: session.browser, device: session.device })} —{' '}
-                {t('users.lastSeen')} {session.lastSeenAt}
+                {t('users.lastSeen')} {formatWhen(session.lastSeenAt)}
                 {session.isCurrent && (
                   <>
                     {' '}
@@ -1051,7 +1056,7 @@ export function SessionList({
                 )}
               </span>
               <Button variant="destructive" size="sm" onClick={() => onRevoke(session.id)}>
-                {t('users.revokeSession', { at: session.lastSeenAt })}
+                {t('users.revokeSession', { at: formatWhen(session.lastSeenAt) })}
               </Button>
             </li>
           ))}

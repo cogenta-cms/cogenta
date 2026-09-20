@@ -9,8 +9,9 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { listSettings, type SiteSetting } from '../api/settings-client.js'
-import type { DateStyle, TimeStyle } from '../lib/format.js'
+import { type DateStyle, formatDateTime, type TimeStyle } from '../lib/format.js'
 
 /**
  * Fetches `GET /api/settings` once and holds it for the session — the same
@@ -121,6 +122,27 @@ export function deriveBrandingSettings(settings: readonly SiteSetting[]): Brandi
  * own separate live read of the same store) must never flash "unbranded"
  * for a site that never touched this setting.
  */
+/**
+ * A date formatter that already knows the site's settings.
+ *
+ * The Settings screen tells an operator the time zone "governs scheduled
+ * publication and every date shown in this admin". It did not: the users
+ * table and the session list printed `2026-09-19T20:26:39.001Z` verbatim, and
+ * the screens that did format a date built their own `Intl.DateTimeFormat`
+ * without passing the zone at all — right by accident whenever the browser
+ * sat in the same one as the site.
+ *
+ * One hook, so a screen cannot format a date and forget where the site lives.
+ */
+export function useDateTimeFormatter(): (iso: string | null | undefined) => string {
+  const { timeZone, dateStyle, timeStyle } = useFormattingSettings()
+  const { i18n } = useTranslation()
+  return (iso) => {
+    if (iso === null || iso === undefined || iso === '') return ''
+    return formatDateTime(iso, { locale: i18n.language, timeZone, dateStyle, timeStyle })
+  }
+}
+
 export function useBrandingSettings(): BrandingSettings {
   const state = useSiteSettingsState()
   if (state.status !== 'ready') {

@@ -2163,6 +2163,7 @@ export function installMockFetch(
     locale?: string | null
     // Fiche 17 task 1 — only meaningful while `status === 'invited'`.
     invitedAt?: string
+    lastSignInAt?: string | null
   }
 
   /** The wire shape `AdminUser` expects — fiche 17's fields default the same way an untouched account's do on the real server. */
@@ -2174,7 +2175,11 @@ export function installMockFetch(
       bio: account.bio ?? null,
       locale: account.locale ?? null,
       mfaRecommended: false,
-      lastSignInAt: null,
+      // A real instant, not `null`: an account that has never signed in is
+      // the one shape that never exercises a date formatter, and it was the
+      // only shape this double produced — so the accounts table printed a raw
+      // ISO timestamp with every test passing.
+      lastSignInAt: account.lastSignInAt ?? '2026-09-19T20:26:39.001Z',
       dormant: false,
       invitation:
         account.status === 'invited' && account.invitedAt !== undefined

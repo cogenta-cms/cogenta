@@ -251,7 +251,7 @@ describe('my profile — sessions', () => {
     await screen.findByText(/Work laptop/u)
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Révoquer la session vue le 2026-03-01T00:00:00.000Z' }),
+      screen.getAllByRole('button', { name: /^Révoquer la session vue le/u })[0] as HTMLElement,
     )
 
     await waitFor(() => {

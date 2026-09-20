@@ -9,6 +9,7 @@ import {
 } from '../api/observability-client.js'
 import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
 import {
   Card,
@@ -96,14 +97,10 @@ export function ObservabilityRoute(): JSX.Element {
     await load()
   }
 
-  function formatDateTime(iso: string): string {
-    const parsed = new Date(iso)
-    if (Number.isNaN(parsed.getTime())) return iso
-    return new Intl.DateTimeFormat(i18n.language, {
-      dateStyle: 'medium',
-      timeStyle: 'medium',
-    }).format(parsed)
-  }
+  // This built its own formatter and passed no time zone, so it read correctly
+  // only while the browser happened to sit in the site's own — which is how a
+  // screen can look right and still ignore the setting that governs it.
+  const formatDateTime = useDateTimeFormatter()
 
   if (!isAdmin) {
     return (

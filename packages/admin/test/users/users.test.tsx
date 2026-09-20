@@ -176,7 +176,7 @@ describe("another account's sessions", () => {
     expect(await screen.findByText(/Phone/u)).toBeDefined()
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Révoquer la session vue le 2026-03-03T00:00:00.000Z' }),
+      screen.getAllByRole('button', { name: /^Révoquer la session vue le/u })[0] as HTMLElement,
     )
 
     expect(await screen.findByText('Aucune session active.')).toBeDefined()

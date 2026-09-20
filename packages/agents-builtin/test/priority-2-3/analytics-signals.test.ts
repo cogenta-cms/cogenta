@@ -4,8 +4,20 @@ import { readAudienceSignals } from '../../src/analytics/signals.js'
 describe('reading what really changed in an audience', () => {
   it('ignores a big percentage on a tiny volume, and keeps a real move', () => {
     const findings = readAudienceSignals(
-      { totalViews: 320, pages: [{ path: '/noise', views: 5 }, { path: '/real', views: 300 }] },
-      { totalViews: 202, pages: [{ path: '/noise', views: 2 }, { path: '/real', views: 200 }] },
+      {
+        totalViews: 320,
+        pages: [
+          { path: '/noise', views: 5 },
+          { path: '/real', views: 300 },
+        ],
+      },
+      {
+        totalViews: 202,
+        pages: [
+          { path: '/noise', views: 2 },
+          { path: '/real', views: 200 },
+        ],
+      },
     )
 
     expect(findings.map((finding) => finding.path)).toEqual(['/real'])
@@ -42,7 +54,13 @@ describe('reading what really changed in an audience', () => {
   })
 
   it('says nothing when two windows look alike', () => {
-    const window = { totalViews: 500, pages: [{ path: '/a', views: 300 }, { path: '/b', views: 200 }] }
+    const window = {
+      totalViews: 500,
+      pages: [
+        { path: '/a', views: 300 },
+        { path: '/b', views: 200 },
+      ],
+    }
     expect(readAudienceSignals(window, window)).toEqual([])
   })
 })

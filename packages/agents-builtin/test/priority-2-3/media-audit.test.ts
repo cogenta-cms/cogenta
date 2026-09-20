@@ -38,7 +38,9 @@ describe('auditing a media library', () => {
 
     const findings = auditMediaLibrary([fresh, old], { referenced: new Set(), now })
 
-    expect(findings.filter((finding) => finding.issue === 'unused').map((f) => f.id)).toEqual(['old'])
+    expect(findings.filter((finding) => finding.issue === 'unused').map((f) => f.id)).toEqual([
+      'old',
+    ])
   })
 
   it('measures weight against the pixels it really has, not against a flat file size', () => {
@@ -56,7 +58,10 @@ describe('auditing a media library', () => {
 
   it('says nothing at all about a library that is in order', () => {
     const findings = auditMediaLibrary(
-      [asset({ id: 'a' }), asset({ id: 'b', kind: 'file', filename: 'report.pdf', width: null, height: null })],
+      [
+        asset({ id: 'a' }),
+        asset({ id: 'b', kind: 'file', filename: 'report.pdf', width: null, height: null }),
+      ],
       { referenced: new Set(['a', 'b']), now },
     )
 

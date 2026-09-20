@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  auditAccessibility,
-  auditContrast,
-  contrastRatio,
-} from '../../src/accessibility/audit.js'
+import { auditAccessibility, auditContrast, contrastRatio } from '../../src/accessibility/audit.js'
 
 const CONFORMING = `<!doctype html><html lang="fr"><body>
 <h1>Les ateliers du samedi</h1>
@@ -27,12 +23,11 @@ describe('auditing the HTML a visitor really receives', () => {
 <p><a href="/x">Cliquez ici</a></p>
 </body></html>`
 
-    expect(auditAccessibility(page).map((finding) => finding.issue).sort()).toEqual([
-      'generic-link-text',
-      'heading-skip',
-      'image-without-alt',
-      'missing-lang',
-    ])
+    expect(
+      auditAccessibility(page)
+        .map((finding) => finding.issue)
+        .sort(),
+    ).toEqual(['generic-link-text', 'heading-skip', 'image-without-alt', 'missing-lang'])
   })
 
   it('accepts a field labelled by aria-label as well as by a <label>', () => {

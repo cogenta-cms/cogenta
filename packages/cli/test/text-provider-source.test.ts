@@ -43,9 +43,11 @@ let agentStore: AgentDeclarationStore
 
 const logger = createLogger({ level: 'silent' })
 
-function configWith(
-  llm?: { readonly provider: string; readonly model: string; readonly apiKey: string | undefined },
-): CogentaConfig {
+function configWith(llm?: {
+  readonly provider: string
+  readonly model: string
+  readonly apiKey: string | undefined
+}): CogentaConfig {
   return {
     ...(llm === undefined ? {} : { llm: { ...llm, baseUrl: undefined } }),
     site: { name: 'Test', url: 'https://example.com' },

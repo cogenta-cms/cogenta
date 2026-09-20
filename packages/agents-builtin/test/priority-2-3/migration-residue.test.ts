@@ -61,7 +61,10 @@ describe('finding what an import left behind', () => {
         text: 'https://old.example.com/2019/05/a-post and https://old.example.com/2019/05/a-post again',
       }),
     ]
-    const redirects = redirectsFor(findMigrationResidue(entries, { previousDomains: ['old.example.com'] }), entries)
+    const redirects = redirectsFor(
+      findMigrationResidue(entries, { previousDomains: ['old.example.com'] }),
+      entries,
+    )
 
     expect(redirects).toEqual([{ from: '/2019/05/a-post', to: '/articles/a-post' }])
   })

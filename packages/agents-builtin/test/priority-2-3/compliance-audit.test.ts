@@ -49,7 +49,12 @@ describe('auditing what a site must be able to show', () => {
             provenance: 'generated',
             provenanceDetail: { agent: 'content', model: 'claude-sonnet' },
           },
-          { id: '2', title: 'Half declared', provenance: 'generated', provenanceDetail: { agent: 'content' } },
+          {
+            id: '2',
+            title: 'Half declared',
+            provenance: 'generated',
+            provenanceDetail: { agent: 'content' },
+          },
           { id: '3', title: 'Written by a person', provenance: 'human', provenanceDetail: null },
         ],
       }),

@@ -53,6 +53,11 @@ export interface McpOptions {
   readonly cwd?: string
   readonly env?: Record<string, string | undefined>
   readonly logger?: Logger
+  /**
+   * Present so every command shares one signature, and **deliberately never
+   * written to**: the real CLI builds this on stdout, which here belongs to
+   * JSON-RPC. Anything this command has to say to a human goes to `stderr`.
+   */
   readonly out: Output
   readonly stderr: Writer
   /** Resolves the acting user from the real user store — the process that launched this command IS that user. */
@@ -289,7 +294,7 @@ function buildSiteManifest(options: {
  * process exits when its stdin closes (the spawning client disconnected).
  */
 export async function runMcp(options: McpOptions): Promise<number> {
-  const { out, stderr } = options
+  const { stderr } = options
   const env = options.env ?? process.env
   const logger = options.logger ?? createLogger({ level: 'silent' })
 
@@ -359,8 +364,14 @@ export async function runMcp(options: McpOptions): Promise<number> {
       logger,
     })
 
-    out.detail(
-      `MCP server ready — ${tools.length} tool(s), actor: ${actor.id ?? '(anonymous)'} [${actor.roles.join(', ')}]`,
+    // stderr, never `out`. This command speaks JSON-RPC on stdout, and the
+    // real CLI builds `out` on that same stream — so a readiness line printed
+    // through it is the first thing a client reads, and it is not JSON. The
+    // connection then fails before `initialize` is ever answered. Every
+    // stdio MCP server has this rule; ours broke it by using the same output
+    // helper as every other command.
+    stderr(
+      `MCP server ready — ${tools.length} tool(s), actor: ${actor.id ?? '(anonymous)'} [${actor.roles.join(', ')}]\n`,
     )
 
     const server = createMcpServer({ name: 'cogenta', version: '1.0.0', tools })

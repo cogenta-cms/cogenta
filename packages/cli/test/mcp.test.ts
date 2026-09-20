@@ -160,6 +160,56 @@ afterEach(() => {
 })
 
 describe('cogenta mcp', () => {
+  /**
+   * stdout belongs to the protocol, and to nothing else.
+   *
+   * `cogenta mcp` printed a human readiness line ("MCP server ready — N
+   * tool(s)…") through `out`, which the real CLI builds on stdout — the very
+   * stream JSON-RPC speaks on. The first thing any client read was therefore
+   * not JSON, and the connection failed before `initialize` was answered.
+   *
+   * Every other test in this file passes `createOutput(() => undefined)`,
+   * discarding that channel entirely, so none of them could ever see it. This
+   * one wires `out` to the same stream as the protocol, exactly as
+   * `src/index.ts` does.
+   */
+  it('writes nothing but JSON-RPC on the stream the protocol owns', async () => {
+    const root = await project()
+    await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
+
+    const stdin = new PassThrough()
+    const stdout = new PassThrough()
+    let raw = ''
+    stdout.on('data', (chunk: Buffer) => {
+      raw += chunk.toString('utf8')
+    })
+
+    const done = runMcp({
+      out: createOutput((text) => {
+        stdout.write(text)
+      }, false),
+      stderr: () => undefined,
+      cwd: root,
+      env: { COGENTA_AUTH_SIGNING_KEY: 'test-signing-key-not-a-real-secret' },
+      stdin,
+      stdout,
+      email: 'editor@example.com',
+    })
+
+    stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })}\n`)
+    for (let attempt = 0; attempt < 200 && !raw.includes('"id":1'); attempt += 1) {
+      await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, 25))
+    }
+    stdin.end()
+    await done
+
+    const lines = raw.split('\n').filter((line) => line.trim() !== '')
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) {
+      expect(() => JSON.parse(line) as unknown).not.toThrow()
+    }
+  }, 30_000)
+
   it('answers initialize and tools/list with the real manifest for an authenticated actor', async () => {
     const root = await project()
     await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])

@@ -231,5 +231,11 @@ describe('cogenta backup / cogenta restore', () => {
       env: {},
     })
     expect(okCode).toBe(0)
-  }, 30_000)
+    // Three runs of the whole backup/restore path, two of them through the
+    // passphrase KDF, which is deliberately expensive. The ceiling was 30s
+    // back when `backup create` dumped a quarter of the tables; now that it
+    // dumps all of them it is roughly three times the work, and this was the
+    // one test in the package that timed out under a full-suite run while
+    // passing on its own.
+  }, 180_000)
 })

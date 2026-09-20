@@ -2,8 +2,25 @@ import { createWriteStream } from 'node:fs'
 import { mkdir, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
+import { createReferenceDocumentStore } from '@cogenta/agents'
+import { ANALYTICS_TABLES, ensureAnalyticsTables } from '@cogenta/analytics'
+import {
+  createNoticeDismissalStore,
+  createNoticeHistoryStore,
+  NOTICE_DISMISSALS_TABLE,
+  NOTICE_HISTORY_TABLE,
+} from '@cogenta/api'
 import { AUTH_TABLES, ensureAuthTables } from '@cogenta/auth'
 import {
+  ensureChannelTables,
+  ensurePreferenceTables,
+  LINKING_TABLES,
+  PREFERENCE_TABLES,
+} from '@cogenta/channels'
+import { COMMENT_TABLES, ensureCommentsTables } from '@cogenta/comments'
+import { TABLES as COMMERCE_TABLES, ensureCommerceTables } from '@cogenta/commerce'
+import {
+  createDatabaseMediaFolderStore,
   createDatabaseMediaStore,
   createDatabaseRegistry,
   createLogger,
@@ -11,6 +28,7 @@ import {
   isCogentaError,
   type Logger,
   loadConfig,
+  MEDIA_FOLDER_TABLE,
   MEDIA_TABLE,
 } from '@cogenta/core'
 import {
@@ -20,16 +38,50 @@ import {
   previewRestore,
   readBackupManifest,
 } from '@cogenta/export'
+import { ensureFormsTables, FORMS_TABLES } from '@cogenta/forms'
+import { ensureMcpConnectionTables, MCP_CONNECTION_TABLE } from '@cogenta/mcp'
 import {
+  ensureMarketplaceTables,
+  ensurePluginProvisionTable,
+  ensurePluginTables,
+  ensureRegistryTables,
+  MARKETPLACE_TABLES,
+  PERMISSION_TABLES,
+  REGISTRY_TABLES,
+} from '@cogenta/plugins'
+import {
+  ADMIN_THEME_TABLE,
   type CollectionDefinition,
+  createNotFoundLogStore,
+  createRedirectPatternStore,
   createRedirectStore,
+  createScheduledPublishFailureStore,
+  createScheduledTaskRegistry,
   createSchemaTables,
+  EMBED_PREVIEW_TABLE,
+  ensureAdminThemeTable,
+  ensureMaintenanceTable,
   ensureMenuTables,
   ensurePatternTables,
+  ensureRolePermissionTable,
+  ensureSearchConsoleConnectionTable,
+  ensureSiteSettingsTables,
+  ensureThemeTable,
+  MAINTENANCE_TABLE,
   MENU_TABLES,
+  NOT_FOUND_LOG_TABLE,
   PATTERN_TABLE,
+  REDIRECT_PATTERNS_TABLE,
   REDIRECTS_TABLE,
+  ROLE_PERMISSIONS_TABLE,
+  SCHEDULED_PUBLISH_FAILURES_TABLE,
+  SCHEDULED_TASK_RUNS_TABLE,
+  SEARCH_CONSOLE_CONNECTION_TABLE,
+  SEARCH_FTS_TABLE,
+  SEARCH_TABLE,
+  SITE_SETTINGS_TABLE,
   type TaxonomyDefinition,
+  THEME_TABLE,
 } from '@cogenta/schema'
 import { ensureWidgetTables, WIDGETS_TABLE } from '@cogenta/widgets'
 import type { Output, Writer } from '../output.js'
@@ -119,17 +171,119 @@ export async function openSite(
 }
 
 /**
+ * Tables a backup deliberately leaves out, each with the reason it is left
+ * out. Nothing here holds anything a restore could not rebuild, or anything
+ * that would be *wrong* to carry from one database into another.
+ *
+ * This map is not documentation: `test/backup-table-coverage.test.ts` walks
+ * the real tables of a real served site and fails on any table that is
+ * neither backed up nor named here. Adding a table to the product and
+ * forgetting it is therefore a failing test, which is how the
+ * quarter-of-the-database backup this map was written for went unnoticed for
+ * so long.
+ */
+export const BACKUP_EXCLUDED_TABLES: Readonly<Record<string, string>> = {
+  [SEARCH_TABLE]:
+    'Derived index. `withSearchIndexing` rewrites it from the entries themselves on every write; restoring a stale copy would be worse than rebuilding it.',
+  [SEARCH_FTS_TABLE]:
+    "SQLite's virtual full-text table over `cogenta_search`. A virtual table has no rows of its own to dump — the shadow tables below are its storage, and only its own `insert` statements may write them.",
+  [`${SEARCH_FTS_TABLE}_config`]: 'FTS5 shadow table — engine-internal storage, never row-copied.',
+  [`${SEARCH_FTS_TABLE}_content`]: 'FTS5 shadow table — engine-internal storage, never row-copied.',
+  [`${SEARCH_FTS_TABLE}_data`]: 'FTS5 shadow table — engine-internal storage, never row-copied.',
+  [`${SEARCH_FTS_TABLE}_docsize`]: 'FTS5 shadow table — engine-internal storage, never row-copied.',
+  [`${SEARCH_FTS_TABLE}_idx`]: 'FTS5 shadow table — engine-internal storage, never row-copied.',
+  cogenta_vectors:
+    'Derived index. Embeddings are recomputed from the indexed content; the pgvector driver creates this table itself and only on Postgres.',
+  cogenta_jobs:
+    'In-flight work of the database queue driver. A job claimed by the process that took the backup means nothing in the database it is restored into.',
+  cogenta_scheduled_task_claims:
+    'Compare-and-set lease held by whichever replica is currently running a scheduled task. Restoring one would hand a fresh site a lock nobody holds.',
+  [EMBED_PREVIEW_TABLE]:
+    'Cache of oEmbed responses (L38), re-fetched on demand. It also holds copies of third-party thumbnails, which a backup has no business carrying.',
+  cogenta_analytics_daily_salts:
+    'The rotating per-day salt that makes an analytics session hash unlinkable. It is key material, it expires daily, and keeping it next to the events it salts is exactly what the privacy design avoids.',
+  cogenta_migrations:
+    "The target database's own ledger of which migrations it has applied. Overwriting it with the source's would make the target lie about its own shape.",
+  cogenta_migrations_lock:
+    'Migration mutex — held only while a migration is running, meaningless outside that process.',
+}
+
+/**
  * Every table `cogenta backup` knows how to name, assembled from each
  * package's own table constants — `@cogenta/export` depends on none of them
  * by design (R1/R9), so this is the one place that has to.
+ *
+ * Whole groups are spread with `Object.values` rather than listed member by
+ * member wherever the owning package publishes its tables as one object: a
+ * table added to `@cogenta/commerce` or `@cogenta/forms` tomorrow then enters
+ * the backup without anyone having to remember this file exists.
+ *
+ * Order is what a forward-only restore needs — `before` is what content
+ * points at (accounts, media), `after` is what points at content (navigation,
+ * comments, orders), so a foreign key always meets its target already
+ * restored.
+ *
+ * Exported for `test/backup-table-coverage.test.ts`, which is the only reason
+ * the coverage guarantee above is a guarantee rather than a hope.
  */
-async function tablesFor(cwd: string): Promise<readonly string[]> {
+export async function backupTables(cwd: string): Promise<readonly string[]> {
   const { collections, taxonomies } = await loadSchemaModule(cwd)
   return buildBackupTables({
     collections,
     taxonomies,
-    before: [...Object.values(AUTH_TABLES), MEDIA_TABLE],
-    after: [MENU_TABLES.menus, MENU_TABLES.items, REDIRECTS_TABLE, PATTERN_TABLE, WIDGETS_TABLE],
+    before: [
+      // Accounts first: `users` before the credentials, sessions and audit
+      // rows that name a user id.
+      ...Object.values(AUTH_TABLES),
+      // A folder before the media it holds, and media before the entries
+      // whose `f.media()` fields name an asset id.
+      MEDIA_FOLDER_TABLE,
+      MEDIA_TABLE,
+    ],
+    after: [
+      // How the site presents itself.
+      SITE_SETTINGS_TABLE,
+      THEME_TABLE,
+      ADMIN_THEME_TABLE,
+      ROLE_PERMISSIONS_TABLE,
+      MAINTENANCE_TABLE,
+      // Navigation, routing, and the editor's own libraries.
+      ...Object.values(MENU_TABLES),
+      REDIRECTS_TABLE,
+      REDIRECT_PATTERNS_TABLE,
+      NOT_FOUND_LOG_TABLE,
+      PATTERN_TABLE,
+      WIDGETS_TABLE,
+      // Publication scheduling: what ran, and what failed to.
+      SCHEDULED_TASK_RUNS_TABLE,
+      SCHEDULED_PUBLISH_FAILURES_TABLE,
+      SEARCH_CONSOLE_CONNECTION_TABLE,
+      // Admin notices — which recommendation a person has already dismissed.
+      NOTICE_DISMISSALS_TABLE,
+      NOTICE_HISTORY_TABLE,
+      // Contract F: comments, and the settings that govern them.
+      ...Object.values(COMMENT_TABLES),
+      // Contract G: forms and everything a visitor has submitted.
+      ...Object.values(FORMS_TABLES),
+      ...Object.values(ANALYTICS_TABLES),
+      // Extensions: what is installed, and what it was allowed to do.
+      ...Object.values(REGISTRY_TABLES),
+      ...Object.values(PERMISSION_TABLES),
+      ...Object.values(MARKETPLACE_TABLES),
+      // Channels: which account is linked to which chat, and how it wants
+      // to be told about things.
+      ...Object.values(LINKING_TABLES),
+      ...Object.values(PREFERENCE_TABLES),
+      MCP_CONNECTION_TABLE,
+      // The assistant's uploaded reference documents. A literal because
+      // `@cogenta/agents` keeps this constant module-private on purpose; the
+      // coverage test fails if it is ever renamed out from under us.
+      'cogenta_reference_documents',
+      // Contract E, in its own dependency order (products before variants,
+      // orders before their lines). `Object.values` preserves the order
+      // `@cogenta/commerce` declares them in, which is already that order.
+      ...Object.values(COMMERCE_TABLES),
+    ],
   })
 }
 
@@ -148,13 +302,38 @@ async function ensureAllTables(
 ): Promise<void> {
   await createSchemaTables(db, collections, taxonomies)
   await ensureAuthTables(db)
+  await ensureSiteSettingsTables(db)
+  await ensureThemeTable(db)
+  await ensureAdminThemeTable(db)
+  await ensureRolePermissionTable(db)
+  await ensureMaintenanceTable(db)
   await ensureMenuTables(db)
   await ensurePatternTables(db)
   await ensureWidgetTables(db)
+  await ensureSearchConsoleConnectionTable(db)
+  await ensureCommentsTables(db)
+  await ensureFormsTables(db)
+  await ensureAnalyticsTables(db)
+  await ensureCommerceTables(db)
+  await ensurePluginTables(db)
+  await ensurePluginProvisionTable(db)
+  await ensureRegistryTables(db)
+  await ensureMarketplaceTables(db)
+  await ensureChannelTables(db)
+  await ensurePreferenceTables(db)
+  await ensureMcpConnectionTables(db)
   await createRedirectStore({ db }).ensureTable()
+  await createRedirectPatternStore({ db }).ensureTable()
+  await createNotFoundLogStore({ db }).ensureTable()
+  await createScheduledPublishFailureStore(db).ensureTable()
+  await createScheduledTaskRegistry({ db }).ensureTable()
+  await createNoticeDismissalStore(db).ensureTable()
+  await createNoticeHistoryStore(db).ensureTable()
+  await createReferenceDocumentStore(db).ensureTable()
   // The media store creates its table lazily on first call; `list()` is the
   // cheapest one that does so without writing anything.
   await createDatabaseMediaStore({ db }).list({ limit: 1 })
+  await createDatabaseMediaFolderStore({ db }).list()
 }
 
 export interface CreateSiteBackupOptions {
@@ -196,7 +375,7 @@ export async function createSiteBackup(
   const prefix = options.filenamePrefix ?? 'backup-'
 
   const { collections, taxonomies } = await loadSchemaModule(cwd)
-  const tables = await tablesFor(cwd)
+  const tables = await backupTables(cwd)
   const { db, site, dispose } = await openSite(options, logger)
   try {
     await ensureAllTables(db, collections, taxonomies)

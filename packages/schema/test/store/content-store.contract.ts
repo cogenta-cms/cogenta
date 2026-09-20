@@ -236,6 +236,81 @@ export function runContentStoreContract(
       it('reports nothing removed when the entry was never there', async () => {
         expect(await tags.delete('01930000-0000-7000-8000-0000000000bb')).toBe(false)
       })
+
+      // A `richText` column was JSON-encoded straight through, so anything
+      // JSON could hold went in: a plain string, an object, a span with no
+      // `marks`. Contract B's schema had been written and exported the whole
+      // time — the store was the one caller that never asked it.
+      it('refuses a rich text value that is not a rich text document', async () => {
+        await expect(
+          articles.create({
+            values: { title: 'Pas un document', body: 'just a string' as never },
+          }),
+        ).rejects.toMatchObject({ code: 'CONTENT_INVALID' })
+      })
+
+      // The same gap, on every other kind: `validation.ts` builds a validator
+      // per field from what the collection declares, and the write path never
+      // called it. Measured on a real server before this: 250 characters into
+      // a `max: 200` title, `"Not A Slug!!"` into a slug that routes a public
+      // URL, the string `"yes"` into a boolean (coerced, so `"false"` would
+      // have been `true`).
+      it('refuses text longer than the length the field declares', async () => {
+        await expect(articles.create({ values: { title: 'x'.repeat(201) } })).rejects.toMatchObject(
+          { code: 'CONTENT_INVALID' },
+        )
+      })
+
+      it('refuses a slug that is not a slug, since it routes a public URL', async () => {
+        await expect(
+          articles.create({ values: { title: 'Un titre', slug: 'Not A Slug!!' } }),
+        ).rejects.toMatchObject({ code: 'CONTENT_INVALID' })
+      })
+
+      it('refuses a boolean given a string, rather than coercing it', async () => {
+        await expect(
+          articles.create({ values: { title: 'Un titre', featured: 'yes' as never } }),
+        ).rejects.toMatchObject({ code: 'CONTENT_INVALID' })
+      })
+
+      it('refuses a select value the field does not offer', async () => {
+        await expect(
+          articles.create({ values: { title: 'Un titre', layout: 'gigantic' as never } }),
+        ).rejects.toMatchObject({ code: 'CONTENT_INVALID' })
+      })
+
+      it('fills in the marks a span left out, rather than storing it half-formed', async () => {
+        // The shape an import, a plugin or an agent produces when it follows
+        // Portable Text, where `marks` is optional. It parses; it just has to
+        // come back out whole, because every reader is entitled to the
+        // defaults contract B declares — the admin editor threw on the first
+        // `span.marks.length` and rendered nothing at all.
+        const entry = await articles.create({
+          values: {
+            title: 'Sans marks',
+            body: [
+              {
+                _key: 'b1',
+                _type: 'block',
+                style: 'normal',
+                children: [{ _key: 's1', _type: 'span', text: 'Hello' }],
+              },
+            ] as never,
+          },
+        })
+
+        const read = await articles.read(entry.id, { state: 'working' })
+
+        expect(read?.values['body']).toEqual([
+          {
+            _key: 'b1',
+            _type: 'block',
+            style: 'normal',
+            children: [{ _key: 's1', _type: 'span', text: 'Hello', marks: [] }],
+            markDefs: [],
+          },
+        ])
+      })
     })
 
     describe('unique fields', () => {

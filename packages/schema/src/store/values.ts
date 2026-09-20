@@ -1,6 +1,7 @@
 import { CogentaError } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
 import type { CollectionDefinition, FieldDefinition } from '../types.js'
+import { fieldSchema } from '../validation.js'
 import { pruneEmptyBlockData } from './block-data.js'
 import type { BlockZones, ContentBlock, ContentValues } from './types.js'
 
@@ -35,38 +36,94 @@ function invalid(message: string, hint: string, details: Record<string, unknown>
   return new CogentaError({ code: 'CONTENT_INVALID', message, hint, details })
 }
 
+/**
+ * The declared schema, applied where the values actually land.
+ *
+ * `validation.ts`'s header has said since L1 that it builds "the validator
+ * that guards every write". Nothing called it on the way in: this function
+ * checked a few types by hand and let everything else through. Measured on a
+ * real server, that meant a `text` field declaring `max: 60` stored 250
+ * characters, a `slug` stored `"Not A Slug!!"`, a `boolean` stored the string
+ * `"yes"` (coerced to `true`, so `"false"` would have been `true` too), and a
+ * `richText` column took a plain string — while a reader downstream was
+ * entitled to assume every one of those was impossible.
+ *
+ * Parsing rather than merely checking: a schema's defaults only fill in when
+ * something parses, which is how a Portable Text span that legitimately omits
+ * `marks` reaches the column with `marks: []` instead of crashing the first
+ * reader that counts them.
+ *
+ * `date` and `datetime` are the documented exception, below: they accept a
+ * `Date` object and an empty string, and neither is a shape the declared
+ * schema describes.
+ */
+/**
+ * What a reference field held to before this file learned to validate: an
+ * array when the field is many-valued, a string otherwise. Unchanged, so that
+ * tightening it stays a decision rather than a side effect.
+ */
+function referenceShape(field: string, definition: FieldDefinition, value: unknown): unknown {
+  if (definition.options['many'] === true) {
+    if (!Array.isArray(value)) {
+      throw invalid(
+        `"${field}" holds several values, so it expects an array.`,
+        'Pass an array of ids.',
+        { field, kind: definition.kind },
+      )
+    }
+    return value
+  }
+  if (typeof value !== 'string') {
+    throw invalid(
+      `"${field}" expects a string, not ${typeof value}.`,
+      'A to-one media, relation or taxonomy field holds one id.',
+      { field, kind: definition.kind },
+    )
+  }
+  return value
+}
+
+/**
+ * Reference kinds are left to their own check below, on purpose and for now.
+ * The declared schema demands a UUID of them (`idSchema`, citing ADR-0015),
+ * which is very likely right — every id this codebase mints is one — but a
+ * media asset belongs to a subsystem that `columns.ts` deliberately keeps at
+ * arm's length ("no foreign key: the media library is its own subsystem"), and
+ * turning a reference's *shape* into a write-time refusal is a decision of its
+ * own, not a side effect of closing the gap this function was fixing. Written
+ * down rather than silently skipped, so that decision can be taken on purpose.
+ */
+const UNCHECKED_REFERENCE_KINDS = new Set(['media', 'relation', 'taxonomy'])
+
+function validated(field: string, definition: FieldDefinition, value: unknown): unknown {
+  if (UNCHECKED_REFERENCE_KINDS.has(definition.kind))
+    return referenceShape(field, definition, value)
+
+  const parsed = fieldSchema(definition).safeParse(value)
+  if (parsed.success) return parsed.data
+
+  throw invalid(
+    `"${field}" is not a valid ${definition.kind} value.`,
+    'Check what the collection declares for this field — a length, a pattern, a set of choices.',
+    {
+      field,
+      kind: definition.kind,
+      // Paths and reasons only. The value itself is content, and content never
+      // belongs in an error's details.
+      issues: parsed.error.issues.slice(0, 5).map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      })),
+    },
+  )
+}
+
 export function encodeFieldValue(
   field: string,
   definition: FieldDefinition,
   value: unknown,
 ): unknown {
   if (value === undefined || value === null) return null
-
-  if (isJsonEncodedArray(definition)) {
-    if (!Array.isArray(value)) {
-      throw invalid(
-        `"${field}" holds several values, so it expects an array.`,
-        'Pass an array — of media ids for a media field, of choice values for a select field.',
-        { field, kind: definition.kind },
-      )
-    }
-    return JSON.stringify(value)
-  }
-
-  if (JSON_KINDS.has(definition.kind)) return JSON.stringify(value)
-
-  if (definition.kind === 'boolean') return Boolean(value)
-
-  if (definition.kind === 'number') {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-      throw invalid(
-        `"${field}" expects a number.`,
-        'Pass a finite number, or null to clear the field.',
-        { field, received: typeof value },
-      )
-    }
-    return value
-  }
 
   if (definition.kind === 'date' || definition.kind === 'datetime') {
     // An empty string is "no date", never a date. It is what a cleared date
@@ -86,15 +143,14 @@ export function encodeFieldValue(
     return definition.kind === 'date' ? date.toISOString().slice(0, 10) : date.toISOString()
   }
 
-  if (typeof value !== 'string') {
-    throw invalid(
-      `"${field}" expects a string, not ${typeof value}.`,
-      'Text, slug, select, colour, media and to-one relation fields hold a string.',
-      { field, kind: definition.kind },
-    )
-  }
+  const checked = validated(field, definition, value)
 
-  return value
+  // Everything else is already the column's own shape: a string, a number, a
+  // boolean. Only the JSON-backed kinds still need encoding.
+  if (isJsonEncodedArray(definition) || JSON_KINDS.has(definition.kind)) {
+    return JSON.stringify(checked)
+  }
+  return checked
 }
 
 export function decodeFieldValue(definition: FieldDefinition, raw: unknown): unknown {

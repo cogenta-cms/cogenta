@@ -415,3 +415,35 @@ describe('contract compliance (@cogenta/blocks, the real validators)', () => {
     expect(placed.body).toEqual(body)
   })
 })
+
+/**
+ * Rows that predate the store parsing what it stores
+ * (`@cogenta/schema`'s `encodeFieldValue`). `marks` and `markDefs` are
+ * optional in Portable Text, contract B defaults them to `[]` when a document
+ * is parsed, and an unparsed one can be missing them entirely. Reading
+ * `.length` off that threw before the editor drew a character: a blank entry
+ * screen with no message, and no way in to fix the entry.
+ */
+describe('portableTextToSlate on a document written before the store parsed', () => {
+  it('reads a span that has no marks at all', () => {
+    const span = { _key: 's1', _type: 'span', text: 'hello' }
+    const doc = [
+      { _key: 'b1', _type: 'block', style: 'normal', children: [span], markDefs: [] },
+    ] as unknown as RichTextDocument
+
+    expect(portableTextToSlate(doc)).toEqual([{ type: 'paragraph', children: [{ text: 'hello' }] }])
+  })
+
+  it('reads a block that has no markDefs at all', () => {
+    const doc = [
+      {
+        _key: 'b1',
+        _type: 'block',
+        style: 'normal',
+        children: [{ _key: 's1', _type: 'span', text: 'code', marks: ['code'] }],
+      },
+    ] as unknown as RichTextDocument
+
+    expect(portableTextToSlate(doc)).toEqual([{ type: 'code-block', children: [{ text: 'code' }] }])
+  })
+})

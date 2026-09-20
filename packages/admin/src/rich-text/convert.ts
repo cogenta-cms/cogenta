@@ -36,10 +36,22 @@ function isWhollyCoded(node: Extract<RichTextNode, { _type: 'block' }>): boolean
   return (
     node.style === 'normal' &&
     node.listItem === undefined &&
-    node.markDefs.length === 0 &&
+    (node.markDefs ?? []).length === 0 &&
     node.children.length > 0 &&
-    node.children.every((span) => span.marks.length === 1 && span.marks[0] === 'code')
+    node.children.every((span) => marksOf(span).length === 1 && marksOf(span)[0] === 'code')
   )
+}
+
+/**
+ * `marks` is optional in Portable Text and contract B's schema defaults it to
+ * `[]` — but only for a document that was actually parsed. A row written
+ * before the store started parsing (`schema/src/store/values.ts`) can hold a
+ * span without it, and reading `.length` off that threw before this editor
+ * drew a single character: a blank screen, no message, the entry unreachable.
+ * Old rows are not going to fix themselves, so reading is where they are met.
+ */
+function marksOf(span: RichTextSpan): readonly string[] {
+  return span.marks ?? []
 }
 
 function nodeToSlate(node: RichTextNode): CustomElement {
@@ -84,14 +96,14 @@ function spansToSlate(
 
   return spans.map((span): Descendant => {
     const leaf: CustomText = { text: span.text }
-    for (const mark of span.marks) {
+    for (const mark of marksOf(span)) {
       if (mark === 'strong') leaf.strong = true
       else if (mark === 'em') leaf.em = true
       else if (mark === 'code') leaf.code = true
       else if (mark === 'strikethrough') leaf.strikethrough = true
     }
 
-    const linkMarkKey = span.marks.find((mark) => defsByKey.has(mark))
+    const linkMarkKey = marksOf(span).find((mark) => defsByKey.has(mark))
     if (linkMarkKey === undefined) return leaf
 
     const def = defsByKey.get(linkMarkKey)

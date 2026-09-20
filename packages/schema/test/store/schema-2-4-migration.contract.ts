@@ -225,12 +225,40 @@ export function runSchema24MigrationContract(
       return { entry: entry.id, term: term.id, tag: tag.id }
     }
 
+    /**
+     * Teardown that says what went wrong.
+     *
+     * Every step used to swallow its own failure. That is defensible for a
+     * teardown — a test must not fail because of its cleanup — but it also
+     * means a cleanup that *stops halfway* leaves tables behind in silence,
+     * and the next test starts on a schema nobody described. On MySQL, where
+     * a foreign key name is unique across the whole schema rather than per
+     * table, "left behind" and "cannot be created again" are the same
+     * sentence, and the error surfaces three statements later in a place that
+     * has nothing to do with the cause.
+     *
+     * So: still never throws, and every step still runs whatever the ones
+     * before it did — but what failed is printed, with the statement that
+     * failed, instead of disappearing.
+     */
     const dropAll = async (): Promise<void> => {
-      await dropSchemaTables(db, collections, taxonomies).catch(() => undefined)
+      const failures: string[] = []
+      try {
+        await dropSchemaTables(db, collections, taxonomies)
+      } catch (caught) {
+        failures.push(`dropSchemaTables: ${String(caught)}`)
+      }
       for (const table of ['cogenta_migrations', 'cogenta_migrations_lock']) {
-        await db
-          .query(sql`drop table if exists ${identifier(table, db.dialect)}`)
-          .catch(() => undefined)
+        try {
+          await db.query(sql`drop table if exists ${identifier(table, db.dialect)}`)
+        } catch (caught) {
+          failures.push(`drop ${table}: ${String(caught)}`)
+        }
+      }
+      if (failures.length > 0) {
+        // eslint-disable-next-line no-console -- a test harness, and the only
+        // way this ever reaches a human is a CI log.
+        console.error(`[schema@2.4 migration — ${name}] teardown left work behind:`, failures)
       }
     }
 

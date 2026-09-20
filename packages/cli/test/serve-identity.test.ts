@@ -117,13 +117,15 @@ describe('site identity reaches the public page (audit T01)', () => {
       await seedHome(server.base, editorToken)
       const adminToken = await adminSession(root, server.base)
 
-      // Nothing chosen: Cogenta's own default favicon, and the site name in
-      // text. This is the regression guard for every site that never opens
-      // the identity card.
+      // Nothing chosen: no favicon at all, and the site name in text. This
+      // used to assert Cogenta's own logo — the CMS's mark in the browser tab
+      // of somebody else's site, which no site owner ever asked for and which
+      // an uploaded logo could not displace until a *footer credit* setting
+      // was switched off. A site with no favicon now behaves like any other
+      // site with no favicon: the browser asks for /favicon.ico and takes the
+      // 404.
       const before = await (await fetch(`${server.base}/`)).text()
-      expect(before).toContain(
-        '<link rel="icon" type="image/png" href="/_cogenta/logo-cogenta.png">',
-      )
+      expect(before).not.toContain('<link rel="icon"')
       expect(before).toContain('>Test site</a>')
       expect(before).not.toContain('cg-site-header__logo')
 
@@ -215,7 +217,9 @@ describe('site identity reaches the public page (audit T01)', () => {
       expect(saved.status).toBe(200)
 
       const html = await (await fetch(`${server.base}/`)).text()
-      expect(html).toContain('<link rel="icon" type="image/png" href="/_cogenta/logo-cogenta.png">')
+      // A chosen media that is not an image falls back to nothing, rather
+      // than to a `<link rel="icon">` pointing at a 404 — or to Cogenta's.
+      expect(html).not.toContain('<link rel="icon"')
     } finally {
       await server.stop()
     }

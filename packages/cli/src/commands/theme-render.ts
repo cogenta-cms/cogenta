@@ -599,8 +599,20 @@ function faviconLinkTag(
   return `<link rel="icon"${typeAttr} href="${escapeAttribute(href)}">`
 }
 
+/**
+ * The site's own logo, or nothing — never Cogenta's.
+ *
+ * This used to read `showCogentaBranding` first and answer with the CMS's own
+ * PNG, so a freshly installed client site put Cogenta's logo in the visitor's
+ * browser tab, and an uploaded logo did nothing at all until somebody turned
+ * off a setting that names the *footer credit*. Nobody chose that coupling and
+ * nothing documented it; a tab is not a credit slot.
+ *
+ * Answering `null` emits no `<link rel="icon">`, which is what every site
+ * without a favicon does — the browser asks for `/favicon.ico` and takes the
+ * 404. That is a better default than wearing someone else's brand.
+ */
 function defaultFaviconFor(branding: BrandingSettings, imageEndpoint: string): string | null {
-  if (branding.showCogentaBranding) return DEFAULT_LOGO_PATH
   if (branding.customLogoMediaId !== null && branding.customLogoMediaId !== '') {
     return `${imageEndpoint}?id=${encodeURIComponent(branding.customLogoMediaId)}&w=64`
   }

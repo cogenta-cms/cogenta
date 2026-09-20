@@ -5,6 +5,7 @@ import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
 import {
   createSiteSettingsStore,
   ensureSiteSettingsTables,
+  SITE_SETTINGS_REGISTRY,
   type SiteSettingsStore,
 } from '@cogenta/schema'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -76,6 +77,54 @@ describe('the site settings transport', () => {
     it('is public, unlike security/webhooks — the theme must render the same tagline anonymously', async () => {
       const response = await router.handle(request('GET'), asPublic)
       expect(response.status).toBe(200)
+      const data = dataOf<readonly SerialisedSiteSetting[]>(response)
+      expect(data.map((setting) => setting.key)).toContain('general.tagline')
+    })
+
+    /**
+     * The same rule, read the other way round. "The values here feed a page's
+     * own render" was the stated ground for answering everybody, and it is
+     * also what excludes most of this registry: an administrative email
+     * address, a comment notification address, an IndexNow key and two search
+     * engine verification tokens feed no render, and any passer-by could read
+     * them.
+     */
+    it('hides from an anonymous caller every setting a visitor cannot already see', async () => {
+      const response = await router.handle(request('GET'), asPublic)
+      const keys = dataOf<readonly SerialisedSiteSetting[]>(response).map((setting) => setting.key)
+
+      for (const secret of [
+        'general.adminEmail',
+        'discussion.notifyEmail',
+        'seo.indexNowKey',
+        'seo.googleSiteVerification',
+        'seo.bingSiteVerification',
+        'updates.autoUpdatePolicy',
+        'channels.telegramBotName',
+        'observability.logLevel',
+      ]) {
+        expect(keys).not.toContain(secret)
+      }
+    })
+
+    it('still answers a signed-in caller with the whole registry', async () => {
+      const anonymous = dataOf<readonly SerialisedSiteSetting[]>(
+        await router.handle(request('GET'), asPublic),
+      )
+      const signedIn = dataOf<readonly SerialisedSiteSetting[]>(
+        await router.handle(request('GET'), asAdmin),
+      )
+
+      expect(signedIn.length).toBe(SITE_SETTINGS_REGISTRY.length)
+      expect(signedIn.length).toBeGreaterThan(anonymous.length)
+      expect(signedIn.map((setting) => setting.key)).toContain('general.adminEmail')
+    })
+
+    it('shows an editor the whole registry too: the line is signed in or not, not which role', async () => {
+      const response = await router.handle(request('GET'), asEditor)
+      expect(dataOf<readonly SerialisedSiteSetting[]>(response).length).toBe(
+        SITE_SETTINGS_REGISTRY.length,
+      )
     })
 
     it('lists every registered setting with its default, before anything is written', async () => {

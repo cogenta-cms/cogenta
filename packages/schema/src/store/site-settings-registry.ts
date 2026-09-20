@@ -1269,3 +1269,59 @@ const BY_KEY = new Map(SITE_SETTINGS_REGISTRY.map((entry) => [entry.key, entry])
 export function siteSettingByKey(key: string): SiteSettingDefinition | undefined {
   return BY_KEY.get(key)
 }
+
+/**
+ * The settings an unauthenticated caller may read.
+ *
+ * `GET /api/settings` answered everybody with all sixty-four, on the stated
+ * ground that "the values here feed a page's own render … an anonymous
+ * visitor has to see the same thing the theme does". That reasoning is
+ * right, and it is exactly the criterion that excludes most of this
+ * registry: the site's administrative email address, the comment
+ * notification address, the IndexNow key, the Google and Bing verification
+ * tokens, the auto-update policy and the channel bot names feed no render at
+ * all, and were readable by anyone who asked.
+ *
+ * So the rule is the one the router already gave itself, applied rather than
+ * assumed: **a setting is publicly readable when its value is already
+ * visible on the public site.** A tagline is on every page; an admin's email
+ * address is not. Listed here rather than flagged per entry so the whole
+ * public surface can be read — and reviewed — in one place.
+ *
+ * Unlisted means private: a setting added without thinking about this is
+ * closed, not open. The only anonymous reader in this repository is the
+ * login screen, which needs the site's name and its white-label branding so
+ * a rebranded site does not say "Cogenta" on the way in.
+ */
+export const PUBLIC_READ_SETTING_KEYS: ReadonlySet<string> = new Set([
+  // Rendered in the page chrome, on every page.
+  'general.title',
+  'general.tagline',
+  'general.footerNote',
+  'general.socialLinks',
+  'branding.showCogentaBranding',
+  'branding.customLogoMediaId',
+  // How a visible date is formatted.
+  'general.timeZone',
+  'general.dateStyle',
+  'general.timeStyle',
+  // Observable by following the site: which path is home, how long a page is.
+  'reading.homePath',
+  'reading.postsPerPage',
+  // Observable from a comment form that is either there or not.
+  'discussion.enabled',
+  'discussion.allowAnonymous',
+  'discussion.maxNestingDepth',
+  // The banner and the policy link are shown to the visitor.
+  'privacy.cookieBannerEnabled',
+  'privacy.cookieBannerMessage',
+  'privacy.policyPath',
+  // Printed beside every price.
+  'commerce.currency',
+  'commerce.priceDisplay',
+])
+
+/** Whether an unauthenticated caller may read this setting. Unknown keys are private. */
+export function isPubliclyReadableSetting(key: string): boolean {
+  return PUBLIC_READ_SETTING_KEYS.has(key)
+}

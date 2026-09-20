@@ -208,6 +208,8 @@ export type {
   SiteSettingUiType,
 } from './site-settings-registry.js'
 export {
+  isPubliclyReadableSetting,
+  PUBLIC_READ_SETTING_KEYS,
   SITE_SETTING_GROUPS,
   SITE_SETTING_SCOPES,
   SITE_SETTING_UI_TYPES,

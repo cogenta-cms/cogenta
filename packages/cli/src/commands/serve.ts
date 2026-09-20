@@ -4614,6 +4614,36 @@ function rateLimitHeaders(
   }
 }
 
+/**
+ * The stored rendition of `asset` closest to a requested width, or `null`
+ * when there is none.
+ *
+ * Shared by the public `/_image` and by the authenticated
+ * `/api/media/{id}/file`, so the two can never disagree about which widths
+ * exist. Neither renders on demand: a width nobody stored falls back to the
+ * whole file rather than spending CPU on request — `/_image` because it is
+ * public, this one because an admin grid opening twenty-five thumbnails at
+ * once would be just as effective a way to spend it.
+ */
+async function storedVariantFor(
+  site: Site,
+  id: string,
+  asset: { readonly width: number | null; readonly height: number | null },
+  requested: number,
+): Promise<{ readonly key: string; readonly contentType: string } | null> {
+  if (site.images === null) return null
+  if (!Number.isInteger(requested) || requested <= 0) return null
+  if (asset.width === null || asset.height === null) return null
+
+  const names = site.images.variantNames({ width: asset.width, height: asset.height })
+  const match = names.find((name) => name.startsWith(`${requested}.`))
+  if (match === undefined) return null
+
+  const key = variantKeyFor(id, match)
+  if (!(await site.storage.exists(key))) return null
+  return { key, contentType: match.endsWith('.webp') ? 'image/webp' : 'application/octet-stream' }
+}
+
 /** Same authentication gate as every other `/api/media` route — the file itself is not public. */
 async function serveMediaFile(
   site: Site,
@@ -4622,6 +4652,7 @@ async function serveMediaFile(
   req: IncomingMessage,
   res: ServerResponse,
   wantsOriginal = false,
+  requestedWidth = Number.NaN,
 ): Promise<void> {
   if (req.method !== 'GET') {
     res.writeHead(405, { allow: 'GET' }).end()
@@ -4642,10 +4673,24 @@ async function serveMediaFile(
   // image, which the admin's editor works from. The current file otherwise.
   const copyKey = originalCopyKey(id)
   const original = wantsOriginal && (await site.storage.exists(copyKey))
-  const key = original ? copyKey : asset.storageKey
-  const contentType = original
+  let key = original ? copyKey : asset.storageKey
+  let contentType = original
     ? ((await site.storage.head(copyKey))?.contentType ?? asset.mimeType)
     : asset.mimeType
+
+  // `?w=` (audit 2026-09-19): the media grid asked this route for every
+  // thumbnail and got the full-resolution upload back every time — 5.6 MB
+  // for twenty-five tiles on a real site, with the 320px renditions already
+  // in storage beside them. Never for `?original=1`, whose whole point is
+  // the untouched file the image editor works from.
+  if (!original && asset.kind === 'image') {
+    const variant = await storedVariantFor(site, id, asset, requestedWidth)
+    if (variant !== null) {
+      key = variant.key
+      contentType = variant.contentType
+    }
+  }
+
   const stream = await site.storage.get(key)
   res.writeHead(200, {
     'content-type': contentType,
@@ -4754,24 +4799,10 @@ async function serveImageVariant(
     ? asset.mimeType
     : 'application/octet-stream'
 
-  const requested = Number(url.searchParams.get('w'))
-  if (
-    site.images !== null &&
-    Number.isInteger(requested) &&
-    requested > 0 &&
-    asset.width !== null &&
-    asset.height !== null
-  ) {
-    const names = site.images.variantNames({ width: asset.width, height: asset.height })
-    const wanted = `${requested}.`
-    const match = names.find((name) => name.startsWith(wanted))
-    if (match !== undefined) {
-      const variantKey = variantKeyFor(id, match)
-      if (await site.storage.exists(variantKey)) {
-        key = variantKey
-        if (match.endsWith('.webp')) contentType = 'image/webp'
-      }
-    }
+  const variant = await storedVariantFor(site, id, asset, Number(url.searchParams.get('w')))
+  if (variant !== null) {
+    key = variant.key
+    contentType = variant.contentType
   }
 
   const stream = await site.storage.get(key)
@@ -5144,6 +5175,7 @@ export function createRequestListener(
           req,
           res,
           url.searchParams.get('original') === '1',
+          Number(url.searchParams.get('w')),
         )
         return
       }

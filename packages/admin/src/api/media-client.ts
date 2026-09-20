@@ -537,11 +537,23 @@ export async function fetchMediaBlobUrl(
     readonly version?: string
     /** L39: the untouched original of an edited image. */
     readonly original?: boolean
+    /**
+     * A width from the stored ladder (320, 640, 960, 1280, 1920). The server
+     * answers with that rendition when it exists and the whole file when it
+     * does not — it never renders one on demand. Leaving this out fetches
+     * the full upload, which is what a grid of thumbnails used to do:
+     * 5.6 MB for twenty-five tiles, with the 320px copies already stored.
+     * Ignored together with `original`, whose point is the untouched file.
+     */
+    readonly width?: number
   } = {},
 ): Promise<string> {
   const query = new URLSearchParams()
   if (options.version !== undefined) query.set('v', options.version)
   if (options.original === true) query.set('original', '1')
+  if (options.width !== undefined && options.original !== true) {
+    query.set('w', String(options.width))
+  }
   const suffix = query.size === 0 ? '' : `?${query.toString()}`
   const response = await fetch(`${API_BASE}/api/media/${encodeURIComponent(id)}/file${suffix}`, {
     headers: authHeader(token),

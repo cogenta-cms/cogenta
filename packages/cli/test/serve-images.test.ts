@@ -223,6 +223,71 @@ describe('cogenta serve — images (L10 task 5)', () => {
     }
   }, 60_000)
 
+  /**
+   * The media library's own thumbnails.
+   *
+   * `<img src>` cannot carry a bearer token, so the admin fetches the bytes
+   * through `/api/media/{id}/file` and hands the grid an object URL — the
+   * reason that route stays authenticated instead of the file being made
+   * public. What it fetched was the *original*: twenty-five thumbnails cost
+   * 5.6 MB on a real site, with the 320px renditions already sitting in
+   * storage beside them, unused. The same ladder `/_image` picks from is now
+   * reachable from behind the token.
+   */
+  it('serves a stored variant to a signed-in caller that asks for a width', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await signIn(root, server.base)
+      const asset = await upload(server.base, token, makePng(1600, 1200))
+      const headers = { authorization: `Bearer ${token}` }
+
+      const full = await fetch(`${server.base}/api/media/${asset.id}/file`, { headers })
+      expect(full.status).toBe(200)
+      const fullBytes = (await full.arrayBuffer()).byteLength
+
+      const thumb = await fetch(`${server.base}/api/media/${asset.id}/file?w=320`, { headers })
+      expect(thumb.status).toBe(200)
+      expect(thumb.headers.get('content-type')).toBe('image/webp')
+      const thumbBytes = (await thumb.arrayBuffer()).byteLength
+      expect(thumbBytes).toBeLessThan(fullBytes)
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
+  it('falls back to the whole file for a width nobody stored, behind the token too', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await signIn(root, server.base)
+      const asset = await upload(server.base, token, makePng(800, 600))
+
+      const odd = await fetch(`${server.base}/api/media/${asset.id}/file?w=713`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(odd.status).toBe(200)
+      expect(odd.headers.get('content-type')).toBe('image/png')
+      expect((await odd.arrayBuffer()).byteLength).toBeGreaterThan(0)
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
+  it('still refuses a width to a caller with no session', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await signIn(root, server.base)
+      const asset = await upload(server.base, token, makePng(800, 600))
+
+      const anonymous = await fetch(`${server.base}/api/media/${asset.id}/file?w=320`)
+      expect(anonymous.status).toBe(401)
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
   it('renders a real srcset in the page, and an og:image derived from the same asset', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

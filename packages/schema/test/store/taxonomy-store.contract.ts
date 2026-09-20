@@ -443,6 +443,41 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
         expect(read?.values.categories).toEqual([])
       })
 
+      // The same promise as the test above, on the other storage shape. A
+      // to-many field keeps its terms in a join table, where `on delete
+      // cascade` removes the join row — which un-classifies. A single-valued
+      // field keeps its term in a column *of the entries table*, where the
+      // very same clause removes the entry itself. One word, two opposite
+      // meanings, and only this test tells them apart.
+      it('un-classifies content when a term is deleted, for a single-valued field too', async () => {
+        const vegan = await keywords.create({ slug: 'vegan', labels: { en: 'Vegan' } })
+        const entry = await recipes.create({
+          values: { title: 'Soupe', keywords: vegan.id },
+        })
+
+        await keywords.delete(vegan.id)
+
+        const read = await recipes.read(entry.id, { state: 'working' })
+        expect(read).not.toBeNull()
+        expect(read?.values.title).toBe('Soupe')
+        expect(read?.values.keywords ?? null).toBeNull()
+      })
+
+      // Losing an entry to a term deletion would also be invisible to the
+      // trash: `delete()` is a soft delete that writes `deletedAt`, and a row
+      // the database removed under it was never soft-deleted at all.
+      it('never makes an entry unrecoverable by deleting the term that classified it', async () => {
+        const vegan = await keywords.create({ slug: 'vegan', labels: { en: 'Vegan' } })
+        await recipes.create({ values: { title: 'Soupe', keywords: vegan.id } })
+
+        await keywords.delete(vegan.id)
+
+        const live = await recipes.list({ state: 'working' })
+        const trashed = await recipes.list({ state: 'working', trashed: 'only' })
+        expect(live.items.map((item) => item.values.title)).toEqual(['Soupe'])
+        expect(trashed.items).toEqual([])
+      })
+
       it('holds a single term in a column when the field is not many', async () => {
         const vegan = await keywords.create({ slug: 'vegan', labels: { en: 'Vegan' } })
         const entry = await recipes.create({

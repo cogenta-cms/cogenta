@@ -86,11 +86,21 @@ export function relationsOf(collection: CollectionDefinition): RelationTarget[] 
       // Removing a term un-classifies the content that carried it; it never
       // deletes that content, and it never refuses the removal either. A
       // classification is an opinion about an entry, not part of it.
+      //
+      // Which clause says that depends on where the term is stored, and the
+      // two are opposites. A to-many field keeps its terms in a join table,
+      // whose row *is* the classification: `cascade` removes that row and the
+      // entry stays. A single-valued field keeps its term in a column of the
+      // entries table, where the row is the entry itself: `cascade` there
+      // deletes the content — silently, and past the trash, since a row the
+      // database removes was never soft-deleted. `setNull` empties the column
+      // instead, which is what un-classifying means for that shape.
+      const many = field.options['many'] !== false
       relations.push({
         field: name,
         to: of,
-        onDelete: 'cascade',
-        many: field.options['many'] !== false,
+        onDelete: many ? 'cascade' : 'setNull',
+        many,
         kind: 'taxonomy',
       })
       continue

@@ -4706,8 +4706,19 @@ async function storedVariantFor(
   if (!Number.isInteger(requested) || requested <= 0) return null
   if (asset.width === null || asset.height === null) return null
 
+  // The smallest rendition at least as wide as the one asked for, not an
+  // exact match. `w=1` used to find nothing on the ladder and fall through to
+  // the original: 1.9 MB of full-resolution PNG for a one-pixel request,
+  // public, uncached work for the disk and a year in every cache in between.
+  // Rounding up serves the 320 instead, and still renders nothing on demand —
+  // the whole point of this function. A width above the ladder finds nothing
+  // and keeps the old behaviour, because above the ladder the original really
+  // is the closest thing stored.
   const names = site.images.variantNames({ width: asset.width, height: asset.height })
-  const match = names.find((name) => name.startsWith(`${requested}.`))
+  const match = names
+    .map((name) => ({ name, width: Number.parseInt(name, 10) }))
+    .filter((candidate) => Number.isFinite(candidate.width) && candidate.width >= requested)
+    .sort((a, b) => a.width - b.width)[0]?.name
   if (match === undefined) return null
 
   const key = variantKeyFor(id, match)

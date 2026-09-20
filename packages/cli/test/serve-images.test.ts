@@ -202,22 +202,40 @@ describe('cogenta serve — images (L10 task 5)', () => {
     }
   }, 60_000)
 
-  it('falls back to the original for a width nobody stored, rather than rendering on demand', async () => {
+  it('rounds a width up to a stored rendition, and only falls back above the ladder', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })
     try {
       const token = await signIn(root, server.base)
+      // 800px wide, so the ladder it earns is 320, 640 and its own 800.
       const asset = await upload(server.base, token, makePng(800, 600))
 
+      // Between two rungs: the next one up, already encoded and sitting in
+      // storage. Never a freshly encoded 713px WebP — a public URL must not
+      // be a way to spend CPU, which is what this assertion has always been
+      // about.
       const odd = await fetch(`${server.base}/_image?id=${asset.id}&w=713`)
       expect(odd.status).toBe(200)
-      // The original PNG, not a freshly encoded 713px WebP: a public URL
-      // must not be a way to spend CPU.
-      expect(odd.headers.get('content-type')).toBe('image/png')
-      // Read the body: an unread response holds its socket open, which is
-      // what `SHUTDOWN_GRACE_MS` exists to survive — but a test should not
-      // be the thing exercising it by accident.
-      expect((await odd.arrayBuffer()).byteLength).toBeGreaterThan(0)
+      expect(odd.headers.get('content-type')).toBe('image/webp')
+      const oddBytes = (await odd.arrayBuffer()).byteLength
+      expect(oddBytes).toBeGreaterThan(0)
+
+      // Below the ladder. This used to find no exact match and hand back the
+      // full-resolution original: on a real photo, megabytes for a request
+      // that asked for one pixel, public and cached for a year.
+      const tiny = await fetch(`${server.base}/_image?id=${asset.id}&w=1`)
+      expect(tiny.status).toBe(200)
+      expect(tiny.headers.get('content-type')).toBe('image/webp')
+      const tinyBytes = (await tiny.arrayBuffer()).byteLength
+      expect(tinyBytes).toBeGreaterThan(0)
+      expect(tinyBytes).toBeLessThan(oddBytes)
+
+      // Above everything stored, the original is genuinely the closest thing
+      // there is, and it is still served rather than rendered.
+      const huge = await fetch(`${server.base}/_image?id=${asset.id}&w=99999`)
+      expect(huge.status).toBe(200)
+      expect(huge.headers.get('content-type')).toBe('image/png')
+      expect((await huge.arrayBuffer()).byteLength).toBeGreaterThan(0)
     } finally {
       await server.stop()
     }
@@ -256,19 +274,28 @@ describe('cogenta serve — images (L10 task 5)', () => {
     }
   }, 60_000)
 
-  it('falls back to the whole file for a width nobody stored, behind the token too', async () => {
+  it('rounds up behind the token too, and falls back only above the ladder', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })
     try {
       const token = await signIn(root, server.base)
       const asset = await upload(server.base, token, makePng(800, 600))
 
+      // Same rule on both routes, because it is the same function: the media
+      // library asking for a thumbnail gets the rendition, not the original.
       const odd = await fetch(`${server.base}/api/media/${asset.id}/file?w=713`, {
         headers: { authorization: `Bearer ${token}` },
       })
       expect(odd.status).toBe(200)
-      expect(odd.headers.get('content-type')).toBe('image/png')
+      expect(odd.headers.get('content-type')).toBe('image/webp')
       expect((await odd.arrayBuffer()).byteLength).toBeGreaterThan(0)
+
+      const huge = await fetch(`${server.base}/api/media/${asset.id}/file?w=99999`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(huge.status).toBe(200)
+      expect(huge.headers.get('content-type')).toBe('image/png')
+      expect((await huge.arrayBuffer()).byteLength).toBeGreaterThan(0)
     } finally {
       await server.stop()
     }

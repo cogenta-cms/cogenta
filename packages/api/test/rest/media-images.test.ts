@@ -276,6 +276,62 @@ describe('an uploaded image is stored with the type its bytes earn', () => {
     expect(after.lastEdit).toMatchObject(edit)
   })
 
+  /**
+   * An image's stored type is the one its bytes earn, never the declared one
+   * (L10's security review). Every other kind was stored exactly as
+   * declared, so a `kind: 'file'` upload could carry `text/html` — bytes
+   * with a `<script>` in them, handed back from the site's own origin with
+   * that very type. A bearer token is what stops that being exploitable
+   * today: a browser navigation gets 401 and `/_image` refuses a non-image.
+   * The layer beneath was missing, and a token is a thin thing to rest on.
+   */
+  it('refuses to store a content type that would execute, whatever the kind says', async () => {
+    const router = createMediaRouter({ store, storage, images: processorThat() })
+    const response = await router.handle(
+      {
+        method: 'POST',
+        path: '/api/media',
+        query: {},
+        body: {
+          kind: 'file',
+          filename: 'evil.html',
+          mimeType: 'text/html',
+          data: Buffer.from('<html><script>alert(1)</script></html>').toString('base64'),
+          alt: 'x',
+        },
+      },
+      EDITOR,
+    )
+
+    expect(response.status).toBe(201)
+    // Stored, but never as something a browser would run.
+    expect((response.body as { data: { mimeType: string } }).data.mimeType).toBe(
+      'application/octet-stream',
+    )
+  })
+
+  it('keeps an ordinary document type exactly as declared', async () => {
+    const router = createMediaRouter({ store, storage, images: processorThat() })
+    for (const mimeType of ['text/plain', 'application/pdf', 'text/csv']) {
+      const response = await router.handle(
+        {
+          method: 'POST',
+          path: '/api/media',
+          query: {},
+          body: {
+            kind: 'file',
+            filename: 'notes',
+            mimeType,
+            data: Buffer.from('plain enough').toString('base64'),
+            alt: 'x',
+          },
+        },
+        EDITOR,
+      )
+      expect((response.body as { data: { mimeType: string } }).data.mimeType).toBe(mimeType)
+    }
+  })
+
   it('leaves a non-image kind declared as sent, since it is never served publicly', async () => {
     const router = createMediaRouter({ store, storage })
     const response = await router.handle(

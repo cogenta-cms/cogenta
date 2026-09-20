@@ -297,6 +297,51 @@ describe('cogenta serve — images (L10 task 5)', () => {
    * deliberately unbuilt) thing. This pins the behaviour that does exist, so
    * the question does not have to be re-litigated from reading the code.
    */
+  /**
+   * The second layer under the stored type: whatever a non-image turns out
+   * to be, the browser downloads it rather than rendering it on this origin.
+   * An image is exempt — the admin's own grid displays those inline.
+   */
+  it('serves a non-image as a download, and an image inline', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await signIn(root, server.base)
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+      const doc = (await (
+        await fetch(`${server.base}/api/media`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            kind: 'file',
+            filename: 'notes.txt',
+            mimeType: 'text/plain',
+            data: Buffer.from('plain enough').toString('base64'),
+            alt: 'Some notes',
+          }),
+        })
+      ).json()) as { data: { id: string } }
+
+      const asDownload = await fetch(`${server.base}/api/media/${doc.data.id}/file`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(asDownload.status).toBe(200)
+      expect(asDownload.headers.get('content-disposition')).toContain('attachment')
+      await asDownload.arrayBuffer()
+
+      const picture = await upload(server.base, token, makePng(400, 300))
+      const inline = await fetch(`${server.base}/api/media/${picture.id}/file`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(inline.status).toBe(200)
+      expect(inline.headers.get('content-disposition')).toBeNull()
+      await inline.arrayBuffer()
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
   it('carries the focal point into the page as object-position', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

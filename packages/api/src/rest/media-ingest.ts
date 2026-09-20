@@ -156,11 +156,45 @@ const CONTENT_TYPE_BY_FORMAT: Readonly<Record<string, string>> = Object.freeze({
 })
 
 /**
- * Checks an image is really an image, and answers with the content type its
- * bytes earn. `null` for every other kind, which is stored as declared.
+ * Content types that execute in a browser on whatever origin serves them.
+ *
+ * An image is already protected: its stored type is the one its bytes earn,
+ * never the one the uploader declared (L10's security review). Every other
+ * kind was stored exactly as declared, so a `kind: 'file'` upload could
+ * carry `text/html` — bytes with a `<script>` in them, served back from the
+ * site's own origin with that very type. Reaching them needs a bearer token
+ * today, which is what keeps this from being exploitable: a browser
+ * navigation gets 401 and `/_image` refuses a non-image outright. It is the
+ * layer beneath that was missing, and a token is a thin thing to rest on.
  */
-function verifyRealType(kind: MediaKind, bytes: Uint8Array): string | null {
-  if (kind !== 'image') return null
+const EXECUTABLE_CONTENT_TYPES: ReadonlySet<string> = new Set([
+  'text/html',
+  'application/xhtml+xml',
+  'image/svg+xml',
+  'application/xml',
+  'text/xml',
+  'text/javascript',
+  'application/javascript',
+  'application/ecmascript',
+  'text/ecmascript',
+])
+
+/** Whether this stored type would render, rather than download, in a browser. */
+export function isExecutableContentType(mimeType: string): boolean {
+  return EXECUTABLE_CONTENT_TYPES.has(mimeType.split(';')[0]?.trim().toLowerCase() ?? '')
+}
+
+/**
+ * Checks an image is really an image, and answers with the content type its
+ * bytes earn. For every other kind the declared type is kept — a site has
+ * every reason to store a `.txt`, a `.docx` or a CSV — unless it is one a
+ * browser would execute, which is neutralised to an opaque download instead
+ * of being refused: the file itself is fine, only serving it as code is not.
+ */
+function verifyRealType(kind: MediaKind, bytes: Uint8Array, declared: string): string | null {
+  if (kind !== 'image') {
+    return isExecutableContentType(declared) ? 'application/octet-stream' : null
+  }
 
   const format = sniffImageFormat(bytes)
   if (format !== null) return CONTENT_TYPE_BY_FORMAT[format] ?? 'application/octet-stream'
@@ -194,7 +228,7 @@ export async function ingestMediaUpload(
 
   // For an image this is the type the *bytes* say, not the one the caller
   // declared — the asset record and every response built from it use it.
-  const mimeType = verifyRealType(input.kind, input.bytes) ?? input.mimeType
+  const mimeType = verifyRealType(input.kind, input.bytes, input.mimeType) ?? input.mimeType
 
   let bytes = Buffer.isBuffer(input.bytes) ? input.bytes : Buffer.from(input.bytes)
   const stripGps = input.stripGps ?? true

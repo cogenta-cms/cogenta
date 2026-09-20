@@ -4695,9 +4695,36 @@ async function serveMediaFile(
   res.writeHead(200, {
     'content-type': contentType,
     'cache-control': 'private, max-age=3600',
+    // Second layer, under the stored type itself (which an upload already
+    // neutralises when it would execute): anything that is not an image is
+    // served as a download, never rendered on this origin. An image is
+    // exempt because the admin's own grid displays it inline.
+    ...(asset.kind === 'image'
+      ? {}
+      : { 'content-disposition': `attachment; filename="${attachmentName(asset.filename)}"` }),
   })
   stream.on('error', () => res.destroy())
   stream.pipe(res)
+}
+
+/**
+ * A filename safe to put inside a quoted `Content-Disposition`. Quotes,
+ * backslashes and control characters — a newline above all — would let a
+ * filename inject a header of its own.
+ */
+function attachmentName(filename: string): string {
+  const cleaned = [...filename]
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0
+      // Control characters (a newline above all) would let a filename inject
+      // a header of its own; a quote or a backslash would end the quoted
+      // string early.
+      if (code < 0x20 || code === 0x7f) return '_'
+      return character === '"' || character === '\\' ? '_' : character
+    })
+    .join('')
+    .trim()
+  return cleaned === '' ? 'download' : cleaned
 }
 
 /**

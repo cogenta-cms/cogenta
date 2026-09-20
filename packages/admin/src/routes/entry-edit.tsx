@@ -65,7 +65,17 @@ import { SeoPanel } from '../seo/seo-panel.js'
 import { useNewEntryDefaultBlocksSetting } from '../settings/site-settings-context.js'
 import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import { cn } from '../ui/cn.js'
-import { Button, Card, CardBody, Input, Label, Modal, Notice, Select } from '../ui/index.js'
+import {
+  Button,
+  buttonVariants,
+  Card,
+  CardBody,
+  Input,
+  Label,
+  Modal,
+  Notice,
+  Select,
+} from '../ui/index.js'
 import { VersionHistory } from '../versions/version-history.js'
 import '../styles/entry-form.css'
 
@@ -238,6 +248,14 @@ export function EntryEditRoute(): JSX.Element {
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ApiErrorDescription | null>(null)
+  /** The entry this URL names does not exist — see the load's own `catch`. */
+  const [missing, setMissing] = useState(false)
+  /**
+   * Unsaved work this browser still holds for an entry that is gone. Rare, but
+   * the one case where "there was nothing here" would be a lie: somebody typed,
+   * the tab autosaved, and the entry was deleted elsewhere in between.
+   */
+  const [missingAutosave, setMissingAutosave] = useState<AutosaveRecord | null>(null)
   /** The block a refused save points at, for the builder to select (L36 audit). */
   const [blockFocus, setBlockFocus] = useState<{
     readonly key: string
@@ -351,6 +369,8 @@ export function EntryEditRoute(): JSX.Element {
     }
     let cancelled = false
     setLoading(true)
+    setMissing(false)
+    setMissingAutosave(null)
     getEntry(token, name, id)
       .then((entry) => {
         if (!cancelled) {
@@ -404,9 +424,23 @@ export function EntryEditRoute(): JSX.Element {
         }
       })
       .catch((caught: unknown) => {
-        if (!cancelled) {
-          setError(describeApiError(caught, t('entryEdit.loadError')))
+        if (cancelled) return
+        // A stale bookmark, or an entry somebody deleted in another tab. The
+        // form used to render anyway — every field editable, "Publish" and
+        // "Duplicate" live, the 404s visible only in the browser console — so
+        // a person could write a whole article into a screen pointing at
+        // nothing. Only a genuine "it is not there": a network failure or a
+        // 500 still shows the banner over the form, since retrying is the
+        // right move there and the entry may well exist.
+        if (caught instanceof ApiError && caught.code === 'CONTENT_NOT_FOUND') {
+          setMissing(true)
+          const storage = browserAutosaveStorage()
+          if (storage !== null && id !== undefined) {
+            setMissingAutosave(readAutosave(storage, autosaveKey(name, id, locale)))
+          }
+          return
         }
+        setError(describeApiError(caught, t('entryEdit.loadError')))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -1222,6 +1256,38 @@ export function EntryEditRoute(): JSX.Element {
           collection.routing.locale === true ? locale : undefined,
         )
       : null
+
+  // Before the form, not beside it: an editable screen pointing at nothing is
+  // worse than no screen, because somebody will write in it.
+  if (missing) {
+    return (
+      <section
+        aria-labelledby="entry-missing-heading"
+        className="reveal flex min-h-[50vh] flex-col items-center justify-center gap-3 p-6 text-center"
+      >
+        <h1
+          id="entry-missing-heading"
+          className="m-0 text-xl leading-7 font-semibold tracking-tight"
+        >
+          {t('entryEdit.missingHeading', { label: collection.labels.singular })}
+        </h1>
+        <p className="m-0 max-w-prose text-sm text-muted-foreground">
+          {t('entryEdit.missingBody')}
+        </p>
+        {missingAutosave !== null && (
+          <p role="status" className="m-0 max-w-prose text-sm text-foreground">
+            {t('entryEdit.missingAutosave', { at: formatTime(missingAutosave.at) })}
+          </p>
+        )}
+        <Link
+          className={cn(buttonVariants({ variant: 'primary' }), 'mt-2 rounded-full px-6')}
+          to={`/collections/${encodeURIComponent(name)}`}
+        >
+          {t('entryEdit.missingBackToList')}
+        </Link>
+      </section>
+    )
+  }
 
   return (
     <section aria-labelledby="entry-heading" className="flex flex-col gap-6">

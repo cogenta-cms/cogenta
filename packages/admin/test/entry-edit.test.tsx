@@ -78,15 +78,11 @@ describe('editing an existing entry', () => {
     expect(alert.textContent).toContain('openssl rand -hex 32')
   })
 
-  it('reports a nonexistent entry rather than showing a blank form', async () => {
-    // Direct navigation to an id the mock server does not have — no list
-    // detour needed, since the point is what happens when the URL itself is
-    // wrong (typed by hand, a stale bookmark).
-    window.history.pushState(null, '', '/collections/article/does-not-exist')
-    render(<App />)
-
-    expect(await screen.findByRole('alert')).toBeDefined()
-  })
+  // A test named "reports a nonexistent entry rather than showing a blank form"
+  // used to sit here and assert only that *an* alert existed. It passed while
+  // the blank form its own name rules out was rendered underneath it, fully
+  // editable. `entry-edit-missing.test.tsx` now owns that behaviour and
+  // asserts the absence the name always claimed.
 })
 
 /**
@@ -392,10 +388,10 @@ describe('creating a new entry', () => {
       const call = vi
         .mocked(globalThis.fetch)
         .mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')
-      expect(call).toBeDefined()
+      if (call === undefined) throw new Error('no POST yet')
       return call
     })
-    expect(JSON.parse(String((created?.[1] as RequestInit).body)).locale).toBe('fr')
+    expect(JSON.parse(String((created[1] as RequestInit).body)).locale).toBe('fr')
   })
 
   it('shows the "Nouveau" link for a role that can create, and lands on the new entry after saving', async () => {

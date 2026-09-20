@@ -1268,6 +1268,12 @@ export function installMockFetch(
     user,
   })
 
+  // Entries this test created, per `installMockFetch()` call. A real server
+  // answers `GET /api/content/{collection}/{id}` for something it has just
+  // accepted on `POST`; this used to 404, and the admin swallowed that 404
+  // while still rendering the form, so the gap was invisible.
+  const createdEntries: { readonly id: string; readonly [key: string]: unknown }[] = []
+
   // Media state lives per `installMockFetch()` call — each test starts with
   // an empty library and grows it through the same upload/edit/delete routes
   // the real server exposes, not through a shared module-level fixture.
@@ -6927,6 +6933,9 @@ export function installMockFetch(
           const entry = MOCK_ENTRIES.find((candidate) => candidate.id === id)
           if (entry !== undefined) return json(200, { data: entry })
 
+          const justCreated = createdEntries.find((candidate) => candidate.id === id)
+          if (justCreated !== undefined) return json(200, { data: justCreated })
+
           // Opening the entry `duplicate` just created above — see there for
           // why this is synthesised rather than stored.
           if (id.endsWith('-copy')) {
@@ -6953,6 +6962,7 @@ export function installMockFetch(
             values: body.values ?? {},
             blocks: body.blocks ?? {},
           }
+          createdEntries.push(created)
           return json(201, { data: created })
         }
 

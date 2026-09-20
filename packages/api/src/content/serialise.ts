@@ -31,6 +31,18 @@ export interface SerialisedEntry {
   readonly deletedAt: string | null
   /** The editorial workflow's state (`schema@2.1`, ADR-0027). `'none'` on a collection that never turned it on. */
   readonly reviewState: ContentEntry['reviewState']
+  /**
+   * Who may see this entry once published (`schema@2.3`, ADR-0037), and the
+   * third system field orthogonal to `status`, after `deletedAt` and
+   * `reviewState` above — which is why it belongs here with them. Without
+   * it the admin read `undefined` for every entry, showed "Public" for a
+   * private page, and left the control with nothing to change *from*: a
+   * private page could not be made public again from the interface.
+   *
+   * The password is never here. Only its hash is stored, and no read
+   * returns it.
+   */
+  readonly visibility: ContentEntry['visibility']
   readonly assignedReviewer: string | null
   readonly state: EntryState
   readonly version: number
@@ -102,6 +114,7 @@ function projectionOf(
     status: entry.status,
     deletedAt: entry.deletedAt,
     reviewState: entry.reviewState,
+    visibility: entry.visibility,
     assignedReviewer: entry.assignedReviewer,
     state: entry.state,
     version: entry.version,

@@ -127,6 +127,68 @@ describe('a page that is not simply public', () => {
     }
   }, 120_000)
 
+  /**
+   * Every other test here proves what a visibility *does* — a 404, a password
+   * form, an absence from the sitemap. None read the state back, and the
+   * transport never carried it: `SerialisedEntry` carries `deletedAt`
+   * (ADR-0022) and `reviewState` (ADR-0027), the two system fields before
+   * this one, and quietly not `visibility` (ADR-0037) — whose own doc
+   * comment says it is orthogonal to `status` "exactly as `deletedAt` and
+   * `reviewState` are".
+   *
+   * So the admin, which declares the field optional, read `undefined` for
+   * every entry and showed "Public" for a page that was private. Worse than
+   * a wrong label: the control had nothing to change *from*, so a private
+   * page could not be made public again from the interface at all.
+   */
+  it('reports the visibility it was given when the entry is read back', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      const id = await publish(server.base, token, 'Note interne', 'note-interne')
+      const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+
+      const read = async (): Promise<Record<string, unknown>> =>
+        (
+          (await (await fetch(`${server.base}/api/content/page/${id}`, { headers })).json()) as {
+            data: Record<string, unknown>
+          }
+        ).data
+
+      expect((await read()).visibility).toBe('public')
+
+      await fetch(`${server.base}/api/content/page/${id}/visibility`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ visibility: 'private' }),
+      })
+      expect((await read()).visibility).toBe('private')
+
+      await fetch(`${server.base}/api/content/page/${id}/visibility`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ visibility: 'password', password: 'ouvre-toi' }),
+      })
+      const protectedEntry = await read()
+      expect(protectedEntry.visibility).toBe('password')
+      // The hash is stored and never readable — not under any key, not even
+      // to an admin (ADR-0037).
+      expect(JSON.stringify(protectedEntry)).not.toContain('ouvre-toi')
+      expect(protectedEntry.accessPassword).toBeUndefined()
+
+      await fetch(`${server.base}/api/content/page/${id}/visibility`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ visibility: 'public' }),
+      })
+      expect((await read()).visibility).toBe('public')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
   it('shows a form until the password is answered, then the page itself', async () => {
     const root = await project()
     await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])

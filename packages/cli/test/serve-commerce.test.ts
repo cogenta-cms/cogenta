@@ -894,7 +894,14 @@ describe('the shop, end to end', () => {
     })
     expect(invoicePrefix.status).toBe(200)
 
-    const reread = await fetch(`${server.base}/api/settings`)
+    // As the admin, which is what this test is about: an invoice series
+    // prefix is an accounting detail, not something a visitor may read, so
+    // `/api/settings` no longer returns it to an anonymous caller. The
+    // public read above still is anonymous, and still proves the currency
+    // and the terms-of-service path are answered without a token.
+    const reread = await fetch(`${server.base}/api/settings`, {
+      headers: { authorization: `Bearer ${admin}` },
+    })
     const rereadBody = (await reread.json()) as { data: readonly { key: string; value: unknown }[] }
     expect(rereadBody.data.find((setting) => setting.key === 'commerce.priceDisplay')?.value).toBe(
       'ht',

@@ -46,6 +46,7 @@ function entry(overrides: Partial<SerialisedEntry> = {}): SerialisedEntry {
     status: 'published',
     deletedAt: null,
     reviewState: 'none',
+    visibility: 'public',
     assignedReviewer: null,
     state: 'published',
     version: 1,

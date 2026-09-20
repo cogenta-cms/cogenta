@@ -1319,6 +1319,9 @@ export const PUBLIC_READ_SETTING_KEYS: ReadonlySet<string> = new Set([
   // Printed beside every price.
   'commerce.currency',
   'commerce.priceDisplay',
+  // Links a shopper is shown, the same way `privacy.policyPath` is.
+  'commerce.tosPagePath',
+  'commerce.returnPolicyPagePath',
 ])
 
 /** Whether an unauthenticated caller may read this setting. Unknown keys are private. */

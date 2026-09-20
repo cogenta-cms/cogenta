@@ -34,7 +34,16 @@ export function renderLogos(block: LogosBlock, ctx: RenderContext): HtmlElement 
           { class: 'cs-logos__item' },
           item.url === undefined
             ? mark
-            : h('a', { class: 'cs-logos__link', href: ctx.link(item.url), rel: 'noopener' }, mark),
+            : h(
+                'a',
+                {
+                  class: 'cs-logos__link',
+                  href: ctx.link(item.url),
+                  'aria-label': item.name,
+                  rel: 'noopener',
+                },
+                mark,
+              ),
         )
       }),
     ),

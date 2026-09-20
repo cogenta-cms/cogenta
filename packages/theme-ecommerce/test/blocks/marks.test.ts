@@ -19,8 +19,13 @@ describe('logos', () => {
   })
 
   it('links a mark that has a url, with external protection, and leaves the other plain', () => {
+    // Contract B: the organisation's name "is also the accessible name of the
+    // link". It reached `image()` as `altFrom`, which is only the *fallback*
+    // used when the media library has no alt text — so for a logo that did
+    // have one, the link announced a photo's description instead of the
+    // organisation it points at.
     expect(logos).toContain(
-      '<a class="ce-marks__plate" href="https://rossio.example" rel="noopener noreferrer">',
+      '<a class="ce-marks__plate" href="https://rossio.example" aria-label="Rossio Hardware" rel="noopener noreferrer">',
     )
     expect(logos).toContain('<span class="ce-marks__plate">')
   })

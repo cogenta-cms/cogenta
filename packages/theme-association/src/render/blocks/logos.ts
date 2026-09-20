@@ -47,7 +47,12 @@ export function renderLogos(block: LogosBlock, ctx: RenderContext): HtmlElement 
             ? h('span', { class: 'ca-partners__cell' }, mark)
             : h(
                 'a',
-                { class: 'ca-partners__cell', href: item.url, rel: 'noopener noreferrer' },
+                {
+                  class: 'ca-partners__cell',
+                  href: item.url,
+                  'aria-label': item.name,
+                  rel: 'noopener noreferrer',
+                },
                 mark,
               ),
         )

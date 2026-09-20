@@ -14,7 +14,7 @@ describe('renderLogos, marks credited by name', () => {
 
   it('links a mark that has a URL, with the external-link protection', () => {
     expect(html).toMatch(
-      /<a class="cg-marks__link" href="https:\/\/acme\.example" rel="noopener noreferrer"><img class="cg-marks__image"/,
+      /<a class="cg-marks__link" href="https:\/\/acme\.example" aria-label="Acme Trade Weekly" rel="noopener noreferrer"><img class="cg-marks__image"/,
     )
   })
 
@@ -39,5 +39,13 @@ describe('renderLogos, marks credited by name', () => {
 
   it('opens on the shared section head', () => {
     expect(html).toContain('<h2 class="cg-head__title" data-field="title">As seen in</h2>')
+  })
+
+  // Contract B: the organisation's name "is also the accessible name of the
+  // link". It reached `image()` as `altFrom`, which is only the *fallback*
+  // used when the media library has no alt text — so for a logo that did have
+  // one, the link announced a photo's description instead of the organisation.
+  it('names the link after the organisation, not after the picture inside it', () => {
+    expect(html).toContain('aria-label="Acme Trade Weekly"')
   })
 })

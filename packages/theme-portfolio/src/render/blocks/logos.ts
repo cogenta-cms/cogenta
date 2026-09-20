@@ -20,7 +20,16 @@ function renderItem(item: LogoItem, ctx: RenderContext): HtmlElement {
     { class: 'cg-marks__item' },
     item.url === undefined
       ? h('div', { class: 'cg-marks__plate' }, mark)
-      : h('a', { class: 'cg-marks__plate', href: item.url, rel: 'noopener noreferrer' }, mark),
+      : h(
+          'a',
+          {
+            class: 'cg-marks__plate',
+            href: item.url,
+            'aria-label': item.name,
+            rel: 'noopener noreferrer',
+          },
+          mark,
+        ),
     h('p', { class: 'cg-marks__name' }, item.name),
   )
 }

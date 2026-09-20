@@ -34,7 +34,12 @@ export function renderLogos(block: LogosBlock, ctx: RenderContext): HtmlElement 
             ? h('span', { class: 'ce-marks__plate' }, mark)
             : h(
                 'a',
-                { class: 'ce-marks__plate', href: item.url, rel: 'noopener noreferrer' },
+                {
+                  class: 'ce-marks__plate',
+                  href: item.url,
+                  'aria-label': item.name,
+                  rel: 'noopener noreferrer',
+                },
                 mark,
               ),
         )

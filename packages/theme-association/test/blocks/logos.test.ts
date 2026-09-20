@@ -14,7 +14,7 @@ describe('logos', () => {
 
   it('links a partner that has a site, with the external-link protection', () => {
     expect(html).toContain(
-      '<a class="ca-partners__cell" href="https://college.example" rel="noopener noreferrer">',
+      '<a class="ca-partners__cell" href="https://college.example" aria-label="Ashworth College" rel="noopener noreferrer">',
     )
   })
 
@@ -29,5 +29,13 @@ describe('logos', () => {
 
   it('titles the block at h2', () => {
     expect(html).toContain('<h2 class="ca-head__title" data-field="title">')
+  })
+
+  // Contract B: the organisation's name "is also the accessible name of the
+  // link". It reached `image()` as `altFrom`, which is only the *fallback*
+  // used when the media library has no alt text — so for a logo that did have
+  // one, the link announced a photo's description instead of the organisation.
+  it('names the link after the organisation, not after the picture inside it', () => {
+    expect(html).toContain('aria-label="Ashworth College"')
   })
 })

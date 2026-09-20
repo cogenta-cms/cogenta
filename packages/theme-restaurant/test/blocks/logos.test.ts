@@ -14,7 +14,7 @@ describe('logos', () => {
 
   it('links a mark out with rel protection, and leaves an unlinked one as a plate', () => {
     expect(html).toContain(
-      '<a class="cr-marks__plate" href="https://tablees.example" rel="noopener noreferrer">',
+      '<a class="cr-marks__plate" href="https://tablees.example" aria-label="Tablées" rel="noopener noreferrer">',
     )
     expect(html).toContain('<span class="cr-marks__plate">')
   })
@@ -25,5 +25,13 @@ describe('logos', () => {
 
   it('titles the row at h2', () => {
     expect(html).toContain('<h2 class="cr-head__title" data-field="title">Written about in</h2>')
+  })
+
+  // Contract B: the organisation's name "is also the accessible name of the
+  // link". It reached `image()` as `altFrom`, which is only the *fallback*
+  // used when the media library has no alt text — so for a logo that did have
+  // one, the link announced a photo's description instead of the organisation.
+  it('names the link after the organisation, not after the picture inside it', () => {
+    expect(html).toContain('aria-label="Tablées"')
   })
 })

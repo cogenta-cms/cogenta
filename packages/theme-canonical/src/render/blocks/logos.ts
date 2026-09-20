@@ -23,7 +23,12 @@ function renderItem(item: LogoItem, ctx: RenderContext): HtmlElement {
       ? logo
       : h(
           'a',
-          { class: 'cg-logo__link', href: ctx.link(item.url), rel: 'noopener noreferrer' },
+          {
+            class: 'cg-logo__link',
+            href: ctx.link(item.url),
+            'aria-label': item.name,
+            rel: 'noopener noreferrer',
+          },
           logo,
         ),
   )

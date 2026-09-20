@@ -18,7 +18,7 @@ describe('logos', () => {
 
   it('links an organisation with an address, and leaves one without as a picture', () => {
     expect(html).toMatch(
-      /<a class="cs-logos__link" href="https:\/\/halvorsen\.example" rel="noopener"><img/,
+      /<a class="cs-logos__link" href="https:\/\/halvorsen\.example" aria-label="Halvorsen Freight" rel="noopener"><img/,
     )
     expect(html.match(/<a /g)).toHaveLength(1)
   })
@@ -29,5 +29,13 @@ describe('logos', () => {
 
   it('titles the grid at h2', () => {
     expect(html).toContain('<h2 class="cs-head__title" data-field="title">Customers</h2>')
+  })
+
+  // Contract B: the organisation's name "is also the accessible name of the
+  // link". It reached `image()` as `altFrom`, which is only the *fallback*
+  // used when the media library has no alt text — so for a logo that did have
+  // one, the link announced a photo's description instead of the organisation.
+  it('names the link after the organisation, not after the picture inside it', () => {
+    expect(html).toContain('aria-label="Halvorsen Freight"')
   })
 })

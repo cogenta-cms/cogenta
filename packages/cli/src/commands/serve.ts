@@ -7427,6 +7427,21 @@ export function createRequestListener(
           // must show up on the very next page view (fiche 14).
           styles: await site.resolveStyles(),
           loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
+          // A published page pointing at media that no longer resolves is
+          // drawn without it rather than refused (see `pruneMissingMedia`).
+          // The visitor gets a 200, so this line is the only trace an
+          // operator has that a page is being served incomplete.
+          onMissingMedia: (report: {
+            readonly path: string
+            readonly media: readonly string[]
+            readonly droppedBlocks: number
+          }) => {
+            logger.warn('page rendered without media that no longer resolves', {
+              path: report.path,
+              media: report.media,
+              droppedBlocks: report.droppedBlocks,
+            })
+          },
           // Self-hosted analytics (`@cogenta/analytics`): the referrer is read
           // from *this* request's own header, server-side — see
           // `analyticsBeaconTag` in `theme-render.ts` for why that, rather

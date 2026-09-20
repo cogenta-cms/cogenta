@@ -7,6 +7,7 @@ import {
   type Filter,
   type FilterOperator,
   type MenuRouter,
+  pruneMissingMedia,
   type QueryRequest,
   RELATIVE_NOW,
   RELATIVE_TODAY,
@@ -197,6 +198,22 @@ export interface ThemeRenderOptions {
    * still to come yesterday.
    */
   readonly onClockDependent?: () => void
+  /**
+   * Called when this page referenced media that no longer resolves, once per
+   * render, just before it is drawn without it (see `pruneMissingMedia`).
+   *
+   * The visitor gets a 200 and a page with something taken out of it, and
+   * nothing else about the request says so — this is the only place an
+   * operator can learn which page lost what. It fires for anything
+   * `loadMedia` did not return, which is a deleted asset but also a reference
+   * to a kind no theme can draw (a PDF in a `media` field): both used to be
+   * the same HTTP 500.
+   */
+  readonly onMissingMedia?: (report: {
+    readonly path: string
+    readonly media: readonly string[]
+    readonly droppedBlocks: number
+  }) => void
   /**
    * The widget areas of the page being rendered (L30), resolved by the host
    * (`widget-resolve.ts`). Absent: no widget anywhere, as before widgets.
@@ -1654,7 +1671,11 @@ async function renderEntryPage(
   options: ThemeRenderOptions,
   context: AccessContext,
 ): Promise<string> {
-  const blocks = toVocabularyBlocks(entry, collection)
+  // Both `let`: a media reference that no longer resolves is taken out of the
+  // entry below, once this render knows which assets actually loaded, and the
+  // blocks are then rebuilt from what is left (see `pruneMissingMedia`).
+  let renderEntry = entry
+  let blocks = toVocabularyBlocks(entry, collection)
 
   // Every entry a `collectionList` block needs is fetched up front — the
   // theme's own contract (`FetchedEntries`, `render-block.ts`) requires it:
@@ -1665,6 +1686,12 @@ async function renderEntryPage(
   const knownEntries = new Map<string, ContentEntry>([[entry.id, entry]])
   /** Which collection each known entry came from — a `ContentEntry` does not say. */
   const entryCollections = new Map<string, string>([[entry.id, collection.name]])
+  /** Which entries each list block showed, so the lists can be rebuilt after a prune. */
+  const listedEntries: {
+    readonly key: string
+    readonly collection: string
+    readonly ids: readonly string[]
+  }[] = []
   for (const block of blocks) {
     if (block._type !== 'collectionList') continue
     const themeQuery = collectionListQuery(block)
@@ -1675,6 +1702,11 @@ async function renderEntryPage(
     fetchedEntries[block._key] = results.items.map((found) =>
       toThemeEntry(found, themeQuery.collection),
     )
+    listedEntries.push({
+      key: block._key,
+      collection: themeQuery.collection,
+      ids: results.items.map((found) => found.id),
+    })
     for (const found of results.items) {
       knownEntries.set(found.id, found)
       entryCollections.set(found.id, themeQuery.collection)
@@ -1708,19 +1740,59 @@ async function renderEntryPage(
   // this reuse costs nothing. Rich text's own media nodes are merged in
   // separately, above.
   const mediaAssets = new Map<string, RenderMediaAsset>()
+  const dependencySource = { collection: (name: string) => collectionsByName.get(name) }
+  /** This render's entries in the wire shape both walks below read. */
+  const serialised = () =>
+    [...knownEntries].map(([id, found]) => ({
+      ...found,
+      collection: entryCollections.get(id) ?? collection.name,
+    }))
   if (options.loadMedia !== undefined) {
-    const dependencies = collectDependencies(
-      [...knownEntries].map(([id, found]) => ({
-        ...found,
-        collection: entryCollections.get(id) ?? collection.name,
-      })),
-      { collection: (name) => collectionsByName.get(name) },
-    )
+    const dependencies = collectDependencies(serialised(), dependencySource)
     const mediaIds = new Set([...dependencies.media, ...richTextAssets.media])
     if (mediaIds.size > 0) {
       for (const [id, asset] of await options.loadMedia([...mediaIds])) {
         mediaAssets.set(id, asset)
       }
+    }
+
+    // What this page asked for and did not get: media deleted while a
+    // published page still pointed at it, or a kind no theme can draw. There
+    // is no way for `ctx.image()` below to say so — contract D's
+    // `ImageSource` has no absent state and the ten installed themes are
+    // written against it — so it throws, and `renderPage` draws every block
+    // of a page in one call: one dead reference took the whole document with
+    // it, an HTTP 500 for every visitor until somebody edited the page.
+    //
+    // So the reference leaves the data instead, here, where "no media chosen"
+    // is a state every theme already draws (`entryImage` returns `undefined`
+    // for it, and the themes mark it `data-media="none"`). After this,
+    // `image()` can only be reached with an identifier that really loaded —
+    // which is why its `throw` stays: reaching it now means a real defect.
+    const missing = [...mediaIds].filter((id) => !mediaAssets.has(id))
+    if (missing.length > 0) {
+      const pruned = pruneMissingMedia(serialised(), dependencySource, new Set(mediaAssets.keys()))
+      for (const item of pruned.entries) {
+        const original = knownEntries.get(item.id)
+        if (original === undefined) continue
+        knownEntries.set(item.id, { ...original, values: item.values, blocks: item.blocks })
+      }
+      renderEntry = knownEntries.get(entry.id) ?? entry
+      blocks = toVocabularyBlocks(renderEntry, collection)
+      for (const listed of listedEntries) {
+        fetchedEntries[listed.key] = listed.ids.flatMap((id) => {
+          const found = knownEntries.get(id)
+          return found === undefined ? [] : [toThemeEntry(found, listed.collection)]
+        })
+      }
+      // The visitor gets a 200 and a page with something taken out of it.
+      // Nothing else in the request says so, so this is the only way an
+      // operator learns which page lost what.
+      options.onMissingMedia?.({
+        path: pathname,
+        media: pruned.prunedMedia,
+        droppedBlocks: pruned.droppedBlocks,
+      })
     }
   }
 
@@ -1880,9 +1952,13 @@ async function renderEntryPage(
   }
   const renderableBlocks = blocks.filter((block): block is VocabularyBlock => block !== null)
 
-  const themeEntry = toThemeEntry(entry, collection.name)
+  // `renderEntry`, not `entry`: whatever this page draws has to be drawn from
+  // the entry the prune above left behind, or a reference it removed comes
+  // back through the entry's own fields (`entryImage`) and `ctx.image()`
+  // throws after all.
+  const themeEntry = toThemeEntry(renderEntry, collection.name)
   const entryMeta = await buildEntryMeta(
-    entry,
+    renderEntry,
     collection,
     themeEntry,
     themeContext,
@@ -1903,13 +1979,13 @@ async function renderEntryPage(
             entryId: entry.id,
             locale: entry.locale,
           },
-          entry: { collection, entry, blocks },
+          entry: { collection, entry: renderEntry, blocks },
         })
   const placesWidgets = theme.widgetAreas !== undefined
   const { page: pageWidgets, footer: footerWidgets } = splitWidgetAreas(widgetAreas)
   const { host: hostWidgets, theme: themeWidgets } = partitionPageAreas(pageWidgets)
   const pageContent: PageContent = {
-    title: entryTitle(entry),
+    title: entryTitle(renderEntry),
     blocks: renderableBlocks,
     entry: entryMeta,
     ...(placesWidgets && hasAnyWidget(themeWidgets) ? { widgets: themeWidgets } : {}),
@@ -2023,7 +2099,10 @@ async function renderEntryPage(
       ? storedSeoSettings
       : { ...storedSeoSettings, defaultSocialImageUrl: identity.shareImageUrl }
   const seoSite = seoSiteFor(options.site, seoSettings)
-  const resource = { collection, entry }
+  // The pruned entry here too: `og:image` and the JSON-LD `image` are derived
+  // from the very fields the prune emptied, and a share card built from a
+  // deleted asset is a broken share card.
+  const resource = { collection, entry: renderEntry }
   const alternates = await alternatesForEntry(
     seoSite,
     collection,
@@ -2058,7 +2137,7 @@ async function renderEntryPage(
   // the entry with those fields removed — the title and the dates stay, being
   // public by design.
   const lockedResource = locked
-    ? { collection, entry: { ...entry, values: publicValuesOf(collection, entry) } }
+    ? { collection, entry: { ...renderEntry, values: publicValuesOf(collection, renderEntry) } }
     : resource
 
   // `head` already carries a real `<title>` (`renderSeoHead`, above) — no

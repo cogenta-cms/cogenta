@@ -174,6 +174,8 @@ export type {
   ProvidersRouterOptions,
 } from './providers-router.js'
 export { createProvidersRouter } from './providers-router.js'
+export type { MediaPruneResult } from './prune-missing-media.js'
+export { pruneMissingMedia } from './prune-missing-media.js'
 export type { ListQuery, QueryLimits, ReadQuery } from './query.js'
 export {
   DEFAULT_LIMITS,

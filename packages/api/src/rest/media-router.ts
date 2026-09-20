@@ -767,8 +767,22 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     const asset = await store.get(id)
     if (asset === null) throw notFound(id)
     // `edited` (L39): whether a crop or rotation can be undone.
+    //
+    // `lastEdit` alongside it, because editing is non-destructive by design —
+    // every edit is re-derived from the untouched original rather than
+    // stacked on the last result, which is what stops quality compounding
+    // away. The consequence is that an editor reopened on an edited image
+    // shows the *original*, so the crop already applied looks undone, and
+    // applying anything replaces it. The parameters were stored all along
+    // and read only inside this router; handing them back is what lets the
+    // editor open on what the image currently is.
+    const lastEdit = await readLastEdit(id)
     return jsonResponse(200, {
-      data: { ...asset, edited: await storage.exists(originalCopyKey(id)) },
+      data: {
+        ...asset,
+        edited: await storage.exists(originalCopyKey(id)),
+        ...(lastEdit === null ? {} : { lastEdit }),
+      },
     })
   }
 

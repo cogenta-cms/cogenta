@@ -41,9 +41,16 @@ function processorThat(
   behaviour: {
     readonly probe?: () => Promise<ImageSize | null>
     readonly variants?: () => Promise<never>
+    /** Present makes the router able to crop and rotate (L39). */
+    readonly edit?: boolean
   } = {},
 ): MediaImageProcessor {
   return {
+    ...(behaviour.edit === true
+      ? {
+          edit: async () => ({ bytes: new Uint8Array([9, 9, 9]), contentType: 'image/webp' }),
+        }
+      : {}),
     probe: behaviour.probe ?? (async () => ({ width: 1000, height: 500 })),
     variants:
       behaviour.variants ??
@@ -235,6 +242,38 @@ describe('an uploaded image is stored with the type its bytes earn', () => {
     const asset = (response.body as { data: { id: string; mimeType: string } }).data
     expect(asset.mimeType).toBe('image/png')
     expect((await store.get(asset.id))?.mimeType).toBe('image/png')
+  })
+
+  /**
+   * Editing is non-destructive: the server re-derives every edit from the
+   * untouched original rather than stacking it on the last result, which is
+   * what stops quality compounding away. The editor therefore opens on the
+   * original — and, with no way to learn what is currently applied, on a
+   * default frame too, so an applied crop looked undone and was silently
+   * replaced by whatever was applied next. The parameters were stored the
+   * whole time and read only inside this router.
+   */
+  it('hands back the crop and rotation currently applied, so an editor can open on them', async () => {
+    const router = createMediaRouter({ store, storage, images: processorThat({ edit: true }) })
+    const { id } = await upload(router)
+    const read = async (): Promise<{ edited?: boolean; lastEdit?: unknown }> =>
+      (
+        (await router.handle({ method: 'GET', path: `/api/media/${id}`, query: {} }, EDITOR))
+          .body as { data: { edited?: boolean; lastEdit?: unknown } }
+      ).data
+
+    expect((await read()).lastEdit).toBeUndefined()
+
+    const edit = { rotate: 90, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.5 } }
+    const edited = await router.handle(
+      { method: 'POST', path: `/api/media/${id}/edit`, query: {}, body: edit },
+      EDITOR,
+    )
+    expect(edited.status).toBe(200)
+
+    const after = await read()
+    expect(after.edited).toBe(true)
+    expect(after.lastEdit).toMatchObject(edit)
   })
 
   it('leaves a non-image kind declared as sent, since it is never served publicly', async () => {

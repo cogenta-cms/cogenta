@@ -69,9 +69,15 @@ export function ImageEditor({
   const { t } = useTranslation()
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [loadError, setLoadError] = useState(false)
-  const [rotate, setRotate] = useState<ImageEdit['rotate']>(0)
-  const [mirror, setMirror] = useState<ImageEdit['mirror']>(undefined)
-  const [crop, setCrop] = useState<CropRect>(FULL_CROP)
+  // Opened on what the image currently is, not on a blank slate. Editing is
+  // non-destructive — the server re-derives every edit from the untouched
+  // original rather than stacking it on the last result — so the editor
+  // necessarily shows the original. Without restoring the stored parameters
+  // it also showed a default frame, which made an applied crop look undone
+  // and silently replaced it the moment anything else was applied.
+  const [rotate, setRotate] = useState<ImageEdit['rotate']>(asset.lastEdit?.rotate ?? 0)
+  const [mirror, setMirror] = useState<ImageEdit['mirror']>(asset.lastEdit?.mirror)
+  const [crop, setCrop] = useState<CropRect>(asset.lastEdit?.crop ?? FULL_CROP)
   const [ratio, setRatio] = useState<RatioPreset>('free')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)

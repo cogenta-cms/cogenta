@@ -34,6 +34,13 @@ export interface MediaAsset {
   readonly createdBy: string | null
   /** L39: whether a crop or rotation was applied and can be undone. Present on a single-asset read. */
   readonly edited?: boolean
+  /**
+   * The crop and rotation currently applied, on a single-asset read of an
+   * edited image. Editing is non-destructive — every edit is re-derived from
+   * the untouched original — so without these the editor opens on the
+   * original with a default frame, making an applied crop look undone.
+   */
+  readonly lastEdit?: ImageEdit
 }
 
 export interface MediaPage {

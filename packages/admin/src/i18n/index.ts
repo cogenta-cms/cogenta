@@ -5,11 +5,17 @@ import fr from './locales/fr.json'
 
 export const SUPPORTED_LANGUAGES = ['fr', 'en'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
-// French is the interface's only language up to this point (ADR-0019) — an
-// existing install with no stored preference and a browser locale outside
-// {fr, en} keeps exactly the text it already had, rather than switching to
-// English out from under it.
-const DEFAULT_LANGUAGE: SupportedLanguage = 'fr'
+// English, in both senses `i18next` uses this for: the language an admin
+// opens in when the browser asks for neither French nor English, and the one
+// a missing key falls back to.
+//
+// It was French, with a reason that has expired: French was the interface's
+// only language, so falling back to it could not surprise anybody. With two,
+// it does — an English admin met French words wherever a key was missing,
+// which is the one place a fallback is guaranteed to be read. English is also
+// the language of this codebase's identifiers, comments and shipped schemas,
+// so a string that has not been translated yet at least matches its source.
+const DEFAULT_LANGUAGE: SupportedLanguage = 'en'
 
 /**
  * ADR-0019: the admin UI's language is a preference of the person

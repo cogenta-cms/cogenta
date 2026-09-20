@@ -220,7 +220,7 @@ export interface BlockDefinition {
 export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   {
     name: 'hero',
-    label: 'Héros',
+    label: 'Hero',
     fields: [
       field('eyebrow', 'text', { localized: true }),
       field('title', 'text', { required: true, localized: true }),
@@ -231,12 +231,12 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'prose',
-    label: 'Texte',
+    label: 'Text',
     fields: [field('body', 'richText', { required: true, localized: true })],
   },
   {
     name: 'mediaFigure',
-    label: 'Média et légende',
+    label: 'Media and caption',
     fields: [
       field('media', 'media', { required: true }),
       field('caption', 'text', { localized: true }),
@@ -249,7 +249,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'featureGrid',
-    label: 'Grille de fonctionnalités',
+    label: 'Feature grid',
     fields: [
       field('title', 'text', { localized: true }),
       listField(
@@ -266,7 +266,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'cta',
-    label: 'Appel à action',
+    label: 'Call to action',
     fields: [
       field('title', 'text', { required: true, localized: true }),
       field('text', 'text', { localized: true }),
@@ -281,7 +281,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'gallery',
-    label: 'Galerie',
+    label: 'Gallery',
     fields: [
       listField('items', [itemField('media', 'media', { required: true })], {
         required: true,
@@ -295,7 +295,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'quote',
-    label: 'Citation',
+    label: 'Quote',
     fields: [
       field('text', 'text', { required: true, localized: true }),
       field('author', 'text'),
@@ -320,7 +320,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'stats',
-    label: 'Statistiques',
+    label: 'Statistics',
     fields: [
       field('title', 'text', { localized: true }),
       listField(
@@ -352,7 +352,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'collectionList',
-    label: 'Liste de contenus',
+    label: 'Content list',
     fields: [
       field('title', 'text', { localized: true }),
       // Filled with the site's own collections when the form renders.
@@ -382,7 +382,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'embed',
-    label: 'Contenu externe',
+    label: 'External content',
     fields: [
       field('provider', 'select', { required: true, options: selectOptions(EMBED_PROVIDERS) }),
       field('url', 'text', { required: true }),
@@ -393,7 +393,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   // ---- blocks@2.0 (RFC 0001), fiche 43 sous-chantier C-i ---------------------
   {
     name: 'testimonial',
-    label: 'Témoignage',
+    label: 'Testimonial',
     fields: [
       field('quote', 'richText', { required: true, localized: true }),
       // Mirrors `testimonialAttributionSchema` ({name, role?, avatar?}), now
@@ -411,7 +411,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'pricingTable',
-    label: 'Tableau de tarifs',
+    label: 'Pricing table',
     fields: [
       field('title', 'text', { localized: true }),
       listField(
@@ -439,7 +439,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'accordion',
-    label: 'Accordéon',
+    label: 'Accordion',
     fields: [
       field('title', 'text', { localized: true }),
       listField(
@@ -454,7 +454,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'statCounter',
-    label: 'Chiffres clés',
+    label: 'Key figures',
     fields: [
       field('title', 'text', { localized: true }),
       listField(
@@ -469,7 +469,7 @@ export const BLOCK_VOCABULARY: readonly BlockDefinition[] = [
   },
   {
     name: 'logoStrip',
-    label: 'Bandeau de logos',
+    label: 'Logo strip',
     fields: [
       listField('logos', [itemField('media', 'media', { required: true })], {
         required: true,

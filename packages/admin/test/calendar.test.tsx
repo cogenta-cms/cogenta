@@ -12,7 +12,21 @@ import { installMockFetch, scheduleCalls, VALID_TOKEN } from './helpers/mock-fet
 
 const TOKEN_STORAGE_KEY = 'cogenta.session.token'
 
+/**
+ * A Wednesday, so that "in two days" is always still inside the displayed
+ * week.
+ *
+ * These tests place their fixture relative to the real clock, and the week
+ * view's own assertion is that an entry two days out "belongs to this week".
+ * On a Saturday or a Sunday it does not, so this file failed two days out of
+ * seven — on the real calendar, with no change to the code it covers. Only
+ * `Date` is faked: timers stay real, which is what `waitFor` needs.
+ */
+const A_WEDNESDAY = new Date('2026-09-16T09:00:00')
+
 beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date'] })
+  vi.setSystemTime(A_WEDNESDAY)
   scheduleCalls.splice(0, scheduleCalls.length)
   localStorage.clear()
   localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
@@ -22,6 +36,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 

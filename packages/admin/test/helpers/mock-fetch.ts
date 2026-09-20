@@ -1161,6 +1161,8 @@ export function installMockFetch(
     // server has never sent — so this double agreed with the admin's own
     // wrong type instead of contradicting it, and the screen rendered a raw
     // UUID and an orphan separator with every test passing.
+    /** Media ids the single-asset read should report as `edited: true` (L39). */
+    readonly editedMedia?: readonly string[]
     readonly mediaUsage?: Readonly<
       Record<
         string,
@@ -5836,6 +5838,27 @@ export function installMockFetch(
           }
           return json(200, { data: found })
         }
+      }
+
+      // `GET /api/media/{id}` — the single-asset read, which the real router
+      // answers with `edited` (whether a crop or rotation can be undone) and
+      // the list route deliberately does not: it would cost one storage stat
+      // per row. Nothing modelled it here, so no test could ever have seen
+      // the "Restore the original" control that depends on it.
+      const mediaReadMatch = /\/api\/media\/([^/?]+)(?:\?.*)?$/u.exec(url)
+      if (mediaReadMatch !== null && method === 'GET' && mediaReadMatch[1] !== '-') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, {
+            error: { code: 'UNAUTHENTICATED', message: 'Sign in to view media.' },
+          })
+        }
+        const found = media.find((item) => item.id === mediaReadMatch[1])
+        if (found === undefined) {
+          return json(404, { error: { code: 'MEDIA_NOT_FOUND', message: 'No media asset.' } })
+        }
+        return json(200, {
+          data: { ...found, edited: options.editedMedia?.includes(found.id) === true },
+        })
       }
 
       const mediaUsageMatch = /\/api\/media\/([^/?]+)\/usage(?:\?.*)?$/u.exec(url)

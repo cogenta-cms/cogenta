@@ -318,6 +318,35 @@ describe('media library folders', () => {
       })
     })
 
+    /**
+     * "Restore the original" is offered only when `asset.edited` is true, and
+     * the server computes that field on the single-asset read alone — the
+     * list route would need one storage stat per row. The detail panel took
+     * its asset straight from the grid's list, so `edited` was always
+     * `undefined` and the control never appeared, on any asset, ever. The
+     * route behind it worked the whole time.
+     */
+    it('offers to restore the original of an edited image', async () => {
+      installMockFetch({ mediaSeedCount: 1, editedMedia: ['media-seed-1'] })
+      render(<App />)
+      await openFirstAsset()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Recadrer ou pivoter' }))
+      expect(await screen.findByRole('button', { name: /Rétablir/ })).toBeDefined()
+    })
+
+    it('does not offer it for an image nobody has edited', async () => {
+      installMockFetch({ mediaSeedCount: 1 })
+      render(<App />)
+      await openFirstAsset()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Recadrer ou pivoter' }))
+      // Wait for the editor itself, so "no Restore button" is an assertion
+      // about a drawn editor rather than about a panel that never opened.
+      await screen.findByRole('button', { name: 'Appliquer' })
+      expect(screen.queryByRole('button', { name: /Rétablir/ })).toBeNull()
+    })
+
     it('still asks for an unused asset, saying the deletion is permanent rather than naming content', async () => {
       installMockFetch({ mediaSeedCount: 1 })
       render(<App />)

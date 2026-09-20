@@ -288,6 +288,54 @@ describe('cogenta serve — images (L10 task 5)', () => {
     }
   }, 60_000)
 
+  /**
+   * The audit reported the focal point as "editable but never applied". It
+   * is applied — as `object-position` on the rendered `<img>`, which is the
+   * right way to honour it: the alternative is cropping on demand, and
+   * neither `/_image` nor `/api/media/{id}/file` will render on request.
+   * What is missing is server-side cropping, which is a different (and
+   * deliberately unbuilt) thing. This pins the behaviour that does exist, so
+   * the question does not have to be re-litigated from reading the code.
+   */
+  it('carries the focal point into the page as object-position', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await signIn(root, server.base)
+      const asset = await upload(server.base, token, makePng(1000, 500), 'A wide gradient')
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+      const focussed = await fetch(`${server.base}/api/media/${asset.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ focal: { x: 0.25, y: 0.75 } }),
+      })
+      expect(focussed.status).toBe(200)
+
+      const created = (await (
+        await fetch(`${server.base}/api/content/page`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            values: { title: 'Focussed', slug: 'focussed', cover: asset.id },
+            blocks: {
+              body: [{ key: 'figure-1', type: 'mediaFigure', data: { media: asset.id } }],
+            },
+          }),
+        })
+      ).json()) as { data: { id: string } }
+      await fetch(`${server.base}/api/content/page/${created.data.id}/publish`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+      })
+
+      const html = await (await fetch(`${server.base}/focussed`)).text()
+      expect(html).toContain('object-position:25% 75%')
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
   it('renders a real srcset in the page, and an og:image derived from the same asset', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

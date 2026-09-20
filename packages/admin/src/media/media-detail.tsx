@@ -4,6 +4,7 @@ import { ApiError } from '../api/client.js'
 import {
   deleteMedia,
   type ExifData,
+  getMedia,
   getMediaExif,
   getMediaUsage,
   type MediaAsset,
@@ -82,6 +83,17 @@ export function MediaDetail({
 
   const [copied, setCopied] = useState(false)
 
+  /**
+   * The asset as the single-asset read describes it, which is the only read
+   * that carries `edited` — the list route would need one storage stat per
+   * row to say whether a crop can be undone. This panel took its asset
+   * straight from the grid's list, so `edited` was always `undefined` and
+   * "Restore the original" never appeared on any asset, though the route
+   * behind it worked the whole time. The prop is used until this arrives, so
+   * nothing waits on a request to draw.
+   */
+  const [detail, setDetail] = useState<MediaAsset>(asset)
+
   const [usage, setUsage] = useState<MediaUsageReport | null>(null)
   const [usageError, setUsageError] = useState(false)
   /**
@@ -102,6 +114,21 @@ export function MediaDetail({
     setDecorative(asset.decorative)
     setJustification(asset.decorativeJustification ?? '')
   }, [asset.id, asset.alt, asset.decorative, asset.decorativeJustification])
+
+  useEffect(() => {
+    setDetail(asset)
+    let cancelled = false
+    getMedia(token, asset.id)
+      .then((full) => {
+        if (!cancelled) setDetail(full)
+      })
+      // A failed read leaves the prop in place: the panel still works, it
+      // just cannot offer what only the fresh read knows about.
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [token, asset])
 
   useEffect(() => {
     let cancelled = false
@@ -254,7 +281,7 @@ export function MediaDetail({
         (editingImage ? (
           <ImageEditor
             token={token}
-            asset={asset}
+            asset={detail}
             onDone={(updated) => {
               setEditingImage(false)
               onChange(updated)

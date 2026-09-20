@@ -1,5 +1,6 @@
 import { type ChangeEvent, type FormEvent, type JSX, useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   deleteMedia,
@@ -15,6 +16,7 @@ import {
   updateMedia,
 } from '../api/media-client.js'
 import { formatDateTime } from '../lib/format.js'
+import { fieldLabel } from '../schema/field-label.js'
 import { Button } from '../ui/index.js'
 import { FocalPointEditor } from './focal-point-editor.js'
 import { ImageEditor } from './image-editor.js'
@@ -42,6 +44,17 @@ function formatBytes(bytes: number): string {
  * replacing the file in place, and moving it between folders — every one of
  * these already existed server-side (fiche 11); this is the wiring.
  */
+/**
+ * Where in the entry, said the way the entry's own form says it.
+ *
+ * `at` is either a field name (`coverImage`) or a path into the blocks
+ * (`blocks.blocks[2].mediaFigure`). Only the first can be named, so only the
+ * first is: a path is shown as it stands rather than guessed at.
+ */
+function placeOf(at: string, t: Parameters<typeof fieldLabel>[1]): string {
+  return /[.[\]]/u.test(at) ? at : fieldLabel(at, t)
+}
+
 export function MediaDetail({
   token,
   asset,
@@ -428,11 +441,19 @@ export function MediaDetail({
           <ul className="m-0 flex flex-col gap-1 p-0 text-sm">
             {usage.matches.map((match) => (
               <li key={`${match.collection}-${match.entryId}-${match.at}`} className="list-none">
-                {t('media.usageItem', {
-                  collection: match.collection,
-                  title: match.title,
-                  at: match.at,
-                })}
+                {/* The entry, reachable. This list is read by someone about to
+                    delete a medium, deciding whether to; "post · Reading on
+                    the 7:52 · coverImage" told them where it is used and left
+                    them to find it by hand. */}
+                <Link
+                  className="text-primary hover:underline"
+                  to={`/collections/${encodeURIComponent(match.collection)}/${encodeURIComponent(match.entryId)}`}
+                >
+                  {match.title}
+                </Link>{' '}
+                <span className="text-muted-foreground">
+                  {t('media.usageItemAt', { at: placeOf(match.at, t) })}
+                </span>
               </li>
             ))}
           </ul>

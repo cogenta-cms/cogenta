@@ -885,7 +885,8 @@
       "keepError": "Impossible de conserver cette image.",
       "kept": "« {{name}} » ajoutée à la médiathèque, marquée comme générée."
     },
-    "uploadImageTypes": "Une image doit être en {{types}} — le contrôle porte sur le contenu du fichier, pas sur son extension. Tout autre fichier est accepté et proposé au téléchargement plutôt qu’affiché."
+    "uploadImageTypes": "Une image doit être en {{types}} — le contrôle porte sur le contenu du fichier, pas sur son extension. Tout autre fichier est accepté et proposé au téléchargement plutôt qu’affiché.",
+    "usageItemAt": "dans {{at}}"
   },
   "collectionList": {
     "tableLabel": "Contenus",

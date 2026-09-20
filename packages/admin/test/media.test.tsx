@@ -363,7 +363,11 @@ describe('media library folders', () => {
       render(<App />)
       await openFirstAsset()
 
-      await screen.findByText(/article · Le pain de seigle · cover/)
+      // The title is the link now (`media/usage-list.test.tsx` covers where
+      // it goes); what matters here is still that the identifier never
+      // reaches the screen.
+      await screen.findByText('Le pain de seigle')
+      await screen.findByText(/dans cover/)
       expect(screen.queryByText(/entry-1/)).toBeNull()
     })
   })

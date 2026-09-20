@@ -1974,7 +1974,16 @@ async function renderEntryPage(
       : await options.widgets({
           context: {
             path: pathname,
-            kind: pathname === '/' ? 'home' : 'entry',
+            // The home page is the home page whichever URL reached it. `/`
+            // and `reading.homePath` (`/home` by default) resolve to one
+            // entry, and deriving this from the requested path alone gave
+            // that entry two different contexts: `/` was "home" and `/home`
+            // an ordinary entry, so a rule matched one and not the other —
+            // five widget areas on `/home`, none on `/`, which is the URL
+            // every visitor reaches first. Only read when widgets are
+            // actually being resolved, since `homePath` is a live settings
+            // read on every request by design.
+            kind: pathname === (await homePathFor(options)) || pathname === '/' ? 'home' : 'entry',
             collection: collection.name,
             entryId: entry.id,
             locale: entry.locale,

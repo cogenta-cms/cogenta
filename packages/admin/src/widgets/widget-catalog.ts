@@ -101,6 +101,30 @@ export function unavailableReason(type: WidgetType, sources: WidgetSources): str
   }
 }
 
+/**
+ * An empty but correctly-typed value for a field a plugin declares, so the
+ * settings form has something to bind to from the first render. A control
+ * handed `undefined` is an uncontrolled one, and a checkbox handed `''` is
+ * not a checkbox.
+ */
+function emptyValueFor(kind: string): unknown {
+  switch (kind) {
+    case 'boolean':
+      return false
+    case 'number':
+      return 0
+    case 'richText':
+    case 'blocks':
+      return []
+    case 'json':
+      return {}
+    case 'taxonomy':
+      return []
+    default:
+      return ''
+  }
+}
+
 /** Settings a new widget starts from: valid as they are, except where a picture has to be chosen. */
 export function defaultSettings(
   type: WidgetType,
@@ -111,6 +135,20 @@ export function defaultSettings(
     readonly sampleLink: string
   },
 ): Record<string, unknown> {
+  // A plugin's type first, and before the switch rather than after it: the
+  // switch is exhaustive over the *vocabulary*, so it has no `default:`
+  // branch, and a plugin name reaches it only through `widgetGroups`' own
+  // `as WidgetType` cast — which is exactly what stops the compiler from
+  // pointing out that such a name matches no case at all. It used to fall off
+  // the end of this function and return `undefined`, and the settings form
+  // read a declared field off that the moment the widget was placed.
+  const provided = pluginWidgetType(type)
+  if (provided !== undefined) {
+    return Object.fromEntries(
+      provided.fields.map((field) => [field.name, emptyValueFor(field.kind)]),
+    )
+  }
+
   const firstCollection = sources.collections.find((collection) => collection.routed)?.name ?? ''
   const firstTaxonomy = sources.taxonomies[0]?.name ?? ''
   switch (type) {

@@ -508,6 +508,31 @@ export interface PluginBlockWireDefinition {
 }
 
 /**
+ * Contract B declares a select's choices as plain strings — `f.select({
+ * options: ['start', 'center'] })` — and `@cogenta/blocks` refuses a plugin
+ * manifest that declares them any other way. This admin's own mirror of the
+ * vocabulary holds the same choices as `{ value }` objects, which
+ * `selectOptions` builds by hand for each of the seventeen.
+ *
+ * Nothing did that for a plugin's fields. The strings arrived where the form
+ * expected objects, `choice.value` was `undefined`, and `localizeBlockField`
+ * called `.replaceAll` on it — so inserting a plugin block turned the builder
+ * white and took the unsaved page with it. This is that conversion, applied
+ * once, at the boundary where an external declaration becomes a field this
+ * admin renders.
+ */
+function normaliseSelectOptions(
+  options: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const choices = options['options']
+  if (!Array.isArray(choices)) return options
+  return {
+    ...options,
+    options: choices.map((choice) => (typeof choice === 'string' ? { value: choice } : choice)),
+  }
+}
+
+/**
  * Narrowed rather than cast: this is data from a server that may be newer
  * than this bundle, and a field kind no editor here can render is dropped —
  * the block still places, with the fields this admin understands, instead of
@@ -528,7 +553,7 @@ export function registerPluginBlocks(blocks: readonly PluginBlockWireDefinition[
         localized: candidate.localized,
         unique: false,
         hasCustomValidation: false,
-        options: candidate.options,
+        options: normaliseSelectOptions(candidate.options),
         ...(candidate.admin === undefined ? {} : { admin: candidate.admin }),
       })),
   }))

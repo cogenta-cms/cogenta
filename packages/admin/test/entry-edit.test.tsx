@@ -107,6 +107,29 @@ describe('status and publication', () => {
     expect(screen.queryByRole('button', { name: 'Publier' })).toBeNull()
   })
 
+  it('drops the "fill the required fields" notice as soon as they are filled', async () => {
+    // It used to survive the fix *and* a successful save — only a reload
+    // cleared it — so the screen went on telling an editor to do something
+    // they had already done.
+    render(<App />)
+    await goToArticles()
+
+    fireEvent.click(await screen.findByRole('link', { name: 'Second article' }))
+    await screen.findByRole('heading', { name: 'Modifier : Article' })
+
+    const title = screen.getByLabelText(/^Titre\s*\*?$/)
+    fireEvent.change(title, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Publier' }))
+
+    expect(await screen.findByText('Remplissez les champs requis avant de publier.')).toBeDefined()
+
+    fireEvent.change(title, { target: { value: 'A title, at last' } })
+
+    await waitFor(() =>
+      expect(screen.queryByText('Remplissez les champs requis avant de publier.')).toBeNull(),
+    )
+  })
+
   it('moves a published entry back to draft through the status selector', async () => {
     render(<App />)
     await goToArticles()

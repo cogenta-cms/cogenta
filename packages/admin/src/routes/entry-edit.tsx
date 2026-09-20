@@ -275,6 +275,14 @@ export function EntryEditRoute(): JSX.Element {
   const [visibility, setVisibility] = useState<EntryVisibility>('public')
   const [statusBusy, setStatusBusy] = useState(false)
   const [statusError, setStatusError] = useState<ApiErrorDescription | null>(null)
+  /**
+   * A publish was refused because required fields were empty. Not a
+   * `statusError`, because that is a message and this is a *condition*: it
+   * stops being true the moment the fields it names are filled, and the notice
+   * below is rendered from that condition rather than from a string that
+   * nothing was ever going to clear.
+   */
+  const [publishBlocked, setPublishBlocked] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
   // Discussion (fiche 15 task 5): a tri-state per-entry override —
@@ -816,12 +824,13 @@ export function EntryEditRoute(): JSX.Element {
       if (Object.keys(required).length > 0) {
         setErrors(required)
         focusFirstError(required)
-        setStatusError({ message: t('entryEdit.publishValidationError') })
+        setPublishBlocked(true)
         return
       }
     }
 
     setStatusBusy(true)
+    setPublishBlocked(false)
     setStatusError(null)
     setStatusMessage(null)
     try {
@@ -1506,6 +1515,11 @@ export function EntryEditRoute(): JSX.Element {
                   <p className="px-4 pb-4 text-xs text-muted-foreground">
                     {t('entryEdit.statusUnmanaged')}
                   </p>
+                )}
+                {publishBlocked && Object.keys(errors).length > 0 && (
+                  <Notice tone="danger" live="assertive">
+                    <p>{t('entryEdit.publishValidationError')}</p>
+                  </Notice>
                 )}
                 {statusError !== null && (
                   <Notice tone="danger" live="assertive">

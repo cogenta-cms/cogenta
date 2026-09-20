@@ -7,6 +7,8 @@ import type {
   FieldChange,
   WordChange,
 } from '../api/content-client.js'
+import { fieldLabel } from '../schema/field-label.js'
+import type { SchemaField } from '../schema/types.js'
 
 /**
  * The structural diff renderer, extracted from `version-history.tsx` (L2
@@ -15,7 +17,20 @@ import type {
  * drifting implementation — "ne pas dupliquer le diff" applies to the UI
  * just as much as to the server route that computes it.
  */
-export function DiffView({ diff }: { readonly diff: ContentDiff }): JSX.Element {
+export function DiffView({
+  diff,
+  fields,
+}: {
+  readonly diff: ContentDiff
+  /**
+   * The collection's own fields, when the caller knows them — so a change
+   * reads "Date de publication — modifié" rather than "publishedAt". The
+   * audit screen does not know them (one row per collection, any collection),
+   * which is why this is optional: `fieldLabel` falls back to the shared
+   * dictionary and then to the name itself.
+   */
+  readonly fields?: readonly SchemaField[]
+}): JSX.Element {
   const { t } = useTranslation()
   if (!diff.changed) return <p>{t('versions.noDiff')}</p>
 
@@ -24,7 +39,11 @@ export function DiffView({ diff }: { readonly diff: ContentDiff }): JSX.Element 
       {diff.fields.length > 0 && (
         <ul className="version-history__field-changes">
           {diff.fields.map((change) => (
-            <FieldChangeRow key={change.field} change={change} />
+            <FieldChangeRow
+              key={change.field}
+              change={change}
+              field={fields?.find((candidate) => candidate.name === change.field)}
+            />
           ))}
         </ul>
       )}
@@ -40,11 +59,17 @@ export function DiffView({ diff }: { readonly diff: ContentDiff }): JSX.Element 
   )
 }
 
-function FieldChangeRow({ change }: { readonly change: FieldChange }): JSX.Element {
+function FieldChangeRow({
+  change,
+  field,
+}: {
+  readonly change: FieldChange
+  readonly field: SchemaField | undefined
+}): JSX.Element {
   const { t } = useTranslation()
   return (
     <li>
-      <strong>{change.field}</strong> — {labelFor(change.change, t)}
+      <strong>{fieldLabel(change.field, t, field)}</strong> — {labelFor(change.change, t)}
       {change.words !== undefined ? (
         <div className="version-history__word-diff">
           <WordDiffView words={change.words} />
@@ -102,7 +127,9 @@ function BlockChangeRow({ change }: { readonly change: BlockChange }): JSX.Eleme
       {change.fields.length > 0 && (
         <ul>
           {change.fields.map((fieldChange) => (
-            <FieldChangeRow key={fieldChange.field} change={fieldChange} />
+            // A block's own field, not a collection's: contract B names it,
+            // and `fieldLabel`'s dictionary is the right fallback for both.
+            <FieldChangeRow key={fieldChange.field} change={fieldChange} field={undefined} />
           ))}
         </ul>
       )}

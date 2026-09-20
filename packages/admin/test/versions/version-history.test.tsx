@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { SchemaField } from '../../src/schema/types.js'
 import { VersionHistory } from '../../src/versions/version-history.js'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -67,6 +68,19 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/** Enough of a collection for the diff to name a field the way an editor sees it. */
+const FIELDS = [
+  {
+    name: 'title',
+    kind: 'text',
+    required: true,
+    localized: false,
+    unique: false,
+    hasCustomValidation: false,
+    options: {},
+  },
+] as const satisfies readonly SchemaField[]
+
 describe('VersionHistory', () => {
   it('lists the versions, marking the live one, with a readable date and author', async () => {
     stubFetch(() => null)
@@ -75,6 +89,7 @@ describe('VersionHistory', () => {
         token="t"
         collection="article"
         entryId="entry-1"
+        fields={FIELDS}
         canRestore={false}
         onRestored={vi.fn()}
       />,
@@ -99,6 +114,7 @@ describe('VersionHistory', () => {
         token="t"
         collection="article"
         entryId="entry-1"
+        fields={FIELDS}
         canRestore={false}
         onRestored={vi.fn()}
       />,
@@ -118,6 +134,7 @@ describe('VersionHistory', () => {
         token="t"
         collection="article"
         entryId="entry-1"
+        fields={FIELDS}
         canRestore={false}
         onRestored={vi.fn()}
       />,
@@ -138,7 +155,10 @@ describe('VersionHistory', () => {
     fireEvent.change(toSelect, { target: { value: '2' } })
     fireEvent.click(screen.getByRole('button', { name: 'Comparer' }))
 
-    expect(await screen.findByText('title', { selector: 'strong' })).toBeDefined()
+    // Named for the person reading it, from the collection's own fields —
+    // the diff used to print the schema's identifier.
+    expect(await screen.findByText('Titre', { selector: 'strong' })).toBeDefined()
+    expect(screen.queryByText('title', { selector: 'strong' })).toBeNull()
 
     const call = ((fetch as ReturnType<typeof vi.fn>).mock.calls as unknown[][]).find((call) =>
       (call[0] as RequestInfo).toString().includes('/diff'),
@@ -171,6 +191,7 @@ describe('VersionHistory', () => {
         token="t"
         collection="article"
         entryId="entry-1"
+        fields={FIELDS}
         canRestore={false}
         onRestored={vi.fn()}
       />,
@@ -200,6 +221,7 @@ describe('VersionHistory', () => {
         token="t"
         collection="article"
         entryId="entry-1"
+        fields={FIELDS}
         canRestore
         onRestored={onRestored}
       />,
@@ -231,6 +253,7 @@ describe('VersionHistory', () => {
         token="t"
         collection="article"
         entryId="entry-1"
+        fields={FIELDS}
         canRestore
         onRestored={onRestored}
       />,
@@ -274,6 +297,7 @@ describe('VersionHistory', () => {
         token="t"
         collection="article"
         entryId="entry-1"
+        fields={FIELDS}
         canRestore
         onRestored={onRestored}
       />,
@@ -309,6 +333,7 @@ describe('VersionHistory', () => {
         token="t"
         collection="article"
         entryId="entry-1"
+        fields={FIELDS}
         canRestore={false}
         onRestored={vi.fn()}
       />,
@@ -332,6 +357,7 @@ describe('VersionHistory', () => {
         token="t"
         collection="article"
         entryId="entry-1"
+        fields={FIELDS}
         canRestore={false}
         onRestored={vi.fn()}
       />,

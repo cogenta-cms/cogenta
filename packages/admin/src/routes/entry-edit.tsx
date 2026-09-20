@@ -1992,6 +1992,7 @@ export function EntryEditRoute(): JSX.Element {
             token={token}
             collection={name}
             entryId={id}
+            fields={collection.fields}
             canRestore={canWrite}
             onRestored={(entry) => {
               setValues({ ...entry.values })

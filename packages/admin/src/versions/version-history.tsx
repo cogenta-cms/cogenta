@@ -12,6 +12,7 @@ import {
 import { listUsers } from '../api/users-client.js'
 import { Button, Modal, Notice } from '../ui/index.js'
 import '../styles/version-history.css'
+import type { SchemaField } from '../schema/types.js'
 import { DiffView } from './diff-view.js'
 
 /**
@@ -34,12 +35,15 @@ export function VersionHistory({
   token,
   collection,
   entryId,
+  fields,
   canRestore,
   onRestored,
 }: {
   readonly token: string
   readonly collection: string
   readonly entryId: string
+  /** Passed through to the diff so a change names the field an editor knows. */
+  readonly fields: readonly SchemaField[]
   readonly canRestore: boolean
   onRestored(entry: Entry): void
 }): JSX.Element {
@@ -245,7 +249,7 @@ export function VersionHistory({
       {diffError !== null && <p role="alert">{diffError}</p>}
       {diff !== null && (
         <div className="version-history__diff">
-          <DiffView diff={diff} />
+          <DiffView diff={diff} fields={fields} />
         </div>
       )}
 

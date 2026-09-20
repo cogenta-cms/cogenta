@@ -122,7 +122,9 @@ describe('audit log', () => {
     // would match more than once.
     const dialog = within(await screen.findByRole('dialog'))
     expect(await dialog.findByText('alice@example.com')).toBeDefined()
-    expect(await dialog.findByText('title')).toBeDefined()
+    // The audit screen shows one row per collection, any collection, so it
+    // passes no fields to the diff: the shared dictionary names the field.
+    expect(await dialog.findByText('Titre')).toBeDefined()
     expect(dialog.getByText(/Before/)).toBeDefined()
     expect(dialog.getByText(/After/)).toBeDefined()
     // Still on the audit screen underneath — a modal (correctly marking the

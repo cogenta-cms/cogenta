@@ -66,6 +66,37 @@ export function runMediaContract(
       }
     })
 
+    // A PDF, a spreadsheet, a `.txt` — none of them has an `alt` anywhere in
+    // its rendering, and the refusal told their uploader to "describe what
+    // the image shows".
+    it('asks a document for no alt text, and still keeps one when it is given', async () => {
+      const { createStore, dispose } = await harness()
+      const store = await createStore()
+      try {
+        const silent = await store.create({
+          kind: 'file',
+          filename: 'contract.pdf',
+          mimeType: 'application/pdf',
+          size: 2048,
+          alt: '',
+          storageKey: 'media/contract.pdf',
+        })
+        expect(silent.alt).toBe('')
+
+        const described = await store.create({
+          kind: 'file',
+          filename: 'minutes.txt',
+          mimeType: 'text/plain',
+          size: 64,
+          alt: 'Minutes of the March meeting',
+          storageKey: 'media/minutes.txt',
+        })
+        expect(described.alt).toBe('Minutes of the March meeting')
+      } finally {
+        await dispose?.()
+      }
+    })
+
     it('refuses a decorative asset with no justification, and writes an empty alt when justified', async () => {
       const { createStore, dispose } = await harness()
       const store = await createStore()

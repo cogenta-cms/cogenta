@@ -7,6 +7,7 @@ import type {
   FocalPoint,
   ListMediaOptions,
   MediaAsset,
+  MediaKind,
   MediaPage,
   MediaProvenance,
   MediaSortField,
@@ -145,7 +146,19 @@ function notFound(id: string): CogentaError {
  * read instead — an editor who cannot explain why an image is decorative is
  * usually one who meant to write alt text and skipped it by accident.
  */
-function validateAltPolicy(alt: string, decorative: boolean, justification: string | null): void {
+function validateAltPolicy(
+  kind: MediaKind,
+  alt: string,
+  decorative: boolean,
+  justification: string | null,
+): void {
+  // Only a picture has an `alt`. The rule used to apply to every upload, so a
+  // PDF and a `.txt` were refused until somebody described "what the image
+  // shows" — a message about an image, on a file that is not one, for an
+  // attribute that exists nowhere in its rendering. A description is still
+  // stored when one is given; it is no longer demanded of a document.
+  if (kind !== 'image') return
+
   if (decorative) {
     if (justification === null || justification.trim().length === 0) {
       throw new CogentaError({
@@ -335,7 +348,7 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
       const decorative = input.decorative ?? false
       const alt = decorative ? '' : input.alt
       const justification = decorative ? (input.decorativeJustification ?? null) : null
-      validateAltPolicy(alt, decorative, justification)
+      validateAltPolicy(input.kind, alt, decorative, justification)
 
       const id = input.id ?? randomUUID()
       const createdAt = new Date().toISOString()
@@ -450,7 +463,7 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
       const justification = decorative
         ? (input.decorativeJustification ?? current.decorative_justification)
         : null
-      validateAltPolicy(alt, decorative, justification)
+      validateAltPolicy(current.kind as MediaKind, alt, decorative, justification)
 
       const focal =
         input.focal === undefined

@@ -187,7 +187,9 @@ export function TermTree({
                     <span className="text-muted-foreground">
                       {' — '}
                       {t('taxonomies.entryCount', {
-                        own: term.entryCount.own,
+                        // i18next pluralises on `count` and on nothing else,
+                        // which is why the term's own tally carries that name.
+                        count: term.entryCount.own,
                         withDescendants: term.entryCount.withDescendants,
                       })}
                     </span>

@@ -59,7 +59,13 @@ export function TextField({
       )}
       {words !== null && (
         <p className="field__word-count">
-          {t('fields.wordCount', { count: words, minutes: readingTimeMinutes(words) })}
+          {/* No text, no reading time. `readingTimeMinutes` floors at one
+              minute on purpose — "0 min" reads as broken — but printing
+              "~1 min de lecture" under an empty field reads as wrong, which
+              is worse. */}
+          {words === 0
+            ? t('fields.wordCountEmpty')
+            : t('fields.wordCount', { count: words, minutes: readingTimeMinutes(words) })}
         </p>
       )}
     </FieldWrapper>

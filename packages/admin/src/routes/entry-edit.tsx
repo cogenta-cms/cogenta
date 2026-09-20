@@ -1787,7 +1787,7 @@ export function EntryEditRoute(): JSX.Element {
                     {t('entryEdit.analyticsHeading')}
                   </span>
                   <span>
-                    {t('entryEdit.analyticsViews', { views: pageStats.views })}
+                    {t('entryEdit.analyticsViews', { count: pageStats.views })}
                     {pageStats.changePercent !== null && (
                       <>
                         {' '}

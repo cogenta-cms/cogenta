@@ -89,7 +89,7 @@ describe('CollectionListRoute', () => {
     fireEvent.change(screen.getByLabelText('Rechercher'), { target: { value: 'second' } })
     fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
 
-    await screen.findByRole('heading', { name: '1 résultat(s)' })
+    await screen.findByRole('heading', { name: '1 résultat' })
     expect(screen.getByRole('link', { name: 'Second article' })).toBeDefined()
     expect(screen.queryByText('First article')).toBeNull()
   })
@@ -101,7 +101,7 @@ describe('CollectionListRoute', () => {
 
     fireEvent.change(screen.getByLabelText('Rechercher'), { target: { value: 'second' } })
     fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
-    await screen.findByRole('heading', { name: '1 résultat(s)' })
+    await screen.findByRole('heading', { name: '1 résultat' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Effacer la recherche' }))
     await screen.findByText('First article')

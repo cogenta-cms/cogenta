@@ -126,6 +126,29 @@ export function runSearchIndexingContract(
       expect(await idsFor('transient', 'draft')).toEqual([])
     })
 
+    /**
+     * The trash is reversible by design (ADR-0022): `delete` writes
+     * `deletedAt` and keeps everything, `untrash` gives it back exactly as it
+     * was. The index has to come back with it — `delete` drops the row, so
+     * without this the entry returns to the site, to the sitemap and to its
+     * relations, and stays permanently unfindable by search.
+     *
+     * This decorator wraps create, update, publish, unpublish,
+     * setVisibility, restore and delete. It did not wrap `untrash`.
+     */
+    it('un-trashing an entry puts it back in the index it was removed from', async () => {
+      const store = wrapped()
+      const entry = await store.create({ values: { title: 'Returned', body: 'x' } })
+      await store.publish(entry.id)
+      expect(await idsFor('returned')).toEqual([entry.id])
+
+      await store.delete(entry.id)
+      expect(await idsFor('returned')).toEqual([])
+
+      await store.untrash(entry.id)
+      expect(await idsFor('returned')).toEqual([entry.id])
+    })
+
     it('restoring an old version re-indexes what that version actually said', async () => {
       const store = wrapped()
       const entry = await store.create({ values: { title: 'Alpaca census', body: 'x' } })

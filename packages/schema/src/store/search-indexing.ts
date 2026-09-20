@@ -142,6 +142,11 @@ export function withSearchIndexing<TValues extends ContentValues = ContentValues
     setVisibility: async (id, visibility, options) =>
       after(await store.setVisibility(id, visibility, options)),
     restore: async (id, version, input) => after(await store.restore(id, version, input)),
+    // The trash is reversible by design (ADR-0022), and `delete` below drops
+    // the index row — so the row has to come back with the entry. Without
+    // this an un-trashed entry returned to the site, to the sitemap and to
+    // its relations, and stayed permanently unfindable by search.
+    untrash: async (id) => after(await store.untrash(id)),
     delete: async (id) => {
       const removed = await store.delete(id)
       // Unconditionally, not only on `removed`: an entry the store says was

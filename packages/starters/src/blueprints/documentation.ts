@@ -114,6 +114,7 @@ export const docPage = defineCollection({
     create: ['editor', 'admin'],
     update: ['editor', 'admin'],
     delete: ['admin'],
+    publish: ['admin'],
   },
 })
 

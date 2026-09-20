@@ -65,11 +65,23 @@ export function vitrineCopyFor(locale: string): VitrineCopy {
 // Content model
 // ---------------------------------------------------------------------------
 
-const EDITORIAL = {
+/**
+ * Terms, not content: `publish` has no meaning on a taxonomy term and the
+ * contract refuses it, which is the whole reason these are two constants
+ * rather than one. They were one, and the collections silently inherited a
+ * set with no `publish` in it — so nothing on a vitrine site could ever be
+ * published.
+ */
+const TAXONOMY = {
   read: ['public'],
   create: ['editor', 'admin'],
   update: ['editor', 'admin'],
   delete: ['admin'],
+} as const
+
+const EDITORIAL = {
+  ...TAXONOMY,
+  publish: ['admin'],
 } as const
 
 export interface VitrineSchema {
@@ -94,7 +106,7 @@ export function vitrineSchema(copy: VitrineCopy): VitrineSchema {
       plural: { en: 'Sectors', fr: 'Secteurs' },
     },
     hierarchical: false,
-    permissions: EDITORIAL,
+    permissions: TAXONOMY,
   })
 
   const solution = defineCollection({

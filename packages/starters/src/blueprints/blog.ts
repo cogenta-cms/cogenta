@@ -133,6 +133,7 @@ export const page = defineCollection({
     create: ['editor', 'admin'],
     update: ['editor', 'admin'],
     delete: ['admin'],
+    publish: ['admin'],
   },
 })
 

@@ -72,6 +72,9 @@ const PERMISSIONS = {
   create: ['editor', 'admin'],
   update: ['editor', 'admin'],
   delete: ['admin'],
+  // An undeclared action grants nobody, admin included: without this line
+  // nothing on this site could ever leave draft.
+  publish: ['admin'],
 } as const
 
 /**

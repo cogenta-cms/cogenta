@@ -203,6 +203,11 @@ export function definePageCollection(routingPattern: string): CollectionDefiniti
       create: ['editor', 'admin'],
       update: ['editor', 'admin'],
       delete: ['admin'],
+      // Without this, no role — admin included — may ever publish a page:
+      // an undeclared action normalises to nobody. Eight blueprints call
+      // this helper, so its omission meant no Cogenta site could publish a
+      // hand-written page at all.
+      publish: ['admin'],
     },
   })
 }

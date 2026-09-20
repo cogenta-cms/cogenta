@@ -1005,7 +1005,7 @@
     "moveDown": "Descendre {{term}}",
     "indent": "Imbriquer {{term}} sous le terme précédent",
     "dedent": "Sortir {{term}} d'un niveau",
-    "depthLimit": "Une branche ne peut pas dépasser {{max}} niveaux d'imbrication — la colonne du chemin matérialisé a une borne (la limite de clé d'index InnoDB en utf8mb4)."
+    "depthLimit": "Une branche ne peut pas dépasser {{max}} niveaux d'imbrication."
   },
   "menus": {
     "heading": "Menus",
@@ -5286,5 +5286,23 @@
     "applyError": "La retouche n’a pas pu être appliquée.",
     "restoreError": "L’original n’a pas pu être rétabli.",
     "previewLabel": "Aperçu de l’image à retoucher"
+  },
+  "contentFields": {
+    "title": "Titre",
+    "slug": "Identifiant d'URL",
+    "body": "Contenu",
+    "excerpt": "Extrait",
+    "summary": "Résumé",
+    "topic": "Sujet",
+    "coverImage": "Image de couverture",
+    "category": "Catégorie",
+    "tags": "Étiquettes",
+    "author": "Auteur",
+    "publishedAt": "Date de publication",
+    "blocks": "Blocs",
+    "seoTitle": "Titre SEO",
+    "seoDescription": "Meta description",
+    "seoImage": "Image pour les réseaux sociaux",
+    "seoNoindex": "Masquer des moteurs de recherche"
   }
 }

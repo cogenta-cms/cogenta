@@ -1005,7 +1005,7 @@
     "moveDown": "Move {{term}} down",
     "indent": "Nest {{term}} under the previous term",
     "dedent": "Move {{term}} out one level",
-    "depthLimit": "A branch cannot nest more than {{max}} levels deep — the materialised path column has a bound (InnoDB's index key limit in utf8mb4)."
+    "depthLimit": "A branch cannot nest more than {{max}} levels deep."
   },
   "menus": {
     "heading": "Menus",
@@ -5286,5 +5286,23 @@
     "applyError": "The edit could not be applied.",
     "restoreError": "The original could not be restored.",
     "previewLabel": "Preview of the image being edited"
+  },
+  "contentFields": {
+    "title": "Title",
+    "slug": "URL slug",
+    "body": "Content",
+    "excerpt": "Excerpt",
+    "summary": "Summary",
+    "topic": "Topic",
+    "coverImage": "Cover image",
+    "category": "Category",
+    "tags": "Tags",
+    "author": "Author",
+    "publishedAt": "Published on",
+    "blocks": "Blocks",
+    "seoTitle": "SEO title",
+    "seoDescription": "SEO description",
+    "seoImage": "SEO image",
+    "seoNoindex": "Hide from search engines"
   }
 }

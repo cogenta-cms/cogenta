@@ -21,6 +21,12 @@ import type { Term } from '../api/taxonomy-client.js'
  * never imports the schema modules (it is a browser bundle), so this is the
  * same hand-kept copy every other admin/server boundary in this codebase
  * already lives with.
+ *
+ * Where the twelve comes from, which is why it lives here and not on screen:
+ * the materialised path is one indexed column, and InnoDB's index key limit
+ * in utf8mb4 is what bounds it. A person filing terms under Cuisine has no
+ * use for that sentence; the limit itself is all they need, and the notice
+ * now says only that.
  */
 export const MAX_TAXONOMY_DEPTH = 12
 

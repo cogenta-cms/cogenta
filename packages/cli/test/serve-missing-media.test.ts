@@ -178,6 +178,72 @@ describe('cogenta serve — a page pointing at media that was deleted', () => {
     }
   }, 60_000)
 
+  /**
+   * The same repair, on the other door into the renderer.
+   *
+   * `POST /api/builder/render` is what the page builder's preview calls, and
+   * the audit found it answering 500 on a dead media reference — every
+   * healthy block on the page vanishing with it, the error banner showing
+   * `THEME_IMAGE_UNSUPPORTED` in English. It funnels into the same
+   * `renderEntryPage` the public URL does (L16's "the preview is the real
+   * render, never a second implementation"), so pruning covers both — but
+   * that is an inference until something exercises this path, and nothing
+   * did.
+   */
+  it('renders the builder preview of a page whose media was deleted, rather than failing it', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await signIn(root, server.base)
+      const doomed = await upload(server.base, token, 'A doomed picture')
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+      const created = (await (
+        await fetch(`${server.base}/api/content/page`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            values: { title: 'In the builder', slug: 'in-the-builder' },
+            blocks: {
+              body: [
+                {
+                  key: 'figure-1',
+                  type: 'mediaFigure',
+                  data: { media: doomed, caption: 'Doomed' },
+                },
+                { key: 'prose-1', type: 'prose', data: { body: paragraph('The draft survives.') } },
+              ],
+            },
+          }),
+        })
+      ).json()) as { data: { id: string } }
+
+      await deleteMedia(server.base, token, doomed)
+
+      const preview = await fetch(`${server.base}/api/builder/render`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          collection: 'page',
+          entryId: created.data.id,
+          blocks: {
+            body: [
+              { key: 'figure-1', type: 'mediaFigure', data: { media: doomed, caption: 'Doomed' } },
+              { key: 'prose-1', type: 'prose', data: { body: paragraph('The draft survives.') } },
+            ],
+          },
+        }),
+      })
+
+      expect(preview.status).toBe(200)
+      const html = JSON.stringify(await preview.json())
+      expect(html).toContain('The draft survives.')
+      expect(html).not.toContain('THEME_IMAGE_UNSUPPORTED')
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
   it('drops a figure that has nothing left to show, and serves the rest of the page', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

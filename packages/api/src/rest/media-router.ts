@@ -37,6 +37,7 @@ import {
   parseStoredEdit,
 } from './media-edit.js'
 import {
+  IMAGE_MIME_TYPES,
   type ImageSize,
   ingestMediaUpload,
   type MediaImageProcessor,
@@ -462,7 +463,12 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
       if (second === 'limits') {
         if (method !== 'GET') return methodNotAllowed(['GET'])
         requireActor(actor)
-        return jsonResponse(200, { data: { maxUploadBytes, acceptedMimeTypes } })
+        // `imageMimeTypes` is the rule the ingest actually applies, on the
+        // bytes. `acceptedMimeTypes` stays for callers that already read it,
+        // and is what it has always been: a hint, never enforced.
+        return jsonResponse(200, {
+          data: { maxUploadBytes, acceptedMimeTypes, imageMimeTypes: IMAGE_MIME_TYPES },
+        })
       }
       if (second === 'bulk-delete') {
         if (method !== 'POST') return methodNotAllowed(['POST'])

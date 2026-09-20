@@ -5689,7 +5689,10 @@ export function installMockFetch(
         return json(200, {
           data: {
             maxUploadBytes: 250 * 1024 * 1024,
+            // The hint the server has always sent and never enforced, plus
+            // the rule the ingest actually applies to an image's bytes.
             acceptedMimeTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/avif'],
+            imageMimeTypes: ['image/avif', 'image/webp', 'image/jpeg', 'image/png'],
           },
         })
       }

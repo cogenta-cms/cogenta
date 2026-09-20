@@ -321,7 +321,14 @@ export function uploadMediaMultipart(
 
 export interface MediaLimits {
   readonly maxUploadBytes: number
+  /**
+   * A hint the server has never enforced, kept because older servers answer
+   * with it and nothing else. `imageMimeTypes` is the rule that is actually
+   * applied — see `upload-form.tsx` for what this screen says now.
+   */
   readonly acceptedMimeTypes: readonly string[]
+  /** The image formats the ingest checks on the bytes. Absent from a server that predates it. */
+  readonly imageMimeTypes?: readonly string[]
 }
 
 /** `GET /api/media/-/limits` — shown before the first file is picked, so a rejection is never the surprise. */

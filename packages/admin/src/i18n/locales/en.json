@@ -780,7 +780,7 @@
     "focalHint": "Click the image to set the focal point.",
     "loadMore": "Load more",
     "uploadProgress": "file {{current}} of {{total}}",
-    "uploadLimits": "Up to {{maxSize}} per file. Accepted types: {{types}}.",
+    "uploadLimits": "Up to {{maxSize}} per file.",
     "uploadQueueHeading": "Uploads",
     "uploadPending": "Waiting…",
     "uploadInProgress": "Uploading {{filename}}",
@@ -884,7 +884,8 @@
       "keeping": "Saving…",
       "keepError": "That image could not be kept.",
       "kept": "“{{name}}” added to the library, recorded as generated."
-    }
+    },
+    "uploadImageTypes": "An image must be {{types}} — checked on the file’s own bytes, not its extension. Any other file is accepted, and offered as a download rather than displayed."
   },
   "collectionList": {
     "tableLabel": "Content",

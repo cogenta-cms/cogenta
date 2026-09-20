@@ -156,6 +156,20 @@ const CONTENT_TYPE_BY_FORMAT: Readonly<Record<string, string>> = Object.freeze({
 })
 
 /**
+ * The image types an upload can actually be, read from the sniffer that
+ * decides it rather than from a list somebody keeps in step by hand.
+ *
+ * `GET /api/media/limits` used to answer with a configurable
+ * `acceptedMimeTypes` that nothing ever enforced, and the upload screen
+ * printed it as "Types acceptés: …" — a closed whitelist that was neither
+ * closed nor a whitelist. For an image the real rule is this set, checked on
+ * the bytes; for anything else there is no list at all, on purpose.
+ */
+export const IMAGE_MIME_TYPES: readonly string[] = Object.freeze(
+  Object.values(CONTENT_TYPE_BY_FORMAT),
+)
+
+/**
  * Content types that execute in a browser on whatever origin serves them.
  *
  * An image is already protected: its stored type is the one its bytes earn,

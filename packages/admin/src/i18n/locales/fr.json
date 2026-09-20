@@ -780,7 +780,7 @@
     "focalHint": "Cliquer sur l’image pour placer le point focal.",
     "loadMore": "Charger la suite",
     "uploadProgress": "fichier {{current}} sur {{total}}",
-    "uploadLimits": "Jusqu’à {{maxSize}} par fichier. Types acceptés : {{types}}.",
+    "uploadLimits": "Jusqu’à {{maxSize}} par fichier.",
     "uploadQueueHeading": "Téléversements",
     "uploadPending": "En attente…",
     "uploadInProgress": "Téléversement de {{filename}}",
@@ -884,7 +884,8 @@
       "keeping": "Enregistrement…",
       "keepError": "Impossible de conserver cette image.",
       "kept": "« {{name}} » ajoutée à la médiathèque, marquée comme générée."
-    }
+    },
+    "uploadImageTypes": "Une image doit être en {{types}} — le contrôle porte sur le contenu du fichier, pas sur son extension. Tout autre fichier est accepté et proposé au téléchargement plutôt qu’affiché."
   },
   "collectionList": {
     "tableLabel": "Contenus",

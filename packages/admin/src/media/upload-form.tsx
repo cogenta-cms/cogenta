@@ -135,9 +135,16 @@ export function UploadForm({
               />
               {limits !== null && (
                 <p className="upload-form__limits">
-                  {t('media.uploadLimits', {
-                    maxSize: formatBytes(limits.maxUploadBytes),
-                    types: limits.acceptedMimeTypes.join(', '),
+                  {/* This used to print `acceptedMimeTypes` as "Types
+                      acceptés: …", a closed whitelist the server never
+                      enforced: a `.txt`, a `.docx` or a CSV all uploaded
+                      fine and none of them was on the list. The real rule
+                      has two halves, and now the screen states both. */}
+                  {t('media.uploadLimits', { maxSize: formatBytes(limits.maxUploadBytes) })}{' '}
+                  {t('media.uploadImageTypes', {
+                    types: (limits.imageMimeTypes ?? limits.acceptedMimeTypes)
+                      .filter((type) => type.startsWith('image/'))
+                      .join(', '),
                   })}
                 </p>
               )}

@@ -1,5 +1,245 @@
 # @cogenta/api
 
+## 2.11.0
+
+### Minor Changes
+
+- [`8c894db`](https://github.com/cogenta-cms/cogenta/commit/8c894dba796f01b589f151537ba24490fe668aae) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Open the image editor on the crop that is currently applied.
+  
+  Reopening the editor on an already-cropped image showed the untouched
+  original with a default frame, so the applied crop looked undone — and
+  applying anything else silently replaced it rather than building on it.
+  
+  The editor showing the original is correct and deliberate: editing is
+  non-destructive, every edit re-derived from the stored original rather than
+  stacked on the last result, which is what stops quality compounding away with
+  each pass. What was missing is that the editor had no way to learn what is
+  currently applied. The parameters were written to storage on every edit and
+  read only inside the media router.
+  
+  `GET /api/media/{id}` now returns `lastEdit` beside `edited`, on the
+  single-asset read where `edited` already lives, and the admin's image editor
+  opens on those values. An image nobody has edited is unchanged: no
+  `lastEdit`, default frame.
+  
+  (`@cogenta/admin` is private and never published, so it carries no changeset
+  of its own — the admin-side half of this change ships with the site build.)
+
+- [`9a0cff5`](https://github.com/cogenta-cms/cogenta/commit/9a0cff523622e5649869398c2fbf1f31f0521785) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Answer `GET /api/media/-/limits` with the image rule the ingest actually applies.
+  
+  `acceptedMimeTypes` has always been a hint: configurable, reported, and
+  enforced by nothing. The upload screen printed it as a closed list of accepted
+  types, while a `.txt`, a `.docx` and a CSV all uploaded fine and none of them
+  was on it — deliberately, since a media library has every reason to hold them.
+  
+  The response gains `imageMimeTypes`, derived from the byte sniffer that
+  decides an image's real type rather than from a list kept in step by hand, so
+  the two cannot drift. `acceptedMimeTypes` is unchanged and still sent, for
+  callers that already read it.
+
+- [`d1df23d`](https://github.com/cogenta-cms/cogenta/commit/d1df23d88dee1a60ffa02e4e9b48525c7894257a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Stop a non-image upload from carrying a content type a browser would execute.
+  
+  An image's stored type has been the one its bytes earn, never the one the
+  uploader declared, since L10's security review. Every other kind was stored
+  exactly as declared, so a `kind: 'file'` upload could carry `text/html` — and
+  the bytes came back from the site's own origin with that type.
+  
+  Not exploitable as it stood: reaching those bytes needs a bearer token, a
+  browser navigation gets 401, and `/_image` refuses a non-image outright. What
+  was missing is the layer under that, and a token is a thin thing to rest on.
+  The admin also announced a list of accepted types the API never enforced.
+  
+  Two layers now, neither of which refuses a legitimate file:
+  
+  - **On upload**, a declared type that executes on an origin — `text/html`,
+    `image/svg+xml`, the XML and JavaScript types — is stored as
+    `application/octet-stream`. The file is kept; only serving it as code is
+    refused. A `.txt`, a `.pdf`, a `.csv` or a `.docx` is stored exactly as
+    declared, as before.
+  - **On serving**, `/api/media/{id}/file` sends `Content-Disposition:
+    attachment` for every kind but `image`, so whatever a file turns out to be
+    the browser downloads it rather than rendering it. Images stay inline — the
+    admin's own grid displays them.
+  
+  Verified against a running site: an HTML upload stored as
+  `application/octet-stream` and served as an attachment, an image still served
+  inline with its own type.
+
+- [`f0ae47b`](https://github.com/cogenta-cms/cogenta/commit/f0ae47b43d6af765d7142fda176d79c7c82ee4b9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Serve a page whose media was deleted, instead of answering HTTP 500.
+  
+  Deleting an asset that a published page still pointed at made that page
+  unservable for everyone: `renderPage` draws every block of a page in one call,
+  and contract D's `RenderContext.image(media): ImageSource` has no "absent"
+  state to return, so the theme could only throw and one dead reference took the
+  whole document with it.
+  
+  Neither the contract nor the ten installed themes can gain that state without a
+  major bump, so the dead reference is now removed from the data before rendering
+  starts. `@cogenta/api` gains `pruneMissingMedia(entries, source, available)`: a
+  pure function that walks entries exactly as `collectDependencies` does —
+  declared `media` fields, expanded relations, the media inside a known block's
+  list items, plus rich text's own `media` nodes — and returns copies with every
+  reference outside `available` gone. A collection field simply forgets its
+  picture; a list item that was only there to show one leaves the list, so a
+  gallery that lost one photograph keeps the others; and a block whose *required*
+  media field is left empty (a `mediaFigure`, a gallery with nothing in it) is
+  dropped rather than rendered as a hole. A block type the registry does not know
+  contributes nothing and is never dropped, the same answer `collectDependencies`
+  gives it. Nothing is mutated in place.
+  
+  `cogenta serve` calls it in `renderEntryPage` once it knows which assets
+  actually loaded, so a dead identifier can no longer reach `ctx.image()` — whose
+  `throw` deliberately stays, and now means a real defect. A render that had to
+  drop something is logged (`ThemeRenderOptions.onMissingMedia`): the visitor
+  gets a 200, so that line is the only trace an operator has that a page is being
+  served incomplete.
+
+- [`8b7f6aa`](https://github.com/cogenta-cms/cogenta/commit/8b7f6aa826eebf14a1e859ab61d4a365bccb25ba) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Refuse a request field a route will never apply, instead of dropping it.
+  
+  Three routes accepted a field, answered `200`/`201`, and ignored it:
+  `POST /api/users` with `password` (the response carried a *different*,
+  generated one, so signing in with the chosen password failed) or
+  `displayName`; `PATCH /api/menus/{id}/items/{itemId}` with `parent`;
+  `PATCH /api/widgets/{id}` with `area`.
+  
+  Not applying them is deliberate in each case, and documented beside the code:
+  an admin does not set somebody else's password, re-parenting rewrites a whole
+  subtree's materialised path and must not ride along with a label edit, and
+  moving a widget needs a position. What was wrong was doing it silently.
+  
+  **These requests now fail** where they used to succeed and quietly do less
+  than the caller believed, naming the route that performs the action.
+  
+  `POST /api/widgets` and `POST /api/widgets/{id}/move` also refuse an area the
+  active theme does not declare — the widget was created invisible, renderable
+  by no theme and listed in no column.
+
+- [`8bbcc4f`](https://github.com/cogenta-cms/cogenta/commit/8bbcc4ff883051241cbf06f65b59458ecb7d9f57) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Let an admin search actually find a draft.
+  
+  The admin's search screen offers a "Statut" filter whose first option is
+  "Tous les statuts", and choosing it sent no `status` at all — and no `status`
+  means `published`, the safe default for a caller that says nothing. So a
+  filter offering every state delivered the one an anonymous visitor sees, and
+  an editor could not find their own unpublished work through it.
+  
+  `?status=any` says it explicitly. It is not a way around the gate: `any` is
+  checked by exactly the same `canReadUnpublished` that guards `status=draft`,
+  so an anonymous caller asking for it gets the same 403 it always got.
+  
+  `SearchQuery.status` accepts a list as well as one value, and the shared
+  `scopeFilters` turns that into `status in (…)`. The state predicate is never
+  dropped, only widened — that clause is what stops a draft reaching a reader
+  who has no right to it, and it stays present on all three engines. An empty
+  list reads as "nothing matches" rather than widening to everything.
+  
+  The admin asks for the widest scope and falls back when refused, rather than
+  re-deriving the permission rule client-side: whether these roles reach drafts
+  is the permission layer's decision (R4), and a second copy of that rule would
+  be one that drifts.
+
+- [`ccf489d`](https://github.com/cogenta-cms/cogenta/commit/ccf489d67a1ba81b4f0aa5ccbbcecc30f671f1d6) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Stop `GET /api/settings` handing the whole registry to anybody who asks.
+  
+  The route answered an unauthenticated caller with all sixty-four settings,
+  including `general.adminEmail`, `discussion.notifyEmail`, `seo.indexNowKey`,
+  `seo.googleSiteVerification`, `seo.bingSiteVerification`,
+  `updates.autoUpdatePolicy` and the channel bot names. Reproduced on a freshly
+  scaffolded site with no token at all.
+  
+  Public read was a deliberate choice, and its stated reason is what bounds it:
+  "the values here feed a page's own render … an anonymous visitor has to see
+  the same thing the theme does". A tagline does. An administrator's email
+  address does not. So the rule is applied rather than assumed: **a setting is
+  publicly readable when its value is already visible on the public site.**
+  
+  `@cogenta/schema` gains `PUBLIC_READ_SETTING_KEYS` and
+  `isPubliclyReadableSetting`, listed beside the registry they describe so the
+  whole public surface can be reviewed in one place — nineteen keys: the page
+  chrome, date formatting, the home path and page size, whether comments are
+  open, the cookie banner, the currency, and the white-label mark. Unlisted
+  means private, so a setting added without thinking about this is closed
+  rather than open. A signed-in caller still receives everything.
+  
+  **Breaking for an anonymous reader of this route.** The only one in this
+  repository is the admin login screen, which needs the site's name and its
+  white-label branding so a rebranded site does not say "Cogenta" on the way
+  in; all three keys are public. A headless client that read other settings
+  without a token now needs one.
+  
+  Verified end to end against a running site: nineteen settings anonymously,
+  sixty-four with an admin token, none of the named keys in the anonymous
+  answer.
+
+- [`38ff019`](https://github.com/cogenta-cms/cogenta/commit/38ff0195daf6e0d5e0f118b33363df6b8733809b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Report an entry's visibility when it is read back.
+  
+  `SerialisedEntry` carried `deletedAt` (ADR-0022) and `reviewState`
+  (ADR-0027) — the two system fields orthogonal to `status` — and quietly not
+  `visibility` (ADR-0037), whose own doc comment says it is orthogonal to
+  `status` "exactly as `deletedAt` and `reviewState` are". The pattern was
+  followed twice and missed on the third.
+  
+  The admin declares the field optional, so it read `undefined` for every
+  entry and fell back to `'public'`. Two symptoms, one cause: a private page
+  displayed "Public", and the control was disabled when you selected "public"
+  because the interface believed it already was — so a page made private could
+  not be made public again from the interface at all.
+  
+  The password is still never returned: only its hash is stored, and no read
+  exposes it. The field is required on `SerialisedEntry`, like its two
+  neighbours, so a serialiser that forgets it fails to compile.
+  
+  The end-to-end visibility suite proved what a visibility *does* — a 404, a
+  password form, an absence from the sitemap — and never read the state back,
+  which is why five passing tests covered a control nobody could use.
+
+### Patch Changes
+
+- [`c44b988`](https://github.com/cogenta-cms/cogenta/commit/c44b9882247c7d0b0a12f1492930af06428408f2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Answer `200` when a redirect replaces the rule that already left that path.
+  
+  One path has one rule: `RedirectStore.add` treats a second rule leaving the
+  same `from` as a replace, deliberately and by its own documentation. Both
+  requests answered `201` with a fresh identifier, which reads as "you now have
+  two" — while the first rule's destination had silently changed under whoever
+  wrote it.
+  
+  A replace answers `200`. The body is unchanged, and so is what is stored.
+
+- [`276a22e`](https://github.com/cogenta-cms/cogenta/commit/276a22e6e06f2110191c872f11bb6a0b0ab80e4e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Make the SEO diagnostic see the entries a site has actually published.
+  
+  It reported zero published entries beside a sitemap of fifteen URLs, in the
+  same response. Worse than the number: every content check is computed over
+  that same set, so missing descriptions, over-long titles and duplicate titles
+  all reported zero whatever the site contained. The whole content-quality panel
+  was inert, not just its counter.
+  
+  The scan lists as the signed-in admin, deliberately, so it can see collections
+  the public role cannot. The gateway derives the face an actor reads from the
+  permission layer — there is no `state:` argument to ask for the published one,
+  and that invariant is worth more than this diagnostic. So every entry carrying
+  an unpublished edit arrives in its working face, and `isPublished` refuses that
+  face: rightly, since its job is deciding whether *this face* may be rendered
+  into a page, a feed or a sitemap.
+  
+  `@cogenta/seo` gains `isPublishedEntry`, the same question without the face
+  check — for a caller that knows which face it holds and is asking about the
+  entry behind it. Both predicates share the `publishedAt` scheduling check, so a
+  scheduled entry still counts as unpublished in either.
+  
+  Measured against a running site: fifteen published entries against fifteen
+  sitemap URLs, and five entries missing a description that the panel had never
+  been able to name.
+- Updated dependencies [[`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba), [`dfad74b`](https://github.com/cogenta-cms/cogenta/commit/dfad74b535f06159b61efbb1a941c27839eca85d), [`99c21a0`](https://github.com/cogenta-cms/cogenta/commit/99c21a0ac93a49064b77cf9ba08cfe15815f1782), [`8bbcc4f`](https://github.com/cogenta-cms/cogenta/commit/8bbcc4ff883051241cbf06f65b59458ecb7d9f57), [`276a22e`](https://github.com/cogenta-cms/cogenta/commit/276a22e6e06f2110191c872f11bb6a0b0ab80e4e), [`ccf489d`](https://github.com/cogenta-cms/cogenta/commit/ccf489d67a1ba81b4f0aa5ccbbcecc30f671f1d6), [`ea2d505`](https://github.com/cogenta-cms/cogenta/commit/ea2d505c2204996eed5737596de7863dd5eda188), [`0bd4e72`](https://github.com/cogenta-cms/cogenta/commit/0bd4e72d937d0b522315a401225dd4741508fd50)]:
+  - @cogenta/core@0.12.1
+  - @cogenta/export@0.3.0
+  - @cogenta/schema@0.11.0
+  - @cogenta/seo@0.4.0
+  - @cogenta/analytics@0.3.8
+  - @cogenta/auth@0.5.12
+  - @cogenta/blocks@1.1.7
+  - @cogenta/channels@0.3.15
+  - @cogenta/forms@0.2.15
+  - @cogenta/mcp@0.3.14
+  - @cogenta/widgets@0.2.7
+
 ## 2.10.0
 
 ### Minor Changes

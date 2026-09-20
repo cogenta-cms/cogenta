@@ -1,5 +1,130 @@
 # @cogenta/starters
 
+## 0.4.0
+
+### Minor Changes
+
+- [`95fdc8d`](https://github.com/cogenta-cms/cogenta/commit/95fdc8df7d3105bcfdcae7ab060246866a78dae9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give the `blog` blueprint a `topic` field and a carousel section, to exercise the blog theme's new listing forms.
+  
+  `post` gains an optional plain-text `topic` field (mirroring the `magazine` blueprint's
+  own `kicker` field), populated on the ten demo posts, so `@cogenta/theme-blog`'s new
+  small-caps topic label shows real content on a scaffolded site rather than staying
+  empty. The home page gains a `carousel`-layout `collectionList` ("A few more essays"),
+  since nothing in the blueprint previously used that layout — the blog theme's new
+  `strip` form had no demo content to render.
+
+- [`afa9229`](https://github.com/cogenta-cms/cogenta/commit/afa9229126640355f3034d0d662cc4f3097a8d95) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give every blog essay its own photograph, closing the gap with theme-magazine's density.
+  
+  Only 4 of the 10 demo posts carried a cover, so the same four photographs kept
+  reappearing across the front page (the hero, a listing card, a carousel item), while
+  three full essays had no image at all — visibly sparser than `@cogenta/theme-magazine`'s
+  own demo content, where every story is illustrated. Two new real, credited photographs
+  (a pair of hands typing on a laptop, a small public library's facade — both CC0/CC BY,
+  sourced the same way as the existing five) plus the one already-bundled but unused
+  `pour-over.jpg` now cover the three remaining essays, so all seven full essays carry
+  their own distinct photograph and none is reused. The three "Letter:" posts stay
+  text-only by design — a personal letter isn't a produced piece the way an essay is, so
+  this isn't "every post gets a photo" but "every post that would have one only once."
+
+- [`dea8093`](https://github.com/cogenta-cms/cogenta/commit/dea809374a43c1b2328858e2e190e27f7d5651ff) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Replace the blog blueprint's AI-generated cover photos with real, credited ones.
+  
+  The five photographs `photo-assets.ts` bundled for the `blog` blueprint at L25 were
+  generated once via Replicate — convincing at a glance, but depicting nothing real, with
+  no verifiable licence today (the key that generated them no longer exists). They are
+  replaced with five real photographs from Wikimedia Commons and Flickr, each under CC0,
+  the public domain, or a Creative Commons Attribution licence (never ShareAlike, never
+  NonCommercial) — the same discipline `@cogenta/theme-entreprise`'s `vitrine` blueprint
+  already keeps for its own twenty-two photographs.
+  
+  A new seeded "Photo credits" page (`blog-credits.ts`, linked from the footer) lists the
+  title, author, licence and source of every photograph, satisfying attribution licences
+  without inventing a second crediting mechanism. Alt text for all five images is rewritten
+  to describe what the new photographs actually show.
+
+- [`8f85628`](https://github.com/cogenta-cms/cogenta/commit/8f856289c373b75ba754e06aa615e352797fcd2e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Let a site publish the content it was scaffolded with. Nothing could.
+  
+  Every one of the nine blueprints shipped at least one collection that no role
+  could publish — and on all nine, one of them was `page`. A person who created
+  a page on a fresh Cogenta site got a status control offering only "Draft", no
+  publish button, and `403 — collection "page" grants "publish" to no role` from
+  the API. Nineteen collections in total: the shared `page` on all nine, plus
+  every collection of `vitrine` (solution, case study, testimonial, job, post),
+  `saas` (feature, changelog), `association` (event, programme) and
+  `documentation` (doc page).
+  
+  `CollectionPermissions` is a `Partial<Record<ContentAction, …>>`, and an action
+  nobody declares normalises to `{ roles: [], own: false }` — nobody, admin
+  included. That is the right default for a permission system, and it is exactly
+  why the compiler was no help: omitting `publish` is a perfectly well-typed way
+  to ship a collection whose content can never go live. The six collections that
+  did work were right by vigilance, not by construction.
+  
+  It stayed invisible because seeded demo content is written straight into the
+  store, bypassing the permission layer entirely: every demo site looked
+  complete, and only the first hand-written entry hit the wall.
+  
+  `test/blueprint-permissions.test.ts` now walks every blueprint we ship and
+  fails on any collection missing any of the five actions, so forgetting one on
+  a new blueprint is a failing test rather than a site nobody can use. The
+  `vitrine` blueprint's permission constant is split in two along the way: it was
+  shared with a taxonomy, and `publish` has no meaning on a term — which is how
+  one omission spread across six collections.
+
+- [`c10f21f`](https://github.com/cogenta-cms/cogenta/commit/c10f21f90482ea06636ca8b44ae76222aabfdafe) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give every shipped blueprint drafts and version history.
+  
+  Of the twenty-five publishable collections the nine blueprints ship, exactly
+  one declared `versioning` — `blog`'s `post`. The other twenty-four had
+  neither half, and both halves live in that one object, so a single omission
+  produced two separate failures on every other site:
+  
+  - **No drafts.** Every save of a published entry went straight to the public
+    page. There was no such thing as an unpublished edit: opening a live
+    article, fixing a sentence and pressing save published it, with nothing to
+    review and no way back but another edit.
+  - **No history.** The store keeps a bare minimum of two versions without it,
+    so the admin's History tab — which is shown on every saved entry, of every
+    collection — could hold at most two, and restoring an older one evicted it.
+  
+  Both stay opt-in in the contract, deliberately: unlimited history is a slow
+  leak, and a collection that genuinely wants neither should be able to say so.
+  What was not deliberate is twenty-four shipped collections silently not
+  asking.
+  
+  A test now walks every blueprint and fails on a publishable collection
+  missing either half, the same guard the `publish` permission got.
+  
+  Verified against a freshly scaffolded magazine site: editing a published
+  article left the public page untouched until `publish`, which then showed the
+  edit; six versions were kept across six writes where two would have been.
+
+### Patch Changes
+
+- [`797d8e8`](https://github.com/cogenta-cms/cogenta/commit/797d8e8d1397d4fe3236689db88ac1d92a3b5c2d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Stop writing English field labels into the schemas the blueprints scaffold.
+  
+  Nine fields — `topic`, `kicker`, `discipline`, `icon`, `orderLink` and the
+  four SEO ones — shipped an English `admin.label` and `admin.help`, so a French
+  site's entry form read "Topic", "SEO title", "Hide from search engines". The
+  admin names them instead, in whichever language the person looking at them
+  chose (ADR-0019 makes that a preference of the person, which a label written
+  into a schema file at scaffold time cannot follow).
+  
+  Four labels stay, deliberately: a portfolio's `summary` is a **Statement** and
+  a SaaS feature's `coverImage` is a **Screenshot**. There the blueprint is not
+  repeating what the field is, it is giving a generic field its own word, and a
+  dictionary keyed by field name would flatten it.
+  
+  A site already scaffolded keeps the labels in its own `cogenta.schema.*`,
+  which is still the first thing the admin reads. Nothing changes for it unless
+  those lines are removed by hand.
+- Updated dependencies [[`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba), [`8c894db`](https://github.com/cogenta-cms/cogenta/commit/8c894dba796f01b589f151537ba24490fe668aae), [`5bdb9f4`](https://github.com/cogenta-cms/cogenta/commit/5bdb9f4dff7529f303ec38940d79e0e59452b502), [`9a0cff5`](https://github.com/cogenta-cms/cogenta/commit/9a0cff523622e5649869398c2fbf1f31f0521785), [`d1df23d`](https://github.com/cogenta-cms/cogenta/commit/d1df23d88dee1a60ffa02e4e9b48525c7894257a), [`f0ae47b`](https://github.com/cogenta-cms/cogenta/commit/f0ae47b43d6af765d7142fda176d79c7c82ee4b9), [`c44b988`](https://github.com/cogenta-cms/cogenta/commit/c44b9882247c7d0b0a12f1492930af06428408f2), [`8b7f6aa`](https://github.com/cogenta-cms/cogenta/commit/8b7f6aa826eebf14a1e859ab61d4a365bccb25ba), [`99c21a0`](https://github.com/cogenta-cms/cogenta/commit/99c21a0ac93a49064b77cf9ba08cfe15815f1782), [`8bbcc4f`](https://github.com/cogenta-cms/cogenta/commit/8bbcc4ff883051241cbf06f65b59458ecb7d9f57), [`276a22e`](https://github.com/cogenta-cms/cogenta/commit/276a22e6e06f2110191c872f11bb6a0b0ab80e4e), [`ccf489d`](https://github.com/cogenta-cms/cogenta/commit/ccf489d67a1ba81b4f0aa5ccbbcecc30f671f1d6), [`ea2d505`](https://github.com/cogenta-cms/cogenta/commit/ea2d505c2204996eed5737596de7863dd5eda188), [`0bd4e72`](https://github.com/cogenta-cms/cogenta/commit/0bd4e72d937d0b522315a401225dd4741508fd50), [`38ff019`](https://github.com/cogenta-cms/cogenta/commit/38ff0195daf6e0d5e0f118b33363df6b8733809b)]:
+  - @cogenta/core@0.12.1
+  - @cogenta/api@2.11.0
+  - @cogenta/theme-kit@0.7.2
+  - @cogenta/schema@0.11.0
+  - @cogenta/blocks@1.1.7
+  - @cogenta/render@0.5.1
+  - @cogenta/widgets@0.2.7
+
 ## 0.3.0
 
 ### Minor Changes

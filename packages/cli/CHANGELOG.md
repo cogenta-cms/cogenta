@@ -1,5 +1,263 @@
 # @cogenta/cli
 
+## 0.19.0
+
+### Minor Changes
+
+- [`80735af`](https://github.com/cogenta-cms/cogenta/commit/80735af7b536e80050cb9708f435f21935805020) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Back up every table of the site, not a quarter of them.
+  
+  `cogenta backup create` archived 25 tables out of roughly a hundred. Missing from every
+  backup — and therefore from every restore — were the active theme, the site settings,
+  installed plugins and their capability grants, comments, forms and their submissions,
+  role permissions, analytics, and all 24 `cogenta_commerce_*` tables: orders, invoices,
+  payments. The command's own help promised "every table … and, when the site sells
+  anything, commerce". Proven by restoring into an empty project and diffing the two
+  databases: 75 tables present in the source were absent from the target.
+  
+  What made it possible is the real fix. The list of tables outside the content schema was
+  hand-maintained in one call site, and nothing checked it against the site it was meant to
+  describe, so a table added anywhere in the product was simply forgotten. There is now a
+  declared exclusion map, each entry carrying the reason that table is *deliberately* not
+  backed up — a derived search index, a queue's in-flight work, a scheduler lease, an
+  oEmbed cache, the rotating analytics salt — and a test that walks the real tables of a
+  real served site and fails on any table that is neither backed up nor named there.
+  Adding a table and forgetting it is now a failing test.
+  
+  This matters beyond `backup`: `update apply` takes a restore point with this command
+  before it changes anything, so until now that safety net was carrying a quarter of the
+  site.
+
+- [`dfad74b`](https://github.com/cogenta-cms/cogenta/commit/dfad74b535f06159b61efbb1a941c27839eca85d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Actually write the media references `cogenta export` has always claimed to write.
+  
+  The command printed "7 media references" over a file that contained none:
+  `exportMediaReferences` and `exportMediaArchive` were complete, tested, and called by
+  nothing. Every entry imported from such a file pointed at an identifier the target site
+  could not resolve. `exportContent` now emits a `media-ref` record per referenced medium
+  when it is given a `media` store, and `counts.mediaRefs` counts **records written**
+  rather than media found — so the number and the file can no longer disagree.
+  
+  `ExportContentOptions` gains `mediaIn`, an optional per-entry resolver for media this
+  package cannot see by itself. Most of a real site's pictures live inside contract B
+  blocks and rich text rather than in declared `f.media()` fields, and finding those means
+  reading the block vocabulary, which `@cogenta/export` depends on neither directly nor
+  through `@cogenta/api` (R9). So the caller is asked instead: `cogenta export` passes a
+  resolver backed by the same `collectDependencies` the REST layer uses to declare a
+  response's dependencies. Without it, an export still carries every declared media field
+  and undercounts a site by roughly half — which is what it did before.
+  
+  `cogenta export` also gains `--media-archive <file>`, writing a ZIP of the referenced
+  media's bytes for the case the target site does not share the source's storage.
+
+- [`d1df23d`](https://github.com/cogenta-cms/cogenta/commit/d1df23d88dee1a60ffa02e4e9b48525c7894257a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Stop a non-image upload from carrying a content type a browser would execute.
+  
+  An image's stored type has been the one its bytes earn, never the one the
+  uploader declared, since L10's security review. Every other kind was stored
+  exactly as declared, so a `kind: 'file'` upload could carry `text/html` — and
+  the bytes came back from the site's own origin with that type.
+  
+  Not exploitable as it stood: reaching those bytes needs a bearer token, a
+  browser navigation gets 401, and `/_image` refuses a non-image outright. What
+  was missing is the layer under that, and a token is a thin thing to rest on.
+  The admin also announced a list of accepted types the API never enforced.
+  
+  Two layers now, neither of which refuses a legitimate file:
+  
+  - **On upload**, a declared type that executes on an origin — `text/html`,
+    `image/svg+xml`, the XML and JavaScript types — is stored as
+    `application/octet-stream`. The file is kept; only serving it as code is
+    refused. A `.txt`, a `.pdf`, a `.csv` or a `.docx` is stored exactly as
+    declared, as before.
+  - **On serving**, `/api/media/{id}/file` sends `Content-Disposition:
+    attachment` for every kind but `image`, so whatever a file turns out to be
+    the browser downloads it rather than rendering it. Images stay inline — the
+    admin's own grid displays them.
+  
+  Verified against a running site: an HTML upload stored as
+  `application/octet-stream` and served as an attachment, an image still served
+  inline with its own type.
+
+- [`efa8125`](https://github.com/cogenta-cms/cogenta/commit/efa81251c0512c118fca91dca0929c65ac61367e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Journal the four writes that reshape a site: menus, widgets, redirects, theme.
+  
+  Settings, media, API keys, role permissions and the admin template each had
+  their own audit recorder. These four had none, so an administrator opening the
+  Audit screen to answer "who changed the navigation?" — or who added a
+  redirect, moved a widget, switched the site's theme — found nothing at all.
+  
+  `recordSiteShapeAudit` sits where every other recorder does, in the host
+  rather than the routers: it reads the response a router already produced, so
+  no router gains an audit dependency. One recorder for the four rather than
+  four near-copies, because unlike the others they have nothing route-specific
+  to read back — the action and the path are the whole entry.
+  
+  Same restraint as the recorders it joins: a `GET` writes nothing, a refused
+  write writes nothing, and a failed journal write is logged without undoing the
+  change it was describing.
+  
+  New audit actions: `menu.write`, `widget.write`, `redirect.write`,
+  `theme.write`.
+
+- [`b89ba68`](https://github.com/cogenta-cms/cogenta/commit/b89ba68f508ff209744cb31a507c59be6c00f722) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Make the "Site title" setting reach the site.
+  
+  Its own help text promises the browser tab and search results, and it reached
+  neither. `<title>`, `og:site_name`, the `%site%` token of the SEO template and
+  the theme's banner all read `site.name` from `cogenta.config.mjs`, which an
+  editor cannot change; the only thing that ever read `general.title` was the
+  admin's own footer.
+  
+  Every public render now resolves the site's name through the setting, falling
+  back to the configured name when it is empty. Read per render, like the
+  branding and chrome settings beside it and for the same reason: a title
+  changed in the admin shows on the next page, with no restart.
+  
+  Deliberately not applied in three places: the theme gallery preview pins its
+  own fictional site name, widget-area resolution renders no title, and the
+  WebAuthn relying party keeps the configured name — a credential is bound to
+  it, and an editable setting has no business moving it.
+
+- [`3159fc3`](https://github.com/cogenta-cms/cogenta/commit/3159fc3ec1ea2cd913fbe012163093500786a6a6) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Let the media library ask for a thumbnail instead of the whole upload.
+  
+  `<img src>` cannot carry a bearer token, so the admin fetches media bytes
+  through `/api/media/{id}/file` and hands the grid an object URL — the reason
+  that route stays authenticated rather than the file being made public. What
+  it fetched was the full-resolution original, every time: 5.6 MB for
+  twenty-five tiles on a real site, with the 320px renditions already sitting
+  in storage beside them and never read.
+  
+  The route now accepts `?w=`, answering with the stored rendition of that
+  width when there is one and the whole file when there is not — it never
+  renders on demand, for the same reason the public `/_image` never does. The
+  width is ignored alongside `?original=1`, whose point is the untouched file
+  the image editor works from.
+  
+  Both endpoints now pick the rendition through one `storedVariantFor`, so the
+  public and authenticated paths cannot drift about which widths exist.
+
+### Patch Changes
+
+- [`74f715a`](https://github.com/cogenta-cms/cogenta/commit/74f715a07d0e1fe398e8ffb44c66af08e9251ce7) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Stop serving Cogenta's logo as a client site's favicon.
+  
+  A freshly installed site answered `<link rel="icon" href="/_cogenta/logo-cogenta.png">`:
+  the CMS's mark in the browser tab of somebody else's site. Uploading a logo
+  changed nothing, because the favicon was chosen by `branding.showCogentaBranding`
+  — a setting whose name, description and every other effect concern the
+  **credit in the footer**. Turning that off was the only way to make an
+  uploaded logo appear in the tab, and nothing documented the link.
+  
+  The site's own logo is used whenever there is one, whatever the footer credit
+  says. With none, no `<link rel="icon">` is emitted at all, which is what every
+  site without a favicon does. The footer credit itself is untouched.
+
+- [`a25568a`](https://github.com/cogenta-cms/cogenta/commit/a25568a91ec7b8f134e81f688d584b01ac20cdc5) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give the home page the same widget rules whichever URL reached it.
+  
+  `/` and `reading.homePath` (`/home` by default) resolve to one entry, but the
+  widget context was derived from the requested path — `kind: pathname === '/'
+  ? 'home' : 'entry'` — so that one entry looked like the home page through one
+  URL and like an ordinary entry through the other, and a visibility rule
+  matched one and not the other.
+  
+  Which side was wrong is not the obvious one. Every blueprint that excludes a
+  widget from the home page does it with `mode: 'except'` and a `{ kind: 'home'
+  }` target: on `/` the target matched and the widget was correctly hidden, on
+  `/home` it did not and the widget appeared on the very page the editor had
+  excluded. The audit measured five widget areas on `/home` against none on `/`
+  and read it as `/` losing its widgets; `/home` was showing what nobody asked
+  for.
+  
+  The path resolved to is read only when widgets are actually being resolved,
+  since `homePath` is a live settings read on every request by design.
+
+- [`22f0dd8`](https://github.com/cogenta-cms/cogenta/commit/22f0dd8f372b119f1a4fac181de45fdc18230182) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Serve a stored rendition for a width below the variant ladder.
+  
+  `/_image?id=…&w=1` answered with the full-resolution original — megabytes for
+  a one-pixel request, on a public endpoint, cached `immutable` for a year. Any
+  width that was not exactly a rung did the same: the lookup matched names
+  exactly, found nothing, and fell back to the whole file.
+  
+  The smallest rendition at least as wide as the request is used instead. A
+  width above everything stored still falls back to the original, which is the
+  closest thing there is. Nothing is rendered on demand, exactly as before.
+  
+  `/api/media/{id}/file?w=` follows the same rule, being the same lookup.
+
+- [`410ca4c`](https://github.com/cogenta-cms/cogenta/commit/410ca4c56a77b52bf7a335bbb31ab7af90cb9d60) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Stop `cogenta mcp` from writing a human banner onto the JSON-RPC channel.
+  
+  The command printed "MCP server ready — N tool(s), actor: …" through `out`,
+  which the CLI builds on stdout — the stream the MCP protocol speaks on. The
+  first thing any client read was therefore not JSON, and the connection failed
+  before `initialize` was ever answered. No MCP client could connect, whatever
+  the client.
+  
+  The line now goes to stderr, where anything this command says to a human
+  belongs. `McpOptions.out` stays, so every command keeps one signature, and
+  says in its own doc comment that this command must never write to it.
+  
+  Every existing test in the file passed `createOutput(() => undefined)`,
+  discarding that channel, so none of them could see it. The new test wires
+  `out` to the same stream as the protocol, exactly as `src/index.ts` does, and
+  asserts every line on it parses as JSON.
+
+- [`f0ae47b`](https://github.com/cogenta-cms/cogenta/commit/f0ae47b43d6af765d7142fda176d79c7c82ee4b9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Serve a page whose media was deleted, instead of answering HTTP 500.
+  
+  Deleting an asset that a published page still pointed at made that page
+  unservable for everyone: `renderPage` draws every block of a page in one call,
+  and contract D's `RenderContext.image(media): ImageSource` has no "absent"
+  state to return, so the theme could only throw and one dead reference took the
+  whole document with it.
+  
+  Neither the contract nor the ten installed themes can gain that state without a
+  major bump, so the dead reference is now removed from the data before rendering
+  starts. `@cogenta/api` gains `pruneMissingMedia(entries, source, available)`: a
+  pure function that walks entries exactly as `collectDependencies` does —
+  declared `media` fields, expanded relations, the media inside a known block's
+  list items, plus rich text's own `media` nodes — and returns copies with every
+  reference outside `available` gone. A collection field simply forgets its
+  picture; a list item that was only there to show one leaves the list, so a
+  gallery that lost one photograph keeps the others; and a block whose *required*
+  media field is left empty (a `mediaFigure`, a gallery with nothing in it) is
+  dropped rather than rendered as a hole. A block type the registry does not know
+  contributes nothing and is never dropped, the same answer `collectDependencies`
+  gives it. Nothing is mutated in place.
+  
+  `cogenta serve` calls it in `renderEntryPage` once it knows which assets
+  actually loaded, so a dead identifier can no longer reach `ctx.image()` — whose
+  `throw` deliberately stays, and now means a real defect. A render that had to
+  drop something is logged (`ThemeRenderOptions.onMissingMedia`): the visitor
+  gets a 200, so that line is the only trace an operator has that a page is being
+  served incomplete.
+- Updated dependencies [[`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba), [`95fdc8d`](https://github.com/cogenta-cms/cogenta/commit/95fdc8df7d3105bcfdcae7ab060246866a78dae9), [`afa9229`](https://github.com/cogenta-cms/cogenta/commit/afa9229126640355f3034d0d662cc4f3097a8d95), [`f79ec2a`](https://github.com/cogenta-cms/cogenta/commit/f79ec2a030913982fcd521fab2603dda84bbf81d), [`dea8093`](https://github.com/cogenta-cms/cogenta/commit/dea809374a43c1b2328858e2e190e27f7d5651ff), [`95fdc8d`](https://github.com/cogenta-cms/cogenta/commit/95fdc8df7d3105bcfdcae7ab060246866a78dae9), [`e99ffe1`](https://github.com/cogenta-cms/cogenta/commit/e99ffe1c74bf67c16fd3027046e0d104bc61a187), [`797d8e8`](https://github.com/cogenta-cms/cogenta/commit/797d8e8d1397d4fe3236689db88ac1d92a3b5c2d), [`8f85628`](https://github.com/cogenta-cms/cogenta/commit/8f856289c373b75ba754e06aa615e352797fcd2e), [`c10f21f`](https://github.com/cogenta-cms/cogenta/commit/c10f21f90482ea06636ca8b44ae76222aabfdafe), [`8c894db`](https://github.com/cogenta-cms/cogenta/commit/8c894dba796f01b589f151537ba24490fe668aae), [`49fc11c`](https://github.com/cogenta-cms/cogenta/commit/49fc11c6f670feca988ed5cd80f7070517631d5a), [`dfad74b`](https://github.com/cogenta-cms/cogenta/commit/dfad74b535f06159b61efbb1a941c27839eca85d), [`5bdb9f4`](https://github.com/cogenta-cms/cogenta/commit/5bdb9f4dff7529f303ec38940d79e0e59452b502), [`cf158d8`](https://github.com/cogenta-cms/cogenta/commit/cf158d838033f7f2e54d7a16ae1b924d3a92b669), [`9a0cff5`](https://github.com/cogenta-cms/cogenta/commit/9a0cff523622e5649869398c2fbf1f31f0521785), [`d1df23d`](https://github.com/cogenta-cms/cogenta/commit/d1df23d88dee1a60ffa02e4e9b48525c7894257a), [`f0ae47b`](https://github.com/cogenta-cms/cogenta/commit/f0ae47b43d6af765d7142fda176d79c7c82ee4b9), [`c44b988`](https://github.com/cogenta-cms/cogenta/commit/c44b9882247c7d0b0a12f1492930af06428408f2), [`8b7f6aa`](https://github.com/cogenta-cms/cogenta/commit/8b7f6aa826eebf14a1e859ab61d4a365bccb25ba), [`99c21a0`](https://github.com/cogenta-cms/cogenta/commit/99c21a0ac93a49064b77cf9ba08cfe15815f1782), [`8bbcc4f`](https://github.com/cogenta-cms/cogenta/commit/8bbcc4ff883051241cbf06f65b59458ecb7d9f57), [`276a22e`](https://github.com/cogenta-cms/cogenta/commit/276a22e6e06f2110191c872f11bb6a0b0ab80e4e), [`ccf489d`](https://github.com/cogenta-cms/cogenta/commit/ccf489d67a1ba81b4f0aa5ccbbcecc30f671f1d6), [`ea2d505`](https://github.com/cogenta-cms/cogenta/commit/ea2d505c2204996eed5737596de7863dd5eda188), [`0bd4e72`](https://github.com/cogenta-cms/cogenta/commit/0bd4e72d937d0b522315a401225dd4741508fd50), [`38ff019`](https://github.com/cogenta-cms/cogenta/commit/38ff0195daf6e0d5e0f118b33363df6b8733809b)]:
+  - @cogenta/core@0.12.1
+  - @cogenta/starters@0.4.0
+  - @cogenta/theme-blog@0.6.0
+  - @cogenta/api@2.11.0
+  - @cogenta/theme-entreprise@1.5.0
+  - @cogenta/export@0.3.0
+  - @cogenta/theme-kit@0.7.2
+  - @cogenta/theme-association@0.5.8
+  - @cogenta/theme-canonical@1.3.8
+  - @cogenta/theme-docs@0.5.8
+  - @cogenta/theme-ecommerce@1.3.8
+  - @cogenta/theme-magazine@1.3.8
+  - @cogenta/theme-portfolio@1.3.8
+  - @cogenta/theme-restaurant@0.5.8
+  - @cogenta/theme-saas@0.5.8
+  - @cogenta/schema@0.11.0
+  - @cogenta/seo@0.4.0
+  - @cogenta/agents@0.9.1
+  - @cogenta/agents-builtin@0.7.1
+  - @cogenta/analytics@0.3.8
+  - @cogenta/auth@0.5.12
+  - @cogenta/blocks@1.1.7
+  - @cogenta/channels@0.3.15
+  - @cogenta/comments@0.2.9
+  - @cogenta/commerce@0.5.10
+  - @cogenta/forms@0.2.15
+  - @cogenta/import@0.2.15
+  - @cogenta/mcp@0.3.14
+  - @cogenta/observability@0.2.8
+  - @cogenta/plugins@0.8.7
+  - @cogenta/render@0.5.1
+  - @cogenta/widgets@0.2.7
+
 ## 0.18.0
 
 ### Minor Changes

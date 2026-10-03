@@ -65,10 +65,29 @@ function keyOf(element: HTMLElement): string {
   return element.dataset['blockKey'] ?? ''
 }
 
+/**
+ * An element, whichever realm it came from.
+ *
+ * `node instanceof Element` cannot be used here, and that is the whole bug
+ * this replaces: the preview is an `<iframe>`, so every event target inside it
+ * is an instance of the *iframe's* `Element`, a different constructor from the
+ * admin window's. The check was therefore false for every node it was ever
+ * handed — measured, `sameRealm: false` — so clicking a block never selected
+ * it and the drop guard never matched either.
+ *
+ * `nodeType === 1` is the element node type in every realm, and testing
+ * `closest` keeps the narrowing honest rather than asserting it.
+ */
+function asElement(node: EventTarget | null): Element | null {
+  if (node === null || typeof node !== 'object') return null
+  const candidate = node as Partial<Element>
+  if (candidate.nodeType !== 1 || typeof candidate.closest !== 'function') return null
+  return candidate as Element
+}
+
 /** The block an arbitrary node sits inside, or `null` for the page frame. */
 function blockOf(node: EventTarget | null): HTMLElement | null {
-  if (node === null || !(node instanceof Element)) return null
-  return node.closest<HTMLElement>('[data-block-key]')
+  return asElement(node)?.closest<HTMLElement>('[data-block-key]') ?? null
 }
 
 /**
@@ -152,8 +171,8 @@ export function wirePreview(doc: Document, handlers: PreviewHandlers): () => voi
   // document the builder is wired to with one it knows nothing about, and
   // submitting a form would post the site's own form from inside the admin.
   on(doc, 'click', (event) => {
-    const element = event.target
-    if (element instanceof Element && element.closest('a') !== null) event.preventDefault()
+    const element = asElement(event.target)
+    if (element !== null && element.closest('a') !== null) event.preventDefault()
     const block = blockOf(event.target)
     if (block !== null) handlers.onSelect(keyOf(block))
   })

@@ -1,6 +1,6 @@
 {
   "name": "@cogenta/theme-restaurant",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "description": "A Cogenta theme for a contemporary bistro: the room across the window, a typographic menu with prices grouped by section, dish pages, and a designed evening palette.",
   "license": "MPL-2.0",
   "type": "module",

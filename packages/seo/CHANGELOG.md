@@ -1,5 +1,40 @@
 # @cogenta/seo
 
+## 0.4.0
+
+### Minor Changes
+
+- [`276a22e`](https://github.com/cogenta-cms/cogenta/commit/276a22e6e06f2110191c872f11bb6a0b0ab80e4e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Make the SEO diagnostic see the entries a site has actually published.
+  
+  It reported zero published entries beside a sitemap of fifteen URLs, in the
+  same response. Worse than the number: every content check is computed over
+  that same set, so missing descriptions, over-long titles and duplicate titles
+  all reported zero whatever the site contained. The whole content-quality panel
+  was inert, not just its counter.
+  
+  The scan lists as the signed-in admin, deliberately, so it can see collections
+  the public role cannot. The gateway derives the face an actor reads from the
+  permission layer — there is no `state:` argument to ask for the published one,
+  and that invariant is worth more than this diagnostic. So every entry carrying
+  an unpublished edit arrives in its working face, and `isPublished` refuses that
+  face: rightly, since its job is deciding whether *this face* may be rendered
+  into a page, a feed or a sitemap.
+  
+  `@cogenta/seo` gains `isPublishedEntry`, the same question without the face
+  check — for a caller that knows which face it holds and is asking about the
+  entry behind it. Both predicates share the `publishedAt` scheduling check, so a
+  scheduled entry still counts as unpublished in either.
+  
+  Measured against a running site: fifteen published entries against fifteen
+  sitemap URLs, and five entries missing a description that the panel had never
+  been able to name.
+
+### Patch Changes
+
+- Updated dependencies [[`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba), [`99c21a0`](https://github.com/cogenta-cms/cogenta/commit/99c21a0ac93a49064b77cf9ba08cfe15815f1782), [`8bbcc4f`](https://github.com/cogenta-cms/cogenta/commit/8bbcc4ff883051241cbf06f65b59458ecb7d9f57), [`ccf489d`](https://github.com/cogenta-cms/cogenta/commit/ccf489d67a1ba81b4f0aa5ccbbcecc30f671f1d6), [`ea2d505`](https://github.com/cogenta-cms/cogenta/commit/ea2d505c2204996eed5737596de7863dd5eda188), [`0bd4e72`](https://github.com/cogenta-cms/cogenta/commit/0bd4e72d937d0b522315a401225dd4741508fd50)]:
+  - @cogenta/core@0.12.1
+  - @cogenta/schema@0.11.0
+
 ## 0.3.12
 
 ### Patch Changes

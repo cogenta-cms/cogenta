@@ -1,5 +1,26 @@
 # @cogenta/theme-portfolio
 
+## 1.3.8
+
+### Patch Changes
+
+- [`cf158d8`](https://github.com/cogenta-cms/cogenta/commit/cf158d838033f7f2e54d7a16ae1b924d3a92b669) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give a logo that links out the organisation's name as the link's own name.
+  
+  Contract B says of the `logos` block's `name` field: "It is also the accessible
+  name of the link." Every theme passed it to `image()` as `altFrom`, which is
+  only the fallback used when the media library has no alt text of its own. For a
+  logo that did have one — the ordinary case — the name was dropped, and the
+  link's accessible name became the alt text of the picture inside it: a link to
+  a farm announcing itself as "A pear poached dark red in Beaujolais". That is a
+  WCAG 2.4.4 failure, and the row of logos was unusable by anyone listening to it.
+  
+  The link now carries the name. Nothing changes visually, and an unlinked logo
+  keeps the documented fallback behaviour.
+- Updated dependencies [[`5bdb9f4`](https://github.com/cogenta-cms/cogenta/commit/5bdb9f4dff7529f303ec38940d79e0e59452b502)]:
+  - @cogenta/theme-kit@0.7.2
+  - @cogenta/blocks@1.1.7
+  - @cogenta/render@0.5.1
+
 ## 1.3.7
 
 ### Patch Changes

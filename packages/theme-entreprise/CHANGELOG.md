@@ -1,5 +1,50 @@
 # @cogenta/theme-entreprise
 
+## 1.5.0
+
+### Minor Changes
+
+- [`49fc11c`](https://github.com/cogenta-cms/cogenta/commit/49fc11c6f670feca988ed5cd80f7070517631d5a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Make collectionList read what an entry is, not only the layout an editor chose.
+  
+  The block recycled one card template across four very different collections (solutions,
+  case studies, jobs, news) via `layout` alone, styled three ways in CSS — unlike this
+  theme's own other rich, content-aware blocks. Two real gaps this closed:
+  
+  - **Open positions.** A job entry (`team`/`contract`, fields only a job has) was rendered
+    with an ordinal number, an arrow-only link and a key-figure slot — none of which mean
+    anything on a job listing, and its `team`/`location`/`contract` were never shown at
+    all. It now gets its own row: title, a `team · location · contract` meta line, the
+    summary, and an explicit "Apply" (a new `collectionString` local to this theme, EN/FR).
+    The layout an editor picks no longer matters for a careers listing — it always reads
+    as a plain vertical list, never a photo grid or a horizontally-scrolling row.
+  - **Case study attribution.** `client` and `location` were declared on every case study
+    and read by nothing: whichever client a result belonged to was only ever findable by
+    writing it into the summary's prose. An entry with either field now prints a credit
+    line under its title, in the label face, the same way a caption credits a photograph.
+  
+  Verified against a scaffolded site: the careers page, four case studies (each crediting
+  its own client), the solutions grid and the news list all render correctly, with no
+  change to the three collections that already worked.
+
+### Patch Changes
+
+- [`cf158d8`](https://github.com/cogenta-cms/cogenta/commit/cf158d838033f7f2e54d7a16ae1b924d3a92b669) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give a logo that links out the organisation's name as the link's own name.
+  
+  Contract B says of the `logos` block's `name` field: "It is also the accessible
+  name of the link." Every theme passed it to `image()` as `altFrom`, which is
+  only the fallback used when the media library has no alt text of its own. For a
+  logo that did have one — the ordinary case — the name was dropped, and the
+  link's accessible name became the alt text of the picture inside it: a link to
+  a farm announcing itself as "A pear poached dark red in Beaujolais". That is a
+  WCAG 2.4.4 failure, and the row of logos was unusable by anyone listening to it.
+  
+  The link now carries the name. Nothing changes visually, and an unlinked logo
+  keeps the documented fallback behaviour.
+- Updated dependencies [[`5bdb9f4`](https://github.com/cogenta-cms/cogenta/commit/5bdb9f4dff7529f303ec38940d79e0e59452b502)]:
+  - @cogenta/theme-kit@0.7.2
+  - @cogenta/blocks@1.1.7
+  - @cogenta/render@0.5.1
+
 ## 1.4.3
 
 ### Patch Changes

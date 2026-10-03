@@ -1,5 +1,134 @@
 # @cogenta/schema
 
+## 0.11.0
+
+### Minor Changes
+
+- [`99c21a0`](https://github.com/cogenta-cms/cogenta/commit/99c21a0ac93a49064b77cf9ba08cfe15815f1782) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add `schema24Migration`, which repairs the foreign key that let a deleted taxonomy term delete content.
+  
+  A `f.taxonomy({ many: false })` field is stored in a column of the entries table, and
+  that column's foreign key was generated with `on delete cascade`: removing a term
+  deleted every entry carrying it, permanently and past the trash, since a row the
+  database removes was never soft-deleted. `tables.ts` now generates `on delete set null`
+  for that shape, but `create table if not exists` does nothing to a table that already
+  exists, so this migration is what reaches an installed site. `many: true` is unaffected
+  and keeps `cascade`, which is correct there: its term lives in a join table whose row
+  *is* the classification.
+  
+  Postgres drops and re-adds the constraint; MySQL/MariaDB do the same through `drop
+  foreign key`, reading the current rule from `information_schema` first so an
+  already-correct constraint is left alone. SQLite has no way to alter a constraint at
+  all, so the entries table is rebuilt — and **not** by the manual's twelve-step
+  procedure, which cannot work inside a migration: `PRAGMA foreign_keys = OFF` is a no-op
+  while a transaction is pending, so `drop table` fires every cascade pointing at the
+  table and deletes the collection's whole `_versions` and `_blocks` history. Measured on
+  SQLite 3.46, and covered by a test. The rebuild therefore copies the referring tables
+  aside, empties them, rebuilds, and puts them back, all inside the migrator's
+  transaction.
+  
+  The migration is marked `destructive`: the rollback faithfully restores `on delete
+  cascade`, and on SQLite the upgrade itself rebuilds tables. Both deserve the explicit
+  confirmation and the verified backup the flag demands.
+
+- [`8bbcc4f`](https://github.com/cogenta-cms/cogenta/commit/8bbcc4ff883051241cbf06f65b59458ecb7d9f57) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Let an admin search actually find a draft.
+  
+  The admin's search screen offers a "Statut" filter whose first option is
+  "Tous les statuts", and choosing it sent no `status` at all — and no `status`
+  means `published`, the safe default for a caller that says nothing. So a
+  filter offering every state delivered the one an anonymous visitor sees, and
+  an editor could not find their own unpublished work through it.
+  
+  `?status=any` says it explicitly. It is not a way around the gate: `any` is
+  checked by exactly the same `canReadUnpublished` that guards `status=draft`,
+  so an anonymous caller asking for it gets the same 403 it always got.
+  
+  `SearchQuery.status` accepts a list as well as one value, and the shared
+  `scopeFilters` turns that into `status in (…)`. The state predicate is never
+  dropped, only widened — that clause is what stops a draft reaching a reader
+  who has no right to it, and it stays present on all three engines. An empty
+  list reads as "nothing matches" rather than widening to everything.
+  
+  The admin asks for the widest scope and falls back when refused, rather than
+  re-deriving the permission rule client-side: whether these roles reach drafts
+  is the permission layer's decision (R4), and a second copy of that rule would
+  be one that drifts.
+
+- [`ccf489d`](https://github.com/cogenta-cms/cogenta/commit/ccf489d67a1ba81b4f0aa5ccbbcecc30f671f1d6) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Stop `GET /api/settings` handing the whole registry to anybody who asks.
+  
+  The route answered an unauthenticated caller with all sixty-four settings,
+  including `general.adminEmail`, `discussion.notifyEmail`, `seo.indexNowKey`,
+  `seo.googleSiteVerification`, `seo.bingSiteVerification`,
+  `updates.autoUpdatePolicy` and the channel bot names. Reproduced on a freshly
+  scaffolded site with no token at all.
+  
+  Public read was a deliberate choice, and its stated reason is what bounds it:
+  "the values here feed a page's own render … an anonymous visitor has to see
+  the same thing the theme does". A tagline does. An administrator's email
+  address does not. So the rule is applied rather than assumed: **a setting is
+  publicly readable when its value is already visible on the public site.**
+  
+  `@cogenta/schema` gains `PUBLIC_READ_SETTING_KEYS` and
+  `isPubliclyReadableSetting`, listed beside the registry they describe so the
+  whole public surface can be reviewed in one place — nineteen keys: the page
+  chrome, date formatting, the home path and page size, whether comments are
+  open, the cookie banner, the currency, and the white-label mark. Unlisted
+  means private, so a setting added without thinking about this is closed
+  rather than open. A signed-in caller still receives everything.
+  
+  **Breaking for an anonymous reader of this route.** The only one in this
+  repository is the admin login screen, which needs the site's name and its
+  white-label branding so a rebranded site does not say "Cogenta" on the way
+  in; all three keys are public. A headless client that read other settings
+  without a token now needs one.
+  
+  Verified end to end against a running site: nineteen settings anonymously,
+  sixty-four with an admin token, none of the named keys in the anonymous
+  answer.
+
+- [`0bd4e72`](https://github.com/cogenta-cms/cogenta/commit/0bd4e72d937d0b522315a401225dd4741508fd50) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Validate every written value against the schema its collection declares.
+  
+  `validation.ts` builds a validator per field and has described itself as "the
+  validator that guards every write" since L1. The write path never called it:
+  values were type-checked by hand and otherwise stored as sent. A `text` field
+  declaring `max: 60` accepted 250 characters, a `slug` accepted
+  `"Not A Slug!!"` and went on to route a public URL, a `boolean` accepted the
+  string `"yes"` and coerced it to `true` (so `"false"` would have stored
+  `true`), and a `richText` field accepted a plain string.
+  
+  Values are now parsed, not merely checked, which is also what makes a schema's
+  defaults apply: a Portable Text span that legitimately omits `marks` — the
+  field is optional in the spec — now reaches the column with `marks: []`
+  instead of arriving half-formed and throwing in the first reader that counts
+  them.
+  
+  **This refuses writes that used to be accepted.** A caller sending a value its
+  own schema forbids now gets `CONTENT_INVALID`, naming the field and the reason.
+  Stored rows are untouched; this is the write path only.
+  
+  Two exceptions, both documented in the code: `date`/`datetime` keep their own
+  handling (they accept a `Date` and the empty string, which is how the admin
+  clears a date), and `media`/`relation`/`taxonomy` keep the shape check they had
+  rather than gaining the UUID check their declared schema would impose — that
+  tightening is a decision of its own.
+
+### Patch Changes
+
+- [`ea2d505`](https://github.com/cogenta-cms/cogenta/commit/ea2d505c2204996eed5737596de7863dd5eda188) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Put an un-trashed entry back in the search index.
+  
+  `withSearchIndexing` wrapped create, update, publish, unpublish,
+  setVisibility, restore and delete — and not `untrash`. Since `delete` drops
+  the index row, restoring an entry from the trash gave it back to the site, to
+  the sitemap and to its relations while leaving it permanently unfindable by
+  search, in the admin and on the public `/search` alike. Any later edit
+  repaired it, so the entries that stayed broken were exactly the ones nobody
+  touched again.
+  
+  The trash is reversible by design (ADR-0022): `delete` keeps everything and
+  `untrash` gives it back exactly as it was. The index is part of "exactly as
+  it was".
+- Updated dependencies [[`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba)]:
+  - @cogenta/core@0.12.1
+
 ## 0.10.0
 
 ### Minor Changes

@@ -242,6 +242,11 @@ enregistrées pour éviter tout décalage de mise en page au chargement. Elle
 exige une session authentifiée : ce n'est pas un dossier public, même si les
 images qu'elle sert à une page publiée le sont via une URL dédiée.
 
+La grille affiche vingt médias à la fois. **Précédent** et **Suivant**, en haut et en
+bas de la grille, parcourent la bibliothèque sans ajouter indéfiniment des vignettes
+à la page. Un changement de recherche, de dossier, de type ou de tri revient à la
+première page ; un téléversement y revient aussi pour montrer les nouveaux fichiers.
+
 ### Recadrer ou pivoter une image
 
 Dans la fiche d'une image, **Recadrer ou pivoter** ouvre l'éditeur : pivotez par quarts de
@@ -264,6 +269,24 @@ laissés sur le contenu ; `/forms` et `/form-submissions` gèrent les
 formulaires publiés sur le site et leurs réponses reçues — deux des rares
 routes de ce CMS qui acceptent une écriture anonyme, protégées dès la
 première version par une limitation de débit et des heuristiques anti-spam.
+
+La liste des formulaires affiche dix lignes par page, avec une recherche par nom
+ou libellé et les commandes **Précédent** et **Suivant** aux deux extrémités. La
+recherche porte sur tous les formulaires et revient à la première page. Les tables
+larges restent défilables horizontalement sur mobile et accessibles au clavier.
+
+Les commentaires et soumissions affichent vingt lignes par page. Les commandes
+**Précédent** et **Suivant** remplacent les lignes visibles ; changer le statut,
+le formulaire ou la recherche revient à la première page. Une action qui vide
+la dernière page ramène à la précédente. Les soumissions conservent leur export
+CSV côté serveur : il couvre les filtres, pas seulement la page affichée. La
+recherche RGPD affiche aussi vingt résultats par page ; **Tout effacer** vise
+l’ensemble des réponses correspondant à l’adresse, quelle que soit la page.
+
+L’écran Menus sépare la création d’un menu, son emplacement et ses langues,
+l’arbre des liens et l’ajout d’un élément en panneaux distincts. Les boutons de
+déplacement, d’imbrication, de modification et de suppression restent disponibles
+sur chaque ligne, y compris sur mobile et au clavier ; le glisser-déposer est facultatif.
 
 ## Import
 

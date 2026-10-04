@@ -24,7 +24,7 @@ Redis, Docker, S3, a persistent worker — anything that assumes an external
 service is **optional**. Every infrastructure need goes through an
 interface with at least two implementations: an optimal one (Redis for the
 queue, for instance) and a degraded one that depends on nothing (in memory,
-or on disk). See [Packages and drivers](paquets-et-drivers.html) for the real
+or on disk). See [Packages and drivers](packages-and-drivers.html) for the real
 list.
 
 ## The CMS works without AI (R2)

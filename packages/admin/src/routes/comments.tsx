@@ -1,4 +1,4 @@
-import { type JSX, useCallback, useEffect, useState } from 'react'
+import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import {
@@ -24,6 +24,7 @@ import {
   Field,
   Input,
   Notice,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -49,6 +50,7 @@ import {
  */
 
 const TABS = COMMENT_STATUSES
+const PAGE_SIZE = 20
 
 function excerpt(body: string, max = 140): string {
   const trimmed = body.trim()
@@ -71,33 +73,85 @@ export function CommentsRoute(): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [replyTarget, setReplyTarget] = useState<string | null>(null)
   const [replyBody, setReplyBody] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [paging, setPaging] = useState({ key: '', page: 0 })
+  const requestGeneration = useRef(0)
+  const filterKey = JSON.stringify([tab, search])
+  const pageIndex = paging.key === filterKey ? paging.page : 0
+  useEffect(() => {
+    setPaging((current) => (current.key === filterKey ? current : { key: filterKey, page: 0 }))
+  }, [filterKey])
+  const pager = (
+    <Pagination
+      variant="pages"
+      page={pageIndex}
+      pageCount={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+      onPageChange={(page) => setPaging({ key: filterKey, page })}
+      loading={loading || busy}
+      previousLabel={t('lists.previous')}
+      nextLabel={t('lists.next')}
+      pageInfo={t('lists.pageInfo', {
+        from: total === 0 ? 0 : pageIndex * PAGE_SIZE + 1,
+        to: pageIndex * PAGE_SIZE + items.length,
+        total,
+      })}
+    />
+  )
 
   const load = useCallback(async () => {
     if (token === null) return
+    const generation = ++requestGeneration.current
+    setLoading(true)
     try {
       const [page, freshCounts] = await Promise.all([
-        listComments(token, { status: tab, ...(search.trim() === '' ? {} : { q: search.trim() }) }),
+        listComments(token, {
+          status: tab,
+          limit: PAGE_SIZE,
+          offset: pageIndex * PAGE_SIZE,
+          ...(search.trim() === '' ? {} : { q: search.trim() }),
+        }),
         getCommentCounts(token),
       ])
-      setItems(page.items)
+      if (generation !== requestGeneration.current) return
       setTotal(page.total)
+      const lastPage = Math.max(0, Math.ceil(page.total / PAGE_SIZE) - 1)
+      if (pageIndex > lastPage) {
+        setPaging({ key: filterKey, page: lastPage })
+        return
+      }
+      setItems(page.items)
       setCounts(freshCounts)
       setSelected(new Set())
+      setReplyTarget(null)
+      setReplyBody('')
       setError(null)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('comments.loadError'))
+      if (generation === requestGeneration.current)
+        setError(caught instanceof ApiError ? caught.message : t('comments.loadError'))
+    } finally {
+      if (generation === requestGeneration.current) setLoading(false)
     }
-  }, [token, tab, search, t])
+  }, [token, tab, search, filterKey, pageIndex, t])
+
+  // A mutation may finish after the user changed page or filters. Refresh
+  // the current view rather than the closure in which that action started.
+  const latestLoad = useRef(load)
+  useEffect(() => {
+    latestLoad.current = load
+  }, [load])
 
   useEffect(() => {
     void load()
+    return () => {
+      requestGeneration.current += 1
+    }
   }, [load])
 
   async function withBusy(fn: () => Promise<void>): Promise<void> {
     setBusy(true)
     try {
       await fn()
-      await load()
+      await latestLoad.current()
       // L20 audit point 15: the sidebar's "Comments" badge is fetched once
       // per session — without this, approving/spamming/trashing here left
       // it showing a stale count until the next full reload.
@@ -123,7 +177,7 @@ export function CommentsRoute(): JSX.Element {
   if (token === null) return <p>{t('comments.signedOut')}</p>
 
   return (
-    <section aria-labelledby="comments-heading" className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6">
       <div>
         <h1 id="comments-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('comments.heading')}
@@ -207,192 +261,208 @@ export function CommentsRoute(): JSX.Element {
           </Card>
         )}
 
-        <Card>
-          <CardBody>
-            <TableRoot label={t('comments.heading')}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>
-                      <input
-                        type="checkbox"
-                        aria-label={t('comments.selectAll')}
-                        checked={allSelected}
-                        onChange={() =>
-                          setSelected(
-                            allSelected ? new Set() : new Set(items.map((item) => item.id)),
-                          )
-                        }
-                      />
-                    </TableHeader>
-                    <TableHeader>{t('comments.column.excerpt')}</TableHeader>
-                    <TableHeader>{t('comments.column.author')}</TableHeader>
-                    <TableHeader>{t('comments.column.target')}</TableHeader>
-                    <TableHeader>{t('comments.column.date')}</TableHeader>
-                    <TableHeader>{t('comments.column.actions')}</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {items.length === 0 && <TableEmpty colSpan={6}>{t('comments.empty')}</TableEmpty>}
-                  {items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
+        {pager}
+        {loading && <p>{t('common.loading')}</p>}
+        {!loading && (
+          <Card>
+            <CardBody>
+              <TableRoot label={t('comments.heading')}>
+                <Table className="min-w-[64rem]">
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>
                         <input
                           type="checkbox"
-                          aria-label={t('comments.selectOne', { author: item.authorName })}
-                          checked={selected.has(item.id)}
-                          onChange={() => toggleSelected(item.id)}
+                          aria-label={t('comments.selectAll')}
+                          checked={allSelected}
+                          onChange={() =>
+                            setSelected(
+                              allSelected ? new Set() : new Set(items.map((item) => item.id)),
+                            )
+                          }
                         />
-                      </TableCell>
-                      <TableCell>
-                        <p className="m-0 max-w-md whitespace-pre-wrap">{excerpt(item.body)}</p>
-                        {item.moderation.flagged === true && (
-                          <p className="m-0 text-xs text-destructive" role="status">
-                            {t('comments.flagged', {
-                              severity: t(`assist.severity.${item.moderation.severity ?? 'low'}`),
-                            })}
-                          </p>
-                        )}
-                        <ModerationCheck token={token} text={item.body} />
-                      </TableCell>
-                      <TableCell>
-                        <span>{item.authorName}</span>
-                        <br />
-                        <span className="text-xs text-muted-foreground">{item.authorEmail}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs">
-                          {item.collection}/{item.entryId}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <time dateTime={item.createdAt}>
-                          {new Date(item.createdAt).toLocaleString()}
-                        </time>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {item.status !== 'approved' && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() =>
-                                void withBusy(async () => {
-                                  await setCommentStatus(token, item.id, 'approved')
-                                })
-                              }
-                            >
-                              {t('comments.action.approve')}
-                            </Button>
-                          )}
-                          {item.status !== 'spam' && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() =>
-                                void withBusy(async () => {
-                                  await setCommentStatus(token, item.id, 'spam')
-                                })
-                              }
-                            >
-                              {t('comments.action.spam')}
-                            </Button>
-                          )}
-                          {item.status !== 'trash' && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() =>
-                                void withBusy(async () => {
-                                  await setCommentStatus(token, item.id, 'trash')
-                                })
-                              }
-                            >
-                              {t('comments.action.trash')}
-                            </Button>
-                          )}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            disabled={busy}
-                            onClick={() => setReplyTarget(replyTarget === item.id ? null : item.id)}
-                          >
-                            {t('comments.action.reply')}
-                          </Button>
-                          {item.status === 'trash' && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="destructive"
-                              disabled={busy}
-                              onClick={() =>
-                                void withBusy(async () => {
-                                  if (!window.confirm(t('comments.purgeConfirm'))) return
-                                  await purgeComment(token, item.id)
-                                })
-                              }
-                            >
-                              {t('comments.action.purge')}
-                            </Button>
-                          )}
-                        </div>
-                        {replyTarget === item.id && (
-                          <form
-                            className="mt-2 flex flex-col gap-2"
-                            onSubmit={(event) => {
-                              event.preventDefault()
-                              const user =
-                                auth.state.status === 'authenticated' ? auth.state.user : null
-                              void withBusy(async () => {
-                                await replyToComment(token, item.id, {
-                                  authorName: user?.email ?? 'Site',
-                                  authorEmail: user?.email ?? '',
-                                  body: replyBody,
-                                })
-                                setReplyBody('')
-                                setReplyTarget(null)
-                              })
-                            }}
-                          >
-                            <Field label={t('comments.replyLabel')}>
-                              {(control) => (
-                                <textarea
-                                  {...control}
-                                  className="w-full rounded-md border border-input bg-background p-2 text-sm"
-                                  value={replyBody}
-                                  onChange={(event) => setReplyBody(event.target.value)}
-                                  required
-                                  rows={3}
-                                />
-                              )}
-                            </Field>
-                            <Button
-                              type="submit"
-                              size="sm"
-                              disabled={busy || replyBody.trim() === ''}
-                            >
-                              {t('comments.replySubmit')}
-                            </Button>
-                          </form>
-                        )}
-                      </TableCell>
+                      </TableHeader>
+                      <TableHeader>{t('comments.column.excerpt')}</TableHeader>
+                      <TableHeader>{t('comments.column.author')}</TableHeader>
+                      <TableHeader>{t('comments.column.target')}</TableHeader>
+                      <TableHeader>{t('comments.column.date')}</TableHeader>
+                      <TableHeader>{t('comments.column.actions')}</TableHeader>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableRoot>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t('comments.total', { count: total })}
-            </p>
-          </CardBody>
-        </Card>
+                  </TableHead>
+                  <TableBody>
+                    {items.length === 0 && (
+                      <TableEmpty colSpan={6}>{t('comments.empty')}</TableEmpty>
+                    )}
+                    {items.map((item, index) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            aria-label={t('comments.selectOne', { author: item.authorName })}
+                            checked={selected.has(item.id)}
+                            onChange={() => toggleSelected(item.id)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <p className="m-0 max-w-md whitespace-pre-wrap">{excerpt(item.body)}</p>
+                          {item.moderation.flagged === true && (
+                            <p className="m-0 text-xs text-destructive" role="status">
+                              {t('comments.flagged', {
+                                severity: t(`assist.severity.${item.moderation.severity ?? 'low'}`),
+                              })}
+                            </p>
+                          )}
+                          <ModerationCheck
+                            token={token}
+                            text={item.body}
+                            contextLabel={t('comments.moderationRegion', {
+                              number: pageIndex * PAGE_SIZE + index + 1,
+                              author: item.authorName,
+                            })}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <span>{item.authorName}</span>
+                          <br />
+                          <span className="text-xs text-muted-foreground">{item.authorEmail}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs">
+                            {item.collection}/{item.entryId}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <time dateTime={item.createdAt}>
+                            {new Date(item.createdAt).toLocaleString()}
+                          </time>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {item.status !== 'approved' && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                disabled={busy}
+                                onClick={() =>
+                                  void withBusy(async () => {
+                                    await setCommentStatus(token, item.id, 'approved')
+                                  })
+                                }
+                              >
+                                {t('comments.action.approve')}
+                              </Button>
+                            )}
+                            {item.status !== 'spam' && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                disabled={busy}
+                                onClick={() =>
+                                  void withBusy(async () => {
+                                    await setCommentStatus(token, item.id, 'spam')
+                                  })
+                                }
+                              >
+                                {t('comments.action.spam')}
+                              </Button>
+                            )}
+                            {item.status !== 'trash' && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                disabled={busy}
+                                onClick={() =>
+                                  void withBusy(async () => {
+                                    await setCommentStatus(token, item.id, 'trash')
+                                  })
+                                }
+                              >
+                                {t('comments.action.trash')}
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              disabled={busy}
+                              onClick={() =>
+                                setReplyTarget(replyTarget === item.id ? null : item.id)
+                              }
+                            >
+                              {t('comments.action.reply')}
+                            </Button>
+                            {item.status === 'trash' && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="destructive"
+                                disabled={busy}
+                                onClick={() =>
+                                  void withBusy(async () => {
+                                    if (!window.confirm(t('comments.purgeConfirm'))) return
+                                    await purgeComment(token, item.id)
+                                  })
+                                }
+                              >
+                                {t('comments.action.purge')}
+                              </Button>
+                            )}
+                          </div>
+                          {replyTarget === item.id && (
+                            <form
+                              className="mt-2 flex flex-col gap-2"
+                              onSubmit={(event) => {
+                                event.preventDefault()
+                                const user =
+                                  auth.state.status === 'authenticated' ? auth.state.user : null
+                                void withBusy(async () => {
+                                  await replyToComment(token, item.id, {
+                                    authorName: user?.email ?? 'Site',
+                                    authorEmail: user?.email ?? '',
+                                    body: replyBody,
+                                  })
+                                  setReplyBody('')
+                                  setReplyTarget(null)
+                                })
+                              }}
+                            >
+                              <Field label={t('comments.replyLabel')}>
+                                {(control) => (
+                                  <textarea
+                                    {...control}
+                                    className="w-full rounded-md border border-input bg-background p-2 text-sm"
+                                    value={replyBody}
+                                    onChange={(event) => setReplyBody(event.target.value)}
+                                    required
+                                    rows={3}
+                                  />
+                                )}
+                              </Field>
+                              <Button
+                                type="submit"
+                                size="sm"
+                                disabled={busy || replyBody.trim() === ''}
+                              >
+                                {t('comments.replySubmit')}
+                              </Button>
+                            </form>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableRoot>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t('comments.total', { count: total })}
+              </p>
+            </CardBody>
+          </Card>
+        )}
+        {pager}
       </div>
     </section>
   )

@@ -224,6 +224,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // recovery window), so 409 fits better than 404.
   API_KEY_PURGE_INVALID: 409,
   API_KEY_RECOVERY_INVALID: 409,
+  APPROVAL_REQUEST_INVALID: 400,
+  APPROVAL_REQUEST_UNKNOWN: 404,
+  APPROVAL_ALREADY_DECIDED: 409,
+  APPROVAL_QUEUE_UNAVAILABLE: 503,
+  APPROVAL_REQUEST_CANCELLED: 409,
 
   AGENT_UNKNOWN: 404,
   // Pre-existing (L5), never mapped before — a malformed create/update body

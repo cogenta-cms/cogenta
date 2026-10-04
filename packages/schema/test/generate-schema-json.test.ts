@@ -56,7 +56,26 @@ function fieldNamed(name: string): SchemaDocumentField {
 describe('buildSchemaDocument', () => {
   it('states which version of the contract it describes', () => {
     expect(document.contract).toBe(SCHEMA_DOCUMENT_CONTRACT)
-    expect(SCHEMA_DOCUMENT_CONTRACT).toBe('schema@2.0')
+    expect(SCHEMA_DOCUMENT_CONTRACT).toBe('schema@2.1')
+  })
+
+  it('preserves enabled, disabled and absent editorial workflows across JSON serialization', () => {
+    const enabled = defineCollection({ ...author, name: 'reviewed', workflow: { enabled: true } })
+    const disabled = defineCollection({
+      ...author,
+      name: 'unreviewed',
+      workflow: { enabled: false },
+    })
+    const output = JSON.parse(renderSchemaJson([author, enabled, disabled])) as {
+      collections: { name: string; workflow?: { enabled: boolean } }[]
+    }
+    expect(output.collections.find((item) => item.name === 'reviewed')?.workflow).toEqual({
+      enabled: true,
+    })
+    expect(output.collections.find((item) => item.name === 'unreviewed')?.workflow).toEqual({
+      enabled: false,
+    })
+    expect(output.collections.find((item) => item.name === 'author')).not.toHaveProperty('workflow')
   })
 
   it('tells the admin whether a collection has a trash, and for how long', () => {
@@ -236,7 +255,7 @@ describe('renderSchemaJson', () => {
     const text = renderSchemaJson([article, author])
 
     expect(text.endsWith('}\n')).toBe(true)
-    expect(text.split('\n')[1]).toBe('  "contract": "schema@2.0",')
+    expect(text.split('\n')[1]).toBe('  "contract": "schema@2.1",')
   })
 
   it('survives the round-trip it exists for', () => {

@@ -1,4 +1,4 @@
-import { type JSX, useCallback, useEffect, useState } from 'react'
+import { type JSX, useCallback, useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ModerationVerdict } from '../api/assist-client.js'
 import { getAssistCapabilities, runModerate } from '../api/assist-client.js'
@@ -17,10 +17,16 @@ import { ApiError } from '../api/client.js'
 export interface ModerationCheckProps {
   readonly token: string
   readonly text: string
+  readonly contextLabel?: string
 }
 
-export function ModerationCheck({ token, text }: ModerationCheckProps): JSX.Element | null {
+export function ModerationCheck({
+  token,
+  text,
+  contextLabel,
+}: ModerationCheckProps): JSX.Element | null {
   const { t } = useTranslation()
+  const headingId = useId()
   const [available, setAvailable] = useState<boolean | null>(null)
   const [running, setRunning] = useState(false)
   const [verdict, setVerdict] = useState<ModerationVerdict | null>(null)
@@ -61,8 +67,11 @@ export function ModerationCheck({ token, text }: ModerationCheckProps): JSX.Elem
   }
 
   return (
-    <section aria-labelledby="moderation-check-heading">
-      <h2 id="moderation-check-heading">{t('assist.moderateHeading')}</h2>
+    <section
+      aria-labelledby={contextLabel === undefined ? headingId : undefined}
+      aria-label={contextLabel}
+    >
+      <h2 id={headingId}>{t('assist.moderateHeading')}</h2>
       <button type="button" disabled={!hasText || running} onClick={() => void check()}>
         {running ? t('assist.running') : t('assist.moderateButton')}
       </button>

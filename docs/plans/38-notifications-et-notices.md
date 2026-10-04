@@ -193,3 +193,12 @@ dépendance à une infrastructure temps réel pour afficher une cloche.
 - Quelles notices sont rejetables définitivement, et lesquelles reviennent tant que la
   condition tient. Recommandation : une condition de sécurité ou de perte de données
   revient toujours.
+
+
+## Présentation compacte des recommandations — octobre 2026
+
+Les notices non critiques conservent leur titre, leur action et leur commande de
+masquage visibles. Leur explication se déplie dans un élément natif `details`,
+accessible au clavier. Les notices critiques de danger restent intégralement
+visibles, conformément à la décision 0021 ; aucun changement de permissions, de
+persistance ni d’obligation MFA n’accompagne cette présentation.

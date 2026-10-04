@@ -1,5 +1,7 @@
+import type { CollectionDefinition } from '@cogenta/schema'
 import { convertContent, mediaUrlsOf } from './content-convert.js'
 import { parseWxr } from './parse.js'
+import { assertWordPressCollectionsCompatible } from './target-preflight.js'
 import type { WxrItem } from './types.js'
 
 /**
@@ -71,7 +73,11 @@ function slugConflictsOf(
     .map(([slug, wpIds]) => ({ kind, slug, wpIds }))
 }
 
-export function analyzeWordPress(xml: string): WordPressPreviewReport {
+export function analyzeWordPress(
+  xml: string,
+  collections: readonly CollectionDefinition[] = [],
+): WordPressPreviewReport {
+  assertWordPressCollectionsCompatible(collections)
   const parsed = parseWxr(xml)
 
   const posts = parsed.items.filter((item) => item.postType === 'post')

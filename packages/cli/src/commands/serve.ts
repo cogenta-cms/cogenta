@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url'
 import {
   assertDecisionAllowed,
   createFileAgentDeclarationStore,
+  createFileApprovalQueue,
   createFilePromptTemplateStore,
   createFileProviderConfigStore,
   createProgressJobStore,
@@ -37,6 +38,7 @@ import {
   buildContentSchema,
   type ConfigStatusInput,
   createAdminThemeRouter,
+  createAgentApprovalsRouter,
   createAgentSkillsRouter,
   createAgentsRouter,
   createAnalyticsRouter,
@@ -253,6 +255,7 @@ import {
   type ImportRun,
   importWordPress,
   parseJsonImport,
+  preflightWordPressTarget,
   undoImport,
 } from '@cogenta/import'
 import { createMcpConnectionStore, ensureMcpConnectionTables } from '@cogenta/mcp'
@@ -276,6 +279,7 @@ import {
   type MarketplaceCatalogEntry,
   type PluginBlockProvision,
   type PluginWidgetProvision,
+  readPluginCode,
 } from '@cogenta/plugins'
 import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
@@ -336,11 +340,6 @@ import {
   type TaxonomyDefinition,
   type TaxonomyStore,
   type TaxonomyTerm,
-  withLifecycleEvents,
-  withReadOnlyStore,
-  withRedirectTracking,
-  withScheduledPublishEnqueue,
-  withSearchIndexing,
 } from '@cogenta/schema'
 import {
   canonicalUrl,
@@ -390,9 +389,15 @@ import {
   buildAgentRuntime,
   PROVIDERS_SUBDIR,
 } from './agent-runtime.js'
-import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './assistant.js'
+import { type AssistantAssembly, buildAssistant } from './assistant.js'
 import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
+import { createDecoratedContentStores } from './decorated-content-stores.js'
+import {
+  DEFAULT_FAVICON_CONTENT_TYPE,
+  DEFAULT_FAVICON_PATH,
+  defaultFaviconBytes,
+} from './default-favicon.js'
 import { DEFAULT_LOGO_CONTENT_TYPE, DEFAULT_LOGO_PATH, defaultLogoBytes } from './default-logo.js'
 import { runDoctor } from './doctor.js'
 import {
@@ -874,6 +879,7 @@ interface Site {
    * working unchanged with this omitted.
    */
   readonly agentsRouter?: AgentsRouter
+  readonly agentApprovalsRouter?: ReturnType<typeof createAgentApprovalsRouter>
   /** `/api/providers` — L22 task 1bis: which LLM providers this site has enabled, with a masked key. Same optionality as `agentsRouter`, built alongside it from the same `agentsRuntimeConfig`. */
   readonly providersRouter?: ProvidersRouter
   /** `/api/agent-skills` — L22 task 1bis: named instruction text an agent loads into its context. Same optionality as `agentsRouter`. */
@@ -1533,7 +1539,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // Forms (contract G, ADR-0026 + fiche 47). Always mounted — see `Site.formStore`'s
   // own comment for why this, unlike commerce, is not opt-in.
   await ensureFormsTables(db)
-  const formStore = createFormStore(db)
+  const formStore = createFormStore(db, Date.now, { defaultLocale: site.defaultLocale })
   // Derived, never the raw signing key itself — same discipline
   // `commentsIpHashSecret` already follows a little further down this
   // function: a leak of this one purpose-specific value must not also be a
@@ -1546,6 +1552,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     .digest('hex')
   const formsRouter = createFormsRouter({
     forms: formStore,
+    defaultLocale: site.defaultLocale,
     // Falls back to an in-process limiter rather than leaving the public
     // submit route unprotected when no shared driver was configured (R1) —
     // the same fallback `resolveActor`'s own `requestQuota` parameter takes.
@@ -1577,104 +1584,28 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const scheduledPublishFailures = createScheduledPublishFailureStore(db)
   await scheduledPublishFailures.ensureTable()
 
-  const stores = new Map<string, ContentStore>()
-  const storeFor = (collection: CollectionDefinition): ContentStore => {
-    const existing = stores.get(collection.name)
-    if (existing !== undefined) return existing
-    // `siblings` is what lets `delete()` enforce `restrict` in application
-    // code (ADR-0022): trashing is an UPDATE, so the foreign key has nothing
-    // left to refuse at that moment.
-    const created = createContentStore({
-      db,
-      collection,
-      siblings: collections,
-      defaultLocale: site.defaultLocale,
-    })
-    const guarded = readOnly ? withReadOnlyStore(created) : created
-    // Writes the redirect a slug rename on a *published* entry owes (fiche 12
-    // task 3). Placed right after the read-only guard, for the same reason
-    // scheduling is: a write the guard refused must never leave a redirect
-    // behind either.
-    const tracked = withRedirectTracking(guarded, {
-      collection,
-      redirects,
-      onError: (error) =>
-        logger.error('redirect tracking failed', {
-          collection: collection.name,
-          error: String(error),
-        }),
-    })
-    // Queues the real publish job for a save that lands as `status:
-    // 'scheduled'`. Placed right after the read-only guard so a write that
-    // guard refused never reaches the queue either.
-    const schedulable = withScheduledPublishEnqueue(tracked, {
-      collection,
-      queue: scheduledPublishQueue,
-      onError: (error) =>
-        logger.error('scheduled publish enqueue failed', {
-          collection: collection.name,
-          error: String(error),
-        }),
-    })
-    // Outermost, so a read-only refusal happens *before* anything is indexed:
-    // a write that never landed must not change the index either.
-    const indexed = withSearchIndexing(schedulable, {
-      collection,
-      index: searchIndex,
-      onError: (error) =>
-        logger.error('search index write failed', {
-          collection: collection.name,
-          error: String(error),
-        }),
-    })
-    // The semantic half, wrapped the same way and for the same reason (L18
-    // task 5): REST and GraphQL are handed the same store instances, so one
-    // wrap covers both and neither can write content the index never hears
-    // about. Absent entirely when no embedder is available.
-    const stored =
-      options.assistant?.vectors === undefined
-        ? indexed
-        : withVectorIndexing(indexed, {
-            collection,
+  const { stores, storeFor } = createDecoratedContentStores({
+    db,
+    collections,
+    defaultLocale: site.defaultLocale,
+    logger,
+    readOnly,
+    redirects,
+    scheduledPublishQueue,
+    searchIndex,
+    ...(options.assistant?.vectors === undefined
+      ? {}
+      : {
+          vectors: {
             siteId: site.url,
             store: options.assistant.vectors.store,
             embeddings: options.assistant.vectors.embeddings,
-            // L22 task 4's per-collection toggle, read live on every write.
             isEnabled: options.assistant.vectors.isEnabled,
-            onError: (error) =>
-              logger.error('vector index write failed', {
-                collection: collection.name,
-                error: String(error),
-              }),
             onIndexed: () => options.assistant?.vectorInfo?.noteIndexed(),
-          })
-    // Outermost of all: an event must describe a write that really landed, so
-    // it fires after the read-only guard has had its chance to refuse and
-    // after the index has been brought back in step. A receiver that rebuilt a
-    // page from an event the store then rejected would serve a page that never
-    // existed.
-    const observed =
-      options.onContentEvent == null
-        ? stored
-        : withLifecycleEvents(stored, {
-            collection,
-            emit: options.onContentEvent,
-            onError: (error) =>
-              logger.error('content webhook emit failed', {
-                collection: collection.name,
-                error: String(error),
-              }),
-          })
-    stores.set(collection.name, observed)
-    return observed
-  }
-  // The gateway (below) reads `stores` directly rather than through
-  // `storeFor` — REST's own lazy population left it empty for any
-  // collection no REST request had touched yet, which the theme-render
-  // fallback (an early GraphQL-gateway caller, not a REST one) hit on its
-  // very first request. Populating eagerly here means both callers see the
-  // same, already-complete map.
-  for (const collection of collections) storeFor(collection)
+          },
+        }),
+    ...(options.onContentEvent == null ? {} : { onContentEvent: options.onContentEvent }),
+  })
 
   // Trash auto-purge (fiche 07 task 5): the collections that actually have a
   // trash, and the window each one keeps it for — computed once, since
@@ -1749,7 +1680,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     readonly targetCollection?: string
   }): Promise<ImportRun> {
     if (input.source === 'wordpress') {
-      const analysis = analyzeWordPress(input.text)
+      await preflightWordPressTarget(db, collections)
+      const analysis = analyzeWordPress(input.text, collections)
       const run = await importTracking.createRun({
         source: 'wordpress',
         createdBy: input.createdBy,
@@ -1815,12 +1747,14 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     }
 
     const text = await readImportSource(input.runId)
+    if (run.source === 'wordpress') await preflightWordPressTarget(db, collections)
     await importTracking.updateRun(input.runId, { status: 'running' })
 
     try {
       if (run.source === 'wordpress') {
         const report = await importWordPress(text, {
           db,
+          collections,
           storage,
           tracking: importTracking,
           runId: input.runId,
@@ -2033,12 +1967,22 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // `buildSiteManifest`). `agentsRuntimeConfig` is optional so a caller
   // that builds a bare `Site` by hand (tests included) is unaffected —
   // `runServe` always supplies it.
+  const approvalController = new AbortController()
   const agentsRuntime: AgentRuntimeAssembly | undefined =
     options.agentsRuntimeConfig === undefined
       ? undefined
       : await buildAgentRuntime({
           dataDir: options.agentsRuntimeConfig.dataDir,
           projectRoot: options.agentsRuntimeConfig.projectRoot,
+          approvalQueue: createFileApprovalQueue({
+            signal: approvalController.signal,
+            directory: join(
+              options.agentsRuntimeConfig.projectRoot,
+              '.cogenta',
+              'agents-runtime',
+              'approvals',
+            ),
+          }),
           // Fiche 58 task 4 — every enabled connection's checked tools are
           // merged into this site's real tool registry, wrapped by the same
           // sandboxed `McpClient` a "test connection" probe uses
@@ -2957,8 +2901,6 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         registry: paymentRegistry,
         config: paymentConfig,
         testMode: options.payment?.testMode ?? true,
-        // Informational only — see `router.ts`'s own comment: no inbound
-        // route answers this path yet (deferred, `BLOCKERS.md`).
         webhookUrl: `${site.url.replace(/\/+$/u, '')}/api/commerce/payments/webhook`,
       },
       permissions: commercePermissions,
@@ -3192,6 +3134,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(agentsRuntime === undefined
       ? {}
       : {
+          agentApprovalsRouter: createAgentApprovalsRouter({
+            queue: agentsRuntime.approvalQueue,
+            audit: auth.audit,
+            logger,
+          }),
           agentsRouter: createAgentsRouter({
             agents: agentsRuntime.agentRegistry,
             audit: auth.audit,
@@ -3231,7 +3178,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       // this function — `@cogenta/import`'s real importer, unchanged, never
       // reimplemented here (R9: this package gains no dependency on it, only
       // `@cogenta/cli` does, which already had one for the terminal command).
-      runWordPressImport: (xml) => importWordPress(xml, { db, storage, comments: commentsStore }),
+      runWordPressImport: (xml) =>
+        importWordPress(xml, { db, storage, comments: commentsStore, collections }),
       analyze: analyzeImportSource,
       apply: applyImportRun,
       getRun: (id) => importTracking.getRun(id),
@@ -3364,6 +3312,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     tickTrashPurge,
     tickChannelNotifications: () => channelDispatcher.flushDue(),
     dispose: async () => {
+      approvalController.abort()
       // Fiche 58 task 4 — kills every spawned MCP server process and
       // removes every sandbox working directory before the database (and
       // everything else) goes away. A no-op when no connection was wired.
@@ -3521,6 +3470,10 @@ function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestReque
  */
 function toCommerceRequest(req: IncomingMessage, url: URL, body: unknown): CommerceRequest {
   const query: Record<string, string | undefined> = {}
+  const headers: Record<string, string> = {}
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (typeof value === 'string') headers[name] = value
+  }
   for (const key of url.searchParams.keys()) {
     query[key] = url.searchParams.get(key) ?? undefined
   }
@@ -3528,6 +3481,7 @@ function toCommerceRequest(req: IncomingMessage, url: URL, body: unknown): Comme
     method: req.method ?? 'GET',
     path: url.pathname,
     query,
+    headers,
     ...(body === undefined ? {} : { body }),
   }
 }
@@ -5185,6 +5139,41 @@ export function createRequestListener(
         return
       }
 
+      // Browser fallback requests are public and resolve the current site
+      // identity, so a saved favicon takes priority without a server restart.
+      if (url.pathname === DEFAULT_FAVICON_PATH) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.writeHead(405, { allow: 'GET, HEAD' }).end()
+          return
+        }
+        const [identity, branding] = await Promise.all([
+          identityForSite(site),
+          brandingForSite(site),
+        ])
+        const ids = [identity.faviconMediaId, branding.customLogoMediaId].filter(
+          (id): id is string => id !== null && id !== '',
+        )
+        const assets = await loadRenderMedia(site, ids)
+        const chosen = ids.find((id) => assets.get(id)?.kind === 'image')
+        if (chosen !== undefined) {
+          res
+            .writeHead(302, {
+              location: `/_image?id=${encodeURIComponent(chosen)}&w=64`,
+              'cache-control': 'public, max-age=0, must-revalidate',
+            })
+            .end()
+          return
+        }
+        const bytes = Buffer.from(defaultFaviconBytes())
+        res.writeHead(200, {
+          'content-type': DEFAULT_FAVICON_CONTENT_TYPE,
+          'content-length': bytes.length,
+          'cache-control': 'public, max-age=0, must-revalidate',
+        })
+        res.end(req.method === 'HEAD' ? undefined : bytes)
+        return
+      }
+
       // Cogenta's own logo, served for the public footer's default branding
       // (fiche L21 task 8) — public and unauthenticated for the same reason
       // `/_image` is: a visitor's browser fetches it with no session. The
@@ -5412,7 +5401,11 @@ export function createRequestListener(
       // not stretch to "refund" or "issue an invoice".
       if (url.pathname.startsWith('/api/commerce')) {
         const body =
-          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+          req.method === 'GET' || req.method === 'DELETE'
+            ? undefined
+            : url.pathname === '/api/commerce/payments/webhook'
+              ? (await readRawBodyBuffer(req))?.toString('utf8')
+              : await readBody(req)
         const request = toCommerceRequest(req, url, body)
         const response = await site.commerceRouter.handle(request, context.actor)
         // Two routes whose body is not JSON: an invoice PDF (bytes) and the
@@ -6360,6 +6353,7 @@ export function createRequestListener(
           const grantStore = createPluginGrantStore(site.db)
           const disableStore = createPluginDisableStore(site.db)
           const granted = new Map<string, readonly string[]>()
+          const runtimeState = new Map<string, 'loaded' | 'restart-required'>()
           const off = new Map<
             string,
             { reason: string; disabledAt: string; details: string | null }
@@ -6372,6 +6366,19 @@ export function createRequestListener(
             })
           }
           for (const plugin of installed.plugins) {
+            let state: 'loaded' | 'restart-required' = 'restart-required'
+            try {
+              const code = await readPluginCode(plugin.packageRoot, plugin.manifest)
+              const fingerprint = createHash('sha256')
+                .update(`${JSON.stringify(plugin.manifest)}\n${code}`)
+                .digest('hex')
+              if (extras.pluginRuntime?.loadedFingerprints[plugin.manifest.name] === fingerprint) {
+                state = 'loaded'
+              }
+            } catch {
+              // Installed files may no longer match readable code loaded at boot.
+            }
+            runtimeState.set(plugin.manifest.name, state)
             granted.set(
               plugin.manifest.name,
               (await grantStore.listGrants(plugin.manifest.name)).map((grant) => grant.capability),
@@ -6385,6 +6392,7 @@ export function createRequestListener(
                   name: plugin.manifest.name,
                   title: plugin.manifest.title ?? null,
                   version: plugin.manifest.version,
+                  runtimeState: runtimeState.get(plugin.manifest.name) ?? 'restart-required',
                   capabilities: plugin.manifest.capabilities,
                   granted: granted.get(plugin.manifest.name) ?? [],
                   provides: plugin.manifest.provides,
@@ -6418,6 +6426,7 @@ export function createRequestListener(
             res.end(JSON.stringify({ data: removal }))
             return
           }
+          await extras.pluginRuntime?.unloadPlugin(pluginName)
           await ensurePluginTables(site.db)
           const grantStore = createPluginGrantStore(site.db)
           for (const grant of await grantStore.listGrants(pluginName)) {
@@ -6987,6 +6996,15 @@ export function createRequestListener(
         return
       }
 
+      if (
+        url.pathname.startsWith('/api/agent-approvals') &&
+        site.agentApprovalsRouter !== undefined
+      ) {
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.agentApprovalsRouter.handle(request, context.actor))
+        return
+      }
       if (url.pathname.startsWith('/api/agents') && site.agentsRouter !== undefined) {
         // L22 task 1: create/update/run all carry a JSON body — the pre-L22
         // enable/disable-only router never needed one, this one does.
@@ -7601,6 +7619,14 @@ export function createRequestListener(
       // a page has no meaningful response to any other method.
       if (req.method === 'GET') {
         const renderOptions = {
+          onInvalidCollectionList: (report: {
+            readonly path: string
+            readonly key: string
+            readonly collection: string
+            readonly code: string
+          }) => {
+            logger.warn('Invalid legacy collection list omitted', report)
+          },
           collections: site.collections,
           gateway: site.gateway,
           site: await renderSiteFor(site),

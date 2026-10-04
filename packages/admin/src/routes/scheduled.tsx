@@ -12,6 +12,7 @@ import {
   type SchedulerMode,
 } from '../api/scheduled-tasks-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useLocalPagination } from '../lib/use-local-pagination.js'
 import {
   Button,
   Card,
@@ -21,6 +22,7 @@ import {
   Modal,
   Notice,
   Pagination,
+  TableRoot,
 } from '../ui/index.js'
 
 /**
@@ -37,7 +39,7 @@ import {
  */
 
 const QUEUE_FETCH_LIMIT = 500
-const QUEUE_PAGE_SIZE = 25
+const PAGE_SIZE = 20
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms} ms`
@@ -57,7 +59,6 @@ export function ScheduledRoute(): JSX.Element | null {
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<ScheduledTaskState | null>(null)
-  const [queuePage, setQueuePage] = useState(0)
   const [lastResult, setLastResult] = useState<{
     readonly name: string
     readonly summary: string | null
@@ -82,7 +83,6 @@ export function ScheduledRoute(): JSX.Element | null {
       setMode(schedulerMode)
       setTasks(list)
       setJobs(queued)
-      setQueuePage(0)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('scheduled.loadError'))
     }
@@ -92,7 +92,22 @@ export function ScheduledRoute(): JSX.Element | null {
     void load()
   }, [load])
 
-  if (token === null || !isAdmin) return null
+  const taskPagination = useLocalPagination(tasks, '', PAGE_SIZE)
+  const queueJobs = [
+    ...jobs.filter((job) => job.status === 'pending' || job.status === 'running'),
+    ...jobs.filter((job) => job.status === 'failed'),
+  ]
+  const queuePagination = useLocalPagination(queueJobs, '', PAGE_SIZE)
+
+  if (token === null) return null
+  if (!isAdmin) {
+    return (
+      <section aria-labelledby="scheduled-heading" className="flex flex-col gap-4">
+        <h1 id="scheduled-heading">{t('scheduled.heading')}</h1>
+        <p role="alert">{t('common.adminPageOnly')}</p>
+      </section>
+    )
+  }
 
   async function runTask(task: ScheduledTaskState): Promise<void> {
     if (token === null) return
@@ -128,21 +143,10 @@ export function ScheduledRoute(): JSX.Element | null {
     }
   }
 
-  const failedJobs = jobs.filter((job) => job.status === 'failed')
-  const activeJobs = jobs.filter((job) => job.status === 'pending' || job.status === 'running')
-  // One window over "what needs attention" — active first (what is running
-  // right now), failed after (what needs a retry) — same order the two
-  // separate lists below have always rendered in, just windowed together.
-  const queueJobs = [...activeJobs, ...failedJobs]
-  const queuePageCount = Math.max(1, Math.ceil(queueJobs.length / QUEUE_PAGE_SIZE))
-  const visibleQueueJobs = queueJobs.slice(
-    queuePage * QUEUE_PAGE_SIZE,
-    (queuePage + 1) * QUEUE_PAGE_SIZE,
-  )
-  const visibleActiveJobs = visibleQueueJobs.filter(
+  const visibleActiveJobs = queuePagination.items.filter(
     (job) => job.status === 'pending' || job.status === 'running',
   )
-  const visibleFailedJobs = visibleQueueJobs.filter((job) => job.status === 'failed')
+  const visibleFailedJobs = queuePagination.items.filter((job) => job.status === 'failed')
 
   return (
     <section aria-labelledby="scheduled-heading" className="flex flex-col gap-6">
@@ -169,70 +173,101 @@ export function ScheduledRoute(): JSX.Element | null {
         </Notice>
       )}
 
-      <Card aria-labelledby="scheduled-tasks-heading">
+      <Card>
         <CardHeader>
           <CardTitle>
             <h2 id="scheduled-tasks-heading">{t('scheduled.tasksHeading')}</h2>
           </CardTitle>
         </CardHeader>
         <CardBody>
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr>
-                <th scope="col">{t('scheduled.columnTask')}</th>
-                <th scope="col">{t('scheduled.columnLastRun')}</th>
-                <th scope="col">{t('scheduled.columnDuration')}</th>
-                <th scope="col">{t('scheduled.columnResult')}</th>
-                <th scope="col">{t('scheduled.columnNextRun')}</th>
-                <th scope="col">{t('scheduled.columnActions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.map((task) => (
-                <tr key={task.name}>
-                  <th scope="row" className="font-normal">
-                    <span className="font-medium">
-                      {t(`scheduled.taskName.${task.name}`, { defaultValue: task.description })}
-                    </span>
-                    {task.overdue && (
-                      <span
-                        role="status"
-                        className="ml-2 rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive"
-                      >
-                        {t('scheduled.overdue')}
-                      </span>
-                    )}
-                  </th>
-                  <td>
-                    {task.lastRun === null
-                      ? t('scheduled.never')
-                      : dateFormatter(task.lastRun.startedAt)}
-                  </td>
-                  <td>{task.lastRun === null ? '—' : formatDuration(task.lastRun.durationMs)}</td>
-                  <td>
-                    {task.lastRun === null
-                      ? '—'
-                      : t(
-                          task.lastRun.outcome === 'success'
-                            ? 'scheduled.outcomeSuccess'
-                            : 'scheduled.outcomeError',
-                        )}
-                  </td>
-                  <td>{dateFormatter(task.nextRunAt)}</td>
-                  <td>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={running === task.name}
-                      onClick={() => requestRun(task)}
-                    >
-                      {running === task.name ? t('scheduled.running') : t('scheduled.runButton')}
-                    </Button>
-                  </td>
+          <TableRoot
+            label={t('scheduled.tasksHeading')}
+            className="min-w-0 max-w-full overflow-x-auto"
+          >
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr>
+                  <th scope="col">{t('scheduled.columnTask')}</th>
+                  <th scope="col">{t('scheduled.columnLastRun')}</th>
+                  <th scope="col">{t('scheduled.columnDuration')}</th>
+                  <th scope="col">{t('scheduled.columnResult')}</th>
+                  <th scope="col">{t('scheduled.columnNextRun')}</th>
+                  <th scope="col">{t('scheduled.columnActions')}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {taskPagination.items.map((task) => (
+                  <tr key={task.name}>
+                    <th scope="row" className="font-sans font-normal normal-case tracking-normal">
+                      <span className="font-medium">
+                        {t(`scheduled.taskName.${task.name}`, { defaultValue: task.description })}
+                      </span>
+                      {task.overdue && (
+                        <span
+                          role="status"
+                          className="ml-2 rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive"
+                        >
+                          {t('scheduled.overdue')}
+                        </span>
+                      )}
+                    </th>
+                    <td>
+                      {task.lastRun === null
+                        ? t('scheduled.never')
+                        : dateFormatter(task.lastRun.startedAt)}
+                    </td>
+                    <td>{task.lastRun === null ? '—' : formatDuration(task.lastRun.durationMs)}</td>
+                    <td>
+                      {task.lastRun === null
+                        ? '—'
+                        : t(
+                            task.lastRun.outcome === 'success'
+                              ? 'scheduled.outcomeSuccess'
+                              : 'scheduled.outcomeError',
+                          )}
+                    </td>
+                    <td>{dateFormatter(task.nextRunAt)}</td>
+                    <td>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={running === task.name}
+                        aria-label={
+                          running === task.name
+                            ? `${t('scheduled.running')} : ${t(`scheduled.taskName.${task.name}`, { defaultValue: task.description })}`
+                            : t('scheduled.runTaskAction', {
+                                name: t(`scheduled.taskName.${task.name}`, {
+                                  defaultValue: task.description,
+                                }),
+                              })
+                        }
+                        onClick={() => requestRun(task)}
+                      >
+                        {running === task.name ? t('scheduled.running') : t('scheduled.runButton')}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableRoot>
+          {taskPagination.pageCount > 1 && (
+            <nav aria-label={t('scheduled.taskPagination')}>
+              <Pagination
+                variant="pages"
+                page={taskPagination.page}
+                pageCount={taskPagination.pageCount}
+                onPageChange={taskPagination.onPageChange}
+                previousLabel={t('lists.previous')}
+                nextLabel={t('lists.next')}
+                pageInfo={t('lists.pageInfo', {
+                  from: taskPagination.start + 1,
+                  to: taskPagination.start + taskPagination.items.length,
+                  total: taskPagination.total,
+                })}
+              />
+            </nav>
+          )}
         </CardBody>
       </Card>
 
@@ -243,40 +278,54 @@ export function ScheduledRoute(): JSX.Element | null {
           </CardTitle>
         </CardHeader>
         <CardBody className="flex flex-col gap-3">
-          {jobs.length === 0 ? (
+          {jobs.length >= QUEUE_FETCH_LIMIT && (
+            <p className="m-0 text-sm text-muted-foreground">
+              {t('scheduled.queueWindowNotice', { count: QUEUE_FETCH_LIMIT })}
+            </p>
+          )}
+          {queueJobs.length === 0 ? (
             <p className="m-0 text-sm text-muted-foreground">{t('scheduled.queueEmpty')}</p>
           ) : (
             <>
               <ul className="m-0 flex flex-col gap-1 pl-0 list-none text-sm">
                 {visibleActiveJobs.map((job) => (
-                  <li key={job.id}>
+                  <li key={job.id} className="break-words [overflow-wrap:anywhere]">
                     {job.id} — {t(`scheduled.jobStatus.${job.status}`)}
                   </li>
                 ))}
                 {visibleFailedJobs.map((job) => (
-                  <li key={job.id} className="flex items-center gap-2">
-                    <span>
+                  <li key={job.id} className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                       {job.id} — {t('scheduled.jobStatus.failed')}
                     </span>
-                    <Button variant="ghost" size="sm" onClick={() => void retryJob(job.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={t('scheduled.retryJobAction', { id: job.id })}
+                      onClick={() => void retryJob(job.id)}
+                    >
                       {t('scheduled.retryButton')}
                     </Button>
                   </li>
                 ))}
               </ul>
-              <Pagination
-                variant="pages"
-                page={queuePage}
-                pageCount={queuePageCount}
-                onPageChange={setQueuePage}
-                previousLabel={t('scheduled.previousPage')}
-                nextLabel={t('scheduled.nextPage')}
-                pageInfo={t('scheduled.queuePageInfo', {
-                  from: queueJobs.length === 0 ? 0 : queuePage * QUEUE_PAGE_SIZE + 1,
-                  to: Math.min(queueJobs.length, (queuePage + 1) * QUEUE_PAGE_SIZE),
-                  total: queueJobs.length,
-                })}
-              />
+              {queuePagination.pageCount > 1 && (
+                <nav aria-label={t('scheduled.queuePagination')}>
+                  <Pagination
+                    variant="pages"
+                    page={queuePagination.page}
+                    pageCount={queuePagination.pageCount}
+                    onPageChange={queuePagination.onPageChange}
+                    previousLabel={t('scheduled.previousPage')}
+                    nextLabel={t('scheduled.nextPage')}
+                    pageInfo={t('scheduled.queuePageInfo', {
+                      from: queueJobs.length === 0 ? 0 : queuePagination.start + 1,
+                      to: queuePagination.start + queuePagination.items.length,
+                      total: queueJobs.length,
+                    })}
+                  />
+                </nav>
+              )}
             </>
           )}
         </CardBody>

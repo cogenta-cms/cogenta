@@ -18,6 +18,7 @@ import {
 import type { CollectionDefinition, ContentStore, MediaUsageReport } from '@cogenta/schema'
 import { findMediaUsage } from '@cogenta/schema'
 import { z } from 'zod'
+import { assertMediaAccess } from '../access/media-permissions.js'
 import type { Actor } from '../types.js'
 import {
   errorResponse,
@@ -60,10 +61,8 @@ export { variantKeyFor }
  * assets (fiche 11 — the media library rewrite).
  *
  * Every route here requires an authenticated actor (`actor.id !== null`):
- * there is no per-collection permission model for media the way there is for
- * content, so the only gate today is "signed in at all" — a known gap,
- * tightened once L4's agent tool permissions land (contract C already names
- * `media.read`/`media.write` scopes for that).
+ * viewer/editor/admin may read; editor/admin may mutate assets and folders.
+ * The shared media permission policy also scopes MCP tools (R4).
  *
  * **Two upload transports, both live.** `multipart/form-data` is the real
  * one (fiche 11 task 1) — a `FormData` upload streams to the server without
@@ -391,6 +390,17 @@ function parseBooleanField(raw: string | undefined, fallback: boolean): boolean 
 }
 
 function normaliseMultipartUpload(form: MultipartFormData): NormalisedUpload {
+  const fields: Record<string, string> = {}
+  for (const [name, value] of Object.entries(form.fields)) {
+    if (typeof value !== 'string') {
+      throw new CogentaError({
+        code: 'MEDIA_INVALID',
+        message: `The upload field "${name}" was submitted more than once.`,
+        hint: 'Send each media metadata field once.',
+      })
+    }
+    fields[name] = value
+  }
   const file = form.files.find((candidate: MultipartFile) => candidate.fieldName === 'file')
   if (file === undefined) {
     throw new CogentaError({
@@ -400,13 +410,13 @@ function normaliseMultipartUpload(form: MultipartFormData): NormalisedUpload {
     })
   }
 
-  const kindField = form.fields['kind']
+  const kindField = fields['kind']
   const kind =
     kindField !== undefined && (MEDIA_KINDS as readonly string[]).includes(kindField)
       ? (kindField as MediaKind)
       : mediaKindFromMime(file.mimeType)
 
-  const tagsField = form.fields['tags']
+  const tagsField = fields['tags']
   const tags =
     tagsField === undefined || tagsField.trim().length === 0
       ? []
@@ -420,12 +430,12 @@ function normaliseMultipartUpload(form: MultipartFormData): NormalisedUpload {
     filename: file.filename,
     mimeType: file.mimeType,
     bytes: Buffer.from(file.data),
-    alt: form.fields['alt'] ?? '',
-    decorative: parseBooleanField(form.fields['decorative'], false),
-    decorativeJustification: form.fields['decorativeJustification'],
-    focal: form.fields['focal'] === undefined ? undefined : parseFocalField(form.fields['focal']),
+    alt: fields['alt'] ?? '',
+    decorative: parseBooleanField(fields['decorative'], false),
+    decorativeJustification: fields['decorativeJustification'],
+    focal: fields['focal'] === undefined ? undefined : parseFocalField(fields['focal']),
     tags,
-    stripGps: parseBooleanField(form.fields['stripGps'], true),
+    stripGps: parseBooleanField(fields['stripGps'], true),
   }
 }
 
@@ -450,6 +460,7 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     if (segments === null) throw noRoute()
 
     const method = request.method.toUpperCase()
+    assertMediaAccess(actor, method === 'GET' || method === 'HEAD' ? 'media.read' : 'media.write')
 
     if (segments.length === 0) {
       if (method === 'GET') return list(request, actor)
@@ -851,7 +862,15 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
     }
 
     const mimeType = verifyRealType(existing.kind, bytes) ?? file.mimeType
-    const stripGps = parseBooleanField(request.body.fields['stripGps'], true)
+    const stripGpsField = request.body.fields['stripGps']
+    if (stripGpsField !== undefined && typeof stripGpsField !== 'string') {
+      throw new CogentaError({
+        code: 'MEDIA_INVALID',
+        message: 'The upload field "stripGps" was submitted more than once.',
+        hint: 'Send each media metadata field once.',
+      })
+    }
+    const stripGps = parseBooleanField(stripGpsField, true)
     if (
       stripGps &&
       existing.kind === 'image' &&

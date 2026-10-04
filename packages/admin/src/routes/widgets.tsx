@@ -1,4 +1,12 @@
-import { type DragEvent, type JSX, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  type DragEvent,
+  type JSX,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { describeApiError } from '../api/describe-error.js'
 import { listForms } from '../api/forms-client.js'
@@ -17,8 +25,19 @@ import {
   type WidgetVisibility,
 } from '../api/widgets-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useLocalPagination } from '../lib/use-local-pagination.js'
 import { useSchema } from '../schema/schema-context.js'
-import { Badge, Button, Field, Input, Modal, Notice, PageHeader, Select } from '../ui/index.js'
+import {
+  Badge,
+  Button,
+  Field,
+  Input,
+  Modal,
+  Notice,
+  PageHeader,
+  Pagination,
+  Select,
+} from '../ui/index.js'
 import { VisibilityEditor } from '../widgets/visibility-editor.js'
 import {
   defaultSettings,
@@ -315,13 +334,13 @@ export function WidgetsRoute(): JSX.Element {
         loadError === null && <p>{t('common.loading')}</p>
       ) : (
         <div
-          className={`grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] ${
+          className={`grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] ${
             previewOpen ? 'xl:grid-cols-[17rem_minmax(0,1fr)_minmax(22rem,34rem)]' : ''
           }`}
         >
           <aside
             aria-labelledby="widgets-library"
-            className="flex flex-col gap-4 self-start rounded-xl border border-border bg-card p-4 lg:sticky lg:top-4"
+            className="flex min-w-0 flex-col gap-4 self-start rounded-xl border border-border bg-card p-4 lg:sticky lg:top-4"
           >
             <h2 id="widgets-library" className="m-0 text-base font-semibold">
               {t('widgets.library')}
@@ -360,10 +379,14 @@ export function WidgetsRoute(): JSX.Element {
               )
               if (types.length === 0) return null
               return (
-                <div key={group.id} className="flex flex-col gap-2">
-                  <h3 className="m-0 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                    {t(`widgets.groups.${group.id}`)}
-                  </h3>
+                <details
+                  key={group.id}
+                  open={lowered !== '' || group.id === 'content'}
+                  className="rounded-md border border-border p-2"
+                >
+                  <summary className="min-h-11 cursor-pointer px-2 py-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    {t(`widgets.groups.${group.id}`)} ({types.length})
+                  </summary>
                   <ul className="m-0 flex list-none flex-col gap-1 p-0">
                     {types.map((type) => {
                       const reason = unavailableReason(type, sources)
@@ -378,23 +401,27 @@ export function WidgetsRoute(): JSX.Element {
                         >
                           <button
                             type="button"
-                            className="flex w-full cursor-pointer flex-col items-start rounded-md border border-transparent px-2 py-1.5 text-left hover:border-border hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                            className="flex min-h-11 w-full cursor-pointer items-center rounded-md border border-transparent px-2 py-1.5 text-left hover:border-border hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                             disabled={reason !== null}
                             onClick={() => openCreate(type)}
                             aria-label={t('widgets.addType', { type: typeLabel(type) })}
+                            aria-describedby={`widget-type-${type}-description`}
                           >
                             <span className="text-sm font-medium">{typeLabel(type)}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {reason === null
-                                ? typeDescription(type)
-                                : t(`widgets.unavailable.${reason}`)}
-                            </span>
                           </button>
+                          <p
+                            id={`widget-type-${type}-description`}
+                            className="m-0 px-2 pb-1.5 text-xs text-muted-foreground"
+                          >
+                            {reason === null
+                              ? typeDescription(type)
+                              : t(`widgets.unavailable.${reason}`)}
+                          </p>
                         </li>
                       )
                     })}
                   </ul>
-                </div>
+                </details>
               )
             })}
             <p className="m-0 text-xs text-muted-foreground">{t('widgets.noHtml')}</p>
@@ -433,170 +460,179 @@ export function WidgetsRoute(): JSX.Element {
                       {t('widgets.emptyArea')}
                     </p>
                   ) : (
-                    <ol className="m-0 flex list-none flex-col gap-2 p-0">
-                      {widgets.map((widget, index) => (
-                        <li
-                          key={widget.id}
-                          draggable
-                          onDragStart={(event) => {
-                            event.dataTransfer.setData('text/plain', `widget:${widget.id}`)
-                            event.dataTransfer.effectAllowed = 'move'
-                            setDragged(widget.id)
-                          }}
-                          onDragEnd={() => setDragged(null)}
-                          onDragOver={(event) => {
-                            if (area.inactive) return
-                            event.preventDefault()
-                          }}
-                          onDrop={(event) => !area.inactive && onDrop(event, area.id, index)}
-                          className={`flex flex-col gap-2 rounded-lg border border-border bg-background p-3 ${dragged === widget.id ? 'opacity-50' : ''} ${widget.enabled ? '' : 'border-dashed'}`}
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex min-w-0 flex-col">
-                              <span className="truncate text-sm font-semibold">
-                                {widget.title ?? typeLabel(widget.type)}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {typeLabel(widget.type)}
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {!widget.enabled && (
-                                <Badge tone="warning">{t('widgets.hidden')}</Badge>
-                              )}
-                              {summary(widget).map((part) => (
-                                <Badge key={part} tone="info">
-                                  {part}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => openEdit(widget)}
-                            >
-                              {t('widgets.actions.edit')}
-                            </Button>
-                            {!area.inactive && (
-                              <>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={index === 0}
-                                  aria-label={t('widgets.actions.upNamed', {
-                                    name: widget.title ?? typeLabel(widget.type),
-                                  })}
-                                  onClick={() =>
-                                    token !== null &&
-                                    void act(
-                                      () => moveWidget(token, widget.id, area.id, index - 1),
-                                      t('widgets.status.moved'),
-                                    )
-                                  }
-                                >
-                                  {t('widgets.actions.up')}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={index === widgets.length - 1}
-                                  aria-label={t('widgets.actions.downNamed', {
-                                    name: widget.title ?? typeLabel(widget.type),
-                                  })}
-                                  onClick={() =>
-                                    token !== null &&
-                                    void act(
-                                      () => moveWidget(token, widget.id, area.id, index + 1),
-                                      t('widgets.status.moved'),
-                                    )
-                                  }
-                                >
-                                  {t('widgets.actions.down')}
-                                </Button>
-                              </>
-                            )}
-                            <Select
-                              aria-label={t('widgets.actions.moveTo', {
-                                name: widget.title ?? typeLabel(widget.type),
-                              })}
-                              className="h-8 w-auto text-xs"
-                              value=""
-                              onChange={(event) => {
-                                const destination = event.target.value
-                                if (token === null || destination === '') return
-                                void act(
-                                  () =>
-                                    moveWidget(
-                                      token,
-                                      widget.id,
-                                      destination,
-                                      widgetsIn(destination).length,
-                                    ),
-                                  t('widgets.status.moved'),
-                                )
-                              }}
-                            >
-                              <option value="">{t('widgets.actions.moveToPrompt')}</option>
-                              {areas
-                                .filter((candidate) => candidate.id !== widget.area)
-                                .map((candidate) => (
-                                  <option key={candidate.id} value={candidate.id}>
-                                    {t(`widgets.areas.${candidate.id}`, {
-                                      defaultValue: candidate.label,
+                    <WidgetAreaItems widgets={widgets}>
+                      {(visibleWidgets, start) => (
+                        <ol className="m-0 flex list-none flex-col gap-2 p-0">
+                          {visibleWidgets.map((widget, localIndex) => {
+                            const index = start + localIndex
+                            return (
+                              <li
+                                key={widget.id}
+                                draggable
+                                onDragStart={(event) => {
+                                  event.dataTransfer.setData('text/plain', `widget:${widget.id}`)
+                                  event.dataTransfer.effectAllowed = 'move'
+                                  setDragged(widget.id)
+                                }}
+                                onDragEnd={() => setDragged(null)}
+                                onDragOver={(event) => {
+                                  if (area.inactive) return
+                                  event.preventDefault()
+                                }}
+                                onDrop={(event) => !area.inactive && onDrop(event, area.id, index)}
+                                className={`flex flex-col gap-2 rounded-lg border border-border bg-background p-3 ${dragged === widget.id ? 'opacity-50' : ''} ${widget.enabled ? '' : 'border-dashed'}`}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex min-w-0 flex-col">
+                                    <span className="truncate text-sm font-semibold">
+                                      {widget.title ?? typeLabel(widget.type)}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {typeLabel(widget.type)}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {!widget.enabled && (
+                                      <Badge tone="warning">{t('widgets.hidden')}</Badge>
+                                    )}
+                                    {summary(widget).map((part) => (
+                                      <Badge key={part} tone="info">
+                                        {part}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => openEdit(widget)}
+                                  >
+                                    {t('widgets.actions.edit')}
+                                  </Button>
+                                  {!area.inactive && (
+                                    <>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        disabled={index === 0}
+                                        aria-label={t('widgets.actions.upNamed', {
+                                          name: widget.title ?? typeLabel(widget.type),
+                                        })}
+                                        onClick={() =>
+                                          token !== null &&
+                                          void act(
+                                            () => moveWidget(token, widget.id, area.id, index - 1),
+                                            t('widgets.status.moved'),
+                                          )
+                                        }
+                                      >
+                                        {t('widgets.actions.up')}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        disabled={index === widgets.length - 1}
+                                        aria-label={t('widgets.actions.downNamed', {
+                                          name: widget.title ?? typeLabel(widget.type),
+                                        })}
+                                        onClick={() =>
+                                          token !== null &&
+                                          void act(
+                                            () => moveWidget(token, widget.id, area.id, index + 1),
+                                            t('widgets.status.moved'),
+                                          )
+                                        }
+                                      >
+                                        {t('widgets.actions.down')}
+                                      </Button>
+                                    </>
+                                  )}
+                                  <Select
+                                    aria-label={t('widgets.actions.moveTo', {
+                                      name: widget.title ?? typeLabel(widget.type),
                                     })}
-                                  </option>
-                                ))}
-                            </Select>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                token !== null &&
-                                void act(
-                                  () => duplicateWidget(token, widget.id),
-                                  t('widgets.status.duplicated'),
-                                )
-                              }
-                            >
-                              {t('widgets.actions.duplicate')}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                token !== null &&
-                                void act(
-                                  () =>
-                                    updateWidget(token, widget.id, { enabled: !widget.enabled }),
-                                  widget.enabled
-                                    ? t('widgets.status.hidden')
-                                    : t('widgets.status.shown'),
-                                )
-                              }
-                            >
-                              {widget.enabled
-                                ? t('widgets.actions.hide')
-                                : t('widgets.actions.show')}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setDeleting(widget)}
-                            >
-                              {t('widgets.actions.delete')}
-                            </Button>
-                          </div>
-                        </li>
-                      ))}
-                    </ol>
+                                    className="h-8 w-auto text-xs"
+                                    value=""
+                                    onChange={(event) => {
+                                      const destination = event.target.value
+                                      if (token === null || destination === '') return
+                                      void act(
+                                        () =>
+                                          moveWidget(
+                                            token,
+                                            widget.id,
+                                            destination,
+                                            widgetsIn(destination).length,
+                                          ),
+                                        t('widgets.status.moved'),
+                                      )
+                                    }}
+                                  >
+                                    <option value="">{t('widgets.actions.moveToPrompt')}</option>
+                                    {areas
+                                      .filter((candidate) => candidate.id !== widget.area)
+                                      .map((candidate) => (
+                                        <option key={candidate.id} value={candidate.id}>
+                                          {t(`widgets.areas.${candidate.id}`, {
+                                            defaultValue: candidate.label,
+                                          })}
+                                        </option>
+                                      ))}
+                                  </Select>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      token !== null &&
+                                      void act(
+                                        () => duplicateWidget(token, widget.id),
+                                        t('widgets.status.duplicated'),
+                                      )
+                                    }
+                                  >
+                                    {t('widgets.actions.duplicate')}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      token !== null &&
+                                      void act(
+                                        () =>
+                                          updateWidget(token, widget.id, {
+                                            enabled: !widget.enabled,
+                                          }),
+                                        widget.enabled
+                                          ? t('widgets.status.hidden')
+                                          : t('widgets.status.shown'),
+                                      )
+                                    }
+                                  >
+                                    {widget.enabled
+                                      ? t('widgets.actions.hide')
+                                      : t('widgets.actions.show')}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setDeleting(widget)}
+                                  >
+                                    {t('widgets.actions.delete')}
+                                  </Button>
+                                </div>
+                              </li>
+                            )
+                          })}
+                        </ol>
+                      )}
+                    </WidgetAreaItems>
                   )}
                 </section>
               )
@@ -746,5 +782,39 @@ export function WidgetsRoute(): JSX.Element {
         <p className="m-0 text-sm">{t('widgets.deleteHelp')}</p>
       </Modal>
     </section>
+  )
+}
+
+/** Each area's page is independent; moving uses the area's original ordered index. */
+function WidgetAreaItems({
+  widgets,
+  children,
+}: {
+  readonly widgets: readonly Widget[]
+  children(items: readonly Widget[], start: number): ReactNode
+}): JSX.Element {
+  const { t } = useTranslation()
+  const page = useLocalPagination(widgets)
+  const pager = (
+    <Pagination
+      variant="pages"
+      page={page.page}
+      pageCount={page.pageCount}
+      onPageChange={page.onPageChange}
+      previousLabel={t('lists.previous')}
+      nextLabel={t('lists.next')}
+      pageInfo={t('lists.pageInfo', {
+        from: page.start + 1,
+        to: page.start + page.items.length,
+        total: page.total,
+      })}
+    />
+  )
+  return (
+    <div className="flex flex-col gap-3">
+      {pager}
+      {children(page.items, page.start)}
+      {pager}
+    </div>
   )
 }

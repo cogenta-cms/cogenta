@@ -232,9 +232,15 @@ export function createCommentsRouter(options: CommentsRouterOptions): CommentsRo
     // treated the same way — never revealed as a distinct reason.
     const renderedAtRaw = body['_ts']
     const renderedAt = typeof renderedAtRaw === 'string' ? Number(renderedAtRaw) : Number.NaN
-    const tooFast = Number.isFinite(renderedAt) && now().getTime() - renderedAt < minFillDelayMs
+    const elapsed = now().getTime() - renderedAt
+    const invalidTiming =
+      typeof renderedAtRaw !== 'string' ||
+      renderedAtRaw.trim() === '' ||
+      !Number.isFinite(renderedAt) ||
+      elapsed < minFillDelayMs ||
+      elapsed > 24 * 60 * 60 * 1000
 
-    if (isHoneypotTripped || tooFast) {
+    if (isHoneypotTripped || invalidTiming) {
       throw new CogentaError({
         code: 'COMMENT_SPAM_DETECTED',
         message: 'This submission was rejected.',

@@ -57,7 +57,7 @@ describe('dashboard', () => {
 
     expect(await screen.findByText(/sqlite/)).toBeDefined()
     expect(screen.getByText(/local/)).toBeDefined()
-    expect(await screen.findByText(/content\.create/)).toBeDefined()
+    expect(await screen.findByText(/Contenu créé/u)).toBeDefined()
   })
 
   it('shows the analytics widget with real totals, for an admin', async () => {
@@ -85,7 +85,7 @@ describe('dashboard', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
     expect(await screen.findByRole('heading', { name: 'État des sauvegardes' })).toBeDefined()
-    expect(screen.getByText(/uniquement en ligne de commande/u)).toBeDefined()
+    expect(screen.getByText(/cogenta backup create/u)).toBeDefined()
     expect(screen.queryByRole('heading', { name: 'CVE ouvertes' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Core Web Vitals' })).toBeNull()
   })
@@ -386,7 +386,7 @@ describe('dashboard', () => {
     // The backups widget's body is a single, always-present paragraph — a
     // simple, stable marker for "is the content showing".
     await screen.findByRole('heading', { name: 'État des sauvegardes' })
-    expect(screen.getByText(/uniquement en ligne de commande/u)).toBeDefined()
+    expect(screen.getByText(/cogenta backup create/u)).toBeDefined()
 
     const collapseButton = screen.getByRole('button', { name: 'Réduire État des sauvegardes' })
     expect(collapseButton.getAttribute('aria-expanded')).toBe('true')
@@ -408,7 +408,7 @@ describe('dashboard', () => {
 
     // Expanding it again shows the content back.
     fireEvent.click(screen.getByRole('button', { name: 'Déplier État des sauvegardes' }))
-    expect(screen.getByText(/uniquement en ligne de commande/u)).toBeDefined()
+    expect(screen.getByText(/cogenta backup create/u)).toBeDefined()
   })
 
   it('a reset button in the settings panel restores the default order, visibility and collapse state', async () => {
@@ -436,6 +436,6 @@ describe('dashboard', () => {
     expect(
       await screen.findByRole('heading', { name: 'Résumé du contenu', hidden: true }),
     ).toBeDefined()
-    expect(screen.getByText(/uniquement en ligne de commande/u)).toBeDefined()
+    expect(screen.getByText(/cogenta backup create/u)).toBeDefined()
   })
 })

@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -204,9 +204,129 @@ describe('cogenta serve — /api/agents with no LLM provider configured (R2)', (
     // distinguishes "no session" from "wrong role".
     expect(response.status).toBe(403)
   })
+
+  it('persists activation before acknowledging it so an immediate run sees the new state', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+    const path = `${server.base}/api/agents/${encodeURIComponent('Accessibility Auditor')}`
+
+    for (const enabled of [true, false, true]) {
+      const changed = await fetch(`${path}/${enabled ? 'enable' : 'disable'}`, {
+        method: 'POST',
+        headers,
+      })
+      expect(changed.status).toBe(200)
+      const run = await fetch(`${path}/run`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ instruction: 'Audit the home page.' }),
+      })
+      const body = (await run.json()) as { error: { code: string } }
+      expect(body.error.code).toBe(enabled ? 'AGENT_NO_PROVIDER' : 'AGENT_DISABLED')
+      const detail = await fetch(path, { headers })
+      expect(((await detail.json()) as { data: { enabled: boolean } }).data.enabled).toBe(enabled)
+    }
+  })
 })
 
 describe('cogenta serve — /api/agents runs a real tool-calling loop once a provider is configured', () => {
+  it('lets the accessibility auditor read the configured site and rejects a different origin', async () => {
+    let pageRequests = 0
+    const htmlServer = createServer((_req, res) => {
+      pageRequests += 1
+      res.writeHead(200, { 'content-type': 'text/html' })
+      res.end('<html lang="fr"><body><h1>Accessible fixture</h1></body></html>')
+    })
+    await new Promise<void>((resolve) => htmlServer.listen(0, '127.0.0.1', resolve))
+    const address = htmlServer.address()
+    if (address === null || typeof address === 'string') throw new Error('fixture has no port')
+    const ownUrl = `http://127.0.0.1:${address.port}`
+    fakeProviders.push({
+      url: ownUrl,
+      requests: [],
+      close: () => new Promise<void>((resolve) => htmlServer.close(() => resolve())),
+    })
+    const root = await project()
+    const configPath = join(root, 'cogenta.config.mjs')
+    await writeFile(
+      configPath,
+      (await readFile(configPath, 'utf8')).replace('https://example.com', ownUrl),
+    )
+    const server = await startServer(root, { registry: activeServers })
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+    const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+    const fake = await startFakeAnthropic([
+      {
+        content: [
+          { type: 'tool_use', id: 'own-site', name: 'http.fetch', input: { url: `${ownUrl}/` } },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+      {
+        content: [{ type: 'text', text: 'Own page checked.' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+      {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'different-origin',
+            name: 'http.fetch',
+            input: { url: server.base },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+      {
+        content: [{ type: 'text', text: 'Different origin refused.' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    ])
+    fakeProviders.push(fake)
+    const configured = await fetch(`${server.base}/api/providers`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        provider: 'anthropic',
+        apiKey: 'sk-ant-test-key',
+        model: 'claude-test',
+        baseUrl: fake.url,
+      }),
+    })
+    expect(configured.status).toBe(201)
+    const path = `${server.base}/api/agents/${encodeURIComponent('Accessibility Auditor')}`
+    expect((await fetch(`${path}/enable`, { method: 'POST', headers })).status).toBe(200)
+    for (const instruction of ['Read the home page.', 'Read a different origin.']) {
+      const run = await fetch(`${path}/run`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ instruction }),
+      })
+      expect(run.status).toBe(200)
+    }
+    expect(pageRequests).toBe(1)
+    expect(JSON.stringify(fake.requests[1])).toContain('Accessible fixture')
+    expect(JSON.stringify(fake.requests[3])).toContain('outside the site origins')
+    const history = await fetch(`${path}/history`, { headers })
+    expect(JSON.stringify(await history.json())).toContain('agent.tool.http.fetch')
+  })
+
   it('executes a permitted tool call, records it in the audit history, and returns the model’s final text', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

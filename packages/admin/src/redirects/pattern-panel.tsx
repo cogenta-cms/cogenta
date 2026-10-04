@@ -85,7 +85,7 @@ export function PatternPanel({ token }: { readonly token: string }): JSX.Element
   }
 
   return (
-    <section aria-labelledby="patterns-heading" className="flex flex-col gap-4">
+    <section className="flex flex-col gap-4">
       <div>
         <h2 id="patterns-heading" className="m-0 text-lg leading-7 font-semibold">
           {t('redirects.patternsHeading')}

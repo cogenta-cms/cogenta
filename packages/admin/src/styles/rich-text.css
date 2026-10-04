@@ -101,3 +101,9 @@
   border-color: var(--primary);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 25%, transparent);
 }
+
+.rich-text-editor [data-slate-placeholder] {
+  /* biome-ignore lint/complexity/noImportantStyles: Slate supplies inline placeholder opacity that fails text contrast. */
+  opacity: 1 !important;
+  color: var(--muted-foreground);
+}

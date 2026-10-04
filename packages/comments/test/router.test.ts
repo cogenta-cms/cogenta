@@ -76,6 +76,31 @@ describe('CommentsRouter — public POST /api/comments', () => {
     expect((response.body as { error: { code: string } }).error.code).toBe('COMMENT_SPAM_DETECTED')
   })
 
+  it.each([undefined, null, '', 'invalid', ['1'], Number.NaN, 'Infinity'])(
+    'rejects missing or malformed render timing (%j) before storing a comment',
+    async (_ts) => {
+      const response = await router.handle(
+        baseRequest({ body: validForm({ _ts }), ip: '203.0.113.5' }),
+      )
+      expect(response.status).toBe(422)
+      expect((response.body as { error: { code: string } }).error.code).toBe(
+        'COMMENT_SPAM_DETECTED',
+      )
+      expect((await createCommentStore({ db }).list({})).items).toHaveLength(0)
+    },
+  )
+
+  it.each([1, -86_400_001])(
+    'rejects future or expired render timing (%j) before storing a comment',
+    async (offset) => {
+      const response = await router.handle(
+        baseRequest({ body: validForm({ _ts: String(now + offset) }), ip: '203.0.113.5' }),
+      )
+      expect(response.status).toBe(422)
+      expect((await createCommentStore({ db }).list({})).items).toHaveLength(0)
+    },
+  )
+
   it('rejects HTML in the body, refusing before the write', async () => {
     const response = await router.handle(
       baseRequest({ body: validForm({ body: '<img src=x onerror=alert(1)>' }), ip: '203.0.113.5' }),

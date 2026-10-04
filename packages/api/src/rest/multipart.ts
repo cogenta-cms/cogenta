@@ -25,7 +25,7 @@ export interface MultipartFile {
 }
 
 export interface MultipartFormData {
-  readonly fields: Readonly<Record<string, string>>
+  readonly fields: Readonly<Record<string, string | readonly string[]>>
   readonly files: readonly MultipartFile[]
 }
 
@@ -106,7 +106,10 @@ export function parseMultipartFormData(body: Uint8Array, contentType: string): M
     : Buffer.from(body.buffer, body.byteOffset, body.byteLength)
   const delimiter = Buffer.from(`--${boundary}`, 'latin1')
 
-  const fields: Record<string, string> = {}
+  const fields: Record<string, string | string[]> = Object.create(null) as Record<
+    string,
+    string | string[]
+  >
   const files: MultipartFile[] = []
 
   let cursor = buffer.indexOf(delimiter)
@@ -139,7 +142,14 @@ export function parseMultipartFormData(body: Uint8Array, contentType: string): M
           data: buffer.subarray(Math.max(bodyStart, 0), Math.max(bodyEnd, bodyStart)),
         })
       } else {
-        fields[headers.name] = buffer.toString('utf8', bodyStart, Math.max(bodyEnd, bodyStart))
+        const value = buffer.toString('utf8', bodyStart, Math.max(bodyEnd, bodyStart))
+        const previous = fields[headers.name]
+        fields[headers.name] =
+          previous === undefined
+            ? value
+            : typeof previous === 'string'
+              ? [previous, value]
+              : [...previous, value]
       }
     }
 

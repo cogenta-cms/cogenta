@@ -571,13 +571,33 @@ export async function deleteVariant(token: string, id: string): Promise<void> {
 
 // ---- customers ----------------------------------------------------------------
 
+export interface CommerceListPage {
+  readonly limit: number
+  readonly hasMore: boolean
+  readonly nextCursor: string | null
+}
+
+export interface CommerceListOptions {
+  readonly cursor?: string
+  readonly limit?: number
+  readonly signal?: AbortSignal
+}
+
 /** Fiche 52 task 3 — the list route already existed server-side; nothing in the admin ever called it. */
 export function listCustomers(
   token: string,
   search: string,
-): Promise<{ readonly customers: readonly Customer[] }> {
-  const query = search.trim() === '' ? '' : `?q=${encodeURIComponent(search.trim())}`
-  return requestBody(`/api/commerce/customers${query}`, { headers: authHeader(token) })
+  options?: CommerceListOptions,
+): Promise<{ readonly customers: readonly Customer[]; readonly page?: CommerceListPage }> {
+  const params = new URLSearchParams()
+  if (search.trim() !== '') params.set('q', search.trim())
+  if (options?.cursor !== undefined) params.set('cursor', options.cursor)
+  if (options?.limit !== undefined) params.set('limit', String(options.limit))
+  const query = params.toString()
+  return requestBody(`/api/commerce/customers${query === '' ? '' : `?${query}`}`, {
+    headers: authHeader(token),
+    ...(options?.signal === undefined ? {} : { signal: options.signal }),
+  })
 }
 
 export function readCustomer(token: string, id: string): Promise<CustomerDetail> {
@@ -613,15 +633,19 @@ export function listOrders(
   status?: OrderStatus,
   q?: string,
   range?: { readonly from?: string; readonly to?: string },
-): Promise<{ readonly orders: readonly Order[] }> {
+  options?: CommerceListOptions,
+): Promise<{ readonly orders: readonly Order[]; readonly page?: CommerceListPage }> {
   const params = new URLSearchParams()
   if (status !== undefined) params.set('status', status)
   if (q !== undefined && q.trim() !== '') params.set('q', q)
   if (range?.from !== undefined && range.from !== '') params.set('from', range.from)
   if (range?.to !== undefined && range.to !== '') params.set('to', range.to)
+  if (options?.cursor !== undefined) params.set('cursor', options.cursor)
+  if (options?.limit !== undefined) params.set('limit', String(options.limit))
   const query = params.toString()
   return requestBody(`/api/commerce/orders${query === '' ? '' : `?${query}`}`, {
     headers: authHeader(token),
+    ...(options?.signal === undefined ? {} : { signal: options.signal }),
   })
 }
 

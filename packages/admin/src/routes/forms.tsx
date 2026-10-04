@@ -22,6 +22,8 @@ import { useAuth } from '../auth/auth-context.js'
 import type { ItemFieldDefinition } from '../blocks/vocabulary.js'
 import { RepeaterField } from '../fields/repeater-field.js'
 import { slugify } from '../lib/slugify.js'
+import { useLocalPagination } from '../lib/use-local-pagination.js'
+import { useSchema } from '../schema/schema-context.js'
 import {
   Button,
   Card,
@@ -31,6 +33,7 @@ import {
   Field,
   Input,
   Notice,
+  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -274,7 +277,7 @@ const BLANK_DRAFT: DraftState = {
   label: '',
   rows: [],
   active: true,
-  confirmationMessage: 'Thank you — your message has been received.',
+  confirmationMessage: '',
   redirectTo: '',
   notifyEmailsText: '',
   autoresponderEnabled: false,
@@ -325,6 +328,28 @@ export function FormsRoute(): JSX.Element {
   const [saving, setSaving] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const headingId = useId()
+  const [search, setSearch] = useState('')
+  const filteredForms = (forms ?? []).filter((form) =>
+    `${form.label} ${form.name}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
+  )
+  const page = useLocalPagination(filteredForms, search)
+  const pager = (
+    <Pagination
+      variant="pages"
+      page={page.page}
+      pageCount={page.pageCount}
+      onPageChange={page.onPageChange}
+      previousLabel={t('lists.previous')}
+      nextLabel={t('lists.next')}
+      pageInfo={t('lists.pageInfo', {
+        from: page.start + 1,
+        to: page.start + page.items.length,
+        total: page.total,
+      })}
+    />
+  )
+  const schema = useSchema()
+  const formLocale = schema.status === 'ready' ? schema.schema.site?.defaultLocale : undefined
 
   const load = useCallback(async () => {
     if (token === null) return
@@ -420,7 +445,7 @@ export function FormsRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 id={headingId} className="m-0 text-2xl leading-tight font-bold tracking-tight">
@@ -433,7 +458,11 @@ export function FormsRoute(): JSX.Element {
           onClick={() => {
             setNameTouched(false)
             setNotice(null)
-            setDraft(BLANK_DRAFT)
+            setDraft({
+              ...BLANK_DRAFT,
+              confirmationMessage: t('forms.defaultConfirmation', { lng: formLocale }),
+              autoresponderBody: t('forms.defaultAutoresponder', { lng: formLocale }),
+            })
           }}
         >
           {t('forms.newForm')}
@@ -464,86 +493,101 @@ export function FormsRoute(): JSX.Element {
       ) : forms === null ? (
         <p>{t('common.loading')}</p>
       ) : (
-        <TableRoot label={t('forms.tableLabel')}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeader>{t('forms.columnLabel')}</TableHeader>
-                <TableHeader>{t('forms.columnName')}</TableHeader>
-                <TableHeader>{t('forms.columnFields')}</TableHeader>
-                <TableHeader>{t('forms.columnActive')}</TableHeader>
-                <TableHeader>{t('forms.columnActions')}</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {forms.length === 0 && <TableEmpty colSpan={5}>{t('forms.empty')}</TableEmpty>}
-              {forms.map((form) => (
-                <TableRow key={form.id}>
-                  <TableCell className="font-medium">{form.label}</TableCell>
-                  <TableCell className="font-mono text-xs">{form.name}</TableCell>
-                  <TableCell>{form.fields.length}</TableCell>
-                  <TableCell>{form.active ? t('forms.active') : t('forms.inactive')}</TableCell>
-                  <TableCell className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        setNameTouched(true)
-                        setNotice(null)
-                        setDraft(draftFromForm(form))
-                      }}
-                    >
-                      {t('forms.edit')}
-                    </Button>
-                    <Link to={`/form-submissions?formId=${form.id}`}>
-                      <Button type="button" size="sm" variant="secondary">
-                        {t('forms.viewSubmissions')}
+        <>
+          <Field label={t('lists.search')}>
+            {(control) => (
+              <Input
+                {...control}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            )}
+          </Field>
+          {pager}
+          <TableRoot label={t('forms.tableLabel')}>
+            <Table className="min-w-[40rem]">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>{t('forms.columnLabel')}</TableHeader>
+                  <TableHeader>{t('forms.columnName')}</TableHeader>
+                  <TableHeader>{t('forms.columnFields')}</TableHeader>
+                  <TableHeader>{t('forms.columnActive')}</TableHeader>
+                  <TableHeader>{t('forms.columnActions')}</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredForms.length === 0 && (
+                  <TableEmpty colSpan={5}>{t('forms.empty')}</TableEmpty>
+                )}
+                {page.items.map((form) => (
+                  <TableRow key={form.id}>
+                    <TableCell className="font-medium">{form.label}</TableCell>
+                    <TableCell className="font-mono text-xs">{form.name}</TableCell>
+                    <TableCell>{form.fields.length}</TableCell>
+                    <TableCell>{form.active ? t('forms.active') : t('forms.inactive')}</TableCell>
+                    <TableCell className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setNameTouched(true)
+                          setNotice(null)
+                          setDraft(draftFromForm(form))
+                        }}
+                      >
+                        {t('forms.edit')}
                       </Button>
-                    </Link>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => void duplicate(form.id)}
-                    >
-                      {t('forms.duplicate')}
-                    </Button>
-                    {confirmDeleteId === form.id ? (
-                      <>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => void remove(form.id)}
-                        >
-                          {t('forms.confirmDelete')}
+                      <Link to={`/form-submissions?formId=${form.id}`}>
+                        <Button type="button" size="sm" variant="secondary">
+                          {t('forms.viewSubmissions')}
                         </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setConfirmDeleteId(null)}
-                        >
-                          {t('common.cancel')}
-                        </Button>
-                      </>
-                    ) : (
+                      </Link>
                       <Button
                         type="button"
                         size="sm"
                         variant="ghost"
-                        onClick={() => setConfirmDeleteId(form.id)}
+                        onClick={() => void duplicate(form.id)}
                       >
-                        {t('forms.delete')}
+                        {t('forms.duplicate')}
                       </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableRoot>
+                      {confirmDeleteId === form.id ? (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => void remove(form.id)}
+                          >
+                            {t('forms.confirmDelete')}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setConfirmDeleteId(null)}
+                          >
+                            {t('common.cancel')}
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setConfirmDeleteId(form.id)}
+                        >
+                          {t('forms.delete')}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableRoot>
+          {pager}
+        </>
       )}
     </section>
   )
@@ -567,6 +611,32 @@ function FormEditor({
   onNameTouched(): void
 }): JSX.Element {
   const { t } = useTranslation()
+  const editorItems: readonly ItemFieldDefinition[] = FIELD_EDITOR_ITEMS.map((field) => ({
+    ...field,
+    admin: { label: t(`forms.editorFields.${field.name}`) },
+    ...(field.name === 'kind'
+      ? {
+          options: {
+            options: FORM_FIELD_KINDS.map((value) => ({
+              value,
+              label: t(`forms.fieldKinds.${value}`),
+            })),
+          },
+        }
+      : field.name === 'showIfOperator'
+        ? {
+            options: {
+              options: [
+                { value: NO_CONDITION, label: t('forms.conditionOperators.none') },
+                ...FORM_CONDITION_OPERATORS.map((value) => ({
+                  value,
+                  label: t(`forms.conditionOperators.${value}`),
+                })),
+              ],
+            },
+          }
+        : {}),
+  }))
 
   return (
     <Card aria-labelledby="form-editor-heading">
@@ -621,7 +691,7 @@ function FormEditor({
               localized: false,
               unique: false,
               hasCustomValidation: false,
-              options: { list: true, items: FIELD_EDITOR_ITEMS, keyed: true },
+              options: { list: true, items: editorItems, keyed: true },
             }}
             value={draft.rows}
             onChange={(value) => onChange({ ...draft, rows: value as FieldEditorRow[] })}

@@ -29,6 +29,18 @@ const COLLECTIONS: readonly CollectionDefinition[] = [
     permissions: { read: ['public'], create: ['editor'], update: ['editor'], publish: ['editor'] },
   },
   {
+    name: 'empty_page',
+    labels: { singular: 'Empty page', plural: 'Empty pages' },
+    routing: { pattern: '/empty/:slug' },
+    fields: {
+      title: { kind: 'text', required: true, options: { max: 200 } },
+      slug: { kind: 'slug', required: true, options: { from: 'title' } },
+      intro: { kind: 'richText', options: {} },
+      body: { kind: 'richText', options: {} },
+    },
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'], publish: ['editor'] },
+  },
+  {
     name: 'page',
     labels: { singular: 'Page', plural: 'Pages' },
     routing: { pattern: '/:slug' },
@@ -83,6 +95,41 @@ interface Entry {
 }
 
 describe('cogenta serve — rich text (fiche 04)', () => {
+  it('publishes and renders a page whose two optional rich text fields were left empty', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await editorToken(root, server.base)
+      const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+      const created = await fetch(`${server.base}/api/content/empty_page`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          values: { title: 'Page with empty documents', slug: 'empty-documents' },
+        }),
+      })
+      expect(created.status).toBe(201)
+      const entry = (await created.json()) as {
+        data: { id: string; values: { intro: unknown; body: unknown } }
+      }
+      expect(entry.data.values.intro).toBeNull()
+      expect(entry.data.values.body).toBeNull()
+      expect(
+        (
+          await fetch(`${server.base}/api/content/empty_page/${entry.data.id}/publish`, {
+            method: 'POST',
+            headers,
+          })
+        ).status,
+      ).toBe(200)
+      const response = await fetch(`${server.base}/empty/empty-documents`)
+      expect(response.status).toBe(200)
+      expect(await response.text()).toContain('Page with empty documents')
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('renders a real srcset for an image node placed inside a paragraph', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

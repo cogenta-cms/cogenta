@@ -44,6 +44,7 @@ import { isMultipartFormData } from './multipart.js'
 
 export interface FormsRouterOptions {
   readonly forms: FormStore
+  readonly defaultLocale?: string
   /** Absent on a site with no e-mail transport configured (R1/R2) — notifications and the autoresponder are then silently skipped, never a hard failure of the submission itself. */
   readonly emailTransport?: EmailTransport
   /** Fiche 47 task 4 — absent means every `notifyChannels` entry a form declares simply never fires (R1: no channel adapters configured, no notification, never a broken submit). */
@@ -527,6 +528,9 @@ export function createFormsRouter(options: FormsRouterOptions): FormsRouter {
             definition,
             recipientEmail: recipient,
             rateLimit: options.rateLimit,
+            ...(options.defaultLocale === undefined
+              ? {}
+              : { defaultLocale: options.defaultLocale }),
           }).catch(() => undefined)
         }
       }

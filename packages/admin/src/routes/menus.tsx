@@ -21,7 +21,18 @@ import { MenuTermPicker } from '../menus/menu-term-picker.js'
 import { MenuTree } from '../menus/menu-tree.js'
 import { buildReorderPayload } from '../menus/menu-tree-ops.js'
 import { useSchema } from '../schema/schema-context.js'
-import { Button, Field, Input, Label, Notice, Select } from '../ui/index.js'
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Field,
+  Input,
+  Label,
+  Notice,
+  Select,
+} from '../ui/index.js'
 
 /**
  * Navigation menus: a named tree of links, edited entirely at runtime — a
@@ -416,9 +427,10 @@ export function MenusRoute(): JSX.Element {
       {error !== null && <p role="alert">{error}</p>}
 
       <div className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5 sm:w-auto sm:flex-1">
           <Label htmlFor="menu-select">{t('menus.menu')}</Label>
           <Select
+            className="min-w-0 max-w-full"
             id="menu-select"
             value={selectedId ?? ''}
             onChange={(event) =>
@@ -442,90 +454,142 @@ export function MenusRoute(): JSX.Element {
       </div>
 
       {mayWrite && (
-        <form
-          onSubmit={(event) => void submitNewMenu(event)}
-          className="flex flex-wrap items-end gap-2"
-        >
-          <h2 className="w-full text-base font-semibold">{t('menus.newMenu')}</h2>
-          <Field label={t('menus.name')}>
-            {(control) => (
-              <Input
-                {...control}
-                value={newName}
-                required
-                onChange={(event) => setNewName(event.target.value)}
-              />
-            )}
-          </Field>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="menu-locale">{t('menus.locale')}</Label>
-            <Select
-              id="menu-locale"
-              value={newLocale}
-              onChange={(event) => setNewLocale(event.target.value)}
+        <Card aria-labelledby="new-menu-heading">
+          <CardHeader>
+            <CardTitle>
+              <h2 id="new-menu-heading">{t('menus.newMenu')}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardBody>
+            <form
+              onSubmit={(event) => void submitNewMenu(event)}
+              className="grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2"
             >
-              {locales.map((locale) => (
-                <option key={locale} value={locale}>
-                  {locale}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <Field label={t('menus.label')}>
-            {(control) => (
-              <Input
-                {...control}
-                value={newLabel}
-                required
-                onChange={(event) => setNewLabel(event.target.value)}
-              />
-            )}
-          </Field>
-          <Button type="submit" disabled={creatingMenu}>
-            {t('menus.create')}
-          </Button>
-        </form>
+              <Field className="min-w-0" label={t('menus.name')}>
+                {(control) => (
+                  <Input
+                    className="min-w-0"
+                    {...control}
+                    value={newName}
+                    required
+                    onChange={(event) => setNewName(event.target.value)}
+                  />
+                )}
+              </Field>
+              <div className="flex min-w-0 max-w-full flex-col gap-1.5">
+                <Label htmlFor="menu-locale">{t('menus.locale')}</Label>
+                <Select
+                  className="min-w-0 max-w-full"
+                  id="menu-locale"
+                  value={newLocale}
+                  onChange={(event) => setNewLocale(event.target.value)}
+                >
+                  {locales.map((locale) => (
+                    <option key={locale} value={locale}>
+                      {locale}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Field className="min-w-0" label={t('menus.label')}>
+                {(control) => (
+                  <Input
+                    className="min-w-0"
+                    {...control}
+                    value={newLabel}
+                    required
+                    onChange={(event) => setNewLabel(event.target.value)}
+                  />
+                )}
+              </Field>
+              <Button type="submit" disabled={creatingMenu} className="justify-self-start">
+                {t('menus.create')}
+              </Button>
+            </form>
+          </CardBody>
+        </Card>
       )}
 
       {selected !== null && (
         <>
           {mayWrite && (
-            <form
-              onSubmit={(event) => void saveLocation(event)}
-              className="flex flex-wrap items-end gap-2"
-            >
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="menu-location">{t('menus.location')}</Label>
-                <Select
-                  id="menu-location"
-                  aria-describedby="menu-location-hint"
-                  value={locationMode}
-                  onChange={(event) => setLocationMode(event.target.value as LocationMode)}
+            <Card aria-labelledby="menu-location-heading">
+              <CardHeader>
+                <CardTitle>
+                  <h2 id="menu-location-heading">{t('menus.locationHeading')}</h2>
+                </CardTitle>
+              </CardHeader>
+              <CardBody>
+                <form
+                  onSubmit={(event) => void saveLocation(event)}
+                  className="grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2"
                 >
-                  <option value="none">{t('menus.locationNone')}</option>
-                  <option value="primary">{t('menus.locationPrimary')}</option>
-                  <option value="footer">{t('menus.locationFooter')}</option>
-                  <option value="custom">{t('menus.locationCustom')}</option>
-                </Select>
-                <p id="menu-location-hint" className="text-sm text-muted-foreground">
-                  {t('menus.locationHint')}
-                </p>
-              </div>
-              {locationMode === 'custom' && (
-                <Field label={t('menus.locationCustomLabel')}>
-                  {(control) => (
-                    <Input
-                      {...control}
-                      value={customLocationDraft}
-                      onChange={(event) => setCustomLocationDraft(event.target.value)}
-                    />
+                  <div className="flex min-w-0 max-w-full flex-col gap-1.5">
+                    <Label htmlFor="menu-location">{t('menus.location')}</Label>
+                    <Select
+                      className="min-w-0 max-w-full"
+                      id="menu-location"
+                      aria-describedby="menu-location-hint"
+                      value={locationMode}
+                      onChange={(event) => setLocationMode(event.target.value as LocationMode)}
+                    >
+                      <option value="none">{t('menus.locationNone')}</option>
+                      <option value="primary">{t('menus.locationPrimary')}</option>
+                      <option value="footer">{t('menus.locationFooter')}</option>
+                      <option value="custom">{t('menus.locationCustom')}</option>
+                    </Select>
+                    <p id="menu-location-hint" className="text-sm text-muted-foreground">
+                      {t('menus.locationHint')}
+                    </p>
+                  </div>
+                  {locationMode === 'custom' && (
+                    <Field className="min-w-0" label={t('menus.locationCustomLabel')}>
+                      {(control) => (
+                        <Input
+                          className="min-w-0"
+                          {...control}
+                          value={customLocationDraft}
+                          onChange={(event) => setCustomLocationDraft(event.target.value)}
+                        />
+                      )}
+                    </Field>
                   )}
-                </Field>
-              )}
-              <Button type="submit" variant="secondary" disabled={savingLocation}>
-                {t('menus.saveLocation')}
-              </Button>
-            </form>
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    disabled={savingLocation}
+                    className="justify-self-start"
+                  >
+                    {t('menus.saveLocation')}
+                  </Button>
+                </form>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="flex min-w-0 max-w-full flex-col gap-1.5">
+                    <Label htmlFor="duplicate-locale">{t('menus.duplicateTo')}</Label>
+                    <Select
+                      className="min-w-0 max-w-full"
+                      id="duplicate-locale"
+                      value={duplicateLocale}
+                      onChange={(event) => setDuplicateLocale(event.target.value)}
+                    >
+                      {locales.map((locale) => (
+                        <option key={locale} value={locale}>
+                          {locale}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={duplicating}
+                    onClick={() => void duplicateToLocale()}
+                  >
+                    {t('menus.duplicate')}
+                  </Button>
+                </div>
+              </CardBody>
+            </Card>
           )}
 
           {problemCount > 0 && (
@@ -549,165 +613,164 @@ export function MenusRoute(): JSX.Element {
             </Notice>
           )}
 
-          {loading && <p>{t('common.loading')}</p>}
-          {!loading && items.length === 0 && <p>{t('menus.empty')}</p>}
-          {!loading && items.length > 0 && (
-            <MenuTree
-              items={items}
-              disabled={!mayWrite || saving}
-              onReorder={(next) => void commitReorder(next)}
-              onEdit={setEditingItem}
-              onDelete={(item) => void removeItem(item)}
-            />
-          )}
+          <Card aria-labelledby="menu-items-heading">
+            <CardHeader>
+              <CardTitle>
+                <h2 id="menu-items-heading">{t('menus.itemsHeading')}</h2>
+              </CardTitle>
+            </CardHeader>
+            <CardBody>
+              {loading && <p>{t('common.loading')}</p>}
+              {!loading && items.length === 0 && <p>{t('menus.empty')}</p>}
+              {!loading && items.length > 0 && (
+                <MenuTree
+                  items={items}
+                  disabled={!mayWrite || saving}
+                  onReorder={(next) => void commitReorder(next)}
+                  onEdit={setEditingItem}
+                  onDelete={(item) => void removeItem(item)}
+                />
+              )}
+            </CardBody>
+          </Card>
 
           {mayWrite && (
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="duplicate-locale">{t('menus.duplicateTo')}</Label>
-                <Select
-                  id="duplicate-locale"
-                  value={duplicateLocale}
-                  onChange={(event) => setDuplicateLocale(event.target.value)}
+            <Card aria-labelledby="new-menu-item-heading">
+              <CardHeader>
+                <CardTitle>
+                  <h2 id="new-menu-item-heading">{t('menus.newItem')}</h2>
+                </CardTitle>
+              </CardHeader>
+              <CardBody>
+                <form
+                  onSubmit={(event) => void submitNewItem(event)}
+                  className="flex min-w-0 flex-col gap-3"
                 >
-                  {locales.map((locale) => (
-                    <option key={locale} value={locale}>
-                      {locale}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={duplicating}
-                onClick={() => void duplicateToLocale()}
-              >
-                {t('menus.duplicate')}
-              </Button>
-            </div>
-          )}
+                  <Field className="min-w-0" label={t('menus.label')}>
+                    {(control) => (
+                      <Input
+                        className="min-w-0"
+                        {...control}
+                        value={itemLabel}
+                        required
+                        onChange={(event) => setItemLabel(event.target.value)}
+                      />
+                    )}
+                  </Field>
 
-          {mayWrite && (
-            <form onSubmit={(event) => void submitNewItem(event)} className="flex flex-col gap-3">
-              <h2 className="text-base font-semibold">{t('menus.newItem')}</h2>
-              <Field label={t('menus.label')}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    value={itemLabel}
-                    required
-                    onChange={(event) => setItemLabel(event.target.value)}
-                  />
-                )}
-              </Field>
+                  <div className="flex min-w-0 max-w-full flex-col gap-1.5">
+                    <Label htmlFor="item-kind">{t('menus.kind')}</Label>
+                    <Select
+                      className="min-w-0 max-w-full"
+                      id="item-kind"
+                      value={itemKind}
+                      onChange={(event) => setItemKind(event.target.value as MenuItemKind)}
+                    >
+                      <option value="url">{t('menus.kindUrl')}</option>
+                      <option value="entry">{t('menus.kindEntry')}</option>
+                      <option value="taxonomy">{t('menus.kindTaxonomy')}</option>
+                      <option value="home">{t('menus.kindHome')}</option>
+                      <option value="submenu-placeholder">{t('menus.kindSubmenu')}</option>
+                    </Select>
+                  </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="item-kind">{t('menus.kind')}</Label>
-                <Select
-                  id="item-kind"
-                  value={itemKind}
-                  onChange={(event) => setItemKind(event.target.value as MenuItemKind)}
-                >
-                  <option value="url">{t('menus.kindUrl')}</option>
-                  <option value="entry">{t('menus.kindEntry')}</option>
-                  <option value="taxonomy">{t('menus.kindTaxonomy')}</option>
-                  <option value="home">{t('menus.kindHome')}</option>
-                  <option value="submenu-placeholder">{t('menus.kindSubmenu')}</option>
-                </Select>
-              </div>
-
-              {itemKind === 'url' && (
-                <Field label={t('menus.url')}>
-                  {(control) => (
-                    <Input
-                      {...control}
-                      value={itemUrl}
-                      required
-                      onChange={(event) => setItemUrl(event.target.value)}
-                    />
+                  {itemKind === 'url' && (
+                    <Field className="min-w-0" label={t('menus.url')}>
+                      {(control) => (
+                        <Input
+                          className="min-w-0"
+                          {...control}
+                          value={itemUrl}
+                          required
+                          onChange={(event) => setItemUrl(event.target.value)}
+                        />
+                      )}
+                    </Field>
                   )}
-                </Field>
-              )}
 
-              {itemKind === 'entry' && token !== null && (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="item-collection">{t('menus.collection')}</Label>
+                  {itemKind === 'entry' && token !== null && (
+                    <>
+                      <div className="flex min-w-0 max-w-full flex-col gap-1.5">
+                        <Label htmlFor="item-collection">{t('menus.collection')}</Label>
+                        <Select
+                          className="min-w-0 max-w-full"
+                          id="item-collection"
+                          value={itemCollection}
+                          onChange={(event) => {
+                            setItemCollection(event.target.value)
+                            setItemEntryId(null)
+                          }}
+                        >
+                          {collections.map((collection) => (
+                            <option key={collection.name} value={collection.name}>
+                              {collection.labels.singular}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <MenuEntryPicker
+                        token={token}
+                        collection={itemCollection}
+                        value={itemEntryId}
+                        onChange={(id) => setItemEntryId(id)}
+                      />
+                    </>
+                  )}
+
+                  {itemKind === 'taxonomy' && token !== null && (
+                    <>
+                      <div className="flex min-w-0 max-w-full flex-col gap-1.5">
+                        <Label htmlFor="item-taxonomy">{t('menus.taxonomy')}</Label>
+                        <Select
+                          className="min-w-0 max-w-full"
+                          id="item-taxonomy"
+                          value={itemTaxonomy}
+                          onChange={(event) => {
+                            setItemTaxonomy(event.target.value)
+                            setItemTermId(null)
+                          }}
+                        >
+                          {taxonomies.map((taxonomy) => (
+                            <option key={taxonomy.name} value={taxonomy.name}>
+                              {taxonomy.labels.singular['en'] ??
+                                Object.values(taxonomy.labels.singular)[0] ??
+                                taxonomy.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <MenuTermPicker
+                        token={token}
+                        taxonomy={itemTaxonomy}
+                        value={itemTermId}
+                        onChange={(id) => setItemTermId(id)}
+                      />
+                    </>
+                  )}
+
+                  <div className="flex min-w-0 max-w-full flex-col gap-1.5">
+                    <Label htmlFor="item-parent">{t('menus.parent')}</Label>
                     <Select
-                      id="item-collection"
-                      value={itemCollection}
-                      onChange={(event) => {
-                        setItemCollection(event.target.value)
-                        setItemEntryId(null)
-                      }}
+                      className="min-w-0 max-w-full"
+                      id="item-parent"
+                      value={itemParent}
+                      onChange={(event) => setItemParent(event.target.value)}
                     >
-                      {collections.map((collection) => (
-                        <option key={collection.name} value={collection.name}>
-                          {collection.labels.singular}
+                      <option value="">{t('menus.noParent')}</option>
+                      {items.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {`${'— '.repeat(item.depth)}${item.label}`}
                         </option>
                       ))}
                     </Select>
                   </div>
-                  <MenuEntryPicker
-                    token={token}
-                    collection={itemCollection}
-                    value={itemEntryId}
-                    onChange={(id) => setItemEntryId(id)}
-                  />
-                </>
-              )}
 
-              {itemKind === 'taxonomy' && token !== null && (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="item-taxonomy">{t('menus.taxonomy')}</Label>
-                    <Select
-                      id="item-taxonomy"
-                      value={itemTaxonomy}
-                      onChange={(event) => {
-                        setItemTaxonomy(event.target.value)
-                        setItemTermId(null)
-                      }}
-                    >
-                      {taxonomies.map((taxonomy) => (
-                        <option key={taxonomy.name} value={taxonomy.name}>
-                          {taxonomy.labels.singular['en'] ??
-                            Object.values(taxonomy.labels.singular)[0] ??
-                            taxonomy.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <MenuTermPicker
-                    token={token}
-                    taxonomy={itemTaxonomy}
-                    value={itemTermId}
-                    onChange={(id) => setItemTermId(id)}
-                  />
-                </>
-              )}
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="item-parent">{t('menus.parent')}</Label>
-                <Select
-                  id="item-parent"
-                  value={itemParent}
-                  onChange={(event) => setItemParent(event.target.value)}
-                >
-                  <option value="">{t('menus.noParent')}</option>
-                  {items.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {`${'— '.repeat(item.depth)}${item.label}`}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <Button type="submit" disabled={creatingItem} className="self-start">
-                {t('menus.addItem')}
-              </Button>
-            </form>
+                  <Button type="submit" disabled={creatingItem} className="self-start">
+                    {t('menus.addItem')}
+                  </Button>
+                </form>
+              </CardBody>
+            </Card>
           )}
         </>
       )}

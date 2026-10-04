@@ -1,4 +1,12 @@
-import { CogentaError, type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
+import {
+  CogentaError,
+  type DatabaseHandle,
+  identifier,
+  limit,
+  newId,
+  type SqlFragment,
+  sql,
+} from '@cogenta/core'
 import { toNullableText, toText } from '../rows.js'
 import { TABLES } from '../tables.js'
 
@@ -29,6 +37,7 @@ export interface CustomerStore {
   list(options?: {
     readonly search?: string
     readonly limit?: number
+    readonly cursor?: string
   }): Promise<readonly Customer[]>
   /**
    * GDPR erasure of the customer record itself (fiche 52 task 3): the email
@@ -47,6 +56,46 @@ export interface CustomerStore {
    * correct scope for "anonymise a customer", not a shortcut.
    */
   anonymize(id: string): Promise<Customer>
+}
+
+/** Position in the immutable creation order; shared with the REST list response. */
+export function encodeCustomerCursor(customer: Customer): string {
+  return Buffer.from(
+    JSON.stringify({ v: 1, kind: 'customer', at: customer.createdAt, id: customer.id }),
+  ).toString('base64url')
+}
+
+function decodeCustomerCursor(cursor: string): { readonly at: string; readonly id: string } {
+  const invalid = new CogentaError({
+    code: 'QUERY_INVALID',
+    message: 'The customer page cursor is invalid.',
+    hint: 'Return to the first customer page and retry.',
+  })
+  try {
+    if (cursor.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(cursor)) throw invalid
+    const value: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
+    if (typeof value !== 'object' || value === null) throw invalid
+    const data = value as {
+      readonly v?: unknown
+      readonly kind?: unknown
+      readonly at?: unknown
+      readonly id?: unknown
+    }
+    if (
+      data.v !== 1 ||
+      data.kind !== 'customer' ||
+      typeof data.at !== 'string' ||
+      !Number.isFinite(Date.parse(data.at)) ||
+      new Date(data.at).toISOString() !== data.at ||
+      typeof data.id !== 'string' ||
+      data.id.length === 0 ||
+      data.id.length > 128
+    )
+      throw invalid
+    return { at: data.at, id: data.id }
+  } catch {
+    throw invalid
+  }
 }
 
 interface CustomerRow {
@@ -166,15 +215,26 @@ export function createCustomerStore(
 
     list: async (options) => {
       const search = options?.search?.trim().toLowerCase()
-      const result =
-        search === undefined || search === ''
-          ? await db.query<CustomerRow>(sql`select * from ${table} order by created_at desc`)
-          : await db.query<CustomerRow>(sql`
-              select * from ${table}
-              where lower(email) like ${`%${search}%`} or lower(name) like ${`%${search}%`}
-              order by created_at desc`)
-
-      return result.rows.slice(0, options?.limit ?? 100).map(decode)
+      const conditions: SqlFragment[] = []
+      if (search !== undefined && search !== '') {
+        conditions.push(
+          sql`(lower(email) like ${`%${search}%`} or lower(name) like ${`%${search}%`})`,
+        )
+      }
+      if (options?.cursor !== undefined) {
+        const cursor = decodeCustomerCursor(options.cursor)
+        conditions.push(
+          sql`(created_at < ${cursor.at} or (created_at = ${cursor.at} and id < ${cursor.id}))`,
+        )
+      }
+      let statement = sql`select * from ${table}`
+      conditions.forEach((condition, index) => {
+        statement = sql`${statement} ${index === 0 ? sql`where` : sql`and`} ${condition}`
+      })
+      const result = await db.query<CustomerRow>(
+        sql`${statement} order by created_at desc, id desc limit ${limit(options?.limit ?? 100)}`,
+      )
+      return result.rows.map(decode)
     },
 
     anonymize: async (id) => {

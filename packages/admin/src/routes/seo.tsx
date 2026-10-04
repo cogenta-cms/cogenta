@@ -170,7 +170,7 @@ export function SeoRoute(): JSX.Element {
 
   const reloadSettings = useCallback(async (): Promise<void> => {
     try {
-      setSettings(await listSettings())
+      setSettings(await listSettings(undefined, token ?? undefined))
       setSettingsError(null)
     } catch (caught) {
       setSettingsError(caught instanceof Error ? caught.message : t('seo.settingsLoadError'))

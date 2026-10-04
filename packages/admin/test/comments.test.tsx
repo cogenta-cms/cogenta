@@ -56,6 +56,89 @@ async function goToComments(): Promise<void> {
 }
 
 describe('the comment moderation queue', () => {
+  it('replaces twenty-row pages and resets search and status filters', async () => {
+    signedInAs(
+      ['admin'],
+      Array.from({ length: 45 }, (_, index) => ({
+        ...PENDING_COMMENT,
+        id: `comment-page-${index}`,
+        body: index === 0 ? PENDING_COMMENT.body : `Pagination comment ${index}`,
+      })),
+    )
+    render(<App />)
+    await goToComments()
+    expect(screen.getAllByRole('row')).toHaveLength(21)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    await screen.findByText('Pagination comment 20')
+    expect(screen.queryByText(PENDING_COMMENT.body)).toBeNull()
+    expect(screen.getAllByRole('row')).toHaveLength(21)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Précédent' })[0] as HTMLElement)
+    await screen.findByText(PENDING_COMMENT.body)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    await screen.findByText('Pagination comment 20')
+    fireEvent.change(screen.getByLabelText('Recherche'), {
+      target: { value: 'Pagination comment 44' },
+    })
+    await screen.findByText('Pagination comment 44')
+    expect(screen.getAllByRole('row')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('tab', { name: /Approuvés/u }))
+    await screen.findByText('Aucun commentaire ici.')
+  })
+
+  it('returns to the preceding page after moderating its last pending comment', async () => {
+    signedInAs(
+      ['admin'],
+      Array.from({ length: 21 }, (_, index) => ({
+        ...PENDING_COMMENT,
+        id: `comment-page-${index}`,
+        body: index === 0 ? PENDING_COMMENT.body : `Pagination comment ${index}`,
+      })),
+    )
+    render(<App />)
+    await goToComments()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    const row = (await screen.findByText('Pagination comment 20')).closest('tr') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: 'Approuver' }))
+    await screen.findByText(PENDING_COMMENT.body)
+    expect(screen.getAllByRole('row')).toHaveLength(21)
+    expect(screen.queryByText('Pagination comment 20')).toBeNull()
+  })
+
+  it('refreshes the current tab when moderation finishes after a tab change', async () => {
+    let finish: (() => void) | undefined
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const fetchMock = globalThis.fetch
+    let refreshedAfterAction = false
+    let actionCompleted = false
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (...args: Parameters<typeof fetch>) => {
+        const path = String(args[0])
+        const result = await fetchMock(...args)
+        if (path.includes('/api/comments/comment-1/status')) {
+          await pending
+          actionCompleted = true
+        } else if (actionCompleted && path.includes('/api/comments?')) refreshedAfterAction = true
+        return result
+      }),
+    )
+    render(<App />)
+    await goToComments()
+    const row = screen.getByText(PENDING_COMMENT.body).closest('tr') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: 'Approuver' }))
+    fireEvent.click(screen.getByRole('tab', { name: /Approuvés/u }))
+    await screen.findByText(APPROVED_COMMENT.body)
+    finish?.()
+    await waitFor(() => expect(refreshedAfterAction).toBe(true))
+    await waitFor(() => expect(screen.queryByText('Chargement…')).toBeNull())
+    expect(screen.getByText(APPROVED_COMMENT.body)).toBeDefined()
+    expect(screen.getByRole('tab', { name: /Approuvés/u }).getAttribute('aria-selected')).toBe(
+      'true',
+    )
+  })
+
   it('shows the pending tab by default, with the pending comment listed', async () => {
     render(<App />)
     await goToComments()

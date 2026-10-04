@@ -223,8 +223,8 @@ export function AgentSkillsRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="agent-skills-heading" className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
+    <section className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <h1
           id="agent-skills-heading"
           className="m-0 text-2xl leading-tight font-bold tracking-tight"
@@ -471,7 +471,7 @@ function SkillResourcesPanel({ token, skillId }: { token: string; skillId: strin
   return (
     <div className="flex flex-col gap-3 rounded-md border border-input p-3">
       <div>
-        <h3 className="m-0 text-sm font-semibold">{t('agentSkills.resources.heading')}</h3>
+        <h2 className="m-0 text-sm font-semibold">{t('agentSkills.resources.heading')}</h2>
         <p className="m-0 text-xs opacity-80">{t('agentSkills.resources.intro')}</p>
       </div>
       {error !== null && (
@@ -486,7 +486,7 @@ function SkillResourcesPanel({ token, skillId }: { token: string; skillId: strin
           {SKILL_RESOURCE_DIRS.map((dir) => (
             <div key={dir} className="flex flex-col gap-2">
               <div>
-                <h4 className="m-0 text-sm font-medium">{t(`agentSkills.resources.${dir}`)}</h4>
+                <h3 className="m-0 text-sm font-medium">{t(`agentSkills.resources.${dir}`)}</h3>
                 <p className="m-0 text-xs opacity-70">{t(`agentSkills.resources.${dir}Hint`)}</p>
               </div>
               <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">

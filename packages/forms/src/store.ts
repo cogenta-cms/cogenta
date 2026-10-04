@@ -10,6 +10,7 @@ import {
   sql,
   unsafeRaw,
 } from '@cogenta/core'
+import { formDefaultMessages } from './default-messages.js'
 import { fromBool, toBool, toInt, toJson, toNullableText, toText } from './rows.js'
 import { TABLES } from './tables.js'
 import type {
@@ -43,7 +44,6 @@ import {
 const RESERVED_NAMES = new Set(['submissions'])
 
 const DEFAULT_RETAIN_DAYS = 180
-const DEFAULT_CONFIRMATION = 'Thank you — your message has been received.'
 const DEFAULT_AUTORESPONDER: AutoresponderConfig = { enabled: false }
 const DEFAULT_CAPTCHA: FormCaptchaConfig = { enabled: false }
 const SUBMISSION_STATUSES: readonly FormSubmissionStatus[] = ['new', 'read', 'archived', 'spam']
@@ -268,7 +268,12 @@ export interface FormStore {
   readonly submissions: FormSubmissionStore
 }
 
-export function createFormStore(db: DatabaseHandle, now: () => number = Date.now): FormStore {
+export function createFormStore(
+  db: DatabaseHandle,
+  now: () => number = Date.now,
+  options: { readonly defaultLocale?: string } = {},
+): FormStore {
+  const messages = formDefaultMessages(options.defaultLocale)
   const d = db.dialect
   const definitionsTable = identifier(TABLES.definitions, d)
   const submissionsTable = identifier(TABLES.submissions, d)
@@ -337,9 +342,9 @@ export function createFormStore(db: DatabaseHandle, now: () => number = Date.now
            notify_emails, autoresponder, retain_days, steps, notify_channels, captcha,
            created_at, updated_at)
         values (${id}, ${name}, ${input.label}, ${JSON.stringify(input.fields)},
-                ${fromBool(input.active ?? true, d)}, ${input.confirmationMessage ?? DEFAULT_CONFIRMATION},
+                ${fromBool(input.active ?? true, d)}, ${input.confirmationMessage ?? messages.confirmation},
                 ${input.redirectTo ?? null}, ${JSON.stringify(input.notifyEmails ?? [])},
-                ${JSON.stringify(input.autoresponder ?? DEFAULT_AUTORESPONDER)},
+                ${JSON.stringify({ ...(input.autoresponder ?? DEFAULT_AUTORESPONDER), body: input.autoresponder?.body ?? messages.autoresponder })},
                 ${input.retainDays ?? DEFAULT_RETAIN_DAYS}, ${JSON.stringify(input.steps ?? [])},
                 ${JSON.stringify(input.notifyChannels ?? [])},
                 ${JSON.stringify(input.captcha ?? DEFAULT_CAPTCHA)}, ${at}, ${at})`)

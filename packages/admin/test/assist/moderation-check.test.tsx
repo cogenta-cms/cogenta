@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { run } from 'axe-core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ModerationCheck } from '../../src/assist/moderation-check.js'
 
@@ -48,6 +49,37 @@ describe('the moderation check on a site with no AI provider', () => {
 })
 
 describe('the moderation check on a configured site', () => {
+  it('gives repeated comment checks distinct contextual landmarks and heading ids', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(CAPABILITIES)),
+    )
+    const { container } = render(
+      <>
+        <ModerationCheck
+          token="t"
+          text="Same body"
+          contextLabel="Vérification du commentaire 1 de Alex"
+        />
+        <ModerationCheck
+          token="t"
+          text="Same body"
+          contextLabel="Vérification du commentaire 2 de Alex"
+        />
+      </>,
+    )
+    await screen.findByRole('region', { name: 'Vérification du commentaire 1 de Alex' })
+    expect(
+      screen.getByRole('region', { name: 'Vérification du commentaire 2 de Alex' }),
+    ).toBeDefined()
+    const headings = screen.getAllByRole('heading', { level: 2 })
+    expect(new Set(headings.map((heading) => heading.id)).size).toBe(2)
+    const results = await run(container as unknown as Parameters<typeof run>[0], {
+      runOnly: { type: 'rule', values: ['landmark-unique'] },
+    })
+    expect(results.violations).toEqual([])
+  })
+
   it('shows a flagged verdict as a badge to read, with no delete or hide action anywhere', async () => {
     const fetchMock = vi.fn(async (url: string | URL | Request) =>
       String(url).endsWith('/run')

@@ -64,6 +64,27 @@ function wordCount(demo: (typeof BLOG_DEMO_POSTS)[number]): number {
 }
 
 describe('blog blueprint, content model and demo writing', () => {
+  it('gives the home page an explicit publication-specific SEO description', () => {
+    const home = buildBlogDemoPages(MEDIA, 'The Field Journal').find((demo) => demo.slug === 'home')
+    expect(home?.seoDescription).toBe(
+      'The Field Journal: essays and letters on reading, writing and walking.',
+    )
+  })
+
+  it('keeps every demo essay heading beneath its article h1 without skipping a level', () => {
+    for (const demo of BLOG_DEMO_POSTS) {
+      let previous = 1
+      for (const node of demo.body({ siteName: DEFAULT_PUBLICATION_NAME, media: MEDIA })) {
+        if (node._type !== 'block' || !/^h[2-6]$/.test(node.style ?? '')) continue
+        const level = Number(node.style?.slice(1))
+        expect(level, `${demo.slug}: ${node.style} after h${previous}`).toBeLessThanOrEqual(
+          previous + 1,
+        )
+        previous = level
+      }
+    }
+  })
+
   it('declares excerpt after body, so the admin form renders the excerpt below the text it summarises', () => {
     expect(Object.keys(post.fields).indexOf('body')).toBeLessThan(
       Object.keys(post.fields).indexOf('excerpt'),

@@ -36,6 +36,7 @@ import {
   Input,
   Modal,
   Notice,
+  PageHeader,
   Select,
   Table,
   TableBody,
@@ -369,6 +370,7 @@ export function AgentDetailRoute(): JSX.Element {
   if (selectedAgent === null) {
     return (
       <section className="flex flex-col gap-4">
+        <PageHeader title={t('agents.heading')} />
         <Link to="/agents">{t('agents.detailBack')}</Link>
         <Notice tone="warning" live="polite">
           <p>{t('agents.detailNotFound')}</p>
@@ -457,9 +459,9 @@ export function AgentDetailRoute(): JSX.Element {
         </summary>
         <div className="mt-3 flex flex-col gap-6">
           <div>
-            <h4 className="m-0 mb-2 text-xs leading-5 font-semibold text-muted-foreground uppercase">
+            <h2 className="m-0 mb-2 text-xs leading-5 font-semibold text-muted-foreground uppercase">
               {t('agents.traces')}
-            </h4>
+            </h2>
             <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
               {(showAllTraces ? traces : traces.slice(0, TECHNICAL_LOG_PAGE_SIZE)).map((trace) => (
                 <li key={trace.id}>
@@ -481,9 +483,9 @@ export function AgentDetailRoute(): JSX.Element {
           </div>
 
           <div>
-            <h4 className="m-0 mb-2 text-xs leading-5 font-semibold text-muted-foreground uppercase">
+            <h2 className="m-0 mb-2 text-xs leading-5 font-semibold text-muted-foreground uppercase">
               {t('agents.history')}
-            </h4>
+            </h2>
             <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
               {(showAllHistory ? history : history.slice(0, TECHNICAL_LOG_PAGE_SIZE)).map(
                 (entry) => (

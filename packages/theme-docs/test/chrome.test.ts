@@ -55,9 +55,11 @@ describe('the header', () => {
   })
 
   it('carries a real search form that asks /search, with a labelled input', () => {
-    expect(header).toContain('<form class="cd-search" action="/search" method="get" role="search">')
     expect(header).toContain(
-      '<label class="cg-visually-hidden" for="cd-search-header">Search the documentation</label>',
+      '<form class="cd-search" action="/search" method="get" role="search" aria-label="Search from the header">',
+    )
+    expect(header).toContain(
+      '<label id="cd-search-header-label" class="cg-visually-hidden" for="cd-search-header">Search the documentation</label>',
     )
     expect(header).toContain('id="cd-search-header"')
   })

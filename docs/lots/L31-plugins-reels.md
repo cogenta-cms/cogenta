@@ -154,6 +154,17 @@ désactivé de chaque plugin et **décrit** les brouillons (lecture du manifeste
 ne doit pas exécuter le code de chaque brouillon, contrairement à vérifier, qui l'exécute
 exprès).
 
+**Correction de recette du 2026-10-04** : une désinstallation réussie retire aussi
+le snapshot chargé du runtime courant. Les routes répondent immédiatement 404,
+les événements ignorent ce plugin et les appels planifiés ou de rendu ne peuvent
+plus exécuter son code. Les exécutions déjà engagées terminent avant la réponse
+de désinstallation. Réinstaller les mêmes fichiers ne réactive pas ce snapshot :
+le redémarrage reste nécessaire pour charger une installation. Les tâches déjà
+enregistrées peuvent rester listées jusqu'au redémarrage ; les lancer produit
+un refus journalisé, sans exécution du plugin. Ce comportement est couvert par
+de vrais tests HTTP d'installation, redémarrage, désinstallation et contrôle
+des rôles, ainsi que par un appel en cours pendant la désinstallation.
+
 **Vérifié sur le vrai site** (`examples/local-playground`, navigateur réel) : plugin créé
 depuis le formulaire, code fonctionnel à l'écran, installé, permission accordée, plugin
 désactivé avec la bonne phrase, puis désinstallé et brouillon supprimé par les routes

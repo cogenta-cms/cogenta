@@ -39,6 +39,7 @@ import {
   visibilityGateFor,
 } from '../content/index.js'
 import type { AccessContext, PermissionLayer } from '../types.js'
+import { assertCollectionListValid } from './collection-list-validation.js'
 import {
   lookupFilter,
   NO_REDIRECTS,
@@ -196,7 +197,11 @@ const REPLACE_SCAN_PAGE = 100
  * optional field left empty passes, and a required one reads as missing,
  * with the block and the field named in the error.
  */
-function assertBlocksValid(zones: CreateInput['blocks'], registry: BlockRegistry): void {
+function assertBlocksValid(
+  zones: CreateInput['blocks'],
+  registry: BlockRegistry,
+  collections: readonly CollectionDefinition[],
+): void {
   if (zones === undefined) return
   for (const blocks of Object.values(zones)) {
     for (const block of blocks) {
@@ -212,6 +217,8 @@ function assertBlocksValid(zones: CreateInput['blocks'], registry: BlockRegistry
         registry,
       )
       if (!outcome.ok) throw outcome.error
+      if (block.type === 'collectionList')
+        assertCollectionListValid(block.key, block.data, collections)
     }
   }
 }
@@ -1008,7 +1015,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     create: async (context, name, input, readOptions) => {
       const target = collection(name)
       permissions.assert('create', target, context)
-      assertBlocksValid(input.blocks, options.blocks ?? vocabularyRegistry)
+      assertBlocksValid(input.blocks, options.blocks ?? vocabularyRegistry, options.collections)
 
       const entry = await store(target).create(input)
       return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
@@ -1017,7 +1024,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     update: async (context, name, id, input, readOptions) => {
       const target = collection(name)
       await assertOwnAware(target, 'update', context, id)
-      assertBlocksValid(input.blocks, options.blocks ?? vocabularyRegistry)
+      assertBlocksValid(input.blocks, options.blocks ?? vocabularyRegistry, options.collections)
 
       const entry = await store(target).update(id, input)
       return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })
@@ -1093,6 +1100,10 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       const target = collection(name)
       permissions.assert('publish', target, context)
 
+      const working = await store(target).read(id, { state: 'working' })
+      if (working !== null)
+        assertBlocksValid(working.blocks, options.blocks ?? vocabularyRegistry, options.collections)
+
       const entry = await store(target).publish(id, input)
       return serialise(context, target, entry, { state: 'published', depth: readOptions.depth })
     },
@@ -1144,6 +1155,10 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       const target = collection(name)
       permissions.assert('create', target, context)
 
+      const source = await store(target).read(id, { state: 'working' })
+      if (source !== null)
+        assertBlocksValid(source.blocks, options.blocks ?? vocabularyRegistry, options.collections)
+
       const entry = await store(target).duplicate(id, {
         ...input,
         createdBy: input.createdBy ?? context.actor.id,
@@ -1192,6 +1207,10 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     restore: async (context, name, id, version, readOptions) => {
       const target = collection(name)
       await assertOwnAware(target, 'update', context, id)
+
+      const source = await store(target).readVersion(id, version)
+      if (source !== null)
+        assertBlocksValid(source.blocks, options.blocks ?? vocabularyRegistry, options.collections)
 
       const entry = await store(target).restore(id, version)
       return serialise(context, target, entry, { state: 'working', depth: readOptions.depth })

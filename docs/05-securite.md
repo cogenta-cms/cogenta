@@ -115,6 +115,24 @@ contenu externe lu par un agent est balisé comme donnée. Les permissions viven
 registre d'outils, pas dans le contexte du modèle. Un agent sans `content.publish` ne
 peut pas publier, quoi qu'on lui écrive.
 
+**Médias et menus** — Les rôles `viewer`, `editor` et `admin` peuvent lire la
+médiathèque authentifiée. Seuls `editor` et `admin` peuvent téléverser, remplacer,
+modifier ou supprimer un média, et gérer ses dossiers. Cette politique centrale
+est partagée par REST et le manifeste MCP. Un rôle personnalisé ne reçoit pas
+implicitement les écritures média. Une destination de menu doit être HTTP(S),
+`mailto`, `tel` ou relative ; les espaces, caractères de contrôle et antislashs
+sont refusés. Le rendu applique cette même politique aux anciennes données et
+retire le lien dangereux.
+
+**Serveur MCP** — Les appels passent par les contrôles communs d'autonomie et
+d'audit, avec origine `mcp` et attribution au compte. Un outil à effet de bord
+non réversible attend une décision humaine dans la file fichier partagée
+`.cogenta/agents-runtime/approvals`, consultée par l'administration. Les décisions
+sont immuables, concurrentes par compare-and-set et persistent après redémarrage.
+Un appel déconnecté est annulé et ne se rejoue pas après validation tardive. Un
+échec de stockage atomique bloque l'exécution. Un rôle `admin` n'annule pas cette
+exigence.
+
 **Fuite de données** — Redaction des données personnelles avant envoi au fournisseur.
 Mode « aucune donnée ne sort » avec modèle local. Liste explicite des champs jamais
 transmis.

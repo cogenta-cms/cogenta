@@ -35,7 +35,7 @@ export function TableRoot({ className, label, ...props }: TableRootProps): JSX.E
       aria-label={label}
       tabIndex={0}
       className={cn(
-        'w-full overflow-x-auto rounded-xl border border-border bg-card shadow-card ' +
+        'min-w-0 max-w-full w-full overflow-x-auto rounded-xl border border-border bg-card shadow-card ' +
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
         className,
       )}

@@ -402,3 +402,9 @@
 .cd-toc__link:hover {
   color: var(--cd-ink);
 }
+
+.cd-doc__title,
+.cd-pager__title,
+.cd-doc__body {
+  overflow-wrap: anywhere;
+}

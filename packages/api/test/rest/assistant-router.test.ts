@@ -332,3 +332,104 @@ describe('assistant usage and budget (fiche 30 task 3)', () => {
     expect(data(response)['usage']).toBeUndefined()
   })
 })
+
+describe('assistant retrieval scopes are authorised before tool execution', () => {
+  function scopedRouter() {
+    const received: unknown[] = []
+    const privateCollection: CollectionDefinition = {
+      ...ARTICLE,
+      name: 'private',
+      permissions: { read: ['admin'] },
+    }
+    const collections = [
+      { ...ARTICLE, permissions: { ...ARTICLE.permissions, update: ['editor', 'admin'] } },
+      privateCollection,
+    ]
+    const router = createAssistantRouter({
+      site: SITE,
+      collections,
+      permissions: createPermissionLayer({ collections }),
+      vectorInfo: {
+        driver: 'memory',
+        dimensions: 64,
+        count: async () => 1,
+        lastIndexedAt: () => null,
+        collections: async () => [],
+        referenceCollection: '_reference_documents',
+      },
+      toolset: {
+        available: true,
+        capabilities: [],
+        tools: [
+          {
+            name: 'assist.chat',
+            description: 'Retrieve readable passages',
+            sideEffects: false,
+            input: { safeParse: (value) => ({ success: true, data: value }) },
+            execute: async (input) => {
+              received.push(input)
+              return { answer: 'Answer' }
+            },
+          },
+        ],
+      },
+    })
+    return { router, received }
+  }
+
+  it('allows an admin to include the reference corpus and private readable content', async () => {
+    const { router, received } = scopedRouter()
+    const actor: AccessContext = { actor: { id: 'admin', roles: ['admin'] } }
+    const response = await router.handle(
+      post({
+        tool: 'assist.chat',
+        input: { collections: ['article', 'private', '_reference_documents'] },
+      }),
+      actor,
+    )
+    expect(response.status).toBe(200)
+    expect(received).toEqual([{ collections: ['article', 'private', '_reference_documents'] }])
+    expect(data(await router.handle(get(), actor))['vector']).toHaveProperty(
+      'referenceCollection',
+      '_reference_documents',
+    )
+  })
+
+  it('narrows an editor to readable collections and does not advertise the reference scope', async () => {
+    const { router, received } = scopedRouter()
+    const response = await router.handle(
+      post({
+        tool: 'assist.chat',
+        input: { collections: ['article', 'private', '_reference_documents', 'missing'] },
+      }),
+      EDITOR,
+    )
+    expect(response.status).toBe(200)
+    expect(received).toEqual([{ collections: ['article'] }])
+    expect(data(await router.handle(get(), EDITOR))['vector']).not.toHaveProperty(
+      'referenceCollection',
+    )
+  })
+
+  it('refuses reference-only retrieval for an editor without invoking the tool', async () => {
+    const { router, received } = scopedRouter()
+    const response = await router.handle(
+      post({ tool: 'assist.chat', input: { collections: ['_reference_documents'] } }),
+      EDITOR,
+    )
+    expect(response.status).toBe(403)
+    expect(received).toEqual([])
+  })
+
+  it('refuses a viewer and an anonymous actor before executing retrieval', async () => {
+    const { router, received } = scopedRouter()
+    for (const actor of [VIEWER, { actor: ANONYMOUS }]) {
+      const response = await router.handle(
+        post({ tool: 'assist.chat', input: { collections: ['article', '_reference_documents'] } }),
+        actor,
+      )
+      expect(response.status).toBe(actor.actor.id === null ? 401 : 403)
+    }
+    expect(received).toEqual([])
+  })
+})

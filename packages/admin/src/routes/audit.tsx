@@ -1,4 +1,4 @@
-import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import {
@@ -35,7 +35,7 @@ import {
 import { DiffView } from '../versions/diff-view.js'
 
 const ACTOR_KINDS: readonly AuditActorKind[] = ['human', 'agent', 'api_key', 'system']
-const PAGE_SIZE = 50
+const PAGE_SIZE = 20
 
 function isoStartOfDay(daysAgo: number): string {
   const date = new Date()
@@ -70,7 +70,11 @@ export function AuditRoute(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
+  const [paging, setPaging] = useState<{
+    readonly key: string
+    readonly cursors: readonly (string | undefined)[]
+  }>({ key: '', cursors: [undefined] })
+  const requestGeneration = useRef(0)
 
   const [integrity, setIntegrity] = useState<AuditIntegrityStatus | null>(null)
   const [integrityChecking, setIntegrityChecking] = useState(false)
@@ -87,8 +91,36 @@ export function AuditRoute(): JSX.Element {
   /** Actor ids resolved to an email, same best-effort pattern `version-history.tsx` and `trash.tsx` already use — a 403 (impossible here, this route is already admin-only) or a deleted account just leaves the id showing. */
   const [actorNames, setActorNames] = useState<ReadonlyMap<string, string>>(new Map())
 
+  const filterKey = JSON.stringify([actorId, action, collection, since, until, actorKind])
+  const cursors = paging.key === filterKey ? paging.cursors : [undefined]
+  const cursor = cursors[cursors.length - 1]
+  useEffect(() => {
+    setPaging((current) =>
+      current.key === filterKey ? current : { key: filterKey, cursors: [undefined] },
+    )
+  }, [filterKey])
+  function changePage(next: number): void {
+    if (next < cursors.length - 1)
+      setPaging({ key: filterKey, cursors: cursors.slice(0, next + 1) })
+    else if (nextCursor !== null && hasMore)
+      setPaging({ key: filterKey, cursors: [...cursors, nextCursor] })
+  }
+  const pager = (
+    <Pagination
+      variant="pages"
+      page={cursors.length - 1}
+      pageCount={cursors.length + (hasMore ? 1 : 0)}
+      onPageChange={changePage}
+      loading={loading}
+      previousLabel={t('lists.previous')}
+      nextLabel={t('lists.next')}
+      pageInfo={t('lists.page', { page: cursors.length })}
+    />
+  )
+
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
+    const generation = ++requestGeneration.current
     setLoading(true)
     setError(null)
     try {
@@ -100,40 +132,19 @@ export function AuditRoute(): JSX.Element {
         ...(until === '' ? {} : { until }),
         ...(actorKind === '' ? {} : { actorKind }),
         limit: PAGE_SIZE,
+        ...(cursor === undefined ? {} : { after: cursor }),
       })
+      if (generation !== requestGeneration.current) return
       setEntries(page.entries)
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('audit.loadError'))
+      if (generation === requestGeneration.current)
+        setError(caught instanceof ApiError ? caught.message : t('audit.loadError'))
     } finally {
-      setLoading(false)
+      if (generation === requestGeneration.current) setLoading(false)
     }
-  }, [token, isAdmin, actorId, action, collection, since, until, actorKind, t])
-
-  async function loadMore(): Promise<void> {
-    if (token === null || nextCursor === null) return
-    setLoadingMore(true)
-    try {
-      const page = await listAuditEntriesPage(token, {
-        ...(actorId === '' ? {} : { actorId }),
-        ...(action === '' ? {} : { action }),
-        ...(collection === '' ? {} : { collection }),
-        ...(since === '' ? {} : { since }),
-        ...(until === '' ? {} : { until }),
-        ...(actorKind === '' ? {} : { actorKind }),
-        limit: PAGE_SIZE,
-        after: nextCursor,
-      })
-      setEntries((current) => [...current, ...page.entries])
-      setHasMore(page.hasMore)
-      setNextCursor(page.nextCursor)
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('audit.loadError'))
-    } finally {
-      setLoadingMore(false)
-    }
-  }
+  }, [token, isAdmin, actorId, action, collection, since, until, actorKind, cursor, t])
 
   const loadIntegrity = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -147,6 +158,9 @@ export function AuditRoute(): JSX.Element {
 
   useEffect(() => {
     void load()
+    return () => {
+      requestGeneration.current += 1
+    }
   }, [load])
 
   useEffect(() => {
@@ -171,7 +185,8 @@ export function AuditRoute(): JSX.Element {
 
   function submitFilters(event: FormEvent): void {
     event.preventDefault()
-    void load()
+    if (cursor === undefined) void load()
+    else setPaging({ key: filterKey, cursors: [undefined] })
   }
 
   function quickRange(days: number): void {
@@ -237,7 +252,7 @@ export function AuditRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="audit-heading" className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6">
       <h1 id="audit-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('audit.heading')}
       </h1>
@@ -387,9 +402,10 @@ export function AuditRoute(): JSX.Element {
       )}
       {loading && <p>{t('common.loading')}</p>}
 
+      {!loading && error === null && pager}
       {!loading && error === null && (
         <TableRoot label={t('audit.heading')}>
-          <Table>
+          <Table className="min-w-[56rem]">
             <TableHead>
               <TableRow>
                 <TableHeader>{t('audit.date')}</TableHeader>
@@ -431,16 +447,7 @@ export function AuditRoute(): JSX.Element {
         </TableRoot>
       )}
 
-      {!loading && (
-        <Pagination
-          variant="cursor"
-          hasMore={hasMore}
-          loading={loadingMore}
-          onLoadMore={() => void loadMore()}
-          loadMoreLabel={t('audit.loadMore')}
-          loadingLabel={t('common.loading')}
-        />
-      )}
+      {!loading && pager}
 
       <RetentionNotice />
 

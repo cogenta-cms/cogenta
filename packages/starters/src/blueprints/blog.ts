@@ -191,7 +191,6 @@ function textBlock(
 
 const p = (text: string): RichNode => textBlock('normal', text)
 const h2 = (text: string): RichNode => textBlock('h2', text)
-const h4 = (text: string): RichNode => textBlock('h4', text)
 const quote = (text: string): RichNode => textBlock('blockquote', text)
 const bullet = (text: string): RichNode => textBlock('normal', text, 'bullet')
 const numbered = (text: string): RichNode => textBlock('normal', text, 'number')
@@ -552,7 +551,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
           'train does the rest.',
       ),
       rule(),
-      h4('Notes'),
+      h2('Notes'),
       numbered(
         'Paper works best for me, but the setting matters more than the medium. The same draft in ' +
           'a different typeface on a different screen shows up nearly as many problems.',
@@ -790,7 +789,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
           'I write this, a third full, with this essay’s first opening on page six.',
       ),
       rule(),
-      h4('Notes'),
+      h2('Notes'),
       numbered(
         'The squared paper was the right choice and I should never have left it. Lines impose a ' +
           'size on handwriting that squares do not.',
@@ -951,7 +950,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
           'could reproduce. For now I am glad of the 7:52, delays and all.',
       ),
       rule(),
-      h4('Notes'),
+      h2('Notes'),
       numbered(
         'My pace is about forty pages an hour for fiction, and closer to twenty-five for anything ' +
           'with footnotes.',
@@ -1020,6 +1019,7 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = [
 export interface BlogDemoPage {
   readonly title: string
   readonly slug: string
+  readonly seoDescription?: string
   readonly blocks: readonly VocabularyBlock[]
 }
 
@@ -1063,6 +1063,10 @@ export function buildBlogDemoPages(
     {
       title: 'Home',
       slug: 'home',
+      seoDescription: `${siteName}: essays and letters on reading, writing and walking.`.slice(
+        0,
+        160,
+      ),
       blocks: [
         {
           _key: 'demo-home-hero',
@@ -1556,7 +1560,11 @@ async function seedBlogDemoContent(ctx: SeedContext): Promise<void> {
     await pageStore.create({
       status: 'published',
       createdBy: adminId,
-      values: { title: demo.title, slug: demo.slug },
+      values: {
+        title: demo.title,
+        slug: demo.slug,
+        ...(demo.seoDescription === undefined ? {} : { seoDescription: demo.seoDescription }),
+      },
       blocks: { blocks: demo.blocks.map(toBlockZoneEntry) },
     })
   }

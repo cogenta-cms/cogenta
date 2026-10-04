@@ -97,7 +97,7 @@ export function NoticeBoard(): JSX.Element | null {
   if (notices.length === 0) return null
 
   return (
-    <div className="mb-6 flex flex-col gap-3">
+    <div className="mb-5 flex flex-col gap-2">
       {visible.map((notice) => (
         <Notice
           key={notice.id}
@@ -125,7 +125,23 @@ export function NoticeBoard(): JSX.Element | null {
                 ),
               })}
         >
-          <p>{t(`notices.${notice.code}.body`, { ...notice.params, defaultValue: notice.code })}</p>
+          {notice.severity === 'danger' ? (
+            <p>
+              {t(`notices.${notice.code}.body`, { ...notice.params, defaultValue: notice.code })}
+            </p>
+          ) : (
+            <details>
+              <summary className="cursor-pointer text-sm text-muted-foreground underline-offset-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {t('notices.details')}
+              </summary>
+              <p className="mt-2 mb-0">
+                {t(`notices.${notice.code}.body`, {
+                  ...notice.params,
+                  defaultValue: notice.code,
+                })}
+              </p>
+            </details>
+          )}
         </Notice>
       ))}
       {hiddenCount > 0 && (

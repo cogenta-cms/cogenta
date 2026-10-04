@@ -505,8 +505,8 @@ export function SeoPanel({
 }
 
 const SCORE_TONE: Readonly<Record<'red' | 'orange' | 'green', string>> = {
-  red: 'bg-destructive/15 text-destructive',
-  orange: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+  red: 'bg-destructive text-destructive-foreground',
+  orange: 'bg-amber-500/15 text-amber-800 dark:text-amber-400',
   green: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
 }
 

@@ -68,6 +68,15 @@ for (const locale of ['fr', 'en'] as const) {
   const pages = buildVitrineDemoPages(copy)
 
   describe(`vitrine blueprint (${locale}) — content model and copy`, () => {
+    it('gives the home page an explicit description from the authored copy in its own language', () => {
+      const home = buildVitrineDemoPages(copy, { firm: 'Northfield' }).find(
+        (demo) => demo.slug === 'home',
+      )
+      expect(home?.seoDescription).toBe(copy.pages('Northfield').home.seoDescription)
+      expect(home?.seoDescription).toContain('Northfield')
+      expect(home?.seoDescription?.length).toBeLessThanOrEqual(160)
+    })
+
     it('declares the four conventional SEO override fields on every routed collection', () => {
       for (const collection of model.collections.filter((c) => c.routing !== undefined)) {
         for (const field of ['seoTitle', 'seoDescription', 'seoImage', 'seoNoindex']) {

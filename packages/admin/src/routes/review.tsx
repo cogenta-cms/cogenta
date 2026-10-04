@@ -174,7 +174,7 @@ export function ReviewRoute(): JSX.Element {
         {t('review.heading')}
       </h1>
 
-      <div role="tablist" aria-label={t('review.heading')} className="flex gap-2">
+      <div role="tablist" aria-label={t('review.heading')} className="flex flex-wrap gap-2">
         {SCOPES.map((candidate) => (
           <Button
             key={candidate}

@@ -9,6 +9,7 @@ import {
 import { newId as uuidv7 } from '../id.js'
 import { joinFragments } from './fragments.js'
 import { MENU_TABLES } from './menu-tables.js'
+import { isSafeMenuUrl } from './menu-url.js'
 import { childPath, depthOf, isBelow, isWithin, rebasedPath } from './taxonomy-path.js'
 
 /**
@@ -345,10 +346,10 @@ export function createMenuStore(options: MenuStoreOptions): MenuStore {
     },
   ): void {
     if (kind === 'url') {
-      if (typeof body.url !== 'string' || body.url.length === 0) {
+      if (!isSafeMenuUrl(body.url)) {
         throw invalid(
-          'A URL item needs a non-empty "url".',
-          'Send { "kind": "url", "url": "https://…" }.',
+          'A URL item needs a safe destination.',
+          'Use an HTTP(S), mailto or tel URL, or a relative path without whitespace or control characters.',
         )
       }
       return

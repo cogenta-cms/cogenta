@@ -114,8 +114,12 @@ async function mysqlDeleteRule(
   table: string,
   constraint: string,
 ): Promise<string | null> {
+  // MySQL preserves information_schema's uppercase column name unless it
+  // has an explicit alias; MariaDB returns the spelling from the SELECT.
+  // Without this alias MySQL's row has DELETE_RULE, is mistaken for absence,
+  // and adding the existing foreign key fails with ER_FK_DUP_NAME.
   const result = await tx.query<{ delete_rule: string }>(
-    sql`select delete_rule from information_schema.referential_constraints
+    sql`select delete_rule as ${identifier('delete_rule', 'mysql')} from information_schema.referential_constraints
         where constraint_schema = database()
           and table_name = ${table}
           and constraint_name = ${constraint}`,

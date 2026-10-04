@@ -38,6 +38,20 @@ describe('extractBoundary', () => {
 })
 
 describe('parseMultipartFormData', () => {
+  it('preserves repeated checkbox values in their submitted order alongside a binary file', () => {
+    const bytes = Buffer.from([0x00, 0xff, 0x89])
+    const body = multipartBody([
+      part('Content-Disposition: form-data; name="topics"', 'news'),
+      part('Content-Disposition: form-data; name="topics"', 'events'),
+      part('Content-Disposition: form-data; name="topics"', 'offers'),
+      part('Content-Disposition: form-data; name="__proto__"', 'safe'),
+      part('Content-Disposition: form-data; name="file"; filename="x.bin"', bytes),
+    ])
+    const result = parseMultipartFormData(body, CONTENT_TYPE)
+    expect(result.fields['topics']).toEqual(['news', 'events', 'offers'])
+    expect(result.fields['__proto__']).toBe('safe')
+    expect(Buffer.from(result.files[0]?.data ?? [])).toEqual(bytes)
+  })
   it('reads a plain text field', () => {
     const body = multipartBody([
       part('Content-Disposition: form-data; name="alt"', 'A red bicycle'),

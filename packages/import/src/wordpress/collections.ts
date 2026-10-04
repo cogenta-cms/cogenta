@@ -16,9 +16,11 @@ import {
  * contract A offers with no fixed shape, for WordPress postmeta that has
  * nowhere semantic to go). Running this import against a site that already
  * has its own `post`/`category`/`tag`/`page` collections under those exact
- * names — e.g. one scaffolded from the `blog` blueprint — is out of scope for
- * this task: `createSchemaTables` only creates a table that does not exist
- * yet, so combining the two is not exercised or supported here.
+ * names — e.g. one scaffolded from the `blog` blueprint — requires the same
+ * import schema. Preview and apply reject incompatible definitions and
+ * physical tables before any writes; a site must explicitly migrate its
+ * schema or choose a mapped CSV/JSON import instead. No schema migration is
+ * performed by the WordPress importer.
  *
  * `body` is a block zone (`f.blocks()`), not a single `f.richText()` field
  * like the blueprint's `post.body`: WordPress content commonly mixes

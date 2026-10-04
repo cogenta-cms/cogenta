@@ -27,6 +27,37 @@ function table(): HTMLElement {
 }
 
 describe('coupons', () => {
+  it('keeps every coupon reachable and resets pagination after searching', async () => {
+    for (let index = 0; index < 12; index++) {
+      const response = await fetch('/api/commerce/coupons', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${VALID_TOKEN}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ code: `PAGED${index}`, kind: 'percentage', value: 1000 }),
+      })
+      expect(response.status).toBe(201)
+    }
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Tableau de bord' })
+    fireEvent.click(await screen.findByRole('link', { name: 'Coupons' }))
+    await within(await screen.findByRole('table')).findByText('PAGED0')
+    expect(within(table()).getAllByRole('row')).toHaveLength(11)
+    expect(screen.queryByText('PAGED11')).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    expect(await screen.findByText('PAGED11')).toBeDefined()
+    fireEvent.change(screen.getByLabelText('Rechercher dans la liste'), {
+      target: { value: 'PAGED0' },
+    })
+    expect(screen.getByText('PAGED0')).toBeDefined()
+    expect(screen.queryByText('PAGED11')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Rechercher dans la liste'), { target: { value: '' } })
+    expect(within(table()).getAllByRole('row')).toHaveLength(11)
+    expect(
+      screen
+        .getAllByRole('button', { name: 'Précédent' })
+        .every((button) => (button as HTMLButtonElement).disabled),
+    ).toBe(true)
+  })
+
   it('creates a percentage coupon and lists it', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })

@@ -1,6 +1,15 @@
 # L20 — Audit complet de l'admin et plan d'amélioration
 
-> **Statut : audit terminé, pas encore un lot planifié.** Ce document est le
+> **Statut : audit historique, conservé comme preuve du contexte initial.**
+> Les constats ci-dessous décrivent le code à la date de cet audit ; ils ne
+> constituent plus le backlog actif. Leur mise en œuvre a été reprise par
+> [L21](L21-corrections-et-fonctionnalites-admin.md) et les [fiches de développement](../plans/).
+> Pour la recette du 3 octobre 2026, consulter le [suivi des 43 constats](../qa/remediation-2026-10-03/tracking.json)
+> et [BLOCKERS](../../BLOCKERS.md), qui distinguent correction, preuve et limite
+> restante. Cette annotation ne réécrit pas les décisions ni ne déclare tous
+> les constats corrigés. Mise à jour : 2026-10-04.
+
+> **Contexte initial conservé :** ce document est le
 > résultat d'une revue exhaustive demandée par l'utilisateur, une fois les 38
 > fiches admin fusionnées : « analyse chaque page, chaque onglet, chaque
 > sous-page — quelles fonctionnalités manquent pour que ce soit complet ?

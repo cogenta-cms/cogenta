@@ -24,8 +24,20 @@ export function renderSearchForm(locale: string, id: string, size: SearchSize): 
       action: SEARCH_PATH,
       method: 'get',
       role: 'search',
+      'aria-label': word(
+        locale,
+        id === 'cd-search-header'
+          ? 'headerSearch'
+          : id === 'cd-search-menu'
+            ? 'menuSearch'
+            : 'pageSearch',
+      ),
     },
-    h('label', { class: 'cg-visually-hidden', for: id }, word(locale, 'searchLabel')),
+    h(
+      'label',
+      { id: `${id}-label`, class: 'cg-visually-hidden', for: id },
+      word(locale, 'searchLabel'),
+    ),
     renderIcon('search', { className: 'cd-search__icon', size: 20 }),
     h('input', {
       id,

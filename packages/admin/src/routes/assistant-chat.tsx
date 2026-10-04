@@ -51,6 +51,7 @@ export function AssistantChatRoute(): JSX.Element | null {
 
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
+  const isAdmin = roles.includes('admin')
   const locale =
     schemaState.status === 'ready' ? (schemaState.schema.site?.defaultLocale ?? 'en') : 'en'
   const collections =
@@ -59,6 +60,12 @@ export function AssistantChatRoute(): JSX.Element | null {
           (collection) => collection.name,
         )
       : []
+
+  const [referenceCollection, setReferenceCollection] = useState<string | null>(null)
+  const searchCollections = [
+    ...collections,
+    ...(referenceCollection === null ? [] : [referenceCollection]),
+  ]
 
   const [available, setAvailable] = useState<boolean | null>(null)
   const [question, setQuestion] = useState('')
@@ -70,6 +77,7 @@ export function AssistantChatRoute(): JSX.Element | null {
     if (token === null) return
     try {
       const capabilities = await getAssistCapabilities(token)
+      setReferenceCollection(isAdmin ? (capabilities.vector?.referenceCollection ?? null) : null)
       setAvailable(
         capabilities.available && capabilities.tools.some((tool) => tool.tool === 'assist.chat'),
       )
@@ -77,7 +85,7 @@ export function AssistantChatRoute(): JSX.Element | null {
       // Treated exactly like "not configured" — see AssistantPanel's own note.
       setAvailable(false)
     }
-  }, [token])
+  }, [token, isAdmin])
 
   useEffect(() => {
     void load()
@@ -106,7 +114,7 @@ export function AssistantChatRoute(): JSX.Element | null {
   async function ask(event: FormEvent): Promise<void> {
     event.preventDefault()
     const asked = question.trim()
-    if (asked === '' || token === null || collections.length === 0 || asking) return
+    if (asked === '' || token === null || searchCollections.length === 0 || asking) return
 
     setAsking(true)
     setError(null)
@@ -119,7 +127,7 @@ export function AssistantChatRoute(): JSX.Element | null {
       const answer: ChatAnswer = await runChat(token, {
         question: asked,
         locale,
-        collections,
+        collections: searchCollections,
         siteId: window.location.origin,
       })
       setTurns((current) => [
@@ -143,6 +151,8 @@ export function AssistantChatRoute(): JSX.Element | null {
     <section aria-labelledby="assistant-chat-heading">
       <h1 id="assistant-chat-heading">{t('assistChat.heading')}</h1>
       <p>{t('assistChat.intro')}</p>
+      <p>{t('assistChat.scopeContent', { collections: collections.join(', '), locale })}</p>
+      {referenceCollection !== null && <p>{t('assistChat.scopeReferences')}</p>}
 
       <ol
         aria-label={t('assistChat.historyLabel')}
@@ -163,11 +173,15 @@ export function AssistantChatRoute(): JSX.Element | null {
                 <ul>
                   {turn.sources.map((source) => (
                     <li key={`${source.collection}/${source.entryId}`}>
-                      <Link
-                        to={`/collections/${encodeURIComponent(source.collection)}/${encodeURIComponent(source.entryId)}`}
-                      >
-                        {source.title}
-                      </Link>
+                      {source.collection === referenceCollection ? (
+                        <span>{source.title}</span>
+                      ) : (
+                        <Link
+                          to={`/collections/${encodeURIComponent(source.collection)}/${encodeURIComponent(source.entryId)}`}
+                        >
+                          {source.title}
+                        </Link>
+                      )}
                       {/* The excerpt is data quoted from the site's own content,
                           shown for a human to check the answer against — never
                           re-interpreted as anything but text (R8). */}

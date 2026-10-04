@@ -1,4 +1,12 @@
-import { type DragEvent, type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
+import {
+  type DragEvent,
+  type FormEvent,
+  type JSX,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
@@ -40,7 +48,7 @@ import {
   Select,
 } from '../ui/index.js'
 
-const PAGE_SIZE = 25
+const PAGE_SIZE = 20
 
 /**
  * Fiche 46: dossiers et gestion de fichiers enrichie.
@@ -74,7 +82,11 @@ export function MediaRoute(): JSX.Element {
   const [hasMore, setHasMore] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
+  const [paging, setPaging] = useState<{
+    readonly key: string
+    readonly cursors: readonly (string | undefined)[]
+  }>({ key: '', cursors: [undefined] })
+  const requestGeneration = useRef(0)
   const [error, setError] = useState<ApiErrorDescription | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
@@ -118,6 +130,41 @@ export function MediaRoute(): JSX.Element {
   const [deleteFolderTarget, setDeleteFolderTarget] = useState<MediaFolder | null>(null)
   const [deleteFolderError, setDeleteFolderError] = useState<string | null>(null)
 
+  const filterKey = JSON.stringify([
+    kindFilter,
+    tagFilter,
+    submittedQuery,
+    fromFilter,
+    toFilter,
+    sort,
+    { folderId: selectedFolderId ?? null, allFolders: selectedFolderId === undefined },
+  ])
+  const cursors = paging.key === filterKey ? paging.cursors : [undefined]
+  const cursor = cursors[cursors.length - 1]
+  useEffect(() => {
+    setPaging((current) =>
+      current.key === filterKey ? current : { key: filterKey, cursors: [undefined] },
+    )
+  }, [filterKey])
+  function changePage(next: number): void {
+    if (next < cursors.length - 1)
+      setPaging({ key: filterKey, cursors: cursors.slice(0, next + 1) })
+    else if (nextCursor !== null && hasMore)
+      setPaging({ key: filterKey, cursors: [...cursors, nextCursor] })
+  }
+  const pager = (
+    <Pagination
+      variant="pages"
+      page={cursors.length - 1}
+      pageCount={cursors.length + (hasMore ? 1 : 0)}
+      onPageChange={changePage}
+      loading={loading}
+      previousLabel={t('lists.previous')}
+      nextLabel={t('lists.next')}
+      pageInfo={t('lists.page', { page: cursors.length })}
+    />
+  )
+
   const loadFolders = useCallback(async () => {
     if (token === null) return
     try {
@@ -135,11 +182,13 @@ export function MediaRoute(): JSX.Element {
 
   const load = useCallback(async () => {
     if (token === null) return
+    const generation = ++requestGeneration.current
     setLoading(true)
     setError(null)
     try {
       const page = await listMedia(token, {
         limit: PAGE_SIZE,
+        ...(cursor === undefined ? {} : { cursor: cursor }),
         ...(kindFilter === '' ? {} : { kind: kindFilter }),
         ...(tagFilter.trim() === '' ? {} : { tag: tagFilter.trim() }),
         ...(submittedQuery.trim() === '' ? {} : { q: submittedQuery.trim() }),
@@ -149,15 +198,25 @@ export function MediaRoute(): JSX.Element {
         direction: sort.direction,
         ...(selectedFolderId === undefined ? {} : { folderId: selectedFolderId }),
       })
+      if (generation !== requestGeneration.current) return
+      if (page.items.length === 0 && cursor !== undefined) {
+        setPaging((current) =>
+          current.key === filterKey
+            ? { ...current, cursors: current.cursors.slice(0, -1) }
+            : current,
+        )
+        return
+      }
       setItems(page.items)
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
       setTotal(page.total ?? null)
       setSelected(new Set())
     } catch (caught) {
-      setError(describeApiError(caught, t('media.loadError')))
+      if (generation === requestGeneration.current)
+        setError(describeApiError(caught, t('media.loadError')))
     } finally {
-      setLoading(false)
+      if (generation === requestGeneration.current) setLoading(false)
     }
   }, [
     token,
@@ -168,39 +227,17 @@ export function MediaRoute(): JSX.Element {
     toFilter,
     sort,
     selectedFolderId,
+    cursor,
+    filterKey,
     t,
   ])
 
   useEffect(() => {
     void load()
-  }, [load])
-
-  async function loadMore(): Promise<void> {
-    if (token === null || nextCursor === null) return
-    setLoadingMore(true)
-    try {
-      const page = await listMedia(token, {
-        limit: PAGE_SIZE,
-        cursor: nextCursor,
-        ...(kindFilter === '' ? {} : { kind: kindFilter }),
-        ...(tagFilter.trim() === '' ? {} : { tag: tagFilter.trim() }),
-        ...(submittedQuery.trim() === '' ? {} : { q: submittedQuery.trim() }),
-        ...(fromFilter === '' ? {} : { from: fromFilter }),
-        ...(toFilter === '' ? {} : { to: toFilter }),
-        sort: sort.field,
-        direction: sort.direction,
-        ...(selectedFolderId === undefined ? {} : { folderId: selectedFolderId }),
-      })
-      setItems((current) => [...current, ...page.items])
-      setHasMore(page.hasMore)
-      setNextCursor(page.nextCursor)
-      setTotal(page.total ?? null)
-    } catch (caught) {
-      setError(describeApiError(caught, t('media.loadError')))
-    } finally {
-      setLoadingMore(false)
+    return () => {
+      requestGeneration.current += 1
     }
-  }
+  }, [load])
 
   function toggleSelected(id: string): void {
     setSelected((current) => {
@@ -336,7 +373,11 @@ export function MediaRoute(): JSX.Element {
   // empty token while `token` is briefly `null` (before the "not signed in
   // yet" return below runs), which is harmless — nothing can be dropped on
   // an unrendered page.
-  const uploads = useUploadQueue(token ?? '', (asset) => setItems((current) => [asset, ...current]))
+  function reloadFirstPage(): void {
+    if (cursor === undefined) void load()
+    else setPaging({ key: filterKey, cursors: [undefined] })
+  }
+  const uploads = useUploadQueue(token ?? '', reloadFirstPage)
   const [pageDragOver, setPageDragOver] = useState(false)
 
   // A page-wide file drop uploads decorative-by-necessity — the same choice
@@ -431,8 +472,8 @@ export function MediaRoute(): JSX.Element {
         </ul>
       )}
 
-      <div className="grid grid-cols-[16rem_1fr] gap-6">
-        <aside>
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside aria-label={t('media.foldersLabel')}>
           {foldersError && <Notice tone="danger">{t('media.foldersLoadError')}</Notice>}
           <MediaFolderTree
             folders={folders}
@@ -449,7 +490,7 @@ export function MediaRoute(): JSX.Element {
           />
         </aside>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
           {breadcrumb.length > 0 && (
             <nav aria-label={t('media.breadcrumbLabel')} className="text-sm text-muted-foreground">
               <button type="button" onClick={() => setSelectedFolderId(undefined)}>
@@ -476,14 +517,14 @@ export function MediaRoute(): JSX.Element {
               <UploadForm
                 token={token}
                 defaultFolderId={selectedFolderId === undefined ? null : selectedFolderId}
-                onUploaded={(asset) => setItems((current) => [asset, ...current])}
+                onUploaded={reloadFirstPage}
               />
             </CardBody>
           </Card>
 
           {/* Renders nothing at all — card included — on a site with no
               image model configured (R2). */}
-          <GeneratePanel token={token} onKept={() => void load()} />
+          <GeneratePanel token={token} onKept={reloadFirstPage} />
 
           <search>
             <form
@@ -662,7 +703,8 @@ export function MediaRoute(): JSX.Element {
           )}
           {loading && <p>{t('common.loading')}</p>}
 
-          {!loading && (
+          {!loading && pager}
+          {!loading && error === null && (
             <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3 p-0">
               {items.map((asset) => (
                 <li
@@ -700,16 +742,7 @@ export function MediaRoute(): JSX.Element {
             </ul>
           )}
 
-          {!loading && (
-            <Pagination
-              variant="cursor"
-              hasMore={hasMore}
-              loading={loadingMore}
-              onLoadMore={() => void loadMore()}
-              loadMoreLabel={t('media.loadMore')}
-              loadingLabel={t('common.loading')}
-            />
-          )}
+          {!loading && pager}
         </div>
       </div>
 
@@ -732,7 +765,11 @@ export function MediaRoute(): JSX.Element {
               )
             }
             onDeleted={(id) => {
-              setItems((current) => current.filter((item) => item.id !== id))
+              const remaining = items.filter((item) => item.id !== id)
+              setItems(remaining)
+              if (remaining.length === 0 && cursors.length > 1) {
+                setPaging({ key: filterKey, cursors: cursors.slice(0, -1) })
+              }
               setSelectedId(null)
             }}
           />

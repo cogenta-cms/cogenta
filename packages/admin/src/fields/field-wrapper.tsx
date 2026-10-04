@@ -73,7 +73,7 @@ export function FieldWrapper({
   return (
     <div className="field">
       <div className="field__label-row">
-        <label htmlFor={id}>
+        <label id={`${id}-label`} htmlFor={id}>
           {label}
           {field.required && (
             <span aria-hidden="true" className="field__required">
@@ -102,7 +102,11 @@ export function FieldWrapper({
           {error}
         </p>
       )}
-      {help !== undefined && <p className="field__help">{help}</p>}
+      {help !== undefined && (
+        <p id={`${id}-help`} className="field__help">
+          {help}
+        </p>
+      )}
     </div>
   )
 }

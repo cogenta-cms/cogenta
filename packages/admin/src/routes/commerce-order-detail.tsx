@@ -34,6 +34,7 @@ import {
   Field,
   Input,
   Notice,
+  PageHeader,
   Table,
   TableBody,
   TableCell,
@@ -97,7 +98,13 @@ export function CommerceOrderRoute(): JSX.Element {
       )
       setRefundsByPayment(Object.fromEntries(refundEntries))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceOrderDetail.loadError'))
+      setError(
+        caught instanceof ApiError && caught.code === 'COMMERCE_ORDER_NOT_FOUND'
+          ? t('commerceOrderDetail.notFound')
+          : caught instanceof ApiError
+            ? caught.message
+            : t('commerceOrderDetail.loadError'),
+      )
     } finally {
       setLoading(false)
     }
@@ -254,20 +261,24 @@ export function CommerceOrderRoute(): JSX.Element {
   if (!canRead) {
     return (
       <section>
+        <PageHeader title={t('commerceOrders.heading')} />
         <p role="alert">{t('commerceOrders.signedInOnly')}</p>
       </section>
     )
   }
 
   if (loading) return <p>{t('common.loading')}</p>
-  if (error !== null) {
+  if (error !== null || order === null) {
     return (
-      <Notice tone="danger" live="assertive">
-        <p>{error}</p>
-      </Notice>
+      <section className="flex flex-col gap-4">
+        <PageHeader title={t('commerceOrders.heading')} />
+        <Link to="/commerce/orders">{t('commerceOrderDetail.back')}</Link>
+        <Notice tone="danger" live="assertive">
+          <p>{error ?? t('commerceOrderDetail.notFound')}</p>
+        </Notice>
+      </section>
     )
   }
-  if (order === null) return <p>{t('commerceOrderDetail.notFound')}</p>
 
   const nextStatuses = TRANSITIONS[order.status]
   const hasAddress =

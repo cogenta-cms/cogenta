@@ -157,6 +157,9 @@ function renderLeaf({ attributes, children, leaf }: RenderLeafProps): JSX.Elemen
 
 export interface RichTextEditorProps {
   readonly id: string
+  readonly labelledBy?: string | undefined
+  readonly describedBy?: string | undefined
+  readonly invalid?: boolean | undefined
   readonly value: RichTextDocument
   readonly disabled?: boolean | undefined
   onChange(value: RichTextDocument): void
@@ -177,6 +180,9 @@ interface SlashState {
  */
 export function RichTextEditor({
   id,
+  labelledBy,
+  describedBy,
+  invalid,
   value,
   disabled = false,
   onChange,
@@ -364,6 +370,10 @@ export function RichTextEditor({
           >
             <Editable
               id={id}
+              aria-labelledby={labelledBy}
+              aria-label={labelledBy === undefined ? t('richText.viewRich') : undefined}
+              aria-describedby={describedBy}
+              aria-invalid={invalid}
               readOnly={disabled}
               renderElement={(props) => renderElement(props, t, session?.token)}
               renderLeaf={renderLeaf}

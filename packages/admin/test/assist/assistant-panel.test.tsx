@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AssistantPanel } from '../../src/assist/assistant-panel.js'
+import { i18next } from '../../src/i18n/index.js'
 
 /**
  * The lot's hardest interface rule, checked first: with no AI provider, this
@@ -59,8 +60,9 @@ function panel(overrides: Partial<Parameters<typeof AssistantPanel>[0]> = {}) {
   )
 }
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals()
+  await i18next.changeLanguage('fr')
 })
 
 describe('the assistant panel on a site with no AI provider', () => {
@@ -123,6 +125,70 @@ describe('the assistant panel on a site with no AI provider', () => {
 })
 
 describe('the assistant panel on a configured site', () => {
+  it.each(['fr', 'en'])(
+    'translates built-in buttons and tooltips in %s while preserving third-party metadata',
+    async (language) => {
+      await act(async () => {
+        await i18next.changeLanguage(language)
+      })
+      const ids = [
+        'rewrite',
+        'proofread',
+        'summarise',
+        'translate',
+        'meta_description',
+        'titles',
+        'tags',
+        'alt_text',
+        'generate_image',
+        'chat',
+        'classify',
+        'find_duplicates',
+        'moderate',
+        'faq_draft',
+        'schema_org_draft',
+        'generate_agent_identity',
+      ]
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          jsonResponse({
+            available: true,
+            tools: [
+              ...ids.map((id) => ({
+                tool: `assist.${id}`,
+                label: `Server label ${id}`,
+                description: `Server description ${id}`,
+                cost: 'medium',
+                needs: [],
+              })),
+              {
+                tool: 'assist.third_party',
+                label: 'Author tool label',
+                description: 'Author tool description',
+                cost: 'low',
+                needs: [],
+              },
+            ],
+          }),
+        ),
+      )
+      render(panel())
+      for (const id of ids) {
+        const button = await screen.findByRole('button', {
+          name: i18next.t(`assistant.builtinTools.${id}.label`),
+        })
+        expect(button.getAttribute('title')).toBe(
+          i18next.t(`assistant.builtinTools.${id}.description`),
+        )
+        expect(screen.queryByText(`Server label ${id}`)).toBeNull()
+      }
+      expect(screen.getByRole('button', { name: 'Author tool label' }).getAttribute('title')).toBe(
+        'Author tool description',
+      )
+    },
+  )
+
   it('offers one button per tool the server listed', async () => {
     vi.stubGlobal(
       'fetch',
@@ -131,8 +197,8 @@ describe('the assistant panel on a configured site', () => {
 
     render(panel())
 
-    expect(await screen.findByRole('button', { name: 'Rewrite' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Translate' })).toBeDefined()
+    expect(await screen.findByRole('button', { name: 'Réécrire' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Traduire' })).toBeDefined()
   })
 
   it('disables every tool while the entry has no text to work on', async () => {
@@ -143,7 +209,7 @@ describe('the assistant panel on a configured site', () => {
 
     render(panel({ fields: [{ name: 'body', label: 'Body', value: '   ' }] }))
 
-    const button = await screen.findByRole('button', { name: 'Rewrite' })
+    const button = await screen.findByRole('button', { name: 'Réécrire' })
     expect((button as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -169,7 +235,7 @@ describe('the assistant panel on a configured site', () => {
     fireEvent.change(await screen.findByLabelText('Quel champ ?'), {
       target: { value: 'summary' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Rewrite' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Réécrire' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Utiliser' }))
 
     const runCall = (fetchMock.mock.calls as unknown[][]).find((call) =>
@@ -191,7 +257,7 @@ describe('the assistant panel on a configured site', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(panel())
-    fireEvent.click(await screen.findByRole('button', { name: 'Rewrite' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Réécrire' }))
 
     expect(await screen.findByText('A shorter sentence.')).toBeDefined()
     expect(screen.getByText(/Rien n'a été modifié/u)).toBeDefined()
@@ -207,7 +273,7 @@ describe('the assistant panel on a configured site', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(panel({ onApply }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Rewrite' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Réécrire' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Utiliser' }))
 
     expect(onApply).toHaveBeenCalledWith('body', 'A shorter sentence.', 'assist.rewrite')
@@ -227,7 +293,7 @@ describe('the assistant panel on a configured site', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(panel())
-    fireEvent.click(await screen.findByRole('button', { name: 'Translate' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Traduire' }))
 
     await screen.findByText('Une phrase.')
     const runCall = (fetchMock.mock.calls as unknown[][]).find((call) =>
@@ -255,7 +321,7 @@ describe('the assistant panel on a configured site', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(panel())
-    fireEvent.click(await screen.findByRole('button', { name: 'Rewrite' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Réécrire' }))
 
     expect(await screen.findByRole('alert')).toBeDefined()
     expect(screen.getByText('The provider is rate-limiting.')).toBeDefined()
@@ -266,7 +332,7 @@ describe('the assistant panel on a configured site', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(panel())
-    await screen.findByRole('button', { name: 'Rewrite' })
+    await screen.findByRole('button', { name: 'Réécrire' })
 
     const headers = (runInitOf(fetchMock.mock.calls[0] as unknown[]).headers ?? {}) as Record<
       string,

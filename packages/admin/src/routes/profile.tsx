@@ -38,6 +38,7 @@ import {
 import { useAuth } from '../auth/auth-context.js'
 import { SUPPORTED_LANGUAGES, setLanguage } from '../i18n/index.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import '../styles/media.css'
 import {
   Button,
@@ -224,6 +225,7 @@ function ChannelPreferencesEditor({
  * one, which is a change, not a reset. The reset flow is L13.
  */
 export function ProfileRoute(): JSX.Element {
+  const formatDateTime = useDateTimeFormatter()
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
@@ -705,7 +707,7 @@ export function ProfileRoute(): JSX.Element {
                       previewable
                     />
                   )}
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="secondary"
@@ -845,8 +847,13 @@ export function ProfileRoute(): JSX.Element {
                       })}
                 </p>
               )}
-              <div className="flex gap-2">
-                <Button type="submit">{t('profile.confirmChangePassword')}</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="submit"
+                  className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
+                >
+                  {t('profile.confirmChangePassword')}
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -897,7 +904,12 @@ export function ProfileRoute(): JSX.Element {
             </div>
           ) : enrolment === null ? (
             <div>
-              <Button onClick={() => void startTotp()}>{t('profile.enableTotp')}</Button>
+              <Button
+                className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
+                onClick={() => void startTotp()}
+              >
+                {t('profile.enableTotp')}
+              </Button>
             </div>
           ) : (
             <form onSubmit={confirmTotp} className="flex flex-col gap-4">
@@ -1006,7 +1018,11 @@ export function ProfileRoute(): JSX.Element {
 
           {profile?.mfa.totp === true && recoveryCodes === null && (
             <div>
-              <Button variant="secondary" onClick={() => void regenerateCodes()}>
+              <Button
+                variant="secondary"
+                className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
+                onClick={() => void regenerateCodes()}
+              >
                 {t('profile.recoveryRegenerate')}
               </Button>
             </div>
@@ -1014,14 +1030,9 @@ export function ProfileRoute(): JSX.Element {
         </CardBody>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2 id="sessions">{t('profile.sessionsHeading')}</h2>
-          </CardTitle>
-          <CardDescription>{t('profile.sessionsIntro')}</CardDescription>
-        </CardHeader>
-        <CardBody>
+      <div id="sessions">
+        <SessionList sessions={sessions} onRevoke={(id) => void revoke(id)}>
+          <p className="m-0 text-sm text-muted-foreground">{t('profile.sessionsIntro')}</p>
           {sessionsActionError !== null && (
             <Notice tone="danger" live="assertive">
               <p>{sessionsActionError}</p>
@@ -1038,16 +1049,15 @@ export function ProfileRoute(): JSX.Element {
           <div>
             <Button
               variant="destructive"
+              className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
               disabled={sessions.length <= 1}
               onClick={() => void revokeOthers()}
             >
               {t('profile.revokeOtherSessions')}
             </Button>
           </div>
-        </CardBody>
-      </Card>
-
-      <SessionList sessions={sessions} onRevoke={(id) => void revoke(id)} />
+        </SessionList>
+      </div>
 
       <Card>
         <CardHeader>
@@ -1108,9 +1118,11 @@ export function ProfileRoute(): JSX.Element {
               {activity.map((entry) => (
                 <li key={entry.id} className="flex flex-wrap items-center justify-between gap-3">
                   <span>
-                    {t(`audit.actionLabel.${entry.action}`, { defaultValue: entry.action })}
+                    {t(`audit.actionLabel.${entry.action}`, {
+                      defaultValue: t('audit.actionOther'),
+                    })}
                   </span>
-                  <span className="text-muted-foreground">{entry.at}</span>
+                  <span className="text-muted-foreground">{formatDateTime(entry.at)}</span>
                 </li>
               ))}
             </ul>

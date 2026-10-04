@@ -114,6 +114,7 @@ describe('the form submissions screen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Voir' }))
     expect(await screen.findByText('visitor@example.com')).toBeDefined()
+    expect(await screen.findByRole('heading', { name: 'Notes internes', level: 2 })).toBeDefined()
   })
 
   it('marks a submission read through the real API', async () => {
@@ -157,34 +158,122 @@ describe('the form submissions screen', () => {
     })
   })
 
-  it('loads a further page of submissions on demand, rather than all of them at once (fiche 67 task 2)', async () => {
+  it('replaces cursor pages, returns to previous rows and resets status filters', async () => {
     const bulkSubmissions = Array.from({ length: 60 }, (_, index) => ({
+      ...SUBMISSION_ONE,
       id: `sub-bulk-${index}`,
-      formId: 'form-1',
-      formName: 'Contact us',
+      status: index === 59 ? ('read' as const) : ('new' as const),
       values: { email: `visitor-${index}@example.com` },
-      consents: [],
-      status: 'new' as const,
-      ipHash: `hash-${index}`,
-      referrer: null,
-      userAgent: null,
-      submittedAt: new Date(2026, 2, 1, 10, index).toISOString(),
     }))
     signedIn(['admin'], { forms: [CONTACT_FORM], formSubmissions: bulkSubmissions })
     render(<App />)
     await goToSubmissions()
 
-    // Each row's selection checkbox carries the submission id in its
-    // accessible name — a unique, stable identifier the collapsed row
-    // shows, unlike the form name/status columns which repeat.
+    const row = (index: number) => `Sélectionner la soumission sub-bulk-${index}`
+    await screen.findByRole('checkbox', { name: row(0) })
+    expect(screen.getAllByRole('checkbox')).toHaveLength(20)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    await screen.findByRole('checkbox', { name: row(20) })
+    expect(screen.queryByRole('checkbox', { name: row(0) })).toBeNull()
+    expect(screen.getAllByRole('checkbox')).toHaveLength(20)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    await screen.findByRole('checkbox', { name: row(59) })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Précédent' })[0] as HTMLElement)
+    await screen.findByRole('checkbox', { name: row(20) })
+    fireEvent.change(screen.getByLabelText('Statut'), { target: { value: 'read' } })
+    await screen.findByRole('checkbox', { name: row(59) })
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Précédent' })).toBeNull()
+  })
+
+  it('returns to the preceding cursor when deletion empties the last page', async () => {
+    const bulkSubmissions = Array.from({ length: 21 }, (_, index) => ({
+      ...SUBMISSION_ONE,
+      id: `sub-bulk-${index}`,
+    }))
+    signedIn(['admin'], { forms: [CONTACT_FORM], formSubmissions: bulkSubmissions })
+    render(<App />)
+    await goToSubmissions()
     await screen.findByRole('checkbox', { name: 'Sélectionner la soumission sub-bulk-0' })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: 'Sélectionner la soumission sub-bulk-20' }),
+    )
+    fireEvent.click(within(screen.getByRole('toolbar')).getByRole('button', { name: 'Supprimer' }))
+    await screen.findByRole('checkbox', { name: 'Sélectionner la soumission sub-bulk-0' })
+    expect(screen.getAllByRole('checkbox')).toHaveLength(20)
     expect(
-      screen.queryByRole('checkbox', { name: 'Sélectionner la soumission sub-bulk-59' }),
+      screen.queryByRole('checkbox', { name: 'Sélectionner la soumission sub-bulk-20' }),
     ).toBeNull()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Charger plus' }))
+  it('paginates GDPR matches while erasing every matching submission', async () => {
+    const matches = Array.from({ length: 21 }, (_, index) => ({
+      ...SUBMISSION_ONE,
+      id: `sub-gdpr-${index}`,
+      formName: `Contact ${index}`,
+    }))
+    signedIn(['admin'], { forms: [CONTACT_FORM], formSubmissions: [...matches, SUBMISSION_TWO] })
+    render(<App />)
+    await goToSubmissions()
+    await screen.findByRole('table')
+    fireEvent.change(screen.getByLabelText('Adresse e-mail'), {
+      target: { value: 'visitor@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
+    const section = screen.getByRole('region', { name: 'Demande relative à une personne' })
+    await within(section).findByText(/Contact 0 —/u)
+    expect(within(section).getAllByRole('listitem')).toHaveLength(20)
+    fireEvent.click(within(section).getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    await within(section).findByText(/Contact 20 —/u)
+    expect(within(section).getAllByRole('listitem')).toHaveLength(1)
+    fireEvent.click(within(section).getByRole('button', { name: 'Tout effacer' }))
+    await waitFor(async () => {
+      const response = await fetch('/api/forms/submissions', {
+        headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      })
+      const body = (await response.json()) as { data: { id: string }[] }
+      expect(body.data.map((item) => item.id)).toEqual(['sub-2'])
+    })
+  })
 
-    await screen.findByRole('checkbox', { name: 'Sélectionner la soumission sub-bulk-59' })
+  it('refreshes the current filter when a mark action finishes after the filter changes', async () => {
+    signedIn(['admin'], { forms: [CONTACT_FORM], formSubmissions: [SUBMISSION_ONE] })
+    let finish: (() => void) | undefined
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const fetchMock = globalThis.fetch
+    let actionCompleted = false
+    let refreshedAfterAction = false
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (...args: Parameters<typeof fetch>) => {
+        const path = String(args[0])
+        const result = await fetchMock(...args)
+        if (path.endsWith('/api/forms/submissions/sub-1') && args[1]?.method === 'PATCH') {
+          await pending
+          actionCompleted = true
+        } else if (actionCompleted && path.includes('/api/forms/submissions?'))
+          refreshedAfterAction = true
+        return result
+      }),
+    )
+    render(<App />)
+    await goToSubmissions()
+    await screen.findByRole('checkbox', { name: 'Sélectionner la soumission sub-1' })
+    fireEvent.click(screen.getByRole('button', { name: 'Marquer comme lue' }))
+    fireEvent.change(screen.getByLabelText('Statut'), { target: { value: 'spam' } })
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('checkbox', { name: 'Sélectionner la soumission sub-1' }),
+      ).toBeNull(),
+    )
+    finish?.()
+    await waitFor(() => expect(refreshedAfterAction).toBe(true))
+    await waitFor(() => expect(screen.queryByText('Chargement…')).toBeNull())
+    expect(screen.queryByRole('checkbox', { name: 'Sélectionner la soumission sub-1' })).toBeNull()
+    expect((screen.getByLabelText('Statut') as HTMLSelectElement).value).toBe('spam')
   })
 
   it('finds a submission by e-mail through the GDPR search, and erases it on request', async () => {

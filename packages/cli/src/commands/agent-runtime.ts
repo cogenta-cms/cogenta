@@ -31,6 +31,7 @@ import {
   createFileAgentSkillStore,
   createFilePromptTemplateStore,
   createFileProviderConfigStore,
+  createHttpFetchTool,
   createKillSwitch,
   createMediaListTool,
   createMediaReadTool,
@@ -506,6 +507,7 @@ function createLiveProviderRegistry(
 }
 
 function buildToolRegistry(options: {
+  readonly siteUrl?: string
   readonly contentService: ContentService
   /**
    * Where `media.store_generated_image` puts a file — see
@@ -607,6 +609,14 @@ function buildToolRegistry(options: {
           }),
         ]),
     createSiteConfigReadTool(),
+    ...(options.siteUrl === undefined
+      ? []
+      : [
+          createHttpFetchTool({
+            allowedDomains: [new URL(options.siteUrl).hostname],
+            allowedOrigins: [new URL(options.siteUrl).origin],
+          }),
+        ]),
     createDocumentExtractTool(),
     createDepsScanTool({ projectRoot: options.projectRoot }),
     // L22 task 3 — the Site Monitor's toolset.
@@ -664,6 +674,7 @@ function createRegistryAdapter(store: AgentDeclarationStore): {
 } {
   let cache: readonly Awaited<ReturnType<AgentDeclarationStore['list']>>[number][] = []
   const killSwitches = new Map<string, MutableKillSwitch>()
+  let mutations: Promise<void> = Promise.resolve()
 
   function killSwitchFor(name: string): MutableKillSwitch {
     const existing = killSwitches.get(name)
@@ -682,29 +693,35 @@ function createRegistryAdapter(store: AgentDeclarationStore): {
     }
   }
 
+  function mutate(change: () => Promise<unknown>): Promise<void> {
+    const next = mutations.then(async () => {
+      await change()
+      await refresh()
+    })
+    // A failed write rejects its caller, without preventing later corrections.
+    mutations = next.catch(() => undefined)
+    return next
+  }
+
   const registry: AgentRegistryLike = {
     list: () => cache,
     get: (name) => cache.find((agent) => agent.name === name),
     enable(name) {
-      killSwitchFor(name).deactivate()
-      void store.setEnabled(name, true).then(refresh)
+      return mutate(() => store.setEnabled(name, true))
     },
     disable(name) {
       killSwitchFor(name).activate()
-      void store.setEnabled(name, false).then(refresh)
+      return mutate(() => store.setEnabled(name, false))
     },
     isEnabled: (name) => !killSwitchFor(name).isActive(),
     async create(input) {
-      await store.create(input as never)
-      await refresh()
+      await mutate(() => store.create(input as never))
     },
     async update(name, patch) {
-      await store.update(name, patch as never)
-      await refresh()
+      await mutate(() => store.update(name, patch as never))
     },
     async remove(name) {
-      await store.remove(name)
-      await refresh()
+      await mutate(() => store.remove(name))
     },
     readIdentity: (name) => store.readIdentity(name),
   }
@@ -845,6 +862,7 @@ export async function buildAgentRuntime(
   await liveProviders.refresh()
 
   const coreToolOptions = {
+    ...(options.site.url === undefined ? {} : { siteUrl: options.site.url }),
     contentService: options.contentService,
     mediaStore: options.mediaStore,
     projectRoot: options.projectRoot,

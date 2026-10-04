@@ -7,7 +7,8 @@
     "saving": "Saving…",
     "yes": "Yes",
     "no": "No",
-    "close": "Close"
+    "close": "Close",
+    "adminPageOnly": "This page is restricted to administrators. Your account does not have the required permissions; contact an administrator if you need access."
   },
   "fields": {
     "geoLat": "Latitude",
@@ -204,7 +205,8 @@
       "target": "On",
       "date": "Date",
       "actions": "Actions"
-    }
+    },
+    "moderationRegion": "Review of comment {{number}} by {{author}}"
   },
   "richTextAssist": {
     "button": "Assist",
@@ -451,6 +453,11 @@
         "title": "Audit log integrity check failed",
         "body": "The scheduled integrity check found the audit log's hash chain broken at entry {{entryId}}. Every entry from this point on cannot be trusted. This stays until a forced full check reports the chain intact again.",
         "action": "Open the audit log"
+      },
+      "recovery-code-used": {
+        "title": "A recovery code was used",
+        "body": "A recovery code was used to sign in. Each code works only once. Check your remaining codes and generate a new set if needed.",
+        "action": "Check my recovery codes"
       }
     },
     "apikey": {
@@ -486,7 +493,11 @@
           "title": "A plugin was disabled: it crashed",
           "body": "\"{{plugin}}\" was stopped and disabled after its worker crashed. It will not run again until you re-enable it."
         },
-        "action": "Open plugins"
+        "action": "Open plugins",
+        "manual": {
+          "title": "Plugin {{name}} is disabled",
+          "body": "This plugin was manually disabled. Open the plugin list to review its configuration and enable it again if needed."
+        }
       }
     },
     "content": {
@@ -502,7 +513,8 @@
         "body": "\"{{from}}\" keeps getting hit as a 404. The agent suggests redirecting it to \"{{to}}\". Nothing has been created — review it and add the redirect yourself if it looks right.",
         "action": "Open Redirections"
       }
-    }
+    },
+    "details": "Why this recommendation?"
   },
   "notifications": {
     "trigger_one": "Notifications, {{count}} unread",
@@ -886,7 +898,8 @@
       "kept": "“{{name}}” added to the library, recorded as generated."
     },
     "uploadImageTypes": "An image must be {{types}} — checked on the file’s own bytes, not its extension. Any other file is accepted, and offered as a download rather than displayed.",
-    "usageItemAt": "in {{at}}"
+    "usageItemAt": "in {{at}}",
+    "foldersLabel": "Folder organisation"
   },
   "collectionList": {
     "tableLabel": "Content",
@@ -956,7 +969,8 @@
     "trashedMessage": "\"{{title}}\" was moved to the trash.",
     "undoTrash": "Undo",
     "undoingTrash": "Undoing…",
-    "undoTrashError": "Could not undo — the entry stays in the trash."
+    "undoTrashError": "Could not undo — the entry stays in the trash.",
+    "showId": "Show identifier"
   },
   "taxonomies": {
     "heading": "Taxonomies",
@@ -1091,7 +1105,10 @@
     "foreignLocaleBody": "This menu is in \"{{locale}}\", a language this site does not declare (declared languages: {{locales}}). Any change here is saved correctly, but no page on this site will show it. Select or duplicate a menu in one of the declared languages.",
     "duplicateTo": "Duplicate to locale",
     "duplicate": "Duplicate menu",
-    "duplicateError": "The menu could not be duplicated."
+    "duplicateError": "The menu could not be duplicated.",
+    "locationHeading": "Location and languages",
+    "itemsHeading": "Menu items",
+    "itemAction": "{{action}} : {{label}}"
   },
   "redirects": {
     "heading": "Redirects",
@@ -1556,7 +1573,44 @@
     "captchaEnabled": "Require a CAPTCHA (Cloudflare Turnstile) before accepting a submission",
     "captchaWarning": "Off by default. Enabling this requires the Turnstile widget script for this form only — every other part of this form still works with no JavaScript at all.",
     "captchaSiteKey": "Turnstile site key",
-    "captchaSecretKey": "Turnstile secret key"
+    "captchaSecretKey": "Turnstile secret key",
+    "defaultConfirmation": "Thank you — your message has been received.",
+    "defaultAutoresponder": "We have received your message. We will get back to you as soon as possible.",
+    "editorFields": {
+      "name": "Technical name",
+      "label": "Field label",
+      "kind": "Field type",
+      "required": "Required",
+      "help": "Field help",
+      "choicesText": "Comma-separated choices",
+      "consentText": "Consent text",
+      "step": "Step",
+      "showIfField": "Condition field",
+      "showIfOperator": "Condition operator",
+      "showIfValue": "Condition value",
+      "acceptCategoriesText": "Accepted file categories",
+      "maxSizeBytes": "Maximum size in bytes"
+    },
+    "fieldKinds": {
+      "text": "Short text",
+      "longText": "Long text",
+      "email": "E-mail address",
+      "phone": "Phone number",
+      "number": "Number",
+      "date": "Date",
+      "choiceSingle": "Single choice",
+      "choiceMulti": "Multiple choice",
+      "consent": "Consent",
+      "file": "File"
+    },
+    "conditionOperators": {
+      "none": "No condition",
+      "equals": "Equals",
+      "notEquals": "Does not equal",
+      "contains": "Contains",
+      "isEmpty": "Is empty",
+      "isNotEmpty": "Is not empty"
+    }
   },
   "formSubmissions": {
     "heading": "Submissions",
@@ -1711,7 +1765,8 @@
       "audit.export": "Audit log exported",
       "agent.run": "Agent run",
       "channel.approval.decide": "Channel approval decided"
-    }
+    },
+    "actionOther": "Other action — inspect details"
   },
   "analytics": {
     "heading": "Analytics",
@@ -1789,7 +1844,7 @@
     "state": "State",
     "model": "Model",
     "autonomy": "Autonomy",
-    "budget": "Budget (tokens/day used)",
+    "budget": "Daily token consumption",
     "actions": "Actions",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -1865,7 +1920,9 @@
     "showAll": "Show all ({{count}})",
     "imageModelResolved": "Images will be drawn by “{{model}}” through the {{provider}} provider. The model above is the one that reasons about what to draw, not the one that draws it.",
     "imageModelMissing": "No image model is configured: this agent can reason about an image but cannot produce one. A multimodal vendor is declared once, with one key — it only needs its image model named.",
-    "imageModelLink": "Set the image model in Providers"
+    "imageModelLink": "Set the image model in Providers",
+    "budgetConsumption": "{{used}} used out of {{limit}}",
+    "providerUnavailable": "Enabled, provider unavailable"
   },
   "providers": {
     "heading": "Providers",
@@ -2021,7 +2078,7 @@
     "scheduledLoadError": "Could not load scheduled content.",
     "analyticsLoadError": "Could not load the analytics widget.",
     "backupsHeading": "Backup status",
-    "backupsBody": "Backup and restore exist, but command-line only (\"cogenta backup\", \"cogenta restore\") — this widget will stay empty until an admin API exposes them.",
+    "backupsBody": "Inspect backups in this site’s terminal: cogenta backup create creates an archive, cogenta backup list locates them and cogenta restore preview <archive> checks it without writing. Keep a copy off the server. This screen does not confirm that a backup exists.",
     "summaryHeading": "Content summary",
     "summaryLoadError": "Could not load the content summary.",
     "summaryEmpty": "No collection is readable by your role.",
@@ -2071,7 +2128,8 @@
       "todo": "To do",
       "shortcuts": "Shortcuts",
       "backups": "Backup status"
-    }
+    },
+    "backupsHelp": "Create, verify and locate a backup"
   },
   "appearance": {
     "heading": "Appearance",
@@ -2822,7 +2880,9 @@
     "roleGrantsHeading": "What this grants",
     "roleGrantsNone": "No permission on this site.",
     "unknownRoleWarning": "This role is named by no collection or taxonomy on this site, so it grants nothing: {{roles}}. Check for a typo.",
-    "roleGrantsLoadNote": "Computed from this site's schema — see \"Roles & permissions\" for the full picture."
+    "roleGrantsLoadNote": "Computed from this site's schema — see \"Roles & permissions\" for the full picture.",
+    "revokeSessionShort": "Revoke",
+    "sessionNumber": "Session {{number}}"
   },
   "apiKeys": {
     "heading": "API keys",
@@ -3293,7 +3353,7 @@
     "tableLabel": "Order list",
     "searchLabel": "Search",
     "searchPlaceholder": "Reference or customer email",
-    "periodTotal": "Total for the orders shown:",
+    "periodTotal": "Total for orders on this page:",
     "statusFilter": "Filter by status",
     "allStatuses": "All statuses",
     "referenceColumn": "Reference",
@@ -3314,7 +3374,11 @@
     "newOrder": "New order",
     "exportCsv": "Export CSV",
     "fromDate": "From",
-    "toDate": "To"
+    "toDate": "To",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "pageInfo": "Page {{page}}",
+    "paginationLabel": "Order pages"
   },
   "commerceCoupons": {
     "heading": "Coupons",
@@ -3992,7 +4056,8 @@
     "cancelButton": "Undo this import",
     "cancelling": "Undoing…",
     "cancelError": "This import could not be undone.",
-    "cancelled": "Undone: everything this import created was moved to the trash, and can be restored from there."
+    "cancelled": "Undone: everything this import created was moved to the trash, and can be restored from there.",
+    "wordPressTargetHelp": "WordPress uses its own collections. An incompatible existing collection is refused before importing; use a fresh site, an explicit schema migration, or CSV/JSON mapped to your schema."
   },
   "builder": {
     "modeLabel": "Editing mode",
@@ -4161,7 +4226,9 @@
     "ask": "Ask",
     "asking": "Asking…",
     "error": "The assistant could not answer. Try again.",
-    "unavailable": "This tool (\"Ask the site\") is not enabled on this site — check the assistant's tool configuration."
+    "unavailable": "This tool (\"Ask the site\") is not enabled on this site — check the assistant's tool configuration.",
+    "scopeContent": "Scope: readable published content ({{collections}}), language {{locale}}.",
+    "scopeReferences": "Indexed reference documents are also searched."
   },
   "assistant": {
     "heading": "Assistant",
@@ -4199,7 +4266,74 @@
     "vectorCount": "{{count}} entries indexed",
     "vectorNeverIndexed": "Nothing indexed yet.",
     "vectorLastIndexed": "Last indexed: {{at}}",
-    "vectorViewIndex": "See what's indexed and add reference documents"
+    "vectorViewIndex": "See what's indexed and add reference documents",
+    "builtinTools": {
+      "rewrite": {
+        "label": "Rewrite",
+        "description": "Rewrite a passage while keeping its meaning and facts."
+      },
+      "proofread": {
+        "label": "Proofread",
+        "description": "Correct spelling, grammar and punctuation without rewriting."
+      },
+      "summarise": {
+        "label": "Summarise",
+        "description": "Summarise a passage in a few sentences."
+      },
+      "translate": {
+        "label": "Translate",
+        "description": "Translate a passage into another language."
+      },
+      "meta_description": {
+        "label": "Meta description",
+        "description": "Suggest meta descriptions for an entry."
+      },
+      "titles": {
+        "label": "Titles",
+        "description": "Suggest titles for an entry."
+      },
+      "tags": {
+        "label": "Tags",
+        "description": "Suggest tags for an entry."
+      },
+      "alt_text": {
+        "label": "Alt text",
+        "description": "Suggest alt text for an image from its surrounding text."
+      },
+      "generate_image": {
+        "label": "Generate image",
+        "description": "Generate candidate images from a description without storing them."
+      },
+      "chat": {
+        "label": "Ask the site",
+        "description": "Answer a question from this site’s content, citing the passages used."
+      },
+      "classify": {
+        "label": "Suggest categories",
+        "description": "Suggest categories from the site’s vocabulary."
+      },
+      "find_duplicates": {
+        "label": "Find duplicates",
+        "description": "Find entries with nearly identical text, without an AI provider."
+      },
+      "moderate": {
+        "label": "Check for review",
+        "description": "Flag content for human review without removing or hiding it."
+      },
+      "faq_draft": {
+        "label": "Draft a FAQ",
+        "description": "Draft a FAQ, always as a draft and never published."
+      },
+      "schema_org_draft": {
+        "label": "Draft structured data",
+        "description": "Draft Schema.org JSON-LD, always as a draft and never published."
+      },
+      "generate_agent_identity": {
+        "label": "Draft agent identity",
+        "description": "Draft an agent’s role, objectives, style and instructions from a short brief without applying them."
+      }
+    },
+    "locationAgents": "Agent configuration"
   },
   "assistantIndex": {
     "heading": "Knowledge index",
@@ -4230,7 +4364,9 @@
     "statusIndexed": "Indexed ({{count}} passage(s))",
     "statusError": "Could not be indexed",
     "documentsEmpty": "No reference document has been uploaded yet.",
-    "remove": "Remove"
+    "remove": "Remove",
+    "collectionsTableLabel": "Content collections table",
+    "documentsTableLabel": "Reference documents table"
   },
   "duplicates": {
     "heading": "Duplicate detection",
@@ -4355,7 +4491,11 @@
       "forms-purge": "Purge form submissions past each form's own GDPR retention window.",
       "channel-notifications": "Flush any due grouped notification to its channel.",
       "analytics-purge": "Purge page-view events past the site's configured retention window.",
-      "updates-auto-check": "Check npm for a newer @cogenta/core/@cogenta/cli, and apply it when the auto-update policy allows and no contract risk was flagged."
+      "updates-auto-check": "Check npm for a newer @cogenta/core/@cogenta/cli, and apply it when the auto-update policy allows and no contract risk was flagged.",
+      "audit-prune": "Purge audit log",
+      "commerce-order-emails": "Send order emails",
+      "commerce-subscriptions": "Bill and retry subscriptions",
+      "commerce-carts": "Detect abandoned carts"
     },
     "tasksHeading": "Tasks",
     "columnTask": "Task",
@@ -4391,7 +4531,12 @@
     "confirmTitle": "Run \"{{name}}\" now?",
     "confirmBody": "This task is destructive — it permanently removes data. This cannot be undone.",
     "confirmCancel": "Cancel",
-    "confirmRun": "Run now"
+    "confirmRun": "Run now",
+    "runTaskAction": "Run now: {{name}}",
+    "retryJobAction": "Retry: {{id}}",
+    "queueWindowNotice": "The queue is limited to a snapshot of {{count}} items. Refresh the page to reload its state.",
+    "taskPagination": "Task pagination",
+    "queuePagination": "Queue pagination"
   },
   "documentation": {
     "heading": "Documentation",
@@ -4413,7 +4558,9 @@
       "sidebarLabel": "Pages in this tree",
       "notFoundTitle": "Page not found",
       "notFoundBody": "This page does not exist in the documentation shipped with this version of Cogenta.",
-      "versionNote": "Documentation correct for Cogenta v{{version}}."
+      "versionNote": "Documentation correct for Cogenta v{{version}}.",
+      "tableScrollLabel": "Table {{index}} of {{title}}",
+      "codeScrollLabel": "Code block {{index}} of {{title}}"
     },
     "sections": {
       "content": {
@@ -4536,7 +4683,11 @@
     "spentColumn": "Total spent",
     "empty": "No customer yet.",
     "search": "Search",
-    "loadError": "Could not load customers."
+    "loadError": "Could not load customers.",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "pageInfo": "Page {{page}}",
+    "paginationLabel": "Customer pages"
   },
   "commerceCustomerDetail": {
     "back": "← Back to customers",
@@ -4656,7 +4807,9 @@
       "replaced": "Plugin replaced; the previous copy is kept.",
       "uninstalled": "Plugin uninstalled.",
       "enabled": "Plugin turned on.",
-      "disabled": "Plugin turned off."
+      "disabled": "Plugin turned off.",
+      "installedRestart": "Plugin installed. Restart the server to load it.",
+      "replacedRestart": "Plugin replaced. Restart the server to load this version."
     },
     "capability": {
       "content.read": "Read the site's content",
@@ -4668,7 +4821,16 @@
       "http.fetch": "Call an outside service",
       "storage.read": "Read its own files",
       "storage.write": "Write its own files"
-    }
+    },
+    "restartRequired": "Installed — restart required",
+    "runtimeLoaded": "Loaded in the server",
+    "restartHelp": "Restart this site’s cogenta serve process, then refresh this page to check loading. Routes, tasks and events load at startup.",
+    "searchLabel": "Search extensions",
+    "searchPlaceholder": "Name or title…",
+    "noMatches": "No extension matches this search.",
+    "previousPage": "Previous",
+    "nextPage": "Next",
+    "pageInfo": "{{from}}–{{to}} of {{total}}"
   },
   "widgets": {
     "heading": "Widgets",
@@ -5018,7 +5180,8 @@
       "scheduled": "Scheduled",
       "published": "Published",
       "draft": "Draft"
-    }
+    },
+    "monthGrid": "Calendar month grid"
   },
   "blockFields": {
     "eyebrow": "Eyebrow",
@@ -5303,5 +5466,24 @@
     "seoNoindex": "Adds a \"noindex\" instruction and removes this entry from the sitemap.",
     "seoTitle": "Overrides the browser tab title and the title shown in search results. Leave blank to use the page title.",
     "topic": "The short label a listing card sets above its title, such as a subject narrower than the category."
+  },
+  "agentApprovals": {
+    "heading": "Actions awaiting approval",
+    "description": "These actions await your decision. Review their contents before authorizing them. A non-reversible action cannot be undone automatically.",
+    "empty": "No pending action.",
+    "loadError": "Approval requests could not be loaded. Please retry.",
+    "decisionError": "The decision could not be saved. Refresh the requests before retrying.",
+    "review": "Review action",
+    "reject": "Reject",
+    "approve": "Authorize this action",
+    "confirmTitle": "Authorize this specific action?",
+    "confirmDescription": "Check the tool and data below. Your approval authorizes only this request, once."
+  },
+  "lists": {
+    "previous": "Previous",
+    "next": "Next",
+    "pageInfo": "{{from}}–{{to}} of {{total}}",
+    "search": "Search the list",
+    "page": "Page {{page}}"
   }
 }

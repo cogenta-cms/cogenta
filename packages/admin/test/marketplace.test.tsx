@@ -56,6 +56,11 @@ describe('the marketplace screen — the sub-view has its own URL (fiche 71)', (
     await goToDiscoverTab()
 
     expect(window.location.search).toContain('tab=discover')
+    expect(screen.getByRole('group', { name: 'Sections de la marketplace' })).toBeDefined()
+    expect(screen.queryByRole('tablist')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Découvrir' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    )
   })
 
   it('shows the "Découvrir" tab straight away when the URL already carries ?tab=discover', async () => {

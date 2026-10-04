@@ -62,6 +62,40 @@ describe('createMenuStore (sqlite)', () => {
     ).rejects.toMatchObject({ code: 'MENU_ITEM_INVALID' })
   })
 
+  it.each([
+    'javascript:alert(1)',
+    'JaVaScRiPt:alert(1)',
+    'java\tscript:alert(1)',
+    '\njavascript:alert(1)',
+    'data:text/html,<svg>',
+    'vbscript:msgbox(1)',
+    '\\javascript:alert(1)',
+  ])('refuses unsafe menu destination %j on creation and update', async (url) => {
+    const menu = await store.create({ name: 'main', locale: 'en', label: 'Main' })
+    await expect(
+      store.createItem(menu.id, { label: 'Bad', kind: 'url', url }),
+    ).rejects.toMatchObject({ code: 'MENU_ITEM_INVALID' })
+    const item = await store.createItem(menu.id, { label: 'Safe', kind: 'url', url: '/safe' })
+    await expect(store.updateItem(item.id, { url })).rejects.toMatchObject({
+      code: 'MENU_ITEM_INVALID',
+    })
+    expect((await store.readItem(item.id))?.url).toBe('/safe')
+  })
+
+  it.each([
+    'https://example.com/path',
+    'http://example.com',
+    'mailto:editor@example.test',
+    'tel:+33123456789',
+    '/about',
+    '../about',
+    '#section',
+    '?page=2',
+  ])('preserves safe menu destination %j', async (url) => {
+    const menu = await store.create({ name: 'main', locale: 'en', label: 'Main' })
+    expect((await store.createItem(menu.id, { label: 'Safe', kind: 'url', url })).url).toBe(url)
+  })
+
   it('nests items and lists them in tree order', async () => {
     const menu = await store.create({ name: 'main', locale: 'en', label: 'Main menu' })
     const parent = await store.createItem(menu.id, { label: 'About', kind: 'submenu-placeholder' })

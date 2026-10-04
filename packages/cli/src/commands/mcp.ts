@@ -1,27 +1,34 @@
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 import {
+  type ApprovalQueue,
   buildManifest,
   type ContentServiceLike,
   createContentDeleteTool,
   createContentPublishTool,
   createContentReadTool,
   createContentWriteDraftTool,
+  createFileApprovalQueue,
   createMediaReadTool,
   createMediaWriteTool,
   createSiteConfigReadTool,
   createToolRegistry,
   type ExecutableTool,
   type ToolDefinition,
+  withAudit,
+  withAutonomy,
 } from '@cogenta/agents'
 import {
   type AccessContext,
   type ContentService,
+  canAccessMedia,
   createContentService,
   createPermissionLayer,
+  type PermissionLayer,
 } from '@cogenta/api'
 import {
   createApiKeyStore,
+  createAuditLog,
   createUserStore,
   ensureAuthTables,
   looksLikeApiKey,
@@ -29,6 +36,7 @@ import {
 import {
   CogentaError,
   createDatabaseMediaStore,
+  createDatabaseQueue,
   createDatabaseRegistry,
   createLogger,
   type DatabaseHandle,
@@ -39,14 +47,15 @@ import {
 import { createMcpServer, serveMcpOverStdio } from '@cogenta/mcp'
 import {
   type CollectionDefinition,
-  type ContentStore,
-  createContentStore,
+  createRedirectStore,
   createRolePermissionOverlay,
   createRolePermissionStore,
   createSchemaTables,
+  createSearchIndex,
   type TaxonomyDefinition,
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
+import { createDecoratedContentStores } from './decorated-content-stores.js'
 import { loadSchemaModule } from './serve.js'
 
 export interface McpOptions {
@@ -60,7 +69,9 @@ export interface McpOptions {
    */
   readonly out: Output
   readonly stderr: Writer
-  /** Resolves the acting user from the real user store — the process that launched this command IS that user. */
+  /** Shared human-review channel; defaults to the same file queue the admin uses. */
+  readonly approvalQueue?: ApprovalQueue
+  /** Resolves the acting user from the real user store. */
   readonly email?: string
   /** A synthetic actor for local testing (`--role viewer`), never combined with --email. */
   readonly role?: string
@@ -99,32 +110,17 @@ verification REST uses for that key — a role the key was not granted is
 refused by the same permission layer, exactly as it would be over HTTP.
 
 With none of these flags, tool calls run as an anonymous ("public") actor:
-content tools still run through the real permission layer (a public actor
-sees only what a public actor may see), but media, site-config and
-HTTP-fetch tools — which have no permission check of their own to fall back
-on — are left out of the manifest entirely. See BLOCKERS.md, "MCP actor
-scoping", for why.
+the manifest exposes only the effective collection capabilities. Media and
+site-config tools require authentication; viewers can read media, while only
+editors and admins can write them. Every non-reversible mutation requires
+human approval in the administration; pending requests are shared through
+.cogenta/agents-runtime/approvals. Closing MCP cancels waiting calls.
 
 Options
   --email <email>    Run as this user (looked up in the user store; must exist)
   --role <role,…>    Run as a synthetic actor with these roles, no real user
   --api-key <key>    Run as the actor a "cogenta_sk_…" API key was granted
 `
-
-/** A fresh, undecorated store per collection: an MCP tool call reads and writes content the same way `cogenta serve`'s REST/GraphQL routes do, through the real permission layer, but does not carry the search/redirect/schedule/vector decorators `assembleSite` wraps around a store — those are cache and derived-index maintenance, not permission-relevant, and wiring the whole of `assembleSite` into a single stdio command is out of this task's scope (see BLOCKERS.md). */
-function storeForFactory(
-  db: DatabaseHandle,
-  collections: readonly CollectionDefinition[],
-): (collection: CollectionDefinition) => ContentStore {
-  const cache = new Map<string, ContentStore>()
-  return (collection) => {
-    const existing = cache.get(collection.name)
-    if (existing !== undefined) return existing
-    const created = createContentStore({ db, collection, siblings: collections })
-    cache.set(collection.name, created)
-    return created
-  }
-}
 
 /**
  * Adapts `@cogenta/api`'s real `ContentService` to the narrow
@@ -134,22 +130,33 @@ function storeForFactory(
  * signature `Record<string, unknown>` promises structurally. Runtime shape
  * is identical; this is a type-level seam only.
  */
-function contentServiceLikeOf(service: ContentService): ContentServiceLike {
+function contentServiceLikeOf(service: ContentService, defaultLocale: string): ContentServiceLike {
   return {
     read: (context, collection, id, options) =>
       service.read(context, collection, id, options) as unknown as Promise<Record<string, unknown>>,
     create: (context, collection, input, options) =>
-      service.create(context, collection, input, options) as unknown as Promise<
-        Record<string, unknown>
-      >,
+      service.create(
+        context,
+        collection,
+        { ...input, locale: input.locale ?? defaultLocale, createdBy: context.actor.id },
+        options,
+      ) as unknown as Promise<Record<string, unknown>>,
     update: (context, collection, id, input, options) =>
-      service.update(context, collection, id, input, options) as unknown as Promise<
-        Record<string, unknown>
-      >,
+      service.update(
+        context,
+        collection,
+        id,
+        { ...input, updatedBy: context.actor.id },
+        options,
+      ) as unknown as Promise<Record<string, unknown>>,
     publish: (context, collection, id, input, options) =>
-      service.publish(context, collection, id, input, options) as unknown as Promise<
-        Record<string, unknown>
-      >,
+      service.publish(
+        context,
+        collection,
+        id,
+        { ...input, publishedBy: context.actor.id },
+        options,
+      ) as unknown as Promise<Record<string, unknown>>,
     remove: (context, collection, id) => service.remove(context, collection, id),
   }
 }
@@ -233,22 +240,8 @@ async function resolveMcpActor(
   return { actor: { id: null, roles: ['public'] }, authenticated: false }
 }
 
-/**
- * Builds this site's real tool manifest for the resolved actor.
- *
- * Content tools (`content.*`) are always included: their actual permission
- * gate lives inside `ContentService`, which calls the same `PermissionLayer`
- * REST and GraphQL use, on every call, keyed on `ctx.actor` — so an anonymous
- * actor is already refused whatever a `public` role may not read or write,
- * exactly as it would be over HTTP.
- *
- * Media, site-config and HTTP-fetch tools have no such internal check (their
- * own doc comments say so plainly: "this tool's declared permissions is the
- * actual gate, enforced by the manifest" — meaning by *this* function, not by
- * the store). They are therefore included only for an authenticated actor
- * (`--email` or `--role`), never for the anonymous default — R4 requires a
- * runtime check somewhere, and for these three tools the manifest boundary is
- * the only place that check can happen.
+/** Build capabilities from effective collection grants and the shared media policy.
+ * Detailed content ownership is still checked by ContentService on every call (R4).
  */
 function buildSiteManifest(options: {
   readonly contentService: Parameters<typeof createContentReadTool>[0]
@@ -257,6 +250,8 @@ function buildSiteManifest(options: {
   readonly actor: AccessContext['actor']
   readonly authenticated: boolean
   readonly logger: Logger
+  readonly collections: readonly CollectionDefinition[]
+  readonly permissions: PermissionLayer
 }): readonly ExecutableTool[] {
   const registered: ToolDefinition[] = [
     createContentReadTool(options.contentService),
@@ -264,18 +259,41 @@ function buildSiteManifest(options: {
     createContentPublishTool(options.contentService),
     createContentDeleteTool(options.contentService),
   ]
-  if (options.authenticated) {
-    registered.push(
-      createMediaReadTool(options.mediaStore),
-      createMediaWriteTool(options.mediaStore),
-      createSiteConfigReadTool(),
-    )
+  if (options.authenticated && canAccessMedia(options.actor, 'media.read')) {
+    registered.push(createMediaReadTool(options.mediaStore))
   }
+  if (options.authenticated && canAccessMedia(options.actor, 'media.write')) {
+    registered.push(createMediaWriteTool(options.mediaStore))
+  }
+  if (options.authenticated) registered.push(createSiteConfigReadTool())
 
-  const registry = createToolRegistry(registered)
+  const allowed = registered.filter((tool) => {
+    const actions =
+      tool.name === 'content.write_draft'
+        ? (['create', 'update'] as const)
+        : tool.name === 'content.publish'
+          ? (['publish'] as const)
+          : tool.name === 'content.delete'
+            ? (['delete'] as const)
+            : tool.name === 'content.read'
+              ? (['read'] as const)
+              : undefined
+    if (actions === undefined) return true
+    return options.collections.some((collection) =>
+      actions.some((action) => {
+        return options.permissions.can(
+          action,
+          collection,
+          { actor: options.actor },
+          options.actor.id,
+        ).allowed
+      }),
+    )
+  })
+  const registry = createToolRegistry(allowed)
   return buildManifest(
     registry,
-    registered.map((tool) => tool.name),
+    allowed.map((tool) => tool.name),
     {
       site: options.site,
       actor: options.actor,
@@ -328,9 +346,16 @@ export async function runMcp(options: McpOptions): Promise<number> {
 
   const selection = await createDatabaseRegistry({ logger }).select(loaded.config.database)
   const db = selection.instance
+  const cancellation = new AbortController()
+  const inputStream = options.stdin ?? process.stdin
+  const cancel = () => cancellation.abort()
+  inputStream.once('end', cancel)
+  inputStream.once('close', cancel)
+  const activeCalls = new Set<Promise<unknown>>()
 
   try {
-    await createSchemaTables(db, collections, [])
+    await createSchemaTables(db, collections, taxonomies)
+    await ensureAuthTables(db)
 
     const { actor, authenticated } = await resolveMcpActor(options, db)
 
@@ -346,12 +371,25 @@ export async function runMcp(options: McpOptions): Promise<number> {
       collections,
       rolePermissionOverrides: rolePermissionOverlay,
     })
-    const storeFor = storeForFactory(db, collections)
+    const searchIndex = await createSearchIndex({ db })
+    const redirects = createRedirectStore({ db })
+    await redirects.ensureTable()
+    const { storeFor } = createDecoratedContentStores({
+      db,
+      collections,
+      defaultLocale: loaded.config.site.defaultLocale,
+      logger,
+      searchIndex,
+      redirects,
+      scheduledPublishQueue: createDatabaseQueue({ db, logger }),
+    })
     const contentService = createContentService({ collections, permissions, storeFor })
     const mediaStore = createDatabaseMediaStore({ db })
 
     const tools = buildSiteManifest({
-      contentService: contentServiceLikeOf(contentService),
+      contentService: contentServiceLikeOf(contentService, loaded.config.site.defaultLocale),
+      collections,
+      permissions,
       mediaStore,
       site: {
         name: loaded.config.site.name,
@@ -374,7 +412,83 @@ export async function runMcp(options: McpOptions): Promise<number> {
       `MCP server ready — ${tools.length} tool(s), actor: ${actor.id ?? '(anonymous)'} [${actor.roles.join(', ')}]\n`,
     )
 
-    const server = createMcpServer({ name: 'cogenta', version: '1.0.0', tools })
+    const auditLog = createAuditLog(db)
+    const approvalQueue = cancellableApprovalQueue(
+      options.approvalQueue ??
+        createFileApprovalQueue({
+          directory: join(projectRoot, '.cogenta', 'agents-runtime', 'approvals'),
+          signal: cancellation.signal,
+        }),
+      cancellation.signal,
+    )
+    const governedTools = tools.map((tool) => {
+      const guarded: ExecutableTool = {
+        ...tool,
+        async execute(input, context) {
+          if (context.signal.aborted)
+            throw new CogentaError({
+              code: 'APPROVAL_REQUEST_CANCELLED',
+              message: 'The MCP connection closed before execution.',
+              hint: 'Reconnect and submit a new request if needed.',
+            })
+          // An approval can wait while HTTP administrators revoke a grant.
+          // Re-read the shared overlay before ContentService checks this call.
+          if (tool.spec.name.startsWith('content.')) await rolePermissionOverlay.refresh()
+          return tool.execute(input, context)
+        },
+      }
+      const audited = withAudit(
+        withAutonomy(guarded, {
+          agentName: 'mcp',
+          autonomy: { default: 'autonomous' },
+          approvalQueue,
+        }),
+        {
+          agentName: 'mcp',
+          actor,
+          autonomyLevel: tool.sideEffects === true ? 'execute_with_approval' : 'autonomous',
+          auditLog: {
+            record: (input) => {
+              const output = input.diff?.['output']
+              const entryId =
+                typeof output === 'object' &&
+                output !== null &&
+                'id' in output &&
+                typeof output.id === 'string'
+                  ? output.id
+                  : undefined
+              return auditLog.record({
+                ...input,
+                ...(entryId === undefined ? {} : { entryId }),
+                diff: { ...input.diff, origin: 'mcp' },
+              })
+            },
+          },
+          targetOf: (input) => ({
+            ...(typeof input['collection'] === 'string' ? { collection: input['collection'] } : {}),
+            ...(typeof input['id'] === 'string' ? { entryId: input['id'] } : {}),
+          }),
+          onAuditFailure: (error) =>
+            logger.error('MCP audit write failed', { error: String(error) }),
+        },
+      )
+      return {
+        ...audited,
+        async execute(
+          input: Readonly<Record<string, unknown>>,
+          context: Parameters<ExecutableTool['execute']>[1],
+        ) {
+          const call = audited.execute(input, { ...context, signal: cancellation.signal })
+          activeCalls.add(call)
+          try {
+            return await call
+          } finally {
+            activeCalls.delete(call)
+          }
+        },
+      }
+    })
+    const server = createMcpServer({ name: 'cogenta', version: '1.0.0', tools: governedTools })
     serveMcpOverStdio({
       server,
       ...(options.stdin === undefined ? {} : { input: options.stdin as never }),
@@ -384,13 +498,19 @@ export async function runMcp(options: McpOptions): Promise<number> {
     // Runs until stdin closes (the MCP client disconnected) — this command
     // has no other exit condition, matching stdio MCP servers generally.
     return await new Promise<number>((resolvePromise) => {
-      const input = options.stdin ?? process.stdin
-      input.once('end', () => resolvePromise(0))
-      input.once('close', () => resolvePromise(0))
+      if (cancellation.signal.aborted) {
+        resolvePromise(0)
+        return
+      }
+      cancellation.signal.addEventListener('abort', () => resolvePromise(0), { once: true })
     })
   } catch (error) {
     return reportFailure(stderr, error)
   } finally {
+    cancellation.abort()
+    await Promise.allSettled([...activeCalls])
+    inputStream.removeListener('end', cancel)
+    inputStream.removeListener('close', cancel)
     await selection.dispose()
   }
 }
@@ -403,4 +523,34 @@ function reportFailure(stderr: Writer, error: unknown): number {
     stderr(`${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`)
   }
   return 1
+}
+
+/** Disconnecting a process cannot leave a future human decision executing its old call. */
+function cancellableApprovalQueue(queue: ApprovalQueue, signal: AbortSignal): ApprovalQueue {
+  return {
+    ...queue,
+    request(input) {
+      return new Promise((resolve, reject) => {
+        const abort = () => {
+          signal.removeEventListener('abort', abort)
+          reject(
+            new CogentaError({
+              code: 'APPROVAL_REQUEST_CANCELLED',
+              message: 'Waiting for human approval was cancelled.',
+              hint: 'Reconnect and submit a new request if the action is still needed.',
+            }),
+          )
+        }
+        if (signal.aborted) {
+          abort()
+          return
+        }
+        signal.addEventListener('abort', abort, { once: true })
+        queue
+          .request(input)
+          .then(resolve, reject)
+          .finally(() => signal.removeEventListener('abort', abort))
+      })
+    },
+  }
 }

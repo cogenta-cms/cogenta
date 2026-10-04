@@ -113,7 +113,7 @@ export function AssistantIndexRoute({
       // Read the live map fresh rather than trusting local state: another
       // admin (or another tab) may have changed a different collection's
       // toggle since this screen last loaded.
-      const settings = await listSettings()
+      const settings = await listSettings(undefined, token ?? undefined)
       const current = settings.find((setting) => setting.key === INDEXED_COLLECTIONS_KEY)
       const map = { ...((current?.value as Readonly<Record<string, boolean>> | undefined) ?? {}) }
       if (nextEnabled) delete map[name]
@@ -163,7 +163,7 @@ export function AssistantIndexRoute({
   }
 
   return (
-    <section aria-labelledby="assistant-index-heading" className="flex flex-col gap-6">
+    <section aria-labelledby="assistant-index-heading" className="flex min-w-0 flex-col gap-6">
       <div>
         <h2 id="assistant-index-heading" className="m-0 text-lg font-semibold text-foreground">
           {t('assistantIndex.heading')}
@@ -192,7 +192,7 @@ export function AssistantIndexRoute({
               {t('assistantIndex.collectionsEmpty')}
             </p>
           ) : (
-            <TableRoot label={t('assistantIndex.collectionsHeading')}>
+            <TableRoot label={t('assistantIndex.collectionsTableLabel')}>
               <Table>
                 <TableHead>
                   <TableRow>
@@ -255,6 +255,7 @@ export function AssistantIndexRoute({
               <input
                 id="assistant-document-upload"
                 type="file"
+                className="block w-full min-w-0 max-w-full text-sm"
                 accept=".pdf,.docx,.md,.markdown,.txt"
                 disabled={uploading}
                 onChange={(event) => void upload(event)}
@@ -281,7 +282,7 @@ export function AssistantIndexRoute({
           {documents === null ? (
             <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
           ) : (
-            <TableRoot label={t('assistantIndex.documentsHeading')}>
+            <TableRoot label={t('assistantIndex.documentsTableLabel')}>
               <Table>
                 <TableHead>
                   <TableRow>

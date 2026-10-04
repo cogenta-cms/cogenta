@@ -381,25 +381,57 @@ describe('media library folders', () => {
  * the same way `users.tsx`'s pre-existing "load more" is proven elsewhere.
  */
 describe('media library pagination', () => {
-  it('loads the first page, then the rest on "load more"', async () => {
+  it('replaces the visible page using cursors and can return to the first page', async () => {
     installMockFetch({ mediaSeedCount: 30 })
     render(<App />)
     await goToMedia()
 
-    expect(await screen.findAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(25)
+    expect(await screen.findAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(20)
     expect(screen.queryByText('seed-30.png')).toBeNull()
     // Fiche 05 task 7: the total from the API's own page.total, not just the
     // count of what happened to load so far.
-    expect(await screen.findByText('25 affichés sur 30')).toBeDefined()
+    expect(await screen.findByText('20 affichés sur 30')).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Charger la suite' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
 
     await waitFor(() => {
-      expect(screen.getAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(30)
+      expect(screen.getAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(10)
     })
     expect(screen.getByText('seed-30.png')).toBeDefined()
-    expect(screen.queryByRole('button', { name: 'Charger la suite' })).toBeNull()
-    expect(screen.getByText('30 affichés sur 30')).toBeDefined()
+    expect(screen.queryByText('seed-1.png')).toBeNull()
+    expect(
+      screen
+        .getAllByRole('button', { name: 'Suivant' })
+        .every((button) => (button as HTMLButtonElement).disabled),
+    ).toBe(true)
+    expect(screen.getByText('10 affichés sur 30')).toBeDefined()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Précédent' })[0] as HTMLElement)
+    await screen.findByText('seed-1.png')
+    expect(screen.queryByText('seed-30.png')).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    await screen.findByText('seed-30.png')
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'image' } })
+    await screen.findByText('seed-1.png')
+    expect(
+      screen
+        .getAllByRole('button', { name: 'Précédent' })
+        .every((button) => (button as HTMLButtonElement).disabled),
+    ).toBe(true)
+  })
+
+  it('returns to the previous cursor page when the final asset on a page is deleted', async () => {
+    installMockFetch({ mediaSeedCount: 21 })
+    render(<App />)
+    await goToMedia()
+    await screen.findByText('seed-1.png')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    fireEvent.click(await screen.findByRole('button', { name: /seed-21\.png/ }))
+    await screen.findByRole('heading', { name: 'seed-21.png' })
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmer la suppression' }))
+    await screen.findByText('seed-1.png')
+    expect(screen.queryByText('seed-21.png')).toBeNull()
+    expect(screen.getAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(20)
   })
 
   // Fiche 05 task 7: both fields already existed in `ListMediaOptions` and
@@ -430,12 +462,12 @@ describe('media library pagination', () => {
     })
   })
 
-  it('shows no "load more" control when the library fits on one page', async () => {
+  it('shows no pager when the library fits on one page', async () => {
     installMockFetch({ mediaSeedCount: 3 })
     render(<App />)
     await goToMedia()
 
     expect(await screen.findAllByRole('button', { name: /seed-\d+\.png/ })).toHaveLength(3)
-    expect(screen.queryByRole('button', { name: 'Charger la suite' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Suivant' })).toBeNull()
   })
 })

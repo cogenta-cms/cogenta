@@ -185,12 +185,18 @@ function fieldWrapper(
 ): string {
   const id = `cg-form-field-${field.name}`
   const errorId = `${id}-error`
-  return `<div class="cg-form__field">
+  return `<div class="cg-form__field"${conditionAttributes(field)}>
 <label for="${id}">${escapeHtmlText(labelFor(field))}</label>
 ${input}
 ${field.help !== undefined ? `<p class="cg-form__help">${escapeHtmlText(field.help)}</p>` : ''}
 ${hasError ? `<p id="${errorId}" class="cg-form__field-error" role="alert">${escapeHtmlText(strings.fieldError)}</p>` : ''}
 </div>`
+}
+
+function conditionAttributes(field: FormFieldDefinition): string {
+  return field.showIf === undefined
+    ? ''
+    : ` data-show-if="${escapeHtmlAttribute(JSON.stringify(field.showIf))}" data-required="${String(field.required)}" data-kind="${field.kind}"`
 }
 
 function renderField(
@@ -203,7 +209,10 @@ function renderField(
   const errorId = `${id}-error`
   const describedBy = hasError ? ` aria-describedby="${errorId}"` : ''
   const invalid = ` aria-invalid="${hasError ? 'true' : 'false'}"`
-  const required = field.required ? ' required' : ''
+  // In the no-JS fallback all conditional controls remain available. Their
+  // Native validation cannot react to another answer without JS; conditional
+  // requirements are therefore enforced by the server in that fallback.
+  const required = field.required && field.showIf === undefined ? ' required' : ''
   const name = escapeHtmlAttribute(field.name)
 
   let input: string
@@ -271,7 +280,7 @@ function renderField(
     }
     case 'consent': {
       const isChecked = fieldValueText(state, field.name) === 'true' ? ' checked' : ''
-      return `<div class="cg-form__field cg-form__field--consent">
+      return `<div class="cg-form__field cg-form__field--consent"${conditionAttributes(field)}>
 <label><input type="checkbox" id="${id}" name="${name}" value="true"${required}${invalid}${describedBy}${isChecked}> ${escapeHtmlText(field.consentText ?? field.label)}</label>
 ${hasError ? `<p id="${errorId}" class="cg-form__field-error" role="alert">${escapeHtmlText(strings.consentRequired)}</p>` : ''}
 </div>`
@@ -392,6 +401,51 @@ export function renderFormPage(
 
   const submitLabel = escapeHtmlText(isFinalStep ? strings.send : strings.next)
 
+  // Progressive enhancement only: without JS every control stays editable,
+  // and the server still decides whether an answer is required or ignored.
+  // Accumulated answers are JSON in an HTML attribute, never executable code.
+  const conditionsScript = stepFields.some((field) => field.showIf !== undefined)
+    ? `<script>
+(() => {
+  const form = document.querySelector('.cg-form');
+  const accumulated = JSON.parse(form.querySelector('[name="_accumulated"]')?.value || '{}');
+  const fields = Array.from(form.querySelectorAll('[data-show-if]'));
+  const update = () => {
+    // Recompute after disabling a parent so a dependent field sees only
+    // answers that will actually be sent, even when fields are out of order.
+    for (let pass = 0; pass <= fields.length; pass += 1) {
+    let changed = false;
+    for (const field of fields) {
+      const values = new FormData(form);
+      const condition = JSON.parse(field.dataset.showIf);
+      const controls = Array.from(form.elements).filter(control => control.name === condition.field);
+      const raw = controls.length ? values.getAll(condition.field) : [].concat(accumulated[condition.field] ?? []);
+      const actual = raw.map(String);
+      const wanted = condition.value ?? '';
+      const blank = actual.length === 0 || actual.every(value => value.trim() === '');
+      const visible = condition.operator === 'equals' ? actual.includes(wanted)
+        : condition.operator === 'notEquals' ? !actual.includes(wanted)
+        : condition.operator === 'contains' ? actual.some(value => value.includes(wanted))
+        : condition.operator === 'isEmpty' ? blank : !blank;
+      if (field.hidden === visible) changed = true;
+      field.hidden = !visible;
+      for (const control of field.querySelectorAll('input,select,textarea')) {
+        control.disabled = !visible;
+        if (field.dataset.kind !== 'choiceMulti' && field.dataset.kind !== 'file') {
+          control.required = visible && field.dataset.required === 'true';
+        }
+      }
+    }
+    if (!changed) break;
+    }
+  };
+  form.addEventListener('input', update);
+  form.addEventListener('change', update);
+  update();
+})();
+</script>`
+    : ''
+
   const body = `${errorBanner}
 <form class="cg-form" method="post" action="/api/forms/${encodeURIComponent(definition.name)}/submit"${needsMultipart ? ' enctype="multipart/form-data"' : ''}>
 ${fields}
@@ -403,7 +457,8 @@ ${stepHiddenFields}
 <input type="hidden" name="${TIMESTAMP_FIELD}" value="${escapeHtmlAttribute(ts)}">
 ${captcha}
 <button type="submit">${submitLabel}</button>
-</form>`
+</form>
+${conditionsScript}`
 
   return shell(definition.label, body, options, context)
 }

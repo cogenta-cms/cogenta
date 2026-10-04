@@ -32,14 +32,15 @@ essaie de le pousser à le faire). Ce que l'assistant peut faire :
   structurées** — chaque outil dit honnêtement, dans sa sortie, qu'il n'a
   rien modifié par lui-même (`applied: false`, toujours).
 
-Aujourd'hui, l'index qui alimente ce panneau se construit **automatiquement**
-depuis le contenu publié du site — rien à indexer à la main, et rien de
-brouillon n'y entre jamais. Ce qui manque encore, et que ce même écran est
-censé apporter : un état visible de ce qui est indexé, la possibilité
-d'exclure une collection précise (l'exemple donné : garder les articles
-publiés hors de l'index si vous préférez que l'assistant s'appuie sur autre
-chose), et un flux pour téléverser des documents additionnels (PDF, DOCX,
-texte) — le tout écrit ailleurs et pas encore branché sur cet écran.
+L’index se construit automatiquement depuis les contenus publiés du site.
+L’onglet Index présente les collections et leur état d’indexation. Un administrateur
+peut exclure une collection ou ajouter des documents de référence (PDF, DOCX ou texte).
+Les réponses du chat sont limitées au périmètre autorisé décrit plus bas.
+
+L’aperçu liste les outils réellement disponibles sur ce site. Les noms et descriptions
+des outils intégrés suivent la langue de l’admin (français ou anglais) ; les textes
+des extensions restent ceux de leurs auteurs. Chaque nom se déplie au clic ou au
+clavier pour montrer sa description, son emplacement et son besoin d’un fournisseur IA.
 
 ## Fournisseur IA
 
@@ -137,3 +138,14 @@ détecte une anomalie (des 404 répétées sur une page qu'un lien externe cible
 encore, par exemple), résume et remonte l'information, puis, selon le niveau
 d'autonomie configuré, propose ou applique une mesure corrective bornée
 (une redirection, jamais un changement de code).
+
+
+## Périmètre des réponses du chat
+
+Le chat recherche les collections lisibles par votre compte dans la langue par
+défaut du site, uniquement parmi les contenus publiés. Le périmètre apparaît à
+l’écran. Pour un administrateur, il inclut aussi les documents de référence indexés :
+ces documents n’ont pas de traduction et sont recherchés dans leur locale technique
+`und`, tout en répondant dans la langue du site. Les comptes éditeur et viewer ne
+peuvent pas interroger ce corpus de référence. Les citations d’un document affichent
+son nom et le passage retrouvé.

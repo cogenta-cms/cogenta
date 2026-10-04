@@ -54,13 +54,16 @@ describe('the trash screen', () => {
     // The default "All" tab (task 1): three rows from two collections,
     // never needing to switch anything to see them.
     expect(await screen.findByText('Thrown away')).toBeDefined()
+    expect(screen.getByRole('group', { name: 'Vue de la corbeille' })).toBeDefined()
+    expect(screen.queryByRole('tablist')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Tout' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByText('Still referenced elsewhere')).toBeDefined()
     expect(screen.getByText('A note nobody kept')).toBeDefined()
 
     // Not "draft": deletedAt is orthogonal to status (ADR-0022), so a
     // published entry in the trash still reads published — and comes back
     // that way.
-    expect(within(rowFor('Thrown away')).getByText('published')).toBeDefined()
+    expect(within(rowFor('Thrown away')).getByText('Publié')).toBeDefined()
     // The exact instant lives in the `title` attribute, not as visible text
     // — the visible cell is a relative time that would drift with the real
     // clock if asserted literally.

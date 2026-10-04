@@ -4,7 +4,7 @@ import type { AssistCapabilities, AssistCapability } from '../api/assist-client.
 import { getAssistCapabilities } from '../api/assist-client.js'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
+import { Button, Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
 import { AssistantChatRoute } from './assistant-chat.js'
 import { AssistantIndexRoute } from './assistant-index.js'
 import { DuplicatesRoute } from './duplicates.js'
@@ -46,6 +46,7 @@ const TOOL_LOCATION: Readonly<Record<string, string>> = {
   'assist.chat': 'assistant.locationChatTab',
   'assist.find_duplicates': 'assistant.locationDuplicatesTab',
   'assist.generate_image': 'assistant.locationNone',
+  'assist.generate_agent_identity': 'assistant.locationAgents',
 }
 
 function needsProvider(tool: AssistCapability): boolean {
@@ -120,6 +121,13 @@ export function AssistantRoute(): JSX.Element | null {
 
   const usage = capabilities.usage
   const vector = capabilities.vector
+  // Only IDs owned by Cogenta use interface translations. Third-party tool
+  // labels and descriptions remain exactly as supplied by their provider.
+  function toolLabel(tool: { readonly tool: string; readonly label: string }): string {
+    return !Object.hasOwn(TOOL_LOCATION, tool.tool)
+      ? tool.label
+      : t(`assistant.builtinTools.${tool.tool.slice('assist.'.length)}.label`)
+  }
 
   return (
     <section aria-labelledby="assistant-heading" className="flex flex-col gap-6">
@@ -130,7 +138,7 @@ export function AssistantRoute(): JSX.Element | null {
       <div
         role="tablist"
         aria-label={t('assistant.tabsLabel')}
-        className="flex gap-2 border-b border-border"
+        className="flex flex-wrap gap-2 border-b border-border"
       >
         {(
           [
@@ -175,20 +183,34 @@ export function AssistantRoute(): JSX.Element | null {
                 </CardTitle>
               </CardHeader>
               <CardBody>
-                <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 sm:grid-cols-2">
                   {capabilities.tools.map((tool) => (
-                    <li key={tool.tool} className="border-b border-border pb-3 last:border-b-0">
-                      <p className="m-0 font-semibold text-foreground">{tool.label}</p>
-                      <p className="m-0 text-sm text-muted-foreground">{tool.description}</p>
-                      <p className="m-0 text-xs text-muted-foreground">
-                        {t('assistant.toolWhere', {
-                          location: t(TOOL_LOCATION[tool.tool] ?? 'assistant.locationNone'),
-                        })}
-                        {' · '}
-                        {needsProvider(tool)
-                          ? t('assistant.toolNeedsProvider')
-                          : t('assistant.toolNoProvider')}
-                      </p>
+                    <li key={tool.tool} className="min-w-0 rounded-md border border-border">
+                      <details className="p-3">
+                        <summary className="cursor-pointer break-words font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                          {toolLabel(tool)}
+                        </summary>
+                        <p className="m-0 mt-2 text-sm text-muted-foreground">
+                          {!Object.hasOwn(TOOL_LOCATION, tool.tool)
+                            ? tool.description
+                            : t(
+                                `assistant.builtinTools.${tool.tool.slice('assist.'.length)}.description`,
+                              )}
+                        </p>
+                        <p className="m-0 mt-2 text-xs text-muted-foreground">
+                          {t('assistant.toolWhere', {
+                            location: t(
+                              Object.hasOwn(TOOL_LOCATION, tool.tool)
+                                ? (TOOL_LOCATION[tool.tool] ?? 'assistant.locationNone')
+                                : 'assistant.locationNone',
+                            ),
+                          })}
+                          {' · '}
+                          {needsProvider(tool)
+                            ? t('assistant.toolNeedsProvider')
+                            : t('assistant.toolNoProvider')}
+                        </p>
+                      </details>
                     </li>
                   ))}
                   {capabilities.tools.length === 0 && <li>{t('assistant.noTools')}</li>}
@@ -227,7 +249,7 @@ export function AssistantRoute(): JSX.Element | null {
                     <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
                       {usage.byTool.map((row) => (
                         <li key={row.tool}>
-                          {row.tool} —{' '}
+                          {toolLabel({ tool: row.tool, label: row.tool })} —{' '}
                           {t('assistant.usageRow', { calls: row.calls, tokens: row.tokens })}
                         </li>
                       ))}
@@ -264,13 +286,14 @@ export function AssistantRoute(): JSX.Element | null {
                           at: new Date(vector.lastIndexedAt).toLocaleString(),
                         })}
                   </p>
-                  <button
+                  <Button
                     type="button"
-                    className="mt-3 text-sm font-medium text-primary underline"
+                    variant="ghost"
+                    className="mt-3 h-auto min-h-11 max-w-full whitespace-normal text-left text-sm underline"
                     onClick={() => setTab('index')}
                   >
                     {t('assistant.vectorViewIndex')}
-                  </button>
+                  </Button>
                 </CardBody>
               </Card>
             )}

@@ -18,7 +18,10 @@
       "!**/test/fixtures",
       // Sources of bundled demo images (L36): throwaway pages rendered once in a
       // browser to make PNGs, never served, so accessibility rules do not apply.
-      "!**/scripts/vitrine-assets"
+      "!**/scripts/vitrine-assets",
+      // Immutable historical audit evidence and one-off scripts are archived
+      // together; maintained regression suites live in tests/e2e.
+      "!docs/qa/audit-2026-10-03"
     ]
   },
   "formatter": {

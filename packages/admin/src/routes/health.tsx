@@ -50,7 +50,7 @@ function statusTone(status: 'ok' | 'degraded' | 'down'): 'success' | 'warning' |
 function TechnicalDetailBadge(): JSX.Element {
   const { t } = useTranslation()
   return (
-    <span className="rounded border border-current px-1 text-[0.65rem] uppercase tracking-wide opacity-70">
+    <span className="rounded border border-current px-1 text-[0.65rem] uppercase tracking-wide">
       {t('health.technicalDetail')}
     </span>
   )
@@ -137,7 +137,15 @@ export function HealthRoute(): JSX.Element | null {
     void load()
   }, [load])
 
-  if (token === null || !isAdmin) return null
+  if (token === null) return null
+  if (!isAdmin) {
+    return (
+      <section aria-labelledby="health-heading" className="flex flex-col gap-4">
+        <h1 id="health-heading">{t('health.heading')}</h1>
+        <p role="alert">{t('common.adminPageOnly')}</p>
+      </section>
+    )
+  }
 
   const pendingCount = migrations?.items.filter((item) => !item.applied).length ?? 0
   const pendingDestructive =
@@ -176,7 +184,10 @@ export function HealthRoute(): JSX.Element | null {
   }
 
   return (
-    <section aria-labelledby="health-heading" className="flex flex-col gap-6">
+    <section
+      aria-labelledby="health-heading"
+      className="flex min-w-0 flex-col gap-6 [overflow-wrap:anywhere]"
+    >
       <h1 id="health-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('health.heading')}
       </h1>

@@ -11,6 +11,15 @@
 
 ## 1. Ce qui existe réellement
 
+Depuis l'audit du 2026-10-03, la prévisualisation et l'application WordPress
+vérifient les collections cibles avant toute écriture. Une collection `post`
+existante avec un champ `body` riche au lieu d'une zone de blocs, un champ attendu
+absent ou un stockage incompatible est refusée avec `IMPORT_MAPPING_INVALID`.
+Le message propose un site neuf pour l'import WordPress, une migration de schéma
+explicitement préparée, ou l'import CSV/JSON mappé au schéma existant. Le préflight
+ne crée aucune table et ne modifie aucun contenu, auteur ni média ; la CLI
+effectue aussi la vérification physique quand elle n'a pas de schéma déclaré.
+
 - `@cogenta/import` lit un export WordPress (WXR).
 - `cogenta import wordpress` en ligne de commande.
 - `routes/import.tsx` : téléverse le fichier et affiche **le même rapport** que la

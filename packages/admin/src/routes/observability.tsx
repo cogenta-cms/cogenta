@@ -9,6 +9,7 @@ import {
 } from '../api/observability-client.js'
 import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useLocalPagination } from '../lib/use-local-pagination.js'
 import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
 import {
@@ -37,7 +38,7 @@ import {
  * `DEFAULT_LOG_CAPACITY`) and gone on the next restart. A second round trip
  * per page would buy nothing a client-side slice does not already have.
  */
-const PAGE_SIZE = 25
+const PAGE_SIZE = 20
 
 /**
  * "Exploitation" > Observabilité (fiche L22 task 5). Point 3's own wording —
@@ -55,7 +56,7 @@ const PAGE_SIZE = 25
  * not settings — nothing here is written back through `PATCH /api/settings`.
  */
 export function ObservabilityRoute(): JSX.Element {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
@@ -63,14 +64,45 @@ export function ObservabilityRoute(): JSX.Element {
   const [settings, setSettings] = useState<readonly SiteSetting[] | null>(null)
   const [snapshot, setSnapshot] = useState<ObservabilitySnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tracesPage, setTracesPage] = useState(0)
-  const [logsPage, setLogsPage] = useState(0)
+  const [snapshotVersion, setSnapshotVersion] = useState(0)
+  const traces = useLocalPagination(snapshot?.traces ?? [], String(snapshotVersion), PAGE_SIZE)
+  const logs = useLocalPagination(snapshot?.logs ?? [], String(snapshotVersion), PAGE_SIZE)
+  const tracesPager = (
+    <Pagination
+      variant="pages"
+      page={traces.page}
+      pageCount={traces.pageCount}
+      onPageChange={traces.onPageChange}
+      previousLabel={t('lists.previous')}
+      nextLabel={t('lists.next')}
+      pageInfo={t('lists.pageInfo', {
+        from: traces.start + 1,
+        to: traces.start + traces.items.length,
+        total: traces.total,
+      })}
+    />
+  )
+  const logsPager = (
+    <Pagination
+      variant="pages"
+      page={logs.page}
+      pageCount={logs.pageCount}
+      onPageChange={logs.onPageChange}
+      previousLabel={t('lists.previous')}
+      nextLabel={t('lists.next')}
+      pageInfo={t('lists.pageInfo', {
+        from: logs.start + 1,
+        to: logs.start + logs.items.length,
+        total: logs.total,
+      })}
+    />
+  )
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
     try {
       const [allSettings, observability] = await Promise.all([
-        listSettings(),
+        listSettings(undefined, token ?? undefined),
         readObservability(token),
       ])
       setSettings(allSettings.filter((setting) => setting.group === 'observability'))
@@ -80,8 +112,7 @@ export function ObservabilityRoute(): JSX.Element {
       // growing while this screen sits open) — landing on a page number that
       // no longer exists would just show an empty table, so every reload
       // starts back at the newest entries.
-      setTracesPage(0)
-      setLogsPage(0)
+      setSnapshotVersion((version) => version + 1)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('observability.loadError'))
     }
@@ -156,63 +187,41 @@ export function ObservabilityRoute(): JSX.Element {
       )}
 
       {snapshot !== null && (
-        <Card aria-labelledby="observability-traces-heading">
+        <Card>
           <CardHeader>
             <CardTitle>
               <h2 id="observability-traces-heading">{t('observability.tracesHeading')}</h2>
             </CardTitle>
           </CardHeader>
           <CardBody className="flex flex-col gap-3">
+            {tracesPager}
             <TracesTable
-              traces={snapshot.traces.slice(tracesPage * PAGE_SIZE, (tracesPage + 1) * PAGE_SIZE)}
+              traces={traces.items}
               formatDateTime={formatDateTime}
               emptyLabel={t('observability.tracesEmpty')}
               t={t}
             />
-            <Pagination
-              variant="pages"
-              page={tracesPage}
-              pageCount={Math.max(1, Math.ceil(snapshot.traces.length / PAGE_SIZE))}
-              onPageChange={setTracesPage}
-              previousLabel={t('observability.previousPage')}
-              nextLabel={t('observability.nextPage')}
-              pageInfo={t('observability.pageInfo', {
-                from: snapshot.traces.length === 0 ? 0 : tracesPage * PAGE_SIZE + 1,
-                to: Math.min(snapshot.traces.length, (tracesPage + 1) * PAGE_SIZE),
-                total: snapshot.traces.length,
-              })}
-            />
+            {tracesPager}
           </CardBody>
         </Card>
       )}
 
       {snapshot !== null && (
-        <Card aria-labelledby="observability-logs-heading">
+        <Card>
           <CardHeader>
             <CardTitle>
               <h2 id="observability-logs-heading">{t('observability.logsHeading')}</h2>
             </CardTitle>
           </CardHeader>
           <CardBody className="flex flex-col gap-3">
+            {logsPager}
             <LogsTable
-              logs={snapshot.logs.slice(logsPage * PAGE_SIZE, (logsPage + 1) * PAGE_SIZE)}
+              logs={logs.items}
               formatDateTime={formatDateTime}
               emptyLabel={t('observability.logsEmpty')}
               t={t}
             />
-            <Pagination
-              variant="pages"
-              page={logsPage}
-              pageCount={Math.max(1, Math.ceil(snapshot.logs.length / PAGE_SIZE))}
-              onPageChange={setLogsPage}
-              previousLabel={t('observability.previousPage')}
-              nextLabel={t('observability.nextPage')}
-              pageInfo={t('observability.pageInfo', {
-                from: snapshot.logs.length === 0 ? 0 : logsPage * PAGE_SIZE + 1,
-                to: Math.min(snapshot.logs.length, (logsPage + 1) * PAGE_SIZE),
-                total: snapshot.logs.length,
-              })}
-            />
+            {logsPager}
           </CardBody>
         </Card>
       )}
@@ -233,7 +242,7 @@ function TracesTable({
 }): JSX.Element {
   return (
     <TableRoot label={t('observability.tracesHeading')}>
-      <Table>
+      <Table className="min-w-[36rem]">
         <TableHead>
           <TableRow>
             <TableHeader>{t('observability.tracesTime')}</TableHeader>
@@ -281,7 +290,7 @@ function LogsTable({
 }): JSX.Element {
   return (
     <TableRoot label={t('observability.logsHeading')}>
-      <Table>
+      <Table className="min-w-[36rem]">
         <TableHead>
           <TableRow>
             <TableHeader>{t('observability.logsTime')}</TableHeader>

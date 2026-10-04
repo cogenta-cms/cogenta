@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app.js'
 import { installMockFetch, VALID_TOKEN } from '../helpers/mock-fetch.js'
@@ -109,4 +109,67 @@ describe('the "ask the site" chat screen', () => {
     expect(screen.getByRole('link', { name: 'First article' })).toBeDefined()
     expect(screen.getByText(/It opened its doors in 1904\./u)).toBeDefined()
   })
+})
+
+describe('the chat exposes and queries its permitted reference scope', () => {
+  const vector = {
+    driver: 'memory',
+    dimensions: 64,
+    count: 1,
+    lastIndexedAt: null,
+    collections: [],
+    referenceCollection: '_reference_documents',
+  }
+  for (const role of ['admin', 'editor']) {
+    it(`includes reference documents only for an ${role} when the server advertises them`, async () => {
+      signedIn({
+        roles: [role],
+        assistant: { available: true, tools: [CHAT_TOOL], vector },
+        assistantRun: {
+          'assist.chat': {
+            answer: 'MISTRAL-4827',
+            sources: [
+              {
+                collection: '_reference_documents',
+                entryId: 'doc-1',
+                title: 'museum.md',
+                excerpt: 'MISTRAL-4827',
+              },
+            ],
+            answeredFromSources: true,
+            applied: false,
+          },
+        },
+      })
+      const fetcher = globalThis.fetch
+      const captured: string[][] = []
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith('/api/assistant/run') && typeof init?.body === 'string') {
+          const body = JSON.parse(init.body) as { input: { collections: string[] } }
+          captured.push(body.input.collections)
+        }
+        return fetcher(input, init)
+      })
+      window.history.pushState(null, '', '/assistant')
+      render(<App />)
+      fireEvent.click(await screen.findByRole('tab', { name: 'Interroger le site' }))
+      fireEvent.change(await screen.findByLabelText('Votre question'), {
+        target: { value: 'What is the museum code?' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Demander' }))
+      await waitFor(() => expect(captured).toHaveLength(1))
+      expect(captured[0]?.includes('_reference_documents')).toBe(role === 'admin')
+      if (role === 'admin') {
+        expect(
+          screen.getByText('Les documents de référence indexés sont aussi recherchés.'),
+        ).toBeDefined()
+        await screen.findByText('museum.md')
+        expect(screen.queryByRole('link', { name: 'museum.md' })).toBeNull()
+      } else {
+        expect(
+          screen.queryByText('Les documents de référence indexés sont aussi recherchés.'),
+        ).toBeNull()
+      }
+    })
+  }
 })

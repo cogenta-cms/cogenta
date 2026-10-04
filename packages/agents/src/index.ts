@@ -95,6 +95,8 @@ export type { WithAuditOptions } from './audit/with-audit.js'
 export { withAudit, withAuditForManifest } from './audit/with-audit.js'
 export type { MemoryApprovalQueueOptions } from './autonomy/approval-queue.js'
 export { createMemoryApprovalQueue } from './autonomy/approval-queue.js'
+export type { FileApprovalQueueOptions } from './autonomy/file-approval-queue.js'
+export { createFileApprovalQueue } from './autonomy/file-approval-queue.js'
 export type { AutonomyUiLevel } from './autonomy/levels.js'
 export {
   AUTONOMY_UI_LEVELS,

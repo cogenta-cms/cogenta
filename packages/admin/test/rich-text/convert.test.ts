@@ -9,6 +9,14 @@ describe('portableTextToSlate', () => {
     expect(portableTextToSlate([])).toEqual([{ type: 'paragraph', children: [{ text: '' }] }])
   })
 
+  it('allocates distinct blocks and text nodes for every empty editor', () => {
+    const first = portableTextToSlate([])
+    const second = portableTextToSlate([])
+    expect(first).not.toBe(second)
+    expect(first[0]).not.toBe(second[0])
+    expect(first[0]?.children[0]).not.toBe(second[0]?.children[0])
+  })
+
   it('converts a plain paragraph', () => {
     const doc: RichTextDocument = [
       {

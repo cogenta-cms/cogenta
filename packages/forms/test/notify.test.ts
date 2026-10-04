@@ -97,6 +97,24 @@ describe('notifyNewSubmission', () => {
 })
 
 describe('sendAutoresponder — disabled by default, rate-limited when on', () => {
+  it.each(['fr', 'en'])(
+    'sends %s site-language fallback text for an older definition without a body',
+    async (defaultLocale) => {
+      const transport = fakeTransport()
+      await sendAutoresponder({
+        transport,
+        definition: definition({ autoresponder: { enabled: true } }),
+        recipientEmail: 'visitor@example.com',
+        rateLimit: createMemoryRateLimiter(),
+        defaultLocale,
+      })
+      expect(JSON.stringify(transport.sent[0])).toContain(
+        defaultLocale === 'fr'
+          ? 'Nous avons bien reçu votre message.'
+          : 'We have received your message.',
+      )
+    },
+  )
   it('sends nothing when the autoresponder is disabled (the default)', async () => {
     const transport = fakeTransport()
     await sendAutoresponder({

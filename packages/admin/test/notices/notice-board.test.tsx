@@ -30,6 +30,33 @@ afterEach(() => {
 })
 
 describe('the admin notice board', () => {
+  it('keeps a recommendation actionable while its explanation can be expanded', async () => {
+    signedIn([MFA_NOTICE])
+    render(<App />)
+
+    await screen.findByText('Activez la vérification en deux étapes')
+    const summary = screen.getByText('Pourquoi cette recommandation ?')
+    const disclosure = summary.closest('details')
+    expect(disclosure).not.toBeNull()
+    expect(disclosure?.open).toBe(false)
+    expect(screen.getByRole('link', { name: 'Configurer maintenant' })).toBeDefined()
+
+    fireEvent.click(summary)
+    expect(disclosure?.open).toBe(true)
+    expect(screen.getByRole('link', { name: 'Configurer maintenant' })).toBeDefined()
+  })
+
+  it('shows a critical explanation in full without requiring expansion', async () => {
+    signedIn([{ ...MFA_NOTICE, severity: 'danger' }])
+    render(<App />)
+
+    const title = await screen.findByText('Activez la vérification en deux étapes')
+    const notice = title.parentElement
+    expect(notice?.querySelector('details')).toBeNull()
+    expect(notice?.textContent).toContain('Ce compte peut publier ou administrer le site.')
+    expect(screen.getByRole('link', { name: 'Configurer maintenant' })).toBeDefined()
+  })
+
   it('shows a recommendation above the page without standing in front of it', async () => {
     signedIn([MFA_NOTICE])
     render(<App />)
@@ -107,4 +134,22 @@ describe('the admin notice board', () => {
 
     await expectNoSeriousA11yViolations(container)
   })
+})
+
+it('explains recovery-code consumption and links to the account security controls', async () => {
+  signedIn([
+    {
+      id: 'security.recovery-code-used',
+      code: 'security.recovery-code-used',
+      severity: 'warning',
+      dismissible: true,
+      action: { code: 'security.recovery-code-used.action', href: '/profile' },
+    },
+  ])
+  render(<App />)
+  expect(await screen.findByText('Un code de secours a été utilisé')).toBeDefined()
+  expect(
+    screen.getByRole('link', { name: 'Vérifier mes codes de secours' }).getAttribute('href'),
+  ).toBe('/profile')
+  expect(screen.getByText(/Chaque code ne fonctionne qu’une fois/u)).toBeDefined()
 })

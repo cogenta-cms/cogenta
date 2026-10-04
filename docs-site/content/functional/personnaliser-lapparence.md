@@ -86,6 +86,12 @@ table des matières, formulaire, recherche, menu, catégories (liste ou menu dé
 termes et réseaux sociaux. Un widget « HTML personnalisé » n'existe pas : Cogenta ne stocke
 jamais de HTML.
 
+Les groupes de la bibliothèque se déplient au clic ou au clavier. La recherche
+ouvre les groupes correspondants. Chaque zone affiche dix widgets par page, avec
+**Précédent** et **Suivant** en haut et en bas : aucun widget n’est supprimé ni
+masqué sur le site par cette pagination. Les boutons de déplacement conservent
+l’ordre de toute la zone, y compris entre deux pages.
+
 Chaque widget se glisse dans une zone ou d'une zone à l'autre, ou se déplace avec les boutons
 **Monter**, **Descendre** et **Déplacer vers…** ; il se **duplique** (la copie reste masquée
 jusqu'à ce que vous l'affichiez), se **masque** sans être supprimé, et se supprime après

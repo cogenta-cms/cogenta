@@ -17,10 +17,12 @@ import {
 } from './slate-types.js'
 
 /** An empty document is not valid Slate — every editor needs at least one block to place a cursor in. */
-export const EMPTY_DOCUMENT: CustomElement[] = [{ type: 'paragraph', children: [{ text: '' }] }]
+export function createEmptyDocument(): CustomElement[] {
+  return [{ type: 'paragraph', children: [{ text: '' }] }]
+}
 
 export function portableTextToSlate(document: RichTextDocument): CustomElement[] {
-  if (document.length === 0) return EMPTY_DOCUMENT
+  if (document.length === 0) return createEmptyDocument()
   return document.map(nodeToSlate)
 }
 

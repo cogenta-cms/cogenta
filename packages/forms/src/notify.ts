@@ -5,6 +5,7 @@ import {
   type EmailTransport,
 } from '@cogenta/channels'
 import { CogentaError, type RateLimitDriver } from '@cogenta/core'
+import { formDefaultMessages } from './default-messages.js'
 import type { FormDefinition, FormNotifyChannel, FormSubmission } from './types.js'
 
 /**
@@ -137,6 +138,8 @@ export interface SendAutoresponderOptions {
   readonly definition: FormDefinition
   readonly recipientEmail: string
   readonly rateLimit: RateLimitDriver
+  /** Fallback language for older definitions without author-provided body text. */
+  readonly defaultLocale?: string
 }
 
 export async function sendAutoresponder(options: SendAutoresponderOptions): Promise<void> {
@@ -161,7 +164,9 @@ export async function sendAutoresponder(options: SendAutoresponderOptions): Prom
     { id: options.recipientEmail },
     {
       level: 'notification',
-      text: options.definition.autoresponder.body ?? 'Thank you — we received your message.',
+      text:
+        options.definition.autoresponder.body ??
+        formDefaultMessages(options.defaultLocale).autoresponder,
     },
   )
 }

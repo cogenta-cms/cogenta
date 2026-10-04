@@ -70,6 +70,40 @@ describe('createMenuRouter', () => {
     await rm(directory, { recursive: true, force: true })
   })
 
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,<svg>',
+    'vbscript:msgbox(1)',
+    'java\tscript:alert(1)',
+  ])(
+    'refuses unsafe menu destinations %j on POST and PATCH without changing the stored item',
+    async (url) => {
+      const menu = await store.create({ name: 'main', locale: 'en', label: 'Main' })
+      const item = await store.createItem(menu.id, { kind: 'url', label: 'Safe', url: '/safe' })
+      const post = await router.handle(
+        {
+          method: 'POST',
+          path: `/api/menus/${menu.id}/items`,
+          query: {},
+          body: { kind: 'url', label: 'Unsafe', url },
+        },
+        asEditor,
+      )
+      expect(post.status).toBe(400)
+      const patch = await router.handle(
+        {
+          method: 'PATCH',
+          path: `/api/menus/${menu.id}/items/${item.id}`,
+          query: {},
+          body: { url },
+        },
+        asEditor,
+      )
+      expect(patch.status).toBe(400)
+      expect((await store.readItem(item.id))?.url).toBe('/safe')
+    },
+  )
+
   it('lets anyone list and read menus', async () => {
     await store.create({ name: 'main', locale: 'en', label: 'Main menu' })
 

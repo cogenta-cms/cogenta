@@ -77,6 +77,9 @@ describe('Widgets screen', () => {
     fireEvent.change(screen.getByLabelText('Zone de destination'), {
       target: { value: 'footer-2' },
     })
+    fireEvent.change(screen.getByLabelText('Rechercher un widget'), {
+      target: { value: 'Recherche' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Ajouter le widget Recherche' }))
     const dialog = await screen.findByRole('dialog')
     expect(dialog.textContent).toContain('Pied de page, colonne 2')
@@ -136,6 +139,69 @@ describe('Widgets screen', () => {
       expect(within(area('Pied de page, colonne 1')).getByText('À propos')).toBeDefined(),
     )
     expect(widgetWrites.map((write) => write.method)).toEqual(['MOVE', 'MOVE'])
+  })
+
+  it('pages each area and moves a second-page widget using its global position', async () => {
+    const template = mockWidgets[0]
+    if (template === undefined) throw new Error('Missing seeded widget')
+    for (let index = 2; index < 12; index++) {
+      mockWidgets.push({
+        ...template,
+        id: `seed-${index}`,
+        position: index,
+        title: `Widget ${index}`,
+      })
+    }
+    open(['admin'])
+    const sidebar = await screen.findByRole('region', { name: 'Barre latérale' })
+    await within(sidebar).findByText('Newsletter')
+    expect(within(sidebar).getAllByRole('listitem')).toHaveLength(10)
+    expect(within(sidebar).queryByText('Widget 10')).toBeNull()
+    fireEvent.click(within(sidebar).getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    await within(sidebar).findByText('Widget 10')
+    fireEvent.click(within(sidebar).getByRole('button', { name: 'Monter Widget 10' }))
+    await waitFor(() =>
+      expect(mockWidgets.find((widget) => widget.id === 'seed-10')?.position).toBe(9),
+    )
+    expect(mockWidgets.find((widget) => widget.id === 'seed-0')?.position).toBe(0)
+    expect(widgetWrites).toEqual([{ method: 'MOVE', id: 'seed-10', area: 'sidebar' }])
+  })
+
+  it('opens matching library groups through search while keeping the catalogue folded initially', async () => {
+    open(['admin'])
+    await screen.findByRole('region', { name: 'Barre latérale' })
+    expect(
+      screen
+        .getByRole('button', { name: 'Ajouter le widget Recherche', hidden: true })
+        .closest('details')
+        ?.hasAttribute('open'),
+    ).toBe(false)
+    fireEvent.change(screen.getByLabelText('Rechercher un widget'), {
+      target: { value: 'Recherche' },
+    })
+    expect(
+      screen
+        .getByRole('button', { name: 'Ajouter le widget Recherche' })
+        .closest('details')
+        ?.hasAttribute('open'),
+    ).toBe(true)
+  })
+
+  it('keeps each catalogue label in its accessible name and exposes its explanation separately', async () => {
+    open(['admin'])
+    await screen.findByRole('region', { name: 'Barre latérale' })
+    const buttons = screen.getAllByRole('button', { name: /^Ajouter le widget/u, hidden: true })
+    expect(buttons.length).toBeGreaterThan(20)
+    for (const button of buttons) {
+      const visibleLabel = button.textContent?.trim() ?? ''
+      expect(visibleLabel.length).toBeGreaterThan(0)
+      expect(button.getAttribute('aria-label')).toContain(visibleLabel)
+      const descriptionId = button.getAttribute('aria-describedby')
+      expect(descriptionId).not.toBeNull()
+      const description = document.getElementById(descriptionId ?? '')
+      expect(description?.textContent?.trim().length).toBeGreaterThan(0)
+      expect(button.contains(description)).toBe(false)
+    }
   })
 
   it('duplicates a widget as a hidden copy and deletes only after confirmation', async () => {

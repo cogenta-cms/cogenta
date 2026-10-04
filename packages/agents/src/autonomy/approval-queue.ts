@@ -14,8 +14,8 @@ export interface MemoryApprovalQueueOptions {
 /**
  * In-process, one queue per running server — enough for `execute_with_approval`
  * to block a run on a real human decision, and for the admin/channel surfaces
- * (L2/L6) to list and decide requests. A durable, cross-process version is a
- * later concern once those surfaces exist to need one.
+ * (L2/L6) to list and decide requests. Use the file driver for durable,
+ * cross-process review in the administration.
  */
 export function createMemoryApprovalQueue(options: MemoryApprovalQueueOptions = {}): ApprovalQueue {
   const now = options.now ?? Date.now
@@ -24,7 +24,14 @@ export function createMemoryApprovalQueue(options: MemoryApprovalQueueOptions = 
   const resolvers = new Map<string, (request: ApprovalRequest) => void>()
 
   return {
-    request(input: ApprovalRequestInput): Promise<ApprovalRequest> {
+    request(input: ApprovalRequestInput, signal?: AbortSignal): Promise<ApprovalRequest> {
+      const cancelled = () =>
+        new CogentaError({
+          code: 'APPROVAL_REQUEST_CANCELLED',
+          message: 'Waiting for human approval was cancelled.',
+          hint: 'Start a new run to request a new action; this run cannot resume.',
+        })
+      if (signal?.aborted === true) return Promise.reject(cancelled())
       const id = generateId()
       const record: ApprovalRequest = {
         id,
@@ -35,8 +42,18 @@ export function createMemoryApprovalQueue(options: MemoryApprovalQueueOptions = 
         status: 'pending',
       }
       requests.set(id, record)
-      return new Promise((resolve) => {
-        resolvers.set(id, resolve)
+      return new Promise((resolve, reject) => {
+        const abort = () => {
+          resolvers.delete(id)
+          signal?.removeEventListener('abort', abort)
+          reject(cancelled())
+        }
+        resolvers.set(id, (decision) => {
+          signal?.removeEventListener('abort', abort)
+          resolve(decision)
+        })
+        signal?.addEventListener('abort', abort, { once: true })
+        if (signal?.aborted === true) abort()
       })
     },
 
@@ -57,6 +74,13 @@ export function createMemoryApprovalQueue(options: MemoryApprovalQueueOptions = 
           code: 'APPROVAL_REQUEST_UNKNOWN',
           message: `No approval request with id "${id}".`,
           hint: 'Check the id, or list pending requests to find the right one.',
+        })
+      }
+      if (existing.status !== 'pending') {
+        throw new CogentaError({
+          code: 'APPROVAL_ALREADY_DECIDED',
+          message: 'This request already has a human decision.',
+          hint: 'Review a new pending request; an existing decision cannot be changed or replayed.',
         })
       }
       const decided: ApprovalRequest = {

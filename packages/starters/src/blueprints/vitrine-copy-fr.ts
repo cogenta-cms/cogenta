@@ -789,6 +789,11 @@ export const VITRINE_COPY_FR: VitrineCopy = {
       credits: 'Crédits photos',
     },
     home: {
+      seoDescription:
+        `${firm}: capteurs, plateforme et services pour surveiller les réseaux d’électricité, d’eau et de rail.`.slice(
+          0,
+          160,
+        ),
       heroEyebrow: 'Ingénierie et logiciel pour les infrastructures critiques',
       heroTitle: 'Voir une panne venir, avant qu’elle ne coupe une ville',
       heroSubtitle: `${firm} conçoit les capteurs, la plateforme et les services qui surveillent en continu les réseaux d’électricité, d’eau et de rail. Nos clients interviennent au bon moment, et non plus après la panne.`,

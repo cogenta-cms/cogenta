@@ -789,6 +789,11 @@ export const VITRINE_COPY_EN: VitrineCopy = {
       credits: 'Photo credits',
     },
     home: {
+      seoDescription:
+        `${firm}: sensors, platform and services for continuous monitoring of electricity, water and rail networks.`.slice(
+          0,
+          160,
+        ),
       heroEyebrow: 'Engineering and software for critical infrastructure',
       heroTitle: 'See a failure coming before it cuts a city off',
       heroSubtitle: `${firm} designs the sensors, the platform and the services that monitor electricity, water and rail networks around the clock. Our clients act at the right moment, not after the breakdown.`,

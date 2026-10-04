@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     name: '@cogenta/starters',
     include: ['test/**/*.test.ts'],
+    exclude: ['test/integration/**'],
     // Most of these tests only read the packs, but the demo-art renderer
     // encodes real PNGs and a few read every bundled photograph: fine alone,
     // too slow for the 5s default under a full workspace run. Same setting

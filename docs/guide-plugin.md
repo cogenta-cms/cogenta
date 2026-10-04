@@ -366,7 +366,17 @@ mon-site/
 ```
 
 `plugins.dir` moves that directory and `plugins.enabled: false` stops a site loading any
-of them at all. The CLI is the hand path onto all of it:
+of them at all.
+
+Plugins are loaded once when `cogenta serve` starts. After installing or replacing
+a plugin in the admin, restart this site's `cogenta serve` process through the
+service manager you use, then refresh the Plugins page. **Installed — restart
+required** means the files on disk differ from the running manifest/code snapshot;
+**Loaded in the server** confirms that exact version has been loaded. Installing
+still grants no permissions: review each requested capability separately. A disabled
+plugin may be loaded but cannot run until it is enabled.
+
+The CLI is the hand path onto all of it:
 
 ```bash
 cogenta plugin list                       # what this site has installed

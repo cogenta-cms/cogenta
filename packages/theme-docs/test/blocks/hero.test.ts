@@ -17,10 +17,12 @@ describe('hero', () => {
 
   it('offers a real search form that asks the host’s search page', () => {
     expect(html).toContain(
-      '<form class="cd-search cd-search--large" action="/search" method="get" role="search">',
+      '<form class="cd-search cd-search--large" action="/search" method="get" role="search" aria-label="Search this documentation">',
     )
     expect(html).toContain('name="q"')
-    expect(html).toMatch(/<label class="cg-visually-hidden" for="cd-search-hero">/)
+    expect(html).toMatch(
+      /<label id="cd-search-hero-label" class="cg-visually-hidden" for="cd-search-hero">/,
+    )
     expect(html).toContain('id="cd-search-hero"')
   })
 

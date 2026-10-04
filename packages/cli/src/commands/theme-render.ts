@@ -1,5 +1,6 @@
 import {
   type AccessContext,
+  assertCollectionListValid,
   type ContentGateway,
   collectDependencies,
   type EmbedPreviewView,
@@ -26,6 +27,7 @@ import {
   buildPath,
   type CollectionDefinition,
   type ContentEntry,
+  isSafeMenuUrl,
   matchPath,
   pruneEmptyBlockData,
   relationsOf,
@@ -64,6 +66,7 @@ import {
   type QueryRequest as ThemeQueryRequest,
   type WidgetAreas,
 } from '@cogenta/theme-kit'
+import { DEFAULT_FAVICON_CONTENT_TYPE, DEFAULT_FAVICON_PATH } from './default-favicon.js'
 import { DEFAULT_LOGO_PATH } from './default-logo.js'
 import { renderPasswordForm, UNLOCK_FLOOR_CSS } from './entry-lock.js'
 import type { PluginBlockRenderer } from './plugin-block-render.js'
@@ -191,6 +194,13 @@ async function listAsTheme(
 export const DEFAULT_IMAGE_ENDPOINT = '/_image'
 
 export interface ThemeRenderOptions {
+  /** Legacy query data that no longer matches the schema is omitted, with an operator-only diagnostic. */
+  readonly onInvalidCollectionList?: (report: {
+    readonly path: string
+    readonly key: string
+    readonly collection: string
+    readonly code: string
+  }) => void
   /**
    * Called when a block on this page filters on `$now`/`$today` (ADR-0038).
    * The host caps the page's public cache lifetime accordingly: a list of
@@ -443,7 +453,7 @@ export interface ThemeRenderOptions {
    * Read live per request, the same reasoning `branding`/`homePath` give:
    * choosing a logo in the admin must show on the very next page view, with
    * no restart. Absent, or resolving to all-`null`, renders exactly as
-   * before: the site name in text, and `DEFAULT_LOGO_PATH` as the favicon.
+   * before: the site name in text, and a neutral document icon as the favicon.
    */
   readonly identity?: () => Promise<SiteIdentityMedia>
   /**
@@ -573,16 +583,11 @@ async function resolveIdentity(
 /**
  * `<link rel="icon">`, and what it falls back to.
  *
- * The fallback is **branding-aware**, and that is not a detail: Cogenta's
- * default icon is Cogenta's own logo, so a site that turned the credit off
- * (fiche L21 task 8) and then got that logo back in its browser tab would
- * have its white-labelling undone by the very change that started serving a
- * favicon at all. A white-labelled site therefore falls back to its own
- * uploaded replacement logo, and to *no icon tag whatsoever* when it has
- * none — a browser's own blank default, which is the honest answer, not
- * somebody else's mark.
+ * A chosen live favicon wins, followed by the site's branding logo. With
+ * neither configured, the host serves a neutral document icon, independent
+ * of the footer credit and without placing a CMS mark in the site's tab.
  *
- * The `type` is only ever declared for the default, which really is the PNG
+ * The `type` is only ever declared for the default, which really is the ICO
  * this package ships; a media-library asset goes through `/_image`, which
  * answers WebP or PNG depending on what the upload pipeline wrote, so
  * declaring `image/png` there would be a claim this file cannot make. A
@@ -594,29 +599,19 @@ function faviconLinkTag(
   imageEndpoint: string,
 ): string {
   const href = chosen ?? defaultFaviconFor(branding, imageEndpoint)
-  if (href === null) return ''
-  const typeAttr = href === DEFAULT_LOGO_PATH ? ' type="image/png"' : ''
+  const typeAttr = href === DEFAULT_FAVICON_PATH ? ` type="${DEFAULT_FAVICON_CONTENT_TYPE}"` : ''
   return `<link rel="icon"${typeAttr} href="${escapeAttribute(href)}">`
 }
 
 /**
- * The site's own logo, or nothing — never Cogenta's.
- *
- * This used to read `showCogentaBranding` first and answer with the CMS's own
- * PNG, so a freshly installed client site put Cogenta's logo in the visitor's
- * browser tab, and an uploaded logo did nothing at all until somebody turned
- * off a setting that names the *footer credit*. Nobody chose that coupling and
- * nothing documented it; a tab is not a credit slot.
- *
- * Answering `null` emits no `<link rel="icon">`, which is what every site
- * without a favicon does — the browser asks for `/favicon.ico` and takes the
- * 404. That is a better default than wearing someone else's brand.
+ * The site's own branding logo, otherwise the neutral installation icon.
+ * The footer credit never controls the site's browser-tab identity.
  */
-function defaultFaviconFor(branding: BrandingSettings, imageEndpoint: string): string | null {
+function defaultFaviconFor(branding: BrandingSettings, imageEndpoint: string): string {
   if (branding.customLogoMediaId !== null && branding.customLogoMediaId !== '') {
     return `${imageEndpoint}?id=${encodeURIComponent(branding.customLogoMediaId)}&w=64`
   }
-  return null
+  return DEFAULT_FAVICON_PATH
 }
 
 /**
@@ -897,12 +892,16 @@ function toVocabularyBlocks(
   // reused rather than a second serialiser for the same data.
   const richTextField = fieldOfKind(collection, 'richText')
   if (richTextField === undefined) return []
+  const document = entry.values[richTextField]
+  // Optional rich text is persisted as null until the author writes it.
+  // An absent document contributes no prose block; the entry header still renders.
+  if (!Array.isArray(document) || document.length === 0) return []
   return [
     {
       _key: 'body',
       _type: 'prose',
       _version: '1.0.0',
-      body: entry.values[richTextField],
+      body: document,
     } as VocabularyBlock,
   ]
 }
@@ -914,10 +913,10 @@ interface RichTextAssets {
   readonly links: readonly { readonly collection: string; readonly id: string }[]
 }
 
-function richTextRefs(document: RichTextDocument): RichTextAssets {
+function richTextRefs(document: RichTextDocument | null | undefined): RichTextAssets {
   const media = new Set<string>()
   const links: { collection: string; id: string }[] = []
-  for (const node of document) {
+  for (const node of document ?? []) {
     if (node._type === 'media') {
       media.add(node.id)
       continue
@@ -1041,7 +1040,11 @@ async function fetchMenuLinksFromPath(
     // `submenu-placeholder` has no resolver call at all, so `resolvedRoute`
     // is `undefined` for it and this falls through to `null`, exactly the
     // "no link, just a heading" case `renderMenuLinks` keeps.
-    href: item.kind === 'url' ? item.url : (item.resolvedRoute ?? null),
+    href: isSafeMenuUrl(item.kind === 'url' ? item.url : item.resolvedRoute)
+      ? item.kind === 'url'
+        ? item.url
+        : (item.resolvedRoute ?? null)
+      : null,
     openInNewTab: item.openInNewTab,
     kind: item.kind,
     title: item.title,
@@ -1157,7 +1160,7 @@ export interface PageChromeOptions {
    * the pre-fiche-50 behaviour.
    */
   readonly seo?: () => Promise<SeoRenderDefaults>
-  /** Same live read `ThemeRenderOptions.identity` documents (audit T01) — absent renders the site name in text and Cogenta's default favicon. */
+  /** Same live read `ThemeRenderOptions.identity` documents (audit T01) — absent renders the site name in text and the neutral default favicon. */
   readonly identity?: () => Promise<SiteIdentityMedia>
   /** Same batch loader `ThemeRenderOptions.loadMedia` documents. Absent means no logo and no favicon can be resolved, so both fall back. */
   readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, RenderMediaAsset>>
@@ -1710,7 +1713,29 @@ async function renderEntryPage(
     if (options.onClockDependent !== undefined && dependsOnClock(themeQuery.filter)) {
       options.onClockDependent()
     }
-    const results = await options.gateway.list(toApiQueryRequest(themeQuery), context)
+    let results: Awaited<ReturnType<ContentGateway['list']>>
+    try {
+      assertCollectionListValid(
+        block._key,
+        { collection: block.collection, sort: block.sort, filter: block.filter },
+        options.collections,
+      )
+      results = await options.gateway.list(toApiQueryRequest(themeQuery), context)
+    } catch (error) {
+      if (
+        !isCogentaError(error) ||
+        !['BLOCK_INVALID', 'CONTENT_INVALID', 'QUERY_INVALID'].includes(error.code)
+      )
+        throw error
+      blocks = blocks.filter((candidate) => candidate._key !== block._key)
+      options.onInvalidCollectionList?.({
+        path: pathname,
+        key: block._key,
+        collection: themeQuery.collection,
+        code: error.code,
+      })
+      continue
+    }
     fetchedEntries[block._key] = results.items.map((found) =>
       toThemeEntry(found, themeQuery.collection),
     )

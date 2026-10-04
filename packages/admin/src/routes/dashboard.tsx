@@ -24,6 +24,7 @@ import {
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary, SchemaField } from '../schema/types.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import {
   AuditIcon,
   BackupIcon,
@@ -170,6 +171,7 @@ function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth]
  * it never swaps their markup for a component.
  */
 export function DashboardRoute(): JSX.Element {
+  const formatDateTime = useDateTimeFormatter()
   const { t } = useTranslation()
   const auth = useAuth()
   const schema = useSchema()
@@ -729,14 +731,19 @@ export function DashboardRoute(): JSX.Element {
                     key={entry.id}
                     className="border-b border-border pb-2.5 text-sm leading-5 last:border-b-0 last:pb-0"
                   >
-                    <span className="font-mono text-xs text-muted-foreground">{entry.at}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {formatDateTime(entry.at)}
+                    </span>
                     <br />
                     <span className="font-medium">
                       {entry.actorId === null
                         ? '—'
                         : (actorNames.get(entry.actorId) ?? entry.actorId)}
                     </span>{' '}
-                    — {entry.action}
+                    —{' '}
+                    {t(`audit.actionLabel.${entry.action}`, {
+                      defaultValue: t('audit.actionOther'),
+                    })}
                     {entry.collection !== null && (
                       <span className="text-muted-foreground"> ({entry.collection})</span>
                     )}
@@ -1026,7 +1033,14 @@ export function DashboardRoute(): JSX.Element {
           {t('dashboard.backupsHeading')}
           {collapseToggle('backups')}
         </h2>
-        {!prefs.collapsed.has('backups') && <p className="m-0">{t('dashboard.backupsBody')}</p>}
+        {!prefs.collapsed.has('backups') && (
+          <>
+            <p className="m-0">{t('dashboard.backupsBody')}</p>
+            <Link to="/documentation/docs/functional/exploiter-le-site#sauvegarder-et-restaurer">
+              {t('dashboard.backupsHelp')}
+            </Link>
+          </>
+        )}
       </section>
     )
   }

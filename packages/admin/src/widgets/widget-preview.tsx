@@ -125,18 +125,18 @@ export function WidgetPreview({
   return (
     <section
       aria-labelledby="widgets-preview"
-      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
+      className="min-w-0 flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 id="widgets-preview" className="m-0 text-base font-semibold">
           {t('widgets.preview.heading')}
         </h2>
-        <div className="flex flex-wrap items-end gap-2">
-          <Field label={t('widgets.preview.page')}>
+        <div className="flex min-w-0 max-w-full flex-wrap items-end gap-2">
+          <Field label={t('widgets.preview.page')} className="min-w-0 max-w-full">
             {(control) => (
               <Select
                 {...control}
-                className="w-auto max-w-[18rem]"
+                className="w-auto min-w-0 max-w-full sm:max-w-[18rem]"
                 value={path}
                 onChange={(event) => onPathChange(event.target.value)}
               >
@@ -178,7 +178,7 @@ export function WidgetPreview({
       </div>
       <div
         ref={container}
-        className="overflow-hidden rounded-md border border-border bg-background"
+        className="min-w-0 max-w-full overflow-hidden rounded-md border border-border bg-background"
         style={{ height: `${Math.round(720 * scale)}px` }}
       >
         <iframe

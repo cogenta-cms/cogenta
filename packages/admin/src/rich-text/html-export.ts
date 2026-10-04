@@ -1,4 +1,4 @@
-import { EMPTY_DOCUMENT } from './convert.js'
+import { createEmptyDocument } from './convert.js'
 import { htmlToSlateFragment } from './paste-html.js'
 import type { CustomElement, Descendant } from './slate-types.js'
 
@@ -167,5 +167,5 @@ export function slateToHtml(nodes: readonly CustomElement[]): string {
 
 /** `htmlToSlateFragment` returns `null` for an empty/unusable fragment — a source view always needs a real document to hand back to the Slate editor. */
 export function htmlToSlate(html: string): CustomElement[] {
-  return htmlToSlateFragment(html) ?? EMPTY_DOCUMENT
+  return htmlToSlateFragment(html) ?? createEmptyDocument()
 }

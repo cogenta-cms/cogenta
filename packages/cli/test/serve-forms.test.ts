@@ -93,6 +93,11 @@ describe('cogenta serve — /api/forms and /forms/{name}', () => {
       const token = await adminToken(root, server.base)
       await createContactForm(server.base, token)
 
+      const listed = (await (
+        await fetch(`${server.base}/api/forms`, { headers: { authorization: `Bearer ${token}` } })
+      ).json()) as { data: { confirmationMessage: string }[] }
+      expect(listed.data[0]?.confirmationMessage).toBe('Merci — votre message a bien été reçu.')
+
       const page = await (await fetch(`${server.base}/forms/contact`)).text()
       expect(page).toContain('>Envoyer</button>')
 
@@ -447,6 +452,11 @@ describe('cogenta serve — fiche 47: logic, steps, files, CSV export', () => {
         ],
       })
 
+      const html = await (await fetch(`${server.base}/forms/contact`)).text()
+      expect(html).toContain('data-show-if=')
+      expect(html).toContain("form.addEventListener('change', update)")
+      expect(html).not.toMatch(/name="phone"[^>]* required/u)
+
       // "phone" would fail (not a real phone number) and is required — but
       // its condition (contactMethod === "phone") is unmet.
       const body = new URLSearchParams({
@@ -553,6 +563,13 @@ describe('cogenta serve — fiche 47: logic, steps, files, CSV export', () => {
         fields: [
           { name: 'email', label: 'E-mail', kind: 'email', required: true },
           { name: 'resume', label: 'Resume', kind: 'file', required: true },
+          {
+            name: 'topics',
+            label: 'Topics',
+            kind: 'choiceMulti',
+            choices: ['news', 'events', 'offers'],
+            required: true,
+          },
         ],
       })
 
@@ -567,6 +584,9 @@ describe('cogenta serve — fiche 47: logic, steps, files, CSV export', () => {
       form.set('_ts', staleTs())
       form.set('email', 'visitor@example.com')
       form.set('resume', new Blob([png], { type: 'image/png' }), 'resume.png')
+      form.append('topics', 'news')
+      form.append('topics', 'events')
+      form.append('topics', 'offers')
 
       const submit = await fetch(`${server.base}/api/forms/contact/submit`, {
         method: 'POST',
@@ -579,10 +599,13 @@ describe('cogenta serve — fiche 47: logic, steps, files, CSV export', () => {
         headers: { authorization: `Bearer ${token}` },
       })
       const listed = (await list.json()) as {
-        data: readonly { values: { resume: { filename: string; storageKey: string } } }[]
+        data: readonly {
+          values: { resume: { filename: string; storageKey: string }; topics: readonly string[] }
+        }[]
       }
       expect(listed.data[0]?.values.resume.filename).toBe('resume.png')
       expect(listed.data[0]?.values.resume.storageKey).toContain('forms/')
+      expect(listed.data[0]?.values.topics).toEqual(['news', 'events', 'offers'])
     } finally {
       await server.stop()
     }

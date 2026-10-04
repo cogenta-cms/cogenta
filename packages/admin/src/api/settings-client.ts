@@ -4,12 +4,8 @@ import { authHeader, request } from './http.js'
  * `GET|PATCH /api/settings` — the editorial site settings a rédacteur can
  * change without a terminal (fiche 23, ADR-0025's third category).
  *
- * Read needs no token: an anonymous visitor's browser never calls this
- * directly, but the admin's own settings screen loads before it necessarily
- * knows whether the signed-in account can write anything, and the site
- * settings provider (`site-settings-context.tsx`) that feeds every screen's
- * date formatting reads this once at startup the same way `SchemaProvider`
- * reads `/api/schema`.
+ * Pass a session token for administrative settings. Anonymous consumers (login
+ * branding and public date formatting) receive only the public settings.
  */
 
 export type SiteSettingGroup =
@@ -42,9 +38,11 @@ export interface SiteSetting {
   readonly updatedBy: string | null
 }
 
-export function listSettings(locale?: string): Promise<readonly SiteSetting[]> {
+export function listSettings(locale?: string, token?: string): Promise<readonly SiteSetting[]> {
   const query = locale === undefined ? '' : `?locale=${encodeURIComponent(locale)}`
-  return request(`/api/settings${query}`)
+  return request(`/api/settings${query}`, {
+    ...(token === undefined ? {} : { headers: authHeader(token) }),
+  })
 }
 
 export function writeSetting(

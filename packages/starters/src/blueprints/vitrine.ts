@@ -24,13 +24,7 @@ import {
 import type { DemoMediaSpec } from './demo-media.js'
 import type { BlueprintMenus } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
-import type {
-  RichInline,
-  RichPart,
-  VitrineCopy,
-  VitrineLocale,
-  VitrinePagesCopy,
-} from './vitrine-copy.js'
+import type { RichInline, RichPart, VitrineCopy, VitrinePagesCopy } from './vitrine-copy.js'
 import { VITRINE_COPY_EN } from './vitrine-copy-en.js'
 import { VITRINE_COPY_FR } from './vitrine-copy-fr.js'
 import { VITRINE_PHOTO_CREDITS } from './vitrine-credits.js'
@@ -260,6 +254,7 @@ const BLOCK_VERSION = '1.0.0'
 export interface VitrineDemoPage {
   readonly title: string
   readonly slug: string
+  readonly seoDescription?: string
   readonly blocks: readonly VocabularyBlock[]
 }
 
@@ -380,6 +375,7 @@ export function buildVitrineDemoPages(
   const page = (key: PageKey, pageSlug: string, blocks: VocabularyBlock[]): VitrineDemoPage => ({
     title: words.titles[key],
     slug: pageSlug,
+    ...(key === 'home' ? { seoDescription: words.home.seoDescription } : {}),
     blocks,
   })
 
@@ -894,7 +890,11 @@ function seedVitrineDemoContent(copy: VitrineCopy) {
     for (const demo of buildVitrineDemoPages(copy, { media, firm })) {
       await pages.create({
         ...published,
-        values: { title: demo.title, slug: demo.slug },
+        values: {
+          title: demo.title,
+          slug: demo.slug,
+          ...(demo.seoDescription === undefined ? {} : { seoDescription: demo.seoDescription }),
+        },
         blocks: { blocks: demo.blocks.map(toBlockZoneEntry) },
       })
     }

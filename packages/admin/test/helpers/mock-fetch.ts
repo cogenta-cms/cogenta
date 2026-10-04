@@ -4832,6 +4832,9 @@ export function installMockFetch(
         })
       }
 
+      if (url.includes('/api/agent-approvals')) {
+        return json(200, { data: [] })
+      }
       if (url.includes('/api/agents')) {
         if (!user.roles.includes('admin')) {
           return json(403, {
@@ -9754,7 +9757,12 @@ export function installMockFetch(
                 c.body.toLowerCase().includes(q),
             )
           }
-          return json(200, { items: filtered, total: filtered.length })
+          const offset = Number(params.get('offset') ?? '0')
+          const limit = Number(params.get('limit') ?? '50')
+          return json(200, {
+            items: filtered.slice(offset, offset + limit),
+            total: filtered.length,
+          })
         }
 
         if (segments.length === 1 && segments[0] === 'counts' && method === 'GET') {

@@ -58,6 +58,7 @@ function isMovable(item: CalendarItem): boolean {
   return item.canSchedule && item.status !== 'published'
 }
 
+// biome-ignore-start lint/a11y/noNoninteractiveTabindex: the calendar overflow region must support keyboard scrolling.
 export function CalendarRoute(): JSX.Element {
   const { t, i18n } = useTranslation()
   const auth = useAuth()
@@ -324,7 +325,11 @@ export function CalendarRoute(): JSX.Element {
               <Badge tone="success">{t('calendar.legendPublished')}</Badge>
             </div>
 
-            <div className="overflow-x-auto">
+            <section
+              aria-label={t('calendar.monthGrid')}
+              tabIndex={0}
+              className="min-w-0 max-w-full overflow-x-auto"
+            >
               <div className="grid min-w-[44rem] grid-cols-7 gap-px border border-border bg-border">
                 {days.slice(0, 7).map((day) => (
                   <div
@@ -387,7 +392,7 @@ export function CalendarRoute(): JSX.Element {
                   )
                 })}
               </div>
-            </div>
+            </section>
           </CardBody>
         </Card>
 
@@ -486,3 +491,5 @@ export function CalendarRoute(): JSX.Element {
     </section>
   )
 }
+
+// biome-ignore-end lint/a11y/noNoninteractiveTabindex: calendar overflow region.

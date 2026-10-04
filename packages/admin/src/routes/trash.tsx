@@ -456,7 +456,10 @@ export function TrashRoute(): JSX.Element {
         <p>{t('trash.noCollections')}</p>
       ) : (
         <>
-          <div role="tablist" aria-label={t('trash.tabsLabel')} className="flex flex-wrap gap-2">
+          <fieldset
+            aria-label={t('trash.tabsLabel')}
+            className="m-0 flex flex-wrap gap-2 border-0 p-0"
+          >
             <Button
               variant={activeTab === 'all' ? 'primary' : 'secondary'}
               size="sm"
@@ -485,7 +488,7 @@ export function TrashRoute(): JSX.Element {
                 </Button>
               )
             })}
-          </div>
+          </fieldset>
 
           <Notice tone="info" live="off">
             <p>
@@ -650,7 +653,7 @@ export function TrashRoute(): JSX.Element {
                         )}
                         {/* The status it had when it was thrown away, and the
                             one restoring gives back: deletedAt is orthogonal. */}
-                        <TableCell>{row.entry.status}</TableCell>
+                        <TableCell>{t(`entryEdit.status.${row.entry.status}`)}</TableCell>
                         <TableCell>
                           {row.entry.deletedAt === null ? (
                             '—'

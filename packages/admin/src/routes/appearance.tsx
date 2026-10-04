@@ -164,13 +164,13 @@ function BrandingCard({
 
   const load = useCallback(async () => {
     try {
-      const data = await listSettings()
+      const data = await listSettings(undefined, token ?? undefined)
       setSettings(data.filter((setting) => setting.group === 'branding'))
       setLoadError(null)
     } catch (caught) {
       setLoadError(caught instanceof Error ? caught.message : t('appearance.brandingLoadError'))
     }
-  }, [t])
+  }, [token, t])
 
   useEffect(() => {
     void load()

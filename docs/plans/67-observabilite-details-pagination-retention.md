@@ -105,3 +105,20 @@ en-têtes — respecter strictement la discipline R7 déjà en place.
 
 Aucune bloquante — le seuil d'avertissement de rétention (tâche 6) est un choix
 produit mineur, ajustable après coup.
+
+
+## Validation de l’affichage — octobre 2026
+
+Les listes de formulaires, coupons et sessions montrent dix éléments à la fois ;
+les plugins installés en montrent cinq. Les zones de widgets affichent dix éléments
+avec leur index global conservé pour les déplacements. La recherche ramène à la
+première page ; la suppression du dernier élément ramène à une page existante.
+Les catalogues de widgets et les fiches des outils IA sont repliables au clavier.
+
+Le journal d’audit et les médias utilisent des pages de vingt résultats, avec une
+pile de curseurs pour revenir à la page précédente. Ils ne cumulent plus les lignes
+dans le DOM. Les filtres invalident les réponses antérieures et les curseurs ; aucun
+offset SQL ni chargement de tout le catalogue n’est introduit. Les traces et logs
+d’observabilité, déjà livrés en instantanés bornés, sont paginés localement par vingt.
+Les contrôles se replient sur petit écran et les tableaux conservent un défilement
+horizontal local accessible au clavier.

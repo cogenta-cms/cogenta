@@ -107,6 +107,35 @@ describe('the full documentation browser', () => {
     expect(screen.getByText('Page introuvable')).toBeDefined()
   })
 
+  it('keeps real Markdown tables in named keyboard-focusable regions while navigating pages', async () => {
+    signedIn()
+    window.history.pushState(null, '', '/documentation/docs/technical/packages-and-drivers')
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Packages and drivers', level: 1 })
+    const region = screen.getByRole('region', { name: 'Tableau 1 de Packages and drivers' })
+    const table = within(region).getByRole('table')
+    expect(region.contains(table)).toBe(true)
+    expect(region.tabIndex).toBe(0)
+    region.focus()
+    expect(document.activeElement).toBe(region)
+    expect(
+      within(table).getByText(
+        'Configuration, typed errors, structured logging and the driver system behind Cogenta.',
+      ),
+    ).toBeDefined()
+
+    const sidebar = screen.getByRole('navigation', { name: 'Pages de cette arborescence' })
+    fireEvent.click(within(sidebar).getByRole('link', { name: 'Creating a plugin' }))
+    await screen.findByRole('heading', { name: 'Writing a Cogenta plugin', level: 1 })
+    expect(screen.queryByRole('region', { name: 'Tableau 1 de Packages and drivers' })).toBeNull()
+    const code = screen.getAllByRole('region', {
+      name: /^Bloc de code \d+ de Creating a plugin$/u,
+    })[0]
+    expect(code?.tabIndex).toBe(0)
+    code?.focus()
+    expect(document.activeElement).toBe(code)
+  })
+
   it('shows the running Cogenta version at the bottom of a page', async () => {
     signedIn()
     window.history.pushState(null, '', '/documentation/docs')

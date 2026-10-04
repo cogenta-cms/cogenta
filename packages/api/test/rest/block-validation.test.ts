@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { asEditor, bodyOf, createHarness, dataOf, type Harness, request } from './harness.js'
+import {
+  ARTICLE,
+  asEditor,
+  bodyOf,
+  createHarness,
+  dataOf,
+  type Harness,
+  request,
+} from './harness.js'
 
 /**
  * What a page builder form sends is checked before it is stored (L36 audit).
@@ -53,5 +61,69 @@ describe('writing blocks', () => {
     const response = await write([{ key: 'p', type: 'comparisonTable', data: { rows: [] } }])
 
     expect(response.status).toBe(201)
+  })
+
+  it.each([
+    { collection: 'missing' },
+    { collection: 'rest_author', sort: { field: 'publishedAt', direction: 'desc' } },
+    { collection: 'rest_article', sort: { field: 'title', direction: 'asc' } },
+    { collection: 'rest_article', filter: { missing: 'value' } },
+    { collection: 'rest_article', filter: { zone: { exists: true } } },
+    { collection: 'rest_article', filter: { rating: { gt: 'wrong type' } } },
+    { collection: 'rest_article', filter: { featured: { exists: 'true' } } },
+  ])('refuses schema-invalid collection list data before creating an entry (%j)', async (data) => {
+    const response = await write([
+      { key: 'list', type: 'collectionList', data: { layout: 'list', ...data } },
+    ])
+    expect(response.status).toBe(400)
+    expect(bodyOf(response)).toMatchObject({ error: { code: 'BLOCK_INVALID' } })
+    expect((await harness.store(ARTICLE).list({ state: 'working' })).items).toHaveLength(0)
+  })
+
+  it.each(['createdAt', 'publishedAt'])(
+    'accepts a valid collection list ordered by %s',
+    async (field) => {
+      const response = await write([
+        {
+          key: 'list',
+          type: 'collectionList',
+          data: {
+            collection: 'rest_article',
+            layout: 'grid',
+            sort: { field, direction: 'desc' },
+            filter: { rating: { gt: 3 } },
+          },
+        },
+      ])
+      expect(response.status).toBe(201)
+    },
+  )
+
+  it('refuses publishing legacy query data without changing the draft or published state', async () => {
+    const stored = await harness.store(ARTICLE).create({
+      values: { title: 'Legacy' },
+      blocks: {
+        zone: [
+          {
+            key: 'list',
+            type: 'collectionList',
+            data: {
+              collection: 'rest_author',
+              layout: 'list',
+              sort: { field: 'publishedAt', direction: 'desc' },
+            },
+          },
+        ],
+      },
+    })
+    const response = await harness.router.handle(
+      request('POST', `/rest_article/${stored.id}/publish`, { body: {} }),
+      asEditor,
+    )
+    expect(response.status).toBe(400)
+    expect((await harness.store(ARTICLE).read(stored.id, { state: 'working' }))?.status).toBe(
+      'draft',
+    )
+    expect(await harness.store(ARTICLE).read(stored.id, { state: 'published' })).toBeNull()
   })
 })

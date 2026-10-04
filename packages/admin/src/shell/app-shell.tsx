@@ -31,6 +31,7 @@ import {
   AssistantIcon,
   AuditIcon,
   CalendarIcon,
+  ChevronRightIcon,
   CollectionsIcon,
   CommentsIcon,
   CommerceOrdersIcon,
@@ -913,7 +914,7 @@ export function AppShell(): JSX.Element {
                   to it still carries the real accessible text) inside a
                   pill, matching the "Voir le site"/"Se déconnecter" buttons
                   either side of it. */}
-              <span className="flex items-center gap-2 rounded-full border border-border bg-card/60 py-1 pr-3 pl-1">
+              <span className="app-shell__account-chip flex min-w-0 items-center gap-2 rounded-full border border-border bg-card/60 py-1 pr-3 pl-1">
                 <span
                   aria-hidden="true"
                   className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-primary"
@@ -925,10 +926,11 @@ export function AppShell(): JSX.Element {
               <button
                 type="button"
                 className="app-shell__logout"
+                aria-label={t('shell.logout')}
                 onClick={() => void auth.logout()}
               >
                 <LogoutIcon className="size-3.5" />
-                {t('shell.logout')}
+                <span className="app-shell__logout-label">{t('shell.logout')}</span>
               </button>
             </>
           )}
@@ -954,7 +956,7 @@ export function AppShell(): JSX.Element {
           onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
         >
           <span className="app-shell__sidebar-toggle-icon" aria-hidden="true">
-            {sidebarCollapsed ? '»' : '«'}
+            <ChevronRightIcon className={sidebarCollapsed ? 'size-4' : 'size-4 rotate-180'} />
           </span>
           <span className="app-shell__nav-group-label">
             {t(sidebarCollapsed ? 'shell.expandSidebar' : 'shell.collapseSidebar')}

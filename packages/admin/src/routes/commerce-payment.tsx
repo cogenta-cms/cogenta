@@ -227,7 +227,9 @@ export function CommercePaymentRoute(): JSX.Element {
                 <p className="m-0 text-muted-foreground">{t('commercePayment.webhookNone')}</p>
               ) : (
                 <>
-                  <code className="rounded bg-muted px-2 py-1 font-mono text-xs">{webhookUrl}</code>
+                  <code className="break-all rounded bg-muted px-2 py-1 font-mono text-xs">
+                    {webhookUrl}
+                  </code>
                   <p className="m-0 text-muted-foreground">
                     {t('commercePayment.webhookNotWired')}
                   </p>

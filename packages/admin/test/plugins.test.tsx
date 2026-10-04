@@ -40,6 +40,41 @@ afterEach(() => {
 })
 
 describe('Plugins screen', () => {
+  it('limits installed cards and keeps later extensions searchable and manageable', async () => {
+    const template = mockPluginsInstalled[0]
+    if (template === undefined) throw new Error('Plugin fixture missing')
+    mockPluginsInstalled.splice(
+      0,
+      mockPluginsInstalled.length,
+      ...Array.from({ length: 12 }, (_, index) => ({
+        ...template,
+        name: `extension-${index}`,
+        title: `Extension ${index}`,
+      })),
+    )
+    open(['admin'])
+    await screen.findByRole('heading', { name: /Extension 0/ })
+    const list = screen.getByRole('region', { name: 'Installés' })
+    expect(within(list).getAllByRole('heading', { level: 3 })).toHaveLength(5)
+    expect(within(list).queryByRole('heading', { name: /Extension 5/ })).toBeNull()
+
+    fireEvent.click(within(list).getByRole('button', { name: 'Suivant' }))
+    expect(within(list).getByRole('heading', { name: /Extension 5/ })).toBeDefined()
+    expect(within(list).getAllByRole('heading', { level: 3 })).toHaveLength(5)
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Rechercher une extension' }), {
+      target: { value: 'extension-11' },
+    })
+    expect(within(list).getByRole('heading', { name: /Extension 11/ })).toBeDefined()
+    expect(within(list).getAllByRole('heading', { level: 3 })).toHaveLength(1)
+    fireEvent.click(within(list).getByRole('button', { name: 'Désinstaller' }))
+    fireEvent.click(within(list).getByRole('button', { name: 'Confirmer la désinstallation' }))
+    await waitFor(() => expect(mockPluginsInstalled).toHaveLength(11))
+    expect(
+      await within(list).findByText('Aucune extension ne correspond à cette recherche.'),
+    ).toBeDefined()
+  })
+
   it('says what a plugin may do in words, and that it holds none of it yet', async () => {
     open(['admin'])
     await screen.findByRole('heading', { name: 'Plugins' })
@@ -96,6 +131,12 @@ describe('Plugins screen', () => {
     expect(screen.getByText(/Installer n'accorde aucune permission/u)).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Installer' }))
+    expect(
+      await screen.findByText('Extension installée. Redémarrez le serveur pour la charger.'),
+    ).toBeDefined()
+    expect(
+      screen.getByText(/Les routes, tâches et événements sont chargés au démarrage/u),
+    ).toBeDefined()
     await waitFor(() =>
       expect(mockPluginsInstalled.map((plugin) => plugin.name)).toContain('atelier'),
     )

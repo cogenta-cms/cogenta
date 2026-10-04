@@ -421,7 +421,10 @@ export function MarketplaceRoute(): JSX.Element {
         </p>
       </div>
 
-      <div role="tablist" aria-label={t('marketplace.tabsLabel')} className="flex flex-wrap gap-2">
+      <fieldset
+        aria-label={t('marketplace.tabsLabel')}
+        className="m-0 flex flex-wrap gap-2 border-0 p-0"
+      >
         <Button
           variant={activeTab === 'installed' ? 'primary' : 'secondary'}
           size="sm"
@@ -441,7 +444,7 @@ export function MarketplaceRoute(): JSX.Element {
         >
           {t('marketplace.discoverTab')}
         </Button>
-      </div>
+      </fieldset>
 
       {activeTab === 'installed' && (
         <div className="flex flex-col gap-4">

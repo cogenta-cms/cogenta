@@ -1,10 +1,11 @@
-import { type JSX, useCallback, useEffect, useState } from 'react'
+import { type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { type Customer, listCustomers } from '../api/commerce-client.js'
 import { ApiError } from '../api/http.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
+  Button,
   Field,
   Input,
   Notice,
@@ -33,25 +34,45 @@ export function CommerceCustomersRoute(): JSX.Element {
 
   const [customers, setCustomers] = useState<readonly Customer[]>([])
   const [search, setSearch] = useState('')
+  const [pagination, setPagination] = useState<{
+    cursors: readonly (string | undefined)[]
+    index: number
+  }>({ cursors: [undefined], index: 0 })
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const cursor = pagination.cursors[pagination.index]
+  const resetPagination = (): void => setPagination({ cursors: [undefined], index: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  useEffect(() => {
     if (token === null || !canRead) return
+    const controller = new AbortController()
+    let cancelled = false
     setLoading(true)
     setError(null)
-    try {
-      setCustomers((await listCustomers(token, search)).customers)
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceCustomers.loadError'))
-    } finally {
-      setLoading(false)
+    setNextCursor(null)
+    void (async () => {
+      try {
+        const response = await listCustomers(token, search, {
+          limit: 20,
+          ...(cursor === undefined ? {} : { cursor }),
+          signal: controller.signal,
+        })
+        if (cancelled) return
+        setCustomers(response.customers)
+        setNextCursor(response.page?.hasMore === true ? (response.page.nextCursor ?? null) : null)
+      } catch (caught) {
+        if (!cancelled)
+          setError(caught instanceof ApiError ? caught.message : t('commerceCustomers.loadError'))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      controller.abort()
     }
-  }, [token, canRead, search, t])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  }, [token, canRead, search, cursor, t])
 
   if (!canRead) {
     return (
@@ -63,7 +84,7 @@ export function CommerceCustomersRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="commerce-customers-heading" className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6">
       <h1
         id="commerce-customers-heading"
         className="m-0 text-2xl leading-tight font-bold tracking-tight"
@@ -77,7 +98,10 @@ export function CommerceCustomersRoute(): JSX.Element {
             <Input
               {...control}
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value)
+                resetPagination()
+              }}
             />
           )}
         </Field>
@@ -116,6 +140,39 @@ export function CommerceCustomersRoute(): JSX.Element {
             </TableBody>
           </Table>
         </TableRoot>
+      )}
+
+      {error === null && (pagination.index > 0 || nextCursor !== null) && (
+        <nav
+          aria-label={t('commerceCustomers.paginationLabel')}
+          className="flex flex-wrap items-center gap-2"
+        >
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={loading || pagination.index === 0}
+            onClick={() => setPagination((current) => ({ ...current, index: current.index - 1 }))}
+          >
+            {t('commerceCustomers.previousPage')}
+          </Button>
+          <span aria-live="polite">
+            {t('commerceCustomers.pageInfo', { page: pagination.index + 1 })}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={loading || nextCursor === null}
+            onClick={() => {
+              if (nextCursor !== null)
+                setPagination((current) => ({
+                  cursors: [...current.cursors.slice(0, current.index + 1), nextCursor],
+                  index: current.index + 1,
+                }))
+            }}
+          >
+            {t('commerceCustomers.nextPage')}
+          </Button>
+        </nav>
       )}
     </section>
   )

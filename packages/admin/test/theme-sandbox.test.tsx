@@ -141,12 +141,26 @@ describe('the theme sandbox screen', () => {
     expect(await screen.findByText('Déployé sous « deployed-theme ».')).toBeDefined()
   })
 
+  it('offers only local themes as clone sources, excluding npm packages', async () => {
+    signedIn(['admin'], {
+      availableThemes: [
+        { name: 'local-theme', label: 'Local', description: '', local: true },
+        { name: '@cogenta/theme-canonical', label: 'Npm', description: '', local: false },
+      ],
+    })
+    await goToScreen()
+    const select = screen.getByLabelText('Cloner depuis')
+    await waitFor(() => expect(select.querySelector('option[value="local-theme"]')).not.toBeNull())
+    expect(select.querySelector('option[value="@cogenta/theme-canonical"]')).toBeNull()
+  })
+
   it('lists archived versions for a theme and restores one', async () => {
     signedIn(['admin'], {
       themeVersions: { 'versioned-theme': ['2026-01-01T00-00-00-000Z'] },
       availableThemes: [
         {
           name: 'versioned-theme',
+          local: true,
           label: 'Versioned theme',
           description: 'A local theme with history.',
         },
@@ -176,7 +190,12 @@ describe('the theme sandbox screen', () => {
 
     signedIn(['admin'], {
       availableThemes: [
-        { name: 'exportable-theme', label: 'Exportable', description: 'A theme to export.' },
+        {
+          name: 'exportable-theme',
+          local: true,
+          label: 'Exportable',
+          description: 'A theme to export.',
+        },
       ],
     })
     await goToScreen()

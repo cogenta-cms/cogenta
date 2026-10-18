@@ -6,7 +6,7 @@ import { magazineContentPack } from './magazine.js'
 import { portfolioContentPack } from './portfolio.js'
 import { restaurantContentPack } from './restaurant.js'
 import { saasContentPack } from './saas.js'
-import { storeContentPack } from './store.js'
+import { createStoreContentPack, storeContentPack } from './store.js'
 import { createVitrineContentPack, vitrineContentPack } from './vitrine.js'
 
 /**
@@ -33,10 +33,11 @@ export const BLUEPRINT_CONTENT_PACKS: Readonly<Record<string, BlueprintContentPa
 /**
  * The pack to scaffold for a blueprint in a given site locale (L36). Most
  * blueprints ship one language and return the same pack whatever the locale;
- * `vitrine` is written in French and in English, and a French site gets the
+ * `vitrine` and `store` are written in French and in English, and a French site gets the
  * French one, addresses included.
  */
 export function contentPackFor(id: string, locale: string): BlueprintContentPack | undefined {
   if (id === 'vitrine') return createVitrineContentPack(locale)
+  if (id === 'store') return createStoreContentPack(locale)
   return BLUEPRINT_CONTENT_PACKS[id]
 }

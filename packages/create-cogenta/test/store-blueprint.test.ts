@@ -7,13 +7,11 @@ import { createDatabaseRegistry, createLogger } from '@cogenta/core'
 import { buildPath, createContentStore, createSearchIndex } from '@cogenta/schema'
 import {
   buildStoreDemoPages,
-  category,
   orderLinkFor,
-  page,
-  product,
-  STORE_DEMO_PRODUCTS,
-  STORE_MEDIA_SPECS,
-  STORE_MENUS,
+  storeCopyFor,
+  storeMediaSpecs,
+  storeMenus,
+  storeSchema,
 } from '@cogenta/starters/blueprints/store'
 import {
   type FetchedEntries,
@@ -25,13 +23,38 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
-// The blueprint seeds eighteen bundled photographs through the real media
+// The blueprint seeds seventeen bundled photographs through the real media
 // pipeline, with WebP variants: slower than vitest's default, not a hang.
 const SCAFFOLD_TIMEOUT = 240_000
 
-const HOME_GRID = STORE_DEMO_PRODUCTS.slice(-4).map((demo) => demo.slug)
+// Installed in both languages: the schema, the addresses and every word of
+// content follow the site's language.
+const SAID = {
+  en: {
+    hero: 'Things for every day, made to last and to be mended',
+    newest: 'Leather boots',
+    story: 'Casa Norte opened in 2014',
+    searched: 'skillet',
+    categorySlugs: ['homeware', 'kitchen', 'wear-and-carry'],
+    firstProduct: 'Enamel mug',
+  },
+  fr: {
+    hero: 'Des objets pour tous les jours, faits pour durer et pour être réparés',
+    newest: 'Bottines en cuir',
+    story: 'Casa Norte a ouvert en 2014',
+    searched: 'poêle',
+    categorySlugs: ['a-porter', 'cuisine', 'maison'],
+    firstProduct: 'Mug émaillé',
+  },
+} as const
 
-describe('scaffoldSite, store blueprint', () => {
+describe.each(['en', 'fr'] as const)('scaffoldSite, store blueprint in %s', (locale) => {
+  const copy = storeCopyFor(locale)
+  const model = storeSchema(copy)
+  const { category, page, product } = model
+  const said = SAID[locale]
+  const HOME_GRID = copy.products.slice(-4).map((demo) => demo.slug)
+
   let targetDir = ''
   let result: Awaited<ReturnType<typeof scaffoldSite>>
 
@@ -41,7 +64,7 @@ describe('scaffoldSite, store blueprint', () => {
       targetDir,
       siteName: 'Casa Norte',
       siteUrl: 'http://localhost:4000',
-      defaultLocale: 'en',
+      defaultLocale: locale,
       databaseDriver: 'sqlite',
       adminEmail: 'admin@example.com',
       blueprintId: 'store',
@@ -86,26 +109,31 @@ describe('scaffoldSite, store blueprint', () => {
 
   it('seeds the menus, the settings and every bundled photograph', () => {
     expect(result.menusSeeded).toBe(
-      STORE_MENUS.header.length + STORE_MENUS.footer.length + (STORE_MENUS.headerAction ? 1 : 0),
+      storeMenus(copy).header.length +
+        storeMenus(copy).footer.length +
+        (storeMenus(copy).headerAction ? 1 : 0),
     )
     expect(result.siteSettingsSeeded).toBeGreaterThanOrEqual(4)
-    expect(result.mediaSeeded).toBe(STORE_MEDIA_SPECS.length)
+    expect(result.mediaSeeded).toBe(storeMediaSpecs(copy).length)
   })
 
   it('seeds published products with their photograph, details and an order link naming the shop', async () => {
     await withDatabase(async (db) => {
       const products = await createContentStore({ db, collection: product }).list({ limit: 100 })
-      expect(products.items).toHaveLength(STORE_DEMO_PRODUCTS.length)
+      expect(products.items).toHaveLength(copy.products.length)
       for (const entry of products.items) {
-        const demo = STORE_DEMO_PRODUCTS.find((candidate) => candidate.slug === entry.values.slug)
+        const demo = copy.products.find((candidate) => candidate.slug === entry.values.slug)
         expect(demo, String(entry.values.slug)).toBeDefined()
         expect(entry.status).toBe('published')
         expect(entry.values.price).toBe(demo?.price)
         expect(entry.values.currency).toBe('EUR')
         expect(entry.values.inStock).toBe(demo?.inStock)
         expect(entry.values.material).toBe(demo?.material)
+        expect(entry.values.category).toBe(
+          copy.categories.find((group) => group.id === demo?.category)?.name,
+        )
         expect(typeof entry.values.photo).toBe('string')
-        expect(entry.values.orderLink).toBe(orderLinkFor('Casa Norte', demo?.name ?? ''))
+        expect(entry.values.orderLink).toBe(orderLinkFor('Casa Norte', demo?.name ?? '', locale))
         expect(entry.blocks.blocks?.map((block) => block.type)).toEqual(['prose', 'collectionList'])
       }
     })
@@ -121,19 +149,16 @@ describe('scaffoldSite, store blueprint', () => {
     })
   })
 
-  it('seeds the four categories with their photograph, and every page, all published', async () => {
+  it('seeds the three categories with their photograph, and every page, all published', async () => {
     await withDatabase(async (db) => {
       const categories = await createContentStore({ db, collection: category }).list()
-      expect(categories.items.map((entry) => entry.values.slug).sort()).toEqual([
-        'carry',
-        'kitchen',
-        'living',
-        'wear',
-      ])
+      expect(categories.items.map((entry) => entry.values.slug).sort()).toEqual(
+        [...said.categorySlugs].sort(),
+      )
       expect(categories.items.every((entry) => typeof entry.values.photo === 'string')).toBe(true)
       const pages = await createContentStore({ db, collection: page }).list({ limit: 20 })
       expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual(
-        buildStoreDemoPages()
+        buildStoreDemoPages({ locale })
           .map((demo) => demo.slug)
           .sort(),
       )
@@ -146,7 +171,7 @@ describe('scaffoldSite, store blueprint', () => {
   it('indexes the seeded products for search, not only inserts them', async () => {
     await withDatabase(async (db) => {
       const index = await createSearchIndex({ db })
-      const results = await index.search({ text: 'linen', locale: 'en' })
+      const results = await index.search({ text: said.searched, locale })
       expect(results.hits.some((hit) => hit.collection === 'product')).toBe(true)
     })
   })
@@ -185,26 +210,31 @@ describe('scaffoldSite, store blueprint', () => {
       const entries: FetchedEntries = { 'home-new': themeEntries }
 
       const html = serialize(
-        renderPage({ title: home.values.title as string, blocks }, themeContext(slugById), entries),
+        renderPage(
+          { title: home.values.title as string, blocks },
+          themeContext(slugById, locale),
+          entries,
+        ),
       )
-      expect(html).toContain('Things for every day, made to last and to be mended')
-      expect(html).toContain('Field jacket')
-      expect(html).toContain('Casa Norte opened in 2014')
+      expect(html).toContain(said.hero)
+      expect(html).toContain(said.newest)
+      expect(html).toContain(said.story)
       expect(html).toContain('mailto:letters@casanorte.com')
       expect(html.match(/<h1[\s>]/g)).toHaveLength(1)
     })
   })
 })
 
-function themeContext(slugById: ReadonlyMap<string, string>): RenderContext {
+function themeContext(slugById: ReadonlyMap<string, string>, locale: 'en' | 'fr'): RenderContext {
+  const { product } = storeSchema(storeCopyFor(locale))
   return {
     site: {
       name: 'Casa Norte',
       url: 'http://localhost:4000',
-      locales: ['en'],
-      defaultLocale: 'en',
+      locales: [locale],
+      defaultLocale: locale,
     },
-    locale: 'en',
+    locale,
     url: new URL('http://localhost:4000/'),
     t: (key) => key,
     image: (media) => ({

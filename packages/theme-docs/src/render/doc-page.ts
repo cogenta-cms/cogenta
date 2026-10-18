@@ -135,7 +135,12 @@ function renderBreadcrumb(
   )
 }
 
-function renderToc(ctx: RenderContext, anchors: HeadingAnchors): HtmlElement | null {
+function renderToc(
+  ctx: RenderContext,
+  anchors: HeadingAnchors,
+  narrow = false,
+): HtmlElement | null {
+  const prefix = narrow ? 'cd-tocn' : 'cd-toc'
   const list = [...anchors.values()]
   if (list.length < 2) return null
   const items: HtmlElement[] = []
@@ -143,9 +148,9 @@ function renderToc(ctx: RenderContext, anchors: HeadingAnchors): HtmlElement | n
   let parent: HeadingAnchor | undefined
   const close = (): void => {
     if (parent === undefined) {
-      for (const orphan of children) items.push(tocItem(orphan, []))
+      for (const orphan of children) items.push(tocItem(orphan, [], prefix))
     } else {
-      items.push(tocItem(parent, children))
+      items.push(tocItem(parent, children, prefix))
     }
     children = []
     parent = undefined
@@ -159,25 +164,45 @@ function renderToc(ctx: RenderContext, anchors: HeadingAnchors): HtmlElement | n
     }
   }
   close()
+  const label = word(ctx.locale, 'onThisPage')
+  if (narrow) {
+    // Below the wide breakpoint the page rail does not fit: the same list sits
+    // under the summary, in a disclosure (no script). Exactly one copy is
+    // displayed at any width.
+    return h(
+      'details',
+      { class: 'cd-tocn' },
+      h('summary', { class: 'cd-tocn__summary' }, label),
+      h(
+        'nav',
+        { class: 'cd-tocn__nav', 'aria-label': label },
+        h('ol', { class: 'cd-tocn__items' }, items),
+      ),
+    )
+  }
   return h(
     'nav',
     { class: 'cd-toc', 'aria-labelledby': 'cd-toc-label' },
-    h('p', { class: 'cd-toc__label', id: 'cd-toc-label' }, word(ctx.locale, 'onThisPage')),
+    h('p', { class: 'cd-toc__label', id: 'cd-toc-label' }, label),
     h('ol', { class: 'cd-toc__items' }, items),
   )
 }
 
-function tocItem(anchor: HeadingAnchor, children: readonly HeadingAnchor[]): HtmlElement {
+function tocItem(
+  anchor: HeadingAnchor,
+  children: readonly HeadingAnchor[],
+  prefix: string,
+): HtmlElement {
   return h(
     'li',
-    { class: 'cd-toc__item', 'data-level': String(anchor.level) },
-    h('a', { class: 'cd-toc__link', href: `#${anchor.id}` }, anchor.text),
+    { class: `${prefix}__item`, 'data-level': String(anchor.level) },
+    h('a', { class: `${prefix}__link`, href: `#${anchor.id}` }, anchor.text),
     children.length === 0
       ? null
       : h(
           'ol',
-          { class: 'cd-toc__items' },
-          children.map((child) => tocItem(child, [])),
+          { class: `${prefix}__items` },
+          children.map((child) => tocItem(child, [], prefix)),
         ),
   )
 }
@@ -261,6 +286,7 @@ export function renderDocPage(
   const anchors = headingAnchors(content)
   const ownHeading = pageHasOwnHeading(content)
   const toc = renderToc(ctx, anchors)
+  const narrowToc = renderToc(ctx, anchors, true)
 
   return h(
     'main',
@@ -287,6 +313,7 @@ export function renderDocPage(
           page.entry?.excerpt === undefined
             ? null
             : h('p', { class: 'cd-doc__lede' }, page.entry.excerpt),
+          narrowToc,
         ),
         h(
           'div',

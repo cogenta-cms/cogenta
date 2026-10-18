@@ -33,6 +33,15 @@ body {
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  /* A short page (a search with no result, a 404) keeps its footer at the
+     bottom of the window rather than under a strip of bare canvas. */
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100vh;
+}
+
+body > main {
+  flex: 1 0 auto;
 }
 
 ::selection {

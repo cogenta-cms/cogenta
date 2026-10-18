@@ -15,7 +15,7 @@ import { buildDocumentationDemoPages } from '../src/blueprints/documentation.js'
 // none of which this test exercises.
 import { buildMagazineDemoPages } from '../src/blueprints/magazine.js'
 import { buildPortfolioDemoPages } from '../src/blueprints/portfolio.js'
-import { buildRestaurantDemoPages } from '../src/blueprints/restaurant.js'
+import { buildRestaurantDemoPages, restaurantCopyFor } from '../src/blueprints/restaurant.js'
 // `saas`'s demo pages are now built from `SeedContext.media` and the real
 // feature ids assigned at seed time (L25) — `buildSaasDemoPages({}, new
 // Map())` renders the same pages this test checked before, minus the
@@ -31,6 +31,7 @@ import { buildStoreDemoPages } from '../src/blueprints/store.js'
 import { buildVitrineDemoPages, vitrineCopyFor } from '../src/blueprints/vitrine.js'
 
 const RESTAURANT_DEMO_PAGES = buildRestaurantDemoPages({})
+const RESTAURANT_FR_DEMO_PAGES = buildRestaurantDemoPages({ copy: restaurantCopyFor('fr') })
 const PORTFOLIO_DEMO_PAGES = buildPortfolioDemoPages({})
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
 const BLOG_DEMO_PAGES = buildBlogDemoPages({})
@@ -68,6 +69,7 @@ const BLUEPRINTS: Readonly<Record<string, readonly DemoPage[]>> = {
   magazine: MAGAZINE_DEMO_PAGES,
   portfolio: PORTFOLIO_DEMO_PAGES,
   restaurant: RESTAURANT_DEMO_PAGES,
+  'restaurant (fr)': RESTAURANT_FR_DEMO_PAGES,
   saas: SAAS_DEMO_PAGES,
   store: STORE_DEMO_PAGES,
   vitrine: VITRINE_DEMO_PAGES,

@@ -9,7 +9,7 @@ import {
   TOKEN_GROUPS,
   TOKEN_SPECS,
   type TokenSpec,
-} from '@cogenta/render'
+} from '@cogenta/render/browser'
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'

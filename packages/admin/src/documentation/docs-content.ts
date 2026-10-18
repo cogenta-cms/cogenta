@@ -1,4 +1,4 @@
-import { adaptDocHtmlForAdmin, type DocTree, renderMarkdownDocument } from '@cogenta/render'
+import { adaptDocHtmlForAdmin, type DocTree, renderMarkdownDocument } from '@cogenta/render/browser'
 
 export type { DocTree }
 

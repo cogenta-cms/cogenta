@@ -1256,7 +1256,7 @@ ${options.headHtml}
 ${verificationTags === '' ? '' : `${verificationTags}\n`}${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 </head>
 <body>
-<a class="cg-skip-link" href="#cg-main">Skip to content</a>
+<a class="cg-skip-link" href="#cg-main">${createThemeTranslator(options.locale)('a11y.skipToContent')}</a>
 ${chrome.header}
 ${bodyHtml}
 ${placesFooter ? '' : footerWidgetsHtml(footerWidgets)}${chrome.footer}
@@ -2264,7 +2264,7 @@ ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH
 ${pluginStyleTags(options.pluginStyleHrefs)}
 </head>
 <body>
-<a class="cg-skip-link" href="#cg-main">Skip to content</a>
+<a class="cg-skip-link" href="#cg-main">${createThemeTranslator(themeContext.locale)('a11y.skipToContent')}</a>
 ${adminBar}
 ${chrome.header}
 ${bodyHtml}
@@ -2702,7 +2702,7 @@ export async function renderThemeGalleryPreview(
 ${options.styles === null ? '' : `<style>${options.styles}</style>`}
 </head>
 <body>
-<a class="cg-skip-link" href="#cg-main">Skip to content</a>
+<a class="cg-skip-link" href="#cg-main">${createThemeTranslator(locale)('a11y.skipToContent')}</a>
 ${chrome.header}
 ${bodyHtml}
 ${chrome.footer}

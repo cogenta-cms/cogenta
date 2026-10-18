@@ -417,6 +417,19 @@ describe('the typography', () => {
     expect(rule('.cs-testimonial__quote > p:first-child')).toMatch(/quotes:\s*"\\201C" "\\201D"/)
   })
 
+  it('sets a French quotation in guillemets with a thin space inside, hanging only where there is a margin for it', () => {
+    expect(CODE).toMatch(
+      /:lang\(fr\) \.cs-testimonial__quote,[^{]*\{[^}]*quotes:\s*"\\00AB\\202F" "\\202F\\00BB"/,
+    )
+    expect(CODE).toMatch(/@media \(max-width: 48rem\) \{\s*:lang\(fr\)[^}]*text-indent:\s*0/)
+  })
+
+  it('keeps the name of the site whole on a phone, by narrowing the action beside it', () => {
+    expect(CODE).toMatch(
+      /@media \(max-width: 30rem\) \{\s*\.cs-header__action\.cg-action\[data-emphasis="primary"\] \{[^}]*white-space:\s*nowrap/,
+    )
+  })
+
   it('sets headings and running text in the one sans', () => {
     expect(CODE).toMatch(/h1, h2, h3, h4, h5, h6\)\s*\{[^}]*font-family:\s*var\(--cs-font-sans\)/)
     expect(rule('body')).toMatch(/font-family:\s*var\(--cs-font-sans\)/)

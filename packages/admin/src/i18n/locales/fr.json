@@ -17,7 +17,6 @@
     "mediaChoose": "Choisir…",
     "mediaRemove": "Retirer",
     "mediaNoImages": "Aucune image dans la médiathèque.",
-    "relationPlaceholder": "Sélecteur de relation vers « {{target}} » à venir (tâche 7).",
     "selectMultiNotSupported": "Ce champ accepte plusieurs valeurs ; l'éditeur correspondant n'est pas encore disponible.",
     "blocksUnknownLabel": "Bloc inconnu : {{type}}",
     "blocksMoveUp": "Monter le bloc {{position}}",
@@ -382,7 +381,7 @@
       "taxonomies": "Termes",
       "semantic": "Par le sens"
     },
-    "semanticIntro": "Alimentée par l'index vectoriel du site — des résultats grossiers, puisqu'il indexe un seul fragment par entrée et qu'aucun fournisseur d'embeddings distant n'est configuré. La recherche lexicale ci-dessus reste la voie principale (R2).",
+    "semanticIntro": "Recherche par le sens, à partir de l'index vectoriel du site. Les résultats restent approximatifs : chaque contenu n'y est représenté que par un seul extrait, et aucun service d'embeddings externe n'est configuré. La recherche par mots, ci-dessus, reste la plus fiable.",
     "semanticEmpty": "Rien n'est revenu pour cette question.",
     "semanticAsk": "Demander",
     "loadError": "Impossible de charger les résultats de recherche."
@@ -1401,7 +1400,7 @@
     "queueLabel": "Pilote de file",
     "storageLabel": "Pilote de stockage",
     "llmLabel": "Fournisseur LLM",
-    "llmNone": "Non configuré — le CMS fonctionne sans (R2).",
+    "llmNone": "Non configuré. Le site fonctionne entièrement sans ; seuls l'assistant et les agents en ont besoin.",
     "embeddingsLabel": "Fournisseur d'embeddings",
     "imageGenerationLabel": "Fournisseur de génération d'images",
     "imageGenerationNone": "Non configuré.",
@@ -1529,7 +1528,7 @@
   "forms": {
     "heading": "Formulaires",
     "adminOnly": "Réservé au rôle « admin ».",
-    "description": "Créez un formulaire, il devient accessible sur /forms/{name} — sans code, sans bloc du contrat B.",
+    "description": "Créez un formulaire : il est publié à l'adresse /forms/{name}, sans une ligne de code.",
     "newForm": "Nouveau formulaire",
     "editForm": "Modifier le formulaire",
     "tableLabel": "Formulaires",
@@ -3167,7 +3166,7 @@
     "anomalyRoutedNotPublic": "« {{label}} » a une route publique mais n'est pas lisible par le rôle public — les pages publiques peuvent échouer à s'afficher ou manquer dans le sitemap.",
     "anomalyUnknownRoleInUse": "Le rôle « {{role}} » est détenu par {{count}} compte(s) mais n'est nommé par aucune collection ni taxonomie — il n'accorde rien, et c'est probablement une faute de frappe.",
     "anomalyUnusedRole": "Le rôle « {{role}} » est déclaré par le schéma mais n'est porté par aucun compte de ce site.",
-    "commerceHeading": "Permissions commerce (contrat E)",
+    "commerceHeading": "Permissions de la boutique",
     "commerceDescription": "Un vocabulaire séparé des cinq actions ci-dessus — « rembourser une commande » n'est pas un update, et « émettre une facture » n'est pas un publish.",
     "commerceTableLabel": "Permissions commerce par rôle",
     "otherHeading": "Autres vocabulaires de permissions",
@@ -5485,5 +5484,82 @@
     "pageInfo": "{{from}}–{{to}} sur {{total}}",
     "search": "Rechercher dans la liste",
     "page": "Page {{page}}"
+  },
+  "shippedText": {
+    "prompts": {
+      "rewrite": {
+        "name": "Réécrire",
+        "description": "Reformuler un passage en conservant son sens et ses faits."
+      },
+      "proofread": {
+        "name": "Relire",
+        "description": "Corriger l'orthographe, la grammaire et la ponctuation sans réécrire."
+      },
+      "summarise": {
+        "name": "Résumer",
+        "description": "Résumer un passage en quelques phrases."
+      },
+      "translate": {
+        "name": "Traduire",
+        "description": "Traduire un passage dans une autre langue."
+      },
+      "meta-description": {
+        "name": "Méta-description",
+        "description": "Proposer des méta-descriptions pour un contenu."
+      },
+      "titles": {
+        "name": "Titres",
+        "description": "Proposer des titres pour un contenu."
+      },
+      "tags": {
+        "name": "Étiquettes",
+        "description": "Proposer des étiquettes pour un contenu."
+      },
+      "alt-text": {
+        "name": "Texte alternatif",
+        "description": "Proposer le texte alternatif d'une image à partir du texte qui l'entoure."
+      },
+      "classify": {
+        "name": "Classer",
+        "description": "Suggérer des catégories pour un contenu, parmi le vocabulaire du site."
+      },
+      "moderate": {
+        "name": "Modérer",
+        "description": "Signaler ce qu'une personne devrait examiner. Ne retire ni ne masque jamais rien."
+      },
+      "faq-draft": {
+        "name": "Brouillon de FAQ",
+        "description": "Rédiger une FAQ à partir d'un contenu. Toujours un brouillon, jamais publié."
+      },
+      "schema-org-draft": {
+        "name": "Brouillon Schema.org",
+        "description": "Rédiger un JSON-LD Schema.org complémentaire pour un contenu. Toujours un brouillon, jamais publié."
+      },
+      "content-chat": {
+        "name": "Questions sur le contenu",
+        "description": "Répondre à une question à partir des contenus du site, en citant les passages utilisés."
+      },
+      "generate-text-block": {
+        "name": "Générer un bloc de texte",
+        "description": "Le bouton « Générer » du constructeur de pages : un premier jet pour un bloc de texte, à partir d'une courte consigne."
+      },
+      "generate-agent-system-prompt": {
+        "name": "Générer le prompt système d'un agent",
+        "description": "Rédige l'identité d'un nouvel agent (rôle, objectifs, style, prompt système) à partir d'une courte description de sa mission."
+      }
+    },
+    "promptCategories": {
+      "text": "Texte",
+      "seo": "SEO",
+      "agent": "Agent"
+    },
+    "adminThemes": {
+      "nightops": {
+        "description": "Une barre de navigation bleu nuit à côté d'un espace de travail net, un seul accent indigo électrique. Space Grotesk partout, JetBrains Mono pour les détails techniques."
+      },
+      "atelier": {
+        "description": "Un papier écru et chaleureux, un accent orange brûlé, composé en IBM Plex : le registre d'un imprimé éditorial plutôt que celui d'une console."
+      }
+    }
   }
 }

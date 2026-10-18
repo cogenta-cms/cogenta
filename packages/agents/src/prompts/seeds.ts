@@ -122,7 +122,7 @@ export function builtinPromptTemplateSeeds(): readonly PromptTemplateInput[] {
     {
       name: 'Generate text block',
       description:
-        'Fiche 43 — the page builder\'s "Générer" button: a first draft for one text block, from a short brief.',
+        'The page builder\'s "Generate" button: a first draft for one text block, from a short brief.',
       category: 'text',
       template: [
         'You are drafting the content of a single "{{blockType}}" block on a page the editor is building.',
@@ -144,7 +144,7 @@ export function builtinPromptTemplateSeeds(): readonly PromptTemplateInput[] {
     {
       name: 'Generate agent system prompt',
       description:
-        'Fiche 55 — drafts a new agent\'s identity.md (role, objectives, style, system prompt) from a short description of its purpose, "façon skill creator".',
+        "Drafts a new agent's identity (role, objectives, style, system prompt) from a short description of its purpose.",
       category: 'agent',
       template: [
         'You are drafting the identity of a new Cogenta agent named "{{agentName}}".',
@@ -211,6 +211,21 @@ const RETIRED_SEED_TEMPLATES: Readonly<Record<string, readonly string[]>> = {
   ],
 }
 
+/**
+ * Descriptions a builtin was once seeded with, by name. The first two named
+ * the planning document they came from ("Fiche 43 — …"), which the admin then
+ * showed to site owners. Like a retired template, an untouched one is
+ * replaced and an edited one is left alone.
+ */
+const RETIRED_SEED_DESCRIPTIONS: Readonly<Record<string, readonly string[]>> = {
+  'Generate text block': [
+    'Fiche 43 — the page builder\'s "Générer" button: a first draft for one text block, from a short brief.',
+  ],
+  'Generate agent system prompt': [
+    'Fiche 55 — drafts a new agent\'s identity.md (role, objectives, style, system prompt) from a short description of its purpose, "façon skill creator".',
+  ],
+}
+
 export async function ensureBuiltinPromptTemplates(store: PromptTemplateStore): Promise<void> {
   const existing = await store.list()
   const byName = new Map(existing.map((template) => [template.name, template]))
@@ -220,9 +235,16 @@ export async function ensureBuiltinPromptTemplates(store: PromptTemplateStore): 
       await store.create(seed, true)
       continue
     }
-    const retired = RETIRED_SEED_TEMPLATES[seed.name] ?? []
-    if (stored.builtin && retired.includes(stored.template)) {
-      await store.update(stored.id, { template: seed.template, description: seed.description })
+    if (!stored.builtin) continue
+    const retiredTemplate = (RETIRED_SEED_TEMPLATES[seed.name] ?? []).includes(stored.template)
+    const retiredDescription = (RETIRED_SEED_DESCRIPTIONS[seed.name] ?? []).includes(
+      stored.description,
+    )
+    if (retiredTemplate || retiredDescription) {
+      await store.update(stored.id, {
+        ...(retiredTemplate ? { template: seed.template } : {}),
+        description: seed.description,
+      })
     }
   }
 }

@@ -10,6 +10,7 @@ import {
   updatePromptTemplate,
 } from '../api/prompt-templates-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { shippedText } from '../i18n/shipped-text.js'
 import {
   Button,
   Card,
@@ -292,9 +293,19 @@ export function PromptSettingsRoute(): JSX.Element {
               {templates.map((template) => (
                 <Fragment key={template.id}>
                   <TableRow key={template.id}>
-                    <TableCell>{template.name}</TableCell>
-                    <TableCell>{template.category}</TableCell>
-                    <TableCell>{template.description}</TableCell>
+                    <TableCell>
+                      {template.builtin
+                        ? shippedText(`prompts.${template.id}.name`, template.name, t)
+                        : template.name}
+                    </TableCell>
+                    <TableCell>
+                      {shippedText(`promptCategories.${template.category}`, template.category, t)}
+                    </TableCell>
+                    <TableCell>
+                      {template.builtin
+                        ? shippedText(`prompts.${template.id}.description`, template.description, t)
+                        : template.description}
+                    </TableCell>
                     <TableCell>{template.builtin ? t('common.yes') : t('common.no')}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">

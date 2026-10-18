@@ -9,6 +9,7 @@ import {
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { MediaPicker } from '../fields/media-picker.js'
+import { shippedText } from '../i18n/shipped-text.js'
 import { useAdminTheme } from '../theme/admin-theme-context.js'
 import { AdminThemePreview } from '../theme/admin-theme-preview.js'
 import {
@@ -173,7 +174,13 @@ export function AdminAppearanceRoute(): JSX.Element {
                   <AdminThemePreview template={template} />
                   <div>
                     <h3 className="m-0 text-sm font-semibold">{template.name}</h3>
-                    <p className="text-muted-foreground text-xs">{template.description}</p>
+                    <p className="text-muted-foreground text-xs">
+                      {shippedText(
+                        `adminThemes.${template.id}.description`,
+                        template.description,
+                        t,
+                      )}
+                    </p>
                   </div>
                   {active ? (
                     <div className="flex items-center justify-between gap-2">

@@ -17,7 +17,6 @@
     "mediaChoose": "Choose…",
     "mediaRemove": "Remove",
     "mediaNoImages": "No images in the media library.",
-    "relationPlaceholder": "Relation picker to \"{{target}}\" coming soon (task 7).",
     "selectMultiNotSupported": "This field accepts multiple values; its editor is not available yet.",
     "blocksUnknownLabel": "Unknown block: {{type}}",
     "blocksMoveUp": "Move block {{position}} up",
@@ -382,7 +381,7 @@
       "taxonomies": "Terms",
       "semantic": "By meaning"
     },
-    "semanticIntro": "Powered by the site's vector index — coarse results, since it indexes one chunk per entry and no remote embedding provider is configured. Lexical search above remains the primary way to search (R2).",
+    "semanticIntro": "Search by meaning, from the site's vector index. Results are approximate: each entry is represented by a single excerpt, and no external embedding service is configured. The word search above remains the most reliable.",
     "semanticEmpty": "Nothing came back for this question.",
     "semanticAsk": "Ask",
     "loadError": "Could not load search results."
@@ -1401,7 +1400,7 @@
     "queueLabel": "Queue driver",
     "storageLabel": "Storage driver",
     "llmLabel": "LLM provider",
-    "llmNone": "Not configured — the CMS works without it (R2).",
+    "llmNone": "Not configured. The whole site works without it; only the assistant and the agents need one.",
     "embeddingsLabel": "Embeddings provider",
     "imageGenerationLabel": "Image generation provider",
     "imageGenerationNone": "Not configured.",
@@ -1529,7 +1528,7 @@
   "forms": {
     "heading": "Forms",
     "adminOnly": "Restricted to the \"admin\" role.",
-    "description": "Build a form, and it becomes reachable at /forms/{name} — no code, no contract B block.",
+    "description": "Build a form and it is published at /forms/{name}, with no code to write.",
     "newForm": "New form",
     "editForm": "Edit form",
     "tableLabel": "Forms",
@@ -3167,7 +3166,7 @@
     "anomalyRoutedNotPublic": "\"{{label}}\" has a public route but is not readable by the public role — public pages may fail to render or be missing from the sitemap.",
     "anomalyUnknownRoleInUse": "The role \"{{role}}\" is held by {{count}} account(s) but no collection or taxonomy names it — it grants nothing, and is likely a typo.",
     "anomalyUnusedRole": "The role \"{{role}}\" is declared by the schema but held by no account on this site.",
-    "commerceHeading": "Commerce permissions (contract E)",
+    "commerceHeading": "Shop permissions",
     "commerceDescription": "A separate vocabulary from the five actions above — \"refund an order\" is not an update, and \"issue an invoice\" is not a publish.",
     "commerceTableLabel": "Commerce permissions by role",
     "otherHeading": "Other permission vocabularies",
@@ -5485,5 +5484,82 @@
     "pageInfo": "{{from}}–{{to}} of {{total}}",
     "search": "Search the list",
     "page": "Page {{page}}"
+  },
+  "shippedText": {
+    "prompts": {
+      "rewrite": {
+        "name": "Rewrite",
+        "description": "Rewrite a passage, keeping its meaning and its facts."
+      },
+      "proofread": {
+        "name": "Proofread",
+        "description": "Correct spelling, grammar and punctuation without rewriting."
+      },
+      "summarise": {
+        "name": "Summarise",
+        "description": "Summarise a passage in a few sentences."
+      },
+      "translate": {
+        "name": "Translate",
+        "description": "Translate a passage into another language."
+      },
+      "meta-description": {
+        "name": "Meta description",
+        "description": "Propose meta descriptions for an entry."
+      },
+      "titles": {
+        "name": "Titles",
+        "description": "Propose titles for an entry."
+      },
+      "tags": {
+        "name": "Tags",
+        "description": "Propose tags for an entry."
+      },
+      "alt-text": {
+        "name": "Alt text",
+        "description": "Propose alt text for an image, from the text around it."
+      },
+      "classify": {
+        "name": "Classify",
+        "description": "Suggest categories for an entry, from the site's own vocabulary."
+      },
+      "moderate": {
+        "name": "Moderate",
+        "description": "Flag content a human should look at. Never removes or hides anything."
+      },
+      "faq-draft": {
+        "name": "FAQ draft",
+        "description": "Draft a FAQ from an entry. Always a draft, never published."
+      },
+      "schema-org-draft": {
+        "name": "Schema.org draft",
+        "description": "Draft extra Schema.org JSON-LD for an entry. Always a draft, never published."
+      },
+      "content-chat": {
+        "name": "Content chat",
+        "description": "Answer a question from this site's own content, citing the passages used."
+      },
+      "generate-text-block": {
+        "name": "Generate text block",
+        "description": "The page builder's \"Generate\" button: a first draft for one text block, from a short brief."
+      },
+      "generate-agent-system-prompt": {
+        "name": "Generate agent system prompt",
+        "description": "Drafts a new agent's identity (role, objectives, style, system prompt) from a short description of its purpose."
+      }
+    },
+    "promptCategories": {
+      "text": "text",
+      "seo": "seo",
+      "agent": "agent"
+    },
+    "adminThemes": {
+      "nightops": {
+        "description": "A dark navy navigation rail beside a crisp workspace, one electric-indigo accent. Space Grotesk throughout, JetBrains Mono for technical details."
+      },
+      "atelier": {
+        "description": "Warm, unbleached paper and a burnt-orange accent, set in IBM Plex — an editorial, printed-form register rather than a console."
+      }
+    }
   }
 }

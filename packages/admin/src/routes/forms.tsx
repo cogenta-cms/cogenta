@@ -33,6 +33,7 @@ import {
   Field,
   Input,
   Notice,
+  PageHeader,
   Pagination,
   Table,
   TableBody,
@@ -446,28 +447,27 @@ export function FormsRoute(): JSX.Element {
 
   return (
     <section className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 id={headingId} className="m-0 text-2xl leading-tight font-bold tracking-tight">
-            {t('forms.heading')}
-          </h1>
-          <p className="text-muted-foreground text-sm">{t('forms.description')}</p>
-        </div>
-        <Button
-          type="button"
-          onClick={() => {
-            setNameTouched(false)
-            setNotice(null)
-            setDraft({
-              ...BLANK_DRAFT,
-              confirmationMessage: t('forms.defaultConfirmation', { lng: formLocale }),
-              autoresponderBody: t('forms.defaultAutoresponder', { lng: formLocale }),
-            })
-          }}
-        >
-          {t('forms.newForm')}
-        </Button>
-      </div>
+      <PageHeader
+        id={headingId}
+        title={t('forms.heading')}
+        description={t('forms.description')}
+        actions={
+          <Button
+            type="button"
+            onClick={() => {
+              setNameTouched(false)
+              setNotice(null)
+              setDraft({
+                ...BLANK_DRAFT,
+                confirmationMessage: t('forms.defaultConfirmation', { lng: formLocale }),
+                autoresponderBody: t('forms.defaultAutoresponder', { lng: formLocale }),
+              })
+            }}
+          >
+            {t('forms.newForm')}
+          </Button>
+        }
+      />
 
       {notice !== null && (
         <Notice tone="success" live="polite">

@@ -185,6 +185,33 @@ describe('ensureBuiltinPromptTemplates', () => {
   )
 
   it(
+    'drops the planning-document reference from an untouched description, and keeps an edited one',
+    async () => {
+      const seed = builtinPromptTemplateSeeds().find(
+        (candidate) => candidate.name === 'Generate text block',
+      )
+      if (seed === undefined) throw new Error('expected the text block seed')
+      const created = await store.create(
+        {
+          ...seed,
+          description:
+            'Fiche 43 — the page builder\'s "Générer" button: a first draft for one text block, from a short brief.',
+        },
+        true,
+      )
+
+      await ensureBuiltinPromptTemplates(store)
+      expect((await store.get(created.id))?.description).toBe(seed.description)
+      expect(seed.description).not.toMatch(/fiche/iu)
+
+      await store.update(created.id, { description: 'Our own words' })
+      await ensureBuiltinPromptTemplates(store)
+      expect((await store.get(created.id))?.description).toBe('Our own words')
+    },
+    SEED_TIMEOUT_MS,
+  )
+
+  it(
     'seeds ids the assist tools resolve by (fiche 45 §4)',
     async () => {
       await ensureBuiltinPromptTemplates(store)

@@ -1,4 +1,4 @@
-# BLOCKERS — état documentaire actualisé le 2026-10-04
+# BLOCKERS — état documentaire actualisé le 2026-10-19
 
 Les résultats ci-dessous distinguent les constats historiques, les corrections
 vérifiées et les limites encore ouvertes. Cette mise à jour ne certifie pas que
@@ -15,35 +15,37 @@ git de ce fichier.
 
 ## 1. Validations d’environnement et accès externes
 
-### 1.1 PostgreSQL / MySQL / MariaDB : les suites SQL réelles ont tourné
+### 1.1 PostgreSQL / MySQL / MariaDB, Redis et S3 : les suites réelles tournent
 
-Le blocage de Docker constaté le **2026-09-17** ne décrit plus la campagne
-actuelle. Le **2026-10-04**, la commande globale d'intégration a terminé avec
-**62 tâches réussies sur 62**. Les tests ont utilisé les vrais services
-PostgreSQL, MySQL et MariaDB ; la couverture SQLite reste fournie par les suites
-unitaires/contrats dédiées. Aucun mock de base ne remplace ces serveurs.
+Rejoué le **2026-10-19** sur la branche d'audit, services lancés par
+`pnpm services:up` (PostgreSQL 17 + pgvector, MySQL 8.4, MariaDB 11.8,
+Redis 7, MinIO), paquet par paquet : **29 paquets, 0 échec**. Les tests ont
+utilisé les vrais serveurs ; aucun mock de base ne les remplace.
 
-| Paquet | Tests d'intégration réussis dans la campagne globale |
+| Paquet | Tests d'intégration réussis |
 |---|---:|
-| `@cogenta/core` | 354 |
+| `@cogenta/core` | 470 |
 | `@cogenta/schema` | 627 |
+| `@cogenta/commerce` | 159 (+ 1 sauté : Stripe, voir 1.2) |
+| `@cogenta/forms` | 93 |
+| `@cogenta/auth` | 48 |
+| `@cogenta/agents` | 36 |
+| `@cogenta/widgets` | 21 |
+| `@cogenta/api` | 9 |
+| `@cogenta/starters` | 9 |
+| `@cogenta/import` | 6 |
 | `@cogenta/comments` | 3 |
 | `@cogenta/analytics` | 2 |
-| `@cogenta/auth` | 48 |
-| `@cogenta/widgets` | 21 |
-| `@cogenta/agents` | 36 |
-| `@cogenta/commerce` | 144 |
-| `@cogenta/forms` | 93 |
-| `@cogenta/api` | 6 |
-| **Total contrôlé** | **1 334** |
+| **Total** | **1 483** |
 
-Cinq tests optionnels restent sautés : **4 Redis/S3** et **1 Stripe**. Ils ne sont
-pas des validations de ces services. Deux exécutions supplémentaires ont validé
-**6 tests d'import WordPress** et **3 tests de permissions/décisions
-d'approbation d'agents** sur les services SQL, soit **1 343 tests réussis** en
-comptant ces campagnes distinctes.
+Changement depuis la campagne du 2026-10-04 (1 334 tests, 4 Redis/S3 sautés) :
+les drivers Redis et S3 sont maintenant exercés. MinIO ne publie plus d'image
+publique (Docker Hub supprimé, quay.io répond 401), ce qui faisait échouer
+**tous** les jobs d'intégration de la CI avant le premier test ;
+`docker-compose.test.yml` épingle désormais `pgsty/minio`, build communautaire
+du même serveur.
 
-Preuves locales ignorées, à conserver hors git :
+Preuves de la campagne du 2026-10-04, conservées hors git :
 `.cogenta/remediation-2026-10-03/integration-all.log`,
 `import-integration.log` et `approvals-integration.log` dans le même dossier.
 Sources des contrats : [core](packages/core/test/integration/),

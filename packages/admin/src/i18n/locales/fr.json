@@ -5560,6 +5560,47 @@
       "atelier": {
         "description": "Un papier écru et chaleureux, un accent orange brûlé, composé en IBM Plex : le registre d'un imprimé éditorial plutôt que celui d'une console."
       }
+    },
+    "agents": {
+      "cogenta-agent": {
+        "summary": "L'agent généraliste du site : il lit et modifie contenus, médias et réglages pour la personne qui lui parle, dans les limites de ce qu'un administrateur peut faire."
+      },
+      "security-scanner": {
+        "summary": "Examine régulièrement les dépendances déclarées par le site à la recherche de versions à risque, et rend compte de ce qu'il trouve, sans jamais rien corriger lui-même."
+      },
+      "content-watch": {
+        "summary": "Un agent d'exemple : de temps en temps, il parcourt les derniers contenus publiés et propose des titres de brouillons à écrire. Un point de départ à adapter, pas une fonction figée."
+      },
+      "site-monitor": {
+        "summary": "Surveille le journal des pages introuvables et, pour un lien cassé qui mérite d'être réparé, propose ou crée une redirection. Il ne touche à rien d'autre."
+      },
+      "cogenta-theme-creator": {
+        "summary": "Conçoit et ajuste l'apparence du site à partir d'une description et, si vous en joignez, de documents ou de captures d'écran. C'est avec lui que travaille l'atelier de thème de l'écran Apparence."
+      },
+      "cogenta-plugin-builder": {
+        "summary": "Écrit une extension pour une fonction que le site n'a pas, toujours dans un bac à sable, jamais directement parmi les extensions installées. Une extension ne reçoit que les autorisations qu'une personne lui accorde."
+      },
+      "media-librarian": {
+        "summary": "Garde la médiathèque utilisable : rédige les textes alternatifs, signale les fichiers que plus rien n'utilise et les images bien plus lourdes que la taille à laquelle elles s'affichent."
+      },
+      "translation-watch": {
+        "summary": "Surveille un site multilingue pour repérer ce qui manque : un contenu sans version dans une langue du site, ou une traduction plus ancienne que la dernière modification de l'original."
+      },
+      "comment-moderator": {
+        "summary": "Fait avancer la file des commentaires sans trancher à la place d'une personne : il n'applique que ce que le filtre anti-spam a déjà établi et explique le reste."
+      },
+      "audience-reader": {
+        "summary": "Lit les statistiques d'audience du site et dit ce qui a réellement changé. Il ne peut rien modifier."
+      },
+      "migration-finisher": {
+        "summary": "Termine ce qu'un import a commencé : liens qui pointent encore vers l'ancien domaine, images encore chargées depuis celui-ci, contenus sans extrait."
+      },
+      "accessibility-auditor": {
+        "summary": "Vérifie le HTML que reçoivent vraiment les visiteurs (langue, ordre des titres, textes alternatifs, intitulés des liens et des champs) ainsi que le contraste des couleurs du thème, mesuré selon la formule WCAG."
+      },
+      "compliance-checker": {
+        "summary": "Vérifie ce qu'un site doit pouvoir montrer : ses pages légales, ses durées de conservation des données, et la mention des contenus rédigés par une machine."
+      }
     }
   }
 }

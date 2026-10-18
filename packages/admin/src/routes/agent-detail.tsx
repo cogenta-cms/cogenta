@@ -25,6 +25,7 @@ import {
 import { AgentChatFeed } from '../assist/agent-chat-feed.js'
 import { useAgentConversation } from '../assist/use-agent-conversation.js'
 import { useAuth } from '../auth/auth-context.js'
+import { agentSummary } from '../i18n/shipped-text.js'
 import { SettingsIcon } from '../ui/icons.js'
 import {
   Button,
@@ -395,7 +396,9 @@ export function AgentDetailRoute(): JSX.Element {
       <PageHeader
         id="agents-detail-heading"
         title={t('agents.detailHeading', { name: selectedAgent.name })}
-        {...(identity === null ? {} : { description: identity.role })}
+        {...(identity === null
+          ? {}
+          : { description: agentSummary(selectedAgent.name, identity.role, t) })}
         actions={
           <Button
             variant="secondary"

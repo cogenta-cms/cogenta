@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next'
 import en from './locales/en.json'
+import SHIPPED_AGENT_ROLES from './shipped-agent-roles.json'
 
 /**
  * Words Cogenta ships as data — a built-in prompt's name and description, an
@@ -23,4 +24,21 @@ export function shippedText(key: string, served: string, t: TFunction): string {
       (en as { shippedText: unknown }).shippedText,
     )
   return shipped === served ? t(`shippedText.${key}`) : served
+}
+
+/**
+ * A built-in agent's role is written for the model — tool names, the
+ * constraints it must keep — and it was the line shown under the agent's
+ * name. While it is the role Cogenta shipped, the page shows a short summary
+ * written for a person instead, in the reader's language; an edited role is
+ * the owner's own words and is shown as they wrote it.
+ */
+export function agentSummary(name: string, role: string, t: TFunction): string {
+  const key = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-|-$/gu, '')
+  return (SHIPPED_AGENT_ROLES as Record<string, string | undefined>)[key] === role
+    ? t(`shippedText.agents.${key}.summary`)
+    : role
 }

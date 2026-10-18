@@ -5560,6 +5560,47 @@
       "atelier": {
         "description": "Warm, unbleached paper and a burnt-orange accent, set in IBM Plex — an editorial, printed-form register rather than a console."
       }
+    },
+    "agents": {
+      "cogenta-agent": {
+        "summary": "The site's general-purpose agent: it reads and changes content, media and settings for whoever talks to it, within what an administrator may do."
+      },
+      "security-scanner": {
+        "summary": "Regularly checks the dependencies the site declares for risky versions and reports what it finds. It never fixes anything itself."
+      },
+      "content-watch": {
+        "summary": "An example agent: now and then it looks over recent posts and suggests titles for new drafts. A starting point to adapt, not a fixed feature."
+      },
+      "site-monitor": {
+        "summary": "Watches the log of pages not found and, for a broken link worth fixing, proposes or creates a redirect. It touches nothing else."
+      },
+      "cogenta-theme-creator": {
+        "summary": "Designs and adjusts the site's look from a description and, if you attach them, documents or screenshots. The theme workshop on the Appearance screen works with it."
+      },
+      "cogenta-plugin-builder": {
+        "summary": "Writes a plugin for a feature the site lacks, always in a sandbox, never straight among the installed plugins. A plugin only gets the permissions a person grants it."
+      },
+      "media-librarian": {
+        "summary": "Keeps the media library usable: writes alt text, points out files nothing uses any more and images far heavier than the size they are shown at."
+      },
+      "translation-watch": {
+        "summary": "Watches a multilingual site for what is missing: content with no version in one of the site's languages, or a translation older than the last change to its original."
+      },
+      "comment-moderator": {
+        "summary": "Keeps the comment queue moving without deciding for a person: it applies only what the spam filter has already settled, and explains the rest."
+      },
+      "audience-reader": {
+        "summary": "Reads the site's audience figures and says what really changed. It cannot change anything."
+      },
+      "migration-finisher": {
+        "summary": "Finishes what an import started: links still pointing at the old domain, images still loaded from it, entries with no excerpt."
+      },
+      "accessibility-auditor": {
+        "summary": "Checks the HTML visitors really receive (language, heading order, alt text, link and form wording) and the theme's colour contrast, measured with the WCAG formula."
+      },
+      "compliance-checker": {
+        "summary": "Checks what a site must be able to show: its legal pages, its data retention settings, and a mention on content written by a machine."
+      }
     }
   }
 }

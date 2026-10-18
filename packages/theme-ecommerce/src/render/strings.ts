@@ -57,7 +57,7 @@ const STRINGS: Readonly<Record<'en' | 'fr', Readonly<Record<ShopStringKey, strin
     dimensions: 'Dimensions',
     weight: 'Poids',
     capacity: 'Contenance',
-    origin: 'Fabriqué à',
+    origin: 'Origine',
     care: 'Entretien',
     delivery: 'Livraison',
   },

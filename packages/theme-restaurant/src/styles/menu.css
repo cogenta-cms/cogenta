@@ -365,7 +365,7 @@
 
 .cr-dish__inner {
   row-gap: var(--cr-s10);
-  align-items: center;
+  align-items: start;
 }
 
 .cr-dish__media {
@@ -465,6 +465,18 @@
   padding: 0;
   list-style: none;
   font-size: var(--cr-text-caption);
+}
+
+/* On a tablet the photograph and the words sit side by side: stacked, a 4:5
+   photograph is taller than the screen and pushes the price out of sight. */
+@media (min-width: 40rem) and (max-width: 63.9375rem) {
+  .cr-dish[data-media="true"] .cr-dish__media {
+    grid-column: 1 / span 5;
+  }
+
+  .cr-dish[data-media="true"] .cr-dish__info {
+    grid-column: 6 / span 7;
+  }
 }
 
 @media (min-width: 64rem) {

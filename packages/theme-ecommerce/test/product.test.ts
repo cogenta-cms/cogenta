@@ -134,7 +134,7 @@ describe('the product page', () => {
     const fr = productPage(JACKET, [], 'fr')
     expect(fr).toContain('En stock')
     expect(fr).toContain('Commander par e-mail')
-    expect(fr).toContain('Fabriqué à')
+    expect(fr).toContain('Origine')
     expect(fr).toMatch(/245\s€/)
   })
 

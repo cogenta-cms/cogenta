@@ -424,7 +424,8 @@ describe('runServe', () => {
       await ensureAuthTables(db)
       const users = createUserStore(db)
       const credentials = createCredentialStore(db)
-      const user = await users.create({ email: 'admin@example.com', roles: ['viewer'] })
+      const user = await users.create({ email: 'admin@example.com', roles: ['editor'] })
+      // An editor: a viewer may read the library but not add to it.
       await credentials.setPassword(user.id, 'correct horse battery staple')
       await db.close()
 

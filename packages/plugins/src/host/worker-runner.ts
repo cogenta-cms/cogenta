@@ -34,7 +34,7 @@ const SANDBOX_ENTRY_URL = new URL('../guest/sandbox-entry.mjs', import.meta.url)
 const MODULE_RENDER_ENTRY_URL = new URL('../guest/module-render-entry.mjs', import.meta.url)
 
 export interface RunIsolatedOptions {
-  /** Killed and reported as a timeout past this — the basic kill switch this task's tests need. */
+  /** Killed and reported as a timeout past this, counted from when the isolated thread or process is running — its start-up is not charged to it. */
   readonly timeoutMs?: number
   /**
    * Call one named handler of the plugin rather than merely evaluating it
@@ -82,6 +82,9 @@ export interface RunIsolatedOptions {
 
 const DEFAULT_TIMEOUT_MS = 2000
 const DEFAULT_MAX_OLD_GENERATION_MB = 64
+/** How long a worker thread may take to start before it is treated as a crash. */
+const STARTUP_TIMEOUT_MS = 30_000
+const STARTUP_EXPIRED = `worker did not start within ${STARTUP_TIMEOUT_MS}ms`
 
 let fallbackWarned = false
 
@@ -257,9 +260,18 @@ export async function runIsolated(
       resolve({ ...result, isolation: 'worker', durationMs: Date.now() - startedAt })
     }
 
-    const timer = setTimeout(() => {
-      finish({ ok: false, error: 'plugin worker timed out', reason: 'timeout' })
-    }, timeoutMs)
+    // The limit is the plugin's, so it runs from the moment the thread
+    // executes JavaScript, not from `new Worker`: starting a thread on a
+    // loaded host is the host's cost (see `process-runner.ts`).
+    let timer = setTimeout(() => {
+      finish({ ok: false, error: STARTUP_EXPIRED, reason: 'crash' })
+    }, STARTUP_TIMEOUT_MS)
+    worker.once('online', () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        finish({ ok: false, error: 'plugin worker timed out', reason: 'timeout' })
+      }, timeoutMs)
+    })
 
     // `sdk-call` messages arrive zero or more times WHILE `code` runs, each
     // one a real capability request that must be re-verified and executed
@@ -412,9 +424,16 @@ export async function runIsolatedModule(
       resolve({ ...result, isolation: 'worker', durationMs: Date.now() - startedAt })
     }
 
-    const timer = setTimeout(() => {
-      finish({ ok: false, error: 'module render worker timed out', reason: 'timeout' })
-    }, timeoutMs)
+    // Same two budgets as `runIsolated`'s worker path.
+    let timer = setTimeout(() => {
+      finish({ ok: false, error: STARTUP_EXPIRED, reason: 'crash' })
+    }, STARTUP_TIMEOUT_MS)
+    worker.once('online', () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        finish({ ok: false, error: 'module render worker timed out', reason: 'timeout' })
+      }, timeoutMs)
+    })
 
     worker.on('message', (message: WorkerGuestMessage) => {
       if (message.type === 'result') {

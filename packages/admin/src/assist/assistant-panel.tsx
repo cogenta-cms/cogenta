@@ -4,6 +4,7 @@ import type { AssistCapability, AssistSuggestion } from '../api/assist-client.js
 import { getAssistCapabilities, runAssistTool } from '../api/assist-client.js'
 import { ApiError } from '../api/client.js'
 import { Button, Card, CardBody, CardHeader, CardTitle, Input, Label, Notice } from '../ui/index.js'
+import { toolDescription, toolLabel } from './tool-text.js'
 
 /**
  * L18 task 3 — the assistant panel on a content entry.
@@ -22,26 +23,6 @@ import { Button, Card, CardBody, CardHeader, CardTitle, Input, Label, Notice } f
 
 /** Inputs this panel knows how to fill on its own, beyond the entry text. */
 const SUPPLIED_BY_PANEL: ReadonlySet<string> = new Set(['targetLocale'])
-
-/** Translate only known built-ins; third-party tool metadata belongs to its author. */
-const BUILTIN_TOOLS: ReadonlySet<string> = new Set([
-  'assist.rewrite',
-  'assist.proofread',
-  'assist.summarise',
-  'assist.translate',
-  'assist.meta_description',
-  'assist.titles',
-  'assist.tags',
-  'assist.alt_text',
-  'assist.generate_image',
-  'assist.chat',
-  'assist.classify',
-  'assist.find_duplicates',
-  'assist.moderate',
-  'assist.faq_draft',
-  'assist.schema_org_draft',
-  'assist.generate_agent_identity',
-])
 
 /** One plain-text field of the entry the assistant can work on. */
 export interface AssistField {
@@ -176,20 +157,12 @@ export function AssistantPanel({
               variant="secondary"
               size="sm"
               disabled={!hasText || running !== null}
-              title={
-                BUILTIN_TOOLS.has(tool.tool)
-                  ? t(`assistant.builtinTools.${tool.tool.slice('assist.'.length)}.description`)
-                  : tool.description
-              }
+              title={toolDescription(tool, t)}
               onClick={() => {
                 void run(tool)
               }}
             >
-              {running === tool.tool
-                ? t('assist.running')
-                : BUILTIN_TOOLS.has(tool.tool)
-                  ? t(`assistant.builtinTools.${tool.tool.slice('assist.'.length)}.label`)
-                  : tool.label}
+              {running === tool.tool ? t('assist.running') : toolLabel(tool, t)}
             </Button>
           ))}
         </div>

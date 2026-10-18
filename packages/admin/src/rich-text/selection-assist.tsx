@@ -5,6 +5,7 @@ import { ReactEditor, useSlate } from 'slate-react'
 import type { AssistCapability, AssistSuggestion } from '../api/assist-client.js'
 import { getAssistCapabilities, runAssistTool } from '../api/assist-client.js'
 import { ApiError } from '../api/client.js'
+import { toolLabel } from '../assist/tool-text.js'
 import { useAuth } from '../auth/auth-context.js'
 import { Button, Notice } from '../ui/index.js'
 
@@ -162,7 +163,7 @@ export function RichTextSelectionAssist({
                     void run(tool)
                   }}
                 >
-                  {running === tool.tool ? t('richTextAssist.running') : tool.label}
+                  {running === tool.tool ? t('richTextAssist.running') : toolLabel(tool, t)}
                 </Button>
               ))}
             </div>

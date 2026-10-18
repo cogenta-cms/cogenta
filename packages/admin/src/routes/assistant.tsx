@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { AssistCapabilities, AssistCapability } from '../api/assist-client.js'
 import { getAssistCapabilities } from '../api/assist-client.js'
 import { ApiError } from '../api/client.js'
+import { toolDescription, toolLabel } from '../assist/tool-text.js'
 import { useAuth } from '../auth/auth-context.js'
 import { Button, Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
 import { AssistantChatRoute } from './assistant-chat.js'
@@ -121,14 +122,6 @@ export function AssistantRoute(): JSX.Element | null {
 
   const usage = capabilities.usage
   const vector = capabilities.vector
-  // Only IDs owned by Cogenta use interface translations. Third-party tool
-  // labels and descriptions remain exactly as supplied by their provider.
-  function toolLabel(tool: { readonly tool: string; readonly label: string }): string {
-    return !Object.hasOwn(TOOL_LOCATION, tool.tool)
-      ? tool.label
-      : t(`assistant.builtinTools.${tool.tool.slice('assist.'.length)}.label`)
-  }
-
   return (
     <section aria-labelledby="assistant-heading" className="flex flex-col gap-6">
       <h1 id="assistant-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
@@ -188,14 +181,10 @@ export function AssistantRoute(): JSX.Element | null {
                     <li key={tool.tool} className="min-w-0 rounded-md border border-border">
                       <details className="p-3">
                         <summary className="cursor-pointer break-words font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                          {toolLabel(tool)}
+                          {toolLabel(tool, t)}
                         </summary>
                         <p className="m-0 mt-2 text-sm text-muted-foreground">
-                          {!Object.hasOwn(TOOL_LOCATION, tool.tool)
-                            ? tool.description
-                            : t(
-                                `assistant.builtinTools.${tool.tool.slice('assist.'.length)}.description`,
-                              )}
+                          {toolDescription(tool, t)}
                         </p>
                         <p className="m-0 mt-2 text-xs text-muted-foreground">
                           {t('assistant.toolWhere', {
@@ -249,7 +238,7 @@ export function AssistantRoute(): JSX.Element | null {
                     <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
                       {usage.byTool.map((row) => (
                         <li key={row.tool}>
-                          {toolLabel({ tool: row.tool, label: row.tool })} —{' '}
+                          {toolLabel({ tool: row.tool, label: row.tool }, t)} —{' '}
                           {t('assistant.usageRow', { calls: row.calls, tokens: row.tokens })}
                         </li>
                       ))}

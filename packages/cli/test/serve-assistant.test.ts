@@ -325,7 +325,9 @@ describe('cogenta serve — per-collection index composition (L22 task 4)', () =
 
     const before = await assistantCapabilities(server.base, token)
     expect(before.data.vector?.collections).toEqual([{ name: 'page', enabled: true, count: 0 }])
-    expect(before.data.vector?.referenceCollection).toBe('_reference_documents')
+    // Uploaded reference documents are an admin's: an editor is not told
+    // where they are stored.
+    expect(before.data.vector?.referenceCollection).toBeUndefined()
 
     const created = await fetch(`${server.base}/api/content/page`, {
       method: 'POST',

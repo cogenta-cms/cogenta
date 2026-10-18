@@ -389,31 +389,25 @@ export function AgentDetailRoute(): JSX.Element {
         </Notice>
       )}
 
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-1">
-          <h1
-            id="agents-detail-heading"
-            className="m-0 text-2xl leading-tight font-bold tracking-tight"
+      {/* Fiche feedback: the agent's own description used to be buried inside
+          "Réglages" — shown here too so what this agent is for is readable
+          without opening the modal. */}
+      <PageHeader
+        id="agents-detail-heading"
+        title={t('agents.detailHeading', { name: selectedAgent.name })}
+        {...(identity === null ? {} : { description: identity.role })}
+        actions={
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setSettingsOpen(true)}
+            aria-label={t('agents.settings')}
           >
-            {t('agents.detailHeading', { name: selectedAgent.name })}
-          </h1>
-          {/* Fiche feedback: the agent's own description used to be buried
-              inside "Réglages" — shown here too so what this agent is for is
-              readable without opening the modal. */}
-          {identity !== null && (
-            <p className="m-0 max-w-2xl text-sm leading-5 text-muted-foreground">{identity.role}</p>
-          )}
-        </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setSettingsOpen(true)}
-          aria-label={t('agents.settings')}
-        >
-          <SettingsIcon className="size-4" aria-hidden="true" />
-          {t('agents.settings')}
-        </Button>
-      </div>
+            <SettingsIcon className="size-4" aria-hidden="true" />
+            {t('agents.settings')}
+          </Button>
+        }
+      />
 
       {/* Fiche feedback: clicking an agent used to land on a long
           configuration page with the chat buried at the bottom. The chat is

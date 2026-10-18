@@ -297,7 +297,9 @@ describe('the writing assistant field picker', () => {
     // The article fixture's `summary` really has text — with the bug, the
     // field picked under the name "1" read `values["1"]`, which is
     // `undefined`, so every tool stayed disabled.
-    const rewrite = await screen.findByRole('button', { name: 'Rewrite' })
+    // A built-in tool is named in the admin's language, whatever English
+    // label the server sent with it.
+    const rewrite = await screen.findByRole('button', { name: 'Réécrire' })
     expect((rewrite as HTMLButtonElement).disabled).toBe(false)
   })
 })
@@ -376,7 +378,7 @@ describe('the "Assistant" and "Traductions" accordions when their feature is off
     fireEvent.click(await screen.findByRole('link', { name: 'First article' }))
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
-    await screen.findByRole('button', { name: 'Rewrite' })
+    await screen.findByRole('button', { name: 'Réécrire' })
     expect(
       screen.queryByText(
         "Aucun fournisseur LLM n'est configuré sur ce site : l'assistant d'écriture n'est pas disponible. Tout le reste de cet écran fonctionne sans lui.",

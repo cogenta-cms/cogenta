@@ -52,3 +52,15 @@ catalog:
 onlyBuiltDependencies:
   - esbuild
   - lefthook
+
+# Transitive dev-only dependencies held at a version past a published advisory,
+# until the tools that pull them in (astro, vitest's vite/jsdom, changesets'
+# launch-editor) raise their own ranges. Each one is a semver-compatible bump.
+#   http-cache-semantics: GHSA-ch52-4w7c-c8xp (fixed in 4.3.0)
+#   smol-toml: GHSA-r4xh-jqrq-34v2 · source-map-js: GHSA-68fv-2mgg-jv7q
+#   shell-quote: GHSA-pqg4-j6r4-53mv
+overrides:
+  http-cache-semantics: ^4.3.0
+  smol-toml: ^1.9.1
+  source-map-js: ^1.2.2
+  shell-quote: ^1.12.0

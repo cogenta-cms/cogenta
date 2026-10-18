@@ -1,5 +1,12 @@
 # Risque résiduel : http-cache-semantics
 
+> **Résolu le 19 octobre 2026.** `http-cache-semantics` 4.3.0 est sortie, hors de
+> la plage vulnérable (`<= 4.2.0`). Le dépôt l'impose par `overrides` dans
+> `pnpm-workspace.yaml`, avec trois autres transitifs de développement signalés
+> depuis (`smol-toml`, `source-map-js`, `shell-quote`) ; `pnpm audit` ne
+> rapporte plus aucune vulnérabilité. L'analyse ci-dessous est conservée telle
+> qu'elle a été faite le 4 octobre.
+
 Analyse du 4 octobre 2026. L'avis [GHSA-ch52-4w7c-c8xp / CVE-2026-93748](https://github.com/advisories/GHSA-ch52-4w7c-c8xp)
 classe `http-cache-semantics <= 4.2.0` en sévérité haute et ne fournit aucune
 version corrigée. Un cache partagé peut réutiliser une réponse pourtant privée,

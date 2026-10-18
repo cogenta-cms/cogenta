@@ -18,7 +18,8 @@
       "!**/test/fixtures",
       // Sources of bundled demo images (L36): throwaway pages rendered once in a
       // browser to make PNGs, never served, so accessibility rules do not apply.
-      "!**/scripts/vitrine-assets"
+      "!**/scripts/vitrine-assets",
+      "!**/scripts/saas-assets"
     ]
   },
   "formatter": {

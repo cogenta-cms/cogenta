@@ -23,10 +23,13 @@ import {
   SAAS_SITE_SETTINGS,
   SAAS_WIDGETS,
   saasContentPack,
+  saasCopyFor,
   saasEmail,
   saasFeatureBlocks,
+  saasMediaSpecs,
   saasUpdateBlocks,
 } from '../src/blueprints/saas.js'
+import { SAAS_PHOTO_CREDITS } from '../src/blueprints/saas-credits.js'
 import { STARTING_SKINS } from '../src/blueprints/starting-skins.js'
 
 const MEDIA = Object.fromEntries(SAAS_MEDIA_SPECS.map((spec) => [spec.name, `media-${spec.name}`]))
@@ -214,50 +217,88 @@ describe('saas blueprint, product and changelog', () => {
 })
 
 describe('saas blueprint, pictures', () => {
-  it('points every media slot at a bundled file described in a full sentence', () => {
-    for (const spec of SAAS_MEDIA_SPECS) {
-      expect(spec.photo, spec.name).toMatch(/^saas\/[a-z-]+\.(png|jpg)$/)
-      const bytes = loadPhotoAsset(spec.photo as string)
-      expect(bytes, spec.photo).toBeDefined()
-      expect(spec.alt.length, spec.name).toBeGreaterThan(spec.name.startsWith('logo-') ? 6 : 30)
-      expect(spec.alt, spec.name).not.toMatch(
-        /placeholder|abstract|composition|stand-in|illustration/i,
+  const LOCALES = ['en', 'fr'] as const
+
+  it('points every media slot at a bundled file described in a full sentence, in each language', () => {
+    for (const locale of LOCALES) {
+      for (const spec of saasMediaSpecs(saasCopyFor(locale))) {
+        expect(spec.photo, spec.name).toMatch(/^saas\/[a-z-]+\.(png|jpg)$/)
+        expect(loadPhotoAsset(spec.photo as string), `${locale} ${spec.photo}`).toBeDefined()
+        expect(spec.alt.length, spec.name).toBeGreaterThan(spec.name.startsWith('logo-') ? 6 : 30)
+        expect(spec.alt, spec.name).not.toMatch(
+          /placeholder|abstract|composition|stand-in|illustration/i,
+        )
+      }
+    }
+  })
+
+  it('draws the interface as crisp PNG screenshots in each language, the hero at retina width', () => {
+    for (const locale of LOCALES) {
+      const screenshots = saasMediaSpecs(saasCopyFor(locale)).filter((s) =>
+        (s.photo as string).endsWith(`-${locale}.png`),
       )
+      expect(screenshots, locale).toHaveLength(7)
+      for (const spec of screenshots) {
+        const bytes = loadPhotoAsset(spec.photo as string) as Uint8Array
+        expect(bundledImageType(bytes).extension, spec.name).toBe('png')
+        const { width, height } = pngSize(bytes)
+        expect(width, spec.name).toBeGreaterThanOrEqual(1600)
+        expect(width / height, spec.name).toBeGreaterThan(1.4)
+        expect(bytes.byteLength, spec.name).toBeLessThan(450_000)
+      }
+      expect(
+        pngSize(loadPhotoAsset(`saas/approvals-queue-${locale}.png`) as Uint8Array).width,
+      ).toBe(2400)
     }
   })
 
-  it('renders the interface as crisp PNG screenshots, the hero at retina width', () => {
-    for (const spec of SAAS_MEDIA_SPECS.filter(
-      (s) => !s.name.startsWith('logo-') && s.name !== 'portrait',
-    )) {
-      const bytes = loadPhotoAsset(spec.photo as string) as Uint8Array
-      expect(bundledImageType(bytes).extension, spec.name).toBe('png')
-      const { width, height } = pngSize(bytes)
-      expect(width, spec.name).toBeGreaterThanOrEqual(1600)
-      expect(width / height, spec.name).toBeGreaterThan(1.4)
-      expect(bytes.byteLength, spec.name).toBeLessThan(450_000)
+  it('draws every customer wordmark as a PNG at one height, in each language', () => {
+    for (const locale of LOCALES) {
+      const heights = saasCopyFor(locale).customers.map((customer) => {
+        const bytes = loadPhotoAsset(`saas/${customer.key}.png`) as Uint8Array
+        expect(bundledImageType(bytes).extension, customer.key).toBe('png')
+        return pngSize(bytes).height
+      })
+      expect(new Set(heights).size, locale).toBe(1)
     }
-    expect(pngSize(loadPhotoAsset('saas/approvals-queue.png') as Uint8Array).width).toBe(2400)
   })
 
-  it('renders every customer wordmark as a PNG at one height', () => {
-    const heights = SAAS_CUSTOMERS.map((customer) => {
-      const bytes = loadPhotoAsset(`saas/${customer.key}.png`) as Uint8Array
-      expect(bundledImageType(bytes).extension, customer.key).toBe('png')
-      return pngSize(bytes).height
-    })
-    expect(new Set(heights).size).toBe(1)
-  })
-
-  it('keeps the portrait of the quoted customer, and bundles no picture it does not use', async () => {
+  it('bundles real photographs only where a credit names them, and a credit for each one', async () => {
     const folder = fileURLToPath(new URL('../src/blueprints/assets/photos/saas/', import.meta.url))
     const files = (await readdir(folder)).sort()
+    const photographs = files.filter((file) => file.endsWith('.jpg'))
+    expect(photographs).toEqual(SAAS_PHOTO_CREDITS.map((credit) => credit.file).sort())
+    // Nothing is bundled that no language uses: no stray AI picture, no portrait.
     const used = new Set(
-      SAAS_MEDIA_SPECS.map((spec) => (spec.photo as string).slice('saas/'.length)),
+      LOCALES.flatMap((locale) =>
+        saasMediaSpecs(saasCopyFor(locale)).map((spec) =>
+          (spec.photo as string).slice('saas/'.length),
+        ),
+      ),
     )
     expect(files.filter((file) => !used.has(file))).toEqual([])
-    expect(files).toContain('adrian-tan.jpg')
-    expect(files).not.toContain('hero.jpg')
+    expect(files).not.toContain('adrian-tan.jpg')
+    for (const credit of SAAS_PHOTO_CREDITS) {
+      expect(credit.licence, credit.file).toMatch(/^(CC0|CC BY) /)
+      expect(credit.licence, credit.file).not.toMatch(/SA|NC/)
+      expect(credit.source, credit.file).toMatch(/^https:\/\/commons\.wikimedia\.org\/wiki\/File:/)
+      const bytes = loadPhotoAsset(`saas/${credit.file}`) as Uint8Array
+      expect(bundledImageType(bytes).extension, credit.file).toBe('jpg')
+      expect(bytes.byteLength, credit.file).toBeLessThan(420_000)
+    }
+  })
+
+  it('shows a locale only the photographs its own credits page lists', () => {
+    for (const locale of LOCALES) {
+      const used = saasMediaSpecs(saasCopyFor(locale))
+        .map((spec) => (spec.photo as string).slice('saas/'.length))
+        .filter((file) => file.endsWith('.jpg'))
+        .sort()
+      const credited = SAAS_PHOTO_CREDITS.filter((credit) => credit.locales.includes(locale))
+        .map((credit) => credit.file)
+        .sort()
+      expect(used, locale).toEqual(credited)
+    }
   })
 
   it('opens the home page on the product screenshot and a strip of the six customer wordmarks', () => {
@@ -327,12 +368,10 @@ describe('saas blueprint, copy', () => {
       home?.blocks.filter((block) => block._type === 'testimonial' || block._type === 'quote') ?? []
     expect(quotes).toHaveLength(1)
     expect(quotes[0]).toMatchObject({
-      attribution: {
-        name: 'Adrian Tan',
-        role: 'Financial Controller, Halvorsen Freight',
-        avatar: 'media-portrait',
-      },
+      attribution: { name: 'Adrian Tan', role: 'Financial Controller, Halvorsen Freight' },
     })
+    // A fictional customer gets no portrait: no photograph presents a real person as them.
+    expect(JSON.stringify(quotes[0])).not.toContain('avatar')
     expect(JSON.stringify(quotes)).not.toMatch(/★|stars?\b|\/5/)
   })
 
@@ -362,6 +401,7 @@ describe('saas blueprint, pages, actions and navigation', () => {
       'demo',
       'legal',
       'privacy',
+      'photo-credits',
     ])
   })
 
@@ -438,7 +478,7 @@ describe('saas blueprint, pages, actions and navigation', () => {
   })
 
   it('places a side column only beside what is read, with real links and nothing the page already lists', () => {
-    expect(saasContentPack.widgets).toBe(SAAS_WIDGETS)
+    expect(saasContentPack.widgets).toEqual(SAAS_WIDGETS)
     const collections = new Set(SAAS_COLLECTIONS.map((collection) => collection.name))
     for (const widget of SAAS_WIDGETS) {
       expect(widget.area).toBe('sidebar')

@@ -105,6 +105,7 @@ class McpSession {
   readonly replies: JsonRpcMessage[] = []
   private buffer = ''
   private waiters: (() => void)[] = []
+  private nextId = 1000
 
   constructor(
     root: string,
@@ -136,7 +137,11 @@ class McpSession {
   }
 
   send(method: string, params?: Record<string, unknown>): number {
-    const id = this.replies.length + 1000 + Math.floor(Math.random() * 1000)
+    // A counter, never a random number: two requests sent before either is
+    // answered once drew the same id on an ARM runner, and the reply to one
+    // was read as the reply to the other.
+    this.nextId += 1
+    const id = this.nextId
     this.stdin.write(
       `${JSON.stringify({ jsonrpc: '2.0', id, method, ...(params ? { params } : {}) })}\n`,
     )

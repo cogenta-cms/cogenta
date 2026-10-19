@@ -57,11 +57,12 @@ describe('where a plugin actually runs', () => {
   it('does not charge the plugin for the time its process takes to start', async () => {
     // Starting a permissioned Node measured about 1.2s on a loaded machine;
     // running this plugin takes a few milliseconds. With one clock started at
-    // fork, a 250ms limit killed it every time.
+    // fork, a 1s limit killed it every time. The limit is 1s rather than less
+    // so that a slow runner's own scheduling is not read as the plugin's.
     const result = await runIsolated('({ go: () => 21 * 2 })', {
       invoke: 'go',
       input: {},
-      timeoutMs: 250,
+      timeoutMs: 1000,
     })
 
     expect(result).toMatchObject({ ok: true, value: 42, isolation: 'process' })

@@ -101,8 +101,11 @@ describe('shared file approval queue', () => {
     expect(await queue.list('approved')).toMatchObject([
       { id: request.id, decidedBy: 'human-admin' },
     ])
-    expect((await stat(directory)).mode & 0o777).toBe(0o700)
-    expect((await stat(join(directory, `${request.id}.json`))).mode & 0o777).toBe(0o600)
+    // Windows has no POSIX permission bits: a file there always reads as 0o666.
+    if (process.platform !== 'win32') {
+      expect((await stat(directory)).mode & 0o777).toBe(0o700)
+      expect((await stat(join(directory, `${request.id}.json`))).mode & 0o777).toBe(0o600)
+    }
   })
 
   it('persists a rejection across queue reconstruction and prevents the action', async () => {

@@ -14,11 +14,25 @@ import { describe, expect, it } from 'vitest'
 const STYLES = fileURLToPath(new URL('../src/styles', import.meta.url))
 
 const SHEETS = readdirSync(STYLES)
-  .filter((name) => extname(name) === '.css')
+  .filter((name) => extname(name) === '.css' && name !== 'fonts.css')
   .map((name) => ({ name, source: readFileSync(join(STYLES, name), 'utf8') }))
 
 const THEME = SHEETS.find((sheet) => sheet.name === 'theme.css')?.source ?? ''
 const CODE = SHEETS.map(({ source }) => source.replace(/\/\*[\s\S]*?\*\//g, '')).join('\n')
+
+const FONTS_CSS = readFileSync(join(STYLES, 'fonts.css'), 'utf8')
+
+/** Every `@font-face` this theme declares, as family / style / weight (and stretch, when it has one). */
+const DECLARED = [...FONTS_CSS.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((match) => {
+  const body = match[1] ?? ''
+  const field = (name: string) => new RegExp(`${name}:\\s*([^;]+);`).exec(body)?.[1]?.trim()
+  return {
+    family: field('font-family')?.replaceAll("'", ''),
+    style: field('font-style'),
+    weight: field('font-weight'),
+    stretch: field('font-stretch'),
+  }
+})
 
 describe('web fonts', () => {
   it('never imports a font without font-display: swap', () => {
@@ -30,15 +44,25 @@ describe('web fonts', () => {
     expect(offenders).toEqual([])
   })
 
-  it('requests exactly two families, in one request', () => {
-    expect([...THEME.matchAll(/@import\s+url\(/g)]).toHaveLength(1)
-    const families = [...THEME.matchAll(/family=([A-Za-z+0-9]+)/g)].map((match) => match[1])
-    expect(families).toEqual(['Cormorant+Garamond', 'Karla'])
+  it('declares exactly Cormorant Garamond and Karla, from the site itself', () => {
+    expect(DECLARED.length).toBeGreaterThan(0)
+    expect(FONTS_CSS).not.toMatch(/googleapis|gstatic|@import/i)
+    const families = [...new Set(DECLARED.map((face) => face.family))].sort()
+    expect(families).toEqual(['Cormorant Garamond', 'Karla'])
   })
 
-  it('asks for the light display weights and the italic of both families', () => {
-    expect(THEME).toContain('family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700')
-    expect(THEME).toContain('family=Karla:ital,wght@0,200..800;1,200..800')
+  it('declares the weights, the italics and the width the stylesheets use', () => {
+    const wanted = [
+      { family: 'Cormorant Garamond', style: 'normal', weight: '300 700' },
+      { family: 'Cormorant Garamond', style: 'italic', weight: '300 700' },
+      { family: 'Karla', style: 'normal', weight: '200 800' },
+      { family: 'Karla', style: 'italic', weight: '200 800' },
+    ]
+    for (const face of wanted) {
+      expect(DECLARED, `${face.family} ${face.style} ${face.weight}`).toContainEqual(
+        expect.objectContaining(face),
+      )
+    }
   })
 
   it('imports no font file from a stylesheet other than the entry point', () => {

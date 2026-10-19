@@ -106,6 +106,8 @@ export interface GenerateSkinCandidatesOptions {
   readonly images?: readonly ChatImagePart[]
   /** Fiche feedback — "je ne sais pas si le traitement est en cours ou pas". Reports which of the (up to five, run in parallel) design directions is starting or has settled, since nothing else distinguishes "still working" from "stuck" for the seconds this call takes. */
   readonly onProgress?: ProgressReporter
+  /** Forwarded to every candidate's `generateSkin`: whether the whole web-font catalogue may be offered (`appearance.remoteWebFonts`). */
+  readonly remoteWebFonts?: boolean
 }
 
 export interface SkinCandidateFailure {
@@ -172,6 +174,7 @@ export async function generateSkinCandidates(
         ...(options.images === undefined || options.images.length === 0
           ? {}
           : { images: options.images }),
+        ...(options.remoteWebFonts === undefined ? {} : { remoteWebFonts: options.remoteWebFonts }),
       })
       progress.report(
         result.ok

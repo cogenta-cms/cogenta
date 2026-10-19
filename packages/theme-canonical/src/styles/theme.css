@@ -16,19 +16,19 @@
  * Not one colour is written literally in any of them: every value comes from
  * a `--cogenta-*` property or from a `--cg-*` property composed from those.
  *
- * The one thing this file adds on its own is the Google Fonts request for the
+ * The one thing this file adds on its own is the self-hosted `fonts.css` faces for the
  * two families the default skin names: Instrument Sans for everything a
  * visitor reads, Instrument Serif for the display line of a page and for
  * quotations. A skin only names a family; it never fetches one. A site whose
  * skin names other families simply never uses these faces, and a browser does
  * not download a face nothing uses. `display=swap` keeps text visible while
- * they load, and `cogenta serve` hoists this `@import` above the skin's rules.
+ * they load, and `cogenta serve` serves the faces itself, from `/_cogenta/fonts/`.
  *
  * The relative `@import`s are flattened at build time by Astro, and by
  * `@cogenta/cli`'s inliner when `cogenta serve` renders without a build.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Instrument+Serif:ital@0;1&display=swap");
+@import "./fonts.css";
 
 @import "./tokens.css";
 @import "./base.css";

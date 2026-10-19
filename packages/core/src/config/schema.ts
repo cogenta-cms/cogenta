@@ -356,6 +356,23 @@ const paymentSchema = z.strictObject({
  */
 const searchConsoleSchema = z.strictObject({})
 
+/**
+ * How the public site looks, as far as the installation (not the editor) decides.
+ *
+ * `remoteWebFonts` is **off by default, and that is the privacy default**: a
+ * font fetched from a provider's server hands every visitor's IP address to
+ * that provider before any consent, which a German court has held unlawful
+ * under the GDPR (LG Munich I, 20 January 2022, 3 O 17493/20). Every Cogenta
+ * theme ships its own faces and serves them from the site itself; a skin that
+ * names a typeface outside that set renders in the next family of its stack.
+ * Turning this on lets a skin use the wider Google Fonts catalogue, at the
+ * price of that request — it is the site owner's explicit, documented choice,
+ * never something the CMS does silently.
+ */
+const appearanceSchema = z.strictObject({
+  remoteWebFonts: z.boolean().default(false),
+})
+
 // `prefault` rather than `default`: an omitted section is parsed as `{}` so the
 // per-field defaults inside it apply, instead of being replaced wholesale.
 export const configSchema = z.strictObject({
@@ -381,6 +398,7 @@ export const configSchema = z.strictObject({
   payment: paymentSchema.prefault({}),
   observability: observabilitySchema.prefault({}),
   searchConsole: searchConsoleSchema.prefault({}),
+  appearance: appearanceSchema.prefault({}),
 })
 
 export type ParsedConfig = z.infer<typeof configSchema>

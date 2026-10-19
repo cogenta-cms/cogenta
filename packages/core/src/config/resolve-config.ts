@@ -178,6 +178,7 @@ export function resolveConfig(
       secret: secrets.webhookSecret,
     }),
     analytics: Object.freeze({ retainDays: config.analytics.retainDays }),
+    appearance: Object.freeze({ remoteWebFonts: config.appearance.remoteWebFonts }),
     llm:
       config.llm === undefined
         ? undefined

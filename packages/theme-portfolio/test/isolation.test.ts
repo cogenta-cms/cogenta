@@ -87,6 +87,7 @@ describe('theme isolation', () => {
       'styles/archive.css',
       'styles/base.css',
       'styles/blocks.css',
+      'styles/fonts.css',
       'styles/theme.css',
       'styles/tokens.css',
       'styles/widgets.css',
@@ -111,18 +112,20 @@ describe('theme isolation', () => {
     })
   }
 
-  it('loads its fonts only from the one host every theme may reach', () => {
-    const imports = STYLESHEETS.flatMap(({ source }) =>
-      [...source.matchAll(/@import\s+url\(["']([^"']+)["']\)/g)].map((match) => match[1] as string),
-    )
-    expect(imports).toHaveLength(1)
-    for (const url of imports) expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
+  it('loads its fonts from the site itself, never from a remote host', () => {
+    const theme = STYLESHEETS.find(({ path }) => path === 'styles/theme.css')?.source ?? ''
+    expect(theme).toMatch(/@import\s+"\.\/fonts\.css"\s*;/)
+    for (const { path, source } of STYLESHEETS) {
+      expect(source, path).not.toMatch(/googleapis|gstatic/i)
+      expect(source, path).not.toMatch(/@import\s+(?:url\()?\s*["']?(?:https?:)?\/\//i)
+    }
   })
 
   it('loads every other sheet by a relative import the host inlines, in order', () => {
     const theme = STYLESHEETS.find(({ path }) => path === 'styles/theme.css')?.source ?? ''
     const local = [...theme.matchAll(/@import\s+"([^"]+)";/g)].map((match) => match[1])
     expect(local).toEqual([
+      './fonts.css',
       './tokens.css',
       './base.css',
       './work.css',
@@ -171,11 +174,12 @@ describe('theme isolation', () => {
   })
 
   it('sets no font family literally: the skin names Archivo, the stylesheets read the token', () => {
-    const literal = STYLESHEETS.flatMap(({ path, source }) =>
-      [...source.matchAll(/font-family:\s*([^;]+);/g)]
-        .map((match) => (match[1] as string).trim())
-        .filter((value) => !value.startsWith('var(--cg-font'))
-        .map((value) => `${path}: ${value}`),
+    const literal = STYLESHEETS.filter(({ path }) => !path.endsWith('fonts.css')).flatMap(
+      ({ path, source }) =>
+        [...source.matchAll(/font-family:\s*([^;]+);/g)]
+          .map((match) => (match[1] as string).trim())
+          .filter((value) => !value.startsWith('var(--cg-font'))
+          .map((value) => `${path}: ${value}`),
     )
     expect(literal).toEqual([])
   })

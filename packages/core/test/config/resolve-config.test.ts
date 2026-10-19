@@ -33,6 +33,28 @@ describe('resolveConfig — defaults', () => {
     expect(config.llm).toBeUndefined()
   })
 
+  it('never loads a web font from a third party unless the site owner turns it on', () => {
+    // A font fetched from a provider hands every visitor's address to it before
+    // any consent (LG Munich I, 20 January 2022, 3 O 17493/20).
+    expect(resolveConfig(minimal, noEnv).appearance.remoteWebFonts).toBe(false)
+    expect(resolveConfig({ ...minimal, appearance: {} }, noEnv).appearance.remoteWebFonts).toBe(
+      false,
+    )
+    expect(
+      resolveConfig({ ...minimal, appearance: { remoteWebFonts: true } }, noEnv).appearance
+        .remoteWebFonts,
+    ).toBe(true)
+  })
+
+  it('refuses a remote web font setting that is not a boolean, or a key it does not know', () => {
+    expect(() =>
+      resolveConfig({ ...minimal, appearance: { remoteWebFonts: 'yes' } } as never, noEnv),
+    ).toThrowError(/appearance\.remoteWebFonts/)
+    expect(() =>
+      resolveConfig({ ...minimal, appearance: { googleFonts: true } } as never, noEnv),
+    ).toThrowError(/appearance/)
+  })
+
   it('defaults embeddings to the local provider, which needs no API key', () => {
     const config = resolveConfig(minimal, noEnv)
 

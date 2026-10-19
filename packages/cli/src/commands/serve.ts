@@ -470,6 +470,7 @@ import {
 import { createTextProviderSource } from './text-provider-source.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
 import { exportThemeZip, importThemeZip } from './theme-export.js'
+import { FONT_ROUTE_PREFIX, serveThemeFont, setRemoteWebFonts } from './theme-fonts.js'
 import {
   availableThemes,
   configureThemeRegistry,
@@ -5193,6 +5194,31 @@ export function createRequestListener(
         return
       }
 
+      // A built-in theme's web fonts, served by the site itself so that no
+      // visitor's address is handed to a font provider. Public and
+      // unauthenticated like the stylesheet that names them; the file name
+      // carries a hash of its bytes, hence the year-long immutable cache. Only
+      // files a theme's own manifest lists can be answered (`theme-fonts.ts`).
+      if (url.pathname.startsWith(FONT_ROUTE_PREFIX)) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.writeHead(405, { allow: 'GET, HEAD' }).end()
+          return
+        }
+        const font = await serveThemeFont(url.pathname)
+        if (font === null) {
+          res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found')
+          return
+        }
+        res.writeHead(200, {
+          'content-type': font.contentType,
+          'content-length': font.body.length,
+          'cache-control': font.cacheControl,
+          'x-content-type-options': 'nosniff',
+        })
+        res.end(req.method === 'HEAD' ? undefined : font.body)
+        return
+      }
+
       // An embed's thumbnail (L38), copied from its provider once and served
       // from here: a visitor's browser loads it without contacting the
       // provider, which is what lets a theme show it before consent.
@@ -8420,6 +8446,9 @@ export async function runServe(options: ServeOptions): Promise<number> {
     read: (url) => readFile(url, 'utf8'),
     projectRoot,
   })
+  // Off unless the site owner opted in: a skin then loads only the families the
+  // themes bundle, and no request leaves the site for a font.
+  setRemoteWebFonts(loaded.config.appearance.remoteWebFonts)
   const themeCss = await themeCssFor(DEFAULT_THEME_NAME)
   const styles = joinStyles(
     await loadSkinCss((path) => readFile(path, 'utf8'), join(projectRoot, 'theme.tokens.json')),

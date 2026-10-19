@@ -21,7 +21,7 @@ import {
   vocabularyRegistry,
 } from '@cogenta/blocks'
 import { CogentaError, isCogentaError } from '@cogenta/core'
-import { describeMedia, type MediaAsset as RenderMediaAsset, renderSkin } from '@cogenta/render'
+import { describeMedia, type MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
   type BlockZones,
   buildPath,
@@ -74,6 +74,7 @@ import { pluginBlockFallback } from './plugin-blocks.js'
 import type { SeoRenderDefaults } from './seo.js'
 import { alternatesForEntry, renderSeoHead, seoSiteFor, siteVerificationMetaTags } from './seo.js'
 import { minifyCss } from './theme-css.js'
+import { missingBundledFaceCss, remoteFontPreconnectTags, renderSiteSkin } from './theme-fonts.js'
 import { DEFAULT_THEME_NAME, resolveTheme, type ThemeModule } from './theme-registry.js'
 import {
   footerWidgetsHtml,
@@ -615,21 +616,6 @@ function defaultFaviconFor(branding: BrandingSettings, imageEndpoint: string): s
 }
 
 /**
- * Four of the five built-in themes pull their typefaces from Google Fonts
- * with a CSS `@import`, which the browser only discovers *after* the
- * stylesheet has downloaded and parsed — two extra round trips before the
- * first glyph is requested. `preconnect` collapses the DNS/TLS half of that
- * wait, and it is emitted unconditionally on purpose: the cost of two unused
- * hints on a system-font theme is a few dozen bytes, while making it
- * conditional would mean this file keeping a list of which themes use web
- * fonts — exactly the per-theme knowledge the chrome extension point exists
- * to keep out of here.
- *
- * `font-display: swap` itself is already declared by every one of those four
- * `@import` URLs (`&display=swap`), so no font blocks first paint today;
- * these hints are the remaining half of that fix.
- */
-/**
  * The site's own feeds, discoverable (audit T03). A reader pasting the site's
  * URL into a feed reader finds them through these two tags and nothing else —
  * the routes existed before this and were invisible.
@@ -646,11 +632,26 @@ function feedLinkTags(siteName: string): string {
   )
 }
 
-function fontPreconnectTags(): string {
-  return (
-    `<link rel="preconnect" href="https://fonts.googleapis.com">` +
-    `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>`
-  )
+/**
+ * What the head says about fonts: nothing, by default.
+ *
+ * The built-in themes serve their faces from the site itself
+ * (`theme-fonts.ts`), so there is nothing to connect to ahead of time, and a
+ * `preconnect` to a font host would itself send the visitor's address there.
+ * Hints to Google are emitted only when the site owner turned on
+ * `appearance.remoteWebFonts`.
+ *
+ * No `<link rel="preload">` for the body face either, though it was built and
+ * measured: on a throttled link (150 ms round trip, 1.5 Mbit/s, cache off, seven
+ * runs each, the blog and magazine themes) the preload moved the font's arrival
+ * about a second earlier but made the stylesheet arrive 450 to 600 ms later,
+ * because the two share the connection, and with `font-display: swap` the text
+ * paints when the stylesheet lands, not when the font does. First and largest
+ * contentful paint got 450 to 850 ms worse and layout shift did not change.
+ * An optimisation that makes the page slower is not one.
+ */
+function fontHeadTags(): string {
+  return remoteFontPreconnectTags()
 }
 
 /** `branding.showCogentaBranding` / `branding.customLogoMediaId`, resolved (fiche L21 task 8). */
@@ -1254,7 +1255,7 @@ export async function renderPageChrome(
 <script>${THEME_TOGGLE_SCRIPT}</script>
 ${faviconLinkTag(identity.faviconHref, branding, DEFAULT_IMAGE_ENDPOINT)}
 ${feedLinkTags(options.site.name)}
-${fontPreconnectTags()}
+${fontHeadTags()}
 ${options.headHtml}
 ${verificationTags === '' ? '' : `${verificationTags}\n`}${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 </head>
@@ -2283,7 +2284,7 @@ async function renderEntryPage(
 <script>${THEME_TOGGLE_SCRIPT}</script>
 ${faviconLinkTag(identity.faviconHref, branding, imageEndpoint)}
 ${feedLinkTags(options.site.name)}
-${fontPreconnectTags()}
+${fontHeadTags()}
 ${head}
 ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 ${pluginStyleTags(options.pluginStyleHrefs)}
@@ -2344,7 +2345,7 @@ export async function loadSkinCss(
 ): Promise<string | null> {
   try {
     const raw = JSON.parse(await readFile(tokensPath)) as unknown
-    return renderSkin(raw).css
+    return renderSiteSkin(raw).css
   } catch {
     return null
   }
@@ -2378,7 +2379,11 @@ export function joinStyles(skinCss: string | null, themeCss: string | null): str
     })
     .trim()
   const kept = withoutRedundantFontImports(imports)
-  return kept.length === 0 ? body : `${kept.join('\n')}\n${body}`
+  // A skin may name a bundled face the active theme does not itself declare
+  // (Geist on the restaurant theme): add the rules, so the choice renders.
+  const faces = skinCss === null ? '' : missingBundledFaceCss(skinCss, body)
+  const sheet = faces === '' ? body : `${body}\n${minifyCss(faces)}`
+  return kept.length === 0 ? sheet : `${kept.join('\n')}\n${sheet}`
 }
 
 /** The `family=` names a Google Fonts request asks for. */

@@ -60,6 +60,8 @@ export interface ProposeThemeCandidatesInput {
   readonly maxCandidates?: number
   /** Fiche feedback — "je ne sais pas si le traitement est en cours ou pas". Reports the theme choice and each design direction as they happen. */
   readonly onProgress?: ProgressReporter
+  /** Whether the site may load web fonts from Google (`appearance.remoteWebFonts`, default off) — widens the typefaces offered to the model from the bundled families to the whole catalogue. */
+  readonly remoteWebFonts?: boolean
 }
 
 export interface ThemeCreatorChromeInput {
@@ -286,6 +288,7 @@ export async function proposeThemeCandidates(
     ...(input.baseline === undefined ? {} : { baseTokens: input.baseline.tokens }),
     ...(input.maxCandidates === undefined ? {} : { count: input.maxCandidates }),
     ...(imageParts.length === 0 ? {} : { images: imageParts }),
+    ...(input.remoteWebFonts === undefined ? {} : { remoteWebFonts: input.remoteWebFonts }),
     onProgress: progress,
   })
 

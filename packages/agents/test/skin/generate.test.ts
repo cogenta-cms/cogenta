@@ -258,8 +258,29 @@ describe('adjusting an existing skin rather than designing a new one', () => {
       blueprintLabel: 'Acme',
     })
 
+    // By default only the families the site serves itself: no request to a
+    // font provider, and nothing the model could name that would silently fall
+    // back to a system face.
     const ask = client.asks[0] ?? ''
     expect(ask).toContain('only these families are loaded for the site')
+    expect(ask).toMatch(/- serif: .*Fraunces/u)
+    expect(ask).toMatch(/- sans: .*Geist/u)
+    expect(ask).toMatch(/- mono: .*IBM Plex Mono/u)
+    expect(ask).not.toMatch(/Playfair Display|JetBrains Mono|- sans: .*\bInter\b/u)
+  })
+
+  it('offers the whole catalogue once the site has allowed remote web fonts', async () => {
+    const client = capturingClient(JSON.stringify(VALID_TOKENS))
+
+    await generateSkin({
+      client,
+      model: 'fake-model',
+      description: 'editorial',
+      blueprintLabel: 'Acme',
+      remoteWebFonts: true,
+    })
+
+    const ask = client.asks[0] ?? ''
     expect(ask).toMatch(/- serif: .*Playfair Display/u)
     expect(ask).toMatch(/- sans: .*Inter/u)
     expect(ask).toMatch(/- mono: .*JetBrains Mono/u)

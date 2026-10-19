@@ -13,8 +13,22 @@ import { describe, expect, it } from 'vitest'
 const STYLES = fileURLToPath(new URL('../src/styles', import.meta.url))
 
 const SHEETS = readdirSync(STYLES)
-  .filter((name) => extname(name) === '.css')
+  .filter((name) => extname(name) === '.css' && name !== 'fonts.css')
   .map((name) => ({ name, source: readFileSync(join(STYLES, name), 'utf8') }))
+
+const FONTS_CSS = readFileSync(join(STYLES, 'fonts.css'), 'utf8')
+
+/** Every `@font-face` this theme declares, as family / style / weight (and stretch, when it has one). */
+const DECLARED = [...FONTS_CSS.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((match) => {
+  const body = match[1] ?? ''
+  const field = (name: string) => new RegExp(`${name}:\\s*([^;]+);`).exec(body)?.[1]?.trim()
+  return {
+    family: field('font-family')?.replaceAll("'", ''),
+    style: field('font-style'),
+    weight: field('font-weight'),
+    stretch: field('font-stretch'),
+  }
+})
 
 describe('web fonts', () => {
   it('never imports a font without font-display: swap', () => {
@@ -26,20 +40,24 @@ describe('web fonts', () => {
     expect(offenders).toEqual([])
   })
 
-  it("requests exactly this theme's two identity typefaces, in one request", () => {
-    const theme = SHEETS.find((sheet) => sheet.name === 'theme.css')
-    expect(theme).toBeDefined()
-    const imports = [...(theme?.source ?? '').matchAll(/@import\s+url\(/g)]
-    expect(imports).toHaveLength(1)
-    const families = [...(theme?.source ?? '').matchAll(/family=([A-Za-z+0-9]+)/g)].map(
-      (match) => match[1],
-    )
-    expect(families.sort()).toEqual(['Figtree', 'Literata'])
+  it('declares exactly Figtree and Literata, from the site itself', () => {
+    expect(DECLARED.length).toBeGreaterThan(0)
+    expect(FONTS_CSS).not.toMatch(/googleapis|gstatic|@import/i)
+    const families = [...new Set(DECLARED.map((face) => face.family))].sort()
+    expect(families).toEqual(['Figtree', 'Literata'])
   })
 
-  it("asks for Literata's optical-size axis and its italic, which the quotations use", () => {
-    const theme = SHEETS.find((sheet) => sheet.name === 'theme.css')
-    expect(theme?.source).toMatch(/family=Literata:ital,opsz,wght@0,7\.\.72,[^;&]*;1,7\.\.72,/)
+  it('declares the weights, the italics and the width the stylesheets use', () => {
+    const wanted = [
+      { family: 'Figtree', style: 'normal', weight: '400 700' },
+      { family: 'Literata', style: 'normal', weight: '300 700' },
+      { family: 'Literata', style: 'italic', weight: '300 600' },
+    ]
+    for (const face of wanted) {
+      expect(DECLARED, `${face.family} ${face.style} ${face.weight}`).toContainEqual(
+        expect.objectContaining(face),
+      )
+    }
   })
 
   it('imports no font file from a stylesheet other than the entry point', () => {

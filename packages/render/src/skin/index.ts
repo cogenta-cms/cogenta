@@ -46,8 +46,11 @@ export {
 export { computeTypeScale, validateSkin } from './validate.js'
 export type { WebFont, WebFontRole } from './web-fonts.js'
 export {
+  availableWebFonts,
   findWebFont,
+  isSelfHostedFamily,
   primaryFamily,
+  SELF_HOSTED_FAMILIES,
   WEB_FONTS,
   webFontImports,
   webFontUrl,

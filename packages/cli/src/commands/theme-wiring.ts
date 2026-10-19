@@ -22,7 +22,7 @@ import { generateSandboxTheme, generateThemeCandidates } from '@cogenta/agents-b
 import type { ThemeRouterOptions } from '@cogenta/api'
 import type { CogentaConfig, DatabaseHandle, Logger } from '@cogenta/core'
 import { createSkinGallery, ensureRegistryTables } from '@cogenta/plugins'
-import { mergeSkinTokens, renderSkin, validateSkin } from '@cogenta/render'
+import { mergeSkinTokens, validateSkin } from '@cogenta/render'
 import type { CollectionDefinition } from '@cogenta/schema'
 import {
   createSiteSettingsStore,
@@ -30,6 +30,7 @@ import {
   ensureSiteSettingsTables,
   ensureThemeTable,
 } from '@cogenta/schema'
+import { renderSiteSkin } from './theme-fonts.js'
 import { availableThemes, DEFAULT_THEME_NAME, loadThemeDefaultTokens } from './theme-registry.js'
 import { joinStyles } from './theme-render.js'
 import {
@@ -462,6 +463,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                     tokens: input.baseline.tokens,
                   },
                   maxCandidates: 1,
+                  remoteWebFonts: options.config.appearance.remoteWebFonts,
                   ...(input.attachments === undefined || input.attachments.length === 0
                     ? {}
                     : { attachments: input.attachments }),
@@ -660,7 +662,7 @@ export async function computeEffectiveStyles(
     }
   }
 
-  const skinCss = tokens === null ? '' : renderSkin(tokens as never).css
+  const skinCss = tokens === null ? '' : renderSiteSkin(tokens as never).css
   const combined =
     overrides.additionalCss === null || overrides.additionalCss === ''
       ? skinCss
@@ -702,7 +704,7 @@ export async function computePreviewStyles(
     wiring.validateTokens(tokens)
   }
 
-  const skinCss = renderSkin(tokens as never).css
+  const skinCss = renderSiteSkin(tokens as never).css
   const combined =
     candidate.additionalCss === undefined || candidate.additionalCss === ''
       ? skinCss
@@ -727,5 +729,5 @@ export function computeCandidateGalleryStyles(
   tokens: Record<string, unknown>,
 ): string | null {
   const validated = wiring.validateTokens(tokens)
-  return joinStyles(renderSkin(validated as never).css, themeCss)
+  return joinStyles(renderSiteSkin(validated as never).css, themeCss)
 }

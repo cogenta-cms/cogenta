@@ -12,16 +12,16 @@
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--cg-*` property composed from those.
  *
- * The one thing this file adds on its own is the Google Fonts request for the
+ * The one thing this file adds on its own is the self-hosted `fonts.css` faces for the
  * two families `tokens.json` names: Geist (display, headings, text and
  * interface, on one variable weight axis) and Geist Mono (labels, indices,
  * figures and captions, the register of an engineering document). A skin only
  * names a family; it never fetches one. Both fall back to real system stacks
- * if Google Fonts is unreachable, and `display=swap` keeps text visible while
- * they load. `cogenta serve` hoists this `@import` above the skin's rules.
+ * if a face fails to load, and `display=swap` keeps text visible while
+ * they load. `cogenta serve` serves the faces itself, from `/_cogenta/fonts/`.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap");
+@import "./fonts.css";
 
 @import "./tokens.css";
 @import "./base.css";

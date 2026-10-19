@@ -192,6 +192,20 @@ conditionnel). Le plancher de sandboxing réellement en place :
 personne, consentement cookies natif, minimisation par défaut, DPA type fourni pour les
 sous-traitants (fournisseurs LLM inclus).
 
+**Requêtes tierces et polices** — Un site Cogenta n'envoie l'adresse IP d'un visiteur à
+aucun tiers par défaut. Les polices web en sont le cas d'école : un `@import` vers Google
+Fonts transmet l'adresse de chaque visiteur avant tout consentement, ce que le tribunal de
+Munich a jugé illicite (LG München I, 20 janvier 2022, 3 O 17493/20). Les dix thèmes livrés
+embarquent donc leurs polices (WOFF2, licence SIL OFL, sous-ensembles latin et latin étendu) et
+`cogenta serve` les envoie depuis `/_cogenta/fonts/<thème>/<fichier>` : liste blanche tirée du
+manifeste du thème, noms de fichiers strictement validés, aucun chemin de système de fichiers
+atteignable, cache `immutable` (noms de fichiers hachés). Un test de bout en bout rend les
+pages des dix thèmes et échoue à la moindre mention de `googleapis` ou `gstatic`, ou d'une URL
+absolue hors du site. Charger des polices depuis Google reste possible, mais seulement par le
+réglage explicite `appearance.remoteWebFonts: true`, désactivé par défaut et documenté comme une
+décision du responsable du site. Un thème tiers garde la liberté de ses propres `@import` : la
+garantie porte sur ce que Cogenta livre.
+
 **Accessibilité** — WCAG 2.2 AA sur l'admin et le thème canonique. L'European
 Accessibility Act est en application depuis juin 2025 : c'est une obligation légale pour
 une large part des sites commerciaux européens, pas un bonus.

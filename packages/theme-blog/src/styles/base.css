@@ -972,3 +972,8 @@ img {
   font-size: 0.875rem;
   color: var(--cg-ink-muted);
 }
+
+/* French sets its quotation marks with a no-break space inside them. */
+:lang(fr) {
+  quotes: "«\00a0" "\00a0»" "“" "”";
+}

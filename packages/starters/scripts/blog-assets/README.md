@@ -32,3 +32,12 @@ wide, saved as progressive JPEG (quality 76-80).
 | `notebook-and-coffee.jpg` | Bottom third removed (a small stationery brand mark) |
 | `desk-setup.jpg` | Right side removed (a second, branded computer) |
 | `platform.jpg`, `notebooks.jpg`, `pour-over.jpg`, `typing.jpg`, `library.jpg` | None |
+
+## Alt text and credits in two languages
+
+The photographs are the same on the French and the English site. Their alt
+text is written in each language (`mediaAlt` in `blog-copy-en.ts` and
+`blog-copy-fr.ts`) and describes only what is in the frame, since the library
+of the photograph is not the library of the French fiction. The seeded credits
+page ("Photo credits" / "Crédits photo") lists the same
+`BLOG_PHOTO_CREDITS` in both languages.

@@ -1,5 +1,5 @@
 import { associationContentPack, createAssociationContentPack } from './association.js'
-import { blogContentPack } from './blog.js'
+import { blogContentPack, createBlogContentPack } from './blog.js'
 import type { BlueprintContentPack } from './content-pack.js'
 import { createDocumentationContentPack, documentationContentPack } from './documentation.js'
 import { createMagazineContentPack, magazineContentPack } from './magazine.js'
@@ -39,6 +39,7 @@ const LOCALIZED_CONTENT_PACKS: Readonly<Record<string, (locale: string) => Bluep
   {
     vitrine: createVitrineContentPack,
     association: createAssociationContentPack,
+    blog: createBlogContentPack,
     documentation: createDocumentationContentPack,
     magazine: createMagazineContentPack,
     portfolio: createPortfolioContentPack,

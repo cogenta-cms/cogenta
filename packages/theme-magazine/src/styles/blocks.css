@@ -550,6 +550,11 @@
   quotes: "\201C" "\201D";
 }
 
+/* A French pull quote is set in guillemets, with a no-break space inside. */
+:lang(fr) .cg-pullquote__text {
+  quotes: "\00ab\00a0" "\00a0\00bb";
+}
+
 .cg-pullquote__text::before {
   content: open-quote;
 }

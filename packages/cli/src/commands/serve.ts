@@ -7265,7 +7265,15 @@ export function createRequestListener(
 
       if (url.pathname === '/_cogenta/go' && req.method === 'GET') {
         const target = url.searchParams.get('to') ?? '/'
-        const safe = target.startsWith('/') && !target.startsWith('//') && !target.includes('\\')
+        // A same-site path only. Browsers drop tabs and line breaks from a URL, so
+        // "/\t/evil.example" would otherwise reach "//evil.example": any control
+        // character refuses the target, as do "//" and a backslash.
+        const safe =
+          target.startsWith('/') &&
+          !target.startsWith('//') &&
+          !target.includes('\\') &&
+          // biome-ignore lint/suspicious/noControlCharactersInRegex: that is the point
+          !/[\u0000-\u001f\u007f]/u.test(target)
         res.writeHead(303, { location: safe ? target : '/', 'cache-control': 'no-store' })
         res.end()
         return

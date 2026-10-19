@@ -316,7 +316,15 @@ describe('widget areas on the public site (L30)', () => {
       })
       expect(local.status).toBe(303)
       expect(local.headers.get('location')).toBe('/topic/cooking')
-      for (const target of ['https://evil.example', '//evil.example', '/\\evil.example']) {
+      // A tab or line break inside the path is dropped by browsers, which would turn
+      // "/\t/evil.example" into "//evil.example".
+      for (const target of [
+        'https://evil.example',
+        '//evil.example',
+        '/\\evil.example',
+        '/\t/evil.example',
+        '/\n/evil.example',
+      ]) {
         const away = await fetch(`${server.base}/_cogenta/go?to=${encodeURIComponent(target)}`, {
           redirect: 'manual',
         })

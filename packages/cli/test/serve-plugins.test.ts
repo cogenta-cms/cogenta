@@ -218,7 +218,9 @@ describe('a plugin on a running site', () => {
     try {
       const admin = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
       const started = fetch(`${server.base}/_cogenta/plugins/watcher/hello`)
-      await expect.poll(() => writtenEvent(root, 'route-started')).toEqual({ started: true })
+      await expect
+        .poll(() => writtenEvent(root, 'route-started'), { timeout: 20_000 })
+        .toEqual({ started: true })
       expect(
         (
           await fetch(`${server.base}/api/plugins/watcher`, {

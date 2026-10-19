@@ -3,7 +3,7 @@ import { blogContentPack } from './blog.js'
 import type { BlueprintContentPack } from './content-pack.js'
 import { documentationContentPack } from './documentation.js'
 import { magazineContentPack } from './magazine.js'
-import { portfolioContentPack } from './portfolio.js'
+import { createPortfolioContentPack, portfolioContentPack } from './portfolio.js'
 import { restaurantContentPack } from './restaurant.js'
 import { saasContentPack } from './saas.js'
 import { storeContentPack } from './store.js'
@@ -38,5 +38,6 @@ export const BLUEPRINT_CONTENT_PACKS: Readonly<Record<string, BlueprintContentPa
  */
 export function contentPackFor(id: string, locale: string): BlueprintContentPack | undefined {
   if (id === 'vitrine') return createVitrineContentPack(locale)
+  if (id === 'portfolio') return createPortfolioContentPack(locale)
   return BLUEPRINT_CONTENT_PACKS[id]
 }

@@ -613,7 +613,7 @@ export const PORTFOLIO_COPY_FR: PortfolioCopy = frenchTypography<PortfolioCopy>(
           text: 'Un point de vue photographié douze fois en dit plus que douze points de vue photographiés une fois.',
         },
         {
-          title: 'Tirer sur le vrai papier',
+          title: 'Tirer sur du vrai papier',
           text: 'Les tirages sont faits dans notre propre atelier sur papier coton, et comparés au fichier sous une lampe lumière du jour. Un écran flatte tout.',
         },
         {

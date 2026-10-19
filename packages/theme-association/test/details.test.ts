@@ -25,7 +25,7 @@ describe('reading an event’s time', () => {
       endsAt: '2026-10-22T22:00:00.000Z',
     })
     expect(time && hoursOf(time, 'en')).toBe('6.30pm to 10pm')
-    expect(time && hoursOf(time, 'fr')).toBe('de 18:30 à 22:00')
+    expect(time && hoursOf(time, 'fr')).toBe('de 18\u00a0h\u00a030 à 22\u00a0h')
   })
 
   it('writes a twelve-hour clock the way the copy does: lowercase, no :00, a dot for minutes', () => {

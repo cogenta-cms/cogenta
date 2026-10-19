@@ -120,11 +120,17 @@ export function fullDateOf(moment: Moment, locale: string): string {
 /**
  * A time of day the way a charity's own printed copy writes it. A locale
  * whose clock is twelve-hour reads "6pm", "7.30pm", "10am": lowercase, no
- * ":00", a dot before the minutes. A locale whose clock is twenty-four-hour
- * keeps the platform's own form ("18:30"). Which clock a locale uses comes
+ * ":00", a dot before the minutes. French reads "18 h 30". A locale whose
+ * clock is twenty-four-hour keeps the platform's own form ("18:30"). Which clock a locale uses comes
  * from `Intl`, never from a list of countries.
  */
 export function timeOf(moment: Moment, locale: string): string {
+  // French writes a time with an "h": "18 h 30", "9 h", the spaces unbreakable.
+  if (locale.toLowerCase().split('-')[0] === 'fr') {
+    const h = moment.date.getUTCHours()
+    const m = moment.date.getUTCMinutes()
+    return m === 0 ? `${h}\u00a0h` : `${h}\u00a0h\u00a0${String(m).padStart(2, '0')}`
+  }
   let resolved: Intl.DateTimeFormat
   try {
     resolved = new Intl.DateTimeFormat(locale, { hour: 'numeric', timeZone: 'UTC' })

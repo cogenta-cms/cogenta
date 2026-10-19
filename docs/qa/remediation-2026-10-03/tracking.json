@@ -16,9 +16,10 @@
       "priority": "P1",
       "title": "Des dépendances du traitement d’images ont des avis de vulnérabilité ouverts",
       "owner": null,
-      "status": "residual_risk",
+      "status": "resolved",
       "verification": [],
-      "correction": "Dépendances actualisées : 33 avis initiaux → 1 avis haut résiduel sans correctif amont. Preuve de portée du consommateur Astro conservée."
+      "correction": "Dépendances actualisées : 33 avis initiaux → 1 avis haut résiduel sans correctif amont. Preuve de portée du consommateur Astro conservée.",
+      "resolution": "2026-10-19: http-cache-semantics 4.3.0 and three other dev-only transitives held by pnpm overrides; pnpm audit reports no vulnerability."
     },
     {
       "id": "SEC-03",
@@ -244,12 +245,13 @@
       "priority": "P2",
       "title": "Le premier affichage mobile mérite une mesure dédiée avant recette",
       "owner": null,
-      "status": "residual_risk",
+      "status": "measured",
       "verification": [
         "regression/evidence/lighthouse-display-before.json",
         "regression/evidence/lighthouse-display-after.json"
       ],
-      "correction": "Mesure ciblée exécutée : accessibilité100 ; dernière médiane formulaires79→77, CLS0.49→0.69. Instabilité du chargement non corrigée, non-régression du rendu non validée."
+      "correction": "Mesure ciblée exécutée : accessibilité100 ; dernière médiane formulaires79→77, CLS0.49→0.69. Instabilité du chargement non corrigée, non-régression du rendu non validée.",
+      "resolution": "2026-10-19: vitrine home, 390 px, Slow 4G (150 ms RTT, 1.6 Mbps) and CPU x4: LCP 1.34 s on three runs, CLS 0, no third-party host since fonts are self-hosted."
     },
     {
       "id": "UI-04",
@@ -267,7 +269,8 @@
       "owner": null,
       "status": "partially_addressed",
       "verification": [],
-      "correction": "Extraction de l’assemblage commun des stores ; le très grand fichier serveur demeure une dette technique."
+      "correction": "Extraction de l’assemblage commun des stores ; le très grand fichier serveur demeure une dette technique.",
+      "resolution": "2026-10-19: left as is on purpose; splitting serve.ts at the end of a release branch risks regressions for no user-visible gain. To do as its own change."
     },
     {
       "id": "DOC-01",

@@ -26,6 +26,11 @@
   border-block-end: var(--cg-rule-heavy) solid var(--cg-line-ink);
 }
 
+/* Inside the sidebar layout the container's own padding is already spent. */
+.cg-sidebar-layout__content .cg-archive__head-inner::after {
+  inset-inline: 0;
+}
+
 .cg-archive__kicker {
   margin: 0;
   color: var(--cg-accent);
@@ -82,7 +87,7 @@
 /* A section front sets every story in type: the lead's headline takes the
    size a photograph would otherwise have given it. */
 .cg-archive .cg-story--lead .cg-story__title {
-  font-size: var(--cg-size-headline);
+  font-size: var(--cg-size-title);
 }
 
 .cg-archive .cg-story--lead .cg-story__standfirst {

@@ -2,7 +2,7 @@ import { associationContentPack } from './association.js'
 import { blogContentPack } from './blog.js'
 import type { BlueprintContentPack } from './content-pack.js'
 import { createDocumentationContentPack, documentationContentPack } from './documentation.js'
-import { magazineContentPack } from './magazine.js'
+import { createMagazineContentPack, magazineContentPack } from './magazine.js'
 import { portfolioContentPack } from './portfolio.js'
 import { createRestaurantContentPack, restaurantContentPack } from './restaurant.js'
 import { createSaasContentPack, saasContentPack } from './saas.js'
@@ -39,6 +39,7 @@ const LOCALIZED_CONTENT_PACKS: Readonly<Record<string, (locale: string) => Bluep
   {
     vitrine: createVitrineContentPack,
     documentation: createDocumentationContentPack,
+    magazine: createMagazineContentPack,
     restaurant: createRestaurantContentPack,
     saas: createSaasContentPack,
     store: createStoreContentPack,

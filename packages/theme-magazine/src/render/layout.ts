@@ -103,3 +103,40 @@ export function entryKicker(entry: ContentEntry): string | undefined {
   }
   return undefined
 }
+
+/**
+ * The words a section front sets above a term's name, by the taxonomy's own
+ * machine name. `TermArchiveInput.taxonomyName` is that name (`section`,
+ * `author`), never a label, so a site in French would read "SECTION" over its
+ * rubrique unless the theme says it in the page's language. A taxonomy the
+ * theme has no word for is set in sentence case, as its owner named it.
+ */
+const TAXONOMY_WORDS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  en: {
+    section: 'Section',
+    author: 'Author',
+    tag: 'Tag',
+    category: 'Category',
+    topic: 'Topic',
+  },
+  fr: {
+    section: 'Rubrique',
+    author: 'Auteur',
+    tag: 'Sujet',
+    category: 'Catégorie',
+    topic: 'Thème',
+  },
+}
+
+export function taxonomyKicker(name: string, locale: string): string {
+  const language = locale.toLowerCase().split('-')[0] ?? 'en'
+  const known = TAXONOMY_WORDS[language]?.[name.toLowerCase()]
+  if (known !== undefined) return known
+  const words = name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .toLowerCase()
+  if (words === '') return name
+  return words.charAt(0).toLocaleUpperCase(locale) + words.slice(1)
+}

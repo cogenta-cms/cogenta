@@ -180,6 +180,17 @@ describe('renderPage, a documentation page', () => {
     for (const id of links) expect(html).toContain(`id="${id}"`)
   })
 
+  it('offers the same list on narrow screens, in a disclosure that names it', () => {
+    expect(html).toMatch(
+      /<details class="cd-tocn"><summary class="cd-tocn__summary">On this page<\/summary><nav class="cd-tocn__nav" aria-label="On this page"><ol class="cd-tocn__items">/,
+    )
+    const narrow = [...html.matchAll(/class="cd-tocn__link" href="#([^"]+)"/g)].map((m) => m[1])
+    expect(narrow).toEqual(['what-gets-installed', 'options'])
+    // The disclosure comes after the summary and before the body.
+    expect(html.indexOf('cd-doc__lede')).toBeLessThan(html.indexOf('cd-tocn'))
+    expect(html.indexOf('cd-tocn')).toBeLessThan(html.indexOf('cd-doc__body'))
+  })
+
   it('nests an h3 under the h2 before it', () => {
     expect(html).toMatch(
       /data-level="2"><a class="cd-toc__link" href="#what-gets-installed">What gets installed<\/a><ol class="cd-toc__items"><li class="cd-toc__item" data-level="3">/,

@@ -64,6 +64,7 @@
 
 .cd-header__nav {
   display: none;
+  flex: none;
   margin-inline-start: auto;
 }
 
@@ -85,6 +86,8 @@
   color: var(--cd-ink-soft);
   font-size: var(--cd-text-ui);
   text-decoration: none;
+  /* A two-word section ("Premiers pas") never breaks over two lines. */
+  white-space: nowrap;
 }
 
 .cd-header__item a:hover {

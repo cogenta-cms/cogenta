@@ -275,6 +275,9 @@ describe('cogenta serve — SEO in the rendered page (L10 task 1)', () => {
           '<link rel="alternate" hreflang="x-default" href="https://example.com/hello-world" />',
         )
       }
+      // The skip link follows the page's language, not the theme's default.
+      expect(french).toContain('>Aller au contenu</a>')
+      expect(english).toContain('>Skip to content</a>')
       expect(english).toContain('<meta property="og:locale:alternate" content="fr" />')
       expect(french).toContain('<meta property="og:locale:alternate" content="en" />')
     } finally {

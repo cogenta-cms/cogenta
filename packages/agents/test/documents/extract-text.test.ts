@@ -7,6 +7,12 @@ import { describe, expect, it } from 'vitest'
 import { extractDocumentText, MAX_TEXT_CHARACTERS } from '../../src/documents/extract-text.js'
 import { measureReadability } from '../../src/documents/pdf.js'
 
+/** CPU milliseconds this process has used since `since` — not wall-clock time, which also counts whatever else a shared machine runs. */
+function cpuMsSince(since: NodeJS.CpuUsage): number {
+  const used = process.cpuUsage(since)
+  return (used.user + used.system) / 1000
+}
+
 /**
  * The corpus is real: the PDFs come out of MuPDF and the DOCX out of
  * python-docx (see `corpus/build-corpus.py`), not out of Cogenta's own
@@ -284,7 +290,7 @@ describe('bounding what one DOCX upload can cost', () => {
     const xml = `<?xml version="1.0"?><w:document><w:body><w:p>${body}</w:p></w:body></w:document>`
     const docx = buildZipWithEntry('word/document.xml', Buffer.from(xml, 'utf8'))
 
-    const started = Date.now()
+    const started = process.cpuUsage()
     // The very first `<w:t>` is unterminated for the rest of the document,
     // so nothing can be attributed to a known text run and this refuses as
     // empty — never hangs, and never treats the raw markup as content. The
@@ -292,7 +298,7 @@ describe('bounding what one DOCX upload can cost', () => {
     expect(() => extractDocumentText({ filename: 'unclosed.docx', bytes: docx })).toThrowError(
       expect.objectContaining({ code: 'DOCUMENT_NO_TEXT_LAYER' }),
     )
-    expect(Date.now() - started).toBeLessThan(1_000)
+    expect(cpuMsSince(started)).toBeLessThan(1_000)
   })
 
   it('keeps the real text that came before a trailing unclosed <w:t>, in linear time', () => {
@@ -301,10 +307,10 @@ describe('bounding what one DOCX upload can cost', () => {
     const xml = `<?xml version="1.0"?><w:document><w:body>${closed}<w:p>${garbage}</w:p></w:body></w:document>`
     const docx = buildZipWithEntry('word/document.xml', Buffer.from(xml, 'utf8'))
 
-    const started = Date.now()
+    const started = process.cpuUsage()
     const result = extractDocumentText({ filename: 'trailing-unclosed.docx', bytes: docx })
 
-    expect(Date.now() - started).toBeLessThan(1_000)
+    expect(cpuMsSince(started)).toBeLessThan(1_000)
     expect(result.text).toContain('Cahier des charges réel')
   })
 
@@ -320,10 +326,10 @@ describe('bounding what one DOCX upload can cost', () => {
     const xml = `<?xml version="1.0"?><w:document><w:body>${body}</w:body></w:document>`
     const docx = buildZipWithEntry('word/document.xml', Buffer.from(xml, 'utf8'))
 
-    const started = Date.now()
+    const started = process.cpuUsage()
     const result = extractDocumentText({ filename: 'many-runs.docx', bytes: docx })
 
-    expect(Date.now() - started).toBeLessThan(1_000)
+    expect(cpuMsSince(started)).toBeLessThan(1_000)
     expect(result.text).toContain('Ligne 0')
     expect(result.text).toContain(`Ligne ${lineCount - 1}`)
   })
@@ -349,11 +355,11 @@ describe('bounding what one PDF upload can cost', () => {
     const junk = 'stream\nendstream\n'.repeat(200_000) // well past MAX_STREAMS
     const pdf = Buffer.from(`%PDF-1.4\n${junk}`, 'latin1')
 
-    const started = Date.now()
+    const started = process.cpuUsage()
     expect(() => extractDocumentText({ filename: 'junk.pdf', bytes: pdf })).toThrowError(
       expect.objectContaining({ code: 'DOCUMENT_NO_TEXT_LAYER' }),
     )
-    expect(Date.now() - started).toBeLessThan(2_000)
+    expect(cpuMsSince(started)).toBeLessThan(2_000)
   })
 
   it('stops accumulating page text once the character cap is reached, instead of collecting every page first', () => {
@@ -415,11 +421,11 @@ describe('bounding what one upload can cost', () => {
     const pathological = `BT /F1 11 Tf 56 700 Td ${'9'.repeat(200_000)} (Real text) Tj ET`
     const pdf = buildMinimalPdf(pathological)
 
-    const started = Date.now()
+    const started = process.cpuUsage()
     const result = extractDocumentText({ filename: 'slow.pdf', bytes: pdf })
 
     expect(result.text).toContain('Real text')
-    expect(Date.now() - started).toBeLessThan(5_000)
+    expect(cpuMsSince(started)).toBeLessThan(5_000)
   })
 
   it('truncates past the character cap and says so, rather than silently dropping the tail', () => {

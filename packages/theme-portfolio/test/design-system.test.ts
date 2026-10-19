@@ -437,4 +437,13 @@ describe('the grid', () => {
     )
     expect(work).not.toMatch(/\[data-length="short"\][^{]*\{[^}]*columns/)
   })
+  it('sets a French quotation in guillemets with no-break spaces, and keeps curly quotes elsewhere', () => {
+    expect(CODE).toMatch(/\.cg-quote__quote\s*\{[^}]*quotes:\s*"\\201C" "\\201D"/)
+    expect(CODE).toMatch(
+      /:lang\(fr\) \.cg-quote__quote\s*\{\s*quotes:\s*"\\00AB\\00A0" "\\00A0\\00BB"/,
+    )
+    expect(CODE).toMatch(
+      /:lang\(fr\) \.cg-widget__quote-text\s*\{\s*quotes:\s*"\\00AB\\00A0" "\\00A0\\00BB"/,
+    )
+  })
 })

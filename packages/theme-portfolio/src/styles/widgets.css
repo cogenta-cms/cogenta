@@ -592,6 +592,10 @@ a.cg-widget__comment-entry:hover {
   letter-spacing: -0.01em;
 }
 
+:lang(fr) .cg-widget__quote-text {
+  quotes: "\00AB\00A0" "\00A0\00BB" "\201C" "\201D";
+}
+
 .cg-widget__quote-text p {
   margin: 0;
 }

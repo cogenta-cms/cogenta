@@ -1,5 +1,37 @@
 # @cogenta/render
 
+## 0.6.0
+
+### Minor Changes
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A skin sheet no longer `@import`s Google Fonts unless asked to. **Behaviour change.**
+  
+  `renderSkinCss`/`renderSkin`/`createSkinStore` used to put an `@import` to
+  `fonts.googleapis.com` at the top of every sheet whose font stacks led with a catalogue
+  family, which sent every visitor's address to Google before any consent. They now emit
+  none by default. The new `remoteWebFonts: true` option restores the imports, for the
+  catalogue families that are not bundled with the built-in themes.
+  
+  `webFontImports(font, { remote })` takes the same switch (default off). New exports:
+  `SELF_HOSTED_FAMILIES` (the catalogue families the built-in themes ship as WOFF2 files),
+  `isSelfHostedFamily` and `availableWebFonts(remote)` — the families a skin can rely on
+  loading, which is what a skin generator should offer a model.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`9cbd623`](https://github.com/cogenta-cms/cogenta/commit/9cbd623fa7898f276d82c72f2467aa8f5ee39785) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `@cogenta/render/browser` is a new entry point holding only what a browser can
+  use: design-token specs, colour and contrast arithmetic, and the documentation
+  Markdown renderer. The admin now imports it instead of the package root, whose
+  image pipeline made the admin build emit a 5 MB WebAssembly file that
+  `@cogenta/cli` published with every release; the published CLI is about 5 MB
+  lighter. `@cogenta/cli`'s build also clears its copy of the admin before
+  copying the new one, so stale builds no longer pile up in `dist/admin-assets`.
+
+### Patch Changes
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Refresh the compatible sharp image-processing dependency and workspace lockfile to remove fixed security advisories. The optional native image processor retains its WASM fallback. Refresh Astro and test-tool patch/minor resolutions without adding a direct dependency; document and reproduce the remaining upstream http-cache-semantics advisory rather than suppressing it.
+- Updated dependencies [[`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba), [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab)]:
+  - @cogenta/core@0.13.0
+  - @cogenta/blocks@1.1.7
+
 ## 0.5.0
 
 ### Minor Changes

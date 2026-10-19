@@ -1,5 +1,106 @@
 # @cogenta/theme-blog
 
+## 0.6.0
+
+### Minor Changes
+
+- [`95fdc8d`](https://github.com/cogenta-cms/cogenta/commit/95fdc8df7d3105bcfdcae7ab060246866a78dae9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Bring the blog theme to the same completeness as `@cogenta/theme-magazine`, in its own quieter register.
+  
+  `collectionList` now reads five forms from the block's own layout and title, the same
+  discipline `@cogenta/theme-magazine` already keeps: `list` untitled stays the theme's
+  signature year-grouped **index**, unchanged; `list` titled is a new ungrouped **digest**
+  for a curated shelf; `grid` untitled is a new **front** (a lead essay with its picture
+  and standfirst, a row of secondaries underneath); `grid` titled is a new **rail** (a
+  lead beside a column of briefs); `carousel` is a new **strip** (essays side by side,
+  scrolling on a narrow screen). The taxonomy-term archive page is rewritten to the same
+  front composition instead of a flat chronological list, so a subject page reads as
+  another chapter of the same publication.
+  
+  A new shared `Story` card (`renderStory`, `storyFromEntry`, `storyFromArchive`) backs
+  every form: a small-caps topic, a serif headline, margin-style dates — blog's own
+  register, not a copy of magazine's red kicker and display sans. `entryTopic` reads a
+  plain-text field (`topic`/`kicker`/`category`/`subject`/`section`), never the
+  `category` taxonomy relation, which stores an id a reader can't be shown.
+  
+  The essay body gains a drop cap (`initial-letter`, guarded by `@supports`) on the
+  opening paragraph — a typographic enhancement already used by `@cogenta/theme-magazine`,
+  newly available here because a `richText`-only body is unambiguously a single opening
+  block.
+
+- [`e99ffe1`](https://github.com/cogenta-cms/cogenta/commit/e99ffe1c74bf67c16fd3027046e0d104bc61a187) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give the blog theme three visual moments it was missing, in its own quiet register.
+  
+  The theme read as flat next to `@cogenta/theme-magazine` and `@cogenta/theme-entreprise`:
+  every section shared the same restrained treatment, and its ink-blue accent colour never
+  appeared outside a link hover. Three changes, none touching a theme this size hasn't
+  already proven elsewhere:
+  
+  - **A full-bleed hero.** With a picture, the essay opens the way its own printed edition
+    would — the photograph fills the page edge to edge, title and standfirst set on it in
+    a flat, uniform tint (`color-mix`, never a gradient, per the studio charter), exactly
+    the technique `@cogenta/theme-entreprise` already uses for the same purpose.
+  - **Bolder section heads.** `From the archive`, `Latest` and the rest now set their
+    title at heading size and semibold weight over a heavier rule, the same confidence
+    `@cogenta/theme-magazine`'s own section heads keep, instead of reading like another
+    paragraph.
+  - **A visible accent.** The small-caps topic label — on a story card, a term archive,
+    and an essay's own header — is now set in the theme's ink-blue accent by default,
+    not only on hover: the same "kicker always coloured" signature `@cogenta/theme-magazine`
+    keeps with red, kept here in blog's own quieter hue.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Ship the fonts with the theme instead of fetching them from Google.
+  
+  Every theme loaded its typefaces with an `@import` to `fonts.googleapis.com`, which sent
+  the IP address of every visitor to Google before any consent — a practice the regional
+  court of Munich held unlawful under the GDPR (LG München I, 20 January 2022, 3 O 17493/20).
+  
+  Each theme package now carries its faces in `fonts/` (WOFF2, Latin and Latin Extended
+  subsets, variable fonts where the family has one, SIL Open Font License text and a
+  `README.md` next to the files) and declares them in `src/styles/fonts.css`, which
+  `theme.css` imports where the remote `@import` used to be. The families, weights, widths
+  and italics are exactly the ones each theme asked Google for, so the typography does not
+  change: before and after screenshots of the entreprise, blog and magazine themes are
+  identical pixel for pixel.
+  
+  The `@font-face` rules point at `/_cogenta/fonts/<theme>/<file>`, which `cogenta serve`
+  (`@cogenta/cli`) answers from the package. **Update `@cogenta/cli` with the theme**: an
+  older `cogenta serve` does not know that route and the page falls back to the next family
+  of its font stack. The package now publishes `fonts/` and exports `./fonts/*.woff2` and
+  `./fonts/manifest.json`.
+
+### Patch Changes
+
+- [`f79ec2a`](https://github.com/cogenta-cms/cogenta/commit/f79ec2a030913982fcd521fab2603dda84bbf81d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fix a real layout bug in the rail form: a dead run of the page under a short lead.
+  
+  `.cg-rail`'s lead and column shared one CSS Grid row, so the row was always exactly as
+  tall as whichever side had more to show — `align-items` cannot shrink a grid track,
+  only reposition a shorter item within it, so a lead with no picture and a short excerpt
+  left a blank column-height of empty page under it whenever the column beside it ran
+  longer. Two changes: the rail now lays its two columns out with flex (independent
+  heights, not a shared track) using the same `--cg-col`/`--cg-col-gap` tokens the page's
+  own subgrid is built from, so the columns still land on the exact same lines; and the
+  column's own items drop their standfirst (a headline and a date, the way a rail of
+  links reads elsewhere on this theme), which was the larger source of the height
+  mismatch to begin with.
+
+- [`cf158d8`](https://github.com/cogenta-cms/cogenta/commit/cf158d838033f7f2e54d7a16ae1b924d3a92b669) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give a logo that links out the organisation's name as the link's own name.
+  
+  Contract B says of the `logos` block's `name` field: "It is also the accessible
+  name of the link." Every theme passed it to `image()` as `altFrom`, which is
+  only the fallback used when the media library has no alt text of its own. For a
+  logo that did have one — the ordinary case — the name was dropped, and the
+  link's accessible name became the alt text of the picture inside it: a link to
+  a farm announcing itself as "A pear poached dark red in Beaujolais". That is a
+  WCAG 2.4.4 failure, and the row of logos was unusable by anyone listening to it.
+  
+  The link now carries the name. Nothing changes visually, and an unlinked logo
+  keeps the documented fallback behaviour.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`1438b68`](https://github.com/cogenta-cms/cogenta/commit/1438b68e37d29a0b798f8849382f75bf6de9f07c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The featured essay's "read" link is now pale like the rest of the hero text instead of dark ink on the photograph, the photograph's tint is a little stronger so the standfirst stays legible over a pale subject, and quotations on a French page use « guillemets » with a no-break space inside them.
+- Updated dependencies [[`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`5bdb9f4`](https://github.com/cogenta-cms/cogenta/commit/5bdb9f4dff7529f303ec38940d79e0e59452b502), [`9cbd623`](https://github.com/cogenta-cms/cogenta/commit/9cbd623fa7898f276d82c72f2467aa8f5ee39785), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab)]:
+  - @cogenta/render@0.6.0
+  - @cogenta/theme-kit@0.7.2
+  - @cogenta/blocks@1.1.7
+
 ## 0.5.7
 
 ### Patch Changes

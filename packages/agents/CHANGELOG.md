@@ -1,5 +1,46 @@
 # @cogenta/agents
 
+## 0.10.0
+
+### Minor Changes
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Only offer the model typefaces the site can load.
+  
+  `generateSkin`, `generateSkinCandidates` and `proposeThemeCandidates` take a new
+  `remoteWebFonts` option (default off). Off, the prompt lists only the families the
+  built-in themes ship and the site serves itself, instead of the whole 70-family catalogue,
+  because a family that falls back to a system face is a typeface the owner would never see.
+  On, the whole catalogue, as before.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Expose human-only review of pending agent actions in the administration, record each decision, and prevent a cancelled run from executing a later-approved action. Synchronize agent activation before returning and make the accessibility auditor's HTTP tool available with an exact site-origin allowlist and no automatic redirects.
+  
+  Resolve complete appearance tokens from the active bundled theme when no local token file exists, so validated partial overrides work on a fresh installation. Existing tool input contracts remain unchanged; approval cancellation and router ports are additive.
+
+### Patch Changes
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Cancel human approval waits when their run or server stops, and prevent late approvals from executing cancelled actions. Keep durable review records, consume expected cancellation of detached proposals, and report unexpected proposal storage failures through a structured logger without logging action input.
+  
+  Enforce the run duration budget during provider calls and human approval waits, and render pages with empty optional rich text fields without failing their public response.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Preserve editorial workflow declarations in schema JSON, authenticate administrative settings reads, allocate independent empty rich-text documents, and offer only supported local theme sources. Retrieve permitted reference documents in their unlocalised corpus, enforce assistant collection scopes before retrieval, repair a documentation link, and expose exact plugin loading status after installation or replacement.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`7a901c4`](https://github.com/cogenta-cms/cogenta/commit/7a901c417fc818604581927a6bff065ead265df2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Two built-in prompt descriptions named the internal planning document they came
+  from ("Fiche 43 — …", "Fiche 55 — …"), which the prompt settings screen then
+  showed to site owners. They now say what the prompt does. A site that still
+  holds the old, untouched description gets the new one the next time built-ins
+  are seeded; a description someone edited is left as it is.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Reject executable menu destinations and neutralize legacy unsafe links during rendering. Share media role grants across REST and MCP so viewers cannot mutate assets or folders.
+  
+  Use the same decorated content stores for HTTP and MCP, preserve the site's default locale and actor attribution, and govern MCP calls through autonomy and the hash-chained audit log. Add a shared file approval queue so administrators can decide non-reversible MCP and runtime actions across processes. Decisions are atomic, immutable and replay-protected; disconnected calls cannot execute after later approval.
+  
+  Preserve MySQL metadata column casing explicitly when repairing taxonomy foreign keys, so the reversible schema migration reads the existing delete rule instead of attempting to duplicate the constraint.
+- Updated dependencies [[`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba), [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`9cbd623`](https://github.com/cogenta-cms/cogenta/commit/9cbd623fa7898f276d82c72f2467aa8f5ee39785), [`99c21a0`](https://github.com/cogenta-cms/cogenta/commit/99c21a0ac93a49064b77cf9ba08cfe15815f1782), [`8bbcc4f`](https://github.com/cogenta-cms/cogenta/commit/8bbcc4ff883051241cbf06f65b59458ecb7d9f57), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`ccf489d`](https://github.com/cogenta-cms/cogenta/commit/ccf489d67a1ba81b4f0aa5ccbbcecc30f671f1d6), [`ea2d505`](https://github.com/cogenta-cms/cogenta/commit/ea2d505c2204996eed5737596de7863dd5eda188), [`0bd4e72`](https://github.com/cogenta-cms/cogenta/commit/0bd4e72d937d0b522315a401225dd4741508fd50)]:
+  - @cogenta/schema@0.11.0
+  - @cogenta/core@0.13.0
+  - @cogenta/render@0.6.0
+  - @cogenta/blocks@1.1.7
+
 ## 0.9.0
 
 ### Minor Changes

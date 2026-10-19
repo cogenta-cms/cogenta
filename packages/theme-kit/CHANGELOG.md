@@ -1,5 +1,28 @@
 # @cogenta/theme-kit
 
+## 0.7.2
+
+### Patch Changes
+
+- [`5bdb9f4`](https://github.com/cogenta-cms/cogenta/commit/5bdb9f4dff7529f303ec38940d79e0e59452b502) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Stop rendering a list item that has nothing in it.
+  
+  Pressing Enter twice at the end of a bullet list used to leave an empty item
+  behind — the editor had no way out of a list but the toolbar's "Paragraph"
+  button — and it was saved as it stood, `listItem: "bullet"` with `text: ""`,
+  then drawn on the public page as an empty `<li></li>`. A screen reader
+  announces that as a list item with no content, and it shifts every visible
+  bullet down by one.
+  
+  The editor no longer creates them (`@cogenta/admin`, same release). This is
+  what happens to the ones already stored, on pages nobody will reopen: the
+  item is not drawn. The stored document keeps it — this decides what is worth
+  drawing, it does not delete what somebody wrote.
+  
+  The list itself still renders as long as one item says something.
+- Updated dependencies [[`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`9cbd623`](https://github.com/cogenta-cms/cogenta/commit/9cbd623fa7898f276d82c72f2467aa8f5ee39785), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab)]:
+  - @cogenta/render@0.6.0
+  - @cogenta/blocks@1.1.7
+
 ## 0.7.1
 
 ### Patch Changes

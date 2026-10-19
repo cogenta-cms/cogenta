@@ -1,5 +1,58 @@
 # @cogenta/theme-restaurant
 
+## 0.6.0
+
+### Minor Changes
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Ship the fonts with the theme instead of fetching them from Google.
+  
+  Every theme loaded its typefaces with an `@import` to `fonts.googleapis.com`, which sent
+  the IP address of every visitor to Google before any consent — a practice the regional
+  court of Munich held unlawful under the GDPR (LG München I, 20 January 2022, 3 O 17493/20).
+  
+  Each theme package now carries its faces in `fonts/` (WOFF2, Latin and Latin Extended
+  subsets, variable fonts where the family has one, SIL Open Font License text and a
+  `README.md` next to the files) and declares them in `src/styles/fonts.css`, which
+  `theme.css` imports where the remote `@import` used to be. The families, weights, widths
+  and italics are exactly the ones each theme asked Google for, so the typography does not
+  change: before and after screenshots of the entreprise, blog and magazine themes are
+  identical pixel for pixel.
+  
+  The `@font-face` rules point at `/_cogenta/fonts/<theme>/<file>`, which `cogenta serve`
+  (`@cogenta/cli`) answers from the package. **Update `@cogenta/cli` with the theme**: an
+  older `cogenta serve` does not know that route and the page falls back to the next family
+  of its font stack. The package now publishes `fonts/` and exports `./fonts/*.woff2` and
+  `./fonts/manifest.json`.
+
+### Patch Changes
+
+- [`cf158d8`](https://github.com/cogenta-cms/cogenta/commit/cf158d838033f7f2e54d7a16ae1b924d3a92b669) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give a logo that links out the organisation's name as the link's own name.
+  
+  Contract B says of the `logos` block's `name` field: "It is also the accessible
+  name of the link." Every theme passed it to `image()` as `altFrom`, which is
+  only the fallback used when the media library has no alt text of its own. For a
+  logo that did have one — the ordinary case — the name was dropped, and the
+  link's accessible name became the alt text of the picture inside it: a link to
+  a farm announcing itself as "A pear poached dark red in Beaujolais". That is a
+  WCAG 2.4.4 failure, and the row of logos was unusable by anyone listening to it.
+  
+  The link now carries the name. Nothing changes visually, and an unlinked logo
+  keeps the documented fallback behaviour.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`3ce66bc`](https://github.com/cogenta-cms/cogenta/commit/3ce66bc448fb4958ae8d64c8bb32cf7cf017c0a6) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fix how a dish page is laid out on a tablet, and give a figure's unit some air.
+  
+  Between 640 and 1023 px a dish's photograph stacked above its words as a full-width 4:5
+  portrait, 940 px tall on a 820 px screen, so the price and the details started below the
+  fold. The photograph now sits beside the words from 640 px up, as it already did from
+  1024 px. On wider screens the photograph and the words now align on their top edge
+  instead of centring on each other, which left the photograph floating below the section
+  label whenever the words were the taller column. A unit beside a figure (`100 km`) was
+  set 0.08 em from its number and read as `100km`; it now keeps 0.18 em.
+- Updated dependencies [[`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`5bdb9f4`](https://github.com/cogenta-cms/cogenta/commit/5bdb9f4dff7529f303ec38940d79e0e59452b502), [`9cbd623`](https://github.com/cogenta-cms/cogenta/commit/9cbd623fa7898f276d82c72f2467aa8f5ee39785), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab)]:
+  - @cogenta/render@0.6.0
+  - @cogenta/theme-kit@0.7.2
+  - @cogenta/blocks@1.1.7
+
 ## 0.5.7
 
 ### Patch Changes

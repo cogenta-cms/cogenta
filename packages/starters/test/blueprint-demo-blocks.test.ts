@@ -1,7 +1,7 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
 import { describe, expect, it } from 'vitest'
-import { buildAssociationDemoPages } from '../src/blueprints/association.js'
+import { associationCopyFor, buildAssociationDemoPages } from '../src/blueprints/association.js'
 // `blog`'s demo pages are now built from `SeedContext.media` too (L25 D4) —
 // `buildBlogDemoPages({})` renders the same pages this test checked before,
 // minus the (now media-dependent) hero backdrop/quote avatar/press logos,
@@ -36,7 +36,8 @@ const STORE_DEMO_PAGES = buildStoreDemoPages({})
 const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())
 const DOCUMENTATION_DEMO_PAGES = buildDocumentationDemoPages({})
-const ASSOCIATION_DEMO_PAGES = buildAssociationDemoPages({})
+const ASSOCIATION_DEMO_PAGES = buildAssociationDemoPages(associationCopyFor('en'), {})
+const ASSOCIATION_FR_DEMO_PAGES = buildAssociationDemoPages(associationCopyFor('fr'), {})
 const VITRINE_DEMO_PAGES = buildVitrineDemoPages(vitrineCopyFor('en'))
 const VITRINE_FR_DEMO_PAGES = buildVitrineDemoPages(vitrineCopyFor('fr'))
 const MAGAZINE_DEMO_PAGES = buildMagazineDemoPages({})
@@ -63,6 +64,7 @@ interface DemoPage {
 
 const BLUEPRINTS: Readonly<Record<string, readonly DemoPage[]>> = {
   association: ASSOCIATION_DEMO_PAGES,
+  'association (fr)': ASSOCIATION_FR_DEMO_PAGES,
   blog: BLOG_DEMO_PAGES,
   documentation: DOCUMENTATION_DEMO_PAGES,
   magazine: MAGAZINE_DEMO_PAGES,

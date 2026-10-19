@@ -49,13 +49,13 @@ export function CommerceSettingsRoute(): JSX.Element {
   const load = useCallback(async () => {
     if (!isAdmin) return
     try {
-      const data = await listSettings()
+      const data = await listSettings(undefined, token ?? undefined)
       setSettings(data.filter((setting) => setting.group === 'commerce'))
       setError(null)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t('settings.loadError'))
     }
-  }, [isAdmin, t])
+  }, [isAdmin, token, t])
 
   useEffect(() => {
     void load()

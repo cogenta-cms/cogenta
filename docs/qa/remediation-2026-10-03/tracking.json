@@ -1,0 +1,424 @@
+{
+  "branch": "fix/production-readiness-audit-2026-10-03",
+  "baseline": "d28eda09a37be677e429c097da72d257530f4e93",
+  "findings": [
+    {
+      "id": "SEC-01",
+      "priority": "P0",
+      "title": "Une URL javascript de menu exécute du code dans le navigateur public",
+      "owner": "security_transport",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Filtrage partagé des URL de menu à la création et au rendu des données héritées."
+    },
+    {
+      "id": "SEC-02",
+      "priority": "P1",
+      "title": "Des dépendances du traitement d’images ont des avis de vulnérabilité ouverts",
+      "owner": null,
+      "status": "resolved",
+      "verification": [],
+      "correction": "Dépendances actualisées : 33 avis initiaux → 1 avis haut résiduel sans correctif amont. Preuve de portée du consommateur Astro conservée.",
+      "resolution": "2026-10-19: http-cache-semantics 4.3.0 and three other dev-only transitives held by pnpm overrides; pnpm audit reports no vulnerability."
+    },
+    {
+      "id": "SEC-03",
+      "priority": "P1",
+      "title": "Un compte viewer peut modifier les médias via REST et MCP",
+      "owner": "security_transport",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Écriture média réservée aux rôles autorisés, vérifiée dans la couche REST/MCP centrale."
+    },
+    {
+      "id": "MCP-01",
+      "priority": "P1",
+      "title": "Les mutations MCP ne passent pas par la chaîne d’audit et de validation humaine",
+      "owner": "security_transport",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Audit, autonomie et file persistante de validation humaine ; interface de décision réservée à un administrateur humain."
+    },
+    {
+      "id": "MCP-02",
+      "priority": "P1",
+      "title": "Un contenu publié par MCP reste absent des index dérivés",
+      "owner": "security_transport",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Assemblage commun des stores décorés, index et effets dérivés entre serveur HTTP et MCP."
+    },
+    {
+      "id": "UI-01",
+      "priority": "P1",
+      "title": "L’en-tête de l’administration impose 693 px à un écran de 390 px",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "En-tête, recherche et navigation adaptés aux petits écrans ; recontrôle des 54 routes à quatre largeurs."
+    },
+    {
+      "id": "FORM-01",
+      "priority": "P1",
+      "title": "Un champ conditionnel masqué par la règle reste visible et required dans le formulaire public",
+      "owner": "forms_public",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Conditions showIf appliquées dans le navigateur et validées par le serveur, avec parcours sans JavaScript."
+    },
+    {
+      "id": "PAY-01",
+      "priority": "P1",
+      "title": "L’URL de webhook de paiement annoncée ne possède pas de traitement entrant",
+      "owner": "forms_public",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Traitement HTTP des webhooks sur corps brut, vérification de signature, montant/devise et transitions idempotentes."
+    },
+    {
+      "id": "QA-01",
+      "priority": "P1",
+      "title": "La commande E2E officielle ne collecte aucune suite navigateur utilisable",
+      "owner": null,
+      "status": "validated_local",
+      "verification": [
+        "regression/evidence/official-e2e-full.json",
+        "regression/evidence/official-e2e-targeted.json"
+      ],
+      "correction": "Harness Playwright officiel ajouté ; trois parcours métier passent. La totalité des nouvelles suites reste à exécuter."
+    },
+    {
+      "id": "MCP-03",
+      "priority": "P2",
+      "title": "La création MCP sans locale utilise en sur un site dont la langue par défaut est fr",
+      "owner": "security_transport",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Locale par défaut du site transmise au serveur MCP."
+    },
+    {
+      "id": "SEC-04",
+      "priority": "P2",
+      "title": "L’absence de timestamp contourne le délai anti-robot des commentaires",
+      "owner": "forms_public",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Timestamp absent refusé par la protection anti-robot des commentaires."
+    },
+    {
+      "id": "I18N-01",
+      "priority": "P2",
+      "title": "Une notification de sécurité affiche ses clés internes à l’utilisateur",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Clés de traduction des notifications de sécurité disponibles en français et anglais."
+    },
+    {
+      "id": "I18N-02",
+      "priority": "P2",
+      "title": "Les nouveaux formulaires français proposent une confirmation en anglais",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Confirmation des nouveaux formulaires et notifications adaptée à la locale du site."
+    },
+    {
+      "id": "A11Y-01",
+      "priority": "P2",
+      "title": "Contrastes insuffisants récurrents dans l’administration",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Contrastes des presets administratifs et styles ajustés, validation des tokens."
+    },
+    {
+      "id": "A11Y-02",
+      "priority": "P2",
+      "title": "L’éditeur de texte riche n’a pas de nom accessible",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Noms accessibles des champs riches et commandes de l’éditeur."
+    },
+    {
+      "id": "A11Y-03",
+      "priority": "P2",
+      "title": "Les onglets Corbeille et Marketplace ont une structure ARIA invalide",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Structure ARIA des onglets Marketplace et Corbeille corrigée."
+    },
+    {
+      "id": "A11Y-04",
+      "priority": "P2",
+      "title": "Petites cibles tactiles dans les dossiers média et certains liens portfolio",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Cibles tactiles des dossiers média et liens Portfolio agrandies."
+    },
+    {
+      "id": "A11Y-05",
+      "priority": "P2",
+      "title": "Le calendrier mobile possède une zone scrollable non accessible au clavier",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Région du calendrier scrollable nommée et accessible au clavier."
+    },
+    {
+      "id": "A11Y-06",
+      "priority": "P3",
+      "title": "Repères dupliqués, titre h1 manquant et niveaux de titre sautés",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Titres, repères et noms contextuels corrigés, dont soumissions et modération répétée."
+    },
+    {
+      "id": "UI-02",
+      "priority": "P2",
+      "title": "Le thème Documentation déborde de 36 px sur toutes ses pages mobiles testées",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Largeur du thème Documentation et recherche corrigée."
+    },
+    {
+      "id": "UI-03",
+      "priority": "P2",
+      "title": "Widgets et tâches planifiées ajoutent des largeurs fixes excessives",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Widgets, tâches planifiées, relecture, assistant et réglages adaptés aux petits écrans."
+    },
+    {
+      "id": "TEXT-01",
+      "priority": "P2",
+      "title": "Statuts anglais, UUID et dates techniques occupent les listes métier",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Statuts et dates localisés ; actions d’audit affichées en langage métier."
+    },
+    {
+      "id": "TEXT-02",
+      "priority": "P2",
+      "title": "Le widget de sauvegarde expose une explication d’implémentation sans action utile",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Texte du widget de sauvegarde remplacé par une explication orientée action."
+    },
+    {
+      "id": "TEXT-03",
+      "priority": "P2",
+      "title": "Le ratio budget/usage d’agents est ambigu et les états ne disent pas si un fournisseur est disponible",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Usage et limite budgétaire distingués, état du fournisseur explicite."
+    },
+    {
+      "id": "SEO-01",
+      "priority": "P2",
+      "title": "Les accueils Vitrine et Blog n’ont pas de meta description",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Descriptions d’accueil FR/EN ajoutées aux nouveaux sites Vitrine et Blog ; contenu existant respecté."
+    },
+    {
+      "id": "SEO-02",
+      "priority": "P3",
+      "title": "Le favicon par défaut provoque une requête 404",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Favicon par défaut servi, personnalisation et repli vérifiés par HTTP."
+    },
+    {
+      "id": "PERF-01",
+      "priority": "P2",
+      "title": "Le premier affichage mobile mérite une mesure dédiée avant recette",
+      "owner": null,
+      "status": "measured",
+      "verification": [
+        "regression/evidence/lighthouse-display-before.json",
+        "regression/evidence/lighthouse-display-after.json"
+      ],
+      "correction": "Mesure ciblée exécutée : accessibilité100 ; dernière médiane formulaires79→77, CLS0.49→0.69. Instabilité du chargement non corrigée, non-régression du rendu non validée.",
+      "resolution": "2026-10-19: vitrine home, 390 px, Slow 4G (150 ms RTT, 1.6 Mbps) and CPU x4: LCP 1.34 s on three runs, CLS 0, no third-party host since fonts are self-hosted."
+    },
+    {
+      "id": "UI-04",
+      "priority": "P3",
+      "title": "Les vignettes de logos coupent leur texte",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Présentation des logos de thèmes ajustée."
+    },
+    {
+      "id": "CODE-01",
+      "priority": "P2",
+      "title": "L’assemblage du serveur concentre de nombreuses responsabilités dans un très grand fichier",
+      "owner": null,
+      "status": "partially_addressed",
+      "verification": [],
+      "correction": "Extraction de l’assemblage commun des stores ; le très grand fichier serveur demeure une dette technique.",
+      "resolution": "2026-10-19: left as is on purpose; splitting serve.ts at the end of a release branch risks regressions for no user-visible gain. To do as its own change."
+    },
+    {
+      "id": "DOC-01",
+      "priority": "P3",
+      "title": "Le corpus contient des constats historiques qui ne décrivent plus le code actuel",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "BLOCKERS, contrats et guides actualisés ; constats historiques conservés comme tels."
+    },
+    {
+      "id": "SETTING-01",
+      "priority": "P1",
+      "title": "43 réglages administratifs absents : le client les charge sans authentification",
+      "owner": "admin_functional",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Authentification ajoutée aux appels de réglages ; 32 contrôles exercés, trois fixtures invalides remplacées par des valeurs valides."
+    },
+    {
+      "id": "WORKFLOW-01",
+      "priority": "P1",
+      "title": "Un workflow configuré disparaît du schéma et de l’interface",
+      "owner": "admin_functional",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Workflow exposé dans le schéma ; parcours éditeur → relecture administrateur → publication vérifié."
+    },
+    {
+      "id": "EDITOR-01",
+      "priority": "P1",
+      "title": "Deux champs de texte riche vides font planter la création",
+      "owner": "admin_functional",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Documents Slate vides distincts pour chaque champ ; création sans collision d’objets."
+    },
+    {
+      "id": "FORM-02",
+      "priority": "P1",
+      "title": "Une soumission multipart perd les premiers choix multiples",
+      "owner": "forms_public",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Valeurs multiples multipart préservées, y compris le premier choix."
+    },
+    {
+      "id": "BLOCK-01",
+      "priority": "P2",
+      "title": "Un tri collectionList accepté rend la page publique en erreur 500",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Validation des blocs et paramètres collectionList avant écriture ; ancien bloc invalide omis avec diagnostic."
+    },
+    {
+      "id": "IMPORT-01",
+      "priority": "P1",
+      "title": "L’import WordPress est proposé sur une collection post incompatible",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Préflight WordPress : collection incompatible refusée avant toute écriture. Le scénario historique qui attendait une importation réussie doit être adapté."
+    },
+    {
+      "id": "AI-01",
+      "priority": "P1",
+      "title": "L’agent intégré d’accessibilité demande un outil inexistant",
+      "owner": "root",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Outil http.fetch enregistré avec périmètre d’origine restreint ; agent d’accessibilité exécuté réellement."
+    },
+    {
+      "id": "AI-02",
+      "priority": "P2",
+      "title": "Les documents indexés ne sont pas recherchés par le chat de l’admin",
+      "owner": "admin_functional",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Recherche des références et locale und activée ; citations exactes vérifiées avec fournisseurs opérationnels."
+    },
+    {
+      "id": "AI-03",
+      "priority": "P2",
+      "title": "L’activation répond avant la synchronisation de l’agent",
+      "owner": "root",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Activation synchronisée avant réponse ; exécution immédiate réelle sans délai ajouté."
+    },
+    {
+      "id": "THEME-01",
+      "priority": "P2",
+      "title": "L’atelier propose de cloner des thèmes npm que le serveur ne sait pas cloner",
+      "owner": "admin_functional",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Clonage proposé seulement pour les thèmes locaux pris en charge."
+    },
+    {
+      "id": "PLUGIN-01",
+      "priority": "P2",
+      "title": "Installer une extension locale ne signale pas clairement le redémarrage nécessaire",
+      "owner": "admin_functional",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Empreinte des extensions au démarrage et indication explicite de redémarrage nécessaire."
+    },
+    {
+      "id": "THEME-02",
+      "priority": "P1",
+      "title": "Enregistrer une couleur sur le thème initial est refusé pour 21 tokens manquants",
+      "owner": null,
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Tokens de base fusionnés avec les modifications partielles ; enregistrement sur thème sans fichier de tokens vérifié."
+    },
+    {
+      "id": "DOC-02",
+      "priority": "P2",
+      "title": "Un lien interne de la documentation mène à un page introuvable",
+      "owner": "admin_functional",
+      "status": "implemented_validation_partial",
+      "verification": [],
+      "correction": "Lien interne de documentation corrigé."
+    }
+  ],
+  "checkpoint": "2026-10-04 — arrêt de périmètre demandé par l’utilisateur",
+  "productionReady": false,
+  "mergePerformed": false,
+  "displayAndFunctionalPass": {
+    "report": "rapport-affichage-et-recette.html",
+    "officialE2e": "120/122 au passage complet, puis deux recontrôles réussis après correction du sélecteur Créer",
+    "listsCases": 39,
+    "commentsSubmissionsCases": 3,
+    "ordersCustomersFixtureCountEach": 121,
+    "sourceBuilds": 34,
+    "globalTypecheckTasks": 74,
+    "noMainMerge": true,
+    "remainingLimits": [
+      "customerDetail/export limit500",
+      "paiements externes sans clés de test",
+      "SMTP externe",
+      "Redis/S3 absents",
+      "suite unitaire globale à réexécuter",
+      "densité mobile widgets",
+      "http-cache-semantics haut sans patch"
+    ]
+  }
+}

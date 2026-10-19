@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { expectNoSeriousA11yViolations } from './helpers/axe.js'
@@ -43,6 +43,35 @@ async function goToForms(): Promise<void> {
 }
 
 describe('the forms builder', () => {
+  it.each([
+    [
+      'fr',
+      'Merci — votre message a bien été reçu.',
+      'Nous avons bien reçu votre message. Nous vous répondrons dès que possible.',
+    ],
+    [
+      'en',
+      'Thank you — your message has been received.',
+      'We have received your message. We will get back to you as soon as possible.',
+    ],
+  ])(
+    'creates defaults in the site locale %s while the admin remains French',
+    async (locale, confirmation, autoresponder) => {
+      signedIn(['admin'], { siteLocales: [locale] })
+      render(<App />)
+      await goToForms()
+      await screen.findByText('Aucun formulaire.')
+      fireEvent.click(screen.getByRole('button', { name: 'Nouveau formulaire' }))
+      expect(
+        ((await screen.findByLabelText('Message de confirmation')) as HTMLTextAreaElement).value,
+      ).toBe(confirmation)
+      fireEvent.click(screen.getByLabelText('Envoyer un accusé de réception automatique'))
+      expect(
+        (screen.getByLabelText("Message de l'accusé de réception") as HTMLTextAreaElement).value,
+      ).toBe(autoresponder)
+    },
+  )
+
   it('lists existing forms', async () => {
     signedIn(['admin'], { forms: [CONTACT_FORM] })
     render(<App />)
@@ -50,6 +79,37 @@ describe('the forms builder', () => {
 
     expect(await screen.findByText('Contact us')).toBeDefined()
     expect(screen.getByText('contact')).toBeDefined()
+  })
+
+  it('pages the complete list, resets a filter and keeps the last page reachable after deletion', async () => {
+    signedIn(['admin'], {
+      forms: Array.from({ length: 11 }, (_, index) => ({
+        ...CONTACT_FORM,
+        id: `paged-${index}`,
+        name: `form-${index}`,
+        label: `Form ${index}`,
+      })),
+    })
+    render(<App />)
+    await goToForms()
+    await screen.findByText('Form 0')
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(11)
+    expect(screen.queryByText('Form 10')).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    await screen.findByText('Form 10')
+    fireEvent.change(screen.getByLabelText('Rechercher dans la liste'), {
+      target: { value: 'Form 0' },
+    })
+    expect(await screen.findByText('Form 0')).toBeDefined()
+    expect(screen.queryByText('Form 10')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Rechercher dans la liste'), { target: { value: '' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    await screen.findByText('Form 10')
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer la suppression' }))
+    await screen.findByText('Form 0')
+    expect(screen.queryByText('Form 10')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Suivant' })).toBeNull()
   })
 
   it('is not offered to a non-admin', async () => {
@@ -91,6 +151,32 @@ describe('the forms builder', () => {
       const listBody = (await response.json()) as { data: { name: string }[] }
       expect(listBody.data.some((f) => f.name === 'contact')).toBe(true)
     })
+  })
+
+  it('translates the field editor controls and choices without rewriting the author label', async () => {
+    signedIn(['admin'], { forms: [CONTACT_FORM] })
+    render(<App />)
+    await goToForms()
+    fireEvent.click(await screen.findByRole('button', { name: 'Modifier' }))
+    expect(
+      ((await screen.findByRole('textbox', { name: 'Libellé du champ' })) as HTMLInputElement)
+        .value,
+    ).toBe('E-mail')
+    expect(
+      (screen.getByRole('combobox', { name: 'Type de champ' }) as HTMLSelectElement).value,
+    ).toBe('email')
+    expect(
+      (screen.getByRole('option', { name: 'Adresse e-mail' }) as HTMLOptionElement).value,
+    ).toBe('email')
+    expect(screen.getByLabelText('Aide du champ')).toBeDefined()
+    expect(screen.getByLabelText('Étape')).toBeDefined()
+    expect(screen.getByLabelText('Champ de la condition')).toBeDefined()
+    expect(screen.getByLabelText('Opérateur de la condition')).toBeDefined()
+    expect(screen.getByLabelText('Valeur de la condition')).toBeDefined()
+    expect((screen.getByRole('option', { name: 'Est égal à' }) as HTMLOptionElement).value).toBe(
+      'equals',
+    )
+    expect(screen.queryByLabelText('Label', { exact: true })).toBeNull()
   })
 
   it('edits an existing form and saves the change through the real API', async () => {

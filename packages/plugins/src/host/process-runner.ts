@@ -34,6 +34,9 @@ import type { WorkerGuestMessage } from './protocol.js'
 const GUEST_DIR = dirname(fileURLToPath(new URL('../guest/process-entry.mjs', import.meta.url)))
 const GUEST_ENTRY = fileURLToPath(new URL('../guest/process-entry.mjs', import.meta.url))
 
+/** How long a forked guest may take to come up before it is treated as a crash. */
+const STARTUP_TIMEOUT_MS = 30_000
+
 /** `--permission` became non-experimental in Node 22.5. */
 export function supportsPermissionModel(version: string = process.versions.node): boolean {
   const [major = 0, minor = 0] = version.split('.').map((part) => Number.parseInt(part, 10))
@@ -97,9 +100,20 @@ export function runInPermissionedProcess(
       resolve(result)
     }
 
-    const timer = setTimeout(
-      () => finish({ ok: false, error: 'plugin timed out', reason: 'timeout' }),
-      options.timeoutMs,
+    // Two budgets, not one. Starting Node is the host's cost, not the
+    // plugin's: on a loaded shared host or a Windows machine it alone can
+    // exceed a plugin's whole time limit, which killed healthy plugins as
+    // "timed out" before a line of theirs ran. The plugin's own clock starts
+    // when its code is handed over; until then only a generous start-up bound
+    // applies, so a child that never comes up is still reaped.
+    let timer = setTimeout(
+      () =>
+        finish({
+          ok: false,
+          error: `plugin process did not start within ${STARTUP_TIMEOUT_MS}ms`,
+          reason: 'crash',
+        }),
+      STARTUP_TIMEOUT_MS,
     )
 
     child.stderr?.on('data', (chunk: Buffer) => {
@@ -120,6 +134,11 @@ export function runInPermissionedProcess(
         return
       }
       if (message.type === 'guest-ready') {
+        clearTimeout(timer)
+        timer = setTimeout(
+          () => finish({ ok: false, error: 'plugin timed out', reason: 'timeout' }),
+          options.timeoutMs,
+        )
         child.send({
           id: 1,
           type: 'run',

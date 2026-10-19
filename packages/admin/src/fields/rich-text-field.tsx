@@ -5,8 +5,9 @@ import { plainTextOfRichText, readingTimeMinutes, wordCount } from '../collectio
 import type { RichTextDocument } from '../rich-text/portable-text.js'
 import { RichTextEditor } from '../rich-text/rich-text-editor.js'
 import type { RichTextSession } from '../rich-text/session.js'
+import { fieldHelp } from '../schema/field-label.js'
 import { useSchema } from '../schema/schema-context.js'
-import { FieldWrapper } from './field-wrapper.js'
+import { FieldWrapper, fieldErrorId } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
 const EMPTY: RichTextDocument = []
@@ -43,6 +44,14 @@ export function RichTextField({
     <FieldWrapper id={id} field={field} error={error ?? null}>
       <RichTextEditor
         id={id}
+        labelledBy={`${id}-label`}
+        describedBy={
+          [
+            ...(fieldHelp(field.name, t, field) === undefined ? [] : [`${id}-help`]),
+            ...(error ? [fieldErrorId(id)] : []),
+          ].join(' ') || undefined
+        }
+        invalid={Boolean(error)}
         value={value ?? EMPTY}
         disabled={disabled}
         onChange={onChange}

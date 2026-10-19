@@ -4,6 +4,7 @@
   "globalDependencies": ["tsconfig.base.json", "biome.jsonc"],
   "globalEnv": ["NODE_ENV", "CI"],
   "globalPassThroughEnv": [
+    "COGENTA_E2E_PORT",
     "COGENTA_TEST_POSTGRES_URL",
     "COGENTA_TEST_MYSQL_URL",
     "COGENTA_TEST_MARIADB_URL",

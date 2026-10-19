@@ -431,9 +431,9 @@ describe('documentation blueprint, home page, navigation and pictures', () => {
 
   it('points its one media slot at a bundled diagram, described in a full sentence, and bundles nothing else', async () => {
     expect(DOCUMENTATION_MEDIA_SPECS.map((spec) => spec.photo)).toEqual([
-      'documentation/delivery-flow.png',
+      'documentation/delivery-flow-en.png',
     ])
-    const bytes = loadPhotoAsset('documentation/delivery-flow.png') as Uint8Array
+    const bytes = loadPhotoAsset('documentation/delivery-flow-en.png') as Uint8Array
     expect(bundledImageType(bytes).extension).toBe('png')
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     expect(view.getUint32(16)).toBeGreaterThanOrEqual(2000)
@@ -445,7 +445,8 @@ describe('documentation blueprint, home page, navigation and pictures', () => {
     const folder = fileURLToPath(
       new URL('../src/blueprints/assets/photos/documentation/', import.meta.url),
     )
-    expect(await readdir(folder)).toEqual(['delivery-flow.png'])
+    // One drawn diagram per language and no photograph: nothing to credit.
+    expect(await readdir(folder)).toEqual(['delivery-flow-en.png', 'delivery-flow-fr.png'])
   })
 
   it("matches the theme's own palette and typefaces in its starting skin", async () => {

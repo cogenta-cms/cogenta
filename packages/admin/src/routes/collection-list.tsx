@@ -25,6 +25,7 @@ import { fieldLabel } from '../schema/field-label.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary, SchemaField } from '../schema/types.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import {
   Button,
@@ -125,6 +126,7 @@ export function CollectionListRoute(): JSX.Element {
   const { name = '' } = useParams<{ name: string }>()
   const auth = useAuth()
   const schema = useSchema()
+  const formatDateTime = useDateTimeFormatter()
   const [searchParams, setSearchParams] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
@@ -526,15 +528,6 @@ export function CollectionListRoute(): JSX.Element {
             entry.updatedAt,
           ])
     downloadCsv(`${collection.name}.csv`, toCsv([header, ...rows]))
-  }
-
-  function formatDateTime(iso: string): string {
-    const parsed = new Date(iso)
-    if (Number.isNaN(parsed.getTime())) return iso
-    return new Intl.DateTimeFormat(i18n.language, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(parsed)
   }
 
   function toggleColumn(fieldName: string, checked: boolean): void {
@@ -972,7 +965,7 @@ export function CollectionListRoute(): JSX.Element {
                           {hit.title === '' ? hit.id : hit.title}
                         </Link>
                       </TableCell>
-                      <TableCell>{hit.status}</TableCell>
+                      <TableCell>{t(`entryEdit.status.${hit.status}`)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -988,7 +981,11 @@ export function CollectionListRoute(): JSX.Element {
             <Table>
               <TableHead>
                 <TableRow>
-                  {canDelete && <TableHeader aria-label={t('collectionList.selectionColumn')} />}
+                  {canDelete && (
+                    <TableHeader>
+                      <span className="sr-only">{t('collectionList.selectionColumn')}</span>
+                    </TableHeader>
+                  )}
                   <TableHeader>{t('collectionList.titleColumn')}</TableHeader>
                   <SortableHeader
                     field="id"
@@ -1046,8 +1043,13 @@ export function CollectionListRoute(): JSX.Element {
                           {titleOf(entry, collection)}
                         </Link>
                       </TableCell>
-                      <TableCell>{entry.id}</TableCell>
-                      <TableCell>{entry.status}</TableCell>
+                      <TableCell>
+                        <details>
+                          <summary>{t('collectionList.showId')}</summary>
+                          <code className="text-xs">{entry.id}</code>
+                        </details>
+                      </TableCell>
+                      <TableCell>{t(`entryEdit.status.${entry.status}`)}</TableCell>
                       {siteLocales.length > 1 && <TableCell>{entry.locale}</TableCell>}
                       <TableCell title={entry.updatedAt}>
                         {formatDateTime(entry.updatedAt)}

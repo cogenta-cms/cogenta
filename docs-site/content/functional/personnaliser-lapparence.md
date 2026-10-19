@@ -86,6 +86,12 @@ table des matières, formulaire, recherche, menu, catégories (liste ou menu dé
 termes et réseaux sociaux. Un widget « HTML personnalisé » n'existe pas : Cogenta ne stocke
 jamais de HTML.
 
+Les groupes de la bibliothèque se déplient au clic ou au clavier. La recherche
+ouvre les groupes correspondants. Chaque zone affiche dix widgets par page, avec
+**Précédent** et **Suivant** en haut et en bas : aucun widget n’est supprimé ni
+masqué sur le site par cette pagination. Les boutons de déplacement conservent
+l’ordre de toute la zone, y compris entre deux pages.
+
 Chaque widget se glisse dans une zone ou d'une zone à l'autre, ou se déplace avec les boutons
 **Monter**, **Descendre** et **Déplacer vers…** ; il se **duplique** (la copie reste masquée
 jusqu'à ce que vous l'affichiez), se **masque** sans être supprimé, et se supprime après
@@ -113,6 +119,40 @@ minimum (AA — 4.5:1 texte normal, 3:1 grand texte) ou omettrait un jeton est
 **refusé à l'enregistrement**, pas seulement signalé — ce qui rend
 l'apparence générée par un agent sûre par construction, jamais un pari sur le
 goût du modèle.
+
+### Les polices : servies par votre site, jamais par un tiers
+
+Une police chargée depuis le serveur d'un fournisseur (Google Fonts, par exemple) lui
+transmet l'adresse IP de **chaque visiteur**, avant même qu'il ait pu consentir. Un tribunal
+allemand a jugé cette pratique contraire au RGPD (LG München I, 20 janvier 2022, 3 O 17493/20).
+Cogenta ne la fait donc pas par défaut : les dix thèmes livrés embarquent leurs polices
+(fichiers WOFF2, sous licence SIL OFL) et votre site les envoie lui-même, depuis
+`/_cogenta/fonts/`. Un visiteur ne contacte que votre site, pour les polices comme pour le reste.
+
+Ce que cela change pour un skin :
+
+- un skin peut nommer **n'importe laquelle des familles embarquées** (Geist, Fraunces,
+  Instrument Sans, Source Serif 4, Literata, Karla, Archivo, IBM Plex, etc.), sur n'importe quel
+  thème : le site ajoute alors lui-même les fichiers correspondants ;
+- une famille qui n'est pas embarquée (Playfair Display, par exemple) s'affiche dans la police
+  suivante de sa pile — ici Georgia — au lieu d'être demandée à un tiers ;
+- l'assistant qui génère un skin ne propose que des familles embarquées.
+
+**Autoriser Google Fonts (à vos risques).** Si vous voulez tout le catalogue de familles d'un skin
+et acceptez la requête à Google, activez-le explicitement dans `cogenta.config.mjs` :
+
+```js
+export default {
+  // …
+  appearance: { remoteWebFonts: true },
+}
+```
+
+C'est votre choix de responsable du site, jamais un effet de bord : il est désactivé par défaut, et
+il faut alors le mentionner dans votre politique de confidentialité et, selon votre analyse
+juridique, recueillir le consentement avant chargement. Même activé, une famille embarquée n'est
+jamais demandée à Google. Un thème tiers que vous installez reste libre de charger ses propres
+polices comme il l'entend : la garantie ci-dessus porte sur ce que Cogenta livre.
 
 `/admin-appearance` fait la même chose pour l'**admin lui-même**, séparément
 du site public : les deux ne partagent pas de skin, un changement de l'un

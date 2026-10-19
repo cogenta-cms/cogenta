@@ -188,6 +188,7 @@ export interface VitrineCopy {
 export interface VitrinePagesCopy {
   readonly titles: Readonly<Record<keyof VitrineCopy['pageSlugs'] | 'home', string>>
   readonly home: {
+    readonly seoDescription: string
     readonly heroEyebrow: string
     readonly heroTitle: string
     readonly heroSubtitle: string

@@ -110,13 +110,13 @@ export function SettingsRoute(): JSX.Element {
 
   const reload = useCallback(async (): Promise<void> => {
     try {
-      const data = await listSettings(locale)
+      const data = await listSettings(locale, token ?? undefined)
       setSettings(data)
       setLoadError(null)
     } catch (caught) {
       setLoadError(caught instanceof Error ? caught.message : t('settings.loadError'))
     }
-  }, [locale, t])
+  }, [locale, token, t])
 
   useEffect(() => {
     void reload()

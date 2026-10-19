@@ -575,6 +575,10 @@ a.cg-widget__comment-entry:hover {
   letter-spacing: var(--ce-tracking-heading);
 }
 
+:lang(fr) .cg-widget__quote-text {
+  quotes: "\00AB\202F" "\202F\00BB";
+}
+
 .cg-widget__quote-text p::before {
   content: open-quote;
 }

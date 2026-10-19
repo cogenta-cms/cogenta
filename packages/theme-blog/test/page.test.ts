@@ -45,6 +45,30 @@ function essay(entry: PageEntryMeta = ESSAY, blocks: readonly VocabularyBlock[] 
 }
 
 describe('renderPage', () => {
+  it('preserves heading levels explicitly authored in user rich text', () => {
+    const prose: VocabularyBlock = {
+      _type: 'prose',
+      _key: 'authored-prose',
+      _version: '1.0.0',
+      body: [
+        {
+          _type: 'block',
+          _key: 'authored-heading',
+          style: 'h4',
+          children: [
+            { _type: 'span', _key: 'heading-text', text: 'An authored subsection', marks: [] },
+          ],
+          markDefs: [],
+        },
+      ],
+    }
+    const before = structuredClone(prose)
+    const html = essay(ESSAY, [prose])
+    expect(html).toContain('<h4')
+    expect(html).toContain('An authored subsection</h4>')
+    expect(prose).toEqual(before)
+  })
+
   it('wraps content in <main id="cg-main">, the mandatory skip-link target', () => {
     expect(FULL_PAGE).toMatch(/^<main class="cg-main" id="cg-main">/)
   })

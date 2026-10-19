@@ -1,4 +1,4 @@
-import { EMPTY_DOCUMENT } from './convert.js'
+import { createEmptyDocument } from './convert.js'
 import type { CustomElement, CustomText, Descendant } from './slate-types.js'
 
 /**
@@ -365,5 +365,5 @@ export function markdownToSlate(markdown: string): CustomElement[] {
     nodes.push({ type: 'paragraph', children: parseInline(paragraphLines.join(' ')) })
   }
 
-  return nodes.length > 0 ? nodes : EMPTY_DOCUMENT
+  return nodes.length > 0 ? nodes : createEmptyDocument()
 }

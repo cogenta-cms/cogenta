@@ -121,7 +121,7 @@ describe('the menu screen', () => {
     const itemsBefore = within(tree).getAllByRole('listitem')
     expect(within(itemsBefore[0] as HTMLElement).getByText('A')).toBeDefined()
 
-    fireEvent.click(within(rowOf('B')).getByRole('button', { name: 'Monter' }))
+    fireEvent.click(within(rowOf('B')).getByRole('button', { name: 'Monter : B' }))
 
     await waitFor(() => {
       const reordered = within(screen.getByRole('list', { name: 'Éléments du menu' })).getAllByRole(
@@ -160,7 +160,7 @@ describe('the menu screen', () => {
     await addUrlItem('B', '/b')
 
     fireEvent.click(
-      within(rowOf('B')).getByRole('button', { name: "Imbriquer sous l'élément au-dessus" }),
+      within(rowOf('B')).getByRole('button', { name: "Imbriquer sous l'élément au-dessus : B" }),
     )
     await waitFor(() => {
       const row = rowOf('B')
@@ -170,7 +170,7 @@ describe('the menu screen', () => {
     // The indent shows at once, but the row's buttons are withdrawn until
     // the new order has been saved.
     const outdent = await waitFor(() =>
-      within(rowOf('B')).getByRole('button', { name: "Remonter d'un niveau" }),
+      within(rowOf('B')).getByRole('button', { name: "Remonter d'un niveau : B" }),
     )
     fireEvent.click(outdent)
     await waitFor(() => {
@@ -186,7 +186,9 @@ describe('the menu screen', () => {
     await createMenu('main', 'Menu principal')
     await addUrlItem('Abuot', '/about')
 
-    fireEvent.click(within(rowOf('Abuot')).getByRole('button', { name: "Modifier l'élément" }))
+    fireEvent.click(
+      within(rowOf('Abuot')).getByRole('button', { name: "Modifier l'élément : Abuot" }),
+    )
     const modal = await screen.findByRole('dialog')
     const label = within(modal).getByLabelText('Libellé') as HTMLInputElement
     fireEvent.change(label, { target: { value: 'About' } })

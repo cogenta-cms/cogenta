@@ -2,12 +2,16 @@ import { CogentaError, type DriverRegistry, isCogentaError } from '@cogenta/core
 import { applyProductsImport, exportProductsCsv, previewProductsImport } from '../catalog/csv.js'
 import type { CatalogStore } from '../catalog/store.js'
 import { COUPON_KINDS, type CouponKind, type CouponStore } from '../coupon/store.js'
-import type { Customer, CustomerStore } from '../customer/store.js'
+import { type Customer, type CustomerStore, encodeCustomerCursor } from '../customer/store.js'
 import type { CreditNoteStore } from '../invoice/credit-note.js'
 import type { InvoiceStore } from '../invoice/store.js'
 import { type OrderExportRow, ordersToCsv } from '../order/csv.js'
 import type { OrderEmailQueue } from '../order/notify.js'
-import type { OrderStore, PlaceManualOrderLineInput } from '../order/store.js'
+import {
+  encodeOrderCursor,
+  type OrderStore,
+  type PlaceManualOrderLineInput,
+} from '../order/store.js'
 import { ORDER_STATUSES, type OrderStatus, type ShippingAddress } from '../order/types.js'
 import type { PaymentStore } from '../payment/store.js'
 import type { PaymentConfig, PaymentGateway } from '../payment/types.js'
@@ -38,6 +42,8 @@ export interface CommerceRequest {
   readonly path: string
   readonly query?: Readonly<Record<string, string | undefined>>
   readonly body?: unknown
+  /** Provider signature headers for the public payment notification route. */
+  readonly headers?: Readonly<Record<string, string>>
 }
 
 export interface CommerceResponse {
@@ -66,7 +72,7 @@ export interface CommercePaymentAdminOptions {
   readonly registry: DriverRegistry<PaymentGateway, PaymentConfig>
   readonly config: PaymentConfig
   readonly testMode: boolean
-  /** Where a caller would point the provider's dashboard, informational until a real inbound endpoint exists. */
+  /** The public endpoint to register in the provider's dashboard. */
   readonly webhookUrl: string
 }
 
@@ -129,6 +135,7 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   COMMERCE_ORDER_LOCKED: 409,
   COMMERCE_INVOICE_SEQUENCE_CONFLICT: 409,
   COMMERCE_AMOUNT_INVALID: 400,
+  QUERY_INVALID: 400,
   COMMERCE_CURRENCY_INVALID: 400,
   COMMERCE_CURRENCY_MISMATCH: 400,
   COMMERCE_QUANTITY_INVALID: 400,
@@ -142,6 +149,7 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   COMMERCE_REFUND_EXCEEDS_PAYMENT: 400,
   COMMERCE_PAYMENT_UNSUPPORTED: 400,
   COMMERCE_PAYMENT_SIGNATURE_INVALID: 403,
+  COMMERCE_PAYMENT_FAILED: 400,
   // The driver registry's own vocabulary (fiche 34 task 3's "tester la
   // connexion") — a bad gateway on the far side, never this server's fault.
   DRIVER_UNAVAILABLE: 502,
@@ -286,6 +294,20 @@ function nullableIsoString(value: unknown): string | null {
 }
 
 /** A query-string integer, or `undefined` for anything that is not a positive whole number. */
+/** Orders/customers are bounded pages, rather than a truncated full list. */
+function readListPageLimit(value: string | undefined): number {
+  if (value === undefined) return 20
+  const parsed = Number(value)
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed) || parsed < 1 || parsed > 100) {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: 'The commerce page size is invalid.',
+      hint: 'Choose an integer limit between 1 and 100, or omit it for 20 rows.',
+    })
+  }
+  return parsed
+}
+
 function parsePositiveInt(value: string | undefined): number | undefined {
   if (value === undefined) return undefined
   const parsed = Number(value)
@@ -379,6 +401,23 @@ export function createCommerceAdminRouter(
           .split('/')
           .filter((segment) => segment !== '')
         const method = request.method.toUpperCase()
+
+        // Provider authentication replaces a CMS session on this one public
+        // write route. PaymentStore verifies the untouched body before any DB write.
+        if (segments[0] === 'payments' && segments[1] === 'webhook' && segments.length === 2) {
+          if (method !== 'POST')
+            return { status: 405, body: { error: { code: 'METHOD_NOT_ALLOWED' } } }
+          if (typeof request.body !== 'string') {
+            throw new CogentaError({
+              code: 'COMMERCE_PAYMENT_SIGNATURE_INVALID',
+              message: 'The payment notification body could not be verified.',
+              hint: 'Send the original provider request body and its signature headers.',
+            })
+          }
+          await options.payments.handleWebhook(request.body, request.headers ?? {})
+          // No payment/customer details on an endpoint without a CMS session.
+          return { status: 200, body: { received: true } }
+        }
 
         // ---- permissions ----------------------------------------------------
         // Read-only, and deliberately not gated behind a write permission: it
@@ -705,19 +744,29 @@ export function createCommerceAdminRouter(
           const query = request.query ?? {}
           const status = query.status
           const q = query.q
+          const pageLimit = readListPageLimit(query.limit)
+          const result = await options.orders.list({
+            ...((ORDER_STATUSES as readonly string[]).includes(status ?? '')
+              ? { status: status as OrderStatus }
+              : {}),
+            ...(q === undefined || q === '' ? {} : { search: q }),
+            ...(query.from === undefined ? {} : { placedFrom: query.from }),
+            ...(query.to === undefined ? {} : { placedTo: query.to }),
+            ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+            limit: pageLimit + 1,
+          })
+          const orders = result.slice(0, pageLimit)
+          const last = orders.at(-1)
+          const hasMore = result.length > pageLimit
           return {
             status: 200,
             body: {
-              orders: await options.orders.list({
-                ...((ORDER_STATUSES as readonly string[]).includes(status ?? '')
-                  ? { status: status as OrderStatus }
-                  : {}),
-                ...(q === undefined || q === '' ? {} : { search: q }),
-                // Advanced filters (fiche 52 task 7): an inclusive placed-at
-                // date range, on top of the status/search this route already had.
-                ...(query.from === undefined ? {} : { placedFrom: query.from }),
-                ...(query.to === undefined ? {} : { placedTo: query.to }),
-              }),
+              orders,
+              page: {
+                limit: pageLimit,
+                hasMore,
+                nextCursor: hasMore && last !== undefined ? encodeOrderCursor(last) : null,
+              },
             },
           }
         }
@@ -926,12 +975,25 @@ export function createCommerceAdminRouter(
         // ---- customers ----------------------------------------------------
         if (segments[0] === 'customers' && segments.length === 1 && method === 'GET') {
           permissions.assert('commerce.read', actor)
+          const query = request.query ?? {}
+          const pageLimit = readListPageLimit(query.limit)
+          const result = await options.customers.list({
+            ...(query.q === undefined ? {} : { search: query.q }),
+            ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+            limit: pageLimit + 1,
+          })
+          const customers = result.slice(0, pageLimit)
+          const last = customers.at(-1)
+          const hasMore = result.length > pageLimit
           return {
             status: 200,
             body: {
-              customers: await options.customers.list({
-                ...(request.query?.q === undefined ? {} : { search: request.query.q }),
-              }),
+              customers,
+              page: {
+                limit: pageLimit,
+                hasMore,
+                nextCursor: hasMore && last !== undefined ? encodeCustomerCursor(last) : null,
+              },
             },
           }
         }

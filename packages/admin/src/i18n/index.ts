@@ -64,6 +64,12 @@ export function setLanguage(language: SupportedLanguage): void {
   void i18next.changeLanguage(language)
 }
 
+// The page language follows the rendered UI, including account preference changes.
+// Subscribe before initialisation so the first paint has the same language too.
+i18next.on('languageChanged', () => {
+  document.documentElement.lang = i18next.resolvedLanguage ?? DEFAULT_LANGUAGE
+})
+
 void i18next.use(initReactI18next).init({
   resources: { fr: { translation: fr }, en: { translation: en } },
   lng: detectLanguage(),

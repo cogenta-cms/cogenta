@@ -31,7 +31,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
-// The blueprint seeds nine bundled photographs through the real media
+// The blueprint seeds twelve bundled photographs through the real media
 // pipeline, with WebP variants: slower than vitest's default, not a hang.
 const SCAFFOLD_TIMEOUT = 180_000
 
@@ -95,7 +95,7 @@ describe('scaffoldSite, magazine blueprint', () => {
     expect(tokens.font.sans).toContain('Libre Franklin')
   })
 
-  it('seeds header, footer and header-action menus, general settings and nine photographs', () => {
+  it('seeds header, footer and header-action menus, general settings and twelve photographs', () => {
     expect(result.menusSeeded).toBe(
       MAGAZINE_MENUS.header.length +
         MAGAZINE_MENUS.footer.length +
@@ -157,12 +157,13 @@ describe('scaffoldSite, magazine blueprint', () => {
     })
   })
 
-  it('seeds the front page, about, subscribe and standards pages, published', async () => {
+  it('seeds the front page, about, subscribe, standards and photo credits pages, published', async () => {
     await withDatabase(async (db) => {
       const pages = await createContentStore({ db, collection: page }).list()
       expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual([
         'about',
         'home',
+        'photo-credits',
         'standards',
         'subscribe',
       ])

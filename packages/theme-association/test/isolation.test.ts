@@ -88,6 +88,7 @@ describe('theme isolation', () => {
       'styles/base.css',
       'styles/blocks.css',
       'styles/chrome.css',
+      'styles/fonts.css',
       'styles/listings.css',
       'styles/theme.css',
       'styles/tokens.css',
@@ -146,14 +147,13 @@ describe('theme isolation', () => {
     expect(offenders).toEqual([])
   })
 
-  it('requests its Google Fonts import from the trusted host only', () => {
-    const theme = STYLESHEET_SOURCES.find(({ path }) => path === 'styles/theme.css')
-    expect(theme).toBeDefined()
-    const urls = [...(theme?.source.matchAll(/@import\s+url\(["']?([^"')]+)["']?\)/g) ?? [])].map(
-      (match) => match[1] as string,
-    )
-    expect(urls.length).toBeGreaterThan(0)
-    for (const url of urls) expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
+  it('loads its fonts from the site itself, never from a remote host', () => {
+    const theme = STYLESHEET_SOURCES.find(({ path }) => path === 'styles/theme.css')?.source ?? ''
+    expect(theme).toMatch(/@import\s+"\.\/fonts\.css"\s*;/)
+    for (const { path, source } of STYLESHEET_SOURCES) {
+      expect(source, path).not.toMatch(/googleapis|gstatic/i)
+      expect(source, path).not.toMatch(/@import\s+(?:url\()?\s*["']?(?:https?:)?\/\//i)
+    }
   })
 })
 

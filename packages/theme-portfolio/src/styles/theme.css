@@ -14,15 +14,15 @@
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--cg-*` property composed from those.
  *
- * The one thing this file adds on its own is the Google Fonts request for
+ * The one thing this file adds on its own is the self-hosted `fonts.css` faces for
  * Archivo with both of its axes: width (62 to 125, the display sizes are set
  * wide) and weight. A skin only names a family; it never fetches one. The
- * family falls back to a real system stack if Google Fonts is unreachable,
+ * family falls back to a real system stack if a face fails to load,
  * and `display=swap` keeps text visible while it loads. `cogenta serve`
- * hoists this `@import` above the skin's rules.
+ * serves the faces itself, from `/_cogenta/fonts/`.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap");
+@import "./fonts.css";
 
 @import "./tokens.css";
 @import "./base.css";

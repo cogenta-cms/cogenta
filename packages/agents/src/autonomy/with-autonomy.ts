@@ -1,4 +1,4 @@
-import { CogentaError } from '@cogenta/core'
+import { CogentaError, createLogger, isCogentaError, type Logger } from '@cogenta/core'
 import type { ExecutableTool, ToolExecutionContext } from '../runtime/types.js'
 import type { ApprovalQueue, AutonomyConfig, AutonomyLevel } from './types.js'
 
@@ -6,10 +6,21 @@ export interface WithAutonomyOptions {
   readonly agentName: string
   readonly autonomy: AutonomyConfig
   readonly approvalQueue: ApprovalQueue
+  /** Reports asynchronous proposal storage failures; never includes the action input. */
+  readonly logger?: Pick<Logger, 'error'>
 }
 
 function levelFor(toolName: string, autonomy: AutonomyConfig): AutonomyLevel {
   return autonomy.overrides?.[toolName] ?? autonomy.default
+}
+
+function assertActive(ctx: ToolExecutionContext): void {
+  if (ctx.signal.aborted)
+    throw new CogentaError({
+      code: 'APPROVAL_REQUEST_CANCELLED',
+      message: 'The agent run was cancelled before this action could execute.',
+      hint: 'Start a new run; a later approval cannot resume a cancelled action.',
+    })
 }
 
 /**
@@ -27,6 +38,7 @@ function levelFor(toolName: string, autonomy: AutonomyConfig): AutonomyLevel {
  * scope, which only ever sees an already-activated configuration.
  */
 export function withAutonomy(tool: ExecutableTool, options: WithAutonomyOptions): ExecutableTool {
+  const logger = options.logger ?? createLogger({ level: 'error' })
   const isSideEffecting = tool.sideEffects !== false
   const forcedApproval = isSideEffecting && tool.reversible !== true
 
@@ -34,11 +46,15 @@ export function withAutonomy(tool: ExecutableTool, options: WithAutonomyOptions)
     input: Readonly<Record<string, unknown>>,
     ctx: ToolExecutionContext,
   ): Promise<unknown> {
-    const decision = await options.approvalQueue.request({
-      agentName: options.agentName,
-      toolName: tool.spec.name,
-      input,
-    })
+    const decision = await options.approvalQueue.request(
+      {
+        agentName: options.agentName,
+        toolName: tool.spec.name,
+        input,
+      },
+      ctx.signal,
+    )
+    assertActive(ctx)
     if (decision.status !== 'approved') {
       throw new CogentaError({
         code: 'TOOL_CALL_REJECTED',
@@ -54,6 +70,7 @@ export function withAutonomy(tool: ExecutableTool, options: WithAutonomyOptions)
     ...(tool.sideEffects === undefined ? {} : { sideEffects: tool.sideEffects }),
     ...(tool.reversible === undefined ? {} : { reversible: tool.reversible }),
     async execute(input: Readonly<Record<string, unknown>>, ctx: ToolExecutionContext) {
+      assertActive(ctx)
       if (!isSideEffecting) return tool.execute(input, ctx)
 
       const level = levelFor(tool.spec.name, options.autonomy)
@@ -69,11 +86,25 @@ export function withAutonomy(tool: ExecutableTool, options: WithAutonomyOptions)
         // Deliberately not awaited: "propose" hands the decision to a human
         // and moves on — the run does not block waiting for it, unlike
         // execute_with_approval below.
-        void options.approvalQueue.request({
-          agentName: options.agentName,
-          toolName: tool.spec.name,
-          input,
-        })
+        void options.approvalQueue
+          .request(
+            {
+              agentName: options.agentName,
+              toolName: tool.spec.name,
+              input,
+            },
+            ctx.signal,
+          )
+          .catch((error: unknown) => {
+            // Proposals never execute the action. Ending their run/process can
+            // stop the waiter while keeping its durable record for human review.
+            if (isCogentaError(error) && error.code === 'APPROVAL_REQUEST_CANCELLED') return
+            logger.error('Agent proposal could not be recorded for human review', {
+              agent: options.agentName,
+              tool: tool.spec.name,
+              code: isCogentaError(error) ? error.code : 'INTERNAL',
+            })
+          })
         return {
           proposed: true,
           note: `Proposed "${tool.spec.name}"; awaiting human review.`,

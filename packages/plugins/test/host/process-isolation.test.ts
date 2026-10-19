@@ -54,6 +54,20 @@ describe('where a plugin actually runs', () => {
     expect(result).toMatchObject({ ok: false, reason: 'timeout', isolation: 'process' })
   })
 
+  it('does not charge the plugin for the time its process takes to start', async () => {
+    // Starting a permissioned Node measured about 1.2s on a loaded machine;
+    // running this plugin takes a few milliseconds. With one clock started at
+    // fork, a 1s limit killed it every time. The limit is 1s rather than less
+    // so that a slow runner's own scheduling is not read as the plugin's.
+    const result = await runIsolated('({ go: () => 21 * 2 })', {
+      invoke: 'go',
+      input: {},
+      timeoutMs: 1000,
+    })
+
+    expect(result).toMatchObject({ ok: true, value: 42, isolation: 'process' })
+  })
+
   it('carries a plugin’s log lines out of the child instead of writing them itself', async () => {
     const lines: string[] = []
 
@@ -95,11 +109,21 @@ describe('the flags that child is started with', () => {
       catch (error) { out.read = error.code }
       try { require('node:child_process').execSync('id'); out.spawn = 'allowed' }
       catch (error) { out.spawn = error.code }
-      out.envKeys = Object.keys(process.env).length
+      out.envKeys = Object.keys(process.env).sort()
       out.permissionModel = typeof process.permission?.has === 'function'
       console.log(JSON.stringify(out))
     `
 
+    // The operating system, not the runner, adds a few variables to any
+    // process started with an empty environment: macOS sets
+    // `__CF_USER_TEXT_ENCODING`, Windows sets `SYSTEMROOT` and its kin. A bare
+    // `node` started the same way, without the guest flags, says which ones —
+    // and the guest must see exactly those, never one more from the host.
+    const { stdout: bare } = await run(
+      process.execPath,
+      ['--eval', 'console.log(JSON.stringify(Object.keys(process.env).sort()))'],
+      { env: {} },
+    )
     const { stdout } = await run(
       process.execPath,
       [...guestExecArgv(64), '--eval', probe],
@@ -110,7 +134,7 @@ describe('the flags that child is started with', () => {
     expect(JSON.parse(stdout.trim())).toEqual({
       read: 'ERR_ACCESS_DENIED',
       spawn: 'ERR_ACCESS_DENIED',
-      envKeys: 0,
+      envKeys: JSON.parse(bare.trim()),
       permissionModel: true,
     })
   })

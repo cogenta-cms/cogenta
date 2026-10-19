@@ -1,63 +1,73 @@
-# BLOCKERS — état vérifié le 2026-09-17
+# BLOCKERS — état documentaire actualisé le 2026-10-19
 
-Ce fichier ne liste que ce qui est **réellement bloqué ou réellement ouvert
-aujourd'hui**. Chaque point ci-dessous a été revérifié contre le code du dépôt
-à cette date ; ce qui ne l'est plus a été retiré et figure en §4 avec sa preuve.
+Les résultats ci-dessous distinguent les constats historiques, les corrections
+vérifiées et les limites encore ouvertes. Cette mise à jour ne certifie pas que
+l'ensemble du produit est prêt pour la production : le [suivi des 43 constats de
+la recette du 3 octobre](docs/qa/remediation-2026-10-03/tracking.json) porte leur
+validation individuelle. Le [rapport initial](docs/qa/audit-2026-10-03/README.md)
+et ses preuves restent conservés sans modification.
 
-Le texte précédent (25 sections accumulées de L10 à la fiche 46, dont une bonne
-moitié périmée) reste dans l'historique git de ce fichier — il n'est pas perdu,
-il n'est simplement plus servi comme s'il décrivait le présent.
+Les points sans nouvelle preuve gardent leur date de constat ou leur limite
+explicite. Les anciennes listes restent également consultables dans l'historique
+git de ce fichier.
 
 ---
 
-## 1. Ce qui attend un accès que cette machine n'a pas
+## 1. Validations d’environnement et accès externes
 
-### 1.1 Postgres / MySQL / MariaDB : aucune suite d'intégration n'a jamais tourné
+### 1.1 PostgreSQL / MySQL / MariaDB, Redis et S3 : les suites réelles tournent
 
-`docker version` échoue toujours aujourd'hui :
+Rejoué le **2026-10-19** sur la branche d'audit, services lancés par
+`pnpm services:up` (PostgreSQL 17 + pgvector, MySQL 8.4, MariaDB 11.8,
+Redis 7, MinIO), paquet par paquet : **29 paquets, 0 échec**. Les tests ont
+utilisé les vrais serveurs ; aucun mock de base ne les remplace.
 
-```
-request returned 500 Internal Server Error for API route and version
-.../v1.56/version, check if the server supports the requested API version
-```
+| Paquet | Tests d'intégration réussis |
+|---|---:|
+| `@cogenta/core` | 470 |
+| `@cogenta/schema` | 627 |
+| `@cogenta/commerce` | 159 (+ 1 sauté : Stripe, voir 1.2) |
+| `@cogenta/forms` | 93 |
+| `@cogenta/auth` | 48 |
+| `@cogenta/agents` | 36 |
+| `@cogenta/widgets` | 21 |
+| `@cogenta/api` | 9 |
+| `@cogenta/starters` | 9 |
+| `@cogenta/import` | 6 |
+| `@cogenta/comments` | 3 |
+| `@cogenta/analytics` | 2 |
+| **Total** | **1 483** |
 
-Donc `pnpm services:up` ne démarre rien, et **toutes** les suites d'intégration
-du dépôt se skippent bruyamment (un `describe.skip` nommant la variable
-manquante), jamais silencieusement :
+Changement depuis la campagne du 2026-10-04 (1 334 tests, 4 Redis/S3 sautés) :
+les drivers Redis et S3 sont maintenant exercés. MinIO ne publie plus d'image
+publique (Docker Hub supprimé, quay.io répond 401), ce qui faisait échouer
+**tous** les jobs d'intégration de la CI avant le premier test ;
+`docker-compose.test.yml` épingle désormais `pgsty/minio`, build communautaire
+du même serveur.
 
-| Paquet | Suites concernées |
-|---|---|
-| `@cogenta/schema` | contenu, taxonomies, migration `schema@2.0`, recherche, routage/404, permissions de rôle, aperçus d'embed |
-| `@cogenta/auth` | réinitialisation de mot de passe, colonnes de session |
-| `@cogenta/commerce` | catalogue, commande, coupons/abonnements |
-| `@cogenta/forms`, `@cogenta/comments` | tables du paquet |
-| `@cogenta/core` | dossiers de médiathèque |
-| `@cogenta/agents` | driver `pgvector` |
+Preuves de la campagne du 2026-10-04, conservées hors git :
+`.cogenta/remediation-2026-10-03/integration-all.log`,
+`import-integration.log` et `approvals-integration.log` dans le même dossier.
+Sources des contrats : [core](packages/core/test/integration/),
+[schema](packages/schema/test/integration/),
+[commerce](packages/commerce/test/integration/),
+[import](packages/import/test/integration/target-preflight.test.ts) et
+[approbations](packages/api/test/integration/agent-approvals.test.ts).
+Les autres paquets de la table ont leur dossier `test/integration/` correspondant.
+
+Pour rejouer sur des bases **de test** dédiées, renseigner
+`COGENTA_TEST_POSTGRES_URL`, `COGENTA_TEST_MYSQL_URL` et
+`COGENTA_TEST_MARIADB_URL`, puis :
 
 ```bash
-pnpm services:up
-pnpm -F @cogenta/schema test:integration   # puis auth, commerce, forms, comments, core, agents
+corepack pnpm test:integration
+corepack pnpm --filter @cogenta/import test:integration
+corepack pnpm --filter @cogenta/api exec vitest run --config vitest.integration.config.ts test/integration/agent-approvals.test.ts --maxWorkers=1
 ```
 
-**Les six points où les dialectes divergent réellement**, à vérifier en
-priorité là-bas — le vert SQLite ne prouve rien pour eux :
-
-1. **Le chemin matérialisé des taxonomies** : tout son intérêt est qu'un `like`
-   se comporte pareil partout, là où un CTE récursif ne le ferait pas.
-2. **La migration `schema@2.0`** : MySQL committe le DDL implicitement, donc un
-   échec à mi-parcours y laisse le schéma entre deux états.
-3. **`rowsAffected`** : la sûreté du stock (`update … where on_hand >= n`) et
-   l'unicité d'usage d'un jeton de réinitialisation (`where used_at is null`) en
-   dépendent, et MySQL a son propre avis sur « ligne affectée ».
-4. **`int8` rendu en chaîne par `pg`** : tout montant de `@cogenta/commerce` est
-   un `bigint` ; `toInt()` existe pour ça et n'a jamais vu Postgres.
-5. **Les courses que `{ immediate: true }` masque sur SQLite** : le verrou
-   fichier sérialise tout, l'isolation par défaut de Postgres/MySQL non — c'est
-   ce que les contrats de concurrence (`role-permission-concurrency.contract.ts`,
-   `media-folders`, `NotFoundLogStore`) doivent prouver sur un vrai serveur.
-6. **`pgvector`** : `1 - (embedding <=> $1::vector)` doit rendre exactement la
-   même similarité que `vectorRank` en mémoire, sinon « changer de driver ne
-   change rien d'observable » cesse d'être vrai.
+Les suites créent et suppriment leurs tables : ces URL ne doivent jamais viser
+une base de production. `pnpm services:up` reste une possibilité locale, sans
+rendre Docker obligatoire pour le CMS.
 
 ### 1.2 Stripe : aucun bac à sable réel
 
@@ -89,19 +99,20 @@ liste nommait —
 ```
 
 et `analytics`, `observability`, `comments` l'avaient été à 13 h 33 lors de la
-publication précédente du même jour. Les trente et un paquets d'une release
-passent donc aujourd'hui par la CI seule. À ne plus recopier.
+publication précédente du même jour. Cette publication du 2026-09-17 a donc
+validé le chemin CI/OIDC des trente et un paquets concernés. À ne plus recopier.
 
-### 1.5 DeepSeek : le compte n'a plus de crédit (constaté le 2026-09-17)
+### 1.5 DeepSeek : le manque de crédit était un constat historique
 
-Premier essai réel de l'assistant avec les deux clés enregistrées dans le
-playground : DeepSeek répond `402 Insufficient Balance` sur chaque appel, OpenAI
-répond normalement. Ce n'est pas un défaut du CMS — l'erreur est nommée et
-remontée telle quelle (`PROVIDER_REQUEST_FAILED`, message du fournisseur) — mais
-tant que le solde n'est pas rechargé, un site dont l'agent « Cogenta Agent »
-préfère `deepseek` verra ses appels échouer **sans basculer** sur le repli
-`openai` : la préférence est résolue avant l'appel, pas après son échec.
-Décision à prendre (voir §2.6).
+Le **2026-09-17**, DeepSeek répondait `402 Insufficient Balance` lors du premier
+essai réel. Le compte a depuis été rechargé. La campagne du **2026-10-03** a
+obtenu une réponse valide HTTP 200 avec `deepseek-v4-flash`, ainsi qu'avec OpenAI :
+[preuve des appels réels](docs/qa/audit-2026-10-03/exhaustif/evidence/provider-health-real.json).
+Il ne faut donc plus présenter ce compte comme actuellement dépourvu de crédit.
+Cette preuve datée ne garantit pas le solde futur.
+
+La question du repli après erreur de fournisseur reste distincte du solde et
+reste décrite au §2.6 ; cette mise à jour ne change pas son comportement.
 
 ### 1.6 Search Console / Bing / IndexNow : jamais confirmés en vrai
 
@@ -131,15 +142,23 @@ contrat B est figé et AGENTS.md exige une RFC. Les deux fiches concernées
 (L15 §5, ADR-0026) ont choisi la route dédiée (`/forms/{name}`) plutôt que de
 contourner la gouvernance. La RFC reste à ouvrir.
 
-### 2.3 L'e-mail d'une tentative de connexion échouée survit à l'anonymisation
+### 2.3 Vie privée : l'adresse saisie lors d'une connexion échouée reste journalisée
 
-`recordAuthAudit` (`packages/cli/src/commands/serve.ts`) enregistre l'e-mail
-tenté verbatim pour **toute** tentative échouée. Un compte anonymisé (fiche 17)
-dont l'ancienne adresse est retentée laisse donc une trace en clair dans le
-journal — ce que `serve-users.test.ts` détecte (test rouge, reproductible,
-antérieur à toute session récente). Décision produit : garder le détail pour la
-détection de force brute, ou hacher/omettre l'adresse. Non tranché, donc non
-corrigé.
+`recordAuthAudit` dans `packages/cli/src/commands/serve.ts` conserve l'adresse
+saisie pour un événement `auth.login_failed`. C'est une trace de tentative de
+connexion, distincte des données du compte ensuite anonymisé.
+
+Le [test d'anonymisation](packages/cli/test/serve-users.test.ts) ne constitue
+**pas un test rouge actuel** : il vérifie l'effacement des données du compte
+hors l'événement `auth.login_failed` qu'il provoque lui-même pour démontrer que
+les anciens identifiants ne fonctionnent plus. Son commentaire explicite cette
+distinction. L'ancienne affirmation de ce fichier sur un échec reproductible
+était périmée.
+
+Le choix de vie privée reste explicite : conserver cette adresse pour la
+détection des tentatives, avec la politique de rétention du journal, ou décider
+de la hacher/omettre. Le test vert ne tranche pas ce choix et cette mise à jour
+ne modifie ni la politique ni le code d'audit.
 
 ### 2.4 `commerce@1.0` n'est délibérément pas figé
 
@@ -164,7 +183,7 @@ improvisé.
 
 ---
 
-## 3. Limites réelles encore ouvertes dans le code
+## 3. État des branchements et limites du code
 
 ### 3.1 Recherche sémantique : embedder local uniquement, un chunk par entrée
 
@@ -176,25 +195,39 @@ que la même question en anglais répond correctement avec ses sources. Et
 liste de blocs, `searchDocumentFor` a déjà tout aplati), donc une citation est
 plus longue que nécessaire.
 
-### 3.2 Aucune route ne reçoit le webhook Stripe entrant
+### 3.2 Webhook de paiement entrant : branchement HTTP corrigé, bac à sable externe restant
 
-`PaymentStore.handleWebhook` existe et est testé ; ce qui manque est le
-branchement HTTP, qui suppose de faire passer le corps **brut** jusqu'à lui — le
-lecteur de corps partagé de `cogenta serve` parse tout en JSON. L'écran affiche
-l'URL à déclarer chez Stripe avec une note honnête disant qu'aucun événement
-n'est reçu.
+Le défaut de branchement est corrigé : `cogenta serve` monte
+`POST /api/commerce/payments/webhook` et transmet le corps brut au routeur de
+paiement. Les [tests du transport serveur](packages/cli/test/serve-commerce.test.ts),
+le [contrat webhook](packages/commerce/test/payment-webhook.contract.ts) et ses
+[tests SQL réels](packages/commerce/test/integration/payment-webhook.test.ts)
+vérifient la réception, les refus et le traitement avec les drivers disponibles.
+La validation avec une vraie clé de bac à sable Stripe reste ouverte (§1.2) ;
+le passage de ces tests ne vaut pas certification du fournisseur externe.
 
-### 3.3 `cogenta mcp` écrit par un `ContentStore` sans décorateurs
+### 3.3 Assemblage MCP : dérivés communs et validation humaine
 
-La commande construit son propre `storeFor` minimal : une entrée écrite par MCP
-est du vrai contenu, immédiatement lisible, mais n'entre ni dans l'index
-plein-texte ni dans l'index vectoriel avant une réindexation. Fusionner les deux
-chemins demande de factoriser la construction de `storeFor` d'`assembleSite`.
+**Corrigé le 2026-10-03** : REST et MCP consomment la même fabrique de magasins
+avec index plein-texte, redirections et programmation. Les appels MCP passent
+par les décorateurs d'audit et d'autonomie ; le manifeste suit les grants réels,
+et la création conserve la locale du site ainsi que l'acteur.
 
-### 3.4 `mcp_connections` n'a pas de suite trois-bases
+Les mutations non réversibles attendent une décision humaine dans une file
+fichier partagée avec `cogenta serve` (`.cogenta/agents-runtime/approvals`).
+La décision est immuable et publiée atomiquement ; un appel MCP déconnecté ne
+peut pas s'exécuter après validation tardive. Cette partie est levée avec le
+branchement de la surface admin de validation. Passer un compte admin ne vaut
+jamais validation de l'action.
+L'index vectoriel et les callbacks de cycle de vie restent optionnels et
+requièrent leur fournisseur/runtime configuré, comme côté HTTP.
 
-Table de registre par instance, même statut que `ensurePluginTables` — SQL écrit
-avec les mêmes précautions de dialecte, jamais exécuté ailleurs que sur SQLite.
+### 3.4 `mcp_connections` : couverture SQL dédiée non établie
+
+La campagne SQL globale ne permet pas à elle seule d'affirmer que chaque table
+est couverte. Aucune suite dédiée à ce registre par instance n'a été identifiée
+lors de cette mise à jour ; cette limite reste ouverte. Son implémentation est
+`packages/mcp/src/registry/tables.ts`.
 
 ### 3.5 Deux noms de dossier de médiathèque identiques restent possibles
 
@@ -254,24 +287,24 @@ Restent vraies :
   GraphQL ne l'expose pas (son enum de tri est fermé ; l'ouvrir demanderait un
   enum construit par collection). REST l'expose.
 
-### 3.10 `pnpm test:e2e` est cassé, et dangereux à lancer ici
+### 3.10 Recette navigateur : configuration bornée ajoutée, résultat à suivre
 
-`package.json` déclare `test:e2e` = `playwright test`, mais **aucun
-`playwright.config.*` n'existe dans le dépôt**. Playwright part donc de la racine,
-balaie toute l'arborescence et meurt avant d'avoir collecté un seul test — mesuré
-le 2026-09-17 : ~3,9 Go de tas tenus pendant ~20 minutes, puis
-`FATAL ERROR: Ineffective mark-compacts near heap limit`, en saturant la machine
-pendant que d'autres suites tournaient.
+Le défaut constaté le **2026-09-17** (découverte de toute l'arborescence sans
+configuration, jusqu'à épuisement du tas) est corrigé dans le dépôt :
+[playwright.config.ts](playwright.config.ts) limite la découverte à `tests/e2e`,
+utilise un worker et lance un serveur QA isolé avec
+[scripts/playwright-server.mjs](scripts/playwright-server.mjs).
 
-Ce n'est pas nouveau, mais cela veut dire que la case « test e2e » de la Définition
-de terminé n'est **pas** atteignable par la commande que le dépôt annonce : elle
-l'est par les suites `packages/cli/test/serve-*.test.ts`, qui lancent un vrai
-serveur HTTP sur une vraie base. À trancher : écrire la configuration manquante, ou
-retirer `test:e2e` du `package.json` pour ne plus tendre le piège.
+`corepack pnpm test:e2e` dispose maintenant d'un périmètre explicite. La recette
+navigateur et les mesures Lighthouse des corrections restent à consulter dans
+le [suivi des 43 constats](docs/qa/remediation-2026-10-03/tracking.json).
+Les tests HTTP `packages/cli/test/serve-*.test.ts` restent utiles mais ne
+remplacent pas une mesure de rendu, de clavier ou de largeur dans un navigateur.
 
 ### 3.11 `/tmp` est de la RAM sur cette machine
 
-`findmnt /tmp` : **tmpfs**, 9,4 Go, soit la moitié des 18 Go de RAM. Un `/tmp`
+Constat de machine du **2026-09-17** : `findmnt /tmp` indiquait **tmpfs**,
+9,4 Go, soit la moitié des 18 Go de RAM. Ce n'est pas une propriété du CMS. Un `/tmp`
 plein fait échouer `createSqliteHandle` (`disk I/O error`), ce qui empêche les
 `afterEach` d'effacer leurs répertoires, ce qui remplit `/tmp` davantage. Avant
 d'accuser le parallélisme des tests, regarder `df -h /tmp`, et nettoyer :

@@ -22,7 +22,7 @@ import { generateSandboxTheme, generateThemeCandidates } from '@cogenta/agents-b
 import type { ThemeRouterOptions } from '@cogenta/api'
 import type { CogentaConfig, DatabaseHandle, Logger } from '@cogenta/core'
 import { createSkinGallery, ensureRegistryTables } from '@cogenta/plugins'
-import { mergeSkinTokens, renderSkin, validateSkin } from '@cogenta/render'
+import { mergeSkinTokens, validateSkin } from '@cogenta/render'
 import type { CollectionDefinition } from '@cogenta/schema'
 import {
   createSiteSettingsStore,
@@ -30,7 +30,8 @@ import {
   ensureSiteSettingsTables,
   ensureThemeTable,
 } from '@cogenta/schema'
-import { availableThemes, loadThemeDefaultTokens } from './theme-registry.js'
+import { renderSiteSkin } from './theme-fonts.js'
+import { availableThemes, DEFAULT_THEME_NAME, loadThemeDefaultTokens } from './theme-registry.js'
 import { joinStyles } from './theme-render.js'
 import {
   deleteSandboxFile,
@@ -257,6 +258,14 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
       return null
     }
   }
+  const loadBaseTokens = async (
+    themeName?: string | null,
+  ): Promise<Record<string, unknown> | null> => {
+    const file = await loadFileTokens()
+    if (file !== null) return file
+    const active = themeName ?? (await themeStore.get()).activeTheme ?? DEFAULT_THEME_NAME
+    return (await loadThemeDefaultTokens(active)) ?? null
+  }
 
   /**
    * L26 task 5 — "the server resolves the baseline's actual tokens itself
@@ -268,7 +277,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
    * overlay.
    */
   async function resolveBaselineTokens(): Promise<Record<string, unknown> | null> {
-    const file = await loadFileTokens()
+    const file = await loadBaseTokens()
     if (file === null) return null
     const overrides = await themeStore.get()
     if (overrides.tokenOverrides === null) return file
@@ -293,6 +302,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
     availableThemes: () => availableThemes(),
     themeDefaultTokens: (themeName) => loadThemeDefaultTokens(themeName),
     loadFileTokens,
+    loadBaseTokens,
     validateTokens: (candidate) => validateSkin(candidate) as unknown as Record<string, unknown>,
     mergeTokens: (base, overrides) =>
       mergeSkinTokens(base as never, overrides as never) as unknown as Record<string, unknown>,
@@ -453,6 +463,7 @@ export async function createThemeWiring(options: ThemeWiringOptions): Promise<Th
                     tokens: input.baseline.tokens,
                   },
                   maxCandidates: 1,
+                  remoteWebFonts: options.config.appearance.remoteWebFonts,
                   ...(input.attachments === undefined || input.attachments.length === 0
                     ? {}
                     : { attachments: input.attachments }),
@@ -629,15 +640,19 @@ export function createThemeSandboxToolWiring(projectRoot: string): {
  * this same check.
  */
 export async function computeEffectiveStyles(
-  wiring: Pick<ThemeRouterOptions, 'store' | 'loadFileTokens' | 'mergeTokens' | 'validateTokens'>,
+  wiring: Pick<
+    ThemeRouterOptions,
+    'store' | 'loadFileTokens' | 'loadBaseTokens' | 'mergeTokens' | 'validateTokens'
+  >,
   themeCss: string | null,
 ): Promise<string | null> {
-  const file = await wiring.loadFileTokens()
-  if (file === null) return joinStyles(null, themeCss)
-
   const overrides = await wiring.store.get()
+  const file =
+    wiring.loadBaseTokens === undefined
+      ? await wiring.loadFileTokens()
+      : await wiring.loadBaseTokens(overrides.activeTheme)
   let tokens = file
-  if (overrides.tokenOverrides !== null) {
+  if (file !== null && overrides.tokenOverrides !== null) {
     const merged = wiring.mergeTokens(file, overrides.tokenOverrides)
     try {
       wiring.validateTokens(merged)
@@ -647,7 +662,7 @@ export async function computeEffectiveStyles(
     }
   }
 
-  const skinCss = renderSkin(tokens as never).css
+  const skinCss = tokens === null ? '' : renderSiteSkin(tokens as never).css
   const combined =
     overrides.additionalCss === null || overrides.additionalCss === ''
       ? skinCss
@@ -670,11 +685,17 @@ export async function computeEffectiveStyles(
  * preview can never show a state a save would actually accept differently.
  */
 export async function computePreviewStyles(
-  wiring: Pick<ThemeRouterOptions, 'loadFileTokens' | 'mergeTokens' | 'validateTokens'>,
+  wiring: Pick<
+    ThemeRouterOptions,
+    'loadFileTokens' | 'loadBaseTokens' | 'mergeTokens' | 'validateTokens'
+  >,
   themeCss: string | null,
   candidate: { readonly tokens?: Record<string, unknown>; readonly additionalCss?: string },
 ): Promise<string | null> {
-  const file = await wiring.loadFileTokens()
+  const file =
+    wiring.loadBaseTokens === undefined
+      ? await wiring.loadFileTokens()
+      : await wiring.loadBaseTokens()
   if (file === null) return joinStyles(null, themeCss)
 
   let tokens: Record<string, unknown> = file
@@ -683,7 +704,7 @@ export async function computePreviewStyles(
     wiring.validateTokens(tokens)
   }
 
-  const skinCss = renderSkin(tokens as never).css
+  const skinCss = renderSiteSkin(tokens as never).css
   const combined =
     candidate.additionalCss === undefined || candidate.additionalCss === ''
       ? skinCss
@@ -708,5 +729,5 @@ export function computeCandidateGalleryStyles(
   tokens: Record<string, unknown>,
 ): string | null {
   const validated = wiring.validateTokens(tokens)
-  return joinStyles(renderSkin(validated as never).css, themeCss)
+  return joinStyles(renderSiteSkin(validated as never).css, themeCss)
 }

@@ -4,9 +4,10 @@ import { dirname, join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { CogentaError } from '@cogenta/core'
 import { runIsolatedModule } from '@cogenta/plugins'
-import { loadTheme, parseThemeManifest, renderSkin } from '@cogenta/render'
+import { loadTheme, parseThemeManifest } from '@cogenta/render'
 import { escapeText } from '@cogenta/theme-kit'
 import { invalidateThemeCss, loadLocalThemeCss } from './theme-css.js'
+import { renderSiteSkin } from './theme-fonts.js'
 import { invalidateFilesystemTheme } from './theme-registry.js'
 
 /**
@@ -223,7 +224,7 @@ export async function renderSandboxPreview(
     // heavier under real filesystem/module-resolution cost. A longer
     // default here reflects that a preview is one explicit click (§ 3.3),
     // never a hot path a short timeout needs to protect.
-    timeoutMs: options.timeoutMs ?? 8000,
+    timeoutMs: options.timeoutMs ?? 20_000,
   })
 
   if (!result.ok) {
@@ -286,7 +287,7 @@ async function previewStyleTag(projectRoot: string, sandboxDir: string): Promise
 
   try {
     const raw = await readFile(join(projectRoot, 'theme.tokens.json'), 'utf8')
-    parts.push(renderSkin(JSON.parse(raw)).css)
+    parts.push(renderSiteSkin(JSON.parse(raw)).css)
   } catch {
     // No theme.tokens.json, or it does not validate — the sandbox's own
     // theme.css (below) still previews, just without real token values.

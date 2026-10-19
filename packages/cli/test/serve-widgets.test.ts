@@ -17,12 +17,12 @@ import { createUser, loginWithMfaSetup, startServer } from './helpers/serve-harn
  * real permission-checked gateway.
  */
 
-async function project(): Promise<string> {
+async function project(locales?: readonly string[]): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'cogenta-widgets-e2e-'))
   await writeFile(
     join(root, 'cogenta.config.mjs'),
     `export default {
-  site: { name: 'Widget Site', url: 'https://example.com' },
+  site: { name: 'Widget Site', url: 'https://example.com'${locales === undefined ? '' : `, locales: ${JSON.stringify(locales)}, defaultLocale: ${JSON.stringify(locales[0])}`} },
   database: { url: ${JSON.stringify(join(root, 'site.db'))} },
   cache: { path: ${JSON.stringify(join(root, 'cache'))} },
   storage: { path: ${JSON.stringify(join(root, 'media'))} },
@@ -283,6 +283,30 @@ describe('widget areas on the public site (L30)', () => {
     }
   }, 120_000)
 
+  it('names each widget area in the page’s language for a screen reader', async () => {
+    const root = await project(['fr'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await session(root, server.base)
+      await article(server.base, token, { title: 'Pain maison', slug: 'pain-maison' }, true)
+      await widget(server.base, token, { area: 'sidebar', type: 'search', title: 'Chercher' })
+      await widget(server.base, token, {
+        area: 'footer-1',
+        type: 'links',
+        title: 'Ailleurs',
+        settings: { items: [{ label: 'Colophon', href: '/colophon' }] },
+      })
+
+      const html = await (await fetch(`${server.base}/blog/pain-maison`)).text()
+
+      expect(html).toContain('aria-label="Barre latérale"')
+      expect(html).toContain('aria-label="Pied de page, colonne 1"')
+      expect(html).not.toContain('aria-label="Footer, column 1"')
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('follows a widget dropdown to a path on this site, and nowhere else', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })
@@ -292,7 +316,15 @@ describe('widget areas on the public site (L30)', () => {
       })
       expect(local.status).toBe(303)
       expect(local.headers.get('location')).toBe('/topic/cooking')
-      for (const target of ['https://evil.example', '//evil.example', '/\\evil.example']) {
+      // A tab or line break inside the path is dropped by browsers, which would turn
+      // "/\t/evil.example" into "//evil.example".
+      for (const target of [
+        'https://evil.example',
+        '//evil.example',
+        '/\\evil.example',
+        '/\t/evil.example',
+        '/\n/evil.example',
+      ]) {
         const away = await fetch(`${server.base}/_cogenta/go?to=${encodeURIComponent(target)}`, {
           redirect: 'manual',
         })

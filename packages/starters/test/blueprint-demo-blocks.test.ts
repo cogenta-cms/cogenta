@@ -1,7 +1,7 @@
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
 import { describe, expect, it } from 'vitest'
-import { buildAssociationDemoPages } from '../src/blueprints/association.js'
+import { associationCopyFor, buildAssociationDemoPages } from '../src/blueprints/association.js'
 // `blog`'s demo pages are now built from `SeedContext.media` too (L25 D4) —
 // `buildBlogDemoPages({})` renders the same pages this test checked before,
 // minus the (now media-dependent) hero backdrop/quote avatar/press logos,
@@ -14,8 +14,9 @@ import { buildDocumentationDemoPages } from '../src/blueprints/documentation.js'
 // before, minus the (now media-dependent) hero/cover/partner-logo images,
 // none of which this test exercises.
 import { buildMagazineDemoPages } from '../src/blueprints/magazine.js'
-import { buildPortfolioDemoPages } from '../src/blueprints/portfolio.js'
-import { buildRestaurantDemoPages } from '../src/blueprints/restaurant.js'
+// `portfolio` is written in French and in English: both are checked.
+import { buildPortfolioDemoPages, portfolioCopyFor } from '../src/blueprints/portfolio.js'
+import { buildRestaurantDemoPages, restaurantCopyFor } from '../src/blueprints/restaurant.js'
 // `saas`'s demo pages are now built from `SeedContext.media` and the real
 // feature ids assigned at seed time (L25) — `buildSaasDemoPages({}, new
 // Map())` renders the same pages this test checked before, minus the
@@ -31,12 +32,15 @@ import { buildStoreDemoPages } from '../src/blueprints/store.js'
 import { buildVitrineDemoPages, vitrineCopyFor } from '../src/blueprints/vitrine.js'
 
 const RESTAURANT_DEMO_PAGES = buildRestaurantDemoPages({})
-const PORTFOLIO_DEMO_PAGES = buildPortfolioDemoPages({})
+const RESTAURANT_FR_DEMO_PAGES = buildRestaurantDemoPages({ copy: restaurantCopyFor('fr') })
+const PORTFOLIO_DEMO_PAGES = buildPortfolioDemoPages(portfolioCopyFor('en'))
+const PORTFOLIO_FR_DEMO_PAGES = buildPortfolioDemoPages(portfolioCopyFor('fr'))
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
 const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())
 const DOCUMENTATION_DEMO_PAGES = buildDocumentationDemoPages({})
-const ASSOCIATION_DEMO_PAGES = buildAssociationDemoPages({})
+const ASSOCIATION_DEMO_PAGES = buildAssociationDemoPages(associationCopyFor('en'), {})
+const ASSOCIATION_FR_DEMO_PAGES = buildAssociationDemoPages(associationCopyFor('fr'), {})
 const VITRINE_DEMO_PAGES = buildVitrineDemoPages(vitrineCopyFor('en'))
 const VITRINE_FR_DEMO_PAGES = buildVitrineDemoPages(vitrineCopyFor('fr'))
 const MAGAZINE_DEMO_PAGES = buildMagazineDemoPages({})
@@ -63,11 +67,14 @@ interface DemoPage {
 
 const BLUEPRINTS: Readonly<Record<string, readonly DemoPage[]>> = {
   association: ASSOCIATION_DEMO_PAGES,
+  'association (fr)': ASSOCIATION_FR_DEMO_PAGES,
   blog: BLOG_DEMO_PAGES,
   documentation: DOCUMENTATION_DEMO_PAGES,
   magazine: MAGAZINE_DEMO_PAGES,
   portfolio: PORTFOLIO_DEMO_PAGES,
+  'portfolio (fr)': PORTFOLIO_FR_DEMO_PAGES,
   restaurant: RESTAURANT_DEMO_PAGES,
+  'restaurant (fr)': RESTAURANT_FR_DEMO_PAGES,
   saas: SAAS_DEMO_PAGES,
   store: STORE_DEMO_PAGES,
   vitrine: VITRINE_DEMO_PAGES,

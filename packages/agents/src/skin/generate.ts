@@ -1,12 +1,12 @@
 import { CogentaError, isCogentaError } from '@cogenta/core'
 import {
+  availableWebFonts,
   CONTRAST_PAIRS,
   DENSITIES,
   type SkinTokens,
   TOKEN_GROUPS,
   TOKEN_SPECS,
   validateSkin,
-  WEB_FONTS,
 } from '@cogenta/render'
 import { assembleContext, type DataItem } from '../identity/context.js'
 import type {
@@ -52,7 +52,7 @@ const KIND_HINT: Readonly<Record<string, string>> = {
  * hand-duplicated copy of the shape — the prompt and the validator cannot
  * drift apart.
  */
-function describeTokenSchema(): string {
+function describeTokenSchema(remoteWebFonts: boolean): string {
   const byGroup = new Map<string, string[]>()
   for (const spec of TOKEN_SPECS) {
     const list = byGroup.get(spec.group) ?? []
@@ -79,7 +79,8 @@ function describeTokenSchema(): string {
     'Typefaces. A font stack only looks the way you intend if its first family actually loads, and only these families are loaded for the site. Start font.serif, font.sans and font.mono each with one family from the matching list, quoted, and end the stack with a generic fallback (serif, sans-serif or monospace):',
     ...(['serif', 'sans', 'mono'] as const).map(
       (role) =>
-        `- ${role}: ${WEB_FONTS.filter((font) => font.role === role)
+        `- ${role}: ${availableWebFonts(remoteWebFonts)
+          .filter((font) => font.role === role)
           .map((font) => font.family)
           .join(', ')}`,
     ),
@@ -133,6 +134,13 @@ export interface GenerateSkinOptions {
    * `{ ok: false, reason }`, not a silent drop.
    */
   readonly images?: readonly ChatImagePart[]
+  /**
+   * Whether the site may load web fonts from Google (`appearance.remoteWebFonts`,
+   * default off). Off, the model is offered only the families the built-in
+   * themes ship and the site serves itself — a typeface it cannot load is a
+   * typeface the owner would never see. On, the whole catalogue.
+   */
+  readonly remoteWebFonts?: boolean
 }
 
 export type GenerateSkinResult =
@@ -165,7 +173,7 @@ function buildPrompt(options: GenerateSkinOptions, correction: string | undefine
         ]
       : []),
     '',
-    describeTokenSchema(),
+    describeTokenSchema(options.remoteWebFonts === true),
     '',
     'Reply with ONLY the JSON object. No prose, no markdown code fence, no explanation.',
   ]

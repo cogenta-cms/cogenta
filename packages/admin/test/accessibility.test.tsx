@@ -39,7 +39,7 @@ describe('WCAG 2.2 AA — authenticated views', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
-    await screen.findByText(/content\.create/)
+    await screen.findByText(/Contenu créé/)
     await expectNoSeriousA11yViolations(document.body)
   })
 
@@ -128,7 +128,7 @@ describe('WCAG 2.2 AA — authenticated views', () => {
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     fireEvent.click(await screen.findByRole('link', { name: "Journal d'audit" }))
-    await screen.findByText('Contenu créé')
+    await screen.findByText(/Contenu créé/)
     await expectNoSeriousA11yViolations(document.body)
   })
 

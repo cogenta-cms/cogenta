@@ -8,6 +8,7 @@ import {
   type NoticeSeverity,
 } from '../api/notices-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import { BellIcon, CloseIcon } from '../ui/icons.js'
 import { buttonVariants } from '../ui/index.js'
 
@@ -31,10 +32,6 @@ const SEVERITIES: readonly NoticeSeverity[] = ['info', 'success', 'warning', 'da
 const PERIODS = ['7', '30', '90', ''] as const
 type Period = (typeof PERIODS)[number]
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString()
-}
-
 /** The `since` boundary `listNoticeHistory` wants for a period option — `undefined` for "all", never an arbitrary epoch. */
 function sinceFor(period: Period): string | undefined {
   if (period === '') return undefined
@@ -43,6 +40,7 @@ function sinceFor(period: Period): string | undefined {
 }
 
 export function NotificationCenter(): JSX.Element | null {
+  const formatDate = useDateTimeFormatter()
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
@@ -128,13 +126,13 @@ export function NotificationCenter(): JSX.Element | null {
         <div
           role="dialog"
           aria-label={t('notifications.title')}
-          className="absolute top-full right-0 z-50 mt-1 flex max-h-[28rem] w-96 flex-col overflow-hidden rounded-md border border-border bg-card shadow-overlay"
+          className="app-shell__notifications-popover absolute top-full right-0 z-50 mt-1 flex max-h-[28rem] w-96 flex-col overflow-hidden rounded-md border border-border bg-card shadow-overlay"
         >
-          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
             <span className="font-sans text-sm font-semibold text-card-foreground">
               {t('notifications.title')}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex max-w-full flex-wrap items-center gap-2">
               <label className="sr-only" htmlFor="notification-center-severity">
                 {t('notifications.filterSeverity')}
               </label>

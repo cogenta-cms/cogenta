@@ -91,7 +91,7 @@ export interface RunAgentLoopInput {
   readonly killSwitch?: KillSwitch
   /** The alert half of a budget stop — called once, with which limit tripped, right before the run returns. */
   readonly onBudgetExceeded?: (reason: BudgetExceededReason) => void
-  /** Wall-clock ceiling for the whole run — "durée maximale par run", the fourth budget dimension the lot's design section names, checked independently of `BudgetTracker` since it belongs to one run, not to the agent's calendar-bucketed totals. */
+  /** Wall-clock ceiling for the whole run — "durée maximale par run". Also aborts the signal passed to providers/tools, including approval waits; independent of the agent's calendar-bucketed BudgetTracker. */
   readonly maxRunDurationMs?: number
   /** Clock the loop measures `maxRunDurationMs` against — injectable for tests, defaults to `Date.now`. */
   readonly now?: () => number

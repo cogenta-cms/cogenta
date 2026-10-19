@@ -30,7 +30,9 @@ restaure encore moins qu'un article).
   delivered`, plus `cancelled`/`refunded`), historique complet de chaque
   commande.
 - **`/commerce/coupons`** — coupons en pourcentage, montant fixe ou livraison
-  offerte, avec fenêtre de validité et compteur d'utilisation.
+  offerte, avec fenêtre de validité et compteur d'utilisation. La liste affiche
+  dix coupons par page ; la recherche par code porte sur toute la liste et
+  revient à la première page. Les actions restent accessibles sur chaque ligne.
 - **`/commerce/subscriptions`** — abonnements, avec une arithmétique de date
   qui traite un mois calendaire correctement (31 janvier + un mois donne le
   28 février, jamais le 3 mars).

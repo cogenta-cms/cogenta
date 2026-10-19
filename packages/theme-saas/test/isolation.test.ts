@@ -94,6 +94,7 @@ describe('theme isolation', () => {
       'styles/base.css',
       'styles/blocks.css',
       'styles/chrome.css',
+      'styles/fonts.css',
       'styles/pricing.css',
       'styles/theme.css',
       'styles/tokens.css',
@@ -117,14 +118,12 @@ describe('theme isolation', () => {
     })
   }
 
-  it('imports fonts, if any, only from Google Fonts over https, never a third-party host', () => {
-    for (const { source } of STYLESHEETS) {
-      const imports = [...source.matchAll(/@import\s+url\(["']([^"')]+)["']\)/g)].map(
-        (match) => match[1] as string,
-      )
-      for (const url of imports) {
-        expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
-      }
+  it('loads its fonts from the site itself, never from a remote host', () => {
+    const theme = STYLESHEETS.find(({ path }) => path === 'styles/theme.css')?.source ?? ''
+    expect(theme).toMatch(/@import\s+"\.\/fonts\.css"\s*;/)
+    for (const { path, source } of STYLESHEETS) {
+      expect(source, path).not.toMatch(/googleapis|gstatic/i)
+      expect(source, path).not.toMatch(/@import\s+(?:url\()?\s*["']?(?:https?:)?\/\//i)
     }
   })
 

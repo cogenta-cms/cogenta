@@ -11,18 +11,18 @@
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--cg-*` property composed from those.
  *
- * The one thing this file adds on its own is the Google Fonts request for the
+ * The one thing this file adds on its own is the self-hosted `fonts.css` faces for the
  * two families `tokens.json` names: Literata (everything a reader reads, with
  * its optical-size axis across its whole range, so a 13 px caption and an
  * 80 px title each get the cut drawn for them, and its italic for quotations)
  * and Figtree (everything a reader uses: navigation, dates, labels, buttons).
  * A skin only names a family; it never fetches one. Both fall back to real
- * system stacks if Google Fonts is unreachable, and `display=swap` keeps text
+ * system stacks if a face fails to load, and `display=swap` keeps text
  * visible while they load. `cogenta serve` hoists this `@import` above the
  * skin's rules.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Figtree:wght@400..700&family=Literata:ital,opsz,wght@0,7..72,300..700;1,7..72,300..600&display=swap");
+@import "./fonts.css";
 
 @import "./tokens.css";
 @import "./base.css";

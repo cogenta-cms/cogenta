@@ -37,6 +37,22 @@ describe('RichTextEditor', () => {
     expect(document.querySelectorAll('[data-slate-node="element"]')).toHaveLength(1)
   })
 
+  it('mounts, adds and removes simultaneous empty editors without sharing Slate nodes', () => {
+    const editors = (ids: readonly string[]) => (
+      <>
+        {ids.map((id) => (
+          <RichTextEditor key={id} id={id} value={[]} onChange={vi.fn()} />
+        ))}
+      </>
+    )
+    const view = render(editors(['first', 'second']))
+    expect(document.querySelectorAll('[data-slate-editor]')).toHaveLength(2)
+    view.rerender(editors(['first', 'second', 'third']))
+    expect(document.querySelectorAll('[data-slate-editor]')).toHaveLength(3)
+    view.rerender(editors(['second', 'third']))
+    expect(document.querySelectorAll('[data-slate-editor]')).toHaveLength(2)
+  })
+
   it('opens a URL input when the link button is pressed', () => {
     render(<RichTextEditor id="body" value={SIMPLE_DOC} onChange={vi.fn()} />)
 

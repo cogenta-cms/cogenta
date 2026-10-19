@@ -1,6 +1,6 @@
 import { serialize, type TermArchiveInput } from '@cogenta/theme-kit'
 import { describe, expect, it } from 'vitest'
-import { renderTermArchive } from '../src/render/term-archive.js'
+import { briefCount, renderTermArchive } from '../src/render/term-archive.js'
 
 const LABELS = {
   empty: 'Nothing is filed under this term yet.',
@@ -43,7 +43,20 @@ describe('renderTermArchive, a section front', () => {
   })
 
   it('sets the taxonomy as a kicker above the term', () => {
-    expect(html).toContain('<p class="cg-archive__kicker">section</p>')
+    expect(html).toContain('<p class="cg-archive__kicker">Section</p>')
+  })
+
+  it("says the kicker in the language of the page, not with the taxonomy's machine name", () => {
+    const french = serialize(renderTermArchive({ ...INPUT, locale: 'fr' }))
+    expect(french).toContain('<p class="cg-archive__kicker">Rubrique</p>')
+    const authors = serialize(
+      renderTermArchive({ ...INPUT, taxonomyName: 'author', locale: 'fr-FR' }),
+    )
+    expect(authors).toContain('<p class="cg-archive__kicker">Auteur</p>')
+    const unknown = serialize(
+      renderTermArchive({ ...INPUT, taxonomyName: 'project_team', locale: 'en' }),
+    )
+    expect(unknown).toContain('<p class="cg-archive__kicker">Project team</p>')
   })
 
   it('composes the stories like the front page: a lead, three briefs, the rest in a row', () => {
@@ -126,6 +139,25 @@ describe('renderTermArchive, a section front', () => {
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-    expect(words).toBe(`section Culture ${LABELS.empty}`)
+    expect(words).toBe(`Section Culture ${LABELS.empty}`)
+  })
+})
+
+describe('briefCount, the briefs beside the lead', () => {
+  it('always leaves the row of three beneath the lead closed full', () => {
+    for (let others = 0; others <= 40; others += 1) {
+      const briefs = briefCount(others)
+      expect(briefs).toBeLessThanOrEqual(others)
+      if (others > 4) expect((others - briefs) % 3, `${others} stories`).toBe(0)
+    }
+  })
+
+  it('keeps two or three briefs where the stories allow it, and never a lone orphan', () => {
+    expect(briefCount(2)).toBe(2)
+    expect(briefCount(3)).toBe(3)
+    expect(briefCount(4)).toBe(1)
+    expect(briefCount(5)).toBe(2)
+    expect(briefCount(6)).toBe(3)
+    expect(briefCount(7)).toBe(1)
   })
 })

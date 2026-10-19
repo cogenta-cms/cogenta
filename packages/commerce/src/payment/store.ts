@@ -155,7 +155,7 @@ export function createPaymentStore(
       async (tx) => {
         const claimed = await tx.query(sql`
           update ${payments} set status = ${'paid'}, updated_at = ${stamp()}
-          where id = ${paymentId} and status <> ${'paid'}`)
+          where id = ${paymentId} and status not in (${'paid'}, ${'refunded'}, ${'cancelled'})`)
 
         const payment = await read(paymentId, tx)
         if (payment === null) {
@@ -366,15 +366,36 @@ export function createPaymentStore(
       const event = await dependencies.gateway.verifyEvent(payload, headers)
 
       const found = await db.query<PaymentRow>(
-        sql`select * from ${payments} where external_id = ${event.externalId}`,
+        sql`select * from ${payments} where external_id = ${event.externalId} and driver = ${dependencies.gateway.name}`,
       )
       const row = found.rows[0]
       if (row === undefined) return null
 
       const payment = decode(row)
+      if (
+        (event.currency !== null && event.currency !== payment.currency) ||
+        (event.status === 'paid' &&
+          (event.currency === null || event.amountMinor !== payment.amountMinor))
+      ) {
+        throw new CogentaError({
+          code: 'COMMERCE_PAYMENT_FAILED',
+          message: 'The payment notification does not match the expected amount and currency.',
+          hint: 'Check the provider payment against this order before confirming it.',
+        })
+      }
+      // Delivery order is not guaranteed. Terminal outcomes must never be
+      // undone by an older intent notification, including concurrent delivery.
+      if (payment.status === 'refunded' || payment.status === 'cancelled') return payment
+      if (payment.status === 'paid' && event.status !== 'refunded') return payment
+      // A partial refund does not mean the entire payment was refunded.
+      if (event.status === 'refunded' && event.amountMinor !== payment.amountMinor) return payment
       if (event.status === 'paid') return settleOnce(payment.id, null, 'Confirmed by the gateway.')
       if (event.status === payment.status) return payment
-      return setStatus(payment.id, event.status)
+      if (payment.status === 'failed' && event.status === 'pending') return payment
+      await db.query(sql`
+        update ${payments} set status = ${event.status}, updated_at = ${stamp()}
+        where id = ${payment.id} and status = ${payment.status}`)
+      return load(payment.id)
     },
   }
 }

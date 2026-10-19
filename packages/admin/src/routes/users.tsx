@@ -1,4 +1,4 @@
-import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, type JSX, type ReactNode, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
 import {
@@ -17,6 +17,7 @@ import {
   updateUser,
 } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useLocalPagination } from '../lib/use-local-pagination.js'
 import { grantsForRole, knownRoleNames } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { SchemaDocument } from '../schema/types.js'
@@ -1024,14 +1025,16 @@ export function UsersRoute(): JSX.Element {
 export function SessionList({
   sessions,
   onRevoke,
+  children,
 }: {
   readonly sessions: readonly UserSession[]
+  readonly children?: ReactNode
   onRevoke(sessionId: string): void
 }): JSX.Element {
   const formatWhen = useDateTimeFormatter()
   const { t } = useTranslation()
 
-  if (sessions.length === 0) return <p>{t('users.noSessions')}</p>
+  const pagination = useLocalPagination(sessions)
 
   return (
     <Card>
@@ -1041,10 +1044,12 @@ export function SessionList({
         </CardTitle>
       </CardHeader>
       <CardBody>
-        <ul className="m-0 flex list-none flex-col gap-3 p-0">
-          {sessions.map((session) => (
+        {children}
+        {sessions.length === 0 && <p>{t('users.noSessions')}</p>}
+        <ul className="m-0 flex list-none flex-col gap-3 p-0" aria-label={t('users.sessionsTitle')}>
+          {pagination.items.map((session, index) => (
             <li key={session.id} className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-sm">
+              <span className="min-w-0 break-words text-sm [overflow-wrap:anywhere]">
                 {session.label ?? t('users.unnamedSession')} —{' '}
                 {t('users.sessionDevice', { browser: session.browser, device: session.device })} —{' '}
                 {t('users.lastSeen')} {formatWhen(session.lastSeenAt)}
@@ -1055,12 +1060,30 @@ export function SessionList({
                   </>
                 )}
               </span>
-              <Button variant="destructive" size="sm" onClick={() => onRevoke(session.id)}>
-                {t('users.revokeSession', { at: formatWhen(session.lastSeenAt) })}
+              <Button
+                variant="destructive"
+                size="sm"
+                aria-label={`${t('users.revokeSession', { at: formatWhen(session.lastSeenAt) })} — ${session.label ?? t('users.unnamedSession')} (${session.browser}, ${session.device}) — ${t('users.sessionNumber', { number: pagination.start + index + 1 })}`}
+                onClick={() => onRevoke(session.id)}
+              >
+                {t('users.revokeSessionShort')}
               </Button>
             </li>
           ))}
         </ul>
+        <Pagination
+          variant="pages"
+          page={pagination.page}
+          pageCount={pagination.pageCount}
+          onPageChange={pagination.onPageChange}
+          previousLabel={t('lists.previous')}
+          nextLabel={t('lists.next')}
+          pageInfo={t('lists.pageInfo', {
+            from: pagination.start + 1,
+            to: pagination.start + pagination.items.length,
+            total: pagination.total,
+          })}
+        />
       </CardBody>
     </Card>
   )

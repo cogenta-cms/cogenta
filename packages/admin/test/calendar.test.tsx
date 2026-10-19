@@ -50,6 +50,10 @@ function inTwoDays(): Date {
 describe('the editorial calendar', () => {
   it('puts each entry on the day it comes out, and lists the drafts still to place', async () => {
     const chip = await screen.findByRole('button', { name: /Second article/u })
+    const scrollRegion = screen.getByRole('region', { name: 'Calendrier du mois' })
+    expect(scrollRegion.tabIndex).toBe(0)
+    scrollRegion.focus()
+    expect(document.activeElement).toBe(scrollRegion)
     expect(chip.closest('[data-day]')?.getAttribute('data-day')).toBe(dayKey(inTwoDays()))
 
     const waiting = screen.getByRole('button', { name: /Idea for later/u })

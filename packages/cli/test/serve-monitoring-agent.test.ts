@@ -278,19 +278,24 @@ describe('cogenta serve — the Site Monitor agent (L22 task 3)', () => {
 
     // The suggestion surfaces on the admin's notice board, pointing at the
     // existing Redirections screen — never a second confirmation UI.
-    const notices = await fetch(`${base}/api/notices`, {
-      headers: { authorization: `Bearer ${adminToken}` },
-    })
-    const noticesBody = (await notices.json()) as {
-      data: readonly {
-        code: string
-        params?: Record<string, string>
-        action?: { href: string }
-      }[]
+    // The notice is written as the run finishes, not before its reply: a slow
+    // runner (macOS CI) read the board once, too early. Wait for it instead.
+    type Notice = {
+      code: string
+      params?: Record<string, string>
+      action?: { href: string }
     }
-    const suggestion = noticesBody.data.find(
-      (notice) => notice.code === 'monitoring.redirect-suggestion',
-    )
+    let suggestion: Notice | undefined
+    for (let attempt = 0; attempt < 40 && suggestion === undefined; attempt++) {
+      const notices = await fetch(`${base}/api/notices`, {
+        headers: { authorization: `Bearer ${adminToken}` },
+      })
+      const noticesBody = (await notices.json()) as { data: readonly Notice[] }
+      suggestion = noticesBody.data.find(
+        (notice) => notice.code === 'monitoring.redirect-suggestion',
+      )
+      if (suggestion === undefined) await new Promise((resolve) => setTimeout(resolve, 250))
+    }
     expect(suggestion).toBeDefined()
     expect(suggestion?.params).toEqual({
       from: '/old-guide',

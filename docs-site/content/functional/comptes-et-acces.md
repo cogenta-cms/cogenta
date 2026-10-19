@@ -22,6 +22,13 @@ visibles dans l'admin (inspiré de la manière dont WordPress affiche ses
 notices) encourage l'activation de la double authentification sans jamais
 empêcher de travailler tant qu'elle n'est pas activée.
 
+Dans **Mon profil**, les sessions actives sont affichées par pages de dix,
+avec leur appareil, leur dernière activité et l’indication de la session actuelle.
+« Précédent » et « Suivant » donnent accès aux autres sessions. Révoquer une session
+conserve la page consultée ; si sa dernière ligne disparaît, la liste revient à la
+dernière page restante. « Déconnecter toutes les autres sessions » garde votre
+connexion actuelle. Un administrateur retrouve la même liste paginée depuis les comptes.
+
 ## Clés API
 
 `/api-keys` gère les clés utilisées par un client headless ou une intégration

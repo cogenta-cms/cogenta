@@ -22,9 +22,12 @@ import { createUser, loginWithMfaSetup, startServer } from './helpers/serve-harn
 
 const COLLECTIONS: readonly CollectionDefinition[] = [
   {
-    name: 'page',
-    labels: { singular: 'Page', plural: 'Pages' },
-    routing: { pattern: '/:slug' },
+    // Not `page`: the importer brings its own `page`, and a site that already
+    // declares one of a different shape is refused before anything is written
+    // (the last test below).
+    name: 'note',
+    labels: { singular: 'Note', plural: 'Notes' },
+    routing: { pattern: '/notes/:slug' },
     fields: {
       title: { kind: 'text', required: true, options: { max: 200 } },
       slug: { kind: 'slug', required: true, options: { from: 'title' } },
@@ -72,7 +75,23 @@ const MINIMAL_WXR = `<?xml version="1.0" encoding="UTF-8" ?>
 </rss>
 `
 
-async function project(): Promise<string> {
+/** A site that already declares a `page` the WordPress importer cannot fill. */
+const INCOMPATIBLE_PAGE: readonly CollectionDefinition[] = [
+  {
+    name: 'page',
+    labels: { singular: 'Page', plural: 'Pages' },
+    routing: { pattern: '/:slug' },
+    fields: {
+      title: { kind: 'text', required: true, options: { max: 200 } },
+      slug: { kind: 'slug', required: true, options: { from: 'title' } },
+    },
+    permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
+  },
+]
+
+async function project(
+  collections: readonly CollectionDefinition[] = COLLECTIONS,
+): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'cogenta-import-e2e-'))
   await writeFile(
     join(root, 'cogenta.config.mjs'),
@@ -87,7 +106,7 @@ async function project(): Promise<string> {
   )
   await writeFile(
     join(root, 'cogenta.schema.mjs'),
-    `export default ${JSON.stringify(COLLECTIONS, null, 2)}\n`,
+    `export default ${JSON.stringify(collections, null, 2)}\n`,
     'utf8',
   )
   return root
@@ -205,6 +224,43 @@ describe('POST /api/import/wordpress', () => {
     })
 
     expect(response.status).toBe(400)
+    await server.stop()
+  })
+
+  it('refuses to import into an existing collection it cannot fill, and writes nothing', async () => {
+    const root = await project(INCOMPATIBLE_PAGE)
+    await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    const token = await loginWithMfaSetup(
+      server.base,
+      'admin@example.com',
+      'correct horse battery staple',
+    )
+
+    const response = await fetch(`${server.base}/api/import/wordpress`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filename: 'export.xml',
+        data: Buffer.from(MINIMAL_WXR, 'utf8').toString('base64'),
+      }),
+    })
+
+    expect(response.status).toBe(400)
+    const body = (await response.json()) as { error: { code: string; message: string } }
+    expect(body.error.code).toBe('IMPORT_MAPPING_INVALID')
+    expect(body.error.message).toContain('"page"')
+
+    const { createSqliteHandle } = await import('@cogenta/core')
+    const { createContentStore } = await import('@cogenta/schema')
+    const { wpPost } = await import('@cogenta/import')
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    const posts = await createContentStore({ db, collection: wpPost })
+      .list({})
+      .catch(() => ({ items: [] }))
+    expect(posts.items).toHaveLength(0)
+    await db.close()
+
     await server.stop()
   })
 })

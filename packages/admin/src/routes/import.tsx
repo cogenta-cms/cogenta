@@ -297,6 +297,8 @@ function PreviewImportCard({ token }: { readonly token: string | null }): JSX.El
           )}
         </Field>
 
+        {source === 'wordpress' && <p>{t('importPreview.wordPressTargetHelp')}</p>}
+
         {(source === 'csv' || source === 'rss') && (
           <Field
             label={t('importPreview.targetCollectionLabel')}

@@ -8,6 +8,8 @@ const MAX_BODY_LENGTH = 100_000
 export interface HttpFetchToolOptions {
   /** Exact hostnames this instance may reach — `http.fetch(domains[])` in the Contract C taxonomy is the permission this list backs. */
   readonly allowedDomains: readonly string[]
+  /** Optional structural restriction to a site's own scheme, host and port. */
+  readonly allowedOrigins?: readonly string[]
   readonly fetchImpl?: typeof fetch
 }
 
@@ -38,6 +40,7 @@ export function createHttpFetchTool(
 ): ToolDefinition<HttpFetchInput, HttpFetchOutput> {
   const doFetch = options.fetchImpl ?? fetch
   const allowed = new Set(options.allowedDomains)
+  const origins = options.allowedOrigins === undefined ? undefined : new Set(options.allowedOrigins)
 
   return defineTool({
     name: 'http.fetch',
@@ -51,10 +54,18 @@ export function createHttpFetchTool(
     cost: 'low',
     async execute(input, ctx) {
       const parsed = new URL(input.url)
-      if (!allowed.has(parsed.hostname)) {
+      if (
+        !allowed.has(parsed.hostname) ||
+        !['http:', 'https:'].includes(parsed.protocol) ||
+        parsed.username !== '' ||
+        parsed.password !== '' ||
+        (origins !== undefined && !origins.has(parsed.origin))
+      ) {
         throw new CogentaError({
           code: 'HTTP_FETCH_DOMAIN_DENIED',
-          message: `"${parsed.hostname}" is not in this agent's allowed domain list.`,
+          message: !allowed.has(parsed.hostname)
+            ? `"${parsed.hostname}" is not in this agent's allowed domain list.`
+            : 'This URL is outside the site origins and HTTP protocols this tool may read.',
           hint: 'Grant the domain in the agent definition, or fetch a different URL.',
           details: { hostname: parsed.hostname, allowed: [...allowed] },
         })
@@ -63,6 +74,10 @@ export function createHttpFetchTool(
       const response = await doFetch(parsed, {
         method: input.method ?? 'GET',
         signal: ctx.signal,
+        // Never let an allowed page redirect this client to an ungranted host.
+        // A redirect is returned as data for the auditor to report or follow
+        // through a new, independently checked call.
+        redirect: 'manual',
       })
       const text = await response.text()
       const headers: Record<string, string> = {}

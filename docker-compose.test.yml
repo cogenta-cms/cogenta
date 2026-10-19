@@ -83,10 +83,12 @@ services:
       retries: 30
 
   minio:
-    # Docker Hub's `minio/minio` now 404s — the image is published on quay.io,
-    # and every Integration job has been failing on `pull access denied` for
-    # it, which reads as an auth problem and is not one.
-    image: quay.io/minio/minio:latest
+    # MinIO stopped publishing public images: Docker Hub's `minio/minio` is
+    # gone and quay.io now answers 401 to anonymous pulls, which failed every
+    # Integration job before a single test ran. `pgsty/minio` is a community
+    # build of the same server (same entrypoint, `mc` included for the health
+    # check), pinned to a release so a retag cannot break CI again.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     command: ['server', '/data']
     environment:
       MINIO_ROOT_USER: cogenta

@@ -66,8 +66,10 @@ export interface SkinStoreOptions extends RenderSkinCssOptions {
 }
 
 export function createSkinStore(initial: unknown, options: SkinStoreOptions = {}): SkinStore {
-  const cssOptions: RenderSkinCssOptions =
-    options.selector === undefined ? {} : { selector: options.selector }
+  const cssOptions: RenderSkinCssOptions = {
+    ...(options.selector === undefined ? {} : { selector: options.selector }),
+    ...(options.remoteWebFonts === undefined ? {} : { remoteWebFonts: options.remoteWebFonts }),
+  }
   let sheet = renderSkin(initial, cssOptions)
 
   return {

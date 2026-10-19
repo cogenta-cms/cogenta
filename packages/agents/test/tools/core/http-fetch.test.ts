@@ -70,4 +70,31 @@ describe('http.fetch', () => {
     const [, init] = fetchImpl.mock.calls[0] as unknown as [URL, RequestInit]
     expect(init.signal).toBe(CTX.signal)
   })
+
+  it('restricts an own-site fetch to the exact origin and never follows redirects implicitly', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(null, { status: 302, headers: { location: 'https://evil.example/' } }),
+    )
+    const tool = createHttpFetchTool({
+      allowedDomains: ['site.example'],
+      allowedOrigins: ['https://site.example'],
+      fetchImpl,
+    })
+    for (const url of [
+      'http://site.example/',
+      'https://site.example:444/',
+      'https://name:password@site.example/',
+    ]) {
+      await expect(tool.execute({ url }, CTX)).rejects.toMatchObject({
+        code: 'HTTP_FETCH_DOMAIN_DENIED',
+      })
+    }
+    expect(fetchImpl).not.toHaveBeenCalled()
+    const result = await tool.execute({ url: 'https://site.example/' }, CTX)
+    expect(result.status).toBe(302)
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [URL, RequestInit]
+    expect(init.redirect).toBe('manual')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
 })

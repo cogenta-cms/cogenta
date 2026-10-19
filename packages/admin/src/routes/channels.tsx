@@ -95,7 +95,7 @@ export function ChannelsRoute(): JSX.Element {
 
   const loadSettings = useCallback(async () => {
     try {
-      setSettings(await listSettings())
+      setSettings(await listSettings(undefined, token ?? undefined))
     } catch {
       // Non-fatal: the bot-name field and the guide both degrade to their
       // generic wording (no name) rather than blocking the rest of the

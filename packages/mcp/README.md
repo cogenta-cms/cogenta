@@ -47,29 +47,23 @@ cogenta mcp                           # anonymous ("public") — the default, no
   rather than silently falling back to anonymous.
 - **With none of these flags**, the server runs as the anonymous `public`
   actor —
-  the same actor an unauthenticated REST request gets. Content tools
-  (`content.read`, `content.write_draft`, `content.publish`,
-  `content.delete`) are still on the manifest and still permission-checked
-  per call, so a public actor can read what a public actor may read and
-  nothing else. Media, site-config and HTTP-fetch tools are left off the
-  manifest entirely in this mode — see "What's on the manifest" below for
-  why.
+  the same actor an unauthenticated REST request gets. Its manifest includes
+  only the effective collection capabilities. Media and site-config tools
+  are left off the manifest entirely in this mode.
 
 ## What's on the manifest
 
-Content tools are always on the manifest, authenticated or not, because their
-actual permission gate lives one layer down: they call into the site's real
-`ContentService`, which asserts against `PermissionLayer` on every read and
-write, exactly as `/api/content/*` does. There is nothing extra this server
-needs to enforce for them.
+Content capabilities are selected from the actor's effective collection grants,
+including role overrides stored in the site's database. Every call also passes
+through `ContentService`, which applies the collection and ownership checks used
+by REST and GraphQL. A revocation written by another transport is re-read before
+execution, including while an action is awaiting human approval.
 
-Media (`media.read`, `media.write`) and site-config (`site.config_read`)
-tools have no such check of their own — by design, per their own doc
-comments in `@cogenta/agents`, *the manifest itself* is the permission gate
-for these three. `cogenta mcp` therefore only puts them on the manifest for
-an authenticated actor (`--email`, `--role`, or `--api-key`); the anonymous
-default never sees them at all, so there is no way to reach one without
-first naming who you are running as.
+Media reads are available to authenticated viewers, editors and admins. Media
+writes require editor or admin. The runtime uses the same media grant policy as
+REST; the tools contain no role checks (R4). Site-config reads require an
+authenticated actor. An excluded capability returns an unknown-tool error before
+execution.
 
 ## Connecting a client
 
@@ -106,18 +100,30 @@ globally, point `command` at the local binary instead of `npx` (for example
 clients accept an `"env"` block alongside `"command"`/`"args"` for exactly
 this; check your client's own MCP configuration docs for the exact key.
 
-## Known limitation
+## Execution and approval
 
-Content written or published through `cogenta mcp` goes through the same
-`ContentStore` as `cogenta serve`'s REST and GraphQL routes, but **not**
-through the same decorated stores `assembleSite` builds — the full-text
-search index, the vector (semantic search) index, redirect tracking on a
-slug rename, and scheduled-publish enqueueing are all decorators applied at
-`cogenta serve` startup, and `cogenta mcp` does not currently wire them in.
-An entry an MCP client creates or edits is real, permission-checked content,
-immediately visible to `cogenta serve` on its next read — but it will not
-appear in full-text or semantic search results, and a slug rename will not
-leave a redirect, until the next full reindex (`cogenta`'s "Outils" admin
-screen, or a restart that touches the entry again). See `BLOCKERS.md`,
-"MCP actor scoping", for the fuller account and the reasoning behind not
-gold-plating this in the first pass.
+The manifest follows the actor's effective collection grants. Media reads are
+available to viewer, editor and admin; media writes are restricted to editor
+and admin, using the same policy as REST. Calling a capability outside that
+manifest returns an unknown-tool error and does not execute a tool.
+
+Content uses the shared decorated-store factory: full-text indexing,
+slug-change redirects and scheduled-publication enqueueing follow the HTTP
+pipeline. The default locale comes from the site's configuration, and content
+mutations record the acting account. Optional vector indexing and lifecycle
+callbacks are enabled when supplied by the runtime assembly.
+
+Every executable MCP call passes through the common autonomy and hash-chained
+audit decorators. Audit entries identify the actor, target and MCP origin and
+include input, output and duration. The existing content and media mutation
+tools declare themselves non-reversible and require a human decision before
+execution. Starting the MCP process or passing an admin API key is not approval.
+
+Human approval uses the file queue shared with `cogenta serve` at
+`.cogenta/agents-runtime/approvals`. An administrator reviews the request in
+the admin; the requesting call remains pending and makes no write until approval.
+The queue keeps requests and decisions across process restarts. Decisions are
+immutable and only one concurrent decision can win. Disconnecting the MCP client
+cancels its pending execution; approving the old request later does not replay it.
+A filesystem that cannot atomically publish a hard link causes the queue to fail
+closed. The memory queue remains available for integrations and tests.

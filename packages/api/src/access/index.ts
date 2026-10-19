@@ -3,6 +3,8 @@
  * tokens that are the only exception to it.
  */
 
+export type { MediaPermission } from './media-permissions.js'
+export { assertMediaAccess, canAccessMedia } from './media-permissions.js'
 export type { PermissionLayerOptions } from './permissions.js'
 export {
   assertAuthenticated,

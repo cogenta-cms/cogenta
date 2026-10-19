@@ -16,10 +16,13 @@
     },
     "./tokens.json": "./tokens.json",
     "./styles/theme.css": "./src/styles/theme.css",
-    "./styles/*.css": "./src/styles/*.css"
+    "./styles/*.css": "./src/styles/*.css",
+    "./fonts/*.woff2": "./fonts/*.woff2",
+    "./fonts/manifest.json": "./fonts/manifest.json"
   },
   "files": [
     "dist",
+    "fonts",
     "src",
     "tokens.json"
   ],

@@ -9,6 +9,11 @@
 export type { AdminThemeRouter, AdminThemeRouterOptions } from './admin-theme-router.js'
 export { createAdminThemeRouter } from './admin-theme-router.js'
 export type {
+  AgentApprovalRequestLike,
+  AgentApprovalsRouterOptions,
+} from './agent-approvals-router.js'
+export { createAgentApprovalsRouter } from './agent-approvals-router.js'
+export type {
   AgentSkillRegistryLike,
   AgentSkillSummary,
   AgentSkillsRouter,
@@ -60,6 +65,7 @@ export {
   parseUpdateBody,
   parseVisibilityBody,
 } from './body.js'
+export { assertCollectionListValid } from './collection-list-validation.js'
 export type {
   ContentPage,
   ContentService,

@@ -113,7 +113,7 @@ function DefaultTuningCard({
 
   const load = useCallback(async () => {
     try {
-      const data = await listSettings()
+      const data = await listSettings(undefined, token ?? undefined)
       // Not every `group: 'assistant'` entry belongs here — `assistant
       // .indexedCollections` (L22 task 4) is a per-collection map, not a
       // scalar this generic card can render (its own doc comment in
@@ -126,7 +126,7 @@ function DefaultTuningCard({
     } catch (caught) {
       setLoadError(caught instanceof Error ? caught.message : t('providers.defaultsLoadError'))
     }
-  }, [t])
+  }, [token, t])
 
   useEffect(() => {
     void load()
@@ -416,7 +416,7 @@ export function ProvidersRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="providers-heading" className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6">
       <h1 id="providers-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('providers.heading')}
       </h1>

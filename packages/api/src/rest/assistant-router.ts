@@ -230,7 +230,7 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
     })
   }
 
-  async function capabilities(): Promise<RestResponse> {
+  async function capabilities(context: AccessContext): Promise<RestResponse> {
     const toolset = await toolsetNow()
     // 200, always. "No provider configured" is an answer, not a failure — the
     // whole degradation story of this lot depends on this not being an error.
@@ -243,7 +243,9 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
             count: await options.vectorInfo.count(),
             lastIndexedAt: options.vectorInfo.lastIndexedAt(),
             collections: await options.vectorInfo.collections(),
-            referenceCollection: options.vectorInfo.referenceCollection,
+            ...(context.actor.roles.includes('admin')
+              ? { referenceCollection: options.vectorInfo.referenceCollection }
+              : {}),
           }
 
     return jsonResponse(200, {
@@ -329,10 +331,44 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
       })
     }
 
+    // Retrieval scopes are narrowed centrally before an assistant tool runs (R4).
+    // A supplied collection name is data, never a permission grant.
+    let executionInput = parsed.data
+    if (
+      (name === 'assist.chat' || name === 'assist.find_duplicates') &&
+      typeof executionInput === 'object' &&
+      executionInput !== null &&
+      'collections' in executionInput
+    ) {
+      const requested = (executionInput as { readonly collections: unknown }).collections
+      if (Array.isArray(requested)) {
+        const readable = new Set(
+          options.collections
+            .filter((collection) => options.permissions.can('read', collection, context).allowed)
+            .map((collection) => collection.name),
+        )
+        if (context.actor.roles.includes('admin') && options.vectorInfo !== undefined) {
+          readable.add(options.vectorInfo.referenceCollection)
+        }
+        const collections = requested.filter(
+          (collection): collection is string =>
+            typeof collection === 'string' && readable.has(collection),
+        )
+        if (collections.length === 0) {
+          throw new CogentaError({
+            code: 'FORBIDDEN',
+            message: 'No requested search collection is readable by this account.',
+            hint: 'Choose a content collection this account may read.',
+          })
+        }
+        executionInput = { ...executionInput, collections }
+      }
+    }
+
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
     try {
-      const output = await tool.execute(parsed.data, {
+      const output = await tool.execute(executionInput, {
         site: options.site,
         actor: context.actor,
         logger,
@@ -432,7 +468,7 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
           // caller gets the same refusal as on `run`, so the panel never renders
           // for someone who could not use it anyway.
           assertMayUseAssistant(context)
-          return capabilities()
+          return capabilities(context)
         }
 
         if (path === `${basePath}/run`) {

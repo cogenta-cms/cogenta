@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Delivery flow</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=block" rel="stylesheet">
+<style>
+  /* 588 x 448 CSS pixels (a 14 px margin round 560 x 420), rendered at 3.5x. Drawn narrow on purpose: shown in
+     a 340 px column on a phone, its type must still be readable. */
+  :root { --ink: #15191f; --grey: #535c68; --line: #d3d9e0; --panel: #f3f5f7; --accent: #006877; --arrow: #8a929d; }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 588px; height: 448px; background: #fff; font-family: 'IBM Plex Sans', sans-serif; color: var(--ink); position: relative; overflow: hidden; }
+  .box { position: absolute; border: 1.5px solid var(--line); border-radius: 8px; background: #fff; }
+  .mono { font-family: 'IBM Plex Mono', monospace; color: var(--grey); font-size: 13.5px; line-height: 1.55; }
+  .app { left: 1px; top: 1px; width: 558px; height: 62px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; }
+  .app h2 { font-size: 19px; font-weight: 600; }
+  .server { left: 1px; top: 92px; width: 558px; height: 128px; overflow: hidden; }
+  .server header { height: 42px; background: var(--panel); border-bottom: 1.5px solid var(--line); padding: 0 20px; display: flex; align-items: center; }
+  .server h2 { font-size: 17px; font-weight: 600; }
+  .step { position: absolute; top: 58px; width: 180px; }
+  .step strong { display: block; font-weight: 500; font-size: 16.5px; line-height: 1.3; margin-bottom: 4px; }
+  .step strong i { font-style: normal; color: var(--grey); margin-right: 8px; }
+  .step .mono { display: block; font-size: 13px; padding-left: 20px; }
+  .cut { position: absolute; top: 56px; width: 1.5px; height: 56px; background: var(--line); }
+  .ep { top: 270px; width: 178px; height: 98px; padding: 14px 14px; white-space: nowrap; }
+  .ep .host { font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 13.5px; margin-bottom: 6px; }
+  .ok { color: var(--accent); font-weight: 500; }
+  .bad { color: var(--ink); font-weight: 500; }
+  .note { position: absolute; left: 0; top: 388px; width: 560px; border-top: 1.5px solid var(--line); padding-top: 12px; font-size: 12.5px; white-space: nowrap; }
+  svg { position: absolute; left: 0; top: 0; }
+</style>
+</head>
+<body>
+<script>
+  const params = new URLSearchParams(location.search)
+  const fr = params.get('lang') === 'fr'
+  const t = fr ? {
+    app: 'Votre application', accepted: '202 Accepted',
+    server: 'Serveur de livraison',
+    s1: 'Enregistrer', s1d: 'conservé 30 jours',
+    s2: 'Signer', s2d: 'HMAC-SHA256',
+    s3: 'Envoyer et noter', s3d: 'délai de 10 s',
+    retry: 'réessai dans 2 min',
+    note: 'Un échec est réessayé après 30 s, 2 min, 10 min, 1 h, 6 h puis 24 h',
+  } : {
+    app: 'Your application', accepted: '202 Accepted',
+    server: 'Delivery server',
+    s1: 'Store', s1d: 'kept for 30 days',
+    s2: 'Sign', s2d: 'HMAC-SHA256',
+    s3: 'Send and record', s3d: 'timeout 10 s',
+    retry: 'retry in 2 min',
+    note: 'Failed attempts retry after 30 s, 2 min, 10 min, 1 h, 6 h and 24 h',
+  }
+  document.documentElement.lang = fr ? 'fr' : 'en'
+  document.body.innerHTML = `
+  <div style="position:absolute;left:14px;top:14px;width:560px;height:420px"><svg width="560" height="420" fill="none" stroke="#8a929d" stroke-width="1.5">
+    <path d="M280 64 V86"/><path d="M275 84 L280 91 L285 84 Z" fill="#8a929d" stroke="none"/>
+    <path d="M280 221 V246 M90 246 H470 M90 246 V263 M280 246 V263 M470 246 V263"/>
+    <path d="M85 261 L90 268 L95 261 Z M275 261 L280 268 L285 261 Z M465 261 L470 268 L475 261 Z" fill="#8a929d" stroke="none"/>
+  </svg>
+  <div class="box app"><h2>${t.app}</h2><div class="mono">POST /v1/events · ${t.accepted}</div></div>
+  <div class="box server">
+    <header><h2>${t.server}</h2></header>
+    <div class="step" style="left:20px"><strong><i>1</i>${t.s1}</strong><span class="mono">${t.s1d}</span></div>
+    <div class="cut" style="left:186px"></div>
+    <div class="step" style="left:206px"><strong><i>2</i>${t.s2}</strong><span class="mono">${t.s2d}</span></div>
+    <div class="cut" style="left:372px"></div>
+    <div class="step" style="left:392px"><strong><i>3</i>${t.s3}</strong><span class="mono">${t.s3d}</span></div>
+  </div>
+  <div class="box ep" style="left:1px"><div class="host">hooks.tessera.com</div><div class="mono"><span class="ok">200</span> · 142 ms</div></div>
+  <div class="box ep" style="left:191px"><div class="host">erp.kilnworks.io</div><div class="mono"><span class="bad">503</span><br>${t.retry}</div></div>
+  <div class="box ep" style="left:381px"><div class="host">api.quayline.app</div><div class="mono"><span class="ok">200</span> · 88 ms</div></div>
+  <div class="note mono">${t.note}</div></div>`
+</script>
+</body>
+</html>

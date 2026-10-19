@@ -204,6 +204,17 @@ async function signIn(root: string, base: string, roles: readonly string[]): Pro
 }
 
 describe('the shop, end to end', () => {
+  it('mounts the public payment webhook and keeps bank transfers confirmed by an operator', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    const response = await fetch(`${server.base}/api/commerce/payments/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: ' { "paid": true }\n',
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ error: { code: 'COMMERCE_PAYMENT_UNSUPPORTED' } })
+  })
   it('answers an admin with the empty catalog, real router and real tables', async () => {
     const root = await project()
     const server = await startServer(root)

@@ -1,0 +1,455 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=block" rel="stylesheet">
+<style>
+:root{--fg:#111113;--muted:#5c5c66;--dim:#8b8b95;--line:#e4e4e7;--soft:#f4f4f5;--accent:#0068d5;--accentSoft:#eef4fe;--green:#138a4f;--amber:#b36b00}
+*{box-sizing:border-box}
+html,body{margin:0;background:#fff}
+body{font-family:'Geist',sans-serif;color:var(--fg);-webkit-font-smoothing:antialiased}
+.mono{font-family:'Geist Mono',monospace}
+.muted{color:var(--muted)}
+svg{flex:none}
+/* settings-style screens: 1600 x 1000 */
+.page{width:1600px;height:1000px;overflow:hidden;position:relative}
+.page .pad{padding:0 64px}
+.crumb{padding-top:44px;font-size:24px;color:var(--muted)}
+.crumb span{margin:0 12px;color:var(--dim)}
+.head{display:flex;justify-content:space-between;align-items:flex-start;margin-top:14px}
+h1{margin:0;font-size:40px;font-weight:600;letter-spacing:-.02em;line-height:1.2}
+.sub{font-size:24px;color:var(--muted);margin-top:10px}
+.btn{height:60px;padding:0 22px;border:1.5px solid var(--line);border-radius:12px;display:inline-flex;align-items:center;gap:10px;font-size:24px;font-weight:500;background:#fff;white-space:nowrap}
+.btn.p{background:var(--accent);border-color:var(--accent);color:#fff}
+.btns{display:flex;gap:16px}
+.rule{border-top:1.5px solid var(--line)}
+.th{font-size:24px;color:var(--muted);display:grid;align-items:center;height:84px}
+.row{display:grid;align-items:center;border-top:1.5px solid var(--line);font-size:26px}
+.chip{background:var(--soft);border-radius:8px;padding:6px 14px;font-weight:500;display:inline-block;margin-left:6px}
+.step{width:44px;height:44px;border:1.5px solid #c9c9d0;border-radius:10px;display:inline-grid;place-items:center;font-size:24px;font-weight:500}
+.dot{width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:12px;background:var(--green)}
+.dot.a{background:var(--amber)}
+.toggle{width:60px;height:36px;border-radius:18px;background:var(--accent);position:relative;flex:none}
+.toggle::after{content:'';position:absolute;right:4px;top:4px;width:28px;height:28px;border-radius:50%;background:#fff}
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--soft);display:inline-grid;place-items:center;font-size:15px;font-weight:600;color:var(--muted);margin-right:14px}
+.hl{background:var(--accentSoft);box-shadow:inset 5px 0 0 var(--accent)}
+.sm{font-size:24px;color:var(--muted)}
+.b{font-weight:500}
+/* the approvals queue: 1200 x 760 css px, drawn at 2x */
+.app{width:1200px;height:760px;display:grid;grid-template-columns:177px 1fr 290px;overflow:hidden;font-size:13px}
+.side{background:#fafafb;border-right:1px solid var(--line);padding:14px 8px;display:flex;flex-direction:column;position:relative}
+.ws{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;line-height:1.2;padding:2px 6px 14px}
+.ws i{width:22px;height:22px;border-radius:6px;background:#111113;color:#fff;font-style:normal;font-size:9px;display:grid;place-items:center;letter-spacing:.02em}
+.srch{border:1px solid var(--line);border-radius:7px;height:28px;display:flex;align-items:center;gap:7px;padding:0 9px;color:var(--dim);margin:0 0 12px;background:#fff}
+.nav div{display:flex;justify-content:space-between;align-items:center;height:30px;padding:0 9px;border-radius:7px;color:#2a2a2f}
+.nav div.on{background:#fff;border:1px solid var(--line);font-weight:500}
+.nav small{color:var(--muted);font-size:12px}
+.nav .grp{height:auto;padding:14px 9px 6px;font-size:11px;color:var(--dim)}
+.me{margin-top:auto;display:flex;align-items:center;gap:8px;padding:10px 6px 0;border-top:1px solid var(--line);font-weight:500}
+.me small{margin-left:auto;color:var(--muted);font-weight:400}
+.me .avatar{width:24px;height:24px;font-size:9px;margin:0;background:var(--accentSoft);color:var(--accent)}
+.list{display:flex;flex-direction:column;min-width:0}
+.lh{display:flex;justify-content:space-between;align-items:center;padding:16px 24px 0}
+.lh h2{margin:0;font-size:21px;font-weight:600;letter-spacing:-.01em}
+.sbtn{height:28px;padding:0 11px;border:1px solid var(--line);border-radius:7px;display:inline-flex;align-items:center;gap:6px;font-weight:500}
+.sbtn.p{background:var(--accent);border-color:var(--accent);color:#fff}
+.tabs{display:flex;gap:24px;padding:18px 24px 0;border-bottom:1px solid var(--line);color:var(--muted)}
+.tabs div{padding-bottom:10px;display:flex;gap:8px;align-items:center}
+.tabs .on{color:var(--fg);box-shadow:inset 0 -2px 0 var(--fg);font-weight:500}
+.tabs em{font-style:normal;background:var(--accentSoft);color:var(--accent);border-radius:6px;padding:1px 6px;font-size:11px;font-weight:600}
+.lr{display:grid;grid-template-columns:22px 1fr 96px 96px;align-items:center;gap:0 6px;padding:0 24px 0 24px;height:56px;border-bottom:1px solid var(--line)}
+.lr.hd{height:36px;color:var(--muted);font-size:12px}
+.lr.sel{background:var(--accentSoft);box-shadow:inset 3px 0 0 var(--accent)}
+.cb{width:13px;height:13px;border:1.5px solid #c4c4cc;border-radius:4px;background:#fff}
+.cb.on{background:var(--accent);border-color:var(--accent)}
+.lr .t{font-weight:500;font-size:13.5px}
+.lr .m{color:var(--muted);font-size:12px;margin-top:2px}
+.lr .m b{font-weight:400;color:var(--dim);margin-left:6px}
+.amt{text-align:right;font-weight:500;font-size:13.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.due{font-size:13px;color:var(--muted);padding-left:12px;white-space:nowrap}
+.due.r::before,.due.o::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px;background:#d92d20}
+.due.o::before{background:var(--amber)}
+.due.r,.due.o{color:var(--fg)}
+.detail{border-left:1px solid var(--line);padding:16px 20px;display:flex;flex-direction:column}
+.detail .top{display:flex;justify-content:space-between;color:var(--muted);font-size:12px}
+.detail h3{margin:8px 0 10px;font-size:17px;font-weight:600;letter-spacing:-.01em}
+.detail .big{font-size:32px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.detail .kv{display:flex;justify-content:space-between;gap:10px;margin-top:9px;font-size:12px}
+.detail .kv span:first-child{color:var(--muted);white-space:nowrap}
+.detail .kv span:last-child,.detail .kv a{text-align:right}
+.detail .kv a{color:var(--accent)}
+.detail h4{margin:20px 0 10px;font-size:13px;font-weight:600;padding-top:16px;border-top:1px solid var(--line)}
+.chain{position:relative;margin-left:2px}
+.node{display:grid;grid-template-columns:22px 1fr auto;gap:0 8px;margin-bottom:12px;font-size:12.5px;position:relative}
+.node .c{width:16px;height:16px;border-radius:50%;border:1.5px solid #c4c4cc;margin-top:2px;background:#fff;position:relative;z-index:1}
+.node .c.ok{background:var(--accent);border-color:var(--accent)}
+.node .c.now{border-color:var(--accent)}
+.node .c.now::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--accent)}
+.node b{font-weight:500}
+.node small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
+.node:not(:last-child)::before{content:'';position:absolute;left:7.5px;top:18px;bottom:-12px;width:1.5px;background:#d4d4da}
+.cmt{display:flex;gap:8px;font-size:12px;line-height:1.45}
+.cmt .avatar{width:22px;height:22px;font-size:8px;margin:0;flex:none}
+.cmt small{color:var(--dim);margin-left:4px}
+.inp{margin-top:10px;border:1px solid var(--line);border-radius:7px;height:30px;display:flex;align-items:center;padding:0 10px;color:var(--dim);font-size:12px}
+.acts{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:14px}
+.acts .sbtn{justify-content:center;height:34px;font-size:13px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const q = new URLSearchParams(location.search)
+const lang = q.get('lang') === 'fr' ? 'fr' : 'en'
+const view = q.get('view') || 'app'
+const fr = lang === 'fr'
+const t = (en, f) => (fr ? f : en)
+const NB = ' ', NS = ' '
+function money(cents, cur) {
+  const n = (cents / 100).toFixed(2)
+  const [i, d] = n.split('.')
+  if (fr) return i.replace(/\B(?=(\d{3})+(?!\d))/g, NB) + ',' + d + NS + '€'
+  return (cur === 'EUR' ? '€' : '$') + i.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + d
+}
+const m = (n, cur) => money(Math.round(n * 100), cur)
+const mw = (n) => m(n).replace(/[.,]00(?=[^0-9]|$)/, '')
+const ic = (d, s = 15, w = 1.8, c = 'currentColor') =>
+  `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="${w}">${d}</svg>`
+const I = {
+  search: ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', 14, 2),
+  inbox: ic('<path d="M3 13h5l1 3h6l1-3h5M5 5h14l2 8v6H3v-6z"/>'),
+  check: ic('<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>'),
+  doc: ic('<path d="M6 3h9l4 4v14H6zM9 12h7M9 16h7"/>'),
+  cart: ic('<path d="M3 4h3l2 11h10l2-8H7M10 20h.01M17 20h.01"/>'),
+  bld: ic('<path d="M5 21V4h10v17M15 9h4v12M9 8h2M9 12h2M9 16h2"/>'),
+  flow: ic('<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7v10M8 5h4a4 4 0 0 1 4 4v1"/>'),
+  list: ic('<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>'),
+  bars: ic('<path d="M5 20V10M12 20V4M19 20v-8"/>'),
+  plug: ic('<path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/>'),
+  users: ic('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2 .6 3.3 2.4 3.5 6"/>'),
+  gear: ic('<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/>'),
+  filter: ic('<path d="M4 6h16M7 12h10M10 18h4"/>', 13, 2),
+  plus: ic('<path d="M12 5v14M5 12h14"/>', 13, 2.2),
+  chev: ic('<path d="m6 9 6 6 6-6"/>', 14, 2),
+  chevL: ic('<path d="m6 9 6 6 6-6"/>', 22, 2, '#8b8b95'),
+  dl: ic('<path d="M12 4v11m-5-4 5 5 5-5M5 20h14"/>', 26, 2),
+  arrow: ic('<path d="M4 12h16m-6-6 6 6-6 6"/>', 26, 2, '#8b8b95'),
+  plug26: ic('<path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/>', 22, 2, '#5c5c66'),
+}
+const av = (s) => `<span class="avatar">${s}</span>`
+
+const root = document.getElementById('root')
+const V = {}
+
+V.app = () => {
+  const co = t('Halvorsen Freight', 'Marenne Logistique')
+  const ini = t('HF', 'ML')
+  const rows = fr
+    ? [
+        ['Révision freins, six tracteurs', 'DA-2481', 'Marta Silva', 'Flotte · FR', 18420, 'r', 'Aujourd’hui'],
+        ['Pneus Kestrel, facture d’août', 'FA-9310', 'Hugo Perrin', 'Flotte · FR', 7912.4, 'o', 'Aujourd’hui'],
+        ['Rayonnages entrepôt, baie 4 Lyon', 'DA-2479', 'Léa Fournier', 'Sites · FR', 42300, 'o', 'Demain'],
+        ['Contrat annuel contrôle des chariots', 'BC-1177', 'Samir Haddad', 'Sites · BE', 9600, '', 'jeu. 4 sept.'],
+        ['Coursiers du quai, surcharge ligne 11', 'FA-9302', 'Inès Roche', 'Exploit. · FR', 1284.75, '', 'jeu. 4 sept.'],
+        ['Renouvellement télématique, 140 véhicules', 'DA-2476', 'Théo Marchand', 'Flotte · FR', 26880, '', 'ven. 5 sept.'],
+        ['Cartes carburant, juillet', 'FA-9297', 'Hugo Perrin', 'Flotte · BE', 61045.18, '', 'lun. 8 sept.'],
+        ['Intérimaires, semaines 38 à 41', 'DA-2470', 'Marta Silva', 'Exploit. · FR', 33600, '', 'mar. 9 sept.'],
+        ['Douchettes de palettes (12)', 'DA-2468', 'Léa Fournier', 'Sites · FR', 4188, '', 'mer. 10 sept.'],
+        ['Cabinet Delorme, revue de bail', 'FA-9288', 'Inès Roche', 'Finance', 3750, '', 'ven. 12 sept.'],
+      ]
+    : [
+        ['Brake service for six tractor units', 'PR-2481', 'Marta Silva', 'Fleet · UK', 18420, 'r', 'Today'],
+        ['Kestrel Tyres, August invoice', 'INV-9310', 'Owen Price', 'Fleet · UK', 7912.4, 'o', 'Today'],
+        ['Warehouse racking, Felixstowe bay 4', 'PR-2479', 'Lena Fischer', 'Sites · UK', 42300, 'o', 'Tomorrow'],
+        ['Annual forklift inspection contract', 'PO-1177', 'Samir Haddad', 'Sites · NL', 9600, '', 'Thu 4 Sep', 'EUR'],
+        ['Dockside Couriers, route 11 surcharge', 'INV-9302', 'Grace Okafor', 'Ops · UK', 1284.75, '', 'Thu 4 Sep'],
+        ['Telematics renewal, 140 vehicles', 'PR-2476', 'Tom Whitaker', 'Fleet · UK', 26880, '', 'Fri 5 Sep'],
+        ['Harbour Energy, fuel cards July', 'INV-9297', 'Owen Price', 'Fleet · NL', 61045.18, '', 'Mon 8 Sep', 'EUR'],
+        ['Temporary drivers, peak weeks 38 to 41', 'PR-2470', 'Marta Silva', 'Ops · UK', 33600, '', 'Tue 9 Sep'],
+        ['Replacement pallet scanners (12)', 'PR-2468', 'Lena Fischer', 'Sites · UK', 4188, '', 'Wed 10 Sep'],
+        ['Northbank Legal, lease review', 'INV-9288', 'Grace Okafor', 'Finance', 3750, '', 'Fri 12 Sep'],
+      ]
+  const nav = [
+    [I.inbox, t('Inbox', 'Réception'), 12, 0],
+    [I.check, t('Approvals', 'Validations'), 8, 1],
+    [I.doc, t('Requests', 'Demandes'), '', 0],
+    [I.doc, t('Invoices', 'Factures'), 41, 0],
+    [I.cart, t('Purchase orders', 'Bons de commande'), '', 0],
+    [I.bld, t('Vendors', 'Fournisseurs'), '', 0],
+  ]
+  const nav2 = [
+    [I.flow, t('Policies', 'Politiques')],
+    [I.list, t('Audit log', 'Journal d’audit')],
+    [I.bars, t('Reports', 'Rapports')],
+    [I.plug, t('Integrations', 'Intégrations')],
+    [I.users, t('Directory', 'Annuaire')],
+    [I.gear, t('Settings', 'Paramètres')],
+  ]
+  const item = ([i, l, n, on]) =>
+    `<div class="${on ? 'on' : ''}"><span style="display:flex;gap:9px;align-items:center">${i}${l}</span><small>${n}</small></div>`
+  return `<div class="app">
+  <div class="side">
+    <div class="ws"><i>${ini}</i><span style="flex:1">${co}</span>${I.chev}</div>
+    <div class="srch">${I.search}<span style="flex:1">${t('Search', 'Rechercher')}</span><span class="mono" style="font-size:11px">/</span></div>
+    <div class="nav">${nav.map(item).join('')}<div class="grp">${t('Workspace', 'Espace de travail')}</div>${nav2
+      .map(([i, l]) => item([i, l, '', 0]))
+      .join('')}</div>
+    <div class="me"><span class="avatar">${t('AT', 'CA')}</span>${t('Adrian Tan', 'Camille Aubry')}</div>
+  </div>
+  <div class="list">
+    <div class="lh"><h2>${t('Approvals', 'Validations')}</h2><div style="display:flex;gap:8px"><span class="sbtn">${I.filter}${t('Filter', 'Filtrer')}</span><span class="sbtn p">${I.plus}${t('New request', 'Nouvelle demande')}</span></div></div>
+    <div class="tabs"><div class="on">${t('Waiting on me', 'À valider par moi')}<em>8</em></div><div>${t('Waiting on others', 'En attente des autres')}<em style="background:var(--soft);color:var(--muted)">23</em></div><div>${t('Approved', 'Validées')}</div><div>${t('Rejected', 'Refusées')}</div></div>
+    <div class="lr hd"><span class="cb"></span><span>${t('Request', 'Demande')}</span><span style="text-align:right">${t('Amount', 'Montant')}</span><span style="padding-left:12px">${t('Due', 'Échéance')}</span></div>
+    ${rows
+      .map(
+        (r, i) => `<div class="lr ${i === 0 ? 'sel' : ''}"><span class="cb ${i === 0 ? 'on' : ''}"></span>
+      <div><div class="t">${r[0]}</div><div class="m"><span class="mono" style="font-size:11px">${r[1]}</span> &nbsp;${r[2]}<b>${r[3]}</b></div></div>
+      <div class="amt">${m(r[4], r[7])}</div><div class="due ${r[5]}">${r[6]}</div></div>`,
+      )
+      .join('')}
+  </div>
+  <div class="detail">
+    <div class="top"><span class="mono">${rows[0][1]}</span><span>${t('Step 2 of 3', 'Étape 2 sur 3')}</span></div>
+    <h3>${rows[0][0]}</h3>
+    <div class="big">${m(18420)}</div>
+    <div class="muted" style="font-size:12px;margin-top:3px">${t('Excl. VAT · Fleet · UK · Budget 2026-FL-03', 'HT · Flotte · FR · Budget 2026-FL-03')}</div>
+    <div class="kv" style="margin-top:16px"><span>${t('Vendor', 'Fournisseur')}</span><span>${t('Westway Commercial Vehicles', 'Garage Lavigne PL')}</span></div>
+    <div class="kv"><span>${t('Quote', 'Devis')}</span><a>${t('WCV-Q-20418.pdf', 'GLPL-D-20418.pdf')}</a></div>
+    <div class="kv"><span>${t('Remaining budget', 'Budget restant')}</span><span>${t(mw(61280) + ' of ' + mw(240000), mw(61280) + ' sur ' + mw(240000))}</span></div>
+    <h4>${t('Approval chain', 'Circuit de validation')}</h4>
+    <div class="chain">
+      <div class="node"><span class="c ok"></span><div><b>${t('Budget owner, Fleet', 'Resp. budget, Flotte')}</b><small>${t('Approved Mon 1 Sep, 09:12', 'Validé lun. 1er sept., 09:12')}</small></div><span>Marta Silva</span></div>
+      <div class="node"><span class="c now"></span><div><b>${t('Finance controller', 'Contrôle de gestion')}</b><small>${t('Waiting, due today 17:00', 'Échéance aujourd’hui, 17:00')}</small></div><span>${t('You', 'Vous')}</span></div>
+      <div class="node"><span class="c"></span><div><b>${t('CFO', 'Direction financière')}</b><small>${t('Required above ' + mw(15000), 'Au-delà de ' + mw(15000))}</small></div><span>Hannah Brooks</span></div>
+    </div>
+    <h4 style="margin-top:6px">${t('Comments', 'Commentaires')}</h4>
+    <div class="cmt"><span class="avatar">MS</span><div><b style="font-weight:500">Marta Silva</b><small>09:12</small><br>${t('Two quotes attached. Westway is ' + mw(2100) + ' cheaper and can start on Monday.', 'Deux devis joints. Lavigne est moins cher de ' + mw(2100) + ' et peut commencer lundi.')}</div></div>
+    <div class="inp">${t('Add a comment or @mention', 'Ajouter un commentaire ou @mention')}</div>
+    <div class="acts"><span class="sbtn">${t('Reject', 'Refuser')}</span><span class="sbtn p">${t('Approve', 'Valider')}</span></div>
+  </div>
+</div>`
+}
+
+V.policy = () => `<div class="page"><div class="pad">
+  <div class="crumb">${t('Policies', 'Politiques')}<span>/</span></div>
+  <div class="head"><div><h1>${t('Purchase requests', 'Demandes d’achat')}</h1>
+  <div class="sub">${t('Version 14, published 12 Aug by Marta Silva. 2 unpublished changes.', 'Version 14, publiée le 12 août par Marta Silva. 2 modifications non publiées.')}</div></div>
+  <div class="btns"><span class="btn">${t('Test on past requests', 'Tester sur l’historique')}</span><span class="btn p">${t('Publish changes', 'Publier')}</span></div></div></div>
+  <div class="rule" style="margin-top:40px"></div>
+  <div class="pad"><div class="th" style="grid-template-columns:80px 440px 470px 300px 1fr"><span>${t('Step', 'Étape')}</span><span>${t('When', 'Si')}</span><span>${t('Approved by', 'Validé par')}</span><span>${t('Deadline', 'Délai')}</span><span style="text-align:right">${t('Last 90 days', 'Sur 90 jours')}</span></div></div>
+  ${[
+    ['1', t('Amount <span class="muted">is at least</span> <span class="chip">' + mw(1000) + '</span>', 'Montant <span class="muted">d’au moins</span> <span class="chip">' + mw(1000) + '</span>'), t('Budget owner of the cost centre', 'Responsable du centre de coûts'), '', t('2 business days', '2 jours ouvrés'), '', '3 204', 0],
+    ['1', t('Vendor <span class="muted">is</span> <span class="chip">new</span>', 'Fournisseur <span class="muted">est</span> <span class="chip">nouveau</span>'), t('Procurement', 'Achats'), t('In parallel with step 1', 'En parallèle de l’étape 1'), t('2 business days', '2 jours ouvrés'), t('Unpublished', 'Non publié'), '112', 1],
+    ['2', t('Amount <span class="muted">is at least</span> <span class="chip">' + mw(10000) + '</span>', 'Montant <span class="muted">d’au moins</span> <span class="chip">' + mw(10000) + '</span>'), t('Finance controller', 'Contrôle de gestion'), '', t('1 business day', '1 jour ouvré'), '', '941', 0],
+    ['3', t('Amount <span class="muted">is at least</span> <span class="chip">' + mw(15000) + '</span><br><span style="display:inline-block;margin-top:10px">Category <span class="muted">is</span> <span class="chip">Capex</span></span>', 'Montant <span class="muted">d’au moins</span> <span class="chip">' + mw(15000) + '</span><br><span style="display:inline-block;margin-top:10px">Catégorie <span class="muted">est</span> <span class="chip">Investissement</span></span>'), t('CFO', 'Direction financière'), t('and COO above ' + mw(50000), 'et DG au-delà de ' + mw(50000)), t('3 business days', '3 jours ouvrés'), '', '208', 0],
+  ]
+    .map(
+      (r) => `<div class="row ${r[7] ? 'hl' : ''}" style="padding:${r[0] === '3' ? '22px' : '26px'} 64px;grid-template-columns:80px 440px 470px 300px 1fr">
+    <span><span class="step">${r[0]}</span></span><span style="line-height:1.1">${r[1]}</span>
+    <span><span class="b">${r[2]}</span>${r[3] ? `<br><span class="sm" style="display:inline-block;margin-top:8px">${r[3]}</span>` : ''}</span>
+    <span class="muted">${r[4]}${r[5] ? `<br><span style="color:var(--accent);display:inline-block;margin-top:6px">${r[5]}</span>` : ''}</span>
+    <span style="text-align:right" class="muted">${r[6]}</span></div>`,
+    )
+    .join('')}
+  <div class="row" style="padding:34px 64px;grid-template-columns:1fr 60px">
+    <div><div class="b" style="font-size:26px">${t('If an approver is away', 'Si un validateur est absent')}</div>
+    <div class="sub" style="margin-top:8px;font-size:25px">${t('Their delegate decides. With no delegate set, the request goes to their manager after 24 hours.', 'Son délégué décide. Sans délégué, la demande passe à son responsable après 24 heures.')}</div></div><div class="toggle"></div></div>
+</div>`
+
+V.audit = () => {
+  const ev = fr
+    ? [
+        ['2026-09-02 09:12:04', 'MS', 'Marta Silva', 'Étape 1 validée', 'Responsable budget, Flotte', 'a41f 09c2'],
+        ['2026-09-02 09:11:47', 'MS', 'Marta Silva', 'Commentaire ajouté', 'Deux devis joints…', '7d20 e5b8'],
+        ['2026-09-01 16:40:22', 'HP', 'Hugo Perrin', 'Montant modifié', m(18240) + ' → ' + m(18420), '3c9e 1a77'],
+        ['2026-09-01 16:38:05', '', 'Synchro Sage', 'Ligne budgétaire liée', '2026-FL-03, Flotte FR', 'f0b3 6e41'],
+        ['2026-09-01 16:31:59', 'HP', 'Hugo Perrin', 'Fichier joint', 'GLPL-D-20418.pdf', '91ca d302'],
+        ['2026-09-01 16:30:12', 'HP', 'Hugo Perrin', 'Demande créée', 'Depuis le formulaire Flotte', '5e67 b8f0'],
+      ]
+    : [
+        ['2026-09-02 09:12:04', 'MS', 'Marta Silva', 'Approved step 1', 'Budget owner, Fleet', 'a41f 09c2'],
+        ['2026-09-02 09:11:47', 'MS', 'Marta Silva', 'Commented', 'Two quotes attached...', '7d20 e5b8'],
+        ['2026-09-01 16:40:22', 'OP', 'Owen Price', 'Changed amount', m(18240) + ' → ' + m(18420), '3c9e 1a77'],
+        ['2026-09-01 16:38:05', '', 'NetSuite sync', 'Linked budget line', '2026-FL-03, Fleet UK', 'f0b3 6e41'],
+        ['2026-09-01 16:31:59', 'OP', 'Owen Price', 'Attached file', 'WCV-Q-20418.pdf', '91ca d302'],
+        ['2026-09-01 16:30:12', 'OP', 'Owen Price', 'Created request', 'From the Fleet request form', '5e67 b8f0'],
+      ]
+  return `<div class="page"><div class="pad">
+  <div class="crumb">${t('Workspace', 'Espace de travail')}<span>/</span></div>
+  <div class="head"><h1>${t('Audit log', 'Journal d’audit')}</h1><span class="btn">${I.dl}${t('Export signed CSV', 'Exporter le CSV signé')}</span></div>
+  <div style="display:flex;align-items:center;margin-top:34px;gap:16px;font-size:24px">
+    <span class="btn" style="height:52px"><span class="muted">${t('Object', 'Objet')}</span> <span class="b">${t('PR-2481', 'DA-2481')}</span></span>
+    <span class="btn" style="height:52px"><span class="muted">${t('Actor', 'Acteur')}</span> <span class="b">${t('Anyone', 'Tous')}</span></span>
+    <span class="btn" style="height:52px"><span class="muted">Date</span> <span class="b">${t('Last 90 days', '90 derniers jours')}</span></span>
+    <span class="muted" style="margin-left:auto">${t('6 events', '6 événements')}</span></div></div>
+  <div class="rule" style="margin-top:32px"></div>
+  <div class="pad"><div class="th" style="height:70px;grid-template-columns:336px 300px 480px 1fr"><span>${t('Time (UTC)', 'Heure (UTC)')}</span><span>${t('Actor', 'Acteur')}</span><span>${t('Event', 'Événement')}</span><span>${t('Chain hash', 'Empreinte')}</span></div></div>
+  ${ev
+    .map(
+      (e) => `<div class="row" style="padding:0 64px;height:92px;grid-template-columns:336px 300px 480px 1fr 30px"><span class="mono" style="font-size:24px">${e[0]}</span>
+    <span style="display:flex;align-items:center;white-space:nowrap">${e[1] ? av(e[1]) : `<span class="avatar">${I.plug26}</span>`}${e[2]}</span>
+    <span><span class="b">${e[3]}</span><br><span class="sm">${e[4]}</span></span><span class="mono muted" style="font-size:24px">${e[5]}</span><span class="dot" style="margin:0"></span></div>`,
+    )
+    .join('')}
+  <div class="row" style="padding:0 64px;height:90px;font-size:24px"><span><span class="dot" style="margin-right:14px"></span>${t('Chain verified: every event matches the hash of the one before it.', 'Chaîne vérifiée : chaque événement correspond à l’empreinte du précédent.')}</span></div>
+</div>`
+}
+
+V.erp = () => {
+  const erp = t('NetSuite', 'Sage X3')
+  const co = t('Halvorsen Freight', 'Marenne Logistique')
+  const rec = fr
+    ? [
+        ['09:14:31', 'Facture fournisseur FF-10482', m(18420), 'Vers Sage X3', 'Comptabilisée', ''],
+        ['09:02:10', 'Bon de commande BC-1177', m(9600), 'Vers Sage X3', 'Créé', ''],
+        ['08:59:44', 'Budget 2026-FL-03', m(240000), 'Depuis Sage X3', 'Mis à jour', ''],
+        ['08:45:02', 'Facture fournisseur FF-10479', m(7912.4), 'Vers Sage X3', 'Relancée, limite de débit', 'a'],
+      ]
+    : [
+        ['09:14:31', 'Vendor bill VB-10482', m(18420), 'To NetSuite', 'Posted', ''],
+        ['09:02:10', 'Purchase order PO-1177', m(9600, 'EUR'), 'To NetSuite', 'Created', ''],
+        ['08:59:44', 'Budget 2026-FL-03', m(240000), 'From NetSuite', 'Updated', ''],
+        ['08:45:02', 'Vendor bill VB-10479', m(7912.4), 'To NetSuite', 'Retried after rate limit', 'a'],
+      ]
+  const sets = fr
+    ? [['Comptabiliser les factures validées', 'Validées pour comptabilisation'], ['Bons de commande', 'Créés dans Sage X3 à la validation finale'], ['Filiales', 'Marenne Logistique SAS, Marenne Benelux SA'], ['Lignes budgétaires', 'Lues toutes les 15 minutes, Budget 2026']]
+    : [['Post approved vendor bills as', 'Approved for posting'], ['Purchase orders', 'Create in NetSuite on final approval'], ['Subsidiaries', 'Halvorsen Freight UK, Halvorsen Freight BV'], ['Budget lines', 'Read every 15 minutes from Budget 2026']]
+  return `<div class="page"><div class="pad">
+  <div class="crumb">${t('Integrations', 'Intégrations')}<span>/</span></div>
+  <div class="head"><h1>${erp}</h1><span class="btn">${t('Sync now', 'Synchroniser')}</span></div>
+  <div class="sub" style="margin-top:18px;color:#3a3a42;font-size:25px"><span class="dot"></span>${t('Connected to ' + co + ' (production). Last sync 2 minutes ago.', 'Connecté à ' + co + ' (production). Dernière synchro il y a 2 minutes.')}</div></div>
+  <div class="rule" style="margin-top:34px"></div>
+  <div class="pad" style="padding-top:22px;padding-bottom:20px">${sets
+    .map(
+      (s) => `<div style="display:grid;grid-template-columns:536px 1fr 30px;align-items:center;height:60px;font-size:26px"><span class="muted">${s[0]}</span><span class="b">${s[1]}</span>${I.chevL}</div>`,
+    )
+    .join('')}</div>
+  <div class="rule"></div>
+  <div class="pad"><div class="b" style="font-size:26px;padding:34px 0 22px">${t('Recent activity', 'Activité récente')}</div>
+  <div class="th" style="height:60px;grid-template-columns:200px 576px 280px 1fr"><span>${t('Time', 'Heure')}</span><span>${t('Record', 'Enregistrement')}</span><span>${t('Direction', 'Sens')}</span><span>${t('Result', 'Résultat')}</span></div></div>
+  ${rec
+    .map(
+      (r) => `<div class="row" style="padding:0 64px;height:80px;grid-template-columns:200px 576px 280px 1fr;font-size:26px"><span class="mono" style="font-size:25px">${r[0]}</span>
+    <span style="display:flex;justify-content:space-between;padding-right:48px"><span class="b">${r[1]}</span><span class="muted">${r[2]}</span></span><span class="muted">${r[3]}</span>
+    <span style="white-space:nowrap"><span class="dot ${r[5]}"></span>${r[4]}</span></div>`,
+    )
+    .join('')}
+</div>`
+}
+
+V.sso = () => {
+  const g = fr
+    ? [['Controle-Gestion', 'Validateur, Finance', 6], ['Responsables-Budget', 'Validateur, ses centres de coûts', 31], ['Compta-Fournisseurs', 'Comptabilité fournisseurs', 9], ['Tous-Salaries', 'Demandeur', 164], ['Audit-Externe-2026', 'Auditeur, lecture seule jusqu’au 31 déc.', 4]]
+    : [['Finance-Controllers', 'Approver, Finance', 6], ['Budget-Owners', 'Approver, own cost centres', 31], ['AP-Team', 'Accounts payable', 9], ['All-Staff', 'Requester', 164], ['External-Audit-2026', 'Auditor, read only until 31 Dec', 4]]
+  return `<div class="page"><div class="pad">
+  <div class="crumb">${t('Settings', 'Paramètres')}<span>/</span></div>
+  <div class="head"><h1>${t('Sign-in and provisioning', 'Connexion et provisionnement')}</h1></div></div>
+  <div class="rule" style="margin-top:44px"></div>
+  <div class="pad" style="padding-top:34px">
+    <div style="display:flex;justify-content:space-between"><div><div class="b" style="font-size:28px">${t('SAML single sign-on', 'Authentification unique SAML')}</div>
+    <div class="sub" style="margin-top:8px;font-size:25px">${t('Members sign in through Okta. Password sign-in is turned off.', 'Les membres se connectent par Okta. Le mot de passe est désactivé.')}</div></div><div class="toggle" style="margin-top:6px"></div></div>
+    <div style="margin-top:26px;font-size:25px;line-height:48px">
+      <div style="display:grid;grid-template-columns:376px 1fr"><span class="muted">${t('Identity provider', 'Fournisseur d’identité')}</span><span>Okta</span></div>
+      <div style="display:grid;grid-template-columns:376px 1fr"><span class="muted">${t('Sign-in URL', 'URL de connexion')}</span><span class="mono" style="font-size:24px">https://${t('halvorsen', 'marenne')}.okta.com/app/sso/saml</span></div>
+      <div style="display:grid;grid-template-columns:376px 1fr"><span class="muted">${t('Certificate', 'Certificat')}</span><span>${t('Expires 14 March 2028', 'Expire le 14 mars 2028')}</span></div></div>
+    <div class="rule" style="margin-top:22px"></div>
+    <div style="display:flex;justify-content:space-between;margin-top:30px"><div><div class="b" style="font-size:28px">${t('SCIM provisioning', 'Provisionnement SCIM')}</div>
+    <div class="sub" style="margin-top:8px;font-size:25px">${t('214 members and 18 groups synced from Okta. Last change 11 minutes ago.', '214 membres et 18 groupes synchronisés depuis Okta. Dernier changement il y a 11 min.')}</div></div><div class="toggle" style="margin-top:6px"></div></div>
+    <div class="th" style="height:80px;margin-top:6px;grid-template-columns:536px 1fr 120px"><span>${t('Okta group', 'Groupe Okta')}</span><span>${t('Role', 'Rôle')}</span><span style="text-align:right">${t('Members', 'Membres')}</span></div>
+    ${g
+      .map(
+        (r) => `<div class="row" style="height:66px;font-size:25px;grid-template-columns:476px 60px 1fr 120px"><span class="mono" style="font-size:24px">${r[0]}</span>${I.arrow}<span style="color:#3a3a42">${r[1]}</span><span style="text-align:right" class="muted">${r[2]}</span></div>`,
+      )
+      .join('')}
+  </div></div>`
+}
+
+V.spend = () => {
+  const weeks = fr
+    ? ['9 juin', '16', '23', '30', '7 juil.', '14', '21', '28', '4 août', '11', '18', '25', '1er sept.']
+    : ['9 Jun', '16', '23', '30', '7 Jul', '14', '21', '28', '4 Aug', '11', '18', '25', '1 Sep']
+  const v = [6.8, 6.2, 6.5, 5.9, 5.4, 5.6, 4.9, 4.7, 4.4, 4.1, 3.9, 3.7, 3.6]
+  const dec = (x) => (fr ? String(x).replace('.', ',') : String(x))
+  const X0 = 128, X1 = 1536, Y0 = 880
+  const sc = (Y0 - 516) / 8
+  const slot = (X1 - X0) / 13
+  return `<div class="page"><div class="pad">
+  <div class="crumb">${t('Reports', 'Rapports')}<span>/</span></div>
+  <div class="head"><h1>${t('Time to approve', 'Délai de validation')}</h1>
+  <div style="background:var(--soft);border-radius:14px;padding:5px;display:flex;font-size:24px;color:var(--muted)"><span style="background:#fff;color:var(--fg);border-radius:10px;padding:10px 20px;box-shadow:0 0 0 1.5px var(--line)">${t('Weekly', 'Hebdo')}</span><span style="padding:10px 20px">${t('Monthly', 'Mensuel')}</span><span style="padding:10px 20px">${t('Quarterly', 'Trimestriel')}</span></div></div></div>
+  <div class="rule" style="margin-top:44px"></div>
+  <div class="pad" style="display:grid;grid-template-columns:1fr 1fr 1fr;height:212px;align-items:center">
+    ${[
+      [t('Median time to approve', 'Délai médian de validation'), fr ? '3,6' + NS + 'h' : '3.6 h', t('1.2 h faster than Q2', '1,2' + NS + 'h plus rapide qu’au T2')],
+      [t('Requests approved', 'Demandes validées'), fr ? '4' + NB + '812' : '4,812', t('Last 13 weeks', '13 dernières semaines')],
+      [t('Waiting over 2 days', 'En attente depuis 2 jours'), '37', t('9 in Sites · UK', '9 sur Sites · FR')],
+    ]
+      .map(
+        (k, i) => `<div style="${i ? 'border-left:1.5px solid var(--line);padding-left:32px' : ''}"><div class="muted" style="font-size:24px">${k[0]}</div><div style="font-size:56px;font-weight:600;letter-spacing:-.02em;margin:10px 0 6px">${k[1]}</div><div class="muted" style="font-size:24px">${k[2]}</div></div>`,
+      )
+      .join('')}</div>
+  <div class="rule"></div>
+  <div class="pad" style="padding-top:34px;font-size:25px;color:#3a3a42">${t('Median hours from request to final approval, by week', 'Heures médianes entre la demande et la validation finale, par semaine')}</div>
+  <svg width="1600" height="1000" style="position:absolute;left:0;top:0" font-family="Geist">
+    ${[0, 2, 4, 6, 8]
+      .map(
+        (h) => `<line x1="${X0}" x2="${X1}" y1="${Y0 - h * sc}" y2="${Y0 - h * sc}" stroke="${h ? '#e9e9ec' : '#cfcfd5'}" stroke-width="2"/><text x="${X0 - 20}" y="${Y0 - h * sc + 8}" font-size="22" fill="#8b8b95" text-anchor="end">${h}${NS}h</text>`,
+      )
+      .join('')}
+    ${v
+      .map((x, i) => {
+        const last = i === 12
+        const cx = X0 + slot * (i + 0.5)
+        return `<rect x="${cx - 20}" y="${Y0 - x * sc}" width="40" height="${x * sc}" rx="4" fill="${last ? '#0068d5' : '#9dbfee'}"/><text x="${cx}" y="${Y0 + 38}" font-size="22" fill="#8b8b95" text-anchor="middle">${weeks[i]}</text>${last ? `<text x="${cx}" y="${Y0 - x * sc - 12}" font-size="24" font-weight="500" fill="#111113" text-anchor="middle">${dec(x)}${NS}h</text>` : ''}`
+      })
+      .join('')}
+  </svg>
+</div>`
+}
+
+V.api = () => {
+  const J = (s) => `<span style="color:#0068d5">${s}</span>`
+  return `<div class="page"><div class="pad">
+  <div class="crumb">${t('Settings', 'Paramètres')}<span>/</span></div>
+  <div class="head"><h1>${t('API and webhooks', 'API et webhooks')}</h1></div></div>
+  <div class="rule" style="margin-top:44px"></div>
+  <div class="pad" style="display:grid;grid-template-columns:904px 1fr;gap:56px;padding-top:44px">
+    <div style="border:1.5px solid var(--line);border-radius:18px;background:#fafafa;overflow:hidden;height:726px">
+      <div style="display:flex;justify-content:space-between;padding:0 32px;height:70px;align-items:center;border-bottom:1.5px solid var(--line);font-size:24px"><span class="b" style="color:#4a4a52">${t('Request', 'Requête')}</span><span class="muted">HTTP</span></div>
+      <pre class="mono" style="margin:0;padding:22px 32px;font-size:23px;line-height:34px;font-family:'Geist Mono'"><b style="font-weight:500">POST</b> /v2/requests
+<span class="muted">Authorization:</span> Bearer key_live_••••3f9a
+
+{
+  "title": ${J(t('"Brake service, six units"', '"Révision freins, six tracteurs"'))},
+  "amount": ${J('"18420.00"')},
+  "currency": ${J(t('"USD"', '"EUR"'))},
+  "cost_centre": ${J(t('"FLEET-UK"', '"FLOTTE-FR"'))},
+  "vendor": ${J('"ven_8Kq2xT"')}
+}
+
+<span style="color:#138a4f;font-weight:500">201 Created</span>  <span class="muted">·  142 ms</span>
+{
+  "status": ${J('"awaiting_approval"')},
+  "next_step": ${J(t('"Budget owner, Fleet"', '"Responsable budget, Flotte"'))}
+}</pre></div>
+    <div>
+      <div class="b" style="font-size:28px">Webhooks</div><div class="sub" style="font-size:25px;margin-top:6px">${t('Signed with HMAC-SHA256.', 'Signés avec HMAC-SHA256.')}</div>
+      ${[
+        [t('erp-bridge.halvorsen.io/events', 'pont-erp.marenne.fr/events'), 'request.approved, request.rejected', '118'],
+        [t('hooks.halvorsen.io/slack', 'hooks.marenne.fr/slack'), 'request.created', '96'],
+      ]
+        .map(
+          (w) => `<div style="border:1.5px solid var(--line);border-radius:16px;padding:22px 26px;margin-top:24px;font-size:24px;line-height:1.5"><div class="mono b" style="font-size:24px;margin-bottom:4px">${w[0]}</div><div class="muted">${w[1]}</div><div><span class="dot" style="margin-right:10px"></span>200 · ${w[2]} ms · ${t('2 min ago', 'il y a 2 min')}</div></div>`,
+        )
+        .join('')}
+      <div class="b" style="font-size:28px;margin-top:40px">${t('API keys', 'Clés d’API')}</div>
+      <div style="display:flex;justify-content:space-between;font-size:25px;margin-top:22px"><span class="mono b" style="font-size:25px">ci-${t('netsuite', 'sage')}-bridge</span><span class="muted">${t('Read and write', 'Lecture et écriture')}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:25px;margin-top:22px"><span class="mono b" style="font-size:25px">${t('reporting-warehouse', 'reporting-entrepot')}</span><span class="muted">${t('Read only', 'Lecture seule')}</span></div>
+    </div></div></div>`
+}
+
+root.innerHTML = V[view]()
+document.title = view
+</script>
+</body>
+</html>

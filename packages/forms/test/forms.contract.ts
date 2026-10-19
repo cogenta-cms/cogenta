@@ -60,6 +60,40 @@ export function runFormsContract(label: string, open: () => Promise<FormsFixture
       expect(found?.id).toBe(created.id)
     })
 
+    it.each(['fr', 'fr-FR', 'en'])(
+      'uses %s site defaults while preserving explicitly authored messages',
+      async (defaultLocale) => {
+        const localized = createFormStore(db, now, { defaultLocale })
+        const input = {
+          label: 'Contact',
+          fields: [{ name: 'email', label: 'E-mail', kind: 'email' as const, required: true }],
+        }
+        const defaults = await localized.definitions.create({
+          ...input,
+          name: 'defaults',
+          autoresponder: { enabled: true },
+        })
+        expect(defaults.confirmationMessage).toBe(
+          defaultLocale.startsWith('fr')
+            ? 'Merci — votre message a bien été reçu.'
+            : 'Thank you — your message has been received.',
+        )
+        expect(defaults.autoresponder.body).toBe(
+          defaultLocale.startsWith('fr')
+            ? 'Nous avons bien reçu votre message. Nous vous répondrons dès que possible.'
+            : 'We have received your message. We will get back to you as soon as possible.',
+        )
+        const custom = await localized.definitions.create({
+          ...input,
+          name: 'custom',
+          confirmationMessage: 'Author confirmation',
+          autoresponder: { enabled: true, body: 'Author acknowledgment' },
+        })
+        expect(custom.confirmationMessage).toBe('Author confirmation')
+        expect(custom.autoresponder.body).toBe('Author acknowledgment')
+      },
+    )
+
     it('refuses a second form with the same name', async () => {
       await store.definitions.create({
         name: 'contact',

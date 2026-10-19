@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app.js'
+import { i18next } from '../../src/i18n/index.js'
 import { installMockFetch, VALID_TOKEN } from '../helpers/mock-fetch.js'
 
 /**
@@ -12,8 +13,9 @@ import { installMockFetch, VALID_TOKEN } from '../helpers/mock-fetch.js'
 
 const TOKEN_STORAGE_KEY = 'cogenta.session.token'
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals()
+  await i18next.changeLanguage('fr')
 })
 
 function signedIn(overrides: Parameters<typeof installMockFetch>[0] = {}): void {
@@ -58,9 +60,79 @@ describe('the unified assistant screen', () => {
     })
     await goToAssistant()
 
-    expect(await screen.findByText('Rewrite')).toBeDefined()
-    expect(screen.getByText('Rewrite a passage.')).toBeDefined()
+    expect(await screen.findByText('Réécrire')).toBeDefined()
+    expect(
+      screen.getByText('Reformuler un passage en conservant son sens et ses faits.'),
+    ).toBeDefined()
+    expect(screen.queryByText('Rewrite a passage.')).toBeNull()
+    expect(screen.getByText('Réécrire').closest('details')?.open).toBe(false)
     expect(screen.getByText(/gpt-test-1/u)).toBeDefined()
+  })
+
+  it('translates every builtin name and description in French and English while keeping third-party text', async () => {
+    const builtinIds = [
+      'rewrite',
+      'proofread',
+      'summarise',
+      'translate',
+      'meta_description',
+      'titles',
+      'tags',
+      'alt_text',
+      'generate_image',
+      'chat',
+      'classify',
+      'find_duplicates',
+      'moderate',
+      'faq_draft',
+      'schema_org_draft',
+      'generate_agent_identity',
+    ]
+    signedIn({
+      assistant: {
+        available: true,
+        tools: [
+          ...builtinIds.map((id) => ({
+            tool: `assist.${id}`,
+            label: `Server label ${id}`,
+            description: `Server description ${id}`,
+            cost: 'medium' as const,
+            needs: [],
+          })),
+          {
+            tool: 'plugin.custom',
+            label: 'Custom author label',
+            description: 'Custom author description',
+            cost: 'low',
+            needs: [],
+          },
+        ],
+      },
+    })
+    await goToAssistant()
+    await screen.findByText('Réécrire')
+    for (const id of builtinIds) {
+      expect(
+        screen.getByText(i18next.t(`assistant.builtinTools.${id}.label`), { selector: 'summary' }),
+      ).toBeDefined()
+      expect(screen.getByText(i18next.t(`assistant.builtinTools.${id}.description`))).toBeDefined()
+      expect(screen.queryByText(`Server label ${id}`)).toBeNull()
+    }
+    expect(screen.getByText('Custom author label')).toBeDefined()
+    expect(screen.getByText('Custom author description')).toBeDefined()
+    await act(async () => {
+      await i18next.changeLanguage('en')
+    })
+    await screen.findByText('Rewrite')
+    for (const id of builtinIds) {
+      expect(
+        screen.getByText(i18next.t(`assistant.builtinTools.${id}.label`), { selector: 'summary' }),
+      ).toBeDefined()
+      expect(screen.getByText(i18next.t(`assistant.builtinTools.${id}.description`))).toBeDefined()
+    }
+    expect(screen.getByText('Custom author label')).toBeDefined()
+    expect(screen.getByText('Custom author description')).toBeDefined()
+    await i18next.changeLanguage('fr')
   })
 
   it('shows usage against the monthly cap, with a warning near the limit', async () => {
@@ -85,6 +157,13 @@ describe('the unified assistant screen', () => {
   })
 
   it('shows the vector index driver, entry count and last indexed time', async () => {
+    const vector = {
+      driver: 'file',
+      dimensions: 384,
+      count: 7,
+      lastIndexedAt: '2026-08-20T09:00:00.000Z',
+      collections: [],
+    }
     signedIn({
       assistant: {
         available: true,
@@ -97,18 +176,22 @@ describe('the unified assistant screen', () => {
             needs: ['siteId', 'collections'],
           },
         ],
-        vector: {
-          driver: 'file',
-          dimensions: 384,
-          count: 7,
-          lastIndexedAt: '2026-08-20T09:00:00.000Z',
-        },
+        vector,
       },
     })
     await goToAssistant()
 
     expect(await screen.findByText(/file \(384/u)).toBeDefined()
     expect(screen.getByText(/7 fiches indexées|7 entries indexed/iu)).toBeDefined()
+    const indexButton = screen.getByRole('button', {
+      name: 'Voir ce qui est indexé et ajouter des documents de référence',
+    })
+    indexButton.focus()
+    expect(document.activeElement).toBe(indexButton)
+    fireEvent.click(indexButton)
+    expect(
+      screen.getByRole('tab', { name: 'Index de connaissances' }).getAttribute('aria-selected'),
+    ).toBe('true')
   })
 
   it('switches to the chat and duplicates tabs without leaving the screen', async () => {

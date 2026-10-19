@@ -437,3 +437,25 @@ describe('the grid and the goods', () => {
     expect(CODE).toMatch(/\.ce-nav-toggle-input:checked ~ \.ce-header__nav\s*\{\s*display:\s*block/)
   })
 })
+
+describe('quotations follow the language of the page', () => {
+  it('sets a French quotation between guillemets, in the letter, the quote block and the widget', () => {
+    for (const selector of [
+      ':lang(fr) .ce-quote__quote',
+      ':lang(fr) .ce-letter__quote',
+      ':lang(fr) .cg-widget__quote-text',
+    ]) {
+      const at = CODE.indexOf(selector)
+      expect(at, selector).toBeGreaterThan(-1)
+      expect(CODE.slice(at, at + 200), selector).toMatch(/quotes: "\\00AB\\202F" "\\202F\\00BB"/)
+    }
+  })
+})
+
+describe('the layout of the figures on a phone', () => {
+  it('lets an odd last figure take the whole row, so two columns never leave an empty cell', () => {
+    const rule =
+      /@media \(max-width: 63\.999rem\)\s*\{\s*\.ce-figures__item:last-child:nth-child\(odd\)\s*\{\s*grid-column: 1 \/ -1;/
+    expect(CODE).toMatch(rule)
+  })
+})

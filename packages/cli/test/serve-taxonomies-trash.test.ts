@@ -160,7 +160,7 @@ describe('taxonomies and the trash, end to end', () => {
         collections: { name: string; trash: unknown }[]
       }
     }
-    expect(schema.data.contract).toBe('schema@2.0')
+    expect(schema.data.contract).toBe('schema@2.1')
     expect(schema.data.taxonomies.map((entry) => entry.name)).toEqual(['topic'])
     expect(schema.data.collections[0]?.trash).toEqual({ retainDays: 30 })
 

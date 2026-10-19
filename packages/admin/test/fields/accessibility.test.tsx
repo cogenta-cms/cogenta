@@ -88,6 +88,31 @@ describe('accessibility — the new fields of fiche 03', () => {
     await expectNoSeriousA11yViolations(container)
   })
 
+  it('names repeated rich-text controls from their own labels and associates errors and help', async () => {
+    const { container } = render(
+      <>
+        <FieldInput
+          id="summary"
+          field={field('richText', { admin: { label: 'Résumé', help: 'Présentation courte' } })}
+          value={[]}
+          onChange={vi.fn()}
+          error="Résumé requis"
+        />
+        <FieldInput
+          id="body"
+          field={field('richText', { admin: { label: 'Corps' } })}
+          value={[]}
+          onChange={vi.fn()}
+        />
+      </>,
+    )
+    const summary = screen.getByRole('textbox', { name: 'Résumé' })
+    expect(summary.getAttribute('aria-describedby')).toBe('summary-help summary-error')
+    expect(summary.getAttribute('aria-invalid')).toBe('true')
+    expect(screen.getByRole('textbox', { name: 'Corps' })).toBeDefined()
+    await expectNoSeriousA11yViolations(container)
+  })
+
   it('a required text field with a character counter has no serious axe-core violation', async () => {
     const { container } = render(
       <FieldInput

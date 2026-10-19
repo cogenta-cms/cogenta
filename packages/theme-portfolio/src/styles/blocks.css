@@ -510,6 +510,11 @@
   quotes: "\201C" "\201D" "\2018" "\2019";
 }
 
+/* French sets a quotation in guillemets, each with a no-break space inside. */
+:lang(fr) .cg-quote__quote {
+  quotes: "\00AB\00A0" "\00A0\00BB" "\201C" "\201D";
+}
+
 .cg-quote__text {
   margin: 0;
   font-size: var(--cg-size-lead);

@@ -245,10 +245,20 @@
   }
 }
 
-@media (max-width: 24rem) {
+@media (max-width: 30rem) {
   .cs-header__action.cg-action[data-emphasis="primary"] {
     padding-inline: var(--cs-s3);
     font-size: var(--cs-text-label);
+    white-space: nowrap;
+  }
+
+  /* The name of the site is what the bar is for: it never gives up its letters to the action. */
+  .cs-header__brand {
+    flex: none;
+  }
+
+  .cs-header__inner {
+    gap: var(--cs-s2);
   }
 }
 

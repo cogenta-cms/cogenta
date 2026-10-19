@@ -25,6 +25,7 @@ import {
 import { AgentChatFeed } from '../assist/agent-chat-feed.js'
 import { useAgentConversation } from '../assist/use-agent-conversation.js'
 import { useAuth } from '../auth/auth-context.js'
+import { agentSummary } from '../i18n/shipped-text.js'
 import { SettingsIcon } from '../ui/icons.js'
 import {
   Button,
@@ -36,6 +37,7 @@ import {
   Input,
   Modal,
   Notice,
+  PageHeader,
   Select,
   Table,
   TableBody,
@@ -369,6 +371,7 @@ export function AgentDetailRoute(): JSX.Element {
   if (selectedAgent === null) {
     return (
       <section className="flex flex-col gap-4">
+        <PageHeader title={t('agents.heading')} />
         <Link to="/agents">{t('agents.detailBack')}</Link>
         <Notice tone="warning" live="polite">
           <p>{t('agents.detailNotFound')}</p>
@@ -387,31 +390,27 @@ export function AgentDetailRoute(): JSX.Element {
         </Notice>
       )}
 
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-1">
-          <h1
-            id="agents-detail-heading"
-            className="m-0 text-2xl leading-tight font-bold tracking-tight"
+      {/* Fiche feedback: the agent's own description used to be buried inside
+          "Réglages" — shown here too so what this agent is for is readable
+          without opening the modal. */}
+      <PageHeader
+        id="agents-detail-heading"
+        title={t('agents.detailHeading', { name: selectedAgent.name })}
+        {...(identity === null
+          ? {}
+          : { description: agentSummary(selectedAgent.name, identity.role, t) })}
+        actions={
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setSettingsOpen(true)}
+            aria-label={t('agents.settings')}
           >
-            {t('agents.detailHeading', { name: selectedAgent.name })}
-          </h1>
-          {/* Fiche feedback: the agent's own description used to be buried
-              inside "Réglages" — shown here too so what this agent is for is
-              readable without opening the modal. */}
-          {identity !== null && (
-            <p className="m-0 max-w-2xl text-sm leading-5 text-muted-foreground">{identity.role}</p>
-          )}
-        </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setSettingsOpen(true)}
-          aria-label={t('agents.settings')}
-        >
-          <SettingsIcon className="size-4" aria-hidden="true" />
-          {t('agents.settings')}
-        </Button>
-      </div>
+            <SettingsIcon className="size-4" aria-hidden="true" />
+            {t('agents.settings')}
+          </Button>
+        }
+      />
 
       {/* Fiche feedback: clicking an agent used to land on a long
           configuration page with the chat buried at the bottom. The chat is
@@ -457,9 +456,9 @@ export function AgentDetailRoute(): JSX.Element {
         </summary>
         <div className="mt-3 flex flex-col gap-6">
           <div>
-            <h4 className="m-0 mb-2 text-xs leading-5 font-semibold text-muted-foreground uppercase">
+            <h2 className="m-0 mb-2 text-xs leading-5 font-semibold text-muted-foreground uppercase">
               {t('agents.traces')}
-            </h4>
+            </h2>
             <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
               {(showAllTraces ? traces : traces.slice(0, TECHNICAL_LOG_PAGE_SIZE)).map((trace) => (
                 <li key={trace.id}>
@@ -481,9 +480,9 @@ export function AgentDetailRoute(): JSX.Element {
           </div>
 
           <div>
-            <h4 className="m-0 mb-2 text-xs leading-5 font-semibold text-muted-foreground uppercase">
+            <h2 className="m-0 mb-2 text-xs leading-5 font-semibold text-muted-foreground uppercase">
               {t('agents.history')}
-            </h4>
+            </h2>
             <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
               {(showAllHistory ? history : history.slice(0, TECHNICAL_LOG_PAGE_SIZE)).map(
                 (entry) => (

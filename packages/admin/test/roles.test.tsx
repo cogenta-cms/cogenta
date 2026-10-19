@@ -139,7 +139,7 @@ describe('the permission matrix', () => {
 
     const commerce = within(
       screen
-        .getByRole('heading', { name: 'Permissions commerce (contrat E)' })
+        .getByRole('heading', { name: 'Permissions de la boutique' })
         .closest('section') as HTMLElement,
     )
     expect(commerce.getByText('commerce.order.refund')).toBeDefined()

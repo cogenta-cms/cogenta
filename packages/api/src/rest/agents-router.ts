@@ -64,8 +64,8 @@ export interface AgentWriteInput {
 export interface AgentRegistryLike {
   list(): readonly AgentSummary[]
   get(name: string): AgentSummary | undefined
-  enable(name: string): void
-  disable(name: string): void
+  enable(name: string): void | Promise<void>
+  disable(name: string): void | Promise<void>
   isEnabled(name: string): boolean
   /** Absent when no budget tracker exists for this agent (no `budget` configured, or the agent has never run). */
   usageFor?(name: string): AgentUsage | undefined
@@ -585,8 +585,8 @@ export function createAgentsRouter(options: AgentsRouterOptions): AgentsRouter {
         if (action === 'enable' || action === 'disable') {
           if (method !== 'POST') return methodNotAllowed(['POST'])
           requireAgent(options, name)
-          if (action === 'enable') options.agents.enable(name)
-          else options.agents.disable(name)
+          if (action === 'enable') await options.agents.enable(name)
+          else await options.agents.disable(name)
           return jsonResponse(200, { data: { name, enabled: options.agents.isEnabled(name) } })
         }
 

@@ -199,7 +199,7 @@ describe('the order list and detail', () => {
     render(<App />)
     await goToOrders()
     expect(within(table()).getByText('ORD-0001')).toBeDefined()
-    expect(screen.getByText('Total des commandes affichées :', { exact: false })).toBeDefined()
+    expect(screen.getByText('Total des commandes de cette page :', { exact: false })).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Nouvelle commande' }))
     const dialog = await screen.findByRole('dialog', { name: 'Nouvelle commande' })

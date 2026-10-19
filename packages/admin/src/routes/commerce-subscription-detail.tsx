@@ -24,6 +24,7 @@ import {
   Field,
   Input,
   Notice,
+  PageHeader,
   Select,
   Table,
   TableBody,
@@ -232,6 +233,7 @@ export function CommerceSubscriptionDetailRoute(): JSX.Element {
   if (error !== null) {
     return (
       <section className="flex flex-col gap-4">
+        <PageHeader title={t('commerceSubscriptions.detailHeading')} />
         <Link to="/commerce/subscriptions">{t('commerceSubscriptionDetail.back')}</Link>
         <Notice tone="danger" live="assertive">
           <p>{error}</p>
@@ -246,6 +248,7 @@ export function CommerceSubscriptionDetailRoute(): JSX.Element {
   if (notFound || subscription === null) {
     return (
       <section className="flex flex-col gap-4">
+        <PageHeader title={t('commerceSubscriptions.detailHeading')} />
         <Link to="/commerce/subscriptions">{t('commerceSubscriptionDetail.back')}</Link>
         <Notice tone="warning" live="polite">
           <p>{t('commerceSubscriptionDetail.notFound')}</p>

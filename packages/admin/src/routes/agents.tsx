@@ -1,6 +1,7 @@
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { AgentApprovals } from '../agents/agent-approvals.js'
 import {
   type AgentSummary,
   createAgent,
@@ -127,7 +128,7 @@ export function splitLines(text: string): readonly string[] {
  * never a hard-coded three-option list.
  */
 export function AgentsRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
@@ -303,7 +304,7 @@ export function AgentsRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="agents-heading" className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
         <h1 id="agents-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('agents.heading')}
@@ -313,6 +314,7 @@ export function AgentsRoute(): JSX.Element {
         </Button>
       </div>
 
+      {token !== null && <AgentApprovals token={token} />}
       {creating && (
         <Card aria-labelledby="agents-create-heading">
           <CardHeader>
@@ -612,6 +614,17 @@ export function AgentsRoute(): JSX.Element {
                   </TableCell>
                   <TableCell>
                     {agent.enabled ? t('agents.enabled') : t('agents.disabled')}
+                    {agent.enabled &&
+                      !enabledProviders.some(
+                        (provider) =>
+                          provider.provider === agent.model?.preferred ||
+                          provider.provider === agent.model?.fallback ||
+                          agent.model === undefined,
+                      ) && (
+                        <p className="m-0 text-xs text-muted-foreground">
+                          {t('agents.providerUnavailable')}
+                        </p>
+                      )}
                   </TableCell>
                   <TableCell>{agent.model?.preferred ?? '—'}</TableCell>
                   <TableCell>
@@ -620,7 +633,15 @@ export function AgentsRoute(): JSX.Element {
                     )}
                   </TableCell>
                   <TableCell>
-                    {agent.budget?.tokensPerDay ?? '—'} / {agent.usage?.tokensToday ?? 0}
+                    {t('agents.budgetConsumption', {
+                      used: new Intl.NumberFormat(i18n.language).format(
+                        agent.usage?.tokensToday ?? 0,
+                      ),
+                      limit:
+                        agent.budget?.tokensPerDay === undefined
+                          ? t('agents.budgetNoLimit')
+                          : new Intl.NumberFormat(i18n.language).format(agent.budget.tokensPerDay),
+                    })}
                   </TableCell>
                   <TableCell>
                     <Button

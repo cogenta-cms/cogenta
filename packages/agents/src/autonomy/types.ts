@@ -34,7 +34,7 @@ export interface ApprovalRequestInput {
  */
 export interface ApprovalQueue {
   /** Creates a pending request and resolves once a human decides it. */
-  request(input: ApprovalRequestInput): Promise<ApprovalRequest>
+  request(input: ApprovalRequestInput, signal?: AbortSignal): Promise<ApprovalRequest>
   list(status?: ApprovalStatus): Promise<readonly ApprovalRequest[]>
   decide(
     id: string,

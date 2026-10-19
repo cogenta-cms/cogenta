@@ -10,6 +10,9 @@ const STRINGS = {
   en: {
     search: 'Search',
     searchLabel: 'Search the documentation',
+    headerSearch: 'Search from the header',
+    menuSearch: 'Search from the menu',
+    pageSearch: 'Search this documentation',
     searchPlaceholder: 'Search the documentation',
     menu: 'Menu',
     documentation: 'Documentation',
@@ -27,6 +30,9 @@ const STRINGS = {
   fr: {
     search: 'Rechercher',
     searchLabel: 'Rechercher dans la documentation',
+    headerSearch: 'Rechercher depuis l’en-tête',
+    menuSearch: 'Rechercher depuis le menu',
+    pageSearch: 'Rechercher dans cette documentation',
     searchPlaceholder: 'Rechercher dans la documentation',
     menu: 'Menu',
     documentation: 'Documentation',

@@ -2,6 +2,10 @@ import { z } from 'zod'
 import type { DataItem } from '../identity/context.js'
 import { resolveInstruction } from '../prompts/render.js'
 import type { PromptTemplateStore } from '../prompts/types.js'
+import {
+  REFERENCE_DOCUMENT_COLLECTION,
+  REFERENCE_DOCUMENT_LOCALE,
+} from '../rag/reference-documents/types.js'
 import type { SemanticSearch } from '../rag/semantic/search.js'
 import { defineTool } from '../tools/define.js'
 import type { ToolDefinition } from '../tools/types.js'
@@ -103,16 +107,33 @@ export function createContentChatTool(
     reversible: false,
     cost: 'medium',
     async execute(input, ctx) {
-      const hits = await options.search.search({
-        text: input.question,
-        locale: input.locale,
-        siteId: input.siteId,
-        collections: input.collections,
-        // Published only. A chat answer is quotable, and quoting a draft to
-        // someone is a disclosure the asker never asked for.
-        status: 'published',
-        limit: input.limit ?? 5,
-      })
+      const limit = input.limit ?? 5
+      const contentCollections = input.collections.filter(
+        (name) => name !== REFERENCE_DOCUMENT_COLLECTION,
+      )
+      const scopes = [
+        ...(contentCollections.length === 0
+          ? []
+          : [{ locale: input.locale, collections: contentCollections }]),
+        ...(input.collections.includes(REFERENCE_DOCUMENT_COLLECTION)
+          ? [{ locale: REFERENCE_DOCUMENT_LOCALE, collections: [REFERENCE_DOCUMENT_COLLECTION] }]
+          : []),
+      ]
+      const results = await Promise.all(
+        scopes.map((scope) =>
+          options.search.search({
+            text: input.question,
+            ...scope,
+            siteId: input.siteId,
+            status: 'published',
+            limit,
+          }),
+        ),
+      )
+      const hits = results
+        .flat()
+        .sort((left, right) => right.score - left.score)
+        .slice(0, limit)
 
       const passages: ChatSource[] = hits
         .filter((hit) => hit.excerpt !== undefined)

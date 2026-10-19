@@ -501,3 +501,80 @@ describe('GET /api/media/{id}/usage and POST /api/media/-/bulk-usage', () => {
     expect(response.status).toBe(400)
   })
 })
+
+describe('media role grants', () => {
+  it.each(['POST', 'PATCH', 'PUT', 'DELETE'])(
+    'refuses a viewer %s before any asset mutation',
+    async (method) => {
+      const asset = await store.create({
+        kind: 'image',
+        filename: 'fixture.png',
+        mimeType: 'image/png',
+        size: 1,
+        storageKey: 'fixture.png',
+        alt: 'Original description',
+      })
+      const path = method === 'POST' ? '/api/media' : `/api/media/${asset.id}`
+      const reply = await router.handle(
+        { method, path, query: {}, body: { alt: 'Attack' } },
+        { id: 'viewer', roles: ['viewer'] },
+      )
+      expect(reply.status).toBe(403)
+      expect((await store.get(asset.id))?.alt).toBe('Original description')
+      expect((await store.list({})).items).toHaveLength(1)
+    },
+  )
+
+  it.each([
+    '/api/media/-/bulk-delete',
+    '/api/media/-/bulk-move',
+    '/api/media/-/bulk-tag',
+    '/api/media/folders',
+    '/api/media/folders/fixture/move',
+    '/api/media/fixture/replace',
+    '/api/media/fixture/edit',
+    '/api/media/fixture/move',
+  ])('refuses a viewer write to %s before processing the request', async (path) => {
+    const reply = await router.handle(
+      { method: 'POST', path, query: {}, body: {} },
+      { id: 'viewer', roles: ['viewer'] },
+    )
+    expect(reply.status).toBe(403)
+  })
+
+  it.each(['viewer', 'editor', 'admin'])('allows %s to read media', async (role) => {
+    expect(
+      (
+        await router.handle(
+          { method: 'GET', path: '/api/media', query: {} },
+          { id: role, roles: [role] },
+        )
+      ).status,
+    ).toBe(200)
+  })
+
+  it.each(['editor', 'admin'])('allows %s to update media metadata', async (role) => {
+    const asset = await store.create({
+      kind: 'image',
+      filename: 'fixture.png',
+      mimeType: 'image/png',
+      size: 1,
+      storageKey: 'fixture.png',
+      alt: 'Original description',
+    })
+    expect(
+      (
+        await router.handle(
+          {
+            method: 'PATCH',
+            path: `/api/media/${asset.id}`,
+            query: {},
+            body: { alt: 'Approved description' },
+          },
+          { id: role, roles: [role] },
+        )
+      ).status,
+    ).toBe(200)
+    expect((await store.get(asset.id))?.alt).toBe('Approved description')
+  })
+})

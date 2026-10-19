@@ -7,6 +7,7 @@ export default defineConfig({
     // times longer than the 5s/10s defaults to do it (seen on schema).
     hookTimeout: 30_000,
     include: ['test/**/*.test.ts'],
+    exclude: ['test/integration/**'],
     // A WordPress import test parses a real WXR fixture and writes every post,
     // page and comment through the real stores into a real SQLite file. That
     // is minutes of honest work compressed into one test, not slowness, and

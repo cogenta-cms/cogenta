@@ -7,6 +7,7 @@ import {
   getDocPage,
   listDocPages,
 } from '../documentation/docs-content.js'
+import { DocsViewer } from '../documentation/docs-viewer.js'
 import '../styles/documentation.css'
 import { Card, CardBody, Notice } from '../ui/index.js'
 
@@ -50,7 +51,7 @@ export function DocumentationDocsRoute(): JSX.Element {
   const page = getDocPage(tree, slug)
 
   return (
-    <section aria-labelledby="documentation-docs-heading" className="flex flex-col gap-6">
+    <section aria-labelledby="documentation-docs-heading" className="min-w-0 flex flex-col gap-6">
       <div>
         <h1
           id="documentation-docs-heading"
@@ -64,7 +65,7 @@ export function DocumentationDocsRoute(): JSX.Element {
       <div
         role="tablist"
         aria-label={t('documentation.docs.treesLabel')}
-        className="flex gap-2 border-b border-border"
+        className="flex flex-wrap gap-2 border-b border-border"
       >
         {TREES.map((id) => (
           <Link
@@ -83,8 +84,8 @@ export function DocumentationDocsRoute(): JSX.Element {
         ))}
       </div>
 
-      <div className="flex gap-6">
-        <nav aria-label={t('documentation.docs.sidebarLabel')} className="w-56 shrink-0">
+      <div className="doc-browser-layout">
+        <nav aria-label={t('documentation.docs.sidebarLabel')} className="doc-pages-nav">
           <ul className="m-0 flex flex-col gap-1 pl-0 text-sm">
             {listDocPages(tree).map((item) => (
               <li key={item.slug} className="list-none">
@@ -117,7 +118,7 @@ export function DocumentationDocsRoute(): JSX.Element {
             <Card>
               <CardBody>
                 {/* See the file header comment for why this is safe: the source is this repository's own committed documentation, never user input. */}
-                <div className="doc-content" dangerouslySetInnerHTML={{ __html: page.html }} />
+                <DocsViewer html={page.html} title={page.title} />
               </CardBody>
             </Card>
           )}

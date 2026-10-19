@@ -22,6 +22,8 @@ export interface InstalledPlugin {
   }
   readonly devMode: boolean
   readonly hasCode: boolean
+  /** Runtime snapshot matching these installed bytes, absent on an older server. */
+  readonly runtimeState?: 'loaded' | 'restart-required'
   /** Set when the plugin does not run: a person switched it off, or the site did. */
   readonly disabled: {
     readonly reason: 'timeout' | 'memory' | 'crash' | 'manual'

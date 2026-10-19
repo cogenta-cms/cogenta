@@ -147,15 +147,20 @@ describe('the observability screen', () => {
     await goToObservability()
 
     // The whole snapshot came back in one fetch (the ring buffer is already
-    // bounded) — the first page shows the first 25 entries, not all 30.
+    // bounded) — the first page shows the first 20 entries, not all 30.
     await screen.findByText('/path-0')
     expect(screen.queryByText('/path-29')).toBeNull()
 
     // Logs are empty in this fixture, so their pager does not render at all
     // (`Pagination`'s `pageCount <= 1` case) — only the traces "Suivant" exists.
-    fireEvent.click(screen.getByRole('button', { name: 'Suivant' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
 
     await screen.findByText('/path-29')
+    expect(screen.queryByText('/path-0')).toBeNull()
+    fireEvent.click(screen.getByLabelText('Collecter les traces et journaux localement'))
+    await screen.findByText('Enregistré.')
+    expect(await screen.findByText('/path-0')).toBeDefined()
+    expect(screen.queryByText('/path-29')).toBeNull()
   })
 
   it('says nothing is being recorded when collection is off', async () => {

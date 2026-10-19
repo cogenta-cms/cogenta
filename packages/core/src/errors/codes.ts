@@ -222,6 +222,10 @@ export const ERROR_CODES = [
 
   // Agents — autonomy and approval (L4)
   'APPROVAL_REQUEST_UNKNOWN',
+  'APPROVAL_REQUEST_INVALID',
+  'APPROVAL_ALREADY_DECIDED',
+  'APPROVAL_QUEUE_UNAVAILABLE',
+  'APPROVAL_REQUEST_CANCELLED',
 
   // Agents — reversibility (L4)
   'RECEIPT_UNKNOWN',

@@ -28,7 +28,8 @@
 
 .cd-header__brand {
   display: inline-flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-inline-size: 0;
   align-items: center;
   min-block-size: 44px;
   color: var(--cd-ink);
@@ -47,7 +48,7 @@
   font-weight: var(--cd-weight-semibold);
   letter-spacing: var(--cd-tracking-heading);
   line-height: 1;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .cd-wordmark__kind {
@@ -63,6 +64,7 @@
 
 .cd-header__nav {
   display: none;
+  flex: none;
   margin-inline-start: auto;
 }
 
@@ -84,6 +86,8 @@
   color: var(--cd-ink-soft);
   font-size: var(--cd-text-ui);
   text-decoration: none;
+  /* A two-word section ("Premiers pas") never breaks over two lines. */
+  white-space: nowrap;
 }
 
 .cd-header__item a:hover {
@@ -92,7 +96,8 @@
 
 .cd-header__end {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-inline-size: 0;
   align-items: center;
   gap: var(--cd-s2);
   margin-inline-start: auto;
@@ -130,7 +135,7 @@
   border: var(--cd-rule) solid var(--cd-line-strong);
   border-radius: var(--cd-radius-control);
   color: var(--cd-ink);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .cg-action[data-emphasis="outline"]:hover {
@@ -436,4 +441,11 @@
   .cd-footer__nav {
     grid-column: 6 / -1;
   }
+}
+
+.cd-header__logo {
+  max-inline-size: 100%;
+}
+.cd-header__inner > * {
+  min-inline-size: 0;
 }

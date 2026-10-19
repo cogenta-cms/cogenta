@@ -1,3 +1,4 @@
+import { CogentaError } from '@cogenta/core'
 import { describe, expect, it } from 'vitest'
 import { createMemoryApprovalQueue } from '../../src/autonomy/approval-queue.js'
 import type { ApprovalQueue } from '../../src/autonomy/types.js'
@@ -60,6 +61,35 @@ describe('withAutonomy — observe', () => {
 })
 
 describe('withAutonomy — propose', () => {
+  it('reports unexpected proposal storage failures without leaking the action input', async () => {
+    const reports: unknown[] = []
+    const queue: ApprovalQueue = {
+      ...createMemoryApprovalQueue(),
+      request: async () => {
+        throw new CogentaError({
+          code: 'APPROVAL_QUEUE_UNAVAILABLE',
+          message: 'Storage failure with sensitive contents',
+        })
+      },
+    }
+    const wrapped = withAutonomy(publishTool(true), {
+      agentName: 'proposal-test',
+      autonomy: { default: 'propose' },
+      approvalQueue: queue,
+      logger: { error: (...report) => reports.push(report) },
+    })
+    expect(await wrapped.execute({ secret: 'not-for-logs' }, CTX)).toMatchObject({ proposed: true })
+    await Promise.resolve()
+    expect(reports).toEqual([
+      [
+        'Agent proposal could not be recorded for human review',
+        { agent: 'proposal-test', tool: 'content.publish', code: 'APPROVAL_QUEUE_UNAVAILABLE' },
+      ],
+    ])
+    expect(JSON.stringify(reports)).not.toContain('not-for-logs')
+    expect(JSON.stringify(reports)).not.toContain('sensitive contents')
+  })
+
   it('queues a request without waiting for it, and never calls the tool', async () => {
     let called = false
     const tool: ExecutableTool = {
@@ -191,4 +221,82 @@ describe('withAutonomyForManifest', () => {
     expect(manifest).toHaveLength(2)
     expect(await manifest[0]?.execute({}, CTX)).toEqual({ ok: true })
   })
+})
+
+it('never executes an action approved after its run was cancelled, with the memory approval driver', async () => {
+  let mutations = 0
+  const queue = createMemoryApprovalQueue()
+  const controller = new AbortController()
+  const wrapped = withAutonomy(
+    {
+      ...publishTool(false),
+      execute: async () => {
+        mutations += 1
+        return {}
+      },
+    },
+    { agentName: 'cancel-test', autonomy: { default: 'autonomous' }, approvalQueue: queue },
+  )
+  const result = wrapped.execute({}, { signal: controller.signal })
+  const rejection = expect(result).rejects.toMatchObject({ code: 'APPROVAL_REQUEST_CANCELLED' })
+  const pending = (await queue.list('pending'))[0]
+  controller.abort()
+  await rejection
+  await queue.decide(pending?.id ?? '', 'approved', 'human')
+  expect(mutations).toBe(0)
+})
+
+it('checks cancellation again after a human decision wins the queue race', async () => {
+  const controller = new AbortController()
+  let mutations = 0
+  const queue: ApprovalQueue = {
+    request: async (input) => {
+      controller.abort()
+      return { ...input, id: 'race', requestedAt: new Date().toISOString(), status: 'approved' }
+    },
+    list: async () => [],
+    decide: async () => {
+      throw new Error('Unused test decision.')
+    },
+  }
+  const wrapped = withAutonomy(
+    {
+      ...publishTool(false),
+      execute: async () => {
+        mutations += 1
+      },
+    },
+    {
+      agentName: 'race-test',
+      autonomy: { default: 'autonomous' },
+      approvalQueue: queue,
+    },
+  )
+  await expect(wrapped.execute({}, { signal: controller.signal })).rejects.toMatchObject({
+    code: 'APPROVAL_REQUEST_CANCELLED',
+  })
+  expect(mutations).toBe(0)
+})
+
+it('prevents a late approval from executing an action after its run deadline expires', async () => {
+  let mutations = 0
+  const queue = createMemoryApprovalQueue({ newId: () => 'deadline-request' })
+  const wrapped = withAutonomy(
+    {
+      ...publishTool(false),
+      execute: async () => {
+        mutations += 1
+      },
+    },
+    {
+      agentName: 'deadline-test',
+      autonomy: { default: 'execute_with_approval' },
+      approvalQueue: queue,
+    },
+  )
+  await expect(wrapped.execute({}, { signal: AbortSignal.timeout(20) })).rejects.toMatchObject({
+    code: 'APPROVAL_REQUEST_CANCELLED',
+  })
+  await queue.decide('deadline-request', 'approved', 'human-after-deadline')
+  expect(mutations).toBe(0)
 })

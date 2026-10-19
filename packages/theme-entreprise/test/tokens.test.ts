@@ -83,7 +83,7 @@ describe('the default skin', () => {
     expect(fgB as number).toBeGreaterThan(fgR as number)
   })
 
-  it('names the Google Fonts families this theme loads, with a real system fallback', () => {
+  it('names the web font families this theme ships, with a real system fallback', () => {
     // L36: one grotesk for display and text, and a monospace for labels and
     // figures, the register of an engineering data sheet.
     expect(tokens.font.sans.startsWith("'Geist'")).toBe(true)
@@ -91,9 +91,9 @@ describe('the default skin', () => {
     expect(tokens.font.sans).toMatch(/system-ui/)
     expect(tokens.font.mono.startsWith("'Geist Mono'")).toBe(true)
     expect(tokens.font.mono).toMatch(/monospace$/)
-    const theme = readFileSync(new URL('../src/styles/theme.css', import.meta.url), 'utf8')
-    expect(theme).toContain('family=Geist:wght@')
-    expect(theme).toContain('family=Geist+Mono:')
+    const fonts = readFileSync(new URL('../src/styles/fonts.css', import.meta.url), 'utf8')
+    expect(fonts).toContain("font-family: 'Geist'")
+    expect(fonts).toContain("font-family: 'Geist Mono'")
   })
 
   it('avoids the most overused default sans faces as its primary choice', () => {

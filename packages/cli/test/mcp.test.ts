@@ -2,7 +2,14 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
+import {
+  type ApprovalQueue,
+  createFileApprovalQueue,
+  createMemoryApprovalQueue,
+} from '@cogenta/agents'
+import { createAuditLog, createUserStore } from '@cogenta/auth'
 import { createSqliteHandle } from '@cogenta/core'
+import { createSearchIndex } from '@cogenta/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runMcp } from '../src/commands/mcp.js'
 import { createOutput } from '../src/output.js'
@@ -40,7 +47,7 @@ async function project(): Promise<string> {
   await writeFile(
     join(root, 'cogenta.config.mjs'),
     `export default {
-  site: { name: 'Test site', url: 'https://example.com' },
+  site: { name: 'Test site', url: 'https://example.com', locales: ['fr', 'en'], defaultLocale: 'fr' },
   database: { url: ${JSON.stringify(join(root, 'site.db'))} },
   cache: { path: ${JSON.stringify(join(root, 'cache'))} },
   storage: { path: ${JSON.stringify(join(root, 'media'))} },
@@ -98,10 +105,12 @@ class McpSession {
   readonly replies: JsonRpcMessage[] = []
   private buffer = ''
   private waiters: (() => void)[] = []
+  private nextId = 1000
 
   constructor(
     root: string,
     actor: { readonly email?: string; readonly role?: string; readonly apiKey?: string },
+    approvalQueue?: ApprovalQueue,
   ) {
     this.stdout.on('data', (chunk: Buffer) => {
       this.buffer += chunk.toString('utf8')
@@ -123,11 +132,16 @@ class McpSession {
       stdin: this.stdin,
       stdout: this.stdout,
       ...actor,
+      ...(approvalQueue === undefined ? {} : { approvalQueue }),
     })
   }
 
   send(method: string, params?: Record<string, unknown>): number {
-    const id = this.replies.length + 1000 + Math.floor(Math.random() * 1000)
+    // A counter, never a random number: two requests sent before either is
+    // answered once drew the same id on an ARM runner, and the reply to one
+    // was read as the reply to the other.
+    this.nextId += 1
+    const id = this.nextId
     this.stdin.write(
       `${JSON.stringify({ jsonrpc: '2.0', id, method, ...(params ? { params } : {}) })}\n`,
     )
@@ -151,6 +165,18 @@ class McpSession {
   close(): void {
     this.stdin.end()
   }
+}
+
+async function approveNext(queue: ApprovalQueue): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const request = (await queue.list('pending')).at(0)
+    if (request !== undefined) {
+      await queue.decide(request.id, 'approved', 'human-reviewer')
+      return
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error('No approval request was submitted.')
 }
 
 const activeSessions: McpSession[] = []
@@ -243,13 +269,15 @@ describe('cogenta mcp', () => {
   it('creates, reads and publishes real content through the tool manifest', async () => {
     const root = await project()
     await createUser(root, 'editor@example.com', 'correct horse battery staple', ['editor'])
-    const session = new McpSession(root, { email: 'editor@example.com' })
+    const approvalQueue = createMemoryApprovalQueue()
+    const session = new McpSession(root, { email: 'editor@example.com' }, approvalQueue)
     activeSessions.push(session)
 
     const createId = session.send('tools/call', {
       name: 'content.write_draft',
       arguments: { collection: 'article', values: { title: 'Hello from MCP' } },
     })
+    await approveNext(approvalQueue)
     const created = await session.waitForReply(createId)
     expect(created.result).toMatchObject({ isError: false })
     const createdEntry = JSON.parse(textOf(created.result)) as {
@@ -269,14 +297,213 @@ describe('cogenta mcp', () => {
       name: 'content.publish',
       arguments: { collection: 'article', id: createdEntry.id },
     })
+    await approveNext(approvalQueue)
     const published = await session.waitForReply(publishId)
     expect(published.result).toMatchObject({ isError: false })
     const publishedEntry = JSON.parse(textOf(published.result)) as { status: string }
     expect(publishedEntry.status).toBe('published')
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    try {
+      const user = await createUserStore(db).byEmail('editor@example.com')
+      expect(JSON.parse(textOf(created.result))).toMatchObject({
+        locale: 'fr',
+        createdBy: user?.id,
+      })
+      const search = await (await createSearchIndex({ db })).search({ text: 'Hello', locale: 'fr' })
+      expect(search.hits.map((hit) => hit.id)).toContain(createdEntry.id)
+      const audit = await createAuditLog(db).list({ action: 'agent.tool.content.write_draft' })
+      expect(audit[0]).toMatchObject({
+        actorId: user?.id,
+        entryId: createdEntry.id,
+        diff: {
+          origin: 'mcp',
+          ok: true,
+          input: { values: { title: 'Hello from MCP' } },
+          output: { id: createdEntry.id },
+        },
+      })
+    } finally {
+      await db.close()
+    }
 
     session.close()
     expect(await session.done).toBe(0)
   }, 30_000)
+
+  it('waits on shared standalone approval and audits rejection without modifying content', async () => {
+    const root = await project()
+    const session = new McpSession(root, { role: 'editor' })
+    activeSessions.push(session)
+    const id = session.send('tools/call', {
+      name: 'content.write_draft',
+      arguments: { collection: 'article', values: { title: 'Must not be written' } },
+    })
+    const humanQueue = createFileApprovalQueue({
+      directory: join(root, '.cogenta', 'agents-runtime', 'approvals'),
+    })
+    let request = (await humanQueue.list('pending')).at(0)
+    for (let attempt = 0; attempt < 200 && request === undefined; attempt += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 25))
+      request = (await humanQueue.list('pending')).at(0)
+    }
+    expect(request).toBeDefined()
+    expect(session.replies.some((reply) => reply.id === id)).toBe(false)
+    if (request === undefined) throw new Error('No human review request.')
+    await humanQueue.decide(request.id, 'rejected', 'human-admin', 'Keep the content unchanged.')
+    const reply = await session.waitForReply(id)
+    expect(reply.result).toMatchObject({ isError: true })
+    expect(textOf(reply.result)).toMatch(/rejected/i)
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    try {
+      const audit = await createAuditLog(db).list({ action: 'agent.tool.content.write_draft' })
+      expect(audit[0]?.diff).toMatchObject({ origin: 'mcp', ok: false })
+      const found = await (await createSearchIndex({ db })).search({
+        text: 'Must',
+        locale: 'fr',
+        status: 'draft',
+      })
+      expect(found.hits).toHaveLength(0)
+    } finally {
+      await db.close()
+    }
+  })
+
+  it('disconnects a pending call and cannot execute it after a later shared human approval', async () => {
+    const root = await project()
+    const session = new McpSession(root, { role: 'editor' })
+    activeSessions.push(session)
+    session.send('tools/call', {
+      name: 'content.write_draft',
+      arguments: { collection: 'article', values: { title: 'Disconnected call' } },
+    })
+    const humanQueue = createFileApprovalQueue({
+      directory: join(root, '.cogenta', 'agents-runtime', 'approvals'),
+    })
+    let request = (await humanQueue.list('pending')).at(0)
+    for (let attempt = 0; attempt < 200 && request === undefined; attempt += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 25))
+      request = (await humanQueue.list('pending')).at(0)
+    }
+    expect(request).toBeDefined()
+    session.close()
+    expect(await session.done).toBe(0)
+    if (request === undefined) throw new Error('No human review request.')
+    await humanQueue.decide(request.id, 'approved', 'human-admin')
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    try {
+      const found = await (await createSearchIndex({ db })).search({
+        text: 'Disconnected',
+        locale: 'fr',
+        status: 'draft',
+      })
+      expect(found.hits).toHaveLength(0)
+      expect(
+        (await createAuditLog(db).list({ action: 'agent.tool.content.write_draft' })).at(0)?.diff,
+      ).toMatchObject({ origin: 'mcp', ok: false })
+    } finally {
+      await db.close()
+    }
+  })
+
+  it('keeps non-reversible mutations pending until a human approves, then records the decision outcome', async () => {
+    const root = await project()
+    const queue = createMemoryApprovalQueue()
+    const session = new McpSession(root, { role: 'editor' }, queue)
+    activeSessions.push(session)
+    const id = session.send('tools/call', {
+      name: 'content.write_draft',
+      arguments: { collection: 'article', locale: 'en', values: { title: 'Pending human review' } },
+    })
+    for (let attempt = 0; attempt < 200 && (await queue.list('pending')).length === 0; attempt += 1)
+      await new Promise<void>((resolve) => setTimeout(resolve, 25))
+    const pending = (await queue.list('pending')).at(0)
+    expect(pending?.toolName).toBe('content.write_draft')
+    expect(session.replies.some((reply) => reply.id === id)).toBe(false)
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    try {
+      const search = await (await createSearchIndex({ db })).search({
+        text: 'Pending',
+        locale: 'en',
+        status: 'draft',
+      })
+      expect(search.hits).toHaveLength(0)
+    } finally {
+      await db.close()
+    }
+    await approveNext(queue)
+    const reply = await session.waitForReply(id)
+    expect(reply.result).toMatchObject({ isError: false })
+    expect(JSON.parse(textOf(reply.result))).toMatchObject({ locale: 'en' })
+  })
+
+  it('refuses a grant revoked by another transport while the action awaits human approval', async () => {
+    const root = await project()
+    const queue = createMemoryApprovalQueue()
+    const session = new McpSession(root, { role: 'editor' }, queue)
+    activeSessions.push(session)
+    const id = session.send('tools/call', {
+      name: 'content.write_draft',
+      arguments: { collection: 'article', values: { title: 'Revoked before approval' } },
+    })
+    for (let attempt = 0; attempt < 200 && (await queue.list('pending')).length === 0; attempt += 1)
+      await new Promise<void>((resolve) => setTimeout(resolve, 25))
+    expect(await queue.list('pending')).toHaveLength(1)
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    try {
+      const { loadSchemaModule } = await import('../src/commands/serve.js')
+      const { createRolePermissionStore } = await import('@cogenta/schema')
+      const { collections, taxonomies } = await loadSchemaModule(root)
+      await createRolePermissionStore({ db, collections, taxonomies }).set({
+        targetType: 'collection',
+        targetName: 'article',
+        action: 'create',
+        roles: ['admin'],
+        updatedBy: 'human-admin',
+      })
+      await approveNext(queue)
+      const reply = await session.waitForReply(id)
+      expect(reply.result).toMatchObject({ isError: true })
+      expect(textOf(reply.result)).toMatch(/create/i)
+      const search = await (await createSearchIndex({ db })).search({
+        text: 'Revoked',
+        locale: 'fr',
+        status: 'draft',
+      })
+      expect(search.hits).toHaveLength(0)
+    } finally {
+      await db.close()
+    }
+  })
+
+  it('gives a real viewer media reading capabilities and refuses metadata mutations without changing storage', async () => {
+    const root = await project()
+    await createUser(root, 'viewer@example.com', 'correct horse battery staple', ['viewer'])
+    const { createDatabaseMediaStore } = await import('@cogenta/core')
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    const store = createDatabaseMediaStore({ db })
+    const asset = await store.create({
+      kind: 'image',
+      filename: 'fixture.png',
+      mimeType: 'image/png',
+      size: 1,
+      storageKey: 'fixture.png',
+      alt: 'Original description',
+    })
+    const session = new McpSession(root, { email: 'viewer@example.com' })
+    activeSessions.push(session)
+    const list = await session.waitForReply(session.send('tools/list'))
+    expect(toolsOf(list.result)).toContain('media.read')
+    expect(toolsOf(list.result)).not.toContain('media.write')
+    const reply = await session.waitForReply(
+      session.send('tools/call', {
+        name: 'media.write',
+        arguments: { id: asset.id, alt: 'Attack' },
+      }),
+    )
+    expect(reply.error?.message).toContain('media.write')
+    expect((await store.get(asset.id))?.alt).toBe('Original description')
+    await db.close()
+  })
 
   it('really enforces R4: a role without create/publish is refused by the same permission layer REST uses', async () => {
     const root = await project()
@@ -288,10 +515,8 @@ describe('cogenta mcp', () => {
       arguments: { collection: 'article', values: { title: 'Should be refused' } },
     })
     const created = await session.waitForReply(createId)
-    // A permission refusal is a tool error (isError: true), not a JSON-RPC
-    // protocol error — same convention `server.ts` uses for every tool failure.
-    expect(created.result).toMatchObject({ isError: true })
-    expect(textOf(created.result)).toMatch(/create/i)
+    // A capability outside the effective manifest is a JSON-RPC unknown-tool error.
+    expect(created.error?.message).toContain('content.write_draft')
 
     session.close()
     expect(await session.done).toBe(0)
@@ -305,14 +530,7 @@ describe('cogenta mcp', () => {
     const listId = session.send('tools/list')
     const list = await session.waitForReply(listId)
     const names = toolsOf(list.result)
-    expect(names).toEqual(
-      expect.arrayContaining([
-        'content.read',
-        'content.write_draft',
-        'content.publish',
-        'content.delete',
-      ]),
-    )
+    expect(names).toEqual(expect.arrayContaining(['content.read']))
     expect(names).not.toEqual(expect.arrayContaining(['media.read', 'site.config_read']))
 
     // Content is still real and permission-checked: a public actor may read
@@ -322,7 +540,7 @@ describe('cogenta mcp', () => {
       arguments: { collection: 'article', values: { title: 'Anonymous write' } },
     })
     const created = await session.waitForReply(createId)
-    expect(created.result).toMatchObject({ isError: true })
+    expect(created.error?.message).toContain('content.write_draft')
 
     session.close()
     expect(await session.done).toBe(0)
@@ -340,7 +558,8 @@ describe('cogenta mcp', () => {
   it('resolves the actor from a real API key, through the same store REST uses', async () => {
     const root = await project()
     const key = await createApiKey(root, ['editor'])
-    const session = new McpSession(root, { apiKey: key })
+    const approvalQueue = createMemoryApprovalQueue()
+    const session = new McpSession(root, { apiKey: key }, approvalQueue)
     activeSessions.push(session)
 
     const listId = session.send('tools/list')
@@ -355,6 +574,7 @@ describe('cogenta mcp', () => {
       name: 'content.write_draft',
       arguments: { collection: 'article', values: { title: 'Hello from an API key' } },
     })
+    await approveNext(approvalQueue)
     const created = await session.waitForReply(createId)
     expect(created.result).toMatchObject({ isError: false })
     const createdEntry = JSON.parse(textOf(created.result)) as { values: { title: string } }
@@ -375,8 +595,7 @@ describe('cogenta mcp', () => {
       arguments: { collection: 'article', values: { title: 'Should be refused' } },
     })
     const created = await session.waitForReply(createId)
-    expect(created.result).toMatchObject({ isError: true })
-    expect(textOf(created.result)).toMatch(/create/i)
+    expect(created.error?.message).toContain('content.write_draft')
 
     session.close()
     expect(await session.done).toBe(0)

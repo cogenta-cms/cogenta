@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -279,7 +279,9 @@ describe('POST /api/theme/activate — a theme with its own typography and colou
 
     const css = await (await fetch(`${server.base}/_cogenta/styles.css`)).text()
     expect(css).toContain("'Cormorant Garamond'")
-    expect(css).toContain('https://fonts.googleapis.com/css2?family=Cormorant+Garamond')
+    // The face comes from the site itself, never from a font provider.
+    expect(css).toContain('/_cogenta/fonts/restaurant/cormorant-garamond-normal-latin-')
+    expect(css).not.toContain('fonts.googleapis.com')
 
     await server.stop()
   }, 60_000)
@@ -298,13 +300,59 @@ describe('POST /api/theme/activate — a theme with its own typography and colou
 
     const css = await (await fetch(`${server.base}/_cogenta/styles.css`)).text()
     expect(css).toContain('#1d4ed8')
-    expect(css).not.toContain("'Cormorant Garamond'")
+    // The theme still declares its own faces (they are part of its layout
+    // package), but the site's skin keeps naming the site's own typefaces.
+    expect(css).not.toMatch(/--cogenta-font-[a-z]+:[^;]*Cormorant/)
 
     await server.stop()
   }, 60_000)
 })
 
 describe('PUT /api/theme/overrides and its hot-swap into the served stylesheet', () => {
+  it('saves and previews a partial skin on a bundled theme without a site token file', async () => {
+    const root = await project()
+    await rm(join(root, 'theme.tokens.json'))
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminSession(root, server.base)
+    const activated = await fetch(`${server.base}/api/theme/activate`, {
+      method: 'POST',
+      headers: auth(token),
+      body: JSON.stringify({ theme: '@cogenta/theme-entreprise', applySkin: false }),
+    })
+    expect(activated.status).toBe(200)
+    const before = await fetch(`${server.base}/api/theme`, { headers: auth(token) })
+    const state = (await before.json()) as {
+      data: { fileTokens: unknown; effectiveTokens: { color: { accent: string } } }
+    }
+    expect(state.data.fileTokens).toBeNull()
+    expect(state.data.effectiveTokens.color.accent).toBeTypeOf('string')
+    const saved = await fetch(`${server.base}/api/theme/overrides`, {
+      method: 'PUT',
+      headers: auth(token),
+      body: JSON.stringify({
+        tokenOverrides: { color: { accent: '#123456' } },
+        additionalCss: '.qa-preview { outline-width: 2px; }',
+      }),
+    })
+    expect(saved.status).toBe(200)
+    const css = await (await fetch(`${server.base}/_cogenta/styles.css`)).text()
+    expect(css).toContain('#123456')
+    expect(css).toContain('.qa-preview')
+    const after = await fetch(`${server.base}/api/theme`, { headers: auth(token) })
+    expect(
+      ((await after.json()) as { data: { effectiveTokens: { color: { accent: string } } } }).data
+        .effectiveTokens.color.accent,
+    ).toBe('#123456')
+    const refused = await fetch(`${server.base}/api/theme/overrides`, {
+      method: 'PUT',
+      headers: auth(token),
+      body: JSON.stringify({
+        tokenOverrides: { color: { accent: '#ffffff', accentFg: '#ffffff' } },
+      }),
+    })
+    expect(refused.status).toBe(422)
+  })
+
   it('saves an override and the public stylesheet reflects it on the very next request', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

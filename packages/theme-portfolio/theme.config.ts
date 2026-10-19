@@ -24,7 +24,7 @@ export default defineTheme({
   name: 'portfolio',
   version: '1.3.0',
   description:
-    'A theme for an independent design studio: work shown large on an asymmetric grid, Archivo set wide for display, black and white with one signal colour, zero client JavaScript.',
+    'A theme for an independent studio, in photography or design: work shown large on an asymmetric grid, Archivo set wide for display, black and white with one signal colour, zero client JavaScript.',
   author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',

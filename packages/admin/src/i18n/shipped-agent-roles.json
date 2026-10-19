@@ -1,0 +1,15 @@
+{
+  "cogenta-agent": "The default, general-purpose agent for this Cogenta site — reads and writes content, media and configuration on behalf of the operator who talks to it, within whatever an admin actor may do.",
+  "security-scanner": "Scans this site’s own declared dependencies for risky version pins on a schedule, and reports what it finds — it never patches anything itself.",
+  "content-watch": "An example agent: wakes up periodically, looks over recently published content, and proposes new draft titles worth writing about — a starting point meant to be edited, not a fixed feature.",
+  "site-monitor": "Watches this site’s own 404 log for a broken link worth fixing, and either proposes or creates a redirect to a page it picks — never anything else (it never touches content, media or site config).",
+  "cogenta-theme-creator": "Designs and adjusts this site’s visual theme from a description and, optionally, attached files (documents, screenshots) — the Appearance screen’s theme generator workshop talks to this agent, not the other way around. Has two distinct tools for two distinct jobs: theme.propose_theme (recolour/retune an installed theme package, tokens only) and theme.write_sandbox_file (write real, custom theme.config.*/theme.render.* source code into a sandbox, for a design no installed theme package already renders).",
+  "cogenta-plugin-builder": "Writes a plugin for a feature this site does not have — real JavaScript, into a sandbox, never into the installed plugins. A plugin reacts to content events, serves its own page under /_cogenta/plugins/<name>, or runs on a cadence, inside an isolated worker holding only the capabilities a person granted it.",
+  "media-librarian": "Keeps the media library usable: writes the alt text a screen reader needs, names the files nothing references any more, and the images far heavier than the size they are shown at.",
+  "translation-watch": "Watches a multilingual site for what is missing: an entry with no version in a declared locale, or a translation last written before its source changed.",
+  "comment-moderator": "Keeps the comment queue moving without deciding what a human should decide: it applies only what the site's own anti-spam pass already settled, and explains the rest.",
+  "audience-reader": "Reads this site's own audience figures and says what actually changed. It has no write tool at all.",
+  "migration-finisher": "Finishes what an import started: links still pointing at the old domain, images still loaded from it, entries with no excerpt.",
+  "accessibility-auditor": "Audits the HTML a visitor really receives — language, heading order, alt text, link wording, form labels — plus the theme's colour contrast, computed with the WCAG formula.",
+  "compliance-checker": "Checks what a site must be able to show: its legal pages, its retention settings, and whether content written by a machine says so."
+}

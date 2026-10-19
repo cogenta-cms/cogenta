@@ -18,11 +18,25 @@ import { describe, expect, it } from 'vitest'
 const STYLES = fileURLToPath(new URL('../src/styles', import.meta.url))
 
 const SHEETS = readdirSync(STYLES)
-  .filter((name) => extname(name) === '.css')
+  .filter((name) => extname(name) === '.css' && name !== 'fonts.css')
   .map((name) => ({ name, source: readFileSync(join(STYLES, name), 'utf8') }))
 
 const THEME = SHEETS.find((sheet) => sheet.name === 'theme.css')?.source ?? ''
 const CODE = SHEETS.map(({ source }) => source.replace(/\/\*[\s\S]*?\*\//g, '')).join('\n')
+
+const FONTS_CSS = readFileSync(join(STYLES, 'fonts.css'), 'utf8')
+
+/** Every `@font-face` this theme declares, as family / style / weight (and stretch, when it has one). */
+const DECLARED = [...FONTS_CSS.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((match) => {
+  const body = match[1] ?? ''
+  const field = (name: string) => new RegExp(`${name}:\\s*([^;]+);`).exec(body)?.[1]?.trim()
+  return {
+    family: field('font-family')?.replaceAll("'", ''),
+    style: field('font-style'),
+    weight: field('font-weight'),
+    stretch: field('font-stretch'),
+  }
+})
 
 describe('web fonts', () => {
   it('never imports a font without font-display: swap', () => {
@@ -34,17 +48,25 @@ describe('web fonts', () => {
     expect(offenders).toEqual([])
   })
 
-  it('requests exactly the two Instrument families, in one request, before any other import', () => {
-    const imports = [...THEME.matchAll(/@import\s+(url\()?["']([^"']+)["']/g)].map((m) => m[2])
-    expect(imports[0]).toMatch(/^https:\/\/fonts\.googleapis\.com\/css2\?/)
-    expect(imports.filter((url) => url?.startsWith('https:'))).toHaveLength(1)
-    const families = [...THEME.matchAll(/family=([A-Za-z+0-9]+)/g)].map((match) => match[1])
-    expect(families).toEqual(['Instrument+Sans', 'Instrument+Serif'])
+  it('declares exactly Instrument Sans and Instrument Serif, from the site itself', () => {
+    expect(DECLARED.length).toBeGreaterThan(0)
+    expect(FONTS_CSS).not.toMatch(/googleapis|gstatic|@import/i)
+    const families = [...new Set(DECLARED.map((face) => face.family))].sort()
+    expect(families).toEqual(['Instrument Sans', 'Instrument Serif'])
   })
 
-  it('asks for the text face’s weights and italics, and the display face’s italic', () => {
-    expect(THEME).toContain('family=Instrument+Sans:ital,wght@0,400..700;1,400..700')
-    expect(THEME).toContain('family=Instrument+Serif:ital@0;1')
+  it('declares the weights, the italics and the width the stylesheets use', () => {
+    const wanted = [
+      { family: 'Instrument Sans', style: 'normal', weight: '400 700' },
+      { family: 'Instrument Sans', style: 'italic', weight: '400 700' },
+      { family: 'Instrument Serif', style: 'normal', weight: '400' },
+      { family: 'Instrument Serif', style: 'italic', weight: '400' },
+    ]
+    for (const face of wanted) {
+      expect(DECLARED, `${face.family} ${face.style} ${face.weight}`).toContainEqual(
+        expect.objectContaining(face),
+      )
+    }
   })
 
   it('imports no font file from a stylesheet other than the entry point', () => {

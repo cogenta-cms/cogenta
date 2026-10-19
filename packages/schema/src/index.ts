@@ -67,6 +67,7 @@ export * from './routing/index.js'
 export * from './scheduling/index.js'
 export * from './search/index.js'
 export * from './store/index.js'
+export { isSafeMenuUrl } from './store/menu-url.js'
 export type { SystemFieldDescriptor, SystemFieldName } from './system-fields.js'
 export {
   isSystemFieldName,

@@ -9,7 +9,7 @@ import {
   TOKEN_GROUPS,
   TOKEN_SPECS,
   type TokenSpec,
-} from '@cogenta/render'
+} from '@cogenta/render/browser'
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
@@ -30,6 +30,7 @@ import {
 } from '../api/theme-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { MediaPicker } from '../fields/media-picker.js'
+import { shippedText } from '../i18n/shipped-text.js'
 import { useAutosaveEnabled } from '../lib/autosave-prefs.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
 import { useSectionAutosave } from '../settings/site-settings-section.js'
@@ -164,13 +165,13 @@ function BrandingCard({
 
   const load = useCallback(async () => {
     try {
-      const data = await listSettings()
+      const data = await listSettings(undefined, token ?? undefined)
       setSettings(data.filter((setting) => setting.group === 'branding'))
       setLoadError(null)
     } catch (caught) {
       setLoadError(caught instanceof Error ? caught.message : t('appearance.brandingLoadError'))
     }
-  }, [t])
+  }, [token, t])
 
   useEffect(() => {
     void load()
@@ -724,7 +725,13 @@ export function AppearanceRoute(): JSX.Element {
                           )}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {candidate.description}
+                          {candidate.local
+                            ? candidate.description
+                            : shippedText(
+                                `themes.${candidate.name.replace(/^@cogenta\//u, '')}.description`,
+                                candidate.description,
+                                t,
+                              )}
                         </span>
                         {theme.sampleData?.themes.includes(candidate.name) === true && (
                           <span className="text-xs font-medium text-foreground">

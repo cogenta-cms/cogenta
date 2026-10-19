@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
   Notice,
+  PageHeader,
   Table,
   TableBody,
   TableCell,
@@ -56,7 +57,13 @@ export function CommerceCustomerRoute(): JSX.Element {
     try {
       setDetail(await readCustomer(token, id))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceCustomerDetail.loadError'))
+      setError(
+        caught instanceof ApiError && caught.code === 'COMMERCE_CUSTOMER_NOT_FOUND'
+          ? t('commerceCustomerDetail.notFound')
+          : caught instanceof ApiError
+            ? caught.message
+            : t('commerceCustomerDetail.loadError'),
+      )
     } finally {
       setLoading(false)
     }
@@ -104,20 +111,24 @@ export function CommerceCustomerRoute(): JSX.Element {
   if (!canRead) {
     return (
       <section>
+        <PageHeader title={t('commerceCustomerDetail.heading')} />
         <p role="alert">{t('commerceOrders.signedInOnly')}</p>
       </section>
     )
   }
 
   if (loading) return <p>{t('common.loading')}</p>
-  if (error !== null) {
+  if (error !== null || detail === null) {
     return (
-      <Notice tone="danger" live="assertive">
-        <p>{error}</p>
-      </Notice>
+      <section className="flex flex-col gap-4">
+        <PageHeader title={t('commerceCustomerDetail.heading')} />
+        <Link to="/commerce/customers">{t('commerceCustomerDetail.back')}</Link>
+        <Notice tone="danger" live="assertive">
+          <p>{error ?? t('commerceCustomerDetail.notFound')}</p>
+        </Notice>
+      </section>
     )
   }
-  if (detail === null) return <p>{t('commerceCustomerDetail.notFound')}</p>
 
   const { customer, orders, totalSpentMinor, currency, subscriptions } = detail
 

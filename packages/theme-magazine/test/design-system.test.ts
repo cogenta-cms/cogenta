@@ -379,3 +379,11 @@ describe('the newspaper typography', () => {
     for (const body of imageRules) expect(body).not.toMatch(/shadow|blur|opacity|transform/)
   })
 })
+
+describe('French typography in the stylesheet', () => {
+  it('sets a French pull quote in guillemets with no-break spaces, not in English curly quotes', () => {
+    expect(CODE).toMatch(
+      /:lang\(fr\)\s+\.cg-pullquote__text\s*\{\s*quotes:\s*"\\00ab\\00a0"\s+"\\00a0\\00bb";/,
+    )
+  })
+})

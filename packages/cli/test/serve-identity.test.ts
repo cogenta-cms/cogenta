@@ -117,15 +117,24 @@ describe('site identity reaches the public page (audit T01)', () => {
       await seedHome(server.base, editorToken)
       const adminToken = await adminSession(root, server.base)
 
-      // Nothing chosen: no favicon at all, and the site name in text. This
-      // used to assert Cogenta's own logo — the CMS's mark in the browser tab
-      // of somebody else's site, which no site owner ever asked for and which
-      // an uploaded logo could not displace until a *footer credit* setting
-      // was switched off. A site with no favicon now behaves like any other
-      // site with no favicon: the browser asks for /favicon.ico and takes the
-      // 404.
+      // A neutral icon is available before identity is configured.
       const before = await (await fetch(`${server.base}/`)).text()
-      expect(before).not.toContain('<link rel="icon"')
+      expect(before).toContain(
+        '<link rel="icon" type="image/vnd.microsoft.icon" href="/favicon.ico">',
+      )
+      const fallback = await fetch(`${server.base}/favicon.ico`)
+      expect(fallback.status).toBe(200)
+      expect(fallback.headers.get('content-type')).toBe('image/vnd.microsoft.icon')
+      expect(fallback.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
+      const fallbackBytes = Buffer.from(await fallback.arrayBuffer())
+      expect(fallbackBytes.readUInt16LE(2)).toBe(1)
+      expect(fallbackBytes.readUInt16LE(4)).toBe(1)
+      expect(fallbackBytes.subarray(22, 30)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      const head = await fetch(`${server.base}/favicon.ico`, { method: 'HEAD' })
+      expect(head.status).toBe(200)
+      expect(head.headers.get('content-length')).toBe(String(fallbackBytes.length))
+      expect((await head.arrayBuffer()).byteLength).toBe(0)
+      expect((await fetch(`${server.base}/favicon.ico`, { method: 'POST' })).status).toBe(405)
       expect(before).toContain('>Test site</a>')
       expect(before).not.toContain('cg-site-header__logo')
 
@@ -150,6 +159,12 @@ describe('site identity reaches the public page (audit T01)', () => {
       // other appearance setting already had.
       const after = await (await fetch(`${server.base}/`)).text()
       expect(after).toContain(`<link rel="icon" href="/_image?id=${faviconId}`)
+      expect(after).not.toContain('href="/favicon.ico"')
+      const customIcon = await fetch(`${server.base}/favicon.ico`, { redirect: 'manual' })
+      expect(customIcon.status).toBe(302)
+      expect(customIcon.headers.get('location')).toBe(`/_image?id=${faviconId}&w=64`)
+      expect(customIcon.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
+      expect((await fetch(`${server.base}/favicon.ico`)).status).toBe(200)
       expect(after).not.toContain('href="/_cogenta/logo-cogenta.png"')
       // The logo replaced the wordmark, and kept the site name as its
       // accessible name rather than dropping it.
@@ -217,9 +232,11 @@ describe('site identity reaches the public page (audit T01)', () => {
       expect(saved.status).toBe(200)
 
       const html = await (await fetch(`${server.base}/`)).text()
-      // A chosen media that is not an image falls back to nothing, rather
-      // than to a `<link rel="icon">` pointing at a 404 — or to Cogenta's.
-      expect(html).not.toContain('<link rel="icon"')
+      // A missing media falls back to the neutral icon rather than a broken URL.
+      expect(html).toContain(
+        '<link rel="icon" type="image/vnd.microsoft.icon" href="/favicon.ico">',
+      )
+      expect((await fetch(`${server.base}/favicon.ico`)).status).toBe(200)
     } finally {
       await server.stop()
     }

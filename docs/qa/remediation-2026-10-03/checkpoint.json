@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-04",
+  "branch": "fix/production-readiness-audit-2026-10-03",
+  "baseline": "d28eda09a37be677e429c097da72d257530f4e93",
+  "productionReady": false,
+  "merged": false,
+  "committed": true,
+  "scope": "User requested completion of existing work only, then a decision checkpoint",
+  "gates": {
+    "strictTypes": {
+      "passed": 74,
+      "total": 74
+    },
+    "lint": {
+      "errors": 0
+    },
+    "unitGlobal": {
+      "passed": 5153,
+      "failed": 4,
+      "workspaceCompleted": false
+    },
+    "unitFailedCasesRechecked": {
+      "passed": 4,
+      "failed": 0,
+      "evidence": ["admin-failed-tests-recheck.log", "admin-expectations-final.log"]
+    },
+    "sqlIntegration": {
+      "globalPassed": 1334,
+      "additionalPassed": 18,
+      "externalSkips": true
+    },
+    "officialJourneys": {
+      "chromiumDesktopPassed": 3,
+      "fullCampaignCompleted": false
+    },
+    "menuSecurity": {
+      "passed": 4,
+      "projects": ["chromium-desktop", "chromium-mobile", "firefox-security", "webkit-security"]
+    }
+  },
+  "openFindings": [
+    "profile overflow 386/320",
+    "menu action overflow 413/390",
+    "English assistant descriptions in French UI",
+    "http-cache-semantics high advisory without upstream fix",
+    "dedicated Lighthouse before/after incomplete",
+    "large serve.ts partly refactored"
+  ],
+  "remainingChecks": [
+    "complete workspace unit run",
+    "full official browser suite",
+    "rechecks of interrupted and outdated fixture scripts",
+    "complete browser role matrix",
+    "external sandbox/infrastructure when configured"
+  ],
+  "report": "rapport-etape.html",
+  "followUp": {
+    "date": "2026-10-19",
+    "note": "Committed as c082c31 and continued on the same branch; the current state of these checks is in BLOCKERS.md (section 1.1) and the branch's later commits."
+  }
+}

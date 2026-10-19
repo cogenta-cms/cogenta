@@ -1,4 +1,5 @@
-import type { DatabaseHandle, Logger, StorageDriver } from '@cogenta/core'
+import { createHash } from 'node:crypto'
+import { CogentaError, type DatabaseHandle, type Logger, type StorageDriver } from '@cogenta/core'
 import {
   type CapabilityHandler,
   createContentDeleteHandler,
@@ -15,8 +16,10 @@ import {
   createStorageWriteHandler,
   ensurePluginTables,
   type InstalledPluginFailure,
+  type IsolatedRunResult,
   loadInstalledPlugins,
   type ResolvedPlugin,
+  type RunPluginOptions,
   readPluginCode,
   runPlugin,
 } from '@cogenta/plugins'
@@ -137,7 +140,11 @@ export interface PluginRuntimeOptions {
 
 export interface PluginRuntime {
   readonly plugins: readonly ResolvedPlugin[]
+  /** Exact manifest and code snapshots loaded at startup, excluding unreadable or inert plugins. */
+  readonly loadedFingerprints: Readonly<Record<string, string>>
   readonly failures: readonly InstalledPluginFailure[]
+  /** Retires a startup snapshot immediately and waits for its existing executions to settle. */
+  unloadPlugin(name: string): Promise<void>
   /** How many plugins subscribe to at least one content event. */
   readonly subscribers: number
   /** Hands the event to every plugin that subscribed to it. Never rejects. */
@@ -237,8 +244,43 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
   const grantStore = createPluginGrantStore(db)
   const disableStore = createPluginDisableStore(db)
   const usageStore = createPluginUsageStore(db)
+  const unloaded = new Set<string>()
+  const activeRuns = new Map<string, Set<Promise<IsolatedRunResult>>>()
   /** Plugin runs in flight, bounded by `MAX_CONCURRENT_PLUGIN_RUNS`. */
   let running = 0
+
+  async function executeLoadedPlugin(
+    plugin: ResolvedPlugin,
+    code: string,
+    grants: Awaited<ReturnType<typeof grantStore.listGrants>>,
+    runOptions: RunPluginOptions,
+  ): Promise<IsolatedRunResult> {
+    const name = plugin.manifest.name
+    if (unloaded.has(name)) {
+      throw new CogentaError({
+        code: 'PLUGIN_DISABLED',
+        message: `Plugin "${name}" was uninstalled and cannot run.`,
+        hint: 'Install the plugin again and restart the site to load its code.',
+      })
+    }
+    const pending = runPlugin(plugin.manifest, code, grants, runOptions)
+    const executions = activeRuns.get(name) ?? new Set<Promise<IsolatedRunResult>>()
+    activeRuns.set(name, executions)
+    executions.add(pending)
+    try {
+      return await pending
+    } finally {
+      executions.delete(pending)
+      if (executions.size === 0) activeRuns.delete(name)
+    }
+  }
+
+  async function unloadPlugin(name: string): Promise<void> {
+    unloaded.add(name)
+    // A successful uninstall response must not leave a worker executing the
+    // removed snapshot. No new invocation can enter while these runs settle.
+    await Promise.allSettled(activeRuns.get(name) ?? [])
+  }
 
   function handlersFor(collection: string | null): Record<string, CapabilityHandler> {
     const handlers: Record<string, CapabilityHandler> = {
@@ -277,10 +319,11 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     for (const { plugin, code, events } of subscribing) {
       if (!events.includes(event.event)) continue
       const name = plugin.manifest.name
+      if (unloaded.has(name)) continue
       try {
         const grants = await grantStore.listGrants(name)
         const handlers = handlersFor(event.collection)
-        const result = await runPlugin(plugin.manifest, code, grants, {
+        const result = await executeLoadedPlugin(plugin, code, grants, {
           onLog: (line) => logger.info('plugin log', { plugin: name, line }),
           invoke: PLUGIN_EVENT_HANDLER,
           input: event,
@@ -315,6 +358,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     const rest = pathname.slice(PLUGIN_ROUTE_PREFIX.length)
     for (const entry of subscribing) {
       const name = entry.plugin.manifest.name
+      if (unloaded.has(name)) continue
       // A scoped name carries its own slash (`@author/plugin`), so the plugin
       // is matched by name first and the remainder is its path.
       if (!rest.startsWith(name)) continue
@@ -343,7 +387,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     running += 1
     try {
       const grants = await grantStore.listGrants(name)
-      const result = await runPlugin(entry.plugin.manifest, entry.code, grants, {
+      const result = await executeLoadedPlugin(entry.plugin, entry.code, grants, {
         onLog: (line) => logger.info('plugin log', { plugin: name, line }),
         invoke: PLUGIN_REQUEST_HANDLER,
         input: { ...request, path: found.path },
@@ -391,7 +435,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
           intervalMs: schedule.everyMinutes * 60_000,
           run: async () => {
             const grants = await grantStore.listGrants(pluginName)
-            const result = await runPlugin(entry.plugin.manifest, entry.code, grants, {
+            const result = await executeLoadedPlugin(entry.plugin, entry.code, grants, {
               onLog: (line) => logger.info('plugin log', { plugin: pluginName, line }),
               invoke: PLUGIN_SCHEDULE_HANDLER,
               input: { name: schedule.name },
@@ -427,7 +471,9 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     handler: string,
     input: unknown,
   ): Promise<{ readonly ok: boolean; readonly value?: unknown; readonly error?: string }> {
-    const entry = subscribing.find((candidate) => candidate.plugin.manifest.name === pluginName)
+    const entry = subscribing.find(
+      (candidate) => candidate.plugin.manifest.name === pluginName && !unloaded.has(pluginName),
+    )
     if (entry === undefined)
       return { ok: false, error: `no plugin named "${pluginName}" is loaded` }
     if (running >= MAX_CONCURRENT_PLUGIN_RUNS) {
@@ -437,7 +483,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     running += 1
     try {
       const grants = await grantStore.listGrants(pluginName)
-      const result = await runPlugin(entry.plugin.manifest, entry.code, grants, {
+      const result = await executeLoadedPlugin(entry.plugin, entry.code, grants, {
         onLog: (line) => logger.info('plugin log', { plugin: pluginName, line }),
         invoke: handler,
         input,
@@ -457,13 +503,32 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
 
   return {
     plugins: installed.plugins,
+    get loadedFingerprints() {
+      return Object.fromEntries(
+        subscribing
+          .filter(({ plugin }) => !unloaded.has(plugin.manifest.name))
+          .map(({ plugin, code }) => [
+            plugin.manifest.name,
+            createHash('sha256')
+              .update(`${JSON.stringify(plugin.manifest)}\n${code}`)
+              .digest('hex'),
+          ]),
+      )
+    },
     failures: installed.failures,
+    unloadPlugin,
     registerSchedules,
     invokeHandler,
-    subscribers: subscribing.filter((entry) => entry.events.length > 0).length,
-    routes: subscribing.flatMap((entry) =>
-      entry.routes.map((path) => `${entry.plugin.manifest.name}${path}`),
-    ),
+    get subscribers() {
+      return subscribing.filter(
+        (entry) => entry.events.length > 0 && !unloaded.has(entry.plugin.manifest.name),
+      ).length
+    },
+    get routes() {
+      return subscribing
+        .filter((entry) => !unloaded.has(entry.plugin.manifest.name))
+        .flatMap((entry) => entry.routes.map((path) => `${entry.plugin.manifest.name}${path}`))
+    },
     dispatchContentEvent,
     handleRequest,
   }

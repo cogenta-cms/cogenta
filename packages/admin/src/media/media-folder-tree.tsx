@@ -200,7 +200,7 @@ function FolderNode({
             title={t('media.newSubfolder')}
             aria-label={t('media.newSubfolderFor', { name: folder.name })}
             onClick={() => onCreateChild(folder.id)}
-            className="cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:text-foreground"
+            className="inline-flex size-8 items-center justify-center cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:text-foreground"
           >
             +
           </button>
@@ -210,7 +210,7 @@ function FolderNode({
             title={t('media.renameFolder')}
             aria-label={t('media.renameFolderFor', { name: folder.name })}
             onClick={() => onRename(folder)}
-            className="cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:text-foreground"
+            className="inline-flex size-8 items-center justify-center cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:text-foreground"
           >
             ✎
           </button>
@@ -220,7 +220,7 @@ function FolderNode({
             title={t('media.deleteFolder')}
             aria-label={t('media.deleteFolderFor', { name: folder.name })}
             onClick={() => onDelete(folder)}
-            className="cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:text-destructive"
+            className="inline-flex size-8 items-center justify-center cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:text-destructive"
           >
             ×
           </button>

@@ -359,3 +359,83 @@ describe('chat over the site content, with a real injection sitting in the index
     expect(JSON.stringify(provider.calls)).not.toContain('staff entrance')
   })
 })
+
+describe('reference documents in the chat retrieval scope', () => {
+  it('retrieves unlocalised reference chunks for a French answer while excluding other locales and scopes', async () => {
+    const store = createMemoryVectorStore({ dimensions: embeddings.dimensions })
+    const text = 'MISTRAL-4827 is the museum access code.'
+    const vector = (await embeddings.embed([text]))[0] ?? []
+    await store.upsert([
+      {
+        siteId: 'site-a',
+        collection: '_reference_documents',
+        entryId: 'reference',
+        locale: 'und',
+        status: 'published',
+        chunk: { id: 'reference:0', documentId: 'reference', blockIds: [], text, hash: 'h' },
+        vector,
+      },
+      {
+        siteId: 'site-a',
+        collection: 'articles',
+        entryId: 'english',
+        locale: 'en',
+        status: 'published',
+        chunk: { id: 'english:0', documentId: 'english', blockIds: [], text, hash: 'h' },
+        vector,
+      },
+      {
+        siteId: 'site-a',
+        collection: 'private',
+        entryId: 'private',
+        locale: 'fr',
+        status: 'published',
+        chunk: { id: 'private:0', documentId: 'private', blockIds: [], text, hash: 'h' },
+        vector,
+      },
+    ])
+    const provider = createFakeProvider(
+      JSON.stringify({ answer: 'Le code est MISTRAL-4827.', usedSources: [1] }),
+    )
+    const tool = createContentChatTool({
+      runtime: createAssistRuntime({ provider, site: TEST_SITE }),
+      search: createSemanticSearch({ store, embeddings }),
+    })
+    const result = await tool.execute(
+      tool.input.parse({ ...ASK, locale: 'fr', collections: ['articles', '_reference_documents'] }),
+      toolContext(),
+    )
+    expect(result.answeredFromSources).toBe(true)
+    expect(result.sources.map((source) => source.entryId)).toEqual(['reference'])
+    expect(provider.calls).toHaveLength(1)
+  })
+
+  it('never searches reference documents when they are absent from the authorised scope', async () => {
+    const store = createMemoryVectorStore({ dimensions: embeddings.dimensions })
+    const text = 'MISTRAL-4827 is the museum access code.'
+    await store.upsert([
+      {
+        siteId: 'site-a',
+        collection: '_reference_documents',
+        entryId: 'reference',
+        locale: 'und',
+        status: 'published',
+        chunk: { id: 'reference:0', documentId: 'reference', blockIds: [], text, hash: 'h' },
+        vector: (await embeddings.embed([text]))[0] ?? [],
+      },
+    ])
+    const provider = createFakeProvider(
+      JSON.stringify({ answer: 'Le code est MISTRAL-4827.', usedSources: [1] }),
+    )
+    const tool = createContentChatTool({
+      runtime: createAssistRuntime({ provider, site: TEST_SITE }),
+      search: createSemanticSearch({ store, embeddings }),
+    })
+    const result = await tool.execute(
+      tool.input.parse({ ...ASK, locale: 'fr', collections: ['articles'] }),
+      toolContext(),
+    )
+    expect(result.answeredFromSources).toBe(false)
+    expect(provider.calls).toHaveLength(0)
+  })
+})

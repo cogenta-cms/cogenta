@@ -1,4 +1,4 @@
-import { Fragment, type JSX, useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { Fragment, type JSX, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
@@ -20,6 +20,7 @@ import {
   searchSubmissionsByEmail,
 } from '../api/forms-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useLocalPagination } from '../lib/use-local-pagination.js'
 import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import {
   Button,
@@ -51,11 +52,11 @@ import {
  * `nextCursor` (`listSubmissions`'s own `ListSubmissionsResult`); this
  * screen just never asked for more than the first 200-row page. It now
  * fetches `PAGE_SIZE` at a time and walks the cursor with the shared
- * `Pagination` component, same "load more" shape `users.tsx` established.
+ * `Pagination` component, a previous/next window without accumulating rows in the DOM.
  */
 
 const STATUSES: readonly FormSubmissionStatus[] = ['new', 'read', 'archived', 'spam']
-const PAGE_SIZE = 50
+const PAGE_SIZE = 20
 
 function valueText(value: string | readonly string[] | FormFileValue): string {
   if (typeof value === 'string') return value
@@ -93,7 +94,28 @@ export function FormSubmissionsRoute(): JSX.Element {
   const [noteDrafts, setNoteDrafts] = useState<Readonly<Record<string, string>>>({})
   const [exporting, setExporting] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [paging, setPaging] = useState<{
+    readonly key: string
+    readonly cursors: readonly (string | undefined)[]
+  }>({ key: '', cursors: [undefined] })
+  const requestGeneration = useRef(0)
+  const gdprPage = useLocalPagination(gdprResults ?? [], emailQuery, PAGE_SIZE)
+  const gdprPager = (
+    <Pagination
+      variant="pages"
+      page={gdprPage.page}
+      pageCount={gdprPage.pageCount}
+      onPageChange={gdprPage.onPageChange}
+      previousLabel={t('lists.previous')}
+      nextLabel={t('lists.next')}
+      pageInfo={t('lists.pageInfo', {
+        from: gdprPage.start + 1,
+        to: gdprPage.start + gdprPage.items.length,
+        total: gdprPage.total,
+      })}
+    />
+  )
 
   const baseFilter = useMemo(
     () => ({
@@ -106,43 +128,84 @@ export function FormSubmissionsRoute(): JSX.Element {
     [formId, statusFilter, queryFilter, fromFilter, toFilter],
   )
 
+  const formsById = useMemo(() => new Map(forms.map((form) => [form.id, form])), [forms])
+  const filterKey = JSON.stringify(baseFilter)
+  const cursors = paging.key === filterKey ? paging.cursors : [undefined]
+  const cursor = cursors[cursors.length - 1]
+  useEffect(() => {
+    setPaging((current) =>
+      current.key === filterKey ? current : { key: filterKey, cursors: [undefined] },
+    )
+  }, [filterKey])
+  useEffect(() => {
+    setOpenId(null)
+  }, [cursor, filterKey])
+  function changePage(next: number): void {
+    if (next < cursors.length - 1)
+      setPaging({ key: filterKey, cursors: cursors.slice(0, next + 1) })
+    else if (nextCursor !== null) setPaging({ key: filterKey, cursors: [...cursors, nextCursor] })
+  }
+  const pager = (
+    <Pagination
+      variant="pages"
+      page={cursors.length - 1}
+      pageCount={cursors.length + (nextCursor === null ? 0 : 1)}
+      onPageChange={changePage}
+      loading={loading}
+      previousLabel={t('lists.previous')}
+      nextLabel={t('lists.next')}
+      pageInfo={t('lists.page', { page: cursors.length })}
+    />
+  )
+
   const load = useCallback(async () => {
     if (token === null) return
+    const generation = ++requestGeneration.current
+    setLoading(true)
+    setError(null)
     try {
       const [formList, page] = await Promise.all([
         listForms(token),
-        listSubmissions(token, { ...baseFilter, limit: PAGE_SIZE }),
+        listSubmissions(token, {
+          ...baseFilter,
+          limit: PAGE_SIZE,
+          ...(cursor === undefined ? {} : { cursor }),
+        }),
       ])
+      if (generation !== requestGeneration.current) return
+      if (page.items.length === 0 && cursor !== undefined) {
+        setPaging((current) =>
+          current.key === filterKey
+            ? { ...current, cursors: current.cursors.slice(0, -1) }
+            : current,
+        )
+        return
+      }
       setForms(formList)
       setSubmissions(page.items)
       setNextCursor(page.nextCursor)
       setSelected(new Set())
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('formSubmissions.loadError'))
+      if (generation === requestGeneration.current)
+        setError(caught instanceof ApiError ? caught.message : t('formSubmissions.loadError'))
+    } finally {
+      if (generation === requestGeneration.current) setLoading(false)
     }
-  }, [token, baseFilter, t])
+  }, [token, baseFilter, cursor, filterKey, t])
+
+  // A mutation may finish after the user changed page or filters. Refresh
+  // the current view rather than the closure in which that action started.
+  const latestLoad = useRef(load)
+  useEffect(() => {
+    latestLoad.current = load
+  }, [load])
 
   useEffect(() => {
     void load()
-  }, [load])
-
-  async function loadMore(): Promise<void> {
-    if (token === null || nextCursor === null) return
-    setLoadingMore(true)
-    try {
-      const page = await listSubmissions(token, {
-        ...baseFilter,
-        limit: PAGE_SIZE,
-        cursor: nextCursor,
-      })
-      setSubmissions((current) => [...(current ?? []), ...page.items])
-      setNextCursor(page.nextCursor)
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('formSubmissions.loadError'))
-    } finally {
-      setLoadingMore(false)
+    return () => {
+      requestGeneration.current += 1
     }
-  }
+  }, [load])
 
   if (!isAdmin) {
     return (
@@ -152,8 +215,6 @@ export function FormSubmissionsRoute(): JSX.Element {
       </section>
     )
   }
-
-  const formsById = useMemo(() => new Map(forms.map((form) => [form.id, form])), [forms])
 
   function toggleSelected(id: string): void {
     const next = new Set(selected)
@@ -166,7 +227,7 @@ export function FormSubmissionsRoute(): JSX.Element {
     if (token === null || selected.size === 0) return
     try {
       await bulkSubmissionAction(token, [...selected], action)
-      await load()
+      await latestLoad.current()
       // L20 audit point 15: the sidebar's "Submissions" badge is fetched
       // once per session — without this, marking read/archived/spam here
       // left it showing a stale unread count.
@@ -180,7 +241,7 @@ export function FormSubmissionsRoute(): JSX.Element {
     if (token === null) return
     try {
       await markSubmissionStatus(token, id, status)
-      await load()
+      await latestLoad.current()
       refreshChromeStatus()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('formSubmissions.markError'))
@@ -246,14 +307,14 @@ export function FormSubmissionsRoute(): JSX.Element {
       const result = await eraseSubmissionsByEmail(token, emailQuery.trim())
       setGdprMessage(t('formSubmissions.gdprErased', { count: result.erased }))
       setGdprResults(null)
-      await load()
+      await latestLoad.current()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('formSubmissions.gdprEraseError'))
     }
   }
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6">
       <div>
         <h1 id={headingId} className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('formSubmissions.heading')}
@@ -404,11 +465,12 @@ export function FormSubmissionsRoute(): JSX.Element {
         </div>
       )}
 
-      {submissions === null ? (
+      {submissions !== null && pager}
+      {submissions === null || loading ? (
         <p>{t('common.loading')}</p>
       ) : (
         <TableRoot label={t('formSubmissions.tableLabel')}>
-          <Table>
+          <Table className="min-w-[48rem]">
             <TableHead>
               <TableRow>
                 <TableHeader>
@@ -520,9 +582,9 @@ export function FormSubmissionsRoute(): JSX.Element {
                         </dl>
 
                         <div className="mt-4 border-t border-border pt-3">
-                          <h3 className="m-0 mb-2 text-sm font-semibold">
+                          <h2 className="m-0 mb-2 text-sm font-semibold">
                             {t('formSubmissions.notesHeading')}
-                          </h3>
+                          </h2>
                           <ul className="mb-2 flex flex-col gap-1 text-sm">
                             {(notesBySubmission[submission.id] ?? []).length === 0 && (
                               <li className="text-muted-foreground">
@@ -576,16 +638,7 @@ export function FormSubmissionsRoute(): JSX.Element {
         </TableRoot>
       )}
 
-      {submissions !== null && (
-        <Pagination
-          variant="cursor"
-          hasMore={nextCursor !== null}
-          loading={loadingMore}
-          onLoadMore={() => void loadMore()}
-          loadMoreLabel={t('formSubmissions.loadMore')}
-          loadingLabel={t('common.loading')}
-        />
-      )}
+      {submissions !== null && pager}
 
       <section aria-labelledby="gdpr-heading" className="rounded-md border border-border p-4">
         <h2 id="gdpr-heading" className="m-0 mb-2 text-base font-semibold">
@@ -616,14 +669,18 @@ export function FormSubmissionsRoute(): JSX.Element {
           </Notice>
         )}
         {gdprResults !== null && (
-          <ul className="mt-3 flex flex-col gap-1 text-sm">
-            {gdprResults.length === 0 && <li>{t('formSubmissions.gdprNoResults')}</li>}
-            {gdprResults.map((submission) => (
-              <li key={submission.id}>
-                {submission.formName} — {new Date(submission.submittedAt).toLocaleString()}
-              </li>
-            ))}
-          </ul>
+          <>
+            {gdprPager}
+            <ul className="mt-3 flex flex-col gap-1 text-sm">
+              {gdprResults.length === 0 && <li>{t('formSubmissions.gdprNoResults')}</li>}
+              {gdprPage.items.map((submission) => (
+                <li key={submission.id}>
+                  {submission.formName} — {new Date(submission.submittedAt).toLocaleString()}
+                </li>
+              ))}
+            </ul>
+            {gdprPager}
+          </>
         )}
       </section>
     </section>

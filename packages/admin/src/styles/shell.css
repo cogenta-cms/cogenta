@@ -83,11 +83,11 @@
 .app-shell__footer-version {
   font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
-  opacity: 0.8;
+  opacity: 1;
 }
 
 .app-shell__footer-site {
-  opacity: 0.8;
+  opacity: 1;
 }
 
 .app-shell__topbar {
@@ -906,5 +906,82 @@
   .app-shell__logout {
     transition: none;
     transform: none !important;
+  }
+}
+
+/* A compact account row leaves every action reachable on narrow screens. */
+.app-shell__topbar > *,
+.app-shell__account,
+.app-shell__content {
+  min-width: 0;
+}
+.app-shell__account-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+.app-shell__footer-site {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1000px) {
+  .app-shell__topbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 72px;
+    padding-block: 0.5rem;
+    gap: 0.5rem;
+  }
+  .app-shell__search {
+    order: 3;
+    flex: 1 0 100%;
+    max-width: none;
+  }
+  .app-shell__account {
+    gap: 0.25rem;
+  }
+  .app-shell__account-chip {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .app-shell__logout-label {
+    display: none;
+  }
+  .app-shell__view-site,
+  .app-shell__logout {
+    min-width: 32px;
+    min-height: 32px;
+    justify-content: center;
+    padding: 0.25rem;
+  }
+}
+@media (max-width: 768px) {
+  .app-shell__topbar {
+    padding-inline: 0.5rem;
+  }
+  .app-shell__brand {
+    min-width: 0;
+    max-width: 90px;
+    flex-wrap: wrap;
+  }
+  .app-shell__topbar .app-shell__brand-logo {
+    max-width: 90px;
+    height: auto;
+    max-height: 40px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-shell__notifications-popover {
+    position: fixed;
+    top: 3.5rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-height: calc(100dvh - 4rem);
   }
 }

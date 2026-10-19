@@ -50,7 +50,7 @@ export interface AssistVectorInfo {
   readonly lastIndexedAt: string | null
   readonly collections: readonly AssistIndexedCollection[]
   /** The reserved pseudo-collection name uploaded reference documents live under — pass it in `runChat`'s `collections` to let the chat tool retrieve them too. */
-  readonly referenceCollection: string
+  readonly referenceCollection?: string
 }
 
 export const REFERENCE_DOCUMENT_STATUSES = ['pending', 'indexed', 'error'] as const

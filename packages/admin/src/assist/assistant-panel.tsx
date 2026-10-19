@@ -4,6 +4,7 @@ import type { AssistCapability, AssistSuggestion } from '../api/assist-client.js
 import { getAssistCapabilities, runAssistTool } from '../api/assist-client.js'
 import { ApiError } from '../api/client.js'
 import { Button, Card, CardBody, CardHeader, CardTitle, Input, Label, Notice } from '../ui/index.js'
+import { toolDescription, toolLabel } from './tool-text.js'
 
 /**
  * L18 task 3 — the assistant panel on a content entry.
@@ -156,12 +157,12 @@ export function AssistantPanel({
               variant="secondary"
               size="sm"
               disabled={!hasText || running !== null}
-              title={tool.description}
+              title={toolDescription(tool, t)}
               onClick={() => {
                 void run(tool)
               }}
             >
-              {running === tool.tool ? t('assist.running') : tool.label}
+              {running === tool.tool ? t('assist.running') : toolLabel(tool, t)}
             </Button>
           ))}
         </div>

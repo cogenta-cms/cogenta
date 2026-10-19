@@ -40,6 +40,42 @@ here: not the same PHP filenames, but the same principle, an imposed
 skeleton with named extension points rather than one free-form template
 where everything is possible and nothing is predictable.
 
+## Fonts: ship them, never link them
+
+A web font fetched from a provider's server sends every visitor's IP address
+there before any consent (LG München I, 20 January 2022, 3 O 17493/20), so the
+built-in themes serve their own. Do the same:
+
+```
+my-theme/
+  fonts/
+    manifest.json          # { theme, faces: [{ family, style, weight, subset, file, css }] }
+    geist-normal-latin-19f9c925.woff2
+    OFL-geist.txt          # the licence travels with the files
+    README.md              # family, licence, source, subsets, how they were fetched
+  src/styles/fonts.css     # the @font-face rules, imported by theme.css
+```
+
+- `fonts.css` declares each face with `font-display: swap`, a `unicode-range`
+  that splits Latin from Latin Extended, and
+  `src: url(/_cogenta/fonts/<theme>/<file>.woff2) format('woff2')`.
+- `cogenta serve` answers that URL from the theme package's `fonts/`
+  directory. **The manifest is the allow-list**: only a file it lists is
+  served, the path is held to a strict shape first (no traversal), the type is
+  `font/woff2`, and the cache is a year `immutable` — which is why file names
+  carry a hash of their bytes, so an updated font gets a new URL.
+- Publish the directory (`"files": ["dist", "fonts", "src", "tokens.json"]`) and
+  export `./fonts/*.woff2` and `./fonts/manifest.json`.
+- The built-in themes' files are produced by `scripts/fetch-theme-fonts.mjs` in
+  the repository (Latin and Latin Extended subsets, WOFF2, OFL-licensed
+  families only).
+- Keep the whole skin system working: name the family in your tokens, and a
+  skin that picks any bundled family renders — the host adds the right faces.
+
+A third-party theme that still `@import`s a remote font keeps working; it just
+sends the request itself. A site opts in to remote fonts for *skins* with
+`appearance.remoteWebFonts` (off by default).
+
 ## The manifest
 
 ```ts

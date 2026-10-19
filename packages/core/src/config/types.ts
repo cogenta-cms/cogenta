@@ -145,6 +145,15 @@ export interface CogentaConfigInput {
     /** Days an event row is kept, counted from when it was recorded. */
     readonly retainDays?: number
   }
+  /**
+   * Installation-level look of the public site. The only knob today is
+   * whether a skin may load web fonts from Google Fonts (`remoteWebFonts`,
+   * default `false`): off, no visitor's address is ever sent to a font
+   * provider, and a skin can use the families Cogenta bundles.
+   */
+  readonly appearance?: {
+    readonly remoteWebFonts?: boolean
+  }
   readonly llm?: {
     readonly provider?: string
     readonly model?: string
@@ -336,6 +345,10 @@ export interface CogentaConfig {
   /** The events-table retention window (fiche 27 task 3). Resolved, default applied. */
   readonly analytics: {
     readonly retainDays: number
+  }
+  /** Whether a skin may load web fonts from a third party. Resolved, default `false` (no request to a font provider). */
+  readonly appearance: {
+    readonly remoteWebFonts: boolean
   }
   /** Absent when no provider is configured. The CMS works without AI (rule R2). */
   readonly llm:

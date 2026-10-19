@@ -1,4 +1,4 @@
-import { type FormEvent, type JSX, useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type JSX, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router'
 import {
@@ -71,41 +71,56 @@ export function CommerceOrdersRoute(): JSX.Element {
   // function and a real server route, but this screen never read anything
   // into it — it passed `undefined` unconditionally.
   const [search, setSearch] = useState('')
+  const [pagination, setPagination] = useState<{
+    cursors: readonly (string | undefined)[]
+    index: number
+  }>({ cursors: [undefined], index: 0 })
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const cursor = pagination.cursors[pagination.index]
+  const resetPagination = (): void => setPagination({ cursors: [undefined], index: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
-  const load = useCallback(async () => {
+  useEffect(() => {
     if (token === null || !canRead) return
+    const controller = new AbortController()
+    let cancelled = false
     setLoading(true)
     setError(null)
-    try {
-      const { orders: list } = await listOrders(
-        token,
-        statusFilter === '' ? undefined : statusFilter,
-        search.trim() === '' ? undefined : search.trim(),
-        {
-          ...(fromDate === '' ? {} : { from: fromDate }),
-          ...(toDate === '' ? {} : { to: toDate }),
-        },
-      )
-      setOrders(list)
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceOrders.loadError'))
-    } finally {
-      setLoading(false)
+    setNextCursor(null)
+    void (async () => {
+      try {
+        const response = await listOrders(
+          token,
+          statusFilter === '' ? undefined : statusFilter,
+          search.trim() === '' ? undefined : search.trim(),
+          {
+            ...(fromDate === '' ? {} : { from: fromDate }),
+            ...(toDate === '' ? {} : { to: toDate }),
+          },
+          { limit: 20, ...(cursor === undefined ? {} : { cursor }), signal: controller.signal },
+        )
+        if (cancelled) return
+        setOrders(response.orders)
+        setNextCursor(response.page?.hasMore === true ? (response.page.nextCursor ?? null) : null)
+      } catch (caught) {
+        if (!cancelled)
+          setError(caught instanceof ApiError ? caught.message : t('commerceOrders.loadError'))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      controller.abort()
     }
-  }, [token, canRead, statusFilter, search, fromDate, toDate, t])
+  }, [token, canRead, statusFilter, search, fromDate, toDate, cursor, t])
 
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  // Audit T-COM-03: "le total de la période affichée" — summed client-side
-  // from the rows already loaded, no new route. Grouped by currency (a shop
+  // The total is explicitly for this page, grouped by currency (a shop
   // billing in more than one is never summed across them into a meaningless
   // single figure), currencies in first-seen order.
-  const periodTotals = useMemo(() => {
+  const pageTotals = useMemo(() => {
     const byCurrency = new Map<string, number>()
     for (const order of orders) {
       byCurrency.set(order.currency, (byCurrency.get(order.currency) ?? 0) + order.totalMinor)
@@ -174,7 +189,10 @@ export function CommerceOrdersRoute(): JSX.Element {
                 type="search"
                 value={search}
                 placeholder={t('commerceOrders.searchPlaceholder')}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  resetPagination()
+                }}
               />
             )}
           </Field>
@@ -185,7 +203,10 @@ export function CommerceOrdersRoute(): JSX.Element {
               <Select
                 {...control}
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as OrderStatus | '')}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as OrderStatus | '')
+                  resetPagination()
+                }}
               >
                 <option value="">{t('commerceOrders.allStatuses')}</option>
                 {ORDER_STATUSES.map((status) => (
@@ -204,7 +225,10 @@ export function CommerceOrdersRoute(): JSX.Element {
                 {...control}
                 type="date"
                 value={fromDate}
-                onChange={(event) => setFromDate(event.target.value)}
+                onChange={(event) => {
+                  setFromDate(event.target.value)
+                  resetPagination()
+                }}
               />
             )}
           </Field>
@@ -216,7 +240,10 @@ export function CommerceOrdersRoute(): JSX.Element {
                 {...control}
                 type="date"
                 value={toDate}
-                onChange={(event) => setToDate(event.target.value)}
+                onChange={(event) => {
+                  setToDate(event.target.value)
+                  resetPagination()
+                }}
               />
             )}
           </Field>
@@ -269,7 +296,7 @@ export function CommerceOrdersRoute(): JSX.Element {
       {!loading && error === null && orders.length > 0 && (
         <p className="text-sm">
           {t('commerceOrders.periodTotal')}{' '}
-          {periodTotals
+          {pageTotals
             .map(([currency, totalMinor]) => formatMinor(totalMinor, currency, i18n.language))
             .join(' + ')}
         </p>
@@ -285,6 +312,39 @@ export function CommerceOrdersRoute(): JSX.Element {
             navigate(`/commerce/orders/${encodeURIComponent(orderId)}`)
           }}
         />
+      )}
+
+      {error === null && (pagination.index > 0 || nextCursor !== null) && (
+        <nav
+          aria-label={t('commerceOrders.paginationLabel')}
+          className="flex flex-wrap items-center gap-2"
+        >
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={loading || pagination.index === 0}
+            onClick={() => setPagination((current) => ({ ...current, index: current.index - 1 }))}
+          >
+            {t('commerceOrders.previousPage')}
+          </Button>
+          <span aria-live="polite">
+            {t('commerceOrders.pageInfo', { page: pagination.index + 1 })}
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={loading || nextCursor === null}
+            onClick={() => {
+              if (nextCursor !== null)
+                setPagination((current) => ({
+                  cursors: [...current.cursors.slice(0, current.index + 1), nextCursor],
+                  index: current.index + 1,
+                }))
+            }}
+          >
+            {t('commerceOrders.nextPage')}
+          </Button>
+        </nav>
       )}
     </section>
   )

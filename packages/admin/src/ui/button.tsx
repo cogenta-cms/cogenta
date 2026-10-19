@@ -33,7 +33,7 @@ export const buttonVariants = cva(
         primary:
           'border-transparent bg-primary text-primary-foreground ' +
           'shadow-[inset_0_1px_0_0_rgb(255_255_255/0.18),var(--shadow-card)] ' +
-          'hover:-translate-y-px hover:bg-primary/90 ' +
+          'hover:-translate-y-px ' +
           'hover:shadow-[inset_0_1px_0_0_rgb(255_255_255/0.18),var(--shadow-raised)]',
         secondary:
           'border-border bg-card text-card-foreground shadow-card hover:-translate-y-px ' +
@@ -42,7 +42,7 @@ export const buttonVariants = cva(
           'border-transparent bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground',
         destructive:
           'border-transparent bg-destructive text-destructive-foreground shadow-card ' +
-          'hover:-translate-y-px hover:bg-destructive/90 hover:shadow-raised',
+          'hover:-translate-y-px hover:shadow-raised',
       },
       size: {
         sm: 'h-8 px-3 text-xs',

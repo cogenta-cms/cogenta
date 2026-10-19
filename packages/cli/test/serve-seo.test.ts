@@ -31,6 +31,7 @@ const COLLECTIONS: readonly CollectionDefinition[] = [
       title: { kind: 'text', required: true, options: { max: 200 } },
       slug: { kind: 'slug', required: true, options: { from: 'title' } },
       excerpt: { kind: 'text', options: { max: 400 } },
+      seoDescription: { kind: 'text', options: { max: 400 } },
     },
     permissions: { read: ['public'], create: ['editor'], update: ['editor'], publish: ['editor'] },
   },
@@ -123,6 +124,7 @@ interface SeedEntry {
   readonly title: string
   readonly slug: string
   readonly excerpt?: string
+  readonly seoDescription?: string
   readonly locale?: string
   readonly translationOf?: string
   readonly publish?: boolean
@@ -147,6 +149,7 @@ async function seed(root: string, entries: readonly SeedEntry[]): Promise<readon
           title: input.title,
           slug: input.slug,
           ...(input.excerpt === undefined ? {} : { excerpt: input.excerpt }),
+          ...(input.seoDescription === undefined ? {} : { seoDescription: input.seoDescription }),
         },
         ...(input.locale === undefined ? {} : { locale: input.locale }),
         ...(input.translationOf === undefined ? {} : { translationOf: input.translationOf }),
@@ -165,6 +168,48 @@ afterEach(() => {
 })
 
 describe('cogenta serve — SEO in the rendered page (L10 task 1)', () => {
+  it('renders the authored home description and its live replacement without changing the canonical or sitemap', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const [id] = await seed(root, [
+        {
+          title: 'Home',
+          slug: 'home',
+          excerpt: 'A less specific excerpt.',
+          seoDescription: 'The authored home description.',
+        },
+      ])
+      expect(id).toBeDefined()
+      const before = await (await fetch(`${server.base}/`)).text()
+      expect(before).toContain(
+        '<meta name="description" content="The authored home description." />',
+      )
+      const { createSqliteHandle } = await import('@cogenta/core')
+      const { createContentStore } = await import('@cogenta/schema')
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      try {
+        const store = createContentStore({ db, collection: PAGE_COLLECTION })
+        if (id === undefined) return
+        await store.update(id, { values: { seoDescription: 'The edited home description.' } })
+        await store.publish(id)
+      } finally {
+        await db.close()
+      }
+      const after = await (await fetch(`${server.base}/`)).text()
+      expect(after).toContain('<meta name="description" content="The edited home description." />')
+      expect(after).not.toContain('The authored home description.')
+      const canonical = /<link rel="canonical"[^>]+>/u.exec(before)?.[0]
+      expect(canonical).toBeDefined()
+      expect(after).toContain(canonical ?? '')
+      expect(after).not.toContain('hreflang=')
+      expect(after).not.toContain('noindex')
+      expect((await fetch(`${server.base}/sitemap.xml`)).status).toBe(200)
+    } finally {
+      await server.stop()
+    }
+  }, 90_000)
+
   it('a rendered page carries a real title, description, canonical, Open Graph and JSON-LD derived from the entry', async () => {
     const root = await project()
     const server = await startServer(root)
@@ -230,6 +275,9 @@ describe('cogenta serve — SEO in the rendered page (L10 task 1)', () => {
           '<link rel="alternate" hreflang="x-default" href="https://example.com/hello-world" />',
         )
       }
+      // The skip link follows the page's language, not the theme's default.
+      expect(french).toContain('>Aller au contenu</a>')
+      expect(english).toContain('>Skip to content</a>')
       expect(english).toContain('<meta property="og:locale:alternate" content="fr" />')
       expect(french).toContain('<meta property="og:locale:alternate" content="en" />')
     } finally {

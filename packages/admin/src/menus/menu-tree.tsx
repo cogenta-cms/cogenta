@@ -109,78 +109,86 @@ function ItemRow({
       onDragEnd={() => setDragging(null)}
       onDragOver={(event) => event.preventDefault()}
       onDrop={drop}
-      className={cn(
-        'flex flex-wrap items-center gap-2 rounded-md border px-2 py-1.5',
-        'border-input bg-card',
-        dragging === item.id && 'opacity-50',
-      )}
-      style={{ marginLeft: `${item.depth * 1.5}rem` }}
+      className={cn('min-w-0', dragging === item.id && 'opacity-50')}
+      style={{ marginLeft: item.parent === null ? '0rem' : '0.5rem' }}
     >
-      <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.label}</span>
-      <HealthBadge item={item} />
-      <span className="min-w-0 max-w-[14rem] truncate text-xs text-muted-foreground">
-        {targetOf(item, t)}
-      </span>
-      {!disabled && (
-        <div className="flex shrink-0 gap-1">
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={index <= 0}
-            aria-label={t('menus.moveUp')}
-            onClick={() => {
-              const next = moveUp(items, item.id)
-              if (next !== items) onReorder(next)
-            }}
-          >
-            ↑
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={index === -1 || index >= siblings.length - 1}
-            aria-label={t('menus.moveDown')}
-            onClick={() => {
-              const next = moveDown(items, item.id)
-              if (next !== items) onReorder(next)
-            }}
-          >
-            ↓
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={index <= 0}
-            aria-label={t('menus.indent')}
-            onClick={() => {
-              const next = indent(items, item.id)
-              if (next !== items) onReorder(next)
-            }}
-          >
-            →
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={item.parent === null}
-            aria-label={t('menus.outdent')}
-            onClick={() => {
-              const next = outdent(items, item.id)
-              if (next !== items) onReorder(next)
-            }}
-          >
-            ←
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => onEdit(item)}>
-            {t('menus.editItem')}
-          </Button>
-          <Button size="sm" variant="destructive" onClick={() => onDelete(item)}>
-            {t('menus.delete')}
-          </Button>
-        </div>
-      )}
+      <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-input bg-card px-2 py-1.5">
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.label}</span>
+        <HealthBadge item={item} />
+        <span className="min-w-0 max-w-[14rem] truncate text-xs text-muted-foreground">
+          {targetOf(item, t)}
+        </span>
+        {!disabled && (
+          <div className="flex min-w-0 max-w-full flex-wrap gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={index <= 0}
+              aria-label={t('menus.itemAction', { action: t('menus.moveUp'), label: item.label })}
+              onClick={() => {
+                const next = moveUp(items, item.id)
+                if (next !== items) onReorder(next)
+              }}
+            >
+              ↑
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={index === -1 || index >= siblings.length - 1}
+              aria-label={t('menus.itemAction', { action: t('menus.moveDown'), label: item.label })}
+              onClick={() => {
+                const next = moveDown(items, item.id)
+                if (next !== items) onReorder(next)
+              }}
+            >
+              ↓
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={index <= 0}
+              aria-label={t('menus.itemAction', { action: t('menus.indent'), label: item.label })}
+              onClick={() => {
+                const next = indent(items, item.id)
+                if (next !== items) onReorder(next)
+              }}
+            >
+              →
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={item.parent === null}
+              aria-label={t('menus.itemAction', { action: t('menus.outdent'), label: item.label })}
+              onClick={() => {
+                const next = outdent(items, item.id)
+                if (next !== items) onReorder(next)
+              }}
+            >
+              ←
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={t('menus.itemAction', { action: t('menus.editItem'), label: item.label })}
+              onClick={() => onEdit(item)}
+            >
+              {t('menus.editItem')}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              aria-label={t('menus.itemAction', { action: t('menus.delete'), label: item.label })}
+              onClick={() => onDelete(item)}
+            >
+              {t('menus.delete')}
+            </Button>
+          </div>
+        )}
+      </div>
       {children.length > 0 && (
-        <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
+        <ul className="m-0 mt-1 flex w-full min-w-0 list-none flex-col gap-1 p-0">
           {children.map((child) => (
             <ItemRow
               key={child.id}
@@ -236,7 +244,7 @@ export function MenuTree({
   const roots = items.filter((item) => item.parent === null)
 
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label={t('menus.treeLabel')}>
+    <ul className="m-0 flex min-w-0 list-none flex-col gap-1 p-0" aria-label={t('menus.treeLabel')}>
       {roots.map((root) => (
         <ItemRow
           key={root.id}

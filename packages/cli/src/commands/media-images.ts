@@ -90,21 +90,22 @@ export function createMediaImageProcessor(
 
     variants: async (bytes, intrinsic) => {
       const metadata = await transformer.metadata(bytes)
-      const produced: UploadedImageVariant[] = []
-
-      for (const width of variantWidthsFor(intrinsic)) {
-        const rendered = await transformer.transform(
-          bytes,
-          planTransform(metadata, { width, format: VARIANT_FORMAT, quality }),
-        )
-        produced.push({
-          name: variantName(width, VARIANT_FORMAT),
-          bytes: rendered.bytes,
-          contentType: rendered.contentType,
-        })
-      }
-
-      return produced
+      // All widths at once: the native transformer encodes on its own thread
+      // pool, and one width after another left most of it idle — seeding the
+      // showcase site's thirty images spent most of its time waiting on this.
+      return await Promise.all(
+        variantWidthsFor(intrinsic).map(async (width): Promise<UploadedImageVariant> => {
+          const rendered = await transformer.transform(
+            bytes,
+            planTransform(metadata, { width, format: VARIANT_FORMAT, quality }),
+          )
+          return {
+            name: variantName(width, VARIANT_FORMAT),
+            bytes: rendered.bytes,
+            contentType: rendered.contentType,
+          }
+        }),
+      )
     },
 
     variantNames: (intrinsic) => variantWidthsFor(intrinsic).map((width) => variantName(width)),

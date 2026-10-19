@@ -100,7 +100,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: color-mix(in oklab, var(--cg-hero-scrim) 40%, transparent);
+  background: color-mix(in oklab, var(--cg-hero-scrim) 52%, transparent);
 }
 
 .cg-hero[data-media="present"] .cg-hero__image {
@@ -116,7 +116,8 @@
 }
 
 .cg-hero[data-media="present"] .cg-hero__title,
-.cg-hero[data-media="present"] .cg-hero__subtitle {
+.cg-hero[data-media="present"] .cg-hero__subtitle,
+.cg-hero[data-media="present"] .cg-action[data-emphasis="secondary"] {
   color: var(--cg-hero-ink);
 }
 

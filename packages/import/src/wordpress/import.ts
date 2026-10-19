@@ -3,6 +3,7 @@ import type { CommentStatus, CommentStore } from '@cogenta/comments'
 import { createDatabaseMediaStore, type DatabaseHandle, type StorageDriver } from '@cogenta/core'
 import {
   buildPath,
+  type CollectionDefinition,
   createContentStore,
   createRedirectStore,
   createSchemaTables,
@@ -26,11 +27,13 @@ import {
 import { downloadAndStoreMedia } from './media.js'
 import { parseWxr } from './parse.js'
 import { type ConversionReport, emptyReport, type UnconvertedItem } from './report.js'
+import { preflightWordPressTarget } from './target-preflight.js'
 import type { WxrComment, WxrItem } from './types.js'
 
 export interface ImportWordPressOptions {
   readonly db: DatabaseHandle
   readonly storage: StorageDriver
+  readonly collections?: readonly CollectionDefinition[]
   /** Injected for tests — real `fetch` by default. */
   readonly fetchImpl?: typeof fetch
   /**
@@ -150,6 +153,7 @@ export async function importWordPress(
   const parsed = parseWxr(xml)
   const acc = emptyReport()
 
+  await preflightWordPressTarget(db, options.collections)
   await createSchemaTables(db, WORDPRESS_IMPORT_COLLECTIONS)
   await ensureAuthTables(db)
 

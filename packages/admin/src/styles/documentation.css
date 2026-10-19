@@ -131,7 +131,40 @@
  * measure at a comfortable reading width regardless of how wide the
  * surrounding column runs. */
 .doc-content {
+  min-width: 0;
   max-width: 65ch;
+  overflow-wrap: anywhere;
+}
+
+.doc-browser-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.doc-pages-nav {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 64rem) {
+  .doc-browser-layout {
+    grid-template-columns: 14rem minmax(0, 1fr);
+  }
+}
+
+.doc-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.doc-table-scroll:focus-visible,
+.doc-content pre:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .doc-content :is(h1, h2, h3, h4) {
@@ -177,6 +210,7 @@
 .doc-content blockquote,
 .doc-content table,
 .doc-content pre {
+  max-width: 100%;
   margin: 0 0 1rem;
 }
 
@@ -208,6 +242,8 @@
 .doc-content table {
   border-collapse: collapse;
   width: 100%;
+  min-width: 28rem;
+  margin-bottom: 0;
 }
 
 .doc-content :is(th, td) {

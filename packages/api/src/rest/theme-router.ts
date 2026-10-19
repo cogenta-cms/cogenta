@@ -252,6 +252,8 @@ export interface ThemeRouterOptions {
   readonly store: ThemeStoreLike
   /** Reads `theme.tokens.json` fresh — never cached across requests, so a manual edit to the file shows up too. */
   readonly loadFileTokens: () => Promise<ThemeTokensLike | null>
+  /** The site file, or the active theme's complete default skin when no file exists. */
+  readonly loadBaseTokens?: (themeName?: string | null) => Promise<ThemeTokensLike | null>
   /**
    * Runs the real `validateSkin` (contract D). Throws the real `CogentaError`
    * (`SKIN_TOKEN_MISSING`, `SKIN_CONTRAST_INSUFFICIENT`, …) on refusal —
@@ -607,9 +609,13 @@ async function effectiveTokens(
   overrides: ThemeOverridesLike,
 ): Promise<{ readonly file: ThemeTokensLike | null; readonly effective: ThemeTokensLike | null }> {
   const file = await options.loadFileTokens()
-  if (file === null) return { file: null, effective: null }
+  const base =
+    options.loadBaseTokens === undefined
+      ? file
+      : await options.loadBaseTokens(overrides.activeTheme)
+  if (base === null) return { file, effective: null }
   const effective =
-    overrides.tokenOverrides === null ? file : options.mergeTokens(file, overrides.tokenOverrides)
+    overrides.tokenOverrides === null ? base : options.mergeTokens(base, overrides.tokenOverrides)
   return { file, effective }
 }
 
@@ -802,9 +808,13 @@ export function createThemeRouter(options: ThemeRouterOptions): ThemeRouter {
             // reasonable in isolation can still break contrast against a
             // base colour it did not touch, so what is validated is always
             // the whole picture, never the fragment alone.
-            const file = await options.loadFileTokens()
-            const base = file ?? {}
-            const merged = options.mergeTokens(base, body.tokenOverrides)
+            const base =
+              options.loadBaseTokens === undefined
+                ? await options.loadFileTokens()
+                : await options.loadBaseTokens(
+                    body.activeTheme ?? (await options.store.get()).activeTheme,
+                  )
+            const merged = options.mergeTokens(base ?? {}, body.tokenOverrides)
             options.validateTokens(merged)
           }
           checkAdditionalCss(body.additionalCss)

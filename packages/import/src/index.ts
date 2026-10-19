@@ -64,6 +64,10 @@ export { downloadAndStoreMedia } from './wordpress/media.js'
 export { parseWxr } from './wordpress/parse.js'
 export type { ConversionReport, UnconvertedItem } from './wordpress/report.js'
 export { formatConversionReport } from './wordpress/report.js'
+export {
+  assertWordPressCollectionsCompatible,
+  preflightWordPressTarget,
+} from './wordpress/target-preflight.js'
 export type {
   ParsedWxr,
   WxrAuthor,

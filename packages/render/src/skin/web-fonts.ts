@@ -14,6 +14,14 @@ import type { FontTokens } from './tokens.js'
  * answer 400 and the family silently never loads, so entries are not added by
  * guesswork. A family outside the catalogue is still a valid skin (a system
  * stack, a self-hosted face): it is simply not fetched from here.
+ *
+ * **Nothing here is requested from Google unless the site asks for it.** A
+ * font fetched from a provider's server sends every visitor's address to that
+ * provider before any consent (LG Munich I, 20 January 2022, 3 O 17493/20), so
+ * the default is no request at all: the families the built-in themes ship
+ * (`SELF_HOSTED_FAMILIES`) are served by the site itself, and the rest of the
+ * catalogue is reachable only through the explicit `appearance.remoteWebFonts`
+ * setting, which turns on the `@import`s below.
  */
 
 export type WebFontRole = 'serif' | 'sans' | 'mono'
@@ -110,6 +118,48 @@ export const WEB_FONTS: readonly WebFont[] = [
   { family: 'Space Mono', role: 'mono', axes: 'ital,wght@0,400;0,700;1,400' },
 ]
 
+/**
+ * The catalogue families the built-in themes bundle as WOFF2 files and `cogenta
+ * serve` sends from the site itself (`/_cogenta/fonts/…`). `@cogenta/cli`
+ * checks this list against the faces the theme packages actually carry, so it
+ * cannot drift from the files.
+ */
+export const SELF_HOSTED_FAMILIES: readonly string[] = [
+  'Albert Sans',
+  'Archivo',
+  'Bricolage Grotesque',
+  'Cormorant Garamond',
+  'Figtree',
+  'Fraunces',
+  'Geist',
+  'Geist Mono',
+  'IBM Plex Mono',
+  'IBM Plex Sans',
+  'Instrument Sans',
+  'Instrument Serif',
+  'Karla',
+  'Libre Franklin',
+  'Literata',
+  'Source Sans 3',
+  'Source Serif 4',
+]
+
+const SELF_HOSTED = new Set(SELF_HOSTED_FAMILIES.map((family) => family.toLowerCase()))
+
+export function isSelfHostedFamily(family: string): boolean {
+  return SELF_HOSTED.has(family.trim().toLowerCase())
+}
+
+/**
+ * The families a skin can rely on loading: the bundled ones, or the whole
+ * catalogue when the site has opted into remote web fonts. This is what a
+ * skin generator may offer a model — offering a family that would silently
+ * fall back to a system face is how a personalisation ends up looking cheap.
+ */
+export function availableWebFonts(remote: boolean): readonly WebFont[] {
+  return remote ? WEB_FONTS : WEB_FONTS.filter((font) => isSelfHostedFamily(font.family))
+}
+
 const BY_FAMILY = new Map(WEB_FONTS.map((font) => [font.family.toLowerCase(), font]))
 
 /** The family a stack actually asks for first, unquoted: `'Playfair Display', Georgia` → `Playfair Display`. */
@@ -130,16 +180,24 @@ export function webFontUrl(font: WebFont): string {
 }
 
 /**
- * The catalogue fonts a skin's three stacks lead with, once each, in token
- * order. One `@import` per family rather than one combined request, so a
- * single family Google ever stops serving cannot take the others down with it.
+ * The catalogue fonts a skin's three stacks lead with that must be fetched
+ * from Google, once each, in token order — and **none at all unless `remote`
+ * is set**: the site's own faces need no `@import`, and a visitor's address is
+ * not sent anywhere by default. With `remote`, one `@import` per family rather
+ * than one combined request, so a single family Google ever stops serving
+ * cannot take the others down with it; a bundled family is never fetched
+ * remotely even then, since the site already has it.
  */
-export function webFontImports(font: FontTokens): readonly string[] {
+export function webFontImports(
+  font: FontTokens,
+  options: { readonly remote?: boolean } = {},
+): readonly string[] {
+  if (options.remote !== true) return []
   const seen = new Set<string>()
   const imports: string[] = []
   for (const stack of [font.sans, font.serif, font.mono]) {
     const found = findWebFont(primaryFamily(stack))
-    if (found === undefined || seen.has(found.family)) continue
+    if (found === undefined || seen.has(found.family) || isSelfHostedFamily(found.family)) continue
     seen.add(found.family)
     imports.push(`@import url("${webFontUrl(found)}");`)
   }

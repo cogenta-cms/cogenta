@@ -561,7 +561,7 @@ export function GlobalSearch(): JSX.Element {
           id={listboxId}
           role="listbox"
           aria-label={t('globalSearch.resultsLabel')}
-          className="absolute top-full left-0 z-50 mt-1 max-h-96 w-full min-w-[20rem] overflow-y-auto rounded-md border border-border bg-card py-1 shadow-overlay"
+          className="absolute top-full left-0 z-50 mt-1 max-h-96 w-full min-w-0 overflow-y-auto rounded-md border border-border bg-card py-1 shadow-overlay"
         >
           {groups.map((group) => (
             // A grouping of `option`s inside `listbox`, not a form control

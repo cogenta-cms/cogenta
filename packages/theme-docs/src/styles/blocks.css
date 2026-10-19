@@ -536,6 +536,11 @@
   quotes: "\201C" "\201D";
 }
 
+.cd-quote__text:lang(fr),
+.cd-testimonial__quote:lang(fr) > p:first-child {
+  quotes: "\00AB\202F" "\202F\00BB";
+}
+
 .cd-quote__text::before,
 .cd-testimonial__quote > p:first-child::before {
   content: open-quote;

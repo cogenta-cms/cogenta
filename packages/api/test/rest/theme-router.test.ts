@@ -116,6 +116,7 @@ function memoryStore(initial: ThemeOverridesLike = emptyOverrides()): ThemeStore
 function router(overrides: {
   readonly store?: ThemeStoreLike
   readonly fileTokens?: Record<string, unknown> | null
+  readonly loadBaseTokens?: Parameters<typeof createThemeRouter>[0]['loadBaseTokens']
   readonly skinGallery?: SkinGalleryLike
   readonly generator?: Parameters<typeof createThemeRouter>[0]['generator']
   readonly fileExporter?: Parameters<typeof createThemeRouter>[0]['fileExporter']
@@ -125,7 +126,9 @@ function router(overrides: {
 }) {
   return createThemeRouter({
     store: overrides.store ?? memoryStore(),
-    loadFileTokens: async () => overrides.fileTokens ?? FILE_TOKENS,
+    loadFileTokens: async () =>
+      overrides.fileTokens === undefined ? FILE_TOKENS : overrides.fileTokens,
+    ...(overrides.loadBaseTokens === undefined ? {} : { loadBaseTokens: overrides.loadBaseTokens }),
     validateTokens: (candidate) => validateSkin(candidate) as unknown as Record<string, unknown>,
     mergeTokens: (base, patch) =>
       mergeSkinTokens(base as never, patch as never) as unknown as Record<string, unknown>,
@@ -184,6 +187,36 @@ describe('createThemeRouter — GET /api/theme', () => {
 })
 
 describe('createThemeRouter — PUT /api/theme/overrides', () => {
+  it('validates a partial override against the active theme defaults when no site token file exists', async () => {
+    const store = memoryStore({ ...emptyOverrides(), activeTheme: '@cogenta/theme-canonical' })
+    const handler = router({ store, fileTokens: null, loadBaseTokens: async () => FILE_TOKENS })
+    const before = await handler.handle({ method: 'GET', path: '/api/theme', query: {} }, ADMIN)
+    expect(
+      (before.body as { data: { fileTokens: unknown; effectiveTokens: unknown } }).data,
+    ).toMatchObject({ fileTokens: null, effectiveTokens: FILE_TOKENS })
+    const saved = await handler.handle(
+      {
+        method: 'PUT',
+        path: '/api/theme/overrides',
+        query: {},
+        body: { tokenOverrides: { color: { accent: '#123456' } } },
+      },
+      ADMIN,
+    )
+    expect(saved.status).toBe(200)
+    const refused = await handler.handle(
+      {
+        method: 'PUT',
+        path: '/api/theme/overrides',
+        query: {},
+        body: { tokenOverrides: { color: { accent: '#ffffff' } } },
+      },
+      ADMIN,
+    )
+    expect(refused.status).toBe(422)
+    expect(store.state.tokenOverrides).toEqual({ color: { accent: '#123456' } })
+  })
+
   it('saves a valid partial token override', async () => {
     const store = memoryStore()
     const r = router({ store })

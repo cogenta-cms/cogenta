@@ -136,7 +136,8 @@ function isCodeBlock(node: RichTextNode): boolean {
   )
 }
 
-const NOTE_LABEL = /^(note|tip|important|warning|caution)\s*[:.]?\s*$/i
+const NOTE_LABEL =
+  /^(note|tip|important|warning|caution|remarque|astuce|attention|avertissement|mise en garde)\s*[:.]?\s*$/iu
 
 function calloutLabel(node: RichTextNode): string | null {
   if (!isTextBlock(node) || node.style !== 'blockquote' || node.children.length < 2) return null
@@ -225,7 +226,7 @@ function renderCodeBlock(node: TextBlock): HtmlElement {
 }
 
 function renderCallout(ctx: RenderContext, node: TextBlock, label: string): HtmlElement {
-  const kind = /^(note|tip)$/i.test(label) ? 'note' : 'warning'
+  const kind = /^(note|tip|remarque|astuce)$/iu.test(label) ? 'note' : 'warning'
   const normalised = label.charAt(0).toUpperCase() + label.slice(1).toLowerCase()
   return h(
     'div',
@@ -293,6 +294,17 @@ function renderHeading(ctx: RenderContext, node: TextBlock, anchor: HeadingAncho
 // ---------------------------------------------------------------------------
 
 const NAMED_KEYS: ReadonlySet<string> = new Set([
+  'entrée',
+  'échap',
+  'suppr',
+  'maj',
+  'majuscule',
+  'espace',
+  'tabulation',
+  'haut',
+  'bas',
+  'gauche',
+  'droite',
   'ctrl',
   'control',
   'cmd',
@@ -321,6 +333,10 @@ const NAMED_KEYS: ReadonlySet<string> = new Set([
   '⌃',
 ])
 const LONE_KEYS: ReadonlySet<string> = new Set([
+  'entrée',
+  'échap',
+  'suppr',
+  'tabulation',
   'enter',
   'return',
   'esc',

@@ -90,7 +90,7 @@ function PagesPagination({
 }: Omit<PagesPaginationProps, 'variant'>): JSX.Element | null {
   if (pageCount <= 1) return null
   return (
-    <div className={cn('flex items-center gap-3 text-sm', className)}>
+    <div className={cn('flex max-w-full flex-wrap items-center gap-2 text-sm', className)}>
       <Button
         variant="secondary"
         size="sm"

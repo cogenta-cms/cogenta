@@ -13,6 +13,10 @@ import {
   RESTAURANT_DISH_PHOTOS,
   RESTAURANT_MEDIA_SPECS,
   RESTAURANT_MENUS,
+  restaurantCopyFor,
+  restaurantMediaSpecs,
+  restaurantMenus,
+  restaurantSchema,
 } from '@cogenta/starters/blueprints/restaurant'
 import {
   type FetchedEntries,
@@ -24,7 +28,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
-// The blueprint seeds nine bundled photographs through the real media
+// The blueprint seeds thirteen bundled photographs through the real media
 // pipeline, with WebP variants: slower than vitest's default, not a hang.
 const SCAFFOLD_TIMEOUT = 240_000
 
@@ -188,15 +192,19 @@ describe('scaffoldSite, restaurant blueprint', () => {
   })
 })
 
-function themeContext(slugById: ReadonlyMap<string, string>): RenderContext {
+function themeContext(
+  slugById: ReadonlyMap<string, string>,
+  locale = 'en',
+  routed: typeof menuItem = menuItem,
+): RenderContext {
   return {
     site: {
       name: 'Maison Verte',
       url: 'http://localhost:4000',
-      locales: ['en'],
-      defaultLocale: 'en',
+      locales: [locale],
+      defaultLocale: locale,
     },
-    locale: 'en',
+    locale,
     url: new URL('http://localhost:4000/'),
     t: (key) => key,
     image: (media) => ({
@@ -213,7 +221,7 @@ function themeContext(slugById: ReadonlyMap<string, string>): RenderContext {
       if ('path' in target) return target.path
       const slug = slugById.get(target.id)
       if (slug === undefined) return '#'
-      return buildPath(menuItem, { slug })
+      return buildPath(routed, { slug })
     },
     content: {
       entry: async () => null,
@@ -222,3 +230,151 @@ function themeContext(slugById: ReadonlyMap<string, string>): RenderContext {
     },
   }
 }
+
+// Installed in French: the schema, the addresses, the names of the sections a
+// dish is filed under and every word of content follow the site's language.
+describe('scaffoldSite, restaurant blueprint, installed in French', () => {
+  const copy = restaurantCopyFor('fr')
+  const model = restaurantSchema(copy)
+  let targetDir = ''
+  let result: Awaited<ReturnType<typeof scaffoldSite>>
+
+  beforeAll(async () => {
+    targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-restaurant-fr-'))
+    result = await scaffoldSite({
+      targetDir,
+      siteName: 'Maison Verte',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'fr',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+      blueprintId: 'restaurant',
+    })
+  }, SCAFFOLD_TIMEOUT)
+
+  afterAll(async () => {
+    if (targetDir !== '') await rm(targetDir, { recursive: true, force: true })
+  })
+
+  async function withDatabase<T>(
+    use: (db: Parameters<typeof createContentStore>[0]['db']) => Promise<T>,
+  ): Promise<T> {
+    const logger = createLogger({ level: 'silent' })
+    const selection = await createDatabaseRegistry({ logger }).select({
+      driver: 'sqlite',
+      url: join(targetDir, '.cogenta', 'site.db'),
+    })
+    try {
+      return await use(selection.instance)
+    } finally {
+      await selection.dispose()
+    }
+  }
+
+  it('writes a French schema file loadCollections can load back', async () => {
+    expect(result.blueprintId).toBe('restaurant')
+    expect(result.fellBackToBlank).toBe(false)
+    expect(result.migrateExitCode).toBe(0)
+    const collections = await loadCollections(targetDir)
+    const dish = collections.find((collection) => collection.name === 'menu_item')
+    expect(dish?.routing?.pattern).toBe('/carte/:slug')
+    expect(JSON.stringify(dish?.fields.category)).toContain('Fromages et desserts')
+    expect(JSON.stringify(dish?.fields.category)).not.toContain('Starters')
+  })
+
+  it('seeds the French menus, with the page addresses of the French site, and every photograph', () => {
+    const menus = restaurantMenus(copy)
+    expect(result.menusSeeded).toBe(
+      menus.header.length + menus.footer.length + (menus.headerAction ? 1 : 0),
+    )
+    expect(menus.footer.map((item) => item.url)).toContain('/credits-photos')
+    expect(result.mediaSeeded).toBe(restaurantMediaSpecs(copy).length)
+  })
+
+  it('seeds every dish in French, filed under a French section, with a photograph when it has one', async () => {
+    await withDatabase(async (db) => {
+      const dishes = await createContentStore({ db, collection: model.menuItem }).list({
+        limit: 100,
+      })
+      expect(dishes.items).toHaveLength(copy.dishes.length)
+      for (const entry of dishes.items) {
+        const dish = copy.dishes.find((candidate) => candidate.slug === entry.values.slug)
+        expect(dish, String(entry.values.slug)).toBeDefined()
+        expect(entry.status).toBe('published')
+        expect(entry.values.name).toBe(dish?.name)
+        expect(entry.values.category).toBe(copy.sections[dish?.section ?? 0])
+        expect(typeof entry.values.photo === 'string').toBe(dish?.photoAlt !== undefined)
+      }
+      expect(dishes.items.map((entry) => entry.values.category)).toContain('Entrées')
+      expect(dishes.items.map((entry) => entry.values.name)).toContain(
+        'Poulpe grillé, safran et orange',
+      )
+    })
+  })
+
+  it('seeds every page, published, in French, down to the photo credits', async () => {
+    await withDatabase(async (db) => {
+      const pages = await createContentStore({ db, collection: model.page }).list({ limit: 20 })
+      expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual(
+        buildRestaurantDemoPages({ copy })
+          .map((demo) => demo.slug)
+          .sort(),
+      )
+      expect(pages.items.every((entry) => entry.status === 'published')).toBe(true)
+      const credits = pages.items.find((entry) => entry.values.slug === 'credits-photos')
+      expect(credits?.values.title).toBe('Crédits photographiques')
+      expect(JSON.stringify(credits?.blocks)).toContain('Wikimedia Commons')
+    })
+  })
+
+  it('indexes the French dishes for search in French', async () => {
+    await withDatabase(async (db) => {
+      const index = await createSearchIndex({ db })
+      const results = await index.search({ text: 'poulpe', locale: 'fr' })
+      expect(results.hits.some((hit) => hit.collection === 'menu_item')).toBe(true)
+    })
+  })
+
+  it('renders the seeded French home page through the restaurant theme: the name, the French sections, the prices in euros the French way', async () => {
+    await withDatabase(async (db) => {
+      const pageStore = createContentStore({ db, collection: model.page })
+      const dishStore = createContentStore({ db, collection: model.menuItem })
+      const home = (await pageStore.list()).items.find((entry) => entry.values.slug === 'home')
+      if (home === undefined) throw new Error('the home page was not seeded')
+      const blocks = (home.blocks.blocks ?? []).map(
+        (block): VocabularyBlock =>
+          ({
+            _key: block.key,
+            _type: block.type,
+            _version: '1.0.0',
+            ...block.data,
+          }) as VocabularyBlock,
+      )
+      const listed = await dishStore.list({ sort: { field: 'id', direction: 'asc' }, limit: 100 })
+      const themeEntries: readonly ThemeContentEntry[] = listed.items.map((entry) => ({
+        id: entry.id,
+        collection: 'menu_item',
+        locale: entry.locale,
+        status: entry.status,
+        ...entry.values,
+      }))
+      const slugById = new Map(listed.items.map((entry) => [entry.id, entry.values.slug as string]))
+      const entries: FetchedEntries = { 'home-menu': themeEntries }
+
+      const html = serialize(
+        renderPage(
+          { title: home.values.title as string, blocks },
+          themeContext(slugById, 'fr', model.menuItem),
+          entries,
+        ),
+      )
+      expect(html).toContain('<h1 class="cr-hero__title" data-field="title">Maison Verte</h1>')
+      expect(html).toContain('<h3 class="cr-menu__section-title">Entrées</h3>')
+      expect(html).toContain('<h3 class="cr-menu__section-title">Vins au verre</h3>')
+      expect(html).toContain('href="/carte/poulpe-grille">Poulpe grillé, safran et orange</a>')
+      expect(html).toMatch(/<data class="cr-menu__price" value="17">17 €<\/data>/)
+      expect(html).toContain('Réserver une table')
+      expect(html).not.toContain('Starters')
+    })
+  })
+})

@@ -6,13 +6,13 @@ packages:
 # it uses — an undeclared import is a lint error — but the range lives here only.
 # pnpm resolves `catalog:` to the real range when publishing.
 catalog:
-  '@aws-sdk/client-s3': ^3.1109.0
-  '@aws-sdk/lib-storage': ^3.1109.0
-  '@aws-sdk/s3-request-presigner': ^3.1109.0
+  '@aws-sdk/client-s3': ^3.1131.0
+  '@aws-sdk/lib-storage': ^3.1131.0
+  '@aws-sdk/s3-request-presigner': ^3.1131.0
   '@radix-ui/react-dialog': ^1.1.23
   '@redis/client': ^6.2.1
   '@tailwindcss/vite': ^4.3.3
-  astro: ^7.2.1
+  astro: ^7.2.8
   'axe-core': ^4.13.0
   '@simplewebauthn/browser': ^13.3.0
   '@simplewebauthn/server': ^13.3.2
@@ -21,7 +21,7 @@ catalog:
   '@types/react': ^19.2.18
   '@types/react-dom': ^19.2.4
   '@vitejs/plugin-react': ^6.0.5
-  bullmq: ^6.1.0
+  bullmq: ^6.3.5
   'class-variance-authority': ^0.7.1
   clsx: ^2.1.1
   drizzle-orm: ^0.45.2
@@ -34,7 +34,7 @@ catalog:
   react-dom: ^19.2.8
   react-i18next: ^17.0.11
   react-router: ^8.3.0
-  sharp: ^0.35.3
+  sharp: ^0.35.4
   slate: ^0.126.2
   slate-dom: ^0.126.0
   slate-history: ^0.113.1
@@ -43,7 +43,7 @@ catalog:
   'tailwind-merge': ^3.6.0
   typescript: ^7.0.2
   vite: ^8.2.1
-  vitest: ^4.1.10
+  vitest: ^4.1.11
   wasm-vips: ^0.0.18
   zod: ^4.4.3
 
@@ -52,3 +52,15 @@ catalog:
 onlyBuiltDependencies:
   - esbuild
   - lefthook
+
+# Transitive dev-only dependencies held at a version past a published advisory,
+# until the tools that pull them in (astro, vitest's vite/jsdom, changesets'
+# launch-editor) raise their own ranges. Each one is a semver-compatible bump.
+#   http-cache-semantics: GHSA-ch52-4w7c-c8xp (fixed in 4.3.0)
+#   smol-toml: GHSA-r4xh-jqrq-34v2 · source-map-js: GHSA-68fv-2mgg-jv7q
+#   shell-quote: GHSA-pqg4-j6r4-53mv
+overrides:
+  http-cache-semantics: ^4.3.0
+  smol-toml: ^1.9.1
+  source-map-js: ^1.2.2
+  shell-quote: ^1.12.0

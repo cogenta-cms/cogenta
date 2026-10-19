@@ -101,7 +101,7 @@ export function OpsSettingsRoute(): JSX.Element {
             </CardTitle>
           </CardHeader>
           <CardBody className="flex flex-col gap-3">
-            <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
+            <dl className="m-0 grid grid-cols-1 sm:grid-cols-[max-content_minmax(0,1fr)] [&_dd]:min-w-0 [&_dd]:break-words gap-x-4 gap-y-2 text-sm">
               <dt className="font-medium">{t('opsSettings.corsLabel')}</dt>
               <dd className="m-0">
                 {security.cors.enabled
@@ -178,7 +178,7 @@ export function OpsSettingsRoute(): JSX.Element {
             </CardTitle>
           </CardHeader>
           <CardBody className="flex flex-col gap-4">
-            <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
+            <dl className="m-0 grid grid-cols-1 sm:grid-cols-[max-content_minmax(0,1fr)] [&_dd]:min-w-0 [&_dd]:break-words gap-x-4 gap-y-2 text-sm">
               <dt className="font-medium">{t('opsSettings.databaseLabel')}</dt>
               <dd className="m-0">{config.database.driver}</dd>
 

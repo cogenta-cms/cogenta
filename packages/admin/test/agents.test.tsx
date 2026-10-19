@@ -50,6 +50,8 @@ describe('agents', () => {
     expect(screen.getByText('Activé')).toBeDefined()
     // "propose" (contract C) reads as "Co-pilote", the L22 task 1 UI label.
     expect(screen.getByText('Co-pilote')).toBeDefined()
+    expect(screen.getByText(/1\s234 consommés sur 200\s000/u)).toBeDefined()
+    expect(screen.getByText('Activé, fournisseur indisponible')).toBeDefined()
   })
 
   it('disables an agent from the list', async () => {

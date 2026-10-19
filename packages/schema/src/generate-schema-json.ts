@@ -6,6 +6,7 @@ import {
   type CollectionPermissions,
   type CollectionRouting,
   type CollectionVersioning,
+  type CollectionWorkflow,
   DEFAULT_TRASH_RETAIN_DAYS,
   type FieldDefinition,
   type FieldKind,
@@ -23,7 +24,7 @@ import type { JsonValue } from './validation.js'
  * one exists does.
  */
 
-export const SCHEMA_DOCUMENT_CONTRACT = 'schema@2.0'
+export const SCHEMA_DOCUMENT_CONTRACT = 'schema@2.1'
 
 export interface SchemaDocumentField {
   readonly name: string
@@ -50,6 +51,7 @@ export interface SchemaDocumentCollection {
   readonly labels: { readonly singular: string; readonly plural: string }
   readonly routing?: CollectionRouting
   readonly versioning?: CollectionVersioning
+  readonly workflow?: CollectionWorkflow
   readonly indexes: readonly (readonly string[])[]
   readonly permissions: CollectionPermissions
   readonly fields: readonly SchemaDocumentField[]
@@ -149,6 +151,7 @@ function describeCollection(collection: CollectionDefinition): SchemaDocumentCol
   }
   if (collection.routing !== undefined) described.routing = collection.routing
   if (collection.versioning !== undefined) described.versioning = collection.versioning
+  if (collection.workflow !== undefined) described.workflow = collection.workflow
   return described
 }
 

@@ -17,7 +17,7 @@ export default defineTheme({
   name: 'entreprise',
   version: '1.2.0',
   description:
-    'A management consultancy theme: Newsreader and Hanken Grotesk on a twelve-column grid, hairlines instead of boxes, one green accent and a designed dark mode.',
+    'An engineering company theme: Geist and Geist Mono on a twelve-column grid, full-bleed photography, key figures on an ink band, hairlines instead of boxes and a designed dark mode.',
   author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',

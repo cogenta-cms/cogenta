@@ -71,7 +71,15 @@ export function ToolsRoute(): JSX.Element | null {
     return () => clearInterval(timer)
   }, [token, active, loadTools])
 
-  if (token === null || !isAdmin) return null
+  if (token === null) return null
+  if (!isAdmin) {
+    return (
+      <section aria-labelledby="tools-heading" className="flex flex-col gap-4">
+        <h1 id="tools-heading">{t('tools.heading')}</h1>
+        <p role="alert">{t('common.adminPageOnly')}</p>
+      </section>
+    )
+  }
 
   async function start(id: string): Promise<void> {
     if (token === null) return

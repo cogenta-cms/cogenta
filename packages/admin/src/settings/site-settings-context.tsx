@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { listSettings, type SiteSetting } from '../api/settings-client.js'
+import { useAuth } from '../auth/auth-context.js'
 import { type DateStyle, formatDateTime, type TimeStyle } from '../lib/format.js'
 
 /**
@@ -201,22 +202,27 @@ export function useNewEntryDefaultBlocksSetting(): readonly string[] {
 }
 
 export function SiteSettingsProvider({ children }: { readonly children: ReactNode }): JSX.Element {
+  const auth = useAuth()
+  const token = auth.state.status === 'authenticated' ? auth.state.token : undefined
   const [state, setState] = useState<SiteSettingsState>({ status: 'loading' })
   const mounted = useRef(true)
+  const requestId = useRef(0)
 
   const load = useCallback(async (): Promise<void> => {
+    const currentRequest = ++requestId.current
     try {
-      const settings = await listSettings()
-      if (mounted.current) setState({ status: 'ready', settings })
+      const settings = await listSettings(undefined, token)
+      if (mounted.current && currentRequest === requestId.current)
+        setState({ status: 'ready', settings })
     } catch (error) {
-      if (mounted.current) {
+      if (mounted.current && currentRequest === requestId.current) {
         setState({
           status: 'error',
           message: error instanceof Error ? error.message : 'Could not load site settings.',
         })
       }
     }
-  }, [])
+  }, [token])
 
   useEffect(() => {
     mounted.current = true

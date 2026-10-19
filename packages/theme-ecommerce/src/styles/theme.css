@@ -15,15 +15,15 @@
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--ce-*` property composed from those.
  *
- * The one thing this file adds on its own is the Google Fonts request for
+ * The one thing this file adds on its own is the self-hosted `fonts.css` faces for
  * Albert Sans, upright and italic, over its whole weight axis. A skin only
  * names a family; it never fetches one. The family falls back to a real
- * system stack if Google Fonts is unreachable, and `display=swap` keeps text
+ * system stack if a face fails to load, and `display=swap` keeps text
  * visible while it loads. `cogenta serve` hoists this `@import` above the
  * skin's rules.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Albert+Sans:ital,wght@0,100..900;1,100..900&display=swap");
+@import "./fonts.css";
 
 @import "./tokens.css";
 @import "./base.css";

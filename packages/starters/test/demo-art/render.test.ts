@@ -4,6 +4,12 @@ import { describe, expect, it } from 'vitest'
 import type { ArtSpec } from '../../src/demo-art/render.js'
 import { mulberry32, renderArt } from '../../src/demo-art/render.js'
 
+/** CPU milliseconds this process has used since `since` — not wall-clock time, which also counts whatever else a shared machine runs. */
+function cpuMsSince(since: NodeJS.CpuUsage): number {
+  const used = process.cpuUsage(since)
+  return (used.user + used.system) / 1000
+}
+
 const RED = { r: 1, g: 0, b: 0 }
 const BLUE = { r: 0, g: 0, b: 1 }
 
@@ -406,15 +412,17 @@ describe('renderArt', () => {
       ],
     }
 
-    const start = performance.now()
+    const start = process.cpuUsage()
     const png = renderArt(spec)
-    const elapsedMs = performance.now() - start
+    const cpuMs = cpuMsSince(start)
 
     expect(sniffImageFormat(png)).toBe('png')
-    // Acceptance criterion (docs/lots/L25-templates-pro.md): under 2s. A
-    // generous 4s bound here avoids flakiness on a loaded CI/dev machine —
-    // measured locally this composition renders in well under 1s.
-    expect(elapsedMs).toBeLessThan(4000)
+    // Acceptance criterion (docs/lots/L25-templates-pro.md): under 2s. The
+    // render's own CPU time, unlike wall-clock time, ignores other processes,
+    // but a busy machine still slows it through shared caches: this one
+    // measured 3.0-3.3s on an eight-core machine at load 20. The bound stays
+    // the 4s this test always allowed.
+    expect(cpuMs).toBeLessThan(4000)
   }, 10_000)
 })
 

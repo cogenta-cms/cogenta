@@ -140,6 +140,9 @@ entrée existante au moment de la migration.
 Le workflow est **optionnel par collection** : `workflow: { enabled: true }` sur
 `defineCollection()`. Absent, une collection se comporte exactement comme avant
 `schema@2.1` — aucune route de transition n'y répond (`CONTENT_WORKFLOW_DISABLED`).
+Le document JSON (`.cogenta/schema.json` et `/api/schema`) annonce également
+`schema@2.1` et conserve ce champ `workflow` lorsqu’il est déclaré, y compris
+`enabled: false`. L’absence conserve le comportement sans relecture.
 
 ### Internationalisation
 
@@ -415,6 +418,15 @@ classes CSS, jamais de valeur de style.
 | `logos` | title, items[{media, name, url}] | Références |
 | `collectionList` | collection, filter, sort, limit, layout | Liste dynamique |
 | `embed` | provider, url, ratio, consentRequired | Contenu externe |
+
+Avant de sauvegarder, publier, dupliquer ou restaurer un bloc `collectionList`,
+la couche de contenu vérifie sa collection, son tri et les champs et valeurs du
+filtre contre le schéma courant. Un tri sur `publishedAt` exige un champ `date`
+ou `datetime` de ce nom déclaré par la collection ; `createdAt` reste disponible
+partout (contrat A `schema@2.4`). Une requête incompatible est refusée avec
+`BLOCK_INVALID` avant écriture. Pour les anciennes données déjà publiées, le
+rendu omet uniquement la liste invalide et signale son emplacement à l'opérateur,
+afin de conserver la page accessible pendant la correction.
 
 ### Le vocabulaire v2 — les cinq ajoutés (`blocks@2.0`)
 
@@ -716,6 +728,20 @@ tâche 5) qui exige un scan de sécurité et une confirmation humaine explicite 
 toute copie.
 
 ### Définition d'un agent
+
+L'attente d'approbation respecte le signal d'annulation du run et, pour le
+driver fichier du serveur, son arrêt. Une annulation ou un délai expiré interdit
+l'exécution, même si une approbation arrive ensuite : le runtime vérifie le
+signal avant et après l'attente. La demande durable reste consultable pour
+examen ; son approbation ultérieure ne relance aucune action interrompue.
+Le plafond `maxRunDurationMs` du runtime produit aussi un signal de délai réel
+pour les fournisseurs et les outils : il interrompt l'attente d'approbation et
+renvoie `max_duration`, sans attendre un nouveau tour de modèle. Une annulation
+explicite reste distinguée par `cancelled`.
+Le mode `propose` ne bloque pas le run et n'exécute jamais l'action. L'arrêt de
+son attente détachée ne produit pas de rejet non géré ; une erreur inattendue
+de stockage est signalée par le logger structuré avec agent, outil et code,
+sans les paramètres de l'action ni le texte brut de l'erreur.
 
 ```ts
 defineAgent({
@@ -1480,6 +1506,14 @@ bouchon — beaucoup d'entreprises ne sont payées que par virement ; la différ
 *qui confirme que l'argent est arrivé*. R2 : sans clé Stripe ni identifiants PayPal, la
 boutique fonctionne de bout en bout.
 
+`POST /api/commerce/payments/webhook` reçoit le corps brut et les en-têtes du
+fournisseur. L'authentification est la signature vérifiée par le driver, indépendante
+des rôles et sessions du CMS ; aucune écriture ne précède cette vérification. Un
+rejeu valide est idempotent, les événements retardés ne rétrogradent pas un paiement
+payé ou remboursé, et montant/devise doivent correspondre avant confirmation. La
+réponse ne divulgue aucune donnée de commande.
+Le driver virement refuse cette route : seul un opérateur confirme un virement.
+
 ### Facture
 
 Numéro séquentiel par série, dense **en factures émises** et non en commandes vivantes :
@@ -1491,6 +1525,31 @@ regénère à l'identique, sans horloge ni aléa.
 Un avoir (fiche 52 task 6) partage le même compare-and-set, dans sa propre série
 (`CN-2026`, distincte de la série `2026` d'une facture) : un par remboursement, jamais
 par commande, puisqu'une commande peut être remboursée en plusieurs fois.
+
+### Pages de commandes et de clients
+
+`GET /api/commerce/orders` et `GET /api/commerce/customers` conservent leurs
+champs `orders` et `customers` et ajoutent `page: { limit, hasMore, nextCursor }`.
+La taille par défaut est 20 ; `limit` accepte un entier de 1 à 100. Une taille ou
+un curseur invalide retourne `QUERY_INVALID` (HTTP 400). Le dernier curseur vaut
+`null` lorsqu'il n'y a plus de page.
+
+`cursor` est opaque et propre à chaque liste. Les commandes suivent
+`placedAt DESC, id DESC`, les clients `createdAt DESC, id DESC`. Le curseur porte
+la date immuable et l'identifiant de la dernière ligne visible ; les requêtes SQL
+appliquent ce couple et une limite avant de décoder les résultats. Il n'y a pas
+de nouvel offset dans l'API. Les méthodes de store gardent leurs tableaux et
+acceptent un curseur facultatif ; l'ancien offset de commandes reste disponible
+pour les appels internes existants, sans combinaison avec un curseur.
+
+Les filtres de recherche, statut et dates restent identiques sur les pages
+suivantes. L'admin repart de la première page lorsqu'un filtre change, conserve
+les curseurs précédents pour le retour et ignore les réponses obsolètes. Le total
+monétaire affiché porte explicitement sur les commandes de la page, par devise,
+et ne constitue pas un agrégat de toute la période. Une liste parcourue pendant
+une modification concurrente n'est pas un snapshot de la boutique ; une nouvelle
+vente se voit en revenant à la première page. La permission `commerce.read`
+s'applique à chaque requête, y compris avec un curseur.
 
 ### Versionnement
 
@@ -1563,6 +1622,8 @@ débit par IP et par cible (`collection:entryId`), champ piège, délai minimal 
 remplissage, heuristiques anti-spam sans IA. Un `<form method=post>` sans JavaScript
 obtient une redirection `303` vers sa propre page (`redirectTo`, validée contre la
 redirection ouverte et l'injection de réponse HTTP) plutôt qu'un corps JSON brut.
+Le timestamp de rendu `_ts` est obligatoire, fini, compris entre le délai minimal
+et 24 heures d'âge ; absent, invalide, futur ou périmé, il est refusé avant stockage.
 
 ### Versionnement
 
@@ -1617,6 +1678,10 @@ par un maximum matériel non configurable.
 Tout champ, quel que soit son type, peut porter `showIf` (fiche 47 tâche 1) : une
 condition (`field`/`operator`/`value`) évaluée côté serveur contre la soumission brute —
 un champ masqué n'est ni requis ni validé, avec ou sans JavaScript.
+Le rendu progressif masque et désactive les champs conditionnels avec JavaScript,
+en ajustant leurs exigences natives à chaque changement. Sans JavaScript, tous ces
+champs restent saisissables sans contrainte native `required` : le serveur applique
+seul leurs conditions, afin qu'un champ inapplicable ne bloque jamais l'envoi.
 
 Un champ `consent` porte son propre texte (`consentText`), et c'est ce texte exact —
 jamais celui d'aujourd'hui — qui est copié, horodaté, sur chaque soumission qui le coche :
@@ -1644,6 +1709,8 @@ dernière étape — désactivé par défaut, jamais obligatoire pour un formula
 pas explicitement activé, et seule fonctionnalité de ce contrat qui suppose du
 JavaScript (le reste du formulaire continue de fonctionner sans, même sur ce
 formulaire-là).
+Les noms répétés d'un choix multiple conservent toutes leurs valeurs dans leur ordre
+de soumission, en encodage URL comme en multipart, y compris avec une pièce jointe.
 
 Arrivée sur une page : une **route dédiée** (`GET /forms/{name}`), rendue par le gabarit
 comme `/search` (L10) — le contrat B est figé et un bloc `form` exige une RFC, ouverte en
@@ -1660,7 +1727,13 @@ qu'exige une demande d'export ou de suppression RGPD.
 ### Notifications
 
 Réutilisent l'adaptateur e-mail existant de `@cogenta/channels` (jamais un second
-transport) et son format `AlertChannelMessage`. L'accusé de réception au visiteur est
+transport). À la création, les messages de confirmation et d'accusé de réception
+omis prennent les valeurs de la langue du site (français ou anglais), figées dans
+la définition ; un texte explicitement écrit par l'auteur est toujours conservé.
+Les anciennes définitions sans corps d'accusé de réception utilisent la langue
+du site au moment de l'envoi. Ces choix n'ajoutent aucun champ de langue au modèle.
+
+Les notifications utilisent son format `AlertChannelMessage`. L'accusé de réception au visiteur est
 **désactivé par défaut** et limité en débit indépendamment de la limite de soumission :
 un e-mail envoyé au nom du site vers une adresse fournie par un anonyme, sans plafond,
 est un relais de spam en puissance. Depuis la fiche 47 tâche 4, `FormDefinition.notifyChannels`

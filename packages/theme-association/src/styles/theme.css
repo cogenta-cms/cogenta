@@ -17,16 +17,16 @@
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--ca-*` property composed from those.
  *
- * The one thing this file adds on its own is the Google Fonts request for the
+ * The one thing this file adds on its own is the self-hosted `fonts.css` faces for the
  * two families the skin names: Bricolage Grotesque (display, optical size
  * 12 to 96, width 75 to 100, weight 200 to 800) and Source Sans 3 (text,
  * upright and italic, 200 to 900). A skin only names a family; it never
  * fetches one. Both fall back to a real system stack if Google Fonts is
  * unreachable, and `display=swap` keeps text visible while they load.
- * `cogenta serve` hoists this `@import` above the skin's rules.
+ * `cogenta serve` serves the faces itself, from `/_cogenta/fonts/`.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap");
+@import "./fonts.css";
 
 @import "./tokens.css";
 @import "./base.css";

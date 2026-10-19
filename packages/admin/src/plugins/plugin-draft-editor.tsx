@@ -231,7 +231,9 @@ export function PluginDraftEditor({
                   const deployment = await deploySandbox(token, draft.id, installedAlready)
                   if (!deployment.ok) throw new Error(deployment.problems.join(' '))
                   onDone(
-                    installedAlready ? t('plugins.status.replaced') : t('plugins.status.installed'),
+                    installedAlready
+                      ? t('plugins.status.replacedRestart')
+                      : t('plugins.status.installedRestart'),
                   )
                 })
               }

@@ -399,6 +399,65 @@ describe('runAgentLoop', () => {
     expect(client.calls).toHaveLength(1)
   })
 
+  it('expires the actual run deadline while awaiting human approval and never executes a late-approved action', async () => {
+    const client = fakeClient([toolCallResponse('publish', {})])
+    const queue = createMemoryApprovalQueue({ newId: () => 'deadline-approval' })
+    let mutations = 0
+    const tool = withAutonomy(
+      {
+        spec: { name: 'publish', description: '', inputSchema: {} },
+        sideEffects: true,
+        reversible: false,
+        execute: async () => {
+          mutations += 1
+        },
+      },
+      { agentName: 'deadline-agent', autonomy: { default: 'autonomous' }, approvalQueue: queue },
+    )
+    const result = await runAgentLoop({
+      client,
+      messages: [{ role: 'user', content: 'Publish.' }],
+      tools: [tool],
+      maxRunDurationMs: 80,
+    })
+    expect(result.stopReason).toBe('max_duration')
+    expect(client.calls).toHaveLength(1)
+    expect(await queue.list('pending')).toHaveLength(1)
+    await queue.decide('deadline-approval', 'approved', 'late-human')
+    expect(mutations).toBe(0)
+  })
+
+  it('stops at the run deadline without retrying a provider that reports cancellation as a request failure', async () => {
+    let calls = 0
+    const client: ProviderClient = {
+      ...fakeClient([]),
+      async chat(_request, options) {
+        calls += 1
+        await new Promise<void>((_resolve, reject) => {
+          options?.signal?.addEventListener(
+            'abort',
+            () =>
+              reject(
+                new CogentaError({
+                  code: 'PROVIDER_REQUEST_FAILED',
+                  message: 'The request was aborted.',
+                }),
+              ),
+            { once: true },
+          )
+        })
+        return textResponse('Unreachable.')
+      },
+    }
+    const result = await runAgentLoop({
+      client,
+      messages: [{ role: 'user', content: 'Wait.' }],
+      maxRunDurationMs: 80,
+    })
+    expect(result.stopReason).toBe('max_duration')
+    expect(calls).toBe(1)
+  })
+
   it('throws PRIVACY_NO_DATA_LEAVES_VIOLATION before the first model call when the client is outside the allowlist', async () => {
     const client = fakeClient([textResponse('should never be reached')])
 

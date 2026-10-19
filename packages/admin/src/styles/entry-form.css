@@ -155,6 +155,14 @@
 .blocks-field__add {
   margin-top: 1rem;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* A select is as wide as its longest option; on a phone that pushed the
+   page sideways. It may shrink to the row, and wraps under its label. */
+.blocks-field__add select {
+  min-width: 0;
+  max-width: 100%;
 }

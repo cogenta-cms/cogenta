@@ -603,6 +603,25 @@
   content: close-quote;
 }
 
+/* French sets a quotation in guillemets with a thin space inside them. */
+:lang(fr) .cs-quote__text,
+:lang(fr) .cs-testimonial__quote,
+:lang(fr) .cs-testimonial__quote > p:first-child {
+  quotes: "\00AB\202F" "\202F\00BB";
+}
+
+:lang(fr) .cs-quote__text,
+:lang(fr) .cs-testimonial__quote > p:first-child {
+  text-indent: -0.78em;
+}
+
+@media (max-width: 48rem) {
+  :lang(fr) .cs-quote__text,
+  :lang(fr) .cs-testimonial__quote > p:first-child {
+    text-indent: 0;
+  }
+}
+
 .cs-testimonial__attribution {
   display: grid;
   gap: var(--cs-s1);

@@ -566,3 +566,15 @@ describe('the grid, the chrome and a documentation page', () => {
     )
   })
 })
+
+describe('French typography and narrow screens', () => {
+  it('quotes a pull quote with « guillemets » and narrow no-break spaces under lang="fr"', () => {
+    expect(CODE).toMatch(
+      /\.cd-quote__text:lang\(fr\),\s*\.cd-testimonial__quote:lang\(fr\) > p:first-child\s*\{\s*quotes:\s*"\\00AB\\202F" "\\202F\\00BB";/,
+    )
+  })
+
+  it('offers the table of contents on narrow screens and hides that copy where the rail shows', () => {
+    expect(CODE).toMatch(/@media \(min-width: 80rem\)\s*\{\s*\.cd-tocn\s*\{\s*display:\s*none;/)
+  })
+})

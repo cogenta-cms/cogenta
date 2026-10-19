@@ -46,3 +46,20 @@ test-results/
 # A throwaway local test site scaffolded against the workspace's own code
 # (not a published example) — never meant to be committed.
 /examples/local-playground/
+
+# QA evidence (2026-10-03 audit and its remediation): screenshots, logs and raw
+# captures run to hundreds of megabytes and stay on the machine that made them.
+# The written reports, and the one proof BLOCKERS.md cites, are versioned.
+docs/qa/audit-2026-10-03/*
+!docs/qa/audit-2026-10-03/README.md
+!docs/qa/audit-2026-10-03/corrections.md
+!docs/qa/audit-2026-10-03/exhaustif/
+docs/qa/audit-2026-10-03/exhaustif/*
+!docs/qa/audit-2026-10-03/exhaustif/evidence/
+docs/qa/audit-2026-10-03/exhaustif/evidence/*
+!docs/qa/audit-2026-10-03/exhaustif/evidence/provider-health-real.json
+docs/qa/remediation-2026-10-03/regression/
+docs/qa/remediation-2026-10-03/__pycache__/
+docs/qa/remediation-2026-10-03/report-validation.json
+docs/qa/remediation-2026-10-03/rapport-etape.html
+docs/qa/remediation-2026-10-03/rapport-etape-mobile.png

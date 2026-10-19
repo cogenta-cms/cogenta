@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -135,7 +135,7 @@ describe('audit log', () => {
   it('loads a further page of entries on demand, rather than all of them at once (fiche 67 task 1)', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
-    // 60 entries — past the screen's 50-entry page size, so a second page
+    // 60 entries — past the screen's 20-entry page size, so a second page
     // genuinely exists to load.
     const auditEntries = Array.from({ length: 60 }, (_, index) => ({
       id: `bulk-${index}`,
@@ -156,13 +156,62 @@ describe('audit log', () => {
     await goToAudit()
 
     // Newest first: entry 59 (the last minute) is on the first page, entry 0
-    // (the earliest) is not — until "Charger plus" is clicked.
+    // (the earliest) is not — until the third cursor page.
     await screen.findByText('entry-59')
     expect(screen.queryByText('entry-0')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Charger plus' }))
-
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(21)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+    await screen.findByText('entry-39')
+    expect(screen.queryByText('entry-59')).toBeNull()
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(21)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
     await screen.findByText('entry-0')
+    expect(screen.queryByText('entry-39')).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Précédent' })[0] as HTMLElement)
+    await screen.findByText('entry-39')
+    expect(screen.queryByText('entry-0')).toBeNull()
+
+    // A slow next-page response must not replace a newer filtered first page.
+    let release: (() => void) | undefined
+    let requested = false
+    let finished = false
+    const delayed = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const originalFetch = globalThis.fetch
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/audit?') && url.includes('collection=missing')) {
+        return Response.json({ data: [], page: { hasMore: false, nextCursor: null } })
+      }
+      if (url.includes('/api/audit?') && url.includes('after=')) {
+        requested = true
+        await delayed
+        const response = await originalFetch(input, init)
+        finished = true
+        return response
+      }
+      return originalFetch(input, init)
+    })
+    try {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
+      await waitFor(() => expect(requested).toBe(true))
+      fireEvent.change(screen.getByLabelText('Collection'), { target: { value: 'missing' } })
+      await screen.findByText('Aucune entrée.')
+      release?.()
+      await waitFor(() => expect(finished).toBe(true))
+      expect(screen.queryByText('entry-0')).toBeNull()
+      fireEvent.change(screen.getByLabelText('Collection'), { target: { value: '' } })
+      await screen.findByText('entry-59')
+      expect(
+        screen
+          .getAllByRole('button', { name: 'Précédent' })
+          .every((button) => (button as HTMLButtonElement).disabled),
+      ).toBe(true)
+    } finally {
+      release?.()
+    }
   })
 
   it('shows the scheduled integrity check status alongside the manual button', async () => {

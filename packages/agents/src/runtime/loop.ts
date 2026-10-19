@@ -2,7 +2,7 @@ import { CogentaError } from '@cogenta/core'
 import { Annotation, END, GraphRecursionError, START, StateGraph } from '@langchain/langgraph'
 import { assertProviderAllowed } from '../privacy/assert-provider-allowed.js'
 import { NOOP_PROGRESS } from '../progress/types.js'
-import type { ChatMessage, ProviderToolCall, TokenUsage } from '../providers/types.js'
+import type { ChatMessage, ChatResponse, ProviderToolCall, TokenUsage } from '../providers/types.js'
 import { RepetitionGuard } from './repetition.js'
 import { retryModelCall, withTimeout } from './retry.js'
 import type {
@@ -114,12 +114,29 @@ function buildAgentGraph(input: RunAgentLoopInput) {
   const repetitionGuard = new RepetitionGuard(input.maxRepeats ?? DEFAULT_MAX_REPEATS)
   const runStartedAt = now()
   const progress = input.onProgress ?? NOOP_PROGRESS
+  const deadline = input.maxRunDurationMs === undefined ? undefined : new AbortController()
+  const deadlineTimer =
+    deadline === undefined ? undefined : setTimeout(() => deadline.abort(), input.maxRunDurationMs)
+  deadlineTimer?.unref()
+  const signal =
+    deadline === undefined
+      ? input.signal
+      : input.signal === undefined
+        ? deadline.signal
+        : AbortSignal.any([input.signal, deadline.signal])
+
+  function signalStopReason(): RunStopReason | undefined {
+    if (input.signal?.aborted === true) return 'cancelled'
+    if (deadline?.signal.aborted === true) return 'max_duration'
+    return undefined
+  }
 
   async function agentNode(state: GraphState): Promise<GraphUpdate> {
     if (input.privacyPolicy !== undefined) {
       assertProviderAllowed(input.client, input.privacyPolicy)
     }
-    if (input.signal?.aborted === true) return { stopReason: 'cancelled' }
+    const stopped = signalStopReason()
+    if (stopped !== undefined) return { stopReason: stopped }
     if (input.killSwitch?.isActive() === true) return { stopReason: 'killed' }
     if (input.maxRunDurationMs !== undefined && now() - runStartedAt >= input.maxRunDurationMs) {
       return { stopReason: 'max_duration' }
@@ -137,34 +154,50 @@ function buildAgentGraph(input: RunAgentLoopInput) {
       state.stepIndex === 0 ? 'Thinking…' : `Thinking… (step ${state.stepIndex + 1})`,
       { kind: 'thinking' },
     )
-    const response = await retryModelCall(
-      () =>
-        withTimeout(
-          (signal) =>
-            input.client.chat(
-              {
-                model: input.client.model,
-                ...(input.system === undefined ? {} : { system: input.system }),
-                messages: [...state.messages],
-                ...(toolSpecs === undefined ? {} : { tools: toolSpecs }),
-                ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
-                ...(input.temperature === undefined ? {} : { temperature: input.temperature }),
-              },
-              { signal },
+    let response: ChatResponse
+    try {
+      response = await retryModelCall(
+        async () => {
+          signal?.throwIfAborted()
+          try {
+            return await withTimeout(
+              (signal) =>
+                input.client.chat(
+                  {
+                    model: input.client.model,
+                    ...(input.system === undefined ? {} : { system: input.system }),
+                    messages: [...state.messages],
+                    ...(toolSpecs === undefined ? {} : { tools: toolSpecs }),
+                    ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
+                    ...(input.temperature === undefined ? {} : { temperature: input.temperature }),
+                  },
+                  { signal },
+                ),
+              timeoutMs,
+              signal,
+            )
+          } catch (error) {
+            // A cancelled/deadline-aborted provider request is terminal,
+            // even if its adapter reports an ordinarily retryable error.
+            signal?.throwIfAborted()
+            throw error
+          }
+        },
+        {
+          maxAttempts,
+          onRetry: (attempt, error) =>
+            progress.report(
+              `Retrying after a provider error (attempt ${attempt}/${maxAttempts}): ${
+                error instanceof Error ? error.message : String(error)
+              }`,
             ),
-          timeoutMs,
-          input.signal,
-        ),
-      {
-        maxAttempts,
-        onRetry: (attempt, error) =>
-          progress.report(
-            `Retrying after a provider error (attempt ${attempt}/${maxAttempts}): ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          ),
-      },
-    )
+        },
+      )
+    } catch (error) {
+      const stopped = signalStopReason()
+      if (stopped !== undefined) return { stopReason: stopped }
+      throw error
+    }
 
     const usage = addUsage(state.usage, response.usage)
     input.budget?.recordCall(response.usage)
@@ -223,11 +256,12 @@ function buildAgentGraph(input: RunAgentLoopInput) {
     const toolOutcomes: ToolCallOutcome[] = []
     let messages = state.messages
     for (const call of state.pendingToolCalls) {
+      if (signal?.aborted === true) break
       progress.report(`Calling tool "${call.name}"…`, { kind: 'tool-call', tool: call.name })
       const outcome = await runTool(
         toolIndex.get(call.name),
         call,
-        input.signal ?? new AbortController().signal,
+        signal ?? new AbortController().signal,
       )
       progress.report(
         outcome.ok
@@ -277,7 +311,13 @@ function buildAgentGraph(input: RunAgentLoopInput) {
     .addConditionalEdges('agent', routeAfterAgent, { tools: 'tools', [END]: END })
     .addEdge('tools', 'agent')
 
-  return { graph: graph.compile(), maxSteps }
+  return {
+    graph: graph.compile(),
+    maxSteps,
+    dispose: () => {
+      if (deadlineTimer !== undefined) clearTimeout(deadlineTimer)
+    },
+  }
 }
 
 /**
@@ -294,7 +334,7 @@ function buildAgentGraph(input: RunAgentLoopInput) {
  * hold a conversation with a model and the tools it was handed.
  */
 export async function runAgentLoop(input: RunAgentLoopInput): Promise<RunResult> {
-  const { graph, maxSteps } = buildAgentGraph(input)
+  const { graph, maxSteps, dispose } = buildAgentGraph(input)
 
   const initialState: GraphState = {
     messages: [...input.messages],
@@ -325,6 +365,8 @@ export async function runAgentLoop(input: RunAgentLoopInput): Promise<RunResult>
       })
     }
     throw error
+  } finally {
+    dispose()
   }
 
   return {

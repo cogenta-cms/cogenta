@@ -1,8 +1,13 @@
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSqliteHandle } from '@cogenta/core'
-import { createPluginGrantStore, ensurePluginTables } from '@cogenta/plugins'
+import {
+  createPluginGrantStore,
+  createPluginUsageStore,
+  ensurePluginTables,
+} from '@cogenta/plugins'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createUser, loginWithMfaSetup, startServer } from './helpers/serve-harness.js'
 
@@ -156,13 +161,16 @@ async function publishOne(base: string, token: string, title: string): Promise<s
 }
 
 /** What the plugin wrote, wherever the local storage driver laid it down. */
-async function writtenEvent(root: string): Promise<Record<string, unknown> | null> {
+async function writtenEvent(
+  root: string,
+  prefix = 'last-event',
+): Promise<Record<string, unknown> | null> {
   const found: string[] = []
   async function walk(dir: string): Promise<void> {
     for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
       const path = join(dir, entry.name)
       if (entry.isDirectory()) await walk(path)
-      else if (entry.name.startsWith('last-event')) found.push(path)
+      else if (entry.name.startsWith(prefix)) found.push(path)
     }
   }
   await walk(join(root, 'media'))
@@ -172,6 +180,233 @@ async function writtenEvent(root: string): Promise<Record<string, unknown> | nul
 }
 
 describe('a plugin on a running site', () => {
+  it('waits for an already running plugin before acknowledging its uninstall', async () => {
+    const root = await project({ grant: true })
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const delayedResponse = createServer((_request, response) => {
+      setTimeout(() => response.end('{}'), 400)
+    })
+    await new Promise<void>((resolve) => delayedResponse.listen(0, '127.0.0.1', resolve))
+    const address = delayedResponse.address()
+    expect(address).not.toBeNull()
+    if (address === null || typeof address === 'string') throw new Error('No QA HTTP address')
+    const manifest = JSON.parse(MANIFEST) as { capabilities: string[] }
+    await writeFile(
+      join(root, 'plugins', 'watcher', 'plugin.manifest.json'),
+      JSON.stringify({
+        ...manifest,
+        capabilities: [...manifest.capabilities, 'http.fetch:127.0.0.1'],
+      }),
+    )
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    try {
+      await createPluginGrantStore(db).grant('watcher', 'http.fetch:127.0.0.1')
+    } finally {
+      await db.close()
+    }
+    await writeFile(
+      join(root, 'plugins', 'watcher', 'plugin.js'),
+      CODE.replace(
+        'onRequest: (request) => {',
+        `onRequest: async (request) => {
+        await sdk.storage.write({ key: 'plugins/watcher/route-started.json', content: '{"started":true}' })
+        await sdk.http.fetch({ url: 'http://127.0.0.1:${address.port}/slow' })
+        await sdk.storage.write({ key: 'plugins/watcher/route-finished.json', content: '{"finished":true}' })`,
+      ),
+    )
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const admin = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      const started = fetch(`${server.base}/_cogenta/plugins/watcher/hello`)
+      await expect
+        .poll(() => writtenEvent(root, 'route-started'), { timeout: 20_000 })
+        .toEqual({ started: true })
+      expect(
+        (
+          await fetch(`${server.base}/api/plugins/watcher`, {
+            method: 'DELETE',
+            headers: auth(admin),
+          })
+        ).status,
+      ).toBe(200)
+      expect(await writtenEvent(root, 'route-finished')).toEqual({ finished: true })
+      expect((await started).status).toBe(200)
+      expect((await fetch(`${server.base}/_cogenta/plugins/watcher/hello`)).status).toBe(404)
+    } finally {
+      await server.stop()
+      await new Promise<void>((resolve, reject) =>
+        delayedResponse.close((error) => (error ? reject(error) : resolve())),
+      )
+    }
+  }, 120_000)
+
+  it('stops a plugin installed over HTTP immediately after uninstall, including its hooks and schedules', async () => {
+    const root = await project()
+    await rm(join(root, 'plugins', 'watcher'), { recursive: true })
+    for (const role of ['admin', 'editor', 'viewer']) {
+      await createUser(
+        root,
+        `${role}@example.com`,
+        'sup3r-secret-pass',
+        role === 'admin' ? ['admin', 'editor'] : [role],
+      )
+    }
+    let server = await startServer(root, { registry: activeServers })
+    try {
+      let admin = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      expect(
+        (
+          await fetch(`${server.base}/api/plugins/sandbox`, {
+            method: 'POST',
+            headers: auth(admin),
+            body: JSON.stringify({ name: 'watcher', template: 'blank' }),
+          })
+        ).status,
+      ).toBe(201)
+      for (const [file, content] of [
+        ['plugin.manifest.json', MANIFEST],
+        ['plugin.js', CODE],
+      ]) {
+        expect(
+          (
+            await fetch(`${server.base}/api/plugins/sandbox/watcher/file?path=${file}`, {
+              method: 'PUT',
+              headers: auth(admin),
+              body: JSON.stringify({ content }),
+            })
+          ).status,
+        ).toBe(200)
+      }
+      const installed = await fetch(`${server.base}/api/plugins/sandbox/watcher/deploy`, {
+        method: 'POST',
+        headers: auth(admin),
+        body: '{}',
+      })
+      expect(installed.status).toBe(200)
+      expect(((await installed.json()) as { data: { ok: boolean } }).data.ok).toBe(true)
+      expect((await fetch(`${server.base}/_cogenta/plugins/watcher/hello`)).status).toBe(404)
+      await server.stop()
+      server = await startServer(root, { registry: activeServers })
+      admin = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      expect((await fetch(`${server.base}/_cogenta/plugins/watcher/hello`)).status).toBe(200)
+      expect(
+        (
+          await fetch(`${server.base}/api/plugins/watcher/grants`, {
+            method: 'POST',
+            headers: auth(admin),
+            body: JSON.stringify({ capability: 'storage.write:plugins/watcher' }),
+          })
+        ).status,
+      ).toBe(201)
+      await publishOne(server.base, admin, 'Before removal')
+      const writtenBefore = await writtenEvent(root)
+      expect(writtenBefore).not.toBeNull()
+      const db = await createSqliteHandle({ url: join(root, 'site.db') })
+      try {
+        const usage = createPluginUsageStore(db)
+        const before = await usage.getUsage('watcher')
+        expect(before?.callCount).toBeGreaterThan(0)
+        for (const role of ['editor', 'viewer', 'public']) {
+          const token =
+            role === 'public'
+              ? null
+              : await loginWithMfaSetup(server.base, `${role}@example.com`, 'sup3r-secret-pass')
+          expect(
+            (
+              await fetch(`${server.base}/api/plugins/watcher`, {
+                method: 'DELETE',
+                ...(token === null ? {} : { headers: auth(token) }),
+              })
+            ).status,
+          ).toBe(403)
+          expect((await fetch(`${server.base}/_cogenta/plugins/watcher/hello`)).status).toBe(200)
+        }
+        const usageBeforeRemoval = await usage.getUsage('watcher')
+        expect(
+          (
+            await fetch(`${server.base}/api/plugins/watcher`, {
+              method: 'DELETE',
+              headers: auth(admin),
+            })
+          ).status,
+        ).toBe(200)
+        expect((await fetch(`${server.base}/_cogenta/plugins/watcher/hello`)).status).toBe(404)
+        await publishOne(server.base, admin, 'After removal')
+        expect(await writtenEvent(root)).toEqual(writtenBefore)
+        const scheduled = await fetch(
+          `${server.base}/api/scheduled-tasks/plugin:watcher:sweep/run`,
+          {
+            method: 'POST',
+            headers: auth(admin),
+          },
+        )
+        expect(scheduled.status).toBe(200)
+        const run = (await scheduled.json()) as { data: { outcome: string; error: string | null } }
+        expect(run.data.outcome).toBe('error')
+        expect(run.data.error).toContain('uninstalled')
+        expect((await usage.getUsage('watcher'))?.callCount).toBe(usageBeforeRemoval?.callCount)
+        expect(await createPluginGrantStore(db).listGrants('watcher')).toEqual([])
+        // Installing identical bytes must not revive the retired startup snapshot.
+        expect(
+          (
+            await fetch(`${server.base}/api/plugins/sandbox/watcher/deploy`, {
+              method: 'POST',
+              headers: auth(admin),
+              body: '{}',
+            })
+          ).status,
+        ).toBe(200)
+        const inventory = (await (
+          await fetch(`${server.base}/api/plugins`, { headers: auth(admin) })
+        ).json()) as {
+          data: { installed: { name: string; runtimeState: string }[] }
+        }
+        expect(
+          inventory.data.installed.find((plugin) => plugin.name === 'watcher')?.runtimeState,
+        ).toBe('restart-required')
+        expect((await fetch(`${server.base}/_cogenta/plugins/watcher/hello`)).status).toBe(404)
+      } finally {
+        await db.close()
+      }
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
+  it('reports a same-version code replacement as requiring restart until the new runtime starts', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    let server = await startServer(root, { registry: activeServers })
+    try {
+      const state = async () => {
+        const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+        const body = (await (
+          await fetch(`${server.base}/api/plugins`, { headers: auth(token) })
+        ).json()) as {
+          data: { installed: { name: string; runtimeState: string }[] }
+        }
+        return body.data.installed.find((plugin) => plugin.name === 'watcher')?.runtimeState
+      }
+      expect(await state()).toBe('loaded')
+      await writeFile(
+        join(root, 'plugins', 'watcher', 'plugin.js'),
+        CODE.replace('Hello ', 'Bonjour '),
+        'utf8',
+      )
+      expect(await state()).toBe('restart-required')
+      expect(
+        await (await fetch(`${server.base}/_cogenta/plugins/watcher/hello?name=Ada`)).text(),
+      ).toBe('<p>Hello Ada</p>')
+      await server.stop()
+      server = await startServer(root, { registry: activeServers })
+      expect(await state()).toBe('loaded')
+      expect(
+        await (await fetch(`${server.base}/_cogenta/plugins/watcher/hello?name=Ada`)).text(),
+      ).toBe('<p>Bonjour Ada</p>')
+    } finally {
+      await server.stop()
+    }
+  })
   it('receives the content event a real publish emits, and acts on it', async () => {
     const root = await project({ grant: true })
     await createUser(root, 'editor@example.com', 'sup3r-secret-pass', ['editor'])

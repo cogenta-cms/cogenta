@@ -46,7 +46,7 @@ export function UpdatesRoute(): JSX.Element {
       const [status, history, settings] = await Promise.all([
         readUpdateStatus(token),
         readUpdateHistory(token),
-        listSettings(),
+        listSettings(undefined, token ?? undefined),
       ])
       setUpdateStatus(status)
       setUpdateHistory(history)

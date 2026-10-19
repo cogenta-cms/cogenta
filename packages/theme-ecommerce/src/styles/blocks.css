@@ -576,6 +576,18 @@
   margin-block-start: 0.6em;
 }
 
+/* French sets a quotation between guillemets, with a narrow no-break space
+   inside each; the wider opening mark hangs a little further out. */
+:lang(fr) .ce-quote__quote,
+:lang(fr) .ce-letter__quote {
+  quotes: "\00AB\202F" "\202F\00BB";
+}
+
+:lang(fr) .ce-quote__text,
+:lang(fr) .ce-letter__quote > p:first-child {
+  text-indent: -0.8em;
+}
+
 @media (min-width: 64rem) {
   .ce-quote__quote,
   .ce-quote__attribution {
@@ -708,6 +720,14 @@
   column-gap: var(--ce-col-gap);
   row-gap: var(--ce-s10);
   margin: 0;
+}
+
+/* Two columns on a phone: an odd last figure takes the whole row rather than
+   leaving an empty cell beside it. */
+@media (max-width: 63.999rem) {
+  .ce-figures__item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (min-width: 64rem) {

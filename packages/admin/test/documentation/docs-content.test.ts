@@ -53,6 +53,20 @@ describe('DOCS', () => {
     expect(page?.html).not.toContain('.html')
   })
 
+  it('resolves every internal documentation link to a bundled article', () => {
+    for (const page of [...DOCS.functional, ...DOCS.technical]) {
+      for (const match of page.html.matchAll(
+        /href="[^"]*\/documentation\/docs\/(functional|technical)\/([^"#?]+)[^"]*"/gu,
+      )) {
+        const tree = match[1] as 'functional' | 'technical'
+        expect(
+          getDocPage(tree, decodeURIComponent(match[2] ?? '')),
+          `${page.tree}/${page.slug} links to ${match[0]}`,
+        ).toBeDefined()
+      }
+    }
+  })
+
   it('rewrites the download links in the technical index to real GitHub source directories', () => {
     const page = DOCS.technical.find((item) => item.slug === 'index')
     expect(page).toBeDefined()

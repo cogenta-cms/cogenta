@@ -112,6 +112,24 @@ describe('notes', () => {
     )
   })
 
+  it('recognises the labels of a French note and tells warnings apart', () => {
+    const note = (label: string): Node => ({
+      _key: k(),
+      _type: 'block',
+      style: 'blockquote',
+      children: [span(label, ['strong']), span(' Un événement ne change jamais.')],
+      markDefs: [],
+    })
+    expect(render([note('Remarque')])).toContain(
+      'data-kind="note" role="note"><p class="cd-callout__label">Remarque</p>',
+    )
+    expect(render([note('Astuce')])).toContain('data-kind="note"')
+    expect(render([note('Attention')])).toContain(
+      'data-kind="warning" role="note"><p class="cd-callout__label">Attention</p>',
+    )
+    expect(render([note('Mise en garde')])).toContain('data-kind="warning"')
+  })
+
   it('leaves any other blockquote a blockquote', () => {
     const quote: Node = {
       _key: k(),
@@ -159,6 +177,12 @@ describe('reference tables', () => {
 })
 
 describe('keys', () => {
+  it('sets French key names as keys', () => {
+    expect(keyChord('Ctrl+Entrée')).toEqual(['Ctrl', 'Entrée'])
+    expect(keyChord('Échap')).toEqual(['Échap'])
+    expect(keyChord('Maj+Tabulation')).toEqual(['Maj', 'Tabulation'])
+  })
+
   it('sets a key chord in inline code as keyboard input', () => {
     expect(render([para(span('Press '), span('Ctrl+C', ['code']))])).toContain(
       '<kbd class="cd-kbd"><kbd>Ctrl</kbd>+<kbd>C</kbd></kbd>',

@@ -341,6 +341,10 @@
 }
 
 .cg-facts__link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  padding-inline: 2px;
   color: var(--cg-ink);
   text-decoration-color: transparent;
 }

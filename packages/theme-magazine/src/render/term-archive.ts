@@ -1,4 +1,5 @@
 import { type HtmlElement, h, renderArchiveIntro, type TermArchiveInput } from '@cogenta/theme-kit'
+import { taxonomyKicker } from './layout.js'
 import { renderStory, storyFromArchive } from './story.js'
 
 /**
@@ -17,11 +18,25 @@ import { renderStory, storyFromArchive } from './story.js'
  */
 const BRIEFS = 3
 
+/**
+ * How many of the stories after the lead stand as briefs beside it. Two or
+ * three keep the right-hand column about as tall as the lead; but the row of
+ * three beneath must close full, so the count is the first of 2, 3, 1, 4 that
+ * leaves a multiple of three, and never more than there are stories.
+ */
+export function briefCount(others: number): number {
+  for (const count of [2, 3, 1, 4]) {
+    if (count <= others && (others - count) % 3 === 0) return count
+  }
+  return Math.min(others, BRIEFS)
+}
+
 export function renderTermArchive(input: TermArchiveInput): HtmlElement {
   const stories = input.entries.map((entry) => storyFromArchive(entry, input.locale))
   const [lead, ...others] = stories
-  const briefs = others.slice(0, BRIEFS)
-  const more = others.slice(BRIEFS)
+  const count = briefCount(others.length)
+  const briefs = others.slice(0, count)
+  const more = others.slice(count)
 
   return h(
     'main',
@@ -43,7 +58,7 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
                 input.ancestors.map((link) => h('li', {}, h('a', { href: link.href }, link.label))),
               ),
             ),
-        h('p', { class: 'cg-archive__kicker' }, input.taxonomyName),
+        h('p', { class: 'cg-archive__kicker' }, taxonomyKicker(input.taxonomyName, input.locale)),
         h('h1', { class: 'cg-archive__title' }, input.term.label),
         renderArchiveIntro(input),
         input.children.length === 0

@@ -115,6 +115,24 @@ contenu externe lu par un agent est balisé comme donnée. Les permissions viven
 registre d'outils, pas dans le contexte du modèle. Un agent sans `content.publish` ne
 peut pas publier, quoi qu'on lui écrive.
 
+**Médias et menus** — Les rôles `viewer`, `editor` et `admin` peuvent lire la
+médiathèque authentifiée. Seuls `editor` et `admin` peuvent téléverser, remplacer,
+modifier ou supprimer un média, et gérer ses dossiers. Cette politique centrale
+est partagée par REST et le manifeste MCP. Un rôle personnalisé ne reçoit pas
+implicitement les écritures média. Une destination de menu doit être HTTP(S),
+`mailto`, `tel` ou relative ; les espaces, caractères de contrôle et antislashs
+sont refusés. Le rendu applique cette même politique aux anciennes données et
+retire le lien dangereux.
+
+**Serveur MCP** — Les appels passent par les contrôles communs d'autonomie et
+d'audit, avec origine `mcp` et attribution au compte. Un outil à effet de bord
+non réversible attend une décision humaine dans la file fichier partagée
+`.cogenta/agents-runtime/approvals`, consultée par l'administration. Les décisions
+sont immuables, concurrentes par compare-and-set et persistent après redémarrage.
+Un appel déconnecté est annulé et ne se rejoue pas après validation tardive. Un
+échec de stockage atomique bloque l'exécution. Un rôle `admin` n'annule pas cette
+exigence.
+
 **Fuite de données** — Redaction des données personnelles avant envoi au fournisseur.
 Mode « aucune donnée ne sort » avec modèle local. Liste explicite des champs jamais
 transmis.
@@ -173,6 +191,20 @@ conditionnel). Le plancher de sandboxing réellement en place :
 **RGPD** — Registre des traitements généré, export et suppression des données d'une
 personne, consentement cookies natif, minimisation par défaut, DPA type fourni pour les
 sous-traitants (fournisseurs LLM inclus).
+
+**Requêtes tierces et polices** — Un site Cogenta n'envoie l'adresse IP d'un visiteur à
+aucun tiers par défaut. Les polices web en sont le cas d'école : un `@import` vers Google
+Fonts transmet l'adresse de chaque visiteur avant tout consentement, ce que le tribunal de
+Munich a jugé illicite (LG München I, 20 janvier 2022, 3 O 17493/20). Les dix thèmes livrés
+embarquent donc leurs polices (WOFF2, licence SIL OFL, sous-ensembles latin et latin étendu) et
+`cogenta serve` les envoie depuis `/_cogenta/fonts/<thème>/<fichier>` : liste blanche tirée du
+manifeste du thème, noms de fichiers strictement validés, aucun chemin de système de fichiers
+atteignable, cache `immutable` (noms de fichiers hachés). Un test de bout en bout rend les
+pages des dix thèmes et échoue à la moindre mention de `googleapis` ou `gstatic`, ou d'une URL
+absolue hors du site. Charger des polices depuis Google reste possible, mais seulement par le
+réglage explicite `appearance.remoteWebFonts: true`, désactivé par défaut et documenté comme une
+décision du responsable du site. Un thème tiers garde la liberté de ses propres `@import` : la
+garantie porte sur ce que Cogenta livre.
 
 **Accessibilité** — WCAG 2.2 AA sur l'admin et le thème canonique. L'European
 Accessibility Act est en application depuis juin 2025 : c'est une obligation légale pour

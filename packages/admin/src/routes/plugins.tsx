@@ -1,4 +1,4 @@
-import { type JSX, useCallback, useEffect, useState } from 'react'
+import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { describeApiError } from '../api/describe-error.js'
 import {
@@ -13,10 +13,11 @@ import {
   uninstallPlugin,
 } from '../api/plugins-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { useLocalPagination } from '../lib/use-local-pagination.js'
 import { describeCapability, describeProvides } from '../plugins/plugin-capabilities.js'
 import { CreatePluginDialog } from '../plugins/plugin-create-dialog.js'
 import { PluginDraftEditor } from '../plugins/plugin-draft-editor.js'
-import { Badge, Button, Notice, PageHeader } from '../ui/index.js'
+import { Badge, Button, Field, Input, Notice, PageHeader, Pagination } from '../ui/index.js'
 
 /**
  * « Plugins » — what this site has installed, what each one may do, and the
@@ -48,6 +49,24 @@ export function PluginsRoute(): JSX.Element {
   const [openDraft, setOpenDraft] = useState<string | null>(null)
   const [confirmingRemoval, setConfirmingRemoval] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [query, setQuery] = useState('')
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const installed = useMemo(
+    () =>
+      (state?.installed ?? []).filter((plugin) =>
+        `${plugin.name} ${plugin.title ?? ''}`.toLocaleLowerCase().includes(normalizedQuery),
+      ),
+    [state, normalizedQuery],
+  )
+  const drafts = useMemo(
+    () =>
+      (state?.sandboxes ?? []).filter((draft) =>
+        `${draft.name} ${draft.title ?? ''}`.toLocaleLowerCase().includes(normalizedQuery),
+      ),
+    [state, normalizedQuery],
+  )
+  const installedPage = useLocalPagination(installed, normalizedQuery, 5)
+  const draftsPage = useLocalPagination(drafts, normalizedQuery)
 
   const load = useCallback(async () => {
     if (token === null) return
@@ -142,21 +161,30 @@ export function PluginsRoute(): JSX.Element {
     const off = plugin.disabled !== null
     const removing = confirmingRemoval === plugin.name
     return (
-      <li key={plugin.name} className="rounded-xl border border-border bg-card p-4">
+      <li key={plugin.name} className="min-w-0 rounded-xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="flex flex-col">
-            <span className="font-semibold">
+          <div className="flex min-w-0 flex-col [overflow-wrap:anywhere]">
+            <h3 className="m-0 text-base font-semibold">
               {plugin.title ?? plugin.name}{' '}
               <span className="text-muted-foreground">{plugin.version}</span>
-            </span>
+            </h3>
             {plugin.title !== null && (
               <span className="text-xs text-muted-foreground">{plugin.name}</span>
             )}
-          </span>
+          </div>
           <span className="flex flex-wrap gap-1">
             <Badge tone={off ? 'neutral' : 'success'}>
               {off ? t('plugins.state.off') : t('plugins.state.on')}
             </Badge>
+            {plugin.runtimeState !== undefined && (
+              <Badge tone={plugin.runtimeState === 'loaded' ? 'success' : 'warning'}>
+                {t(
+                  plugin.runtimeState === 'loaded'
+                    ? 'plugins.runtimeLoaded'
+                    : 'plugins.restartRequired',
+                )}
+              </Badge>
+            )}
             {plugin.devMode && <Badge tone="warning">{t('plugins.unsigned')}</Badge>}
             {!plugin.hasCode && <Badge tone="danger">{t('plugins.noCode')}</Badge>}
           </span>
@@ -182,7 +210,7 @@ export function PluginsRoute(): JSX.Element {
           <p className="m-0 mt-3 text-sm">{t('plugins.asksNothing')}</p>
         ) : (
           <>
-            <h3 className="mt-3 mb-0 text-sm font-semibold">{t('plugins.permissions')}</h3>
+            <h4 className="mt-3 mb-0 text-sm font-semibold">{t('plugins.permissions')}</h4>
             <p className="m-0 mb-1 text-xs text-muted-foreground">{t('plugins.permissionsHelp')}</p>
             <ul className="m-0 list-none divide-y divide-border p-0">
               {plugin.capabilities.map((capability) => capabilityRow(plugin, capability))}
@@ -224,7 +252,6 @@ export function PluginsRoute(): JSX.Element {
           >
             {removing ? t('plugins.confirmUninstall') : t('plugins.uninstall')}
           </Button>
-          <span className="text-xs text-muted-foreground">{t('plugins.uninstallHelp')}</span>
         </div>
       </li>
     )
@@ -268,6 +295,9 @@ export function PluginsRoute(): JSX.Element {
           </Button>
         }
       />
+      <Notice tone="info" live="off">
+        <p>{t('plugins.restartHelp')}</p>
+      </Notice>
       {error !== null && (
         <Notice tone="danger" live="polite">
           <p>{error}</p>
@@ -284,19 +314,47 @@ export function PluginsRoute(): JSX.Element {
         </Notice>
       )}
 
+      <Field label={t('plugins.searchLabel')}>
+        {(control) => (
+          <Input
+            {...control}
+            type="search"
+            value={query}
+            placeholder={t('plugins.searchPlaceholder')}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        )}
+      </Field>
+
       <section aria-labelledby="plugins-installed" className="flex flex-col gap-3">
         <h2 id="plugins-installed" className="m-0 text-base font-semibold">
           {t('plugins.installed')}
         </h2>
+        <p className="m-0 text-sm text-muted-foreground">{t('plugins.uninstallHelp')}</p>
         {state === null ? (
           <p>{t('common.loading')}</p>
         ) : state.installed.length === 0 ? (
           <p className="m-0 text-sm text-muted-foreground">{t('plugins.noneInstalled')}</p>
+        ) : installed.length === 0 ? (
+          <p className="m-0 text-sm text-muted-foreground">{t('plugins.noMatches')}</p>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-4 p-0">
-            {state.installed.map((plugin) => installedCard(plugin))}
+            {installedPage.items.map((plugin) => installedCard(plugin))}
           </ul>
         )}
+        <Pagination
+          variant="pages"
+          page={installedPage.page}
+          pageCount={installedPage.pageCount}
+          onPageChange={installedPage.onPageChange}
+          previousLabel={t('plugins.previousPage')}
+          nextLabel={t('plugins.nextPage')}
+          pageInfo={t('plugins.pageInfo', {
+            from: installedPage.start + 1,
+            to: installedPage.start + installedPage.items.length,
+            total: installedPage.total,
+          })}
+        />
         {(state?.failures ?? []).map((failure) => (
           <Notice key={failure.directory} tone="warning" live="off">
             <p>
@@ -316,11 +374,26 @@ export function PluginsRoute(): JSX.Element {
         <p className="m-0 text-sm text-muted-foreground">{t('plugins.draftsHelp')}</p>
         {state !== null && state.sandboxes.length === 0 ? (
           <p className="m-0 text-sm text-muted-foreground">{t('plugins.noDraft')}</p>
+        ) : state !== null && drafts.length === 0 ? (
+          <p className="m-0 text-sm text-muted-foreground">{t('plugins.noMatches')}</p>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {(state?.sandboxes ?? []).map((item) => draftCard(item))}
+            {draftsPage.items.map((item) => draftCard(item))}
           </ul>
         )}
+        <Pagination
+          variant="pages"
+          page={draftsPage.page}
+          pageCount={draftsPage.pageCount}
+          onPageChange={draftsPage.onPageChange}
+          previousLabel={t('plugins.previousPage')}
+          nextLabel={t('plugins.nextPage')}
+          pageInfo={t('plugins.pageInfo', {
+            from: draftsPage.start + 1,
+            to: draftsPage.start + draftsPage.items.length,
+            total: draftsPage.total,
+          })}
+        />
         {draft !== null && token !== null && (
           <PluginDraftEditor
             key={draft.id}

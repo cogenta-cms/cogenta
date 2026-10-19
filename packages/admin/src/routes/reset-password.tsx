@@ -56,6 +56,7 @@ export function ResetPasswordRoute(): JSX.Element {
       <AuthLayout>
         <Card className="reveal w-full max-w-sm rounded-xl shadow-raised">
           <CardBody>
+            <h1>{t('resetPassword.heading')}</h1>
             <Notice tone="danger" live="assertive">
               <p>{t('resetPassword.missingToken')}</p>
             </Notice>

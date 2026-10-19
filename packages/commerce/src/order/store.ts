@@ -80,6 +80,7 @@ export interface OrderStoreDependencies {
 }
 
 export interface OrderListOptions {
+  readonly cursor?: string
   readonly status?: OrderStatus
   readonly customerId?: string
   /**
@@ -95,6 +96,46 @@ export interface OrderListOptions {
   readonly placedTo?: string
   readonly limit?: number
   readonly offset?: number
+}
+
+/** Position in the immutable placement order; shared with the REST list response. */
+export function encodeOrderCursor(order: Order): string {
+  return Buffer.from(
+    JSON.stringify({ v: 1, kind: 'order', at: order.placedAt, id: order.id }),
+  ).toString('base64url')
+}
+
+function decodeOrderCursor(cursor: string): { readonly at: string; readonly id: string } {
+  const invalid = new CogentaError({
+    code: 'QUERY_INVALID',
+    message: 'The order page cursor is invalid.',
+    hint: 'Return to the first order page and retry.',
+  })
+  try {
+    if (cursor.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(cursor)) throw invalid
+    const value: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
+    if (typeof value !== 'object' || value === null) throw invalid
+    const data = value as {
+      readonly v?: unknown
+      readonly kind?: unknown
+      readonly at?: unknown
+      readonly id?: unknown
+    }
+    if (
+      data.v !== 1 ||
+      data.kind !== 'order' ||
+      typeof data.at !== 'string' ||
+      !Number.isFinite(Date.parse(data.at)) ||
+      new Date(data.at).toISOString() !== data.at ||
+      typeof data.id !== 'string' ||
+      data.id.length === 0 ||
+      data.id.length > 128
+    )
+      throw invalid
+    return { at: data.at, id: data.id }
+  } catch {
+    throw invalid
+  }
 }
 
 export interface OrderStore {
@@ -526,12 +567,27 @@ export function createOrderStore(
       if (options?.placedTo !== undefined) {
         conditions.push(sql`placed_at <= ${options.placedTo}`)
       }
+      if (options?.cursor !== undefined) {
+        if (options.offset !== undefined) {
+          throw new CogentaError({
+            code: 'QUERY_INVALID',
+            message: 'An order cursor cannot be combined with an offset.',
+            hint: 'Use the page cursor alone.',
+          })
+        }
+        const cursor = decodeOrderCursor(options.cursor)
+        conditions.push(
+          sql`(placed_at < ${cursor.at} or (placed_at = ${cursor.at} and id < ${cursor.id}))`,
+        )
+      }
 
       let statement = sql`select * from ${orders}`
       conditions.forEach((condition, index) => {
         statement = sql`${statement} ${index === 0 ? sql`where` : sql`and`} ${condition}`
       })
-      statement = sql`${statement} order by placed_at desc, id desc limit ${limit(options?.limit ?? 100)} offset ${limit(options?.offset ?? 0)}`
+      statement = sql`${statement} order by placed_at desc, id desc limit ${limit(options?.limit ?? 100)}`
+      if (options?.offset !== undefined)
+        statement = sql`${statement} offset ${limit(options.offset)}`
 
       const result = await db.query<OrderRow>(statement)
       const decoded: Order[] = []

@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url'
 import {
   assertDecisionAllowed,
   createFileAgentDeclarationStore,
+  createFileApprovalQueue,
   createFilePromptTemplateStore,
   createFileProviderConfigStore,
   createProgressJobStore,
@@ -37,6 +38,7 @@ import {
   buildContentSchema,
   type ConfigStatusInput,
   createAdminThemeRouter,
+  createAgentApprovalsRouter,
   createAgentSkillsRouter,
   createAgentsRouter,
   createAnalyticsRouter,
@@ -253,6 +255,7 @@ import {
   type ImportRun,
   importWordPress,
   parseJsonImport,
+  preflightWordPressTarget,
   undoImport,
 } from '@cogenta/import'
 import { createMcpConnectionStore, ensureMcpConnectionTables } from '@cogenta/mcp'
@@ -276,8 +279,8 @@ import {
   type MarketplaceCatalogEntry,
   type PluginBlockProvision,
   type PluginWidgetProvision,
+  readPluginCode,
 } from '@cogenta/plugins'
-import type { MediaAsset as RenderMediaAsset } from '@cogenta/render'
 import {
   type AdminThemeStore,
   type BlockZones,
@@ -336,11 +339,6 @@ import {
   type TaxonomyDefinition,
   type TaxonomyStore,
   type TaxonomyTerm,
-  withLifecycleEvents,
-  withReadOnlyStore,
-  withRedirectTracking,
-  withScheduledPublishEnqueue,
-  withSearchIndexing,
 } from '@cogenta/schema'
 import {
   canonicalUrl,
@@ -390,9 +388,15 @@ import {
   buildAgentRuntime,
   PROVIDERS_SUBDIR,
 } from './agent-runtime.js'
-import { type AssistantAssembly, buildAssistant, withVectorIndexing } from './assistant.js'
+import { type AssistantAssembly, buildAssistant } from './assistant.js'
 import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
+import { createDecoratedContentStores } from './decorated-content-stores.js'
+import {
+  DEFAULT_FAVICON_CONTENT_TYPE,
+  DEFAULT_FAVICON_PATH,
+  defaultFaviconBytes,
+} from './default-favicon.js'
 import { DEFAULT_LOGO_CONTENT_TYPE, DEFAULT_LOGO_PATH, defaultLogoBytes } from './default-logo.js'
 import { runDoctor } from './doctor.js'
 import {
@@ -456,6 +460,9 @@ import {
   renderRobots,
   seoSiteFor,
 } from './seo.js'
+import { recordAuthAudit, recordContentAudit, responseId } from './serve-audit.js'
+import { loadRenderMedia } from './serve-render-media.js'
+import { webauthnConfigFor } from './serve-webauthn.js'
 import { createSitePlanning } from './site-plan.js'
 import {
   authorArchiveKicker,
@@ -465,6 +472,7 @@ import {
 import { createTextProviderSource } from './text-provider-source.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
 import { exportThemeZip, importThemeZip } from './theme-export.js'
+import { FONT_ROUTE_PREFIX, serveThemeFont, setRemoteWebFonts } from './theme-fonts.js'
 import {
   availableThemes,
   configureThemeRegistry,
@@ -684,7 +692,7 @@ interface TrashPurgeSummary {
   readonly perCollection: readonly { readonly collection: string; readonly purged: number }[]
 }
 
-interface Site {
+export interface Site {
   readonly db: DatabaseHandle
   readonly auth: AuthStore
   /** `@cogenta/core`'s own package version (fiche 22 tâche 8, part 4) — the admin footer/topbar and, branding permitting, the public footer. */
@@ -874,6 +882,7 @@ interface Site {
    * working unchanged with this omitted.
    */
   readonly agentsRouter?: AgentsRouter
+  readonly agentApprovalsRouter?: ReturnType<typeof createAgentApprovalsRouter>
   /** `/api/providers` — L22 task 1bis: which LLM providers this site has enabled, with a masked key. Same optionality as `agentsRouter`, built alongside it from the same `agentsRuntimeConfig`. */
   readonly providersRouter?: ProvidersRouter
   /** `/api/agent-skills` — L22 task 1bis: named instruction text an agent loads into its context. Same optionality as `agentsRouter`. */
@@ -1158,12 +1167,6 @@ interface Site {
    */
   readonly tickChannelNotifications: () => Promise<readonly string[]>
   dispose(): Promise<void>
-}
-
-/** `relyingPartyId` is the bare host: WebAuthn ties a passkey to a domain, not a URL. */
-function webauthnConfigFor(site: { readonly name: string; readonly url: string }) {
-  const host = new URL(site.url).hostname
-  return { relyingPartyName: site.name, relyingPartyId: host, origin: site.url }
 }
 
 interface AssembleSiteOptions {
@@ -1533,7 +1536,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // Forms (contract G, ADR-0026 + fiche 47). Always mounted — see `Site.formStore`'s
   // own comment for why this, unlike commerce, is not opt-in.
   await ensureFormsTables(db)
-  const formStore = createFormStore(db)
+  const formStore = createFormStore(db, Date.now, { defaultLocale: site.defaultLocale })
   // Derived, never the raw signing key itself — same discipline
   // `commentsIpHashSecret` already follows a little further down this
   // function: a leak of this one purpose-specific value must not also be a
@@ -1546,6 +1549,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     .digest('hex')
   const formsRouter = createFormsRouter({
     forms: formStore,
+    defaultLocale: site.defaultLocale,
     // Falls back to an in-process limiter rather than leaving the public
     // submit route unprotected when no shared driver was configured (R1) —
     // the same fallback `resolveActor`'s own `requestQuota` parameter takes.
@@ -1577,104 +1581,28 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const scheduledPublishFailures = createScheduledPublishFailureStore(db)
   await scheduledPublishFailures.ensureTable()
 
-  const stores = new Map<string, ContentStore>()
-  const storeFor = (collection: CollectionDefinition): ContentStore => {
-    const existing = stores.get(collection.name)
-    if (existing !== undefined) return existing
-    // `siblings` is what lets `delete()` enforce `restrict` in application
-    // code (ADR-0022): trashing is an UPDATE, so the foreign key has nothing
-    // left to refuse at that moment.
-    const created = createContentStore({
-      db,
-      collection,
-      siblings: collections,
-      defaultLocale: site.defaultLocale,
-    })
-    const guarded = readOnly ? withReadOnlyStore(created) : created
-    // Writes the redirect a slug rename on a *published* entry owes (fiche 12
-    // task 3). Placed right after the read-only guard, for the same reason
-    // scheduling is: a write the guard refused must never leave a redirect
-    // behind either.
-    const tracked = withRedirectTracking(guarded, {
-      collection,
-      redirects,
-      onError: (error) =>
-        logger.error('redirect tracking failed', {
-          collection: collection.name,
-          error: String(error),
-        }),
-    })
-    // Queues the real publish job for a save that lands as `status:
-    // 'scheduled'`. Placed right after the read-only guard so a write that
-    // guard refused never reaches the queue either.
-    const schedulable = withScheduledPublishEnqueue(tracked, {
-      collection,
-      queue: scheduledPublishQueue,
-      onError: (error) =>
-        logger.error('scheduled publish enqueue failed', {
-          collection: collection.name,
-          error: String(error),
-        }),
-    })
-    // Outermost, so a read-only refusal happens *before* anything is indexed:
-    // a write that never landed must not change the index either.
-    const indexed = withSearchIndexing(schedulable, {
-      collection,
-      index: searchIndex,
-      onError: (error) =>
-        logger.error('search index write failed', {
-          collection: collection.name,
-          error: String(error),
-        }),
-    })
-    // The semantic half, wrapped the same way and for the same reason (L18
-    // task 5): REST and GraphQL are handed the same store instances, so one
-    // wrap covers both and neither can write content the index never hears
-    // about. Absent entirely when no embedder is available.
-    const stored =
-      options.assistant?.vectors === undefined
-        ? indexed
-        : withVectorIndexing(indexed, {
-            collection,
+  const { stores, storeFor } = createDecoratedContentStores({
+    db,
+    collections,
+    defaultLocale: site.defaultLocale,
+    logger,
+    readOnly,
+    redirects,
+    scheduledPublishQueue,
+    searchIndex,
+    ...(options.assistant?.vectors === undefined
+      ? {}
+      : {
+          vectors: {
             siteId: site.url,
             store: options.assistant.vectors.store,
             embeddings: options.assistant.vectors.embeddings,
-            // L22 task 4's per-collection toggle, read live on every write.
             isEnabled: options.assistant.vectors.isEnabled,
-            onError: (error) =>
-              logger.error('vector index write failed', {
-                collection: collection.name,
-                error: String(error),
-              }),
             onIndexed: () => options.assistant?.vectorInfo?.noteIndexed(),
-          })
-    // Outermost of all: an event must describe a write that really landed, so
-    // it fires after the read-only guard has had its chance to refuse and
-    // after the index has been brought back in step. A receiver that rebuilt a
-    // page from an event the store then rejected would serve a page that never
-    // existed.
-    const observed =
-      options.onContentEvent == null
-        ? stored
-        : withLifecycleEvents(stored, {
-            collection,
-            emit: options.onContentEvent,
-            onError: (error) =>
-              logger.error('content webhook emit failed', {
-                collection: collection.name,
-                error: String(error),
-              }),
-          })
-    stores.set(collection.name, observed)
-    return observed
-  }
-  // The gateway (below) reads `stores` directly rather than through
-  // `storeFor` — REST's own lazy population left it empty for any
-  // collection no REST request had touched yet, which the theme-render
-  // fallback (an early GraphQL-gateway caller, not a REST one) hit on its
-  // very first request. Populating eagerly here means both callers see the
-  // same, already-complete map.
-  for (const collection of collections) storeFor(collection)
+          },
+        }),
+    ...(options.onContentEvent == null ? {} : { onContentEvent: options.onContentEvent }),
+  })
 
   // Trash auto-purge (fiche 07 task 5): the collections that actually have a
   // trash, and the window each one keeps it for — computed once, since
@@ -1749,7 +1677,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     readonly targetCollection?: string
   }): Promise<ImportRun> {
     if (input.source === 'wordpress') {
-      const analysis = analyzeWordPress(input.text)
+      await preflightWordPressTarget(db, collections)
+      const analysis = analyzeWordPress(input.text, collections)
       const run = await importTracking.createRun({
         source: 'wordpress',
         createdBy: input.createdBy,
@@ -1815,12 +1744,14 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     }
 
     const text = await readImportSource(input.runId)
+    if (run.source === 'wordpress') await preflightWordPressTarget(db, collections)
     await importTracking.updateRun(input.runId, { status: 'running' })
 
     try {
       if (run.source === 'wordpress') {
         const report = await importWordPress(text, {
           db,
+          collections,
           storage,
           tracking: importTracking,
           runId: input.runId,
@@ -2033,12 +1964,22 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // `buildSiteManifest`). `agentsRuntimeConfig` is optional so a caller
   // that builds a bare `Site` by hand (tests included) is unaffected —
   // `runServe` always supplies it.
+  const approvalController = new AbortController()
   const agentsRuntime: AgentRuntimeAssembly | undefined =
     options.agentsRuntimeConfig === undefined
       ? undefined
       : await buildAgentRuntime({
           dataDir: options.agentsRuntimeConfig.dataDir,
           projectRoot: options.agentsRuntimeConfig.projectRoot,
+          approvalQueue: createFileApprovalQueue({
+            signal: approvalController.signal,
+            directory: join(
+              options.agentsRuntimeConfig.projectRoot,
+              '.cogenta',
+              'agents-runtime',
+              'approvals',
+            ),
+          }),
           // Fiche 58 task 4 — every enabled connection's checked tools are
           // merged into this site's real tool registry, wrapped by the same
           // sandboxed `McpClient` a "test connection" probe uses
@@ -2535,8 +2476,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
    * taxonomy named `author`, whose term archives already answer `/author/…`.
    */
   const authorCollections = collections.filter(
-    (collection) =>
-      collection.routing !== undefined && collection.fields['publishedAt'] !== undefined,
+    (collection) => collection.routing !== undefined && collection.fields.publishedAt !== undefined,
   )
 
   /** Slugs of every account with a public name, oldest account first keeping the plain one. */
@@ -2957,8 +2897,6 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         registry: paymentRegistry,
         config: paymentConfig,
         testMode: options.payment?.testMode ?? true,
-        // Informational only — see `router.ts`'s own comment: no inbound
-        // route answers this path yet (deferred, `BLOCKERS.md`).
         webhookUrl: `${site.url.replace(/\/+$/u, '')}/api/commerce/payments/webhook`,
       },
       permissions: commercePermissions,
@@ -3192,6 +3130,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(agentsRuntime === undefined
       ? {}
       : {
+          agentApprovalsRouter: createAgentApprovalsRouter({
+            queue: agentsRuntime.approvalQueue,
+            audit: auth.audit,
+            logger,
+          }),
           agentsRouter: createAgentsRouter({
             agents: agentsRuntime.agentRegistry,
             audit: auth.audit,
@@ -3231,7 +3174,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       // this function — `@cogenta/import`'s real importer, unchanged, never
       // reimplemented here (R9: this package gains no dependency on it, only
       // `@cogenta/cli` does, which already had one for the terminal command).
-      runWordPressImport: (xml) => importWordPress(xml, { db, storage, comments: commentsStore }),
+      runWordPressImport: (xml) =>
+        importWordPress(xml, { db, storage, comments: commentsStore, collections }),
       analyze: analyzeImportSource,
       apply: applyImportRun,
       getRun: (id) => importTracking.getRun(id),
@@ -3364,6 +3308,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     tickTrashPurge,
     tickChannelNotifications: () => channelDispatcher.flushDue(),
     dispose: async () => {
+      approvalController.abort()
       // Fiche 58 task 4 — kills every spawned MCP server process and
       // removes every sandbox working directory before the database (and
       // everything else) goes away. A no-op when no connection was wired.
@@ -3521,6 +3466,10 @@ function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestReque
  */
 function toCommerceRequest(req: IncomingMessage, url: URL, body: unknown): CommerceRequest {
   const query: Record<string, string | undefined> = {}
+  const headers: Record<string, string> = {}
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (typeof value === 'string') headers[name] = value
+  }
   for (const key of url.searchParams.keys()) {
     query[key] = url.searchParams.get(key) ?? undefined
   }
@@ -3528,6 +3477,7 @@ function toCommerceRequest(req: IncomingMessage, url: URL, body: unknown): Comme
     method: req.method ?? 'GET',
     path: url.pathname,
     query,
+    headers,
     ...(body === undefined ? {} : { body }),
   }
 }
@@ -3917,186 +3867,6 @@ function clientIpOf(req: IncomingMessage): string {
   return req.socket.remoteAddress ?? 'unknown'
 }
 
-function responseId(response: RestResponse): string | undefined {
-  const data = (response.body as { readonly data?: { readonly id?: unknown } } | null)?.data
-  return typeof data?.id === 'string' ? data.id : undefined
-}
-
-/**
- * The content version a create/update/restore/publish response just
- * produced — `SerialisedEntry.version`, a system field on every serialised
- * entry. Feeds `RecordAuditInput.version` (fiche 21 task 1), which is what
- * lets the audit detail view ask `GET .../diff?from={version-1}&to={version}`
- * instead of re-deriving one.
- */
-function responseVersion(response: RestResponse): number | undefined {
-  const data = (response.body as { readonly data?: { readonly version?: unknown } } | null)?.data
-  return typeof data?.version === 'number' ? data.version : undefined
-}
-
-/**
- * The audit action a `/api/content/*` request stands for, or `null` for a
- * read (`history`/`diff`/`preview`/`translations`, or an unrecognised
- * sub-route this layer should not guess about).
- *
- * Found while wiring the trash screen's "deleted by" column (fiche 07 task
- * 3): `untrash` and `purge` fell through to `null` here, alongside
- * `unpublish` and `duplicate` — four real mutations silently missing from
- * the audit log despite the header comment above claiming every mutation
- * lands in it. All four are real writes and are named the same way
- * `publish`/`restore` already were.
- */
-function contentAuditAction(method: string, subAction: string | undefined): string | null {
-  switch (subAction) {
-    case 'publish':
-      return 'content.publish'
-    case 'unpublish':
-      return 'content.unpublish'
-    case 'duplicate':
-      return 'content.duplicate'
-    case 'restore':
-      return 'content.restore'
-    case 'untrash':
-      return 'content.untrash'
-    case 'purge':
-      return 'content.purge'
-    // Who may read a page is a decision of its own (`schema@2.3`), and one an
-    // auditor will ask about: "who made this note public?". Found missing
-    // while wiring L34 — it fell to `default` and was never recorded.
-    case 'visibility':
-      return 'content.visibility'
-    case 'history':
-    case 'diff':
-    case 'preview':
-    case 'translations':
-      return null
-    case undefined:
-      if (method === 'POST') return 'content.create'
-      if (method === 'PATCH' || method === 'PUT') return 'content.update'
-      if (method === 'DELETE') return 'content.delete'
-      return null
-    default:
-      return null
-  }
-}
-
-/** The part of a `/-/replace` answer the audit log reads. */
-interface ReplaceAuditReport {
-  readonly applied?: boolean
-  readonly entries?: readonly {
-    readonly entryId: string
-    readonly collection: string
-    readonly occurrences: number
-  }[]
-}
-
-/**
- * Every mutation lands in `@cogenta/auth`'s hash-chained audit log
- * (`packages/auth/src/audit.ts`), which existed since L2's own `AuthStore`
- * was built but had no writer until now. Recording here, at the transport
- * boundary, rather than inside `ContentService`/`MediaRouter`, means every
- * route that mutates something is covered by one place instead of every
- * write path remembering to call it — the same reasoning that keeps actor
- * resolution itself at this layer rather than duplicated per route.
- *
- * Never blocks or fails the response it is auditing: a write that succeeded
- * must reach the caller whether or not the audit row could be appended, and
- * a broken audit log is something `verify()` surfaces on its own.
- */
-async function recordContentAudit(
-  site: Site,
-  actor: AccessContext['actor'],
-  method: string,
-  pathname: string,
-  body: unknown,
-  response: RestResponse,
-  logger: Logger,
-): Promise<void> {
-  if (response.status < 200 || response.status >= 300) return
-  const segments = pathname
-    .replace(/^\/api\/content\/?/u, '')
-    .split('/')
-    .filter((segment) => segment.length > 0)
-  const [collection, id, subAction] = segments
-
-  // A search-and-replace that was applied (L34) crosses collections, so it
-  // is recorded once per entry it wrote — the audit log is a per-entry
-  // history, and "which pages did that rename touch?" has to be answerable
-  // from it. Each row carries the phrase and its replacement, never the text
-  // around them: that is in the entry's own version history already.
-  if (collection === '-' && id === 'replace') {
-    const report = (response.body as { readonly data?: ReplaceAuditReport } | null)?.data
-    if (report?.applied !== true) return
-    const request = body as { readonly find?: unknown; readonly replace?: unknown } | null
-    for (const written of report.entries ?? []) {
-      await site.auth.audit
-        .record({
-          actorId: actor.id,
-          actorRoles: actor.roles,
-          action: 'content.replace',
-          collection: written.collection,
-          entryId: written.entryId,
-          diff: {
-            _replace: {
-              find: typeof request?.find === 'string' ? request.find : '',
-              replace: typeof request?.replace === 'string' ? request.replace : '',
-              occurrences: written.occurrences,
-            },
-          },
-        })
-        .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
-    }
-    return
-  }
-  if (collection === undefined || collection === '-') return
-
-  const action = contentAuditAction(method, subAction)
-  if (action === null) return
-
-  const entryId = id ?? responseId(response)
-  const values =
-    typeof body === 'object' && body !== null && 'values' in body
-      ? (body as { readonly values?: Record<string, unknown> }).values
-      : undefined
-  const version = responseVersion(response)
-
-  // Fiche 30 task 5: which fields (if any) were filled by an accepted
-  // assistant suggestion since the last save. Not a contract A field — this
-  // never reaches `store.update`, `parseUpdateBody` strips it as an unknown
-  // key — only the audit trail, so "a paragraph written" and "a paragraph
-  // accepted from a suggestion" read differently in the log even though both
-  // produce the same `content.update`.
-  const assistApplied =
-    typeof body === 'object' && body !== null && 'assistApplied' in body
-      ? (
-          body as {
-            readonly assistApplied?: readonly { readonly field: string; readonly tool: string }[]
-          }
-        ).assistApplied
-      : undefined
-  const diff =
-    values === undefined && (assistApplied === undefined || assistApplied.length === 0)
-      ? undefined
-      : {
-          ...(values === undefined ? {} : values),
-          ...(assistApplied === undefined || assistApplied.length === 0
-            ? {}
-            : { _assistApplied: assistApplied }),
-        }
-
-  await site.auth.audit
-    .record({
-      actorId: actor.id,
-      actorRoles: actor.roles,
-      action,
-      collection,
-      ...(entryId === undefined ? {} : { entryId }),
-      ...(diff === undefined ? {} : { diff }),
-      ...(version === undefined ? {} : { version }),
-    })
-    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
-}
-
 /**
  * Pings IndexNow the moment a publish or unpublish response succeeds (fiche
  * 50 task 3) — off by default (`seo.indexNowEnabled`), a no-op with no key
@@ -4308,73 +4078,6 @@ async function recordImportAudit(
       action: 'import.wordpress',
       ...(report === undefined ? {} : { diff: report }),
     })
-    .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
-}
-
-async function recordAuthAudit(
-  site: Site,
-  actor: AccessContext['actor'],
-  method: string,
-  pathname: string,
-  response: RestResponse,
-  logger: Logger,
-  body?: unknown,
-): Promise<void> {
-  if (response.status < 200 || response.status >= 300) {
-    // A refused password attempt is the "who is trying to get in" signal a
-    // security-conscious admin expects an audit log to carry (WordPress and
-    // its security plugins log these too) — only the first step, though:
-    // TOTP, recovery-code and passkey completion reuse the same
-    // `AUTH_INVALID_CREDENTIALS`-family codes for a different meaning each
-    // time, so recording those here under one generic action would misname
-    // what actually failed.
-    if (pathname.endsWith('/api/auth/login') && method === 'POST') {
-      const email =
-        body !== null &&
-        typeof body === 'object' &&
-        typeof (body as { email?: unknown }).email === 'string'
-          ? (body as { email: string }).email
-          : null
-      await site.auth.audit
-        .record({
-          actorId: null,
-          actorRoles: [],
-          action: 'auth.login_failed',
-          ...(email === null ? {} : { diff: { email } }),
-        })
-        .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
-    }
-    return
-  }
-
-  if (pathname.endsWith('/api/auth/session') && method === 'DELETE') {
-    await site.auth.audit
-      .record({ actorId: actor.id, actorRoles: actor.roles, action: 'auth.logout' })
-      .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
-    return
-  }
-
-  // Login, TOTP completion and passkey completion all land here the same
-  // way: whichever step actually produced a session is the one worth
-  // recording, not every intermediate MFA round trip.
-  const data = (response.body as { readonly data?: { readonly status?: unknown } } | null)?.data
-  if (data?.status !== 'session') return
-  const user = (data as { readonly user?: { readonly id?: unknown; readonly roles?: unknown } })
-    .user
-  const userId = typeof user?.id === 'string' ? user.id : null
-  const roles = Array.isArray(user?.roles) ? (user.roles as string[]) : []
-
-  // A recovery-code sign-in is its own, more specific event (fiche 18 task
-  // 1): "a code was consumed" is worth remarking on in a way an ordinary
-  // login is not — it is what `createRecoveryCodeUsedNoticeSource` looks
-  // for — so it is recorded instead of the generic `auth.login`, not in
-  // addition to it.
-  const action = pathname.endsWith('/api/auth/recovery-code')
-    ? 'auth.recovery_code_used'
-    : 'auth.login'
-
-  await site.auth.audit
-    .record({ actorId: userId, actorRoles: roles, action })
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 
@@ -4927,45 +4630,6 @@ async function serveImageVariant(
 }
 
 /**
- * Loads the media a theme render references, as `@cogenta/render`'s
- * `MediaAsset`.
- *
- * The two shapes are deliberately different types (ADR-0016: the delivery
- * plane declares its own wire types rather than importing the engine's), so
- * this is the one place they are mapped. Only images and videos exist in that
- * shape at all — a PDF has no `srcset` — so anything else is left out and
- * `ctx.image()` refuses it clearly.
- */
-async function loadRenderMedia(
-  site: Site,
-  ids: readonly string[],
-): Promise<ReadonlyMap<string, RenderMediaAsset>> {
-  const found = new Map<string, RenderMediaAsset>()
-  for (const id of new Set(ids)) {
-    const asset = await site.mediaStore.get(id)
-    if (asset === null) continue
-    if (asset.kind !== 'image' && asset.kind !== 'video') continue
-    found.set(id, {
-      id: asset.id,
-      kind: asset.kind,
-      alt: asset.alt,
-      ...(asset.width === null ? {} : { width: asset.width }),
-      ...(asset.height === null ? {} : { height: asset.height }),
-      focal: asset.focal,
-      // Fiche 05 task 2: the field `ImageSource`/`variantUrl` have carried
-      // since `theme@1.2` (`packages/render/src/images/types.ts`'s own
-      // `version` doc comment) but nobody ever set — a replaced original
-      // kept serving under the exact same `/_image?id=…` query string a
-      // year-long `immutable` cache had already stored. `contentHash`
-      // changes on every `MediaStore.replace()`, so folding it in here is
-      // what actually breaks that cache.
-      version: asset.contentHash,
-    })
-  }
-  return found
-}
-
-/**
  * Fiche 24's extra runtime state — health/tools/maintenance/error-log — kept
  * separate from `Site` rather than folded into it: none of it is part of
  * "what a site is" the way a `ContentStore` or a `MediaStore` is, and every
@@ -5185,6 +4849,41 @@ export function createRequestListener(
         return
       }
 
+      // Browser fallback requests are public and resolve the current site
+      // identity, so a saved favicon takes priority without a server restart.
+      if (url.pathname === DEFAULT_FAVICON_PATH) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.writeHead(405, { allow: 'GET, HEAD' }).end()
+          return
+        }
+        const [identity, branding] = await Promise.all([
+          identityForSite(site),
+          brandingForSite(site),
+        ])
+        const ids = [identity.faviconMediaId, branding.customLogoMediaId].filter(
+          (id): id is string => id !== null && id !== '',
+        )
+        const assets = await loadRenderMedia(site, ids)
+        const chosen = ids.find((id) => assets.get(id)?.kind === 'image')
+        if (chosen !== undefined) {
+          res
+            .writeHead(302, {
+              location: `/_image?id=${encodeURIComponent(chosen)}&w=64`,
+              'cache-control': 'public, max-age=0, must-revalidate',
+            })
+            .end()
+          return
+        }
+        const bytes = Buffer.from(defaultFaviconBytes())
+        res.writeHead(200, {
+          'content-type': DEFAULT_FAVICON_CONTENT_TYPE,
+          'content-length': bytes.length,
+          'cache-control': 'public, max-age=0, must-revalidate',
+        })
+        res.end(req.method === 'HEAD' ? undefined : bytes)
+        return
+      }
+
       // Cogenta's own logo, served for the public footer's default branding
       // (fiche L21 task 8) — public and unauthenticated for the same reason
       // `/_image` is: a visitor's browser fetches it with no session. The
@@ -5201,6 +4900,31 @@ export function createRequestListener(
           'cache-control': 'public, max-age=31536000, immutable',
         })
         res.end(Buffer.from(defaultLogoBytes()))
+        return
+      }
+
+      // A built-in theme's web fonts, served by the site itself so that no
+      // visitor's address is handed to a font provider. Public and
+      // unauthenticated like the stylesheet that names them; the file name
+      // carries a hash of its bytes, hence the year-long immutable cache. Only
+      // files a theme's own manifest lists can be answered (`theme-fonts.ts`).
+      if (url.pathname.startsWith(FONT_ROUTE_PREFIX)) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.writeHead(405, { allow: 'GET, HEAD' }).end()
+          return
+        }
+        const font = await serveThemeFont(url.pathname)
+        if (font === null) {
+          res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found')
+          return
+        }
+        res.writeHead(200, {
+          'content-type': font.contentType,
+          'content-length': font.body.length,
+          'cache-control': font.cacheControl,
+          'x-content-type-options': 'nosniff',
+        })
+        res.end(req.method === 'HEAD' ? undefined : font.body)
         return
       }
 
@@ -5412,7 +5136,11 @@ export function createRequestListener(
       // not stretch to "refund" or "issue an invoice".
       if (url.pathname.startsWith('/api/commerce')) {
         const body =
-          req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
+          req.method === 'GET' || req.method === 'DELETE'
+            ? undefined
+            : url.pathname === '/api/commerce/payments/webhook'
+              ? (await readRawBodyBuffer(req))?.toString('utf8')
+              : await readBody(req)
         const request = toCommerceRequest(req, url, body)
         const response = await site.commerceRouter.handle(request, context.actor)
         // Two routes whose body is not JSON: an invoice PDF (bytes) and the
@@ -5818,7 +5546,7 @@ export function createRequestListener(
           // step, with everything posted" is always the right page.
           const stepsCount = definition?.steps.length ?? 0
           const accumulatedFromBody = (() => {
-            const raw = postedFields['_accumulated']
+            const raw = postedFields._accumulated
             if (typeof raw !== 'string' || raw.trim() === '') return {}
             try {
               const parsed: unknown = JSON.parse(raw)
@@ -5844,9 +5572,7 @@ export function createRequestListener(
                       ? {
                           step: stepsCount - 1,
                           accumulated: accumulatedFromBody,
-                          ...(typeof postedFields['_ts'] === 'string'
-                            ? { ts: postedFields['_ts'] }
-                            : {}),
+                          ...(typeof postedFields._ts === 'string' ? { ts: postedFields._ts } : {}),
                         }
                       : {}),
                   },
@@ -6360,6 +6086,7 @@ export function createRequestListener(
           const grantStore = createPluginGrantStore(site.db)
           const disableStore = createPluginDisableStore(site.db)
           const granted = new Map<string, readonly string[]>()
+          const runtimeState = new Map<string, 'loaded' | 'restart-required'>()
           const off = new Map<
             string,
             { reason: string; disabledAt: string; details: string | null }
@@ -6372,6 +6099,19 @@ export function createRequestListener(
             })
           }
           for (const plugin of installed.plugins) {
+            let state: 'loaded' | 'restart-required' = 'restart-required'
+            try {
+              const code = await readPluginCode(plugin.packageRoot, plugin.manifest)
+              const fingerprint = createHash('sha256')
+                .update(`${JSON.stringify(plugin.manifest)}\n${code}`)
+                .digest('hex')
+              if (extras.pluginRuntime?.loadedFingerprints[plugin.manifest.name] === fingerprint) {
+                state = 'loaded'
+              }
+            } catch {
+              // Installed files may no longer match readable code loaded at boot.
+            }
+            runtimeState.set(plugin.manifest.name, state)
             granted.set(
               plugin.manifest.name,
               (await grantStore.listGrants(plugin.manifest.name)).map((grant) => grant.capability),
@@ -6385,6 +6125,7 @@ export function createRequestListener(
                   name: plugin.manifest.name,
                   title: plugin.manifest.title ?? null,
                   version: plugin.manifest.version,
+                  runtimeState: runtimeState.get(plugin.manifest.name) ?? 'restart-required',
                   capabilities: plugin.manifest.capabilities,
                   granted: granted.get(plugin.manifest.name) ?? [],
                   provides: plugin.manifest.provides,
@@ -6418,6 +6159,7 @@ export function createRequestListener(
             res.end(JSON.stringify({ data: removal }))
             return
           }
+          await extras.pluginRuntime?.unloadPlugin(pluginName)
           await ensurePluginTables(site.db)
           const grantStore = createPluginGrantStore(site.db)
           for (const grant of await grantStore.listGrants(pluginName)) {
@@ -6987,6 +6729,15 @@ export function createRequestListener(
         return
       }
 
+      if (
+        url.pathname.startsWith('/api/agent-approvals') &&
+        site.agentApprovalsRouter !== undefined
+      ) {
+        const body = req.method === 'GET' ? undefined : await readBody(req)
+        const request = toRestRequest(req, url, body)
+        writeRestResponse(res, await site.agentApprovalsRouter.handle(request, context.actor))
+        return
+      }
       if (url.pathname.startsWith('/api/agents') && site.agentsRouter !== undefined) {
         // L22 task 1: create/update/run all carry a JSON body — the pre-L22
         // enable/disable-only router never needed one, this one does.
@@ -7514,7 +7265,15 @@ export function createRequestListener(
 
       if (url.pathname === '/_cogenta/go' && req.method === 'GET') {
         const target = url.searchParams.get('to') ?? '/'
-        const safe = target.startsWith('/') && !target.startsWith('//') && !target.includes('\\')
+        // A same-site path only. Browsers drop tabs and line breaks from a URL, so
+        // "/\t/evil.example" would otherwise reach "//evil.example": any control
+        // character refuses the target, as do "//" and a backslash.
+        const safe =
+          target.startsWith('/') &&
+          !target.startsWith('//') &&
+          !target.includes('\\') &&
+          // biome-ignore lint/suspicious/noControlCharactersInRegex: that is the point
+          !/[\u0000-\u001f\u007f]/u.test(target)
         res.writeHead(303, { location: safe ? target : '/', 'cache-control': 'no-store' })
         res.end()
         return
@@ -7601,6 +7360,14 @@ export function createRequestListener(
       // a page has no meaningful response to any other method.
       if (req.method === 'GET') {
         const renderOptions = {
+          onInvalidCollectionList: (report: {
+            readonly path: string
+            readonly key: string
+            readonly collection: string
+            readonly code: string
+          }) => {
+            logger.warn('Invalid legacy collection list omitted', report)
+          },
           collections: site.collections,
           gateway: site.gateway,
           site: await renderSiteFor(site),
@@ -8394,6 +8161,9 @@ export async function runServe(options: ServeOptions): Promise<number> {
     read: (url) => readFile(url, 'utf8'),
     projectRoot,
   })
+  // Off unless the site owner opted in: a skin then loads only the families the
+  // themes bundle, and no request leaves the site for a font.
+  setRemoteWebFonts(loaded.config.appearance.remoteWebFonts)
   const themeCss = await themeCssFor(DEFAULT_THEME_NAME)
   const styles = joinStyles(
     await loadSkinCss((path) => readFile(path, 'utf8'), join(projectRoot, 'theme.tokens.json')),

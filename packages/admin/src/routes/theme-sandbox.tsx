@@ -522,7 +522,11 @@ export function ThemeSandboxRoute(): JSX.Element {
     try {
       const [{ ids }, theme] = await Promise.all([listSandboxIds(token), getTheme(token)])
       setSandboxIds(ids)
-      setAvailableThemeNames(theme.availableThemes.map((candidate) => candidate.name))
+      setAvailableThemeNames(
+        theme.availableThemes
+          .filter((candidate) => candidate.local)
+          .map((candidate) => candidate.name),
+      )
       setLoadError(null)
     } catch (caught) {
       setLoadError(toErrorState(caught, t('themeSandbox.loadError')))

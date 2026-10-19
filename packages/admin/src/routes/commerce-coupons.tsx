@@ -12,12 +12,14 @@ import {
 import { ApiError } from '../api/http.js'
 import { useAuth } from '../auth/auth-context.js'
 import { majorTextToMinor, minorToMajorText } from '../commerce/money.js'
+import { useLocalPagination } from '../lib/use-local-pagination.js'
 import {
   Button,
   Field,
   Input,
   Modal,
   Notice,
+  Pagination,
   Select,
   Table,
   TableBody,
@@ -59,6 +61,26 @@ export function CommerceCouponsRoute(): JSX.Element {
   const [maxRedemptions, setMaxRedemptions] = useState('')
   const [maxRedemptionsPerCustomer, setMaxRedemptionsPerCustomer] = useState('')
   const [restrictedProductIds, setRestrictedProductIds] = useState('')
+  const [search, setSearch] = useState('')
+  const filteredCoupons = coupons.filter((coupon) =>
+    coupon.code.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
+  )
+  const page = useLocalPagination(filteredCoupons, search)
+  const pager = (
+    <Pagination
+      variant="pages"
+      page={page.page}
+      pageCount={page.pageCount}
+      onPageChange={page.onPageChange}
+      previousLabel={t('lists.previous')}
+      nextLabel={t('lists.next')}
+      pageInfo={t('lists.pageInfo', {
+        from: page.start + 1,
+        to: page.start + page.items.length,
+        total: page.total,
+      })}
+    />
+  )
 
   const load = useCallback(async () => {
     if (token === null || !canRead) return
@@ -204,72 +226,85 @@ export function CommerceCouponsRoute(): JSX.Element {
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && error === null && (
-        <TableRoot label={t('commerceCoupons.tableLabel')}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeader>{t('commerceCoupons.codeColumn')}</TableHeader>
-                <TableHeader>{t('commerceCoupons.kindColumn')}</TableHeader>
-                <TableHeader>{t('commerceCoupons.valueColumn')}</TableHeader>
-                <TableHeader>{t('commerceCoupons.redemptionsColumn')}</TableHeader>
-                <TableHeader>{t('commerceCoupons.statusColumn')}</TableHeader>
-                <TableHeader>{t('commerceCoupons.actionsColumn')}</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {coupons.map((coupon) => (
-                <TableRow key={coupon.code}>
-                  <TableCell>{coupon.code}</TableCell>
-                  <TableCell>{t(`commerceCoupons.kind.${coupon.kind}`)}</TableCell>
-                  <TableCell>{describeValue(coupon)}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-0.5">
-                      <span>
-                        {coupon.maxRedemptions === null
-                          ? t('commerceCoupons.unlimited', { used: coupon.redemptions })
-                          : t('commerceCoupons.limited', {
-                              used: coupon.redemptions,
-                              max: coupon.maxRedemptions,
-                            })}
-                      </span>
-                      {coupon.maxRedemptionsPerCustomer !== null && (
-                        <span className="text-xs text-muted-foreground">
-                          {t('commerceCoupons.perCustomerLimitLabel', {
-                            max: coupon.maxRedemptionsPerCustomer,
-                          })}
-                        </span>
-                      )}
-                      {(coupon.restrictedProductIds?.length ?? 0) > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          {t('commerceCoupons.restrictedLabel', {
-                            count: coupon.restrictedProductIds.length,
-                          })}
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {coupon.active ? t('commerceCoupons.active') : t('commerceCoupons.inactive')}
-                  </TableCell>
-                  <TableCell>
-                    {coupon.active && (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => void deactivate(coupon)}
-                      >
-                        {t('commerceCoupons.deactivate', { code: coupon.code })}
-                      </Button>
-                    )}
-                  </TableCell>
+        <>
+          <Field label={t('lists.search')}>
+            {(control) => (
+              <Input
+                {...control}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            )}
+          </Field>
+          {pager}
+          <TableRoot label={t('commerceCoupons.tableLabel')}>
+            <Table className="min-w-[48rem]">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>{t('commerceCoupons.codeColumn')}</TableHeader>
+                  <TableHeader>{t('commerceCoupons.kindColumn')}</TableHeader>
+                  <TableHeader>{t('commerceCoupons.valueColumn')}</TableHeader>
+                  <TableHeader>{t('commerceCoupons.redemptionsColumn')}</TableHeader>
+                  <TableHeader>{t('commerceCoupons.statusColumn')}</TableHeader>
+                  <TableHeader>{t('commerceCoupons.actionsColumn')}</TableHeader>
                 </TableRow>
-              ))}
-              {coupons.length === 0 && (
-                <TableEmpty colSpan={6}>{t('commerceCoupons.empty')}</TableEmpty>
-              )}
-            </TableBody>
-          </Table>
-        </TableRoot>
+              </TableHead>
+              <TableBody>
+                {page.items.map((coupon) => (
+                  <TableRow key={coupon.code}>
+                    <TableCell>{coupon.code}</TableCell>
+                    <TableCell>{t(`commerceCoupons.kind.${coupon.kind}`)}</TableCell>
+                    <TableCell>{describeValue(coupon)}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <span>
+                          {coupon.maxRedemptions === null
+                            ? t('commerceCoupons.unlimited', { used: coupon.redemptions })
+                            : t('commerceCoupons.limited', {
+                                used: coupon.redemptions,
+                                max: coupon.maxRedemptions,
+                              })}
+                        </span>
+                        {coupon.maxRedemptionsPerCustomer !== null && (
+                          <span className="text-xs text-muted-foreground">
+                            {t('commerceCoupons.perCustomerLimitLabel', {
+                              max: coupon.maxRedemptionsPerCustomer,
+                            })}
+                          </span>
+                        )}
+                        {(coupon.restrictedProductIds?.length ?? 0) > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {t('commerceCoupons.restrictedLabel', {
+                              count: coupon.restrictedProductIds.length,
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {coupon.active ? t('commerceCoupons.active') : t('commerceCoupons.inactive')}
+                    </TableCell>
+                    <TableCell>
+                      {coupon.active && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => void deactivate(coupon)}
+                        >
+                          {t('commerceCoupons.deactivate', { code: coupon.code })}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filteredCoupons.length === 0 && (
+                  <TableEmpty colSpan={6}>{t('commerceCoupons.empty')}</TableEmpty>
+                )}
+              </TableBody>
+            </Table>
+          </TableRoot>
+          {pager}
+        </>
       )}
 
       <Modal

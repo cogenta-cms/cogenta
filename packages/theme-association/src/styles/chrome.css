@@ -481,7 +481,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Two columns on a phone: an odd last group takes the whole row, not half of it. */
+.ca-footer__group:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 @media (min-width: 48rem) {
+  .ca-footer__group:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
   .ca-footer__nav[data-columns="1"] {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -1247,3 +1247,11 @@
     grid-column: 1 / span 8;
   }
 }
+
+/* French quotation marks: « guillemets » with a no-break space inside. */
+:lang(fr) .ca-quote__text,
+:lang(fr) .ca-story__quote,
+:lang(fr) .cg-widget__quote-text,
+:lang(fr) q {
+  quotes: "\00AB\00A0" "\00A0\00BB" "\201C" "\201D";
+}

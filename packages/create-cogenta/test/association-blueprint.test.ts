@@ -12,15 +12,12 @@ import {
   SITE_SETTINGS_SITE_SCOPE,
 } from '@cogenta/schema'
 import {
-  ASSOCIATION_DEMO_EVENTS,
-  ASSOCIATION_MEDIA_SPECS,
-  ASSOCIATION_MENUS,
-  ASSOCIATION_PROGRAMMES,
+  associationCopyFor,
+  associationMediaSpecs,
+  associationMenus,
+  associationSchema,
   buildAssociationDemoPages,
   DEFAULT_ASSOCIATION_NAME,
-  event,
-  page,
-  programme,
 } from '@cogenta/starters/blueprints/association'
 import {
   type PageContent,
@@ -31,7 +28,10 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
 
-// Fourteen bundled pictures through the real media pipeline, with WebP
+const copy = associationCopyFor('en')
+const { event, page, programme } = associationSchema(copy)
+
+// Fifteen bundled pictures through the real media pipeline, with WebP
 // variants: slower than vitest's default.
 const SCAFFOLD_TIMEOUT = 240_000
 
@@ -89,9 +89,9 @@ describe('scaffoldSite, association blueprint', () => {
   })
 
   it('seeds the menus, the settings and every bundled picture', () => {
-    expect(result.menusSeeded).toBe(ASSOCIATION_MENUS.header.length + 1)
+    expect(result.menusSeeded).toBe(associationMenus(copy).header.length + 1)
     expect(result.siteSettingsSeeded).toBeGreaterThanOrEqual(4)
-    expect(result.mediaSeeded).toBe(ASSOCIATION_MEDIA_SPECS.length)
+    expect(result.mediaSeeded).toBe(associationMediaSpecs(copy).length)
   })
 
   it('seeds the footer as columns, and a footer note with the site’s own email address', async () => {
@@ -112,7 +112,7 @@ describe('scaffoldSite, association blueprint', () => {
   it('seeds every programme and event published, dated in the future, with their pictures', async () => {
     await withDatabase(async (db) => {
       const events = await createContentStore({ db, collection: event }).list({ limit: 20 })
-      expect(events.items).toHaveLength(ASSOCIATION_DEMO_EVENTS.length)
+      expect(events.items).toHaveLength(copy.events.length)
       for (const entry of events.items) {
         expect(entry.status).toBe('published')
         expect(Date.parse(String(entry.values.date))).toBeGreaterThan(Date.now())
@@ -121,7 +121,7 @@ describe('scaffoldSite, association blueprint', () => {
         )
       }
       const programmes = await createContentStore({ db, collection: programme }).list({ limit: 20 })
-      expect(programmes.items).toHaveLength(ASSOCIATION_PROGRAMMES.length)
+      expect(programmes.items).toHaveLength(copy.programmes.length)
       for (const entry of programmes.items) {
         expect(entry.status).toBe('published')
         expect(typeof entry.values.coverImage).toBe('string')
@@ -134,7 +134,7 @@ describe('scaffoldSite, association blueprint', () => {
     await withDatabase(async (db) => {
       const pages = await createContentStore({ db, collection: page }).list({ limit: 20 })
       expect(pages.items.map((entry) => entry.values.slug).sort()).toEqual(
-        buildAssociationDemoPages({})
+        buildAssociationDemoPages(copy, {})
           .map((demo) => demo.slug)
           .sort(),
       )

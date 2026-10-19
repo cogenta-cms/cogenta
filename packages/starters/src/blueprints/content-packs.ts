@@ -1,4 +1,4 @@
-import { associationContentPack } from './association.js'
+import { associationContentPack, createAssociationContentPack } from './association.js'
 import { blogContentPack } from './blog.js'
 import type { BlueprintContentPack } from './content-pack.js'
 import { createDocumentationContentPack, documentationContentPack } from './documentation.js'
@@ -38,6 +38,7 @@ export const BLUEPRINT_CONTENT_PACKS: Readonly<Record<string, BlueprintContentPa
 const LOCALIZED_CONTENT_PACKS: Readonly<Record<string, (locale: string) => BlueprintContentPack>> =
   {
     vitrine: createVitrineContentPack,
+    association: createAssociationContentPack,
     documentation: createDocumentationContentPack,
     magazine: createMagazineContentPack,
     restaurant: createRestaurantContentPack,

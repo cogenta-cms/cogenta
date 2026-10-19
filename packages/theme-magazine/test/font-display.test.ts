@@ -13,10 +13,24 @@ import { describe, expect, it } from 'vitest'
 const STYLES = fileURLToPath(new URL('../src/styles', import.meta.url))
 
 const SHEETS = readdirSync(STYLES)
-  .filter((name) => extname(name) === '.css')
+  .filter((name) => extname(name) === '.css' && name !== 'fonts.css')
   .map((name) => ({ name, source: readFileSync(join(STYLES, name), 'utf8') }))
 
 const THEME = SHEETS.find((sheet) => sheet.name === 'theme.css')?.source ?? ''
+
+const FONTS_CSS = readFileSync(join(STYLES, 'fonts.css'), 'utf8')
+
+/** Every `@font-face` this theme declares, as family / style / weight (and stretch, when it has one). */
+const DECLARED = [...FONTS_CSS.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((match) => {
+  const body = match[1] ?? ''
+  const field = (name: string) => new RegExp(`${name}:\\s*([^;]+);`).exec(body)?.[1]?.trim()
+  return {
+    family: field('font-family')?.replaceAll("'", ''),
+    style: field('font-style'),
+    weight: field('font-weight'),
+    stretch: field('font-stretch'),
+  }
+})
 
 describe('web fonts', () => {
   it('never imports a font without font-display: swap', () => {
@@ -28,19 +42,25 @@ describe('web fonts', () => {
     expect(offenders).toEqual([])
   })
 
-  it("requests exactly this theme's three families, in one request", () => {
-    expect([...THEME.matchAll(/@import\s+url\(/g)]).toHaveLength(1)
-    const families = [...THEME.matchAll(/family=([A-Za-z+0-9]+)/g)].map((match) => match[1])
-    expect(families.sort()).toEqual(['Fraunces', 'Libre+Franklin', 'Source+Serif+4'])
+  it('declares exactly Fraunces, Libre Franklin and Source Serif 4, from the site itself', () => {
+    expect(DECLARED.length).toBeGreaterThan(0)
+    expect(FONTS_CSS).not.toMatch(/googleapis|gstatic|@import/i)
+    const families = [...new Set(DECLARED.map((face) => face.family))].sort()
+    expect(families).toEqual(['Fraunces', 'Libre Franklin', 'Source Serif 4'])
   })
 
-  it("asks for Fraunces's whole optical-size axis, and no Fraunces italic", () => {
-    expect(THEME).toMatch(/family=Fraunces:opsz,wght@9\.\.144,/)
-    expect(THEME).not.toMatch(/family=Fraunces:ital/)
-  })
-
-  it('asks for Source Serif 4 with its optical sizes and its italic, which standfirsts use', () => {
-    expect(THEME).toMatch(/family=Source\+Serif\+4:ital,opsz,wght@0,8\.\.60,[^;&]*;1,8\.\.60,/)
+  it('declares the weights, the italics and the width the stylesheets use', () => {
+    const wanted = [
+      { family: 'Fraunces', style: 'normal', weight: '300 800' },
+      { family: 'Libre Franklin', style: 'normal', weight: '400 800' },
+      { family: 'Source Serif 4', style: 'normal', weight: '400 700' },
+      { family: 'Source Serif 4', style: 'italic', weight: '400 600' },
+    ]
+    for (const face of wanted) {
+      expect(DECLARED, `${face.family} ${face.style} ${face.weight}`).toContainEqual(
+        expect.objectContaining(face),
+      )
+    }
   })
 
   it('imports no font file from a stylesheet other than the entry point', () => {

@@ -68,14 +68,14 @@ describe('the default skin', () => {
     expect(contrast(tokens.color.accent, tokens.color.bg)).toBeGreaterThanOrEqual(7)
   })
 
-  it('names the Google Fonts families this theme loads, with a real system fallback', () => {
+  it('names the web font families this theme ships, with a real system fallback', () => {
     expect(tokens.font.serif.startsWith("'Literata'")).toBe(true)
     expect(tokens.font.serif).toMatch(/serif$/)
     expect(tokens.font.sans.startsWith("'Figtree'")).toBe(true)
     expect(tokens.font.sans).toMatch(/system-ui/)
-    const theme = readFileSync(new URL('../src/styles/theme.css', import.meta.url), 'utf8')
-    expect(theme).toContain('family=Literata:ital,opsz,wght@')
-    expect(theme).toContain('family=Figtree:')
+    const fonts = readFileSync(new URL('../src/styles/fonts.css', import.meta.url), 'utf8')
+    expect(fonts).toContain("font-family: 'Literata'")
+    expect(fonts).toContain("font-family: 'Figtree'")
   })
 
   it('names none of the typefaces generated templates reach for first', () => {

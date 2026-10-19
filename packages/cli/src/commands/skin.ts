@@ -214,6 +214,7 @@ async function runGenerateSkin(options: SkinOptions): Promise<number> {
       model: loaded.config.llm.model,
       description: options.description,
       blueprintLabel: loaded.config.site.name,
+      remoteWebFonts: loaded.config.appearance.remoteWebFonts,
     })
 
     if (!result.ok) {

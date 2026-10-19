@@ -16,16 +16,16 @@
  * Not one colour is written literally in any of them: every value comes from
  * a skin token or from a `--cr-*` property composed from those.
  *
- * The one thing this file adds on its own is the Google Fonts request for the
+ * The one thing this file adds on its own is the self-hosted `fonts.css` faces for the
  * two families the skin names: Cormorant Garamond (display, upright and
  * italic, 300 to 700) and Karla (text, upright and italic, 200 to 800). A
  * skin only names a family; it never fetches one. Both fall back to a real
- * system stack if Google Fonts is unreachable, and `display=swap` keeps text
+ * system stack if a face fails to load, and `display=swap` keeps text
  * visible while they load. `cogenta serve` hoists this `@import` above the
  * skin's rules.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=Karla:ital,wght@0,200..800;1,200..800&display=swap");
+@import "./fonts.css";
 
 @import "./tokens.css";
 @import "./base.css";

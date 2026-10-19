@@ -85,6 +85,7 @@ describe('theme isolation', () => {
       'styles/article.css',
       'styles/base.css',
       'styles/blocks.css',
+      'styles/fonts.css',
       'styles/stories.css',
       'styles/theme.css',
       'styles/tokens.css',
@@ -101,13 +102,12 @@ describe('theme isolation', () => {
     })
   }
 
-  it('loads its fonts only from the one host every theme may reach', () => {
-    const imports = STYLESHEETS.flatMap(({ source }) =>
-      [...source.matchAll(/@import\s+url\(["']([^"']+)["']\)/g)].map((match) => match[1] as string),
-    )
-    expect(imports.length).toBeGreaterThan(0)
-    for (const url of imports) {
-      expect(url.startsWith('https://fonts.googleapis.com/')).toBe(true)
+  it('loads its fonts from the site itself, never from a remote host', () => {
+    const theme = STYLESHEETS.find(({ path }) => path === 'styles/theme.css')?.source ?? ''
+    expect(theme).toMatch(/@import\s+"\.\/fonts\.css"\s*;/)
+    for (const { path, source } of STYLESHEETS) {
+      expect(source, path).not.toMatch(/googleapis|gstatic/i)
+      expect(source, path).not.toMatch(/@import\s+(?:url\()?\s*["']?(?:https?:)?\/\//i)
     }
   })
 
@@ -115,6 +115,7 @@ describe('theme isolation', () => {
     const theme = STYLESHEETS.find(({ path }) => path === 'styles/theme.css')?.source ?? ''
     const local = [...theme.matchAll(/@import\s+"([^"]+)";/g)].map((match) => match[1])
     expect(local).toEqual([
+      './fonts.css',
       './tokens.css',
       './base.css',
       './stories.css',

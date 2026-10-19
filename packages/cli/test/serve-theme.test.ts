@@ -279,7 +279,9 @@ describe('POST /api/theme/activate — a theme with its own typography and colou
 
     const css = await (await fetch(`${server.base}/_cogenta/styles.css`)).text()
     expect(css).toContain("'Cormorant Garamond'")
-    expect(css).toContain('https://fonts.googleapis.com/css2?family=Cormorant+Garamond')
+    // The face comes from the site itself, never from a font provider.
+    expect(css).toContain('/_cogenta/fonts/restaurant/cormorant-garamond-normal-latin-')
+    expect(css).not.toContain('fonts.googleapis.com')
 
     await server.stop()
   }, 60_000)
@@ -298,7 +300,9 @@ describe('POST /api/theme/activate — a theme with its own typography and colou
 
     const css = await (await fetch(`${server.base}/_cogenta/styles.css`)).text()
     expect(css).toContain('#1d4ed8')
-    expect(css).not.toContain("'Cormorant Garamond'")
+    // The theme still declares its own faces (they are part of its layout
+    // package), but the site's skin keeps naming the site's own typefaces.
+    expect(css).not.toMatch(/--cogenta-font-[a-z]+:[^;]*Cormorant/)
 
     await server.stop()
   }, 60_000)

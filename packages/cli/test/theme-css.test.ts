@@ -97,15 +97,12 @@ describe('the theme stylesheet cogenta serve actually sends', () => {
     expect(sheet).toContain('.cg-archive__pager')
     expect(sheet).toContain('.cg-comment__meta')
     // No relative import is left unresolved: that would be a second request
-    // for a file the page cannot reach. Since L27 the canonical theme loads its
-    // two web fonts, so exactly one import remains, and it is the remote
-    // Google Fonts request the page head preconnects to.
-    const imports = [...sheet.matchAll(/@import\s+url\(["']?([^"')]+)["']?\)/g)].map(
-      (match) => match[1],
-    )
-    expect(imports).toHaveLength(sheet.match(/@import/g)?.length ?? 0)
-    expect(imports).toHaveLength(1)
-    expect(imports[0]).toMatch(/^https:\/\/fonts\.googleapis\.com\/css2\?family=Instrument\+Sans/)
+    // for a file the page cannot reach. Since the fonts are self-hosted the
+    // canonical theme has no import left at all — not even a remote one — and
+    // declares its faces from the site's own `/_cogenta/fonts/` route.
+    expect(sheet).not.toContain('@import')
+    expect(sheet).toContain('@font-face')
+    expect(sheet).toContain('/_cogenta/fonts/canonical/')
   })
 
   it('sends the design system, not just the skin variables it is built from', async () => {
@@ -117,12 +114,11 @@ describe('the theme stylesheet cogenta serve actually sends', () => {
     expect(css).toContain('color-scheme:')
   })
 
-  it("keeps a theme's web font import first, where a browser still honours it", async () => {
-    const theme = (await loadThemeCss(
-      { read: (url) => readFile(url, 'utf8') },
-      '@cogenta/theme-saas',
-    )) as string
-    expect(theme).toContain('@import url("https://fonts.googleapis.com/')
+  it("keeps a third-party theme's web font import first, where a browser still honours it", () => {
+    // A theme Cogenta does not ship may still `@import` a remote font; that
+    // keeps working (this is about what Cogenta ships, not what a site installs).
+    const theme =
+      '@import url("https://fonts.googleapis.com/css2?family=Lora&display=swap");.a{color: red}'
     const joined = joinStyles(':root{--cogenta-color-bg: #fff}', theme) as string
     // CSS drops any @import that follows another rule, so the font never loads.
     expect(joined.startsWith('@import url("https://fonts.googleapis.com/')).toBe(true)

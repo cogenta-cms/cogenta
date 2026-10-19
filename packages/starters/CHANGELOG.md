@@ -1,5 +1,270 @@
 # @cogenta/starters
 
+## 0.4.0
+
+### Minor Changes
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`834c4b4`](https://github.com/cogenta-cms/cogenta/commit/834c4b4c9d26b7708b6aa00e9759a7130edaa881) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Write the association blueprint in French and in English, and replace its AI-generated photographs with real, credited ones.
+  
+  The charity site was English-only, so a French site got an English food bank. It now ships
+  two complete versions, the way `vitrine` does: `contentPackFor('association', 'fr')` returns
+  a French association loi 1901 (membership, general assembly, tax receipts at 66 %, a legal
+  notice, French addresses and a telephone number from the range reserved for fiction), and any
+  other locale the English charity (Gift Aid, trustees, a charity number). Collections, labels
+  and routes follow the language (`/nos-actions/…` and `/agenda/…` in French, `/what-we-do/…` and
+  `/events/…` in English), as do the demo content, the menus, the widgets, the footer and the
+  alternative text of every picture. French typography is applied once when the pack is built:
+  no-break spaces before `: ; ? !`, `%` and `€`, inside times and telephone numbers.
+  
+  The eight photographs generated at L25 depicted nothing real; they are replaced with nine real
+  photographs from Wikimedia Commons, each under CC0, the public domain or CC BY, none showing a
+  person presented as a volunteer or a beneficiary (the testimonial no longer carries a portrait).
+  A seeded "Photo credits" page, in both languages and linked from the footer, lists the author,
+  licence and source of every file (`association-credits.ts`). French partner wordmarks were
+  drawn for the French site. The old blueprint-level exports (`ASSOCIATION_PROGRAMMES`,
+  `buildAssociationDemoPages(media)`, …) take a copy: use `associationCopyFor(locale)` and the
+  `associationSchema`, `associationMenus`, `associationWidgets` and `associationMediaSpecs`
+  builders; `associationContentPack` is still the English pack.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`1438b68`](https://github.com/cogenta-cms/cogenta/commit/1438b68e37d29a0b798f8849382f75bf6de9f07c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `blog` blueprint now ships in French as well as English. A site scaffolded with a French locale gets essays, letters, pages, menus, widgets, settings, photo alt text and the photo-credits page written in French (set in Toulouse and Montauban rather than translated from Leeds and York), with French typography, French public paths (`/categorie/…`, `/etiquette/…`, `/a-propos`, `/credits-photo`) and French term labels. `contentPackFor('blog', locale)` picks the language, `createBlogContentPack(locale)` and `blogCopyFor` are new, and the existing English exports are unchanged.
+
+- [`95fdc8d`](https://github.com/cogenta-cms/cogenta/commit/95fdc8df7d3105bcfdcae7ab060246866a78dae9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give the `blog` blueprint a `topic` field and a carousel section, to exercise the blog theme's new listing forms.
+  
+  `post` gains an optional plain-text `topic` field (mirroring the `magazine` blueprint's
+  own `kicker` field), populated on the ten demo posts, so `@cogenta/theme-blog`'s new
+  small-caps topic label shows real content on a scaffolded site rather than staying
+  empty. The home page gains a `carousel`-layout `collectionList` ("A few more essays"),
+  since nothing in the blueprint previously used that layout — the blog theme's new
+  `strip` form had no demo content to render.
+
+- [`afa9229`](https://github.com/cogenta-cms/cogenta/commit/afa9229126640355f3034d0d662cc4f3097a8d95) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give every blog essay its own photograph, closing the gap with theme-magazine's density.
+  
+  Only 4 of the 10 demo posts carried a cover, so the same four photographs kept
+  reappearing across the front page (the hero, a listing card, a carousel item), while
+  three full essays had no image at all — visibly sparser than `@cogenta/theme-magazine`'s
+  own demo content, where every story is illustrated. Two new real, credited photographs
+  (a pair of hands typing on a laptop, a small public library's facade — both CC0/CC BY,
+  sourced the same way as the existing five) plus the one already-bundled but unused
+  `pour-over.jpg` now cover the three remaining essays, so all seven full essays carry
+  their own distinct photograph and none is reused. The three "Letter:" posts stay
+  text-only by design — a personal letter isn't a produced piece the way an essay is, so
+  this isn't "every post gets a photo" but "every post that would have one only once."
+
+- [`dea8093`](https://github.com/cogenta-cms/cogenta/commit/dea809374a43c1b2328858e2e190e27f7d5651ff) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Replace the blog blueprint's AI-generated cover photos with real, credited ones.
+  
+  The five photographs `photo-assets.ts` bundled for the `blog` blueprint at L25 were
+  generated once via Replicate — convincing at a glance, but depicting nothing real, with
+  no verifiable licence today (the key that generated them no longer exists). They are
+  replaced with five real photographs from Wikimedia Commons and Flickr, each under CC0,
+  the public domain, or a Creative Commons Attribution licence (never ShareAlike, never
+  NonCommercial) — the same discipline `@cogenta/theme-entreprise`'s `vitrine` blueprint
+  already keeps for its own twenty-two photographs.
+  
+  A new seeded "Photo credits" page (`blog-credits.ts`, linked from the footer) lists the
+  title, author, licence and source of every photograph, satisfying attribution licences
+  without inventing a second crediting mechanism. Alt text for all five images is rewritten
+  to describe what the new photographs actually show.
+
+- [`8f85628`](https://github.com/cogenta-cms/cogenta/commit/8f856289c373b75ba754e06aa615e352797fcd2e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Let a site publish the content it was scaffolded with. Nothing could.
+  
+  Every one of the nine blueprints shipped at least one collection that no role
+  could publish — and on all nine, one of them was `page`. A person who created
+  a page on a fresh Cogenta site got a status control offering only "Draft", no
+  publish button, and `403 — collection "page" grants "publish" to no role` from
+  the API. Nineteen collections in total: the shared `page` on all nine, plus
+  every collection of `vitrine` (solution, case study, testimonial, job, post),
+  `saas` (feature, changelog), `association` (event, programme) and
+  `documentation` (doc page).
+  
+  `CollectionPermissions` is a `Partial<Record<ContentAction, …>>`, and an action
+  nobody declares normalises to `{ roles: [], own: false }` — nobody, admin
+  included. That is the right default for a permission system, and it is exactly
+  why the compiler was no help: omitting `publish` is a perfectly well-typed way
+  to ship a collection whose content can never go live. The six collections that
+  did work were right by vigilance, not by construction.
+  
+  It stayed invisible because seeded demo content is written straight into the
+  store, bypassing the permission layer entirely: every demo site looked
+  complete, and only the first hand-written entry hit the wall.
+  
+  `test/blueprint-permissions.test.ts` now walks every blueprint we ship and
+  fails on any collection missing any of the five actions, so forgetting one on
+  a new blueprint is a failing test rather than a site nobody can use. The
+  `vitrine` blueprint's permission constant is split in two along the way: it was
+  shared with a taxonomy, and `publish` has no meaning on a term — which is how
+  one omission spread across six collections.
+
+- [`c10f21f`](https://github.com/cogenta-cms/cogenta/commit/c10f21f90482ea06636ca8b44ae76222aabfdafe) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give every shipped blueprint drafts and version history.
+  
+  Of the twenty-five publishable collections the nine blueprints ship, exactly
+  one declared `versioning` — `blog`'s `post`. The other twenty-four had
+  neither half, and both halves live in that one object, so a single omission
+  produced two separate failures on every other site:
+  
+  - **No drafts.** Every save of a published entry went straight to the public
+    page. There was no such thing as an unpublished edit: opening a live
+    article, fixing a sentence and pressing save published it, with nothing to
+    review and no way back but another edit.
+  - **No history.** The store keeps a bare minimum of two versions without it,
+    so the admin's History tab — which is shown on every saved entry, of every
+    collection — could hold at most two, and restoring an older one evicted it.
+  
+  Both stay opt-in in the contract, deliberately: unlimited history is a slow
+  leak, and a collection that genuinely wants neither should be able to say so.
+  What was not deliberate is twenty-four shipped collections silently not
+  asking.
+  
+  A test now walks every blueprint and fails on a publishable collection
+  missing either half, the same guard the `publish` permission got.
+  
+  Verified against a freshly scaffolded magazine site: editing a published
+  article left the public page untouched until `publish`, which then showed the
+  edit; six versions were kept across six writes where two would have been.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`8dbb497`](https://github.com/cogenta-cms/cogenta/commit/8dbb497cc8d3ba0445011db03c52695c40c74ece) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `documentation` blueprint is now written in French as well as English.
+  
+  A site whose default locale is French (`fr`, `fr-FR`, ...) is seeded with the French
+  documentation: thirteen pages with French headings, sections and slugs
+  (`/docs/demarrage-rapide`, `/docs/verifier-les-signatures`, ...), a French home page,
+  menus, footer, widgets and site settings. Commands, configuration keys, API names and
+  terminal output stay in English, as in the French documentation of any developer tool;
+  the comments inside code examples are translated. French typography is applied to the
+  prose (narrow no-break spaces before `; ? ! %`, a no-break space before `:`, « guillemets »).
+  `contentPackFor('documentation', locale)` picks the language; `documentationContentPack`
+  remains the English pack. The delivery-flow diagram is redrawn in two language variants
+  (`delivery-flow-fr.png`, `delivery-flow-en.png`, no gradient, readable at phone width);
+  the blueprint still bundles no photograph. New exports: `createDocumentationContentPack`,
+  `documentationCopyFor`, `documentationMediaSpecs`. The `summary` field of `doc_page` no
+  longer carries an English `admin.label`, so the admin shows its translated name.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`8575eea`](https://github.com/cogenta-cms/cogenta/commit/8575eea9b935e52b76b72e211fe1ebd94b049637) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Write the `magazine` blueprint in French as well as English, and replace its AI-generated photographs with real, credited ones.
+  
+  `contentPackFor('magazine', locale)` now returns a French magazine for any `fr*` locale: *Le Courrier du Port* (or whatever name the person gave) covering Belmarais, a fictional mid-sized city, with eighteen articles in four rubriques, twelve bylined writers, a front page, an « À propos » page, subscription plans in euros, a charter and corrections page, and widgets, menus and settings in French — French typography included (no-break spaces before `: ; ? !` and inside times and amounts, « guillemets », no « de Le » when the site's name starts with an article). The English magazine is unchanged apart from its photographs, and `magazineContentPack`, `buildMagazineDemoPages` and the other existing exports keep working and still return the English one. The schema, the routes and the slugs of the collections are the same in both languages; the new `createMagazineContentPack(locale)` and `magazineCopyFor(locale)` pick the words.
+  
+  The twelve photographs under `assets/photos/magazine/` are real, from Wikimedia Commons under CC0, the public domain or CC BY (author, licence and source page in `magazine-credits.ts`, also rendered on a seeded « Crédits photographiques » / "Photo credits" page linked from the footer). Each article's lead credit now names its real photographer instead of a fictional one. The `excerpt` and `frontPage` fields no longer carry an English `admin.label`: the administration names them in the reader's language.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`7554505`](https://github.com/cogenta-cms/cogenta/commit/755450563c6af30ba91375c03967be397d42cbcb) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `portfolio` blueprint is now an independent photography studio, written in French and in English, on twenty-eight real photographs.
+  
+  A site scaffolded with `defaultLocale: 'fr'` gets French content, French addresses (`/projets/…`, `/collaborateurs/…`), a Lyon address and euro prices; any other locale gets the English site, as before (`portfolioContentPack` is still the English pack, and `contentPackFor('portfolio', locale)` picks by locale). The collection and taxonomy names the project page labels its fact sheet with follow the language. French text is set with no-break spaces before `: ; ? ! » € %` and inside thousands.
+  
+  The seven projects (a lagoon, a vineyard, a fishing harbour, a forest under snow, a glacier, a cliff path, a valley of stone towers) replace the drawn design work, and each is a case study of 310 to 380 words. Every photograph comes from Wikimedia Commons under CC0, the public domain or CC BY, is credited on a seeded "Photo credits" page linked from the footer, and is recorded in `portfolio-credits.ts`.
+  
+  If you imported the old `PORTFOLIO_DEMO_PROJECTS`, `PORTFOLIO_DEMO_DISCIPLINES`, `PORTFOLIO_DEMO_TEAM`, `PORTFOLIO_MEDIA_SPECS`, `PORTFOLIO_MENUS`, `PORTFOLIO_WIDGETS` or `PORTFOLIO_SITE_SETTINGS` constants, or called `buildPortfolioDemoPages(options)`, read them from `portfolioCopyFor(locale)` and the new `portfolioMediaSpecs`, `portfolioMenus`, `portfolioWidgets` and `portfolioSiteSettings` functions instead; the page builders now take the copy as their first argument.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`de95623`](https://github.com/cogenta-cms/cogenta/commit/de9562393b763aa1776427abab8a4c7cf8ddeb67) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Write the `restaurant` blueprint in French and in English, with real, credited photographs.
+  
+  A French site used to get an English restaurant: the menu, the pages, the menus and the
+  footer all in English, the sections of the menu stored as `Starters` and `Mains`. The
+  blueprint now ships both languages, written rather than translated, the way `vitrine`
+  does. `contentPackFor('restaurant', 'fr-FR')` returns the French pack (`createRestaurantContentPack(locale)`),
+  and every other locale the English one, which `restaurantContentPack` still exports
+  unchanged. A French site gets French addresses (`/carte/…`, `/salon-prive`,
+  `/mentions-legales`), a menu filed under `Entrées`, `Plats`, `Fromages et desserts` and
+  `Vins au verre`, the telephone as `04 78 28 16 42`, hours as `12 h à 13 h 45`, prices as
+  `12 €`, and French typography: a non-breaking space inside a time, before a currency sign
+  and before `:` `;` `?` `!`, so a line never breaks inside `13 h 45`. The copy lives in
+  `restaurant-copy.ts` (types), `restaurant-copy-fr.ts` and `restaurant-copy-en.ts`; a
+  missing sentence in one language is a type error, not a blank on a page.
+  
+  The fiction moved with the photograph of its dining room: the restaurant now occupies the
+  former offices of a silk merchant in rue Burdeau, in a room of green panelling and
+  bookcases, and the menu follows the photographs (cod in a vin jaune sauce, duck leg
+  confit, wild mushroom risotto, pike quenelle, apple and pink praline cake) instead of the
+  other way round. The menu keeps its nineteen dishes and wines.
+  
+  The nine AI-generated photographs `photo-assets.ts` bundled at L25 are replaced by
+  thirteen real ones from Wikimedia Commons under CC0, the public domain or Creative
+  Commons Attribution: the room, ten dishes cropped to the theme's 4:5, the street and a
+  market stall. A seeded "Photo credits" page (`restaurant-credits.ts`, linked from the
+  footer and the legal notice, in both languages) lists the author, licence and source of
+  each. The field labels the blueprint used to declare in English (`admin.label`) are
+  removed: the administration translates them from its own dictionaries.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`8eeb160`](https://github.com/cogenta-cms/cogenta/commit/8eeb16021bd1a627bc2e4620f2d304ac2511e67c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Write the `saas` blueprint in French as well as English, with real photographs and drawn interface screenshots in both languages.
+  
+  A French site (`fr`, `fr-FR`, `fr-CA`, ...) now scaffolds a site written in French rather than a
+  translated one: the collections are routed `/fonctionnalites/…` and `/nouveautes/…`, the pages are
+  `produit`, `tarifs`, `securite`, `entreprise`, `mentions-legales` and the rest, prices are in euros,
+  the company is based in Paris with an office in Montreal, the ERPs are the ones a French buyer
+  runs (Sage X3, Cegid), and the legal notice and privacy policy follow French law (RGPD, CNIL).
+  `contentPackFor('saas', locale)` picks the language, the way `vitrine` does; the English
+  `saasContentPack` export and every English export of `saas.ts` stay as they were. The new
+  `createSaasContentPack(locale)`, `saasCopyFor`, `saasSchema`, `saasMenus`, `saasFooter`,
+  `saasWidgets`, `saasSiteSettings` and `saasMediaSpecs` expose each part for one language.
+  
+  The product screenshots (the approvals queue, the policy editor, the audit log, the ERP
+  connection, sign-in and provisioning, the time-to-approve report, the API settings) are drawn as HTML
+  and rendered to PNG in English and in French, with invented data and no gradient
+  (`scripts/saas-assets/`); the French customers' wordmarks are drawn the same way. The portrait of
+  the quoted customer is gone: a fictional person gets no photograph. Three real photographs per
+  language (a data-centre room, and the two cities where the company has offices) come from
+  Wikimedia Commons under CC0 or CC BY, and a seeded "Photo credits" page, linked from the footer,
+  lists their author, licence and source.
+  
+  The `feature` and `changelog` fields no longer carry an English `admin.label`, so the administration
+  labels them through its own dictionaries. The screenshot files are renamed `<name>-en.png` and
+  `<name>-fr.png`.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`2799ab6`](https://github.com/cogenta-cms/cogenta/commit/2799ab64368b2694e7b7822f477d033980aec0e0) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Write the `store` blueprint in French and in English, with real, credited photographs.
+  
+  `contentPackFor('store', locale)` now returns the French shop for any `fr*` locale, as it
+  already does for `vitrine`: the product and category routes (`/boutique/…`,
+  `/categorie/…`), the names the administration shows, the menus, the widgets, the
+  settings and every word of demo content are written in French, not translated at
+  render time. The French is set with French typography (no-break spaces before `:` `;`
+  `?` and before a unit, apostrophes and thousands separators as a French reader expects),
+  and the shop's address, telephone number, VAT rate, withdrawal period, legal guarantee
+  and mediation notice follow French consumer law. `storeContentPack` stays the English
+  pack, so nothing that imports it changes; `storeCopyFor`, `storeSchema`, `storeMenus`,
+  `storeWidgets`, `storeSiteSettings`, `storeMediaSpecs` and `createStoreContentPack` are
+  new exports.
+  
+  The shop is now a small one in Lyon, and the catalogue was rewritten around the
+  photographs that honestly exist: a cast-iron skillet, an enamel mug, a stovetop coffee
+  maker, a copper jam pan, a stoneware vase, a turned wooden bowl, Aleppo soap, a
+  crocheted throw, a travel bag, a wallet, boots and a sweater, in three departments
+  (kitchen, homeware, wear and carry). Fourteen real photographs from Wikimedia Commons
+  (CC0, public domain or CC BY, never ShareAlike or NonCommercial) replace the
+  AI-generated ones, with no brand, logo or recognisable person in any of them. A seeded
+  "Photo credits" page (`store-credits.ts`, linked from the footer, in both languages)
+  lists the title, author, licence and source of every file.
+  
+  Breaking for a caller that read the old English constants: the products are now typed
+  `StoreProductCopy`, the third department is "Wear and carry", and the product's
+  `category` select holds the department's name in the site's language.
+
+### Patch Changes
+
+- [`797d8e8`](https://github.com/cogenta-cms/cogenta/commit/797d8e8d1397d4fe3236689db88ac1d92a3b5c2d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Stop writing English field labels into the schemas the blueprints scaffold.
+  
+  Nine fields — `topic`, `kicker`, `discipline`, `icon`, `orderLink` and the
+  four SEO ones — shipped an English `admin.label` and `admin.help`, so a French
+  site's entry form read "Topic", "SEO title", "Hide from search engines". The
+  admin names them instead, in whichever language the person looking at them
+  chose (ADR-0019 makes that a preference of the person, which a label written
+  into a schema file at scaffold time cannot follow).
+  
+  Four labels stay, deliberately: a portfolio's `summary` is a **Statement** and
+  a SaaS feature's `coverImage` is a **Screenshot**. There the blueprint is not
+  repeating what the field is, it is giving a generic field its own word, and a
+  dictionary keyed by field name would flatten it.
+  
+  A site already scaffolded keeps the labels in its own `cogenta.schema.*`,
+  which is still the first thing the admin reads. Nothing changes for it unless
+  those lines are removed by hand.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Provide authored home meta descriptions for Blog and Vitrine in their existing SEO fields. Use second-level Notes headings in the blog demo essays while preserving headings authored by users.
+  
+  Serve a neutral fallback favicon on fresh sites. Configured favicon media remains first priority, takes effect immediately and uses revalidatable redirects from the browser fallback URL.
+- Updated dependencies [[`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba), [`8c894db`](https://github.com/cogenta-cms/cogenta/commit/8c894dba796f01b589f151537ba24490fe668aae), [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`5bdb9f4`](https://github.com/cogenta-cms/cogenta/commit/5bdb9f4dff7529f303ec38940d79e0e59452b502), [`9a0cff5`](https://github.com/cogenta-cms/cogenta/commit/9a0cff523622e5649869398c2fbf1f31f0521785), [`d1df23d`](https://github.com/cogenta-cms/cogenta/commit/d1df23d88dee1a60ffa02e4e9b48525c7894257a), [`f0ae47b`](https://github.com/cogenta-cms/cogenta/commit/f0ae47b43d6af765d7142fda176d79c7c82ee4b9), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`c44b988`](https://github.com/cogenta-cms/cogenta/commit/c44b9882247c7d0b0a12f1492930af06428408f2), [`8b7f6aa`](https://github.com/cogenta-cms/cogenta/commit/8b7f6aa826eebf14a1e859ab61d4a365bccb25ba), [`9cbd623`](https://github.com/cogenta-cms/cogenta/commit/9cbd623fa7898f276d82c72f2467aa8f5ee39785), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`99c21a0`](https://github.com/cogenta-cms/cogenta/commit/99c21a0ac93a49064b77cf9ba08cfe15815f1782), [`8bbcc4f`](https://github.com/cogenta-cms/cogenta/commit/8bbcc4ff883051241cbf06f65b59458ecb7d9f57), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`276a22e`](https://github.com/cogenta-cms/cogenta/commit/276a22e6e06f2110191c872f11bb6a0b0ab80e4e), [`ccf489d`](https://github.com/cogenta-cms/cogenta/commit/ccf489d67a1ba81b4f0aa5ccbbcecc30f671f1d6), [`ea2d505`](https://github.com/cogenta-cms/cogenta/commit/ea2d505c2204996eed5737596de7863dd5eda188), [`0bd4e72`](https://github.com/cogenta-cms/cogenta/commit/0bd4e72d937d0b522315a401225dd4741508fd50), [`38ff019`](https://github.com/cogenta-cms/cogenta/commit/38ff0195daf6e0d5e0f118b33363df6b8733809b), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab)]:
+  - @cogenta/schema@0.11.0
+  - @cogenta/core@0.13.0
+  - @cogenta/api@2.11.0
+  - @cogenta/render@0.6.0
+  - @cogenta/theme-kit@0.7.2
+  - @cogenta/blocks@1.1.7
+  - @cogenta/widgets@0.2.7
+
 ## 0.3.0
 
 ### Minor Changes

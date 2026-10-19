@@ -1,5 +1,57 @@
 # @cogenta/theme-portfolio
 
+## 1.4.0
+
+### Minor Changes
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Ship the fonts with the theme instead of fetching them from Google.
+  
+  Every theme loaded its typefaces with an `@import` to `fonts.googleapis.com`, which sent
+  the IP address of every visitor to Google before any consent — a practice the regional
+  court of Munich held unlawful under the GDPR (LG München I, 20 January 2022, 3 O 17493/20).
+  
+  Each theme package now carries its faces in `fonts/` (WOFF2, Latin and Latin Extended
+  subsets, variable fonts where the family has one, SIL Open Font License text and a
+  `README.md` next to the files) and declares them in `src/styles/fonts.css`, which
+  `theme.css` imports where the remote `@import` used to be. The families, weights, widths
+  and italics are exactly the ones each theme asked Google for, so the typography does not
+  change: before and after screenshots of the entreprise, blog and magazine themes are
+  identical pixel for pixel.
+  
+  The `@font-face` rules point at `/_cogenta/fonts/<theme>/<file>`, which `cogenta serve`
+  (`@cogenta/cli`) answers from the package. **Update `@cogenta/cli` with the theme**: an
+  older `cogenta serve` does not know that route and the page falls back to the next family
+  of its font stack. The package now publishes `fonts/` and exports `./fonts/*.woff2` and
+  `./fonts/manifest.json`.
+
+### Patch Changes
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Improve built-in admin status contrast in light mode, keep documentation headers and long titles within narrow viewports, give search landmarks contextual names, and enlarge portfolio fact links for touch interaction.
+
+- [`cf158d8`](https://github.com/cogenta-cms/cogenta/commit/cf158d838033f7f2e54d7a16ae1b924d3a92b669) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Give a logo that links out the organisation's name as the link's own name.
+  
+  Contract B says of the `logos` block's `name` field: "It is also the accessible
+  name of the link." Every theme passed it to `image()` as `altFrom`, which is
+  only the fallback used when the media library has no alt text of its own. For a
+  logo that did have one — the ordinary case — the name was dropped, and the
+  link's accessible name became the alt text of the picture inside it: a link to
+  a farm announcing itself as "A pear poached dark red in Beaujolais". That is a
+  WCAG 2.4.4 failure, and the row of logos was unusable by anyone listening to it.
+  
+  The link now carries the name. Nothing changes visually, and an unlinked logo
+  keeps the documented fallback behaviour.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`5d1b9f8`](https://github.com/cogenta-cms/cogenta/commit/5d1b9f84d441b992dbd24f518ab003d2f60af6fe) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The theme's description now says it suits an independent studio in
+  photography or design, as its sample site is now a photography studio.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`9d7dae4`](https://github.com/cogenta-cms/cogenta/commit/9d7dae4eda8fd1664cc61ecb4b63f04257551667) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Speak French on a French page, down to the quotation marks.
+  
+  The quote block and the quote widget used English curly quotes whatever the language of the page. On a page whose language is French they now open with `«` and close with `»`, each with a no-break space inside, as French typography asks. The "Primary" and "Footer" names that a screen reader announces for the header and footer navigation are now "Navigation principale" and "Pied de page" there. Pages in other languages are unchanged.
+- Updated dependencies [[`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`5bdb9f4`](https://github.com/cogenta-cms/cogenta/commit/5bdb9f4dff7529f303ec38940d79e0e59452b502), [`9cbd623`](https://github.com/cogenta-cms/cogenta/commit/9cbd623fa7898f276d82c72f2467aa8f5ee39785), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab)]:
+  - @cogenta/render@0.6.0
+  - @cogenta/theme-kit@0.7.2
+  - @cogenta/blocks@1.1.7
+
 ## 1.3.7
 
 ### Patch Changes

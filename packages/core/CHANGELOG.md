@@ -1,5 +1,36 @@
 # @cogenta/core
 
+## 0.13.0
+
+### Minor Changes
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Add `appearance.remoteWebFonts` to the site configuration (default `false`).
+  
+  Off, no visitor's address is sent to a font provider: skins use the families the built-in
+  themes bundle and a family outside that set falls back to the next one of its stack. On, a
+  skin may use the wider Google Fonts catalogue at the price of a request to Google before
+  any consent, which must then be disclosed (and, depending on your legal analysis,
+  consented to). It is read as `config.appearance.remoteWebFonts` on the resolved config.
+
+### Patch Changes
+
+- [`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Ask for alt text on an image, not on every file.
+  
+  Uploading a PDF, a spreadsheet or a `.txt` without alt text was refused with
+  "Alt text is required unless the image is marked decorative", advising the
+  uploader to "describe what the image shows". None of those has an `alt`
+  anywhere in its rendering, so the rule asked for something that could not be
+  used and the message described a file that was not there.
+  
+  The requirement now applies to `kind: 'image'`. A description given for a
+  document is still stored; it is simply no longer demanded.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Reject executable menu destinations and neutralize legacy unsafe links during rendering. Share media role grants across REST and MCP so viewers cannot mutate assets or folders.
+  
+  Use the same decorated content stores for HTTP and MCP, preserve the site's default locale and actor attribution, and govern MCP calls through autonomy and the hash-chained audit log. Add a shared file approval queue so administrators can decide non-reversible MCP and runtime actions across processes. Decisions are atomic, immutable and replay-protected; disconnected calls cannot execute after later approval.
+  
+  Preserve MySQL metadata column casing explicitly when repairing taxonomy foreign keys, so the reversible schema migration reads the existing delete rule instead of attempting to duplicate the constraint.
+
 ## 0.12.0
 
 ### Minor Changes

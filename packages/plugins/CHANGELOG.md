@@ -1,5 +1,27 @@
 # @cogenta/plugins
 
+## 0.8.7
+
+### Patch Changes
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`c6032a2`](https://github.com/cogenta-cms/cogenta/commit/c6032a2ce5ff93828e7a4797a4f2cea423e86522) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A plugin's time limit no longer includes the time its isolated process takes
+  to start. Starting a permission-restricted Node process can alone take more
+  than a second on a loaded shared host or on Windows, and the limit (two
+  seconds by default) used to run from the moment the process was forked, so a
+  healthy plugin could be killed and reported as `timeout` before any of its code
+  ran. The plugin's clock now starts when its code is handed over; a process that
+  never comes up is still stopped after thirty seconds, reported as `crash`.
+
+- [#28](https://github.com/cogenta-cms/cogenta/pull/28) [`7a09969`](https://github.com/cogenta-cms/cogenta/commit/7a099698df03798e818c3c9711098e855c388186) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The same start-up allowance now applies when a plugin or a theme module runs
+  in a worker thread (the fallback runtime, and the sandbox that renders a theme
+  under construction): the time limit runs from the moment the thread executes,
+  so a loaded host no longer reports "module render worker timed out" for a theme
+  that renders in milliseconds.
+- Updated dependencies [[`dcf76f4`](https://github.com/cogenta-cms/cogenta/commit/dcf76f4ef93be5bae52196a5a610df4f0a36dfba), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`ab0bf4f`](https://github.com/cogenta-cms/cogenta/commit/ab0bf4fe4d79d668e857ecc13cc882a80179e10b), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`7a901c4`](https://github.com/cogenta-cms/cogenta/commit/7a901c417fc818604581927a6bff065ead265df2), [`9cbd623`](https://github.com/cogenta-cms/cogenta/commit/9cbd623fa7898f276d82c72f2467aa8f5ee39785), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab), [`c082c31`](https://github.com/cogenta-cms/cogenta/commit/c082c31a106cd1c8ea3d4d7a7c7600a7e4d61aab)]:
+  - @cogenta/core@0.13.0
+  - @cogenta/agents@0.10.0
+  - @cogenta/render@0.6.0
+
 ## 0.8.6
 
 ### Patch Changes

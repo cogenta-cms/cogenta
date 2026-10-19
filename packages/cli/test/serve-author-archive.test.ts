@@ -158,6 +158,9 @@ describe('cogenta serve — author archives (L37)', () => {
 
       const article = await (await fetch(`${server.base}/blog/capteurs-vibrations`)).text()
       expect(article).toContain('href="/archive/author/camille-durand"')
+      // The first link of the page speaks the language of the site.
+      expect(article).toContain('<a class="cg-skip-link" href="#cg-main">Aller au contenu</a>')
+      expect(html).toContain('<a class="cg-skip-link" href="#cg-main">Aller au contenu</a>')
     } finally {
       await server.stop()
     }

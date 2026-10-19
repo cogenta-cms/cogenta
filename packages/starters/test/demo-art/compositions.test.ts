@@ -174,6 +174,19 @@ describe('productArt', () => {
   }, 20_000)
 })
 
+/**
+ * CPU milliseconds this process spent rendering, not wall-clock time: the
+ * render is synchronous, so its own CPU time is its cost, while elapsed time
+ * also counts whatever else a shared machine runs (a full-suite run beside
+ * other jobs measured 6.3s for a render that costs well under one).
+ */
+function cpuMsOf(render: () => void): number {
+  const before = process.cpuUsage()
+  render()
+  const used = process.cpuUsage(before)
+  return (used.user + used.system) / 1000
+}
+
 describe('performance (acceptance criterion: a composition renders in under 2s)', () => {
   it('every hero variant renders its full 1600x1000 size well under the bound', () => {
     const variants: readonly HeroVariant[] = [
@@ -185,26 +198,31 @@ describe('performance (acceptance criterion: a composition renders in under 2s)'
       'warm',
     ]
     for (const variant of variants) {
-      const start = performance.now()
-      const png = renderArt(heroArt(storePalette, variant, 1))
-      const elapsedMs = performance.now() - start
+      let png: Uint8Array = new Uint8Array()
+      const cpuMs = cpuMsOf(() => {
+        png = renderArt(heroArt(storePalette, variant, 1))
+      })
       expect(sniffImageFormat(png)).toBe('png')
-      // A generous 4s bound avoids flakiness under a loaded full-suite run;
-      // measured locally every variant renders in well under 1s.
-      expect(elapsedMs).toBeLessThan(4000)
+      expect(cpuMs).toBeLessThan(2000)
     }
   }, 30_000)
 
   it('coverArt and productArt render their full sizes well under the bound', () => {
     for (let seed = 0; seed < 9; seed++) {
-      const start = performance.now()
-      expect(sniffImageFormat(renderArt(coverArt(storePalette, seed)))).toBe('png')
-      expect(performance.now() - start).toBeLessThan(4000)
+      let png: Uint8Array = new Uint8Array()
+      const cpuMs = cpuMsOf(() => {
+        png = renderArt(coverArt(storePalette, seed))
+      })
+      expect(sniffImageFormat(png)).toBe('png')
+      expect(cpuMs).toBeLessThan(2000)
     }
     for (let seed = 0; seed < 6; seed++) {
-      const start = performance.now()
-      expect(sniffImageFormat(renderArt(productArt(storePalette, seed)))).toBe('png')
-      expect(performance.now() - start).toBeLessThan(4000)
+      let png: Uint8Array = new Uint8Array()
+      const cpuMs = cpuMsOf(() => {
+        png = renderArt(productArt(storePalette, seed))
+      })
+      expect(sniffImageFormat(png)).toBe('png')
+      expect(cpuMs).toBeLessThan(2000)
     }
   }, 30_000)
 })

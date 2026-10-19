@@ -40,6 +40,6 @@ export default defineConfig({
     // package's test run under `pnpm test` at the workspace root, and can
     // take longer than the default 5s on its own before a single test body
     // even starts — this is that headroom, not slack for a slow test.
-    testTimeout: 20_000,
+    testTimeout: 60_000,
   },
 })

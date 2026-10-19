@@ -1259,7 +1259,7 @@ ${options.headHtml}
 ${verificationTags === '' ? '' : `${verificationTags}\n`}${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
 </head>
 <body>
-<a class="cg-skip-link" href="#cg-main">${createThemeTranslator(options.locale)('a11y.skipToContent')}</a>
+${skipLinkHtml(options.locale)}
 ${chrome.header}
 ${bodyHtml}
 ${placesFooter ? '' : footerWidgetsHtml(footerWidgets)}${chrome.footer}
@@ -2289,7 +2289,7 @@ ${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH
 ${pluginStyleTags(options.pluginStyleHrefs)}
 </head>
 <body>
-<a class="cg-skip-link" href="#cg-main">${createThemeTranslator(themeContext.locale)('a11y.skipToContent')}</a>
+${skipLinkHtml(themeContext.locale)}
 ${adminBar}
 ${chrome.header}
 ${bodyHtml}
@@ -2727,13 +2727,19 @@ export async function renderThemeGalleryPreview(
 ${options.styles === null ? '' : `<style>${options.styles}</style>`}
 </head>
 <body>
-<a class="cg-skip-link" href="#cg-main">${createThemeTranslator(locale)('a11y.skipToContent')}</a>
+${skipLinkHtml(locale)}
 ${chrome.header}
 ${bodyHtml}
 ${chrome.footer}
 </body>
 </html>
 `
+}
+
+/** The first link of every page, in the page's own language (`a11y.skipToContent`). */
+function skipLinkHtml(locale: string): string {
+  const label = createThemeTranslator(locale)('a11y.skipToContent')
+  return `<a class="cg-skip-link" href="#cg-main">${escapeHtml(label)}</a>`
 }
 
 function escapeHtml(value: string): string {

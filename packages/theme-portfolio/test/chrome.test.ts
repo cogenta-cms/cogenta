@@ -225,3 +225,16 @@ describe('renderChrome, the footer', () => {
     expect(renderChrome({ ...BASE, brand: BRAND }).footer).toContain('Studio Hale')
   })
 })
+
+describe('renderChrome, the names of its landmarks', () => {
+  it('names the navigation landmarks in the language of the page', () => {
+    const french = renderChrome({ ...BASE, locale: 'fr-FR' })
+    expect(french.header).toContain('aria-label="Navigation principale"')
+    expect(french.footer).toContain('aria-label="Pied de page"')
+    expect(french.header + french.footer).not.toContain('aria-label="Primary"')
+    expect(french.header + french.footer).not.toContain('aria-label="Footer"')
+    const english = renderChrome(BASE)
+    expect(english.header).toContain('aria-label="Primary"')
+    expect(english.footer).toContain('aria-label="Footer"')
+  })
+})

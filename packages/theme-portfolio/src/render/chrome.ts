@@ -64,6 +64,22 @@ function renderFooterNote(note: string): string {
     .join('')}</div>`
 }
 
+/**
+ * The names a screen reader gives the header and footer landmarks, in the
+ * page's own language. The page's visible words come from `THEME_STRINGS`;
+ * these three are read aloud only, so they stay with the markup that carries
+ * them.
+ */
+function landmarkLabels(locale: string): {
+  readonly menu: string
+  readonly primary: string
+  readonly footer: string
+} {
+  return locale.toLowerCase().startsWith('fr')
+    ? { menu: 'Menu', primary: 'Navigation principale', footer: 'Pied de page' }
+    : { menu: 'Menu', primary: 'Primary', footer: 'Footer' }
+}
+
 export function renderChrome(input: ChromeInput): ChromeResult {
   const siteName = escapeText(input.site.name)
   const home = escapeAttribute(input.homeHref)
@@ -82,13 +98,14 @@ export function renderChrome(input: ChromeInput): ChromeResult {
       ? ''
       : `<p class="cg-masthead__tagline">${escapeText(input.tagline)}</p>`
 
+  const landmarks = landmarkLabels(input.locale)
   const hasMenu = links !== '' || action !== ''
   const menu = hasMenu
-    ? `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
+    ? `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="${landmarks.menu}">` +
       `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">` +
       `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
       `</label>` +
-      `<nav class="cg-masthead__nav" id="cg-nav" aria-label="Primary">` +
+      `<nav class="cg-masthead__nav" id="cg-nav" aria-label="${landmarks.primary}">` +
       `${links === '' ? '' : `<ul class="cg-masthead__links">${links}</ul>`}` +
       `${action}` +
       `</nav>`
@@ -131,7 +148,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `${
       footerLinks === ''
         ? ''
-        : `<nav class="cg-colophon__nav" aria-label="Footer"><ul class="cg-colophon__links">${footerLinks}</ul></nav>`
+        : `<nav class="cg-colophon__nav" aria-label="${landmarks.footer}"><ul class="cg-colophon__links">${footerLinks}</ul></nav>`
     }` +
     `${social === null ? '' : `<div class="cg-colophon__follow">${serialize(social)}</div>`}` +
     `<div class="cg-colophon__legal">` +

@@ -14,7 +14,8 @@ import { buildDocumentationDemoPages } from '../src/blueprints/documentation.js'
 // before, minus the (now media-dependent) hero/cover/partner-logo images,
 // none of which this test exercises.
 import { buildMagazineDemoPages } from '../src/blueprints/magazine.js'
-import { buildPortfolioDemoPages } from '../src/blueprints/portfolio.js'
+// `portfolio` is written in French and in English: both are checked.
+import { buildPortfolioDemoPages, portfolioCopyFor } from '../src/blueprints/portfolio.js'
 import { buildRestaurantDemoPages, restaurantCopyFor } from '../src/blueprints/restaurant.js'
 // `saas`'s demo pages are now built from `SeedContext.media` and the real
 // feature ids assigned at seed time (L25) — `buildSaasDemoPages({}, new
@@ -32,7 +33,8 @@ import { buildVitrineDemoPages, vitrineCopyFor } from '../src/blueprints/vitrine
 
 const RESTAURANT_DEMO_PAGES = buildRestaurantDemoPages({})
 const RESTAURANT_FR_DEMO_PAGES = buildRestaurantDemoPages({ copy: restaurantCopyFor('fr') })
-const PORTFOLIO_DEMO_PAGES = buildPortfolioDemoPages({})
+const PORTFOLIO_DEMO_PAGES = buildPortfolioDemoPages(portfolioCopyFor('en'))
+const PORTFOLIO_FR_DEMO_PAGES = buildPortfolioDemoPages(portfolioCopyFor('fr'))
 const STORE_DEMO_PAGES = buildStoreDemoPages({})
 const BLOG_DEMO_PAGES = buildBlogDemoPages({})
 const SAAS_DEMO_PAGES = buildSaasDemoPages({}, new Map())
@@ -70,6 +72,7 @@ const BLUEPRINTS: Readonly<Record<string, readonly DemoPage[]>> = {
   documentation: DOCUMENTATION_DEMO_PAGES,
   magazine: MAGAZINE_DEMO_PAGES,
   portfolio: PORTFOLIO_DEMO_PAGES,
+  'portfolio (fr)': PORTFOLIO_FR_DEMO_PAGES,
   restaurant: RESTAURANT_DEMO_PAGES,
   'restaurant (fr)': RESTAURANT_FR_DEMO_PAGES,
   saas: SAAS_DEMO_PAGES,

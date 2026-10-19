@@ -5601,6 +5601,38 @@
       "compliance-checker": {
         "summary": "Vérifie ce qu'un site doit pouvoir montrer : ses pages légales, ses durées de conservation des données, et la mention des contenus rédigés par une machine."
       }
+    },
+    "themes": {
+      "theme-association": {
+        "description": "Une association de quartier : une photographie de ceux avec qui elle agit, des chiffres d'impact replacés dans leur contexte, ses actions, un agenda daté avec une page par événement, et un appel au don dans son jaune."
+      },
+      "theme-blog": {
+        "description": "Une publication personnelle faite pour la lecture : Literata et Figtree sur une grille de douze colonnes avec marge, un sommaire éditorial classé par année, des filets plutôt que des encadrés et un mode sombre dessiné."
+      },
+      "theme-canonical": {
+        "description": "Le thème de référence : les dix-sept blocs, aucun JavaScript côté visiteur, une base neutre et accessible."
+      },
+      "theme-docs": {
+        "description": "Un thème de documentation dense, pensé pour la référence : une navigation latérale qui reste en place, de vrais blocs de code et un véritable mode sombre."
+      },
+      "theme-ecommerce": {
+        "description": "Une boutique pour une marque d'objets du quotidien faits pour durer : sable et encre, Albert Sans, photos produit au format 4:5, une fiche avec prix, stock et détails, aucun JavaScript côté visiteur."
+      },
+      "theme-entreprise": {
+        "description": "Un thème d'entreprise d'ingénierie : Geist et Geist Mono sur une grille de douze colonnes, des photographies pleine largeur, les chiffres clés sur un bandeau d'encre, des filets plutôt que des encadrés et un mode sombre dessiné."
+      },
+      "theme-magazine": {
+        "description": "Un magazine d'actualité et de culture : un titre daté entre doubles filets, une une asymétrique avec brèves et filets de colonne, des rubriques, un bandeau d'opinions, un classement des plus lus, et des articles composés en Fraunces, Source Serif 4 et Libre Franklin. Aucun JavaScript côté visiteur."
+      },
+      "theme-portfolio": {
+        "description": "Un thème pour un studio indépendant, de photographie ou de design : les travaux montrés en grand sur une grille asymétrique, Archivo en large pour les titres, du noir et blanc avec une seule couleur signal, aucun JavaScript côté visiteur."
+      },
+      "theme-restaurant": {
+        "description": "Un bistrot contemporain : la salle vue à travers la vitrine, une carte typographique classée par section avec ses prix, une page par plat et une palette du soir."
+      },
+      "theme-saas": {
+        "description": "Un thème de logiciel B2B : du blanc et une gamme de gris structurée, une encre presque noire et un seul bleu signal, Geist et Geist Mono, des captures produit encadrées, un comparatif d'offres à filets et un mode sombre dessiné."
+      }
     }
   }
 }

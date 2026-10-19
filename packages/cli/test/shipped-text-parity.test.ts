@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { builtinAgentSeeds, builtinPromptTemplateSeeds } from '@cogenta/agents'
 import { adminThemeTemplateById } from '@cogenta/schema'
@@ -82,6 +82,26 @@ describe('the words the admin translates are the words the server ships', () => 
       expect(roles[key], seed.name).toBe(seed.identity?.role)
       expect(en.shippedText.agents[key]?.summary, seed.name).toBeTruthy()
       expect(fr.shippedText.agents[key]?.summary, seed.name).toBeTruthy()
+    }
+  })
+
+  it('holds every built-in theme description, read from the theme packages themselves', async () => {
+    const packages = join(import.meta.dirname, '..', '..')
+    const themes = (await readdir(packages)).filter(
+      (name) => name.startsWith('theme-') && name !== 'theme-kit',
+    )
+    const en = (await adminDictionary('en')) as unknown as {
+      shippedText: { themes: Record<string, { description: string }> }
+    }
+    const fr = (await adminDictionary('fr')) as unknown as {
+      shippedText: { themes: Record<string, { description: string }> }
+    }
+    expect(themes.length).toBeGreaterThanOrEqual(10)
+    for (const theme of themes) {
+      const config = await readFile(join(packages, theme, 'theme.config.ts'), 'utf8')
+      const declared = /description:\s*(['"`])([\s\S]*?)\1,/u.exec(config)?.[2]
+      expect(en.shippedText.themes[theme]?.description, theme).toBe(declared)
+      expect(fr.shippedText.themes[theme]?.description, theme).toBeTruthy()
     }
   })
 })

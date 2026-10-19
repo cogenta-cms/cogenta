@@ -5601,6 +5601,38 @@
       "compliance-checker": {
         "summary": "Checks what a site must be able to show: its legal pages, its data retention settings, and a mention on content written by a machine."
       }
+    },
+    "themes": {
+      "theme-association": {
+        "description": "A neighbourhood charity: a photograph of the people it works with, impact figures with their context, programmes, a dated events calendar with event pages, and a donation ask in its own yellow."
+      },
+      "theme-blog": {
+        "description": "A personal publication made for reading: Literata and Figtree on a twelve-column grid with a margin, an editorial index grouped by year, hairlines instead of boxes and a designed dark mode."
+      },
+      "theme-canonical": {
+        "description": "The reference theme: all seventeen blocks, zero client JavaScript, a neutral, accessible default."
+      },
+      "theme-docs": {
+        "description": "A dense, reference-first documentation theme: a sticky sidebar-navigated doc layout, real code blocks, a genuine dark mode."
+      },
+      "theme-ecommerce": {
+        "description": "A shop for a brand of durable everyday goods: sand and ink, Albert Sans, product photographs at 4:5, a product page with price, stock and details, zero client JavaScript."
+      },
+      "theme-entreprise": {
+        "description": "An engineering company theme: Geist and Geist Mono on a twelve-column grid, full-bleed photography, key figures on an ink band, hairlines instead of boxes and a designed dark mode."
+      },
+      "theme-magazine": {
+        "description": "A news and culture magazine theme: a dated masthead between double rules, an asymmetric front page with briefs and column rules, section rails, an opinion strip, a ranked list, and articles set in Fraunces, Source Serif 4 and Libre Franklin. Zero client JavaScript."
+      },
+      "theme-portfolio": {
+        "description": "A theme for an independent studio, in photography or design: work shown large on an asymmetric grid, Archivo set wide for display, black and white with one signal colour, zero client JavaScript."
+      },
+      "theme-restaurant": {
+        "description": "A contemporary bistro: the room across the window, a typographic menu grouped by section with prices, dish pages, and an evening palette."
+      },
+      "theme-saas": {
+        "description": "A B2B software theme: white and a structured grey scale, near-black ink and one signal blue, Geist and Geist Mono, framed product screenshots, a ruled plan comparison and a designed dark mode."
+      }
     }
   }
 }

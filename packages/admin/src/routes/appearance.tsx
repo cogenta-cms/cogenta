@@ -30,6 +30,7 @@ import {
 } from '../api/theme-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { MediaPicker } from '../fields/media-picker.js'
+import { shippedText } from '../i18n/shipped-text.js'
 import { useAutosaveEnabled } from '../lib/autosave-prefs.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
 import { useSectionAutosave } from '../settings/site-settings-section.js'
@@ -724,7 +725,13 @@ export function AppearanceRoute(): JSX.Element {
                           )}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {candidate.description}
+                          {candidate.local
+                            ? candidate.description
+                            : shippedText(
+                                `themes.${candidate.name.replace(/^@cogenta\//u, '')}.description`,
+                                candidate.description,
+                                t,
+                              )}
                         </span>
                         {theme.sampleData?.themes.includes(candidate.name) === true && (
                           <span className="text-xs font-medium text-foreground">

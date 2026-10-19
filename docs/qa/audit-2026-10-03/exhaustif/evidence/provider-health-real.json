@@ -1,0 +1,14 @@
+[
+  {
+    "provider": "deepseek",
+    "model": "deepseek-v4-flash",
+    "status": 200,
+    "validResponse": true
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-5-mini",
+    "status": 200,
+    "validResponse": true
+  }
+]

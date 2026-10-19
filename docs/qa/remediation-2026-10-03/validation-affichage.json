@@ -1,0 +1,3026 @@
+{
+  "generatedAt": "2026-10-04T22:56:37+02:00",
+  "officialE2e": {
+    "available": true,
+    "validationMode": "120/122 au passage complet, puis les deux échecs recontrôlés après correction du sélecteur Créer",
+    "initialStats": {
+      "startTime": "2026-10-04T15:57:30.198Z",
+      "duration": 426928.93899999995,
+      "expected": 120,
+      "skipped": 0,
+      "unexpected": 2,
+      "flaky": 0
+    },
+    "targetedStats": {
+      "startTime": "2026-10-04T20:20:07.707Z",
+      "duration": 24878.456,
+      "expected": 2,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "stats": {
+      "expected": 122,
+      "unexpected": 0,
+      "skipped": 0
+    },
+    "tests": [
+      {
+        "title": "a large form list stays bounded and edits on its second page are persisted",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 5206
+      },
+      {
+        "title": "all eight menu levels remain operable at 320 pixels without horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2578
+      },
+      {
+        "title": "missing order, customer, subscription and agent detail pages explain the failure and allow returning",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 6145
+      },
+      {
+        "title": "a large form list stays bounded and edits on its second page are persisted",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 5353
+      },
+      {
+        "title": "all eight menu levels remain operable at 320 pixels without horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 3182
+      },
+      {
+        "title": "missing order, customer, subscription and agent detail pages explain the failure and allow returning",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 5395
+      },
+      {
+        "title": "renders administration / without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3002
+      },
+      {
+        "title": "renders administration /review without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2361
+      },
+      {
+        "title": "renders administration /collections without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2605
+      },
+      {
+        "title": "renders administration /calendar without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2593
+      },
+      {
+        "title": "renders administration /media without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2522
+      },
+      {
+        "title": "renders administration /taxonomies without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 1982
+      },
+      {
+        "title": "renders administration /menus without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2571
+      },
+      {
+        "title": "renders administration /comments without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3092
+      },
+      {
+        "title": "renders administration /translations without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2326
+      },
+      {
+        "title": "renders administration /trash without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2368
+      },
+      {
+        "title": "renders administration /replace without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2340
+      },
+      {
+        "title": "renders administration /forms without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2741
+      },
+      {
+        "title": "renders administration /form-submissions without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2894
+      },
+      {
+        "title": "renders administration /appearance without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 5905
+      },
+      {
+        "title": "renders administration /widgets without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3562
+      },
+      {
+        "title": "renders administration /plugins without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2938
+      },
+      {
+        "title": "renders administration /admin-appearance without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2770
+      },
+      {
+        "title": "renders administration /seo without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3059
+      },
+      {
+        "title": "renders administration /commerce/products without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3335
+      },
+      {
+        "title": "renders administration /commerce/orders without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2705
+      },
+      {
+        "title": "renders administration /commerce/customers without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2701
+      },
+      {
+        "title": "renders administration /commerce/coupons without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2942
+      },
+      {
+        "title": "renders administration /commerce/subscriptions without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2741
+      },
+      {
+        "title": "renders administration /commerce/settings without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3080
+      },
+      {
+        "title": "renders administration /commerce/tax without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2733
+      },
+      {
+        "title": "renders administration /commerce/shipping without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3048
+      },
+      {
+        "title": "renders administration /commerce/payment without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3157
+      },
+      {
+        "title": "renders administration /assistant without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3000
+      },
+      {
+        "title": "renders administration /agents without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2971
+      },
+      {
+        "title": "renders administration /providers without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3088
+      },
+      {
+        "title": "renders administration /agent-skills without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3002
+      },
+      {
+        "title": "renders administration /prompt-settings without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3010
+      },
+      {
+        "title": "renders administration /mcp without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2750
+      },
+      {
+        "title": "renders administration /mcp-clients without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2938
+      },
+      {
+        "title": "renders administration /channels without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2906
+      },
+      {
+        "title": "renders administration /create-site without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3016
+      },
+      {
+        "title": "renders administration /users without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2950
+      },
+      {
+        "title": "renders administration /api-keys without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2692
+      },
+      {
+        "title": "renders administration /roles without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2933
+      },
+      {
+        "title": "renders administration /audit without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3469
+      },
+      {
+        "title": "renders administration /analytics without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3008
+      },
+      {
+        "title": "renders administration /import without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2928
+      },
+      {
+        "title": "renders administration /marketplace without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2858
+      },
+      {
+        "title": "renders administration /ops-settings without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3070
+      },
+      {
+        "title": "renders administration /updates without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2658
+      },
+      {
+        "title": "renders administration /health without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 4927
+      },
+      {
+        "title": "renders administration /observability without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3354
+      },
+      {
+        "title": "renders administration /tools without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2991
+      },
+      {
+        "title": "renders administration /scheduled without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 2887
+      },
+      {
+        "title": "renders administration /settings without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3177
+      },
+      {
+        "title": "renders administration /profile without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3372
+      },
+      {
+        "title": "renders administration /documentation without a crash or horizontal page overflow",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3273
+      },
+      {
+        "title": "creates and saves an entry with two initially empty rich-text fields",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 3937
+      },
+      {
+        "title": "renders administration / without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2727
+      },
+      {
+        "title": "renders administration /review without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2132
+      },
+      {
+        "title": "renders administration /collections without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2102
+      },
+      {
+        "title": "renders administration /calendar without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2340
+      },
+      {
+        "title": "renders administration /media without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2350
+      },
+      {
+        "title": "renders administration /taxonomies without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2258
+      },
+      {
+        "title": "renders administration /menus without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2034
+      },
+      {
+        "title": "renders administration /comments without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1827
+      },
+      {
+        "title": "renders administration /translations without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1816
+      },
+      {
+        "title": "renders administration /trash without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1922
+      },
+      {
+        "title": "renders administration /replace without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1838
+      },
+      {
+        "title": "renders administration /forms without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1915
+      },
+      {
+        "title": "renders administration /form-submissions without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1950
+      },
+      {
+        "title": "renders administration /appearance without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 4229
+      },
+      {
+        "title": "renders administration /widgets without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 3179
+      },
+      {
+        "title": "renders administration /plugins without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2202
+      },
+      {
+        "title": "renders administration /admin-appearance without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2296
+      },
+      {
+        "title": "renders administration /seo without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2327
+      },
+      {
+        "title": "renders administration /commerce/products without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2284
+      },
+      {
+        "title": "renders administration /commerce/orders without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2295
+      },
+      {
+        "title": "renders administration /commerce/customers without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2111
+      },
+      {
+        "title": "renders administration /commerce/coupons without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2168
+      },
+      {
+        "title": "renders administration /commerce/subscriptions without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1879
+      },
+      {
+        "title": "renders administration /commerce/settings without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1975
+      },
+      {
+        "title": "renders administration /commerce/tax without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1994
+      },
+      {
+        "title": "renders administration /commerce/shipping without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1912
+      },
+      {
+        "title": "renders administration /commerce/payment without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1966
+      },
+      {
+        "title": "renders administration /assistant without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1942
+      },
+      {
+        "title": "renders administration /agents without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2045
+      },
+      {
+        "title": "renders administration /providers without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2070
+      },
+      {
+        "title": "renders administration /agent-skills without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1912
+      },
+      {
+        "title": "renders administration /prompt-settings without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2034
+      },
+      {
+        "title": "renders administration /mcp without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2113
+      },
+      {
+        "title": "renders administration /mcp-clients without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2246
+      },
+      {
+        "title": "renders administration /channels without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2211
+      },
+      {
+        "title": "renders administration /create-site without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2365
+      },
+      {
+        "title": "renders administration /users without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2220
+      },
+      {
+        "title": "renders administration /api-keys without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2076
+      },
+      {
+        "title": "renders administration /roles without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2315
+      },
+      {
+        "title": "renders administration /audit without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2472
+      },
+      {
+        "title": "renders administration /analytics without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2138
+      },
+      {
+        "title": "renders administration /import without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2267
+      },
+      {
+        "title": "renders administration /marketplace without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2253
+      },
+      {
+        "title": "renders administration /ops-settings without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1844
+      },
+      {
+        "title": "renders administration /updates without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1814
+      },
+      {
+        "title": "renders administration /health without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1799
+      },
+      {
+        "title": "renders administration /observability without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2014
+      },
+      {
+        "title": "renders administration /tools without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1765
+      },
+      {
+        "title": "renders administration /scheduled without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1865
+      },
+      {
+        "title": "renders administration /settings without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2071
+      },
+      {
+        "title": "renders administration /profile without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2453
+      },
+      {
+        "title": "renders administration /documentation without a crash or horizontal page overflow",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 2074
+      },
+      {
+        "title": "creates and saves an entry with two initially empty rich-text fields",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 3609
+      },
+      {
+        "title": "public conditional multipart form preserves every selected choice and file",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 5488
+      },
+      {
+        "title": "editorial workflow remains available through submission, approval and publication",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 7184
+      },
+      {
+        "title": "human administrator reviews a real pending MCP mutation before it can execute",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 13689
+      },
+      {
+        "title": "public conditional multipart form preserves every selected choice and file",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 4738
+      },
+      {
+        "title": "editorial workflow remains available through submission, approval and publication",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 5159
+      },
+      {
+        "title": "human administrator reviews a real pending MCP mutation before it can execute",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 12022
+      },
+      {
+        "title": "refuses executable menu URLs before they can reach a public browser",
+        "project": "chromium-desktop",
+        "status": "expected",
+        "durationMs": 1553
+      },
+      {
+        "title": "refuses executable menu URLs before they can reach a public browser",
+        "project": "chromium-mobile",
+        "status": "expected",
+        "durationMs": 1596
+      },
+      {
+        "title": "refuses executable menu URLs before they can reach a public browser",
+        "project": "firefox-security",
+        "status": "expected",
+        "durationMs": 3807
+      },
+      {
+        "title": "refuses executable menu URLs before they can reach a public browser",
+        "project": "webkit-security",
+        "status": "expected",
+        "durationMs": 3947
+      }
+    ]
+  },
+  "functionalSuites": [
+    {
+      "name": "display-last-regressions-1440",
+      "total": 7,
+      "passed": 7
+    },
+    {
+      "name": "display-last-regressions-390",
+      "total": 7,
+      "passed": 7
+    },
+    {
+      "name": "documentation-keyboard",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "name": "display-final-320",
+      "total": 17,
+      "passed": 17
+    },
+    {
+      "name": "display-final-390",
+      "total": 17,
+      "passed": 17
+    },
+    {
+      "name": "destructive-hover-light",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "name": "destructive-hover-dark",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "name": "screens-1440",
+      "total": 114,
+      "passed": 114
+    },
+    {
+      "name": "screens-390",
+      "total": 108,
+      "passed": 108
+    },
+    {
+      "name": "forms-lifecycle",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "name": "widgets-lifecycle",
+      "total": 23,
+      "passed": 23
+    },
+    {
+      "name": "comments-lifecycle",
+      "total": 2,
+      "passed": 2
+    },
+    {
+      "name": "media-lifecycle",
+      "total": 10,
+      "passed": 10
+    },
+    {
+      "name": "commerce-lifecycle",
+      "total": 11,
+      "passed": 11
+    },
+    {
+      "name": "api-keys-lifecycle",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "name": "redirects-lifecycle",
+      "total": 9,
+      "passed": 9
+    },
+    {
+      "name": "fields-lifecycle",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "name": "blocks-lifecycle",
+      "total": 17,
+      "passed": 17
+    },
+    {
+      "name": "content-import-replace",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "name": "passkeys-lifecycle",
+      "total": 2,
+      "passed": 2
+    },
+    {
+      "name": "password-reset-lifecycle",
+      "total": 2,
+      "passed": 2
+    },
+    {
+      "name": "settings-invalid-fixtures-recheck",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "name": "admin-bounded-lists",
+      "total": 39,
+      "passed": 39
+    },
+    {
+      "name": "admin-sessions-display",
+      "total": 7,
+      "passed": 7
+    },
+    {
+      "name": "admin-menus-display",
+      "total": 6,
+      "passed": 6
+    },
+    {
+      "name": "admin-assistant-display",
+      "total": 5,
+      "passed": 5
+    },
+    {
+      "name": "comments-submissions-pagination",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "name": "commerce-pagination",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "name": "plugin-uninstall-live",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "name": "ai-tools-real",
+      "total": 16,
+      "passed": 16
+    },
+    {
+      "name": "ai-ui-lifecycle",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "name": "ai-theme-lifecycle",
+      "total": 2,
+      "passed": 2
+    },
+    {
+      "name": "ai-site-plan",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "name": "ai-management",
+      "total": 6,
+      "passed": 6
+    },
+    {
+      "name": "agent-tools-lifecycle",
+      "total": 1,
+      "passed": 1
+    },
+    {
+      "name": "calendar-lifecycle",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "name": "builder-lifecycle",
+      "total": 2,
+      "passed": 2
+    },
+    {
+      "name": "mcp-clients-lifecycle",
+      "total": 5,
+      "passed": 5
+    },
+    {
+      "name": "appearance-lifecycle",
+      "total": 2,
+      "passed": 2
+    },
+    {
+      "name": "theme-lifecycle",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "name": "admin-theme-lifecycle",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "name": "plugins-lifecycle",
+      "total": 5,
+      "passed": 5
+    },
+    {
+      "name": "plugins-templates",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "name": "plugin-restart-lifecycle",
+      "total": 3,
+      "passed": 3
+    },
+    {
+      "name": "import-formats-incompatible",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "name": "import-formats-compatible",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "name": "roles-lifecycle",
+      "total": 4,
+      "passed": 4
+    },
+    {
+      "name": "health-lifecycle",
+      "total": 2,
+      "passed": 2
+    }
+  ],
+  "remainingDisplayObservations": [],
+  "captureCount": 2366,
+  "lighthouseBefore": [
+    {
+      "phase": "before",
+      "path": "/admin/widgets",
+      "iteration": 1,
+      "preflight": {
+        "title": "Widgets",
+        "height": 13634,
+        "tableRows": 0,
+        "listItems": 75
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T15:24:09.543Z",
+      "scores": {
+        "performance": 0.74,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 701.254,
+        "largest-contentful-paint": 986.743,
+        "speed-index": 413,
+        "total-blocking-time": 230.03800000000012,
+        "cumulative-layout-shift": 0.5368818856717321,
+        "total-byte-weight": 2734804,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "label-content-name-mismatch",
+          "title": "Elements with visible text labels do not have matching accessible names.",
+          "details": {
+            "type": "table",
+            "headings": [
+              {
+                "key": "node",
+                "valueType": "node",
+                "subItemsHeading": {
+                  "key": "relatedNode",
+                  "valueType": "node"
+                },
+                "label": "Failing Elements"
+              }
+            ],
+            "items": [
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-0-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,0,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1115,
+                    "bottom": 1165,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Texte\">",
+                  "nodeLabel": "Texte\nDu texte mis en forme, avec des liens.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-1-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,1,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1169,
+                    "bottom": 1235,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Image\">",
+                  "nodeLabel": "Image\nUne image de la médiathèque, avec légende et lien.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-2-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,2,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1239,
+                    "bottom": 1289,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Galerie\">",
+                  "nodeLabel": "Galerie\nPlusieurs images en grille.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-3-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,3,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1293,
+                    "bottom": 1343,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Vidéo ou intégration\">",
+                  "nodeLabel": "Vidéo ou intégration\nUne vidéo YouTube ou Vimeo, un podcast Spotify.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-4-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,4,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1347,
+                    "bottom": 1397,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Citation\">",
+                  "nodeLabel": "Citation\nUne citation et sa source.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-5-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,5,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1401,
+                    "bottom": 1451,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Appel à l'action\">",
+                  "nodeLabel": "Appel à l'action\nUn titre, un texte et un bouton.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-6-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,6,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1455,
+                    "bottom": 1505,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Présentation\">",
+                  "nodeLabel": "Présentation\nUne photo, un titre et quelques lignes.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-7-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,7,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1509,
+                    "bottom": 1559,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Coordonnées\">",
+                  "nodeLabel": "Coordonnées\nAdresse, téléphone, e-mail et horaires.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-8-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,0,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1599,
+                    "bottom": 1649,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Dernières publications\">",
+                  "nodeLabel": "Dernières publications\nLes entrées les plus récentes d'une collection.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-9-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,1,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1653,
+                    "bottom": 1719,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Articles liés\">",
+                  "nodeLabel": "Articles liés\nLes entrées qui partagent les termes de celle affichée.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-10-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,2,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1723,
+                    "bottom": 1789,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Les plus lus\">",
+                  "nodeLabel": "Les plus lus\nLes pages les plus vues, d'après les statistiques du site.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-11-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,3,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1793,
+                    "bottom": 1843,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Derniers commentaires\">",
+                  "nodeLabel": "Derniers commentaires\nLes commentaires approuvés les plus récents.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-12-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,4,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1847,
+                    "bottom": 1897,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Archives\">",
+                  "nodeLabel": "Archives\nLes publications par mois ou par année.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-13-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,5,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1901,
+                    "bottom": 1951,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Calendrier\">",
+                  "nodeLabel": "Calendrier\nLe mois en cours, avec les jours de publication.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-14-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,6,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1955,
+                    "bottom": 2005,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Table des matières\">",
+                  "nodeLabel": "Table des matières\nLes intertitres de l'entrée affichée.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-15-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,7,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2009,
+                    "bottom": 2075,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Formulaire\">",
+                  "nodeLabel": "Formulaire\nUn formulaire du site, comme une inscription à la newsletter.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-16-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,0,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2115,
+                    "bottom": 2165,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Recherche\">",
+                  "nodeLabel": "Recherche\nUn champ de recherche sur le site.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-17-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,1,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2169,
+                    "bottom": 2219,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Menu\">",
+                  "nodeLabel": "Menu\nUn menu de navigation existant.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-18-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,2,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2223,
+                    "bottom": 2273,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Liste de liens\">",
+                  "nodeLabel": "Liste de liens\nDes liens choisis à la main.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-19-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,3,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2277,
+                    "bottom": 2343,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Catégories\">",
+                  "nodeLabel": "Catégories\nLes termes d'une taxonomie, en liste ou en menu déroulant.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-20-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,4,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2347,
+                    "bottom": 2413,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Nuage d'étiquettes\">",
+                  "nodeLabel": "Nuage d'étiquettes\nLes termes les plus utilisés, en tailles proportionnelles.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-21-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,5,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2417,
+                    "bottom": 2467,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Réseaux sociaux\">",
+                  "nodeLabel": "Réseaux sociaux\nLes liens vers vos réseaux, avec leurs icônes.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              }
+            ],
+            "debugData": {
+              "type": "debugdata",
+              "impact": "serious",
+              "tags": [
+                "cat.semantics",
+                "wcag21a",
+                "wcag253",
+                "EN-301-549",
+                "EN-9.2.5.3",
+                "RGAAv4",
+                "RGAA-6.1.5",
+                "experimental"
+              ]
+            }
+          }
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cache-insight",
+          "title": "Use efficient cache lifetimes"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "forced-reflow-insight",
+          "title": "Forced reflow"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    },
+    {
+      "phase": "before",
+      "path": "/admin/widgets",
+      "iteration": 2,
+      "preflight": {
+        "title": "Widgets",
+        "height": 13634,
+        "tableRows": 0,
+        "listItems": 75
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T15:24:37.359Z",
+      "scores": {
+        "performance": 0.75,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 726.268,
+        "largest-contentful-paint": 1032.133,
+        "speed-index": 428,
+        "total-blocking-time": 225.69799999999998,
+        "cumulative-layout-shift": 0.5368818856717321,
+        "total-byte-weight": 2788081,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "mainthread-work-breakdown",
+          "title": "Minimize main-thread work"
+        },
+        {
+          "id": "bootup-time",
+          "title": "Reduce JavaScript execution time"
+        },
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "label-content-name-mismatch",
+          "title": "Elements with visible text labels do not have matching accessible names.",
+          "details": {
+            "type": "table",
+            "headings": [
+              {
+                "key": "node",
+                "valueType": "node",
+                "subItemsHeading": {
+                  "key": "relatedNode",
+                  "valueType": "node"
+                },
+                "label": "Failing Elements"
+              }
+            ],
+            "items": [
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-0-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,0,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1115,
+                    "bottom": 1165,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Texte\">",
+                  "nodeLabel": "Texte\nDu texte mis en forme, avec des liens.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-1-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,1,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1169,
+                    "bottom": 1235,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Image\">",
+                  "nodeLabel": "Image\nUne image de la médiathèque, avec légende et lien.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-2-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,2,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1239,
+                    "bottom": 1289,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Galerie\">",
+                  "nodeLabel": "Galerie\nPlusieurs images en grille.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-3-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,3,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1293,
+                    "bottom": 1343,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Vidéo ou intégration\">",
+                  "nodeLabel": "Vidéo ou intégration\nUne vidéo YouTube ou Vimeo, un podcast Spotify.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-4-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,4,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1347,
+                    "bottom": 1397,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Citation\">",
+                  "nodeLabel": "Citation\nUne citation et sa source.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-5-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,5,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1401,
+                    "bottom": 1451,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Appel à l'action\">",
+                  "nodeLabel": "Appel à l'action\nUn titre, un texte et un bouton.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-6-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,6,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1455,
+                    "bottom": 1505,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Présentation\">",
+                  "nodeLabel": "Présentation\nUne photo, un titre et quelques lignes.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-7-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,7,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1509,
+                    "bottom": 1559,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Coordonnées\">",
+                  "nodeLabel": "Coordonnées\nAdresse, téléphone, e-mail et horaires.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-8-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,0,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1599,
+                    "bottom": 1649,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Dernières publications\">",
+                  "nodeLabel": "Dernières publications\nLes entrées les plus récentes d'une collection.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-9-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,1,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1653,
+                    "bottom": 1719,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Articles liés\">",
+                  "nodeLabel": "Articles liés\nLes entrées qui partagent les termes de celle affichée.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-10-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,2,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1723,
+                    "bottom": 1789,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Les plus lus\">",
+                  "nodeLabel": "Les plus lus\nLes pages les plus vues, d'après les statistiques du site.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-11-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,3,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1793,
+                    "bottom": 1843,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Derniers commentaires\">",
+                  "nodeLabel": "Derniers commentaires\nLes commentaires approuvés les plus récents.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-12-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,4,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1847,
+                    "bottom": 1897,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Archives\">",
+                  "nodeLabel": "Archives\nLes publications par mois ou par année.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-13-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,5,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1901,
+                    "bottom": 1951,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Calendrier\">",
+                  "nodeLabel": "Calendrier\nLe mois en cours, avec les jours de publication.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-14-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,6,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1955,
+                    "bottom": 2005,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Table des matières\">",
+                  "nodeLabel": "Table des matières\nLes intertitres de l'entrée affichée.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-15-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,7,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2009,
+                    "bottom": 2075,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Formulaire\">",
+                  "nodeLabel": "Formulaire\nUn formulaire du site, comme une inscription à la newsletter.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-16-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,0,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2115,
+                    "bottom": 2165,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Recherche\">",
+                  "nodeLabel": "Recherche\nUn champ de recherche sur le site.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-17-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,1,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2169,
+                    "bottom": 2219,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Menu\">",
+                  "nodeLabel": "Menu\nUn menu de navigation existant.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-18-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,2,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2223,
+                    "bottom": 2273,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Liste de liens\">",
+                  "nodeLabel": "Liste de liens\nDes liens choisis à la main.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-19-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,3,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2277,
+                    "bottom": 2343,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Catégories\">",
+                  "nodeLabel": "Catégories\nLes termes d'une taxonomie, en liste ou en menu déroulant.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-20-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,4,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2347,
+                    "bottom": 2413,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Nuage d'étiquettes\">",
+                  "nodeLabel": "Nuage d'étiquettes\nLes termes les plus utilisés, en tailles proportionnelles.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-21-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,5,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2417,
+                    "bottom": 2467,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Réseaux sociaux\">",
+                  "nodeLabel": "Réseaux sociaux\nLes liens vers vos réseaux, avec leurs icônes.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              }
+            ],
+            "debugData": {
+              "type": "debugdata",
+              "impact": "serious",
+              "tags": [
+                "cat.semantics",
+                "wcag21a",
+                "wcag253",
+                "EN-301-549",
+                "EN-9.2.5.3",
+                "RGAAv4",
+                "RGAA-6.1.5",
+                "experimental"
+              ]
+            }
+          }
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cache-insight",
+          "title": "Use efficient cache lifetimes"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "forced-reflow-insight",
+          "title": "Forced reflow"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    },
+    {
+      "phase": "before",
+      "path": "/admin/widgets",
+      "iteration": 3,
+      "preflight": {
+        "title": "Widgets",
+        "height": 13634,
+        "tableRows": 0,
+        "listItems": 75
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T15:25:04.583Z",
+      "scores": {
+        "performance": 0.73,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 711.01,
+        "largest-contentful-paint": 1029.711,
+        "speed-index": 420,
+        "total-blocking-time": 260.2819999999999,
+        "cumulative-layout-shift": 0.5398832962145781,
+        "total-byte-weight": 2788081,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "label-content-name-mismatch",
+          "title": "Elements with visible text labels do not have matching accessible names.",
+          "details": {
+            "type": "table",
+            "headings": [
+              {
+                "key": "node",
+                "valueType": "node",
+                "subItemsHeading": {
+                  "key": "relatedNode",
+                  "valueType": "node"
+                },
+                "label": "Failing Elements"
+              }
+            ],
+            "items": [
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-0-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,0,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1115,
+                    "bottom": 1165,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Texte\">",
+                  "nodeLabel": "Texte\nDu texte mis en forme, avec des liens.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-1-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,1,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1169,
+                    "bottom": 1235,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Image\">",
+                  "nodeLabel": "Image\nUne image de la médiathèque, avec légende et lien.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-2-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,2,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1239,
+                    "bottom": 1289,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Galerie\">",
+                  "nodeLabel": "Galerie\nPlusieurs images en grille.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-3-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,3,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1293,
+                    "bottom": 1343,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Vidéo ou intégration\">",
+                  "nodeLabel": "Vidéo ou intégration\nUne vidéo YouTube ou Vimeo, un podcast Spotify.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-4-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,4,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1347,
+                    "bottom": 1397,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Citation\">",
+                  "nodeLabel": "Citation\nUne citation et sa source.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-5-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,5,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1401,
+                    "bottom": 1451,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Appel à l'action\">",
+                  "nodeLabel": "Appel à l'action\nUn titre, un texte et un bouton.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-6-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,6,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1455,
+                    "bottom": 1505,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Présentation\">",
+                  "nodeLabel": "Présentation\nUne photo, un titre et quelques lignes.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-7-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,3,DIV,1,UL,7,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1509,
+                    "bottom": 1559,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Coordonnées\">",
+                  "nodeLabel": "Coordonnées\nAdresse, téléphone, e-mail et horaires.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-8-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,0,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1599,
+                    "bottom": 1649,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Dernières publications\">",
+                  "nodeLabel": "Dernières publications\nLes entrées les plus récentes d'une collection.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-9-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,1,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1653,
+                    "bottom": 1719,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Articles liés\">",
+                  "nodeLabel": "Articles liés\nLes entrées qui partagent les termes de celle affichée.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-10-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,2,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1723,
+                    "bottom": 1789,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Les plus lus\">",
+                  "nodeLabel": "Les plus lus\nLes pages les plus vues, d'après les statistiques du site.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-11-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,3,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1793,
+                    "bottom": 1843,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Derniers commentaires\">",
+                  "nodeLabel": "Derniers commentaires\nLes commentaires approuvés les plus récents.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-12-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,4,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1847,
+                    "bottom": 1897,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Archives\">",
+                  "nodeLabel": "Archives\nLes publications par mois ou par année.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-13-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,5,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1901,
+                    "bottom": 1951,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Calendrier\">",
+                  "nodeLabel": "Calendrier\nLe mois en cours, avec les jours de publication.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-14-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,6,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 1955,
+                    "bottom": 2005,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Table des matières\">",
+                  "nodeLabel": "Table des matières\nLes intertitres de l'entrée affichée.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-15-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,4,DIV,1,UL,7,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2009,
+                    "bottom": 2075,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Formulaire\">",
+                  "nodeLabel": "Formulaire\nUn formulaire du site, comme une inscription à la newsletter.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-16-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,0,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2115,
+                    "bottom": 2165,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Recherche\">",
+                  "nodeLabel": "Recherche\nUn champ de recherche sur le site.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-17-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,1,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2169,
+                    "bottom": 2219,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Menu\">",
+                  "nodeLabel": "Menu\nUn menu de navigation existant.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-18-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,2,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2223,
+                    "bottom": 2273,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Liste de liens\">",
+                  "nodeLabel": "Liste de liens\nDes liens choisis à la main.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-19-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,3,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2277,
+                    "bottom": 2343,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Catégories\">",
+                  "nodeLabel": "Catégories\nLes termes d'une taxonomie, en liste ou en menu déroulant.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-20-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,4,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2347,
+                    "bottom": 2413,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 66
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Nuage d'étiquettes\">",
+                  "nodeLabel": "Nuage d'étiquettes\nLes termes les plus utilisés, en tailles proportionnelles.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              },
+              {
+                "node": {
+                  "type": "node",
+                  "lhId": "1-21-BUTTON",
+                  "path": "1,HTML,1,BODY,0,DIV,0,DIV,3,MAIN,1,SECTION,2,DIV,0,ASIDE,5,DIV,1,UL,5,LI,0,BUTTON",
+                  "selector": "div.flex > ul.m-0 > li > button.flex",
+                  "boundingRect": {
+                    "top": 2417,
+                    "bottom": 2467,
+                    "left": 41,
+                    "right": 349,
+                    "width": 308,
+                    "height": 50
+                  },
+                  "snippet": "<button type=\"button\" class=\"flex w-full cursor-pointer flex-col items-start rounded-md border border-t…\" aria-label=\"Ajouter le widget Réseaux sociaux\">",
+                  "nodeLabel": "Réseaux sociaux\nLes liens vers vos réseaux, avec leurs icônes.",
+                  "explanation": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+                }
+              }
+            ],
+            "debugData": {
+              "type": "debugdata",
+              "impact": "serious",
+              "tags": [
+                "cat.semantics",
+                "wcag21a",
+                "wcag253",
+                "EN-301-549",
+                "EN-9.2.5.3",
+                "RGAAv4",
+                "RGAA-6.1.5",
+                "experimental"
+              ]
+            }
+          }
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cache-insight",
+          "title": "Use efficient cache lifetimes"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "forced-reflow-insight",
+          "title": "Forced reflow"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    },
+    {
+      "phase": "before",
+      "path": "/admin/forms",
+      "iteration": 1,
+      "preflight": {
+        "title": "Formulaires",
+        "height": 4029,
+        "tableRows": 19,
+        "listItems": 0
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T15:25:31.954Z",
+      "scores": {
+        "performance": 0.79,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 691.328,
+        "largest-contentful-paint": 853.488,
+        "speed-index": 392,
+        "total-blocking-time": 0,
+        "cumulative-layout-shift": 0.4864262234345511,
+        "total-byte-weight": 2441989,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cache-insight",
+          "title": "Use efficient cache lifetimes"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    },
+    {
+      "phase": "before",
+      "path": "/admin/forms",
+      "iteration": 2,
+      "preflight": {
+        "title": "Formulaires",
+        "height": 4029,
+        "tableRows": 19,
+        "listItems": 0
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T15:25:52.994Z",
+      "scores": {
+        "performance": 0.79,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 641.229,
+        "largest-contentful-paint": 831.655,
+        "speed-index": 365,
+        "total-blocking-time": 0,
+        "cumulative-layout-shift": 0.49053664323644236,
+        "total-byte-weight": 2441989,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cache-insight",
+          "title": "Use efficient cache lifetimes"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    },
+    {
+      "phase": "before",
+      "path": "/admin/forms",
+      "iteration": 3,
+      "preflight": {
+        "title": "Formulaires",
+        "height": 4029,
+        "tableRows": 19,
+        "listItems": 0
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T15:26:14.119Z",
+      "scores": {
+        "performance": 0.79,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 672.848,
+        "largest-contentful-paint": 822,
+        "speed-index": 366,
+        "total-blocking-time": 0,
+        "cumulative-layout-shift": 0.4864262234345511,
+        "total-byte-weight": 2441989,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cache-insight",
+          "title": "Use efficient cache lifetimes"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    }
+  ],
+  "lighthouseAfter": [
+    {
+      "phase": "after",
+      "path": "/admin/widgets",
+      "iteration": 1,
+      "preflight": {
+        "title": "Widgets",
+        "height": 5500,
+        "tableRows": 0,
+        "listItems": 35
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T20:49:19.267Z",
+      "scores": {
+        "performance": 0.74,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 706.851,
+        "largest-contentful-paint": 706.851,
+        "speed-index": 401,
+        "total-blocking-time": 189.5979999389649,
+        "cumulative-layout-shift": 0.7480199457246192,
+        "total-byte-weight": 2725425,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "forced-reflow-insight",
+          "title": "Forced reflow"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "path": "/admin/widgets",
+      "iteration": 2,
+      "preflight": {
+        "title": "Widgets",
+        "height": 5500,
+        "tableRows": 0,
+        "listItems": 35
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T20:49:43.787Z",
+      "scores": {
+        "performance": 0.74,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 719.559,
+        "largest-contentful-paint": 719.559,
+        "speed-index": 413,
+        "total-blocking-time": 166.20999999999992,
+        "cumulative-layout-shift": 0.7362293080577359,
+        "total-byte-weight": 2911396,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "mainthread-work-breakdown",
+          "title": "Minimize main-thread work"
+        },
+        {
+          "id": "bootup-time",
+          "title": "Reduce JavaScript execution time"
+        },
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "forced-reflow-insight",
+          "title": "Forced reflow"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "path": "/admin/widgets",
+      "iteration": 3,
+      "preflight": {
+        "title": "Widgets",
+        "height": 5500,
+        "tableRows": 0,
+        "listItems": 35
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T20:50:07.714Z",
+      "scores": {
+        "performance": 0.8,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 737.571,
+        "largest-contentful-paint": 737.571,
+        "speed-index": 427,
+        "total-blocking-time": 173.6099999999999,
+        "cumulative-layout-shift": 0.36735787659842456,
+        "total-byte-weight": 2911287,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "forced-reflow-insight",
+          "title": "Forced reflow"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "path": "/admin/forms",
+      "iteration": 1,
+      "preflight": {
+        "title": "Formulaires",
+        "height": 1701,
+        "tableRows": 10,
+        "listItems": 0
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T20:50:32.174Z",
+      "scores": {
+        "performance": 0.82,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 672.282,
+        "largest-contentful-paint": 672.282,
+        "speed-index": 381,
+        "total-blocking-time": 0,
+        "cumulative-layout-shift": 0.38254010734238647,
+        "total-byte-weight": 2565209,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "path": "/admin/forms",
+      "iteration": 2,
+      "preflight": {
+        "title": "Formulaires",
+        "height": 1701,
+        "tableRows": 10,
+        "listItems": 0
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T20:50:52.831Z",
+      "scores": {
+        "performance": 0.77,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 700.291,
+        "largest-contentful-paint": 700.291,
+        "speed-index": 381,
+        "total-blocking-time": 0,
+        "cumulative-layout-shift": 0.6896919431279621,
+        "total-byte-weight": 2533470,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    },
+    {
+      "phase": "after",
+      "path": "/admin/forms",
+      "iteration": 3,
+      "preflight": {
+        "title": "Formulaires",
+        "height": 1701,
+        "tableRows": 10,
+        "listItems": 0
+      },
+      "lighthouseVersion": "13.5.0",
+      "fetchTime": "2026-10-04T20:51:13.398Z",
+      "scores": {
+        "performance": 0.77,
+        "accessibility": 1,
+        "best-practices": 1
+      },
+      "metrics": {
+        "first-contentful-paint": 673.395,
+        "largest-contentful-paint": 673.395,
+        "speed-index": 375,
+        "total-blocking-time": 0,
+        "cumulative-layout-shift": 0.6898626045422818,
+        "total-byte-weight": 2565209,
+        "dom-size": null
+      },
+      "cache": "HTTP cache cleared before every passage; localStorage session retained",
+      "failedAudits": [
+        {
+          "id": "layout-shifts",
+          "title": "Avoid large layout shifts"
+        },
+        {
+          "id": "valid-source-maps",
+          "title": "Missing source maps for large first-party JavaScript"
+        },
+        {
+          "id": "unused-javascript",
+          "title": "Reduce unused JavaScript"
+        },
+        {
+          "id": "cls-culprits-insight",
+          "title": "Layout shift culprits"
+        },
+        {
+          "id": "network-dependency-tree-insight",
+          "title": "Network dependency tree"
+        }
+      ]
+    }
+  ]
+}

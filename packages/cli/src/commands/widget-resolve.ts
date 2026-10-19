@@ -25,6 +25,7 @@ import {
 } from '@cogenta/theme-kit'
 import {
   isWidgetVisible,
+  STANDARD_WIDGET_AREAS,
   type Widget,
   type WidgetAreaDeclaration,
   type WidgetRequestContext,
@@ -174,6 +175,31 @@ const STRINGS: Record<string, WidgetStrings> = {
     nextMonth: 'Mois suivant',
     postsOn: 'Publié le {date}',
   },
+}
+
+/**
+ * The standard areas' names, which a screen reader announces for each
+ * `<aside>` ("Footer, column 1"). `@cogenta/widgets` declares them in English;
+ * a French page reads them in French. A theme that renamed an area keeps its
+ * own name.
+ */
+const AREA_LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  fr: {
+    sidebar: 'Barre latérale',
+    'content-before': 'Avant le contenu',
+    'content-after': 'Après le contenu',
+    'footer-1': 'Pied de page, colonne 1',
+    'footer-2': 'Pied de page, colonne 2',
+    'footer-3': 'Pied de page, colonne 3',
+    'footer-4': 'Pied de page, colonne 4',
+  },
+}
+
+function areaLabel(id: string, declared: string, locale: string): string {
+  const stock = STANDARD_WIDGET_AREAS.find((area) => area.id === id)?.label
+  if (stock !== declared) return declared
+  const base = locale.split('-')[0]?.toLowerCase() ?? 'en'
+  return AREA_LABELS[base]?.[id] ?? declared
 }
 
 export function widgetStrings(locale: string): WidgetStrings {
@@ -981,7 +1007,7 @@ export async function resolveWidgetAreas(
     media = await deps.loadMedia([...mediaIds])
   }
 
-  const labels = new Map(declared.map((area) => [area.id, area.label]))
+  const labels = new Map(declared.map((area) => [area.id, areaLabel(area.id, area.label, locale)]))
   const areas: Record<string, { id: string; label: string; widgets: ResolvedWidget[] }> = {}
   for (const { area, build } of pending) {
     if (!labels.has(area)) continue

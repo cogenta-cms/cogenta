@@ -41,7 +41,7 @@ const LANGUAGE_TAG = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/
 /** `/Blog/Été/` and `/blog/été` are the same route. Case is left alone: paths are case-sensitive. */
 export function normalisePath(path: string): string {
   const withoutQuery = path.split(/[?#]/u)[0] ?? ''
-  const trimmed = withoutQuery.replace(/\/+$/u, '')
+  const trimmed = withoutQuery.replace(/(?<!\/)\/+$/u, '')
   if (trimmed.length === 0) return '/'
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }

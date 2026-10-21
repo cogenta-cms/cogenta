@@ -2,7 +2,7 @@ import { CogentaError } from '@cogenta/core'
 import type { AuditLogLike } from '../audit/types.js'
 import { withAuditForManifest } from '../audit/with-audit.js'
 import type { ApprovalQueue } from '../autonomy/types.js'
-import { withAutonomyForManifest } from '../autonomy/with-autonomy.js'
+import { stricterAutonomy, withAutonomyForManifest } from '../autonomy/with-autonomy.js'
 import { createBudgetTracker } from '../budget/tracker.js'
 import type { BudgetTracker, KillSwitch } from '../budget/types.js'
 import { assembleContext, type SiteContext } from '../identity/context.js'
@@ -53,6 +53,8 @@ export interface RunnerSite {
 export interface AgentProviderRegistryLike {
   has(name: string): boolean
   get(name: string): ProviderClient
+  /** Every configured provider, by name — the last resort of `resolveProvider`. */
+  names?(): readonly string[]
 }
 
 export interface RunAgentOptions {
@@ -199,6 +201,14 @@ function resolveProvider(
   if (model.fallback !== undefined && providers.has(model.fallback)) {
     return withModelOverride(providers.get(model.fallback), model.model)
   }
+  // Any configured provider, with its own default model: every built-in
+  // agent prefers Anthropic then OpenAI, so a site set up with only
+  // DeepSeek, Mistral or a local model ran none of them — while the
+  // assistant, on the same site, already used whatever was configured.
+  // The agent's own model id is not applied: it names a model of the
+  // provider it asked for, not of this one.
+  const anyConfigured = providers.names?.()[0]
+  if (anyConfigured !== undefined) return providers.get(anyConfigured)
   throw new CogentaError({
     code: 'AGENT_NO_PROVIDER',
     message: `"${agentName}" has no configured LLM provider (wants "${model.preferred}"${
@@ -266,19 +276,23 @@ export function createAgentRunner(options: AgentRunnerOptions): AgentRunner {
       // the parent's — its own autonomy config, its own name in the audit
       // trail — never a bare pass-through just because they were reached one
       // hop away from the top-level run.
+      // Never more freedom than the agent that delegates: the stricter of
+      // the two, tool by tool (`stricterAutonomy`).
+      const delegatedAutonomy = stricterAutonomy(
+        agent.autonomy ?? { default: 'observe' },
+        subagent.autonomy ?? { default: 'observe' },
+      )
       const subTools = withAuditForManifest(
         withAutonomyForManifest(buildManifest(options.tools, subagent.tools, subContext), {
           agentName: subagent.name,
-          autonomy: subagent.autonomy ?? { default: 'observe' },
+          autonomy: delegatedAutonomy,
           approvalQueue: options.approvalQueue,
         }),
         {
           auditLog: options.auditLog,
           agentName: subagent.name,
           actor: actorFor(subagent.name),
-          ...(subagent.autonomy?.default === undefined
-            ? {}
-            : { autonomyLevel: subagent.autonomy.default }),
+          autonomyLevel: delegatedAutonomy.default,
         },
       )
       let subClient: ProviderClient

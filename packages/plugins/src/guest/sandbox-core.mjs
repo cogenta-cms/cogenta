@@ -33,7 +33,14 @@ const BOOTSTRAP = `(function (bridge, log, capabilitiesJson) {
     if (sdk[namespace] === undefined) sdk[namespace] = {}
     if (sdk[namespace][method] === undefined) {
       sdk[namespace][method] = async (args) => {
-        const raw = await bridge(name, JSON.stringify(args === undefined ? null : args))
+        let raw
+        try {
+          raw = await bridge(name, JSON.stringify(args === undefined ? null : args))
+        } catch (failure) {
+          // Rebuilt in this realm: an error object of the host's realm would
+          // hand the plugin that realm's Function through .constructor.
+          throw new Error(typeof failure === 'string' ? failure : 'the host refused this call')
+        }
         return JSON.parse(raw)
       }
     }

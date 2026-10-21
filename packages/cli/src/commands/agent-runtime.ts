@@ -503,6 +503,7 @@ function createLiveProviderRegistry(
     },
     has: (name) => registry.has(name),
     get: (name) => registry.get(name),
+    names: () => registry.names(),
   }
 }
 

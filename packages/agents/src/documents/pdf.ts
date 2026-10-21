@@ -25,6 +25,13 @@ import { MAX_TEXT_CHARACTERS } from './limits.js'
  */
 
 const MAX_INFLATED_BYTES = 200 * 1024 * 1024
+/**
+ * All streams of one document together. Each stream is capped above, but
+ * hundreds of them that hold no text never moved the text counter, so the
+ * loop below could inflate gigabytes, synchronously, before giving up
+ * (security review of 2026-10-21).
+ */
+const MAX_TOTAL_INFLATED_BYTES = 400 * 1024 * 1024
 
 /** CP-1252's only departures from Latin-1: the 0x80–0x9F block. */
 const CP1252_HIGH = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ'
@@ -454,6 +461,7 @@ export function extractPdfText(buffer: Buffer): PdfExtraction {
   const pages: string[] = []
   let skipped = 0
   let accumulated = 0
+  let inflatedTotal = 0
   // `MAX_TEXT_CHARACTERS` is `extractDocumentText`'s final cap, checked only
   // after every format reader has already built its whole result string.
   // Enforcing the same budget here, inside the loop, is what stops a PDF
@@ -471,11 +479,18 @@ export function extractPdfText(buffer: Buffer): PdfExtraction {
       break
     }
     if (/\/Type\s*\/(?:XObject|Metadata|ObjStm|XRef)\b/.test(stream.dictionary)) continue
+    if (inflatedTotal > MAX_TOTAL_INFLATED_BYTES) {
+      warnings.push(
+        'Stopped reading after decompressing more data than a text document holds; the rest of this PDF was not read.',
+      )
+      break
+    }
     const decoded = decodeStream(stream)
     if (decoded === undefined) {
       skipped++
       continue
     }
+    inflatedTotal += decoded.length
     // A content stream is the only thing with text-showing operators in it.
     if (!/\b(?:Tj|TJ)\b/.test(decoded.toString('latin1'))) continue
     const text = textFromContentStream(decoded)

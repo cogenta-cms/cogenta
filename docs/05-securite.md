@@ -85,6 +85,25 @@ construction.
 - SRI sur toute ressource externe
 - Uploads : vérification du type réel, pas de l'extension ; réencodage systématique des
   images ; SVG assainis ou refusés
+- **État réel au 2026-10-21** (revue de sécurité de ce jour) :
+  - *CSP* : toujours facultative (`security.csp`), **pas encore envoyée par défaut** —
+    les scripts en ligne des thèmes (bascule clair/sombre, JSON-LD) n'ont pas de nonce.
+    C'est la prochaine marche ; elle compte d'autant plus que le jeton de session de
+    l'admin vit dans `localStorage` sur l'origine du site.
+  - *Liens* : `javascript:`, `vbscript:` et `data:` refusés à l'écriture dans le contrat B
+    (`isScriptUrl`) et neutralisés au rendu pour tout thème et tout arbre de plugin
+    (`safeUrlAttribute`, dans `serialize` de `@cogenta/theme-kit`).
+  - *CSRF* : sans objet tant qu'aucune route ne s'authentifie par cookie (jeton `Bearer`).
+  - *Thèmes du bac à sable* : un fichier écrit par l'agent de thème ou dépaqueté d'un
+    ZIP n'est importé, prévisualisé et vérifié que dans un processus enfant sous le
+    modèle de permissions de Node (le bac à sable et les paquets installés lisibles,
+    environnement vide, ni `child_process` ni écriture). **Un thème déployé, lui,
+    s'exécute dans le processus du serveur**, comme un thème installé par npm : le
+    déploiement exige la confirmation d'un admin, l'écran dit ce risque, et un contrôle
+    statique refuse `process`, `globalThis`, `import()` dynamique et voisins — un
+    second mur, pas la frontière.
+  - *Déni de service* : expressions régulières en forme linéaire ; corps de requête
+    anonyme plafonné à 1 Mio (26 Mio pour un formulaire public avec fichier).
 
 ## 6. Chaîne d'approvisionnement
 

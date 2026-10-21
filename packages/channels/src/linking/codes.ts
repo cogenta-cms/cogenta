@@ -1,11 +1,10 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, randomInt } from 'node:crypto'
 
 /**
  * Crockford-style alphabet, ambiguous characters (`0`/`O`, `1`/`I`/`L`)
  * removed — a code a person reads on a screen and types into a chat app
- * must not depend on font rendering to tell `0` from `O`. 32 symbols divides
- * 256 evenly, so mapping a random byte to an index via modulo carries no
- * bias (unlike an alphabet size that doesn't divide 256).
+ * must not depend on font rendering to tell `0` from `O`. 31 symbols, each
+ * drawn uniformly by `randomInt`.
  */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
@@ -21,12 +20,10 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 const CODE_LENGTH = 8
 
 export function generateLinkCode(): string {
-  const bytes = randomBytes(CODE_LENGTH)
   let code = ''
-  for (let i = 0; i < CODE_LENGTH; i++) {
-    const byte = bytes[i] ?? 0
-    code += CODE_ALPHABET[byte % CODE_ALPHABET.length]
-  }
+  // `randomInt`, not a byte modulo the alphabet: 31 symbols do not divide
+  // 256, so the first eight letters came out more often than the rest.
+  for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]
   return code
 }
 

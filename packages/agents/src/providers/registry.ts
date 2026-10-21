@@ -120,6 +120,7 @@ export function createProviderRegistry(
 ): {
   readonly get: (name: string) => ProviderClient
   readonly has: (name: string) => boolean
+  readonly names: () => readonly string[]
 } {
   const clients = new Map<string, ProviderClient>()
   for (const [name, entry] of Object.entries(config)) {
@@ -128,6 +129,7 @@ export function createProviderRegistry(
 
   return {
     has: (name) => clients.has(name),
+    names: () => [...clients.keys()].sort(),
     get(name) {
       const client = clients.get(name)
       if (client === undefined) {

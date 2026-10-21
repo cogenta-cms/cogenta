@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isScriptUrl, SCRIPT_URL_MESSAGE } from './link-safety.js'
 import { plainTextSchema } from './plain-text.js'
 
 /**
@@ -8,7 +9,12 @@ import { plainTextSchema } from './plain-text.js'
  * entity rather than its URL is what makes a slug change harmless.
  */
 export const linkTargetSchema = z.union([
-  z.strictObject({ href: z.string().min(1) }),
+  z.strictObject({
+    href: z
+      .string()
+      .min(1)
+      .refine((href) => !isScriptUrl(href), { error: SCRIPT_URL_MESSAGE }),
+  }),
   z.strictObject({ collection: z.string().min(1), id: z.string().min(1) }),
 ])
 

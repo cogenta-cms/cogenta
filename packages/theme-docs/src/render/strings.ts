@@ -61,7 +61,7 @@ export function word(locale: string, key: ThemeWord): string {
  * product in ink and the word that says what the site is in the quieter grey,
  * and the copyright line names the product, not the word "Docs".
  */
-const DOCS_SUFFIX = /^(.+?)\s+(docs|documentation|developer docs|developers|dev docs)$/i
+const DOCS_SUFFIX = /^(.+?)(?<!\s)\s+(docs|documentation|developer docs|developers|dev docs)$/i
 
 export function splitSiteName(name: string): {
   readonly product: string

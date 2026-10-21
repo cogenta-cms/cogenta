@@ -172,7 +172,7 @@ function isSafeRedirectPath(value: string): boolean {
 }
 
 export function createCommentsRouter(options: CommentsRouterOptions): CommentsRouter {
-  const basePath = (options.basePath ?? '/api/comments').replace(/\/+$/u, '')
+  const basePath = (options.basePath ?? '/api/comments').replace(/(?<!\/)\/+$/u, '')
   const { permissions } = options
   const honeypotField = options.honeypotField ?? 'website'
   const minFillDelayMs = options.minFillDelayMs ?? 3_000

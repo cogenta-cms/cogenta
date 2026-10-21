@@ -644,7 +644,7 @@ export function paypalPaymentDriver(options: PayPalDriverOptions = {}): PaymentD
     | undefined
 
   const resolveBaseUrl = (config: PaymentConfig): string =>
-    (config.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '')
+    (config.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/(?<!\/)\/+$/, '')
 
   async function probeToken(
     clientId: string,

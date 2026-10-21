@@ -180,6 +180,41 @@ describe('the sandbox holds nothing of the worker’s own realm (2026-09-16 revi
     })
   }
 
+  it('cannot reach the host through the error a refused SDK call rejects with (2026-10-21 review)', async () => {
+    // The host used to reject with an Error of its own realm: catching it
+    // and climbing `.constructor.constructor` gave the real `process` — in
+    // the child, a `fetch` the domain allow-list never sees.
+    const code = `({
+      go: async () => {
+        try {
+          await sdk.storage.write({ key: 'plugins/x/a', content: 'x' })
+          return { escaped: false, message: 'no refusal' }
+        } catch (error) {
+          try {
+            const found = error.constructor.constructor('return process')()
+            return { escaped: found !== null && typeof found === 'object' && typeof found.pid === 'number' }
+          } catch (inner) {
+            return { escaped: false, message: String(inner).slice(0, 80) }
+          }
+        }
+      },
+    })`
+
+    const result = await runIsolated(code, {
+      invoke: 'go',
+      input: {},
+      grantedCapabilities: ['storage.write:plugins/x'],
+      handlers: {
+        'storage.write': async () => {
+          throw new Error('refused by the host')
+        },
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.value).toMatchObject({ escaped: false })
+  })
+
   it('still gives a plugin a working SDK and console through that wall', async () => {
     const code = `({
       go: async () => {

@@ -1,6 +1,6 @@
 import type { SeoFinding } from './types.js'
 
-const LINK_PATTERN = /\[[^\]]+\]\([^)]+\)/
+const LINK_PATTERN = /\[[^[\]]+\]\([^)]+\)/
 
 /**
  * "Vérification de llms.txt" (the AEO/GEO differentiator) — checks the

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, randomInt } from 'node:crypto'
 
 /**
  * Same alphabet as the linking code (`linking/codes.ts`) — Crockford-style,
@@ -26,12 +26,10 @@ const TOKEN_LENGTH = 12
 export const APPROVAL_TOKEN_TTL_MS = 20 * 60 * 1000
 
 export function generateApprovalToken(): string {
-  const bytes = randomBytes(TOKEN_LENGTH)
   let token = ''
-  for (let i = 0; i < TOKEN_LENGTH; i++) {
-    const byte = bytes[i] ?? 0
-    token += TOKEN_ALPHABET[byte % TOKEN_ALPHABET.length]
-  }
+  // `randomInt`, not a byte modulo the alphabet: 31 symbols do not divide
+  // 256, so the first eight letters came out more often than the rest.
+  for (let i = 0; i < TOKEN_LENGTH; i++) token += TOKEN_ALPHABET[randomInt(TOKEN_ALPHABET.length)]
   return token
 }
 

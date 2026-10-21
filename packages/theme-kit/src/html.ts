@@ -93,6 +93,38 @@ export function escapeAttribute(value: string): string {
   return escapeText(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
+/** Attributes a browser follows or loads: a script scheme in one of them runs. */
+const URL_ATTRIBUTES = new Set([
+  'href',
+  'src',
+  'action',
+  'formaction',
+  'poster',
+  'cite',
+  'xlink:href',
+])
+const SAFE_SCHEMES = new Set(['http', 'https', 'mailto', 'tel'])
+
+/**
+ * A URL attribute's value, or `#` when its scheme could run script.
+ *
+ * The last wall, at the one place every theme and every plugin tree turns
+ * into HTML (security review of 2026-10-21): an editor's `javascript:` link
+ * in a call to action, a rich-text link, an embed or a logo was written as
+ * is and ran on the site's origin — the admin's too — at the first click.
+ * Relative URLs and fragments pass; so do http(s), mailto and tel, and a
+ * `data:image/` source. Browsers ignore whitespace and control characters
+ * around a scheme (`java\tscript:`), so the scheme is read without them.
+ */
+export function safeUrlAttribute(name: string, value: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: that is the point
+  const probe = value.replace(/[\u0000-\u0020\u007f]/gu, '').toLowerCase()
+  const scheme = /^([a-z][a-z0-9+.-]*):/u.exec(probe)?.[1]
+  if (scheme === undefined || SAFE_SCHEMES.has(scheme)) return value
+  if (scheme === 'data' && name !== 'href' && probe.startsWith('data:image/')) return value
+  return '#'
+}
+
 function serializeAttributes(attrs: Attributes): string {
   let out = ''
   // Insertion order, not sorted: it is deterministic already, and an author
@@ -103,7 +135,10 @@ function serializeAttributes(attrs: Attributes): string {
       out += ` ${name}`
       continue
     }
-    out += ` ${name}="${escapeAttribute(String(value))}"`
+    const text = URL_ATTRIBUTES.has(name.toLowerCase())
+      ? safeUrlAttribute(name.toLowerCase(), String(value))
+      : String(value)
+    out += ` ${name}="${escapeAttribute(text)}"`
   }
   return out
 }

@@ -183,7 +183,7 @@ function readStructure(input: unknown): Structure {
 
 /** Numeric part of a validated CSS length. The unit is carried separately. */
 function lengthValue(raw: string): { amount: number; unit: string } {
-  const match = /^(-?(?:\d+\.?\d*|\.\d+))(.*)$/.exec(raw.trim())
+  const match = /^(-?(?:\d+(?:\.\d*)?|\.\d+))([\s\S]*)$/.exec(raw.trim())
   return { amount: Number(match?.[1] ?? '0'), unit: (match?.[2] ?? '').trim() }
 }
 

@@ -494,7 +494,7 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
         const url =
           options.siteUrl === undefined || path === null
             ? null
-            : `${options.siteUrl.replace(/\/+$/u, '')}${path}${path.includes('?') ? '&' : '?'}${query}`
+            : `${options.siteUrl.replace(/(?<!\/)\/+$/u, '')}${path}${path.includes('?') ? '&' : '?'}${query}`
         return jsonResponse(201, {
           data: {
             token,
@@ -600,7 +600,7 @@ function noRoute(): CogentaError {
 }
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 

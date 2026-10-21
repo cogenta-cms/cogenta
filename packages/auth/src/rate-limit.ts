@@ -45,6 +45,20 @@ export interface RateLimiter {
   /** Throws `AUTH_RATE_LIMITED` if the subject is currently backed off. */
   check(subject: string): Promise<void>
   record(subject: string): Promise<void>
+  /**
+   * Counts this attempt *before* the credential is checked, then throws
+   * `AUTH_RATE_LIMITED` if the attempts already made put the subject past a
+   * threshold. `check` then `record` leaves the whole slow verification
+   * (scrypt, ~100 ms) between the two: a thousand parallel requests all pass
+   * `check` before the first `record`, so a guessing script got a thousand
+   * tries per window instead of five. Reserving first closes that gap. A
+   * successful attempt calls `clear`; a failed one needs no `record`.
+   *
+   * `scale` multiplies every threshold — for a subject shared by every
+   * caller (an account, whoever is guessing), where the usual five would let
+   * any stranger lock its owner out.
+   */
+  reserve(subject: string, scale?: number): Promise<void>
   /** Called after a successful login: past failures stop counting against them. */
   clear(subject: string): Promise<void>
   /**
@@ -74,23 +88,35 @@ export function createRateLimiter(db: DatabaseHandle, now: () => number = Date.n
     return Number(result.rows[0]?.n ?? 0)
   }
 
+  function refuseIfPast(attempts: number, scale = 1): void {
+    const threshold = [...THRESHOLDS].reverse().find((entry) => attempts >= entry.attempts * scale)
+    if (threshold === undefined) return
+
+    throw new CogentaError({
+      code: 'AUTH_RATE_LIMITED',
+      message: 'Too many attempts. Try again later.',
+      hint: `Wait about ${Math.ceil(threshold.delayMs / 1000)} seconds before trying again, or use a passkey, which this limit does not slow down.`,
+      details: { retryAfterMs: threshold.delayMs },
+    })
+  }
+
+  async function insertAttempt(subject: string): Promise<void> {
+    await db.query(sql`
+      insert into ${table} (id, subject, at) values (${newId(now)}, ${subject}, ${new Date(now()).toISOString()})`)
+  }
+
   return {
     check: async (subject) => {
-      const attempts = await countRecent(subject)
-      const threshold = [...THRESHOLDS].reverse().find((entry) => attempts >= entry.attempts)
-      if (threshold === undefined) return
-
-      throw new CogentaError({
-        code: 'AUTH_RATE_LIMITED',
-        message: 'Too many attempts. Try again later.',
-        hint: `Wait about ${Math.ceil(threshold.delayMs / 1000)} seconds before trying again, or use a passkey, which this limit does not slow down.`,
-        details: { retryAfterMs: threshold.delayMs },
-      })
+      refuseIfPast(await countRecent(subject))
     },
 
-    record: async (subject) => {
-      await db.query(sql`
-        insert into ${table} (id, subject, at) values (${newId(now)}, ${subject}, ${new Date(now()).toISOString()})`)
+    record: insertAttempt,
+
+    reserve: async (subject, scale = 1) => {
+      await insertAttempt(subject)
+      // Every row this one could have raced with is already written, so the
+      // count it sees includes them; minus one for this attempt itself.
+      refuseIfPast((await countRecent(subject)) - 1, scale)
     },
 
     clear: async (subject) => {

@@ -16,7 +16,9 @@ export {
   createStorageReadHandler,
   createStorageWriteHandler,
 } from './host/capabilities.js'
+export { moduleReadPaths } from './host/module-process-runner.js'
 export type {
+  InspectIsolatedModuleOptions,
   IsolatedRunResult,
   PluginDisabledEvent,
   RunIsolatedModuleOptions,
@@ -24,6 +26,7 @@ export type {
   RunPluginOptions,
 } from './host/worker-runner.js'
 export {
+  inspectIsolatedModule,
   runIsolated,
   runIsolatedModule,
   runIsolatedOrThrow,

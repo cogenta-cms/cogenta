@@ -353,7 +353,7 @@ function readShippingAddress(body: Record<string, unknown>): ShippingAddress | n
 export function createCommerceAdminRouter(
   options: CommerceAdminRouterOptions,
 ): CommerceAdminRouter {
-  const basePath = (options.basePath ?? '/api/commerce').replace(/\/+$/u, '')
+  const basePath = (options.basePath ?? '/api/commerce').replace(/(?<!\/)\/+$/u, '')
   const { permissions } = options
 
   /**

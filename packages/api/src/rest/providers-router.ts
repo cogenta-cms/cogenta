@@ -108,7 +108,7 @@ function requireAdmin(actor: Actor): void {
 }
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 
@@ -309,6 +309,8 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
           // every tuning field above.
           const imageModel = textField(body, 'imageModel')
           const imageBaseUrl = textField(body, 'imageBaseUrl')
+          // Needed only when an endpoint moves (`PROVIDER_KEY_REQUIRED`).
+          const apiKey = body['apiKey']
           let result: ProviderSummary | undefined
           if (typeof enabled === 'boolean') {
             result = await options.providers.setEnabled(provider, enabled)
@@ -330,6 +332,7 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
               ...(maxCorrectionAttempts === undefined ? {} : { maxCorrectionAttempts }),
               ...(imageModel === undefined ? {} : { imageModel }),
               ...(imageBaseUrl === undefined ? {} : { imageBaseUrl }),
+              ...(typeof apiKey === 'string' && apiKey.trim().length > 0 ? { apiKey } : {}),
             })
           }
           if (result === undefined) {

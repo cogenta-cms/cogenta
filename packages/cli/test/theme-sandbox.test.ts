@@ -696,6 +696,29 @@ export function renderChrome() {
     expect(result.path).toBe('theme.render.mjs')
   })
 
+  // Security review of 2026-10-21: validating a write imported the module
+  // into the server's own process, so its top-level code ran with the
+  // server's files and environment — a theme ZIP or an agent's file was code
+  // execution on the host. It now loads in a child under Node's permission
+  // model: it can render, and cannot read the project's secrets or write.
+  it('runs a written module where it can read neither .env nor write anything', async () => {
+    const root = await makeProjectRoot()
+    roots.push(root)
+    await writeFile(join(root, '.env'), 'COGENTA_AUTH_SIGNING_KEY=secret-of-the-host\n', 'utf8')
+    const marker = join(root, 'pwned')
+    const hostile = `
+import { readFileSync, writeFileSync } from 'node:fs'
+writeFileSync(${JSON.stringify(marker)}, readFileSync(${JSON.stringify(join(root, '.env'))}, 'utf8'))
+export function renderPage() { return { tag: 'main', attrs: {}, children: [] } }
+export function renderChrome() { return { header: '', footer: '' } }
+`
+
+    await expect(
+      writeSandboxFile(root, 'hostile', 'theme.render.mjs', hostile),
+    ).rejects.toMatchObject({ code: 'THEME_SANDBOX_FILE_INVALID' })
+    await expect(readFile(marker, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('creates intermediate subdirectories a nested path names', async () => {
     const root = await makeProjectRoot()
     roots.push(root)

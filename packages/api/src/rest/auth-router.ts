@@ -68,7 +68,7 @@ const DEFAULT_BASE_PATH = '/api/auth'
 function bearerToken(headers: RestRequest['headers']): string | null {
   const raw = headers?.['authorization']
   if (raw === undefined) return null
-  const match = /^Bearer\s+(.+)$/iu.exec(raw)
+  const match = /^Bearer\s+(\S.*)$/iu.exec(raw)
   return match?.[1]?.trim() ?? null
 }
 
@@ -90,12 +90,13 @@ function requestedTtlMs(body: Record<string, unknown>): number | undefined {
 function loginContextFrom(
   request: RestRequest,
   body: Record<string, unknown>,
-): { userAgent?: string; ttlMs?: number } {
+): { userAgent?: string; ttlMs?: number; ip?: string } {
   const userAgent = requestUserAgent(request.headers)
   const ttlMs = requestedTtlMs(body)
   return {
     ...(userAgent === undefined ? {} : { userAgent }),
     ...(ttlMs === undefined ? {} : { ttlMs }),
+    ...(request.clientIp === undefined ? {} : { ip: request.clientIp }),
   }
 }
 
@@ -375,10 +376,16 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
 
     const user = await auth.users.byEmail(email)
     if (user !== null && user.status === 'active') {
-      const issued = await auth.resets.issue(user.id)
-      if (onForgotPassword !== undefined) {
-        await onForgotPassword({ user, token: issued.token, expiresAt: issued.expiresAt })
-      }
+      // Not awaited: issuing the token and sending the mail took long enough
+      // to tell a real address from an unknown one by the response time,
+      // and a mail failure answered 500 only for a real account. The answer
+      // below is the same either way; a failure is the mailer's to report.
+      void auth.resets
+        .issue(user.id)
+        .then((issued) =>
+          onForgotPassword?.({ user, token: issued.token, expiresAt: issued.expiresAt }),
+        )
+        .catch(() => undefined)
     }
 
     return jsonResponse(200, {
@@ -640,7 +647,7 @@ function noRoute(): CogentaError {
 }
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 

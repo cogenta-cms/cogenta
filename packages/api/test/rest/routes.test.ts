@@ -49,6 +49,19 @@ describe('REST routes', () => {
     expect(valuesOf(dataOf(response))['title']).toBe('First')
   })
 
+  it('answers a path of thousands of slashes in linear time, never stalling the server', async () => {
+    // `/\/+$/` backtracked quadratically: 16 000 slashes (a header Node
+    // accepts) blocked the event loop for ~0.9 s per request.
+    const started = process.cpuUsage()
+    const response = await harness.router.handle(
+      request('GET', `/rest_article${'/'.repeat(100_000)}x`),
+      asPublic,
+    )
+    const { user, system } = process.cpuUsage(started)
+    expect(response.status).toBeGreaterThanOrEqual(400)
+    expect((user + system) / 1000).toBeLessThan(500)
+  })
+
   it('refuses to create an entry for an actor without the create permission', async () => {
     const response = await harness.router.handle(
       request('POST', '/rest_article', { body: { values: { title: 'Nope' } } }),

@@ -132,7 +132,11 @@ export interface PluginBlockCheck {
 }
 
 function safeUrl(value: string): boolean {
-  const trimmed = value.trim().toLowerCase()
+  // Browsers drop control characters and whitespace anywhere in a scheme:
+  // `java\tscript:` and `\u0001javascript:` passed a `trim()` (security
+  // review of 2026-10-21). Read without them.
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: that is the point
+  const trimmed = value.replace(/[\u0000-\u0020\u007f]/gu, '').toLowerCase()
   if (trimmed.startsWith('javascript:') || trimmed.startsWith('vbscript:')) return false
   // `data:` is allowed only for an image, which is what a generated chart or
   // a QR code needs; `data:text/html` would be a document on this origin.

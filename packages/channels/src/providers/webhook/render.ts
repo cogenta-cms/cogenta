@@ -18,7 +18,7 @@ export interface WebhookPayload {
  * module; both wrap the one real primitive, `buildSignedApprovalLink`.
  */
 function actionToUrl(action: ChannelAction, links: WebhookActionLinkOptions): string {
-  const match = /^(approve|deny)\s+(.+)$/.exec(action.id)
+  const match = /^(approve|deny)\s+(\S.*)$/.exec(action.id)
   const [, word = 'approve', token = action.id] = match ?? []
   const decision = word === 'approve' ? 'approved' : 'rejected'
   return buildSignedApprovalLink(

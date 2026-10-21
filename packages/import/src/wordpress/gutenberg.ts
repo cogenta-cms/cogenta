@@ -26,7 +26,7 @@ export interface HtmlSegment {
 
 export type ContentSegment = GutenbergBlockSegment | HtmlSegment
 
-const BLOCK_COMMENT = /<!--\s*(\/)?wp:([a-zA-Z0-9][\w/-]*)\s*({[^}]*})?\s*(\/)?-->/g
+const BLOCK_COMMENT = /<!--\s*(\/)?wp:([a-zA-Z0-9][\w/-]*)\s*(?:({[^}]*})\s*)?(\/)?-->/g
 
 function parseAttrs(raw: string | undefined): Record<string, unknown> {
   if (raw === undefined) return {}

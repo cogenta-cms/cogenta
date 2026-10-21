@@ -348,7 +348,9 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
 
     const getUserRoles = async (userId: string): Promise<readonly string[]> => {
       const user = await users.byId(userId)
-      return user === null ? [] : user.roles
+      // A disabled account loses its web sessions; its linked chat account
+      // must lose its rights the same instant (security review 2026-10-21).
+      return user === null || user.status !== 'active' ? [] : user.roles
     }
     const run = (name: string, instruction: string, trigger?: string) =>
       agentsRuntime.agentRunner.run(name, instruction, trigger)

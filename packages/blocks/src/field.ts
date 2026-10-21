@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isScriptUrl, SCRIPT_URL_MESSAGE } from './link-safety.js'
 import { plainTextSchema } from './plain-text.js'
 import { type RichTextDocument, richTextDocumentSchema } from './rich-text.js'
 
@@ -114,9 +115,9 @@ function text<const O extends TextFieldOptions<boolean> = NotRequired>(
   if (opts.min !== undefined) schema = schema.min(opts.min)
   if (opts.max !== undefined) schema = schema.max(opts.max)
   if (opts.format === 'url') {
-    schema = schema.refine((value) => URL.canParse(value), {
-      error: 'must be an absolute URL',
-    })
+    schema = schema
+      .refine((value) => URL.canParse(value), { error: 'must be an absolute URL' })
+      .refine((value) => !isScriptUrl(value), { error: SCRIPT_URL_MESSAGE })
   }
   return makeField('text', schema, { min: opts.min, max: opts.max, format: opts.format }, opts)
 }

@@ -173,7 +173,7 @@ export interface Fact {
 }
 
 function contactHref(value: string): string | undefined {
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return `mailto:${value}`
+  if (/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(value)) return `mailto:${value}`
   const digits = value.replace(/[\s().-]/g, '')
   if (/^\+?\d{7,15}$/.test(digits)) return `tel:${digits}`
   return undefined

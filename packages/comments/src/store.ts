@@ -81,7 +81,7 @@ function notFound(id: string): CogentaError {
   })
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u
+const EMAIL_RE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/u
 
 function assertCreateInput(input: CommentCreateInput): void {
   const body = input.body.trim()

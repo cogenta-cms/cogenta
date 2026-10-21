@@ -1,9 +1,8 @@
-import { randomUUID } from 'node:crypto'
 import { access, cp, lstat, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { CogentaError } from '@cogenta/core'
-import { runIsolatedModule } from '@cogenta/plugins'
+import { inspectIsolatedModule, moduleReadPaths, runIsolatedModule } from '@cogenta/plugins'
 import { loadTheme, parseThemeManifest } from '@cogenta/render'
 import { escapeText } from '@cogenta/theme-kit'
 import { invalidateThemeCss, loadLocalThemeCss } from './theme-css.js'
@@ -122,6 +121,29 @@ export async function renderPreview(page, chromeInput, callbacks) {
 `
 }
 
+/**
+ * What a sandbox module may read when it runs: its own sandbox, the
+ * installed packages it imports and the `package.json` files above it
+ * (`moduleReadPaths`) — never `.env`, never `.cogenta/site.db`. Every import of a sandbox module goes through a child
+ * process under Node's permission model with this list (security review of
+ * 2026-10-21): before, a write was validated by an `import()` in the
+ * server's own process, so a theme ZIP or an agent's file ran with the
+ * server's secrets.
+ */
+const readPathsBySandbox = new Map<string, Promise<readonly string[]>>()
+
+function sandboxReadPaths(sandboxDir: string): Promise<readonly string[]> {
+  let paths = readPathsBySandbox.get(sandboxDir)
+  if (paths === undefined) {
+    paths = moduleReadPaths(sandboxDir)
+    readPathsBySandbox.set(sandboxDir, paths)
+  }
+  return paths
+}
+
+/** Heap for one sandbox run: a theme imports theme-kit and its blocks, more than a plugin. */
+const SANDBOX_HEAP_MB = 192
+
 /** A short, fixed page — same reasoning `renderThemeGalleryPreview` already documents: every preview must show the same content, database-free, so nothing here can leak a real entry and comparing two edits of the same sandbox stays fair. */
 function previewDemoPage(): unknown {
   return {
@@ -202,6 +224,8 @@ export async function renderSandboxPreview(
   const siteName = options.siteName ?? 'Preview'
   const result = await runIsolatedModule({
     moduleUrl: pathToFileURL(join(dir, PREVIEW_ADAPTER_FILE)),
+    readPaths: await sandboxReadPaths(dir),
+    maxOldGenerationSizeMb: SANDBOX_HEAP_MB,
     exportName: 'renderPreview',
     args: [previewDemoPage(), previewDemoChromeInput(siteName)],
     callbacks: {
@@ -373,17 +397,56 @@ const CONFIG_MODULE_CANDIDATES = ['theme.config.js', 'theme.config.mjs', 'theme.
  * override it — used here, rather than changing the shared default and
  * risking the production hot path.
  */
-async function importManifestCacheBusted(root: string): Promise<unknown> {
-  for (const file of CONFIG_MODULE_CANDIDATES) {
-    const path = join(root, file)
-    try {
-      await access(path)
-    } catch {
-      continue
+function importManifestIsolated(projectRoot: string) {
+  return async (root: string): Promise<unknown> => {
+    for (const file of CONFIG_MODULE_CANDIDATES) {
+      const path = join(root, file)
+      try {
+        await access(path)
+      } catch {
+        continue
+      }
+      // A fresh child process per call is also what keeps a re-check from
+      // reading a stale, cached copy of a file the agent has since fixed.
+      return inspectedExports(projectRoot, root, path, file)
     }
-    return import(`${pathToFileURL(path).href}?t=${randomUUID()}`)
+    throw missingManifest(root)
   }
-  throw new CogentaError({
+}
+
+/** What `theme.config.*` exports, read in a restricted child process — never imported here. */
+async function inspectedExports(
+  projectRoot: string,
+  sandboxDir: string,
+  path: string,
+  relativePath: string,
+): Promise<{
+  readonly functions: readonly string[]
+  readonly default?: unknown
+  readonly theme?: unknown
+}> {
+  const result = await inspectIsolatedModule({
+    moduleUrl: pathToFileURL(path),
+    readPaths: await sandboxReadPaths(sandboxDir),
+  })
+  if (!result.ok) {
+    throw new CogentaError({
+      code: 'THEME_SANDBOX_FILE_INVALID',
+      message: `"${relativePath}" failed to load: ${result.error ?? 'unknown error'}`,
+      hint: "A theme module may import @cogenta/theme-kit and its own files; it cannot read the site's files, spawn a process or see its environment.",
+      details: { relativePath },
+    })
+  }
+  const value = (result.value ?? {}) as Record<string, unknown>
+  return {
+    functions: Array.isArray(value.functions) ? (value.functions as string[]) : [],
+    ...(value.default === null || value.default === undefined ? {} : { default: value.default }),
+    ...(value.theme === null || value.theme === undefined ? {} : { theme: value.theme }),
+  }
+}
+
+function missingManifest(root: string): CogentaError {
+  return new CogentaError({
     code: 'THEME_NOT_FOUND',
     message: `No theme manifest was found in ${root}.`,
     hint: `A theme root holds one of: ${CONFIG_MODULE_CANDIDATES.join(', ')}.`,
@@ -410,7 +473,7 @@ export async function checkThemeDeployment(
     await loadTheme({
       theme: { name: themeName, root: dir },
       verify: true,
-      importManifest: importManifestCacheBusted,
+      importManifest: importManifestIsolated(projectRoot),
     })
   } catch (error) {
     const message =
@@ -422,7 +485,66 @@ export async function checkThemeDeployment(
     return { ok: false, reasons: [message] }
   }
 
+  const ambient = await ambientAuthorityFindings(dir)
+  if (ambient.length > 0) return { ok: false, reasons: ambient }
+
   return { ok: true, reasons: [] }
+}
+
+/**
+ * Words a theme's render code has no use for and an escape needs. A
+ * deployed theme runs in the server's own process (contract D renders in
+ * process, on every page), so what came out of a sandbox — written by an
+ * agent from an outside document, or unpacked from a ZIP — is held to more
+ * than `verifyTheme`'s import check: `process`, `globalThis`,
+ * `getBuiltinModule` or a dynamic `import()` reach the filesystem with no
+ * import at all. A static scan is a second wall, not the boundary — the
+ * human confirming the deploy is — so a word refused here can be renamed.
+ */
+const AMBIENT_AUTHORITY: readonly (readonly [RegExp, string])[] = [
+  [/\bprocess\b/u, 'process'],
+  [/\bglobalThis\b/u, 'globalThis'],
+  [/\bgetBuiltinModule\b/u, 'getBuiltinModule'],
+  [/\brequire\s*\(/u, 'require()'],
+  [/\beval\s*\(/u, 'eval()'],
+  [/\bFunction\b/u, 'Function'],
+  [/\bimport\s*\(/u, 'import()'],
+  [/\.\s*constructor\b/u, '.constructor'],
+  [/\bReflect\b/u, 'Reflect'],
+  [/\bWebAssembly\b/u, 'WebAssembly'],
+  [/\bfetch\s*\(/u, 'fetch()'],
+]
+
+async function ambientAuthorityFindings(dir: string): Promise<string[]> {
+  const findings: string[] = []
+  const visit = async (current: string): Promise<void> => {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === PREVIEW_ADAPTER_FILE) continue
+      const path = join(current, entry.name)
+      if (entry.isDirectory()) {
+        await visit(path)
+        continue
+      }
+      if (!/\.(?:m?js|ts)$/u.test(entry.name)) continue
+      // Comments are documentation, not code: dropped before the scan.
+      const code = (await readFile(path, 'utf8'))
+        .replace(/\/\*[\s\S]*?\*\//gu, ' ')
+        .replace(/(^|[^:])\/\/[^\n]*/gu, '$1')
+      for (const [pattern, word] of AMBIENT_AUTHORITY) {
+        if (pattern.test(code)) {
+          const relativePath = path
+            .slice(dir.length + 1)
+            .split(sep)
+            .join('/')
+          findings.push(
+            `${relativePath} uses ${word}, which a deployed theme may not: it runs inside the server, and ${word} reaches beyond what a theme renders with.`,
+          )
+        }
+      }
+    }
+  }
+  await visit(dir)
+  return findings
 }
 
 export type ThemeDeploymentResult =
@@ -799,21 +921,21 @@ async function validateSandboxModuleWrite(
     return
   }
 
-  let imported: Record<string, unknown>
+  // Loaded in a restricted child process, never in this one: this file was
+  // written by an agent or unpacked from a ZIP, and importing it here ran
+  // its top-level code with the server's secrets (review of 2026-10-21).
+  let imported: Awaited<ReturnType<typeof inspectedExports>>
   try {
-    // `?t=` alone collided under fast, sub-millisecond-apart rewrites in the
-    // same process (two calls landing in the same `Date.now()` millisecond
-    // resolve to the same cached module — the second write's own validation
-    // then silently ran against the *first* write's already-cached content).
-    // `randomUUID()` never repeats within a process, cache-busting for real.
-    imported = (await import(`${pathToFileURL(target).href}?t=${randomUUID()}`)) as Record<
-      string,
-      unknown
-    >
+    imported = await inspectedExports(
+      projectRoot,
+      sandboxDirectory(projectRoot, id),
+      target,
+      relativePath,
+    )
   } catch (error) {
     throw new CogentaError({
       code: 'THEME_SANDBOX_FILE_INVALID',
-      message: `"${relativePath}" failed to load: ${error instanceof Error ? error.message : String(error)}`,
+      message: error instanceof Error ? error.message : String(error),
       hint: isConfig
         ? 'theme.config.* must be an ES module whose default export is the result of defineTheme({...}) from @cogenta/theme-kit — see that error for which field is wrong.'
         : 'theme.render.* must be an ES module that imports { h } from @cogenta/theme-kit and exports renderPage and renderChrome.',
@@ -854,7 +976,7 @@ async function validateSandboxModuleWrite(
     }
   } else {
     const missing = ['renderPage', 'renderChrome'].filter(
-      (name) => typeof imported[name] !== 'function',
+      (name) => !imported.functions.includes(name),
     )
     if (missing.length > 0) {
       throw new CogentaError({

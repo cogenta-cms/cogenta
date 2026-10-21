@@ -186,6 +186,12 @@ export interface ProviderConfigStore {
       /** `null` clears it: this vendor stops offering images. */
       readonly imageModel?: string | null
       readonly imageBaseUrl?: string | null
+      /**
+       * Required whenever `baseUrl` or `imageBaseUrl` changes
+       * (`PROVIDER_KEY_REQUIRED` otherwise): the saved key goes wherever
+       * the endpoint says, so pointing it elsewhere is re-saving the key.
+       */
+      readonly apiKey?: string
     },
   ): Promise<StoredProviderConfig>
   remove(provider: ProviderName): Promise<void>
@@ -453,8 +459,29 @@ export function createFileProviderConfigStore(
         patch.imageModel === undefined ? existing.imageModel : (patch.imageModel ?? undefined)
       const nextImageBaseUrl =
         patch.imageBaseUrl === undefined ? existing.imageBaseUrl : (patch.imageBaseUrl ?? undefined)
+      // The saved key travels to the endpoint. Moving the endpoint without
+      // the key would let a stolen admin session send that key — which the
+      // admin never shows — to a server of its choosing (security review of
+      // 2026-10-21): moving it is re-saving the key, so the key is asked for.
+      // Clearing an endpoint (back to the vendor's own, or no images at all)
+      // sends the key nowhere new, and needs nothing.
+      const endpointMoved =
+        (nextBaseUrl !== undefined && nextBaseUrl !== '' && nextBaseUrl !== existing.baseUrl) ||
+        (nextImageBaseUrl !== undefined &&
+          nextImageBaseUrl !== '' &&
+          nextImageBaseUrl !== existing.imageBaseUrl)
+      const newKey = patch.apiKey === undefined ? '' : patch.apiKey.trim()
+      if (endpointMoved && newKey === '') {
+        throw new CogentaError({
+          code: 'PROVIDER_KEY_REQUIRED',
+          message: `Changing where "${provider}" sends its requests needs its API key again.`,
+          hint: 'Type the API key in the same form: the saved key is never sent to a new address on its own.',
+        })
+      }
+      const keyFields = newKey === '' ? {} : { ...encrypt(newKey), maskedKey: mask(newKey) }
       const updated: EncryptedRecord = {
         ...existingWithoutTuning,
+        ...keyFields,
         model: patch.model ?? existing.model,
         ...(nextBaseUrl === undefined ? {} : { baseUrl: nextBaseUrl }),
         updatedAt: now().toISOString(),

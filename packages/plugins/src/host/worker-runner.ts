@@ -6,6 +6,7 @@ import type { PluginGrant } from '../permissions/grants.js'
 import { resolveGrantedCapabilities } from '../permissions/resolve.js'
 import type { PluginUsageStore } from '../permissions/usage.js'
 import type { CapabilityHandler } from './capabilities.js'
+import { runModuleInPermissionedProcess } from './module-process-runner.js'
 import { runInPermissionedProcess, supportsPermissionModel } from './process-runner.js'
 import type {
   WorkerGuestMessage,
@@ -361,6 +362,64 @@ export interface RunIsolatedModuleOptions {
   readonly callbacks?: Readonly<Record<string, (args: readonly unknown[]) => unknown>>
   readonly timeoutMs?: number
   readonly maxOldGenerationSizeMb?: number
+  /**
+   * What the module may read, each passed verbatim to `--allow-fs-read`.
+   * When set, the module runs in a child process under Node's permission
+   * model (`module-process-runner.ts`) instead of a worker of this process —
+   * required for any module this host did not ship itself, such as a theme
+   * sandbox an agent writes. Never falls back to the worker: on a Node
+   * without the permission model the run fails and says so.
+   */
+  readonly readPaths?: readonly string[]
+}
+
+async function runModuleInProcess(
+  request: Parameters<typeof runModuleInPermissionedProcess>[0],
+  options: {
+    readonly readPaths: readonly string[]
+    readonly callbacks: Readonly<Record<string, (args: readonly unknown[]) => unknown>>
+    readonly timeoutMs: number
+    readonly maxOldGenerationSizeMb: number
+  },
+): Promise<IsolatedRunResult> {
+  const startedAt = Date.now()
+  if (!supportsPermissionModel()) {
+    return {
+      ok: false,
+      error: `Node ${process.versions.node} has no permission model (22.5 or later required), so this module cannot be isolated from the server and is not run.`,
+      reason: 'crash',
+      isolation: 'process',
+      durationMs: 0,
+    }
+  }
+  const result = await runModuleInPermissionedProcess(request, options)
+  return { ...result, isolation: 'process', durationMs: Date.now() - startedAt }
+}
+
+export interface InspectIsolatedModuleOptions {
+  readonly moduleUrl: URL
+  /** See `RunIsolatedModuleOptions.readPaths`; required here. */
+  readonly readPaths: readonly string[]
+  readonly timeoutMs?: number
+}
+
+/**
+ * What a module exports, learnt without importing it into this process:
+ * the names of its exported functions, and its `default` and `theme`
+ * exports as plain data — enough to validate a theme manifest.
+ */
+export function inspectIsolatedModule(
+  options: InspectIsolatedModuleOptions,
+): Promise<IsolatedRunResult> {
+  return runModuleInProcess(
+    { type: 'inspect-module', moduleUrl: options.moduleUrl.href },
+    {
+      readPaths: options.readPaths,
+      callbacks: {},
+      timeoutMs: options.timeoutMs ?? 20_000,
+      maxOldGenerationSizeMb: DEFAULT_MAX_OLD_GENERATION_MB,
+    },
+  )
 }
 
 async function handleCallbackCall(
@@ -394,6 +453,23 @@ export async function runIsolatedModule(
 ): Promise<IsolatedRunResult> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const callbacks = options.callbacks ?? {}
+  if (options.readPaths !== undefined) {
+    return runModuleInProcess(
+      {
+        type: 'run-module',
+        moduleUrl: options.moduleUrl.href,
+        exportName: options.exportName,
+        args: options.args ?? [],
+        callbackNames: Object.keys(callbacks),
+      },
+      {
+        readPaths: options.readPaths,
+        callbacks,
+        timeoutMs,
+        maxOldGenerationSizeMb: options.maxOldGenerationSizeMb ?? DEFAULT_MAX_OLD_GENERATION_MB,
+      },
+    )
+  }
   const id = nextRequestId
   nextRequestId += 1
 

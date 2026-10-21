@@ -438,7 +438,7 @@ export function stripePaymentDriver(options: StripeDriverOptions = {}): PaymentD
   let probe: { readonly secretKey: string; readonly baseUrl: string } | undefined
 
   const resolveBaseUrl = (config: PaymentConfig): string =>
-    (config.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '')
+    (config.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/(?<!\/)\/+$/, '')
 
   return {
     name: 'stripe',

@@ -58,8 +58,8 @@ interface Envelope<T> {
 }
 
 export function createContentClient(options: ContentClientOptions): ContentClient {
-  const basePath = (options.basePath ?? DEFAULT_BASE_PATH).replace(/\/+$/u, '')
-  const origin = options.url.replace(/\/+$/u, '')
+  const basePath = (options.basePath ?? DEFAULT_BASE_PATH).replace(/(?<!\/)\/+$/u, '')
+  const origin = options.url.replace(/(?<!\/)\/+$/u, '')
   const doFetch = options.fetch ?? globalThis.fetch
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
 

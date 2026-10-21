@@ -79,7 +79,7 @@ const DEFAULT_WINDOW_DAYS = 28
 const STATE_FRESHNESS_MS = 10 * 60 * 1000
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 

@@ -162,6 +162,11 @@ export function ThemeCandidatePreview({
         <iframe
           title={t('themeGenerator.previewTitle', { label: candidate.label })}
           srcDoc={html}
+          // No script, and an origin of its own: this HTML comes from theme
+          // code an agent or a ZIP may have written, and an iframe without
+          // `sandbox` shares the admin's origin — and its session token
+          // (security review of 2026-10-21). A preview needs neither.
+          sandbox=""
           {...(interactive ? {} : { tabIndex: -1, 'aria-hidden': true as const })}
           className={interactive ? 'border-0' : 'pointer-events-none border-0'}
           style={{

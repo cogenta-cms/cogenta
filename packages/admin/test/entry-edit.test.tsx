@@ -344,7 +344,7 @@ describe('the "Assistant" and "Traductions" accordions when their feature is off
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     await screen.findByText(
-      "Aucun fournisseur LLM n'est configuré sur ce site : l'assistant d'écriture n'est pas disponible. Tout le reste de cet écran fonctionne sans lui.",
+      "Aucun fournisseur d’IA n'est configuré sur ce site : l'assistant d'écriture n'est pas disponible. Tout le reste de cet écran fonctionne sans lui.",
     )
     expect(
       screen.getByText(
@@ -381,7 +381,7 @@ describe('the "Assistant" and "Traductions" accordions when their feature is off
     await screen.findByRole('button', { name: 'Réécrire' })
     expect(
       screen.queryByText(
-        "Aucun fournisseur LLM n'est configuré sur ce site : l'assistant d'écriture n'est pas disponible. Tout le reste de cet écran fonctionne sans lui.",
+        "Aucun fournisseur d’IA n'est configuré sur ce site : l'assistant d'écriture n'est pas disponible. Tout le reste de cet écran fonctionne sans lui.",
       ),
     ).toBeNull()
 

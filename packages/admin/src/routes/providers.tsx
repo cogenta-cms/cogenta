@@ -222,7 +222,15 @@ export function ProvidersRoute(): JSX.Element {
   const [editMaxCorrectionAttempts, setEditMaxCorrectionAttempts] = useState('')
   const [editImageModel, setEditImageModel] = useState('')
   const [editImageBaseUrl, setEditImageBaseUrl] = useState('')
+  const [editApiKey, setEditApiKey] = useState('')
   const [editBusy, setEditBusy] = useState(false)
+  // The saved key goes wherever the endpoint says: moving an endpoint asks
+  // for the key again, as the server does (`PROVIDER_KEY_REQUIRED`).
+  const editNextImageBaseUrl = editImageModel.trim().length === 0 ? '' : editImageBaseUrl.trim()
+  const editEndpointMoved =
+    editing !== null &&
+    ((editBaseUrl.trim().length > 0 && editBaseUrl.trim() !== (editing.baseUrl ?? '')) ||
+      (editNextImageBaseUrl.length > 0 && editNextImageBaseUrl !== (editing.imageBaseUrl ?? '')))
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -337,6 +345,7 @@ export function ProvidersRoute(): JSX.Element {
     )
     setEditImageModel(provider.imageModel ?? '')
     setEditImageBaseUrl(provider.imageBaseUrl ?? '')
+    setEditApiKey('')
     setError(null)
   }
 
@@ -368,6 +377,7 @@ export function ProvidersRoute(): JSX.Element {
           editImageModel.trim().length === 0 || editImageBaseUrl.trim().length === 0
             ? null
             : editImageBaseUrl.trim(),
+        ...(editEndpointMoved ? { apiKey: editApiKey.trim() } : {}),
       })
       setEditing(null)
       await load()
@@ -422,13 +432,112 @@ export function ProvidersRoute(): JSX.Element {
       </h1>
       <p className="m-0 text-sm opacity-80">{t('providers.intro')}</p>
 
-      {token !== null && <DefaultTuningCard token={token} autosaveEnabled={autosaveEnabled} />}
-
       {error !== null && (
         <Notice tone="danger" live="assertive">
           <p>{error}</p>
         </Notice>
       )}
+
+      <div className="flex flex-col gap-3">
+        <h2 className="m-0 text-lg font-semibold">{t('providers.configuredHeading')}</h2>
+        {loading && <p>{t('common.loading')}</p>}
+
+        {!loading && (
+          <TableRoot label={t('providers.heading')}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeader>{t('providers.provider')}</TableHeader>
+                  <TableHeader>{t('providers.model')}</TableHeader>
+                  <TableHeader>{t('providers.apiKey')}</TableHeader>
+                  <TableHeader>{t('providers.tuningColumn')}</TableHeader>
+                  <TableHeader>{t('providers.imagesColumn')}</TableHeader>
+                  <TableHeader>{t('providers.state')}</TableHeader>
+                  <TableHeader>{t('agents.actions')}</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {providers.map((provider) => (
+                  <TableRow key={provider.provider}>
+                    <TableCell>{provider.provider}</TableCell>
+                    <TableCell>{provider.model}</TableCell>
+                    <TableCell>{provider.maskedKey}</TableCell>
+                    <TableCell>
+                      {provider.maxOutputTokens === undefined &&
+                      provider.requestTimeoutMs === undefined &&
+                      provider.maxCorrectionAttempts === undefined ? (
+                        <span className="text-muted-foreground">
+                          {t('providers.tuningDefault')}
+                        </span>
+                      ) : (
+                        <span className="text-sm">
+                          {[
+                            provider.maxOutputTokens === undefined
+                              ? undefined
+                              : t('providers.tuningTokens', { count: provider.maxOutputTokens }),
+                            provider.requestTimeoutMs === undefined
+                              ? undefined
+                              : t('providers.tuningTimeout', {
+                                  seconds: Math.round(provider.requestTimeoutMs / 1000),
+                                }),
+                            provider.maxCorrectionAttempts === undefined
+                              ? undefined
+                              : t('providers.tuningAttempts', {
+                                  count: provider.maxCorrectionAttempts,
+                                }),
+                          ]
+                            .filter((part) => part !== undefined)
+                            .join(' · ')}
+                        </span>
+                      )}
+                    </TableCell>
+                    {/* The capability, read exactly the way the server derives
+                        it: a model is named, or this vendor does text only. */}
+                    <TableCell>
+                      {provider.imageModel === undefined || provider.imageModel === '' ? (
+                        <span className="text-muted-foreground">
+                          {t('providers.imageTextOnly')}
+                        </span>
+                      ) : (
+                        <Badge tone="info">{provider.imageModel}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {provider.enabled ? t('providers.enabled') : t('providers.disabled')}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => startEdit(provider)}>
+                          {t('providers.edit')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={provider.enabled ? 'destructive' : 'secondary'}
+                          disabled={busy === provider.provider}
+                          onClick={() => void toggle(provider)}
+                        >
+                          {provider.enabled ? t('providers.disable') : t('providers.enable')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy === provider.provider}
+                          onClick={() => void remove(provider)}
+                        >
+                          {t('providers.remove')}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {providers.length === 0 && (
+                  <TableEmpty colSpan={7}>{t('providers.noProviders')}</TableEmpty>
+                )}
+              </TableBody>
+            </Table>
+          </TableRoot>
+        )}
+      </div>
 
       <Card aria-labelledby="providers-add-heading">
         <CardHeader>
@@ -436,8 +545,8 @@ export function ProvidersRoute(): JSX.Element {
             <h2 id="providers-add-heading">{t('providers.addHeading')}</h2>
           </CardTitle>
         </CardHeader>
-        <CardBody>
-          <div className="flex flex-wrap items-end gap-3">
+        <CardBody className="flex flex-col gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t('providers.provider')}>
               {(control) => (
                 <select
@@ -456,7 +565,7 @@ export function ProvidersRoute(): JSX.Element {
               )}
             </Field>
             {isCustomProvider && (
-              <Field label={t('providers.customProviderId')} className="min-w-[200px]">
+              <Field label={t('providers.customProviderId')}>
                 {(control) => (
                   <Input
                     {...control}
@@ -467,7 +576,7 @@ export function ProvidersRoute(): JSX.Element {
                 )}
               </Field>
             )}
-            <Field label={t('providers.apiKey')} className="min-w-[240px]">
+            <Field label={t('providers.apiKey')}>
               {(control) => (
                 <Input
                   {...control}
@@ -480,7 +589,7 @@ export function ProvidersRoute(): JSX.Element {
               )}
             </Field>
             {!isCustomProvider && (selectedCatalogEntry?.knownModels.length ?? 0) > 0 && (
-              <Field label={t('providers.knownModel')} className="min-w-[200px]">
+              <Field label={t('providers.knownModel')}>
                 {(control) => (
                   <select
                     {...control}
@@ -498,7 +607,7 @@ export function ProvidersRoute(): JSX.Element {
                 )}
               </Field>
             )}
-            <Field label={t('providers.model')} className="min-w-[180px]">
+            <Field label={t('providers.model')}>
               {(control) => (
                 <Input
                   {...control}
@@ -511,108 +620,113 @@ export function ProvidersRoute(): JSX.Element {
                 />
               )}
             </Field>
-            <Field
-              label={t('providers.baseUrl')}
-              className="min-w-[200px]"
-              description={isCustomProvider ? t('providers.baseUrlRequiredForCustom') : undefined}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  value={formBaseUrl}
-                  onChange={(event) => setFormBaseUrl(event.target.value)}
-                  placeholder={t('providers.baseUrlPlaceholder')}
-                />
-              )}
-            </Field>
-            <Field
-              label={t('providers.maxOutputTokens')}
-              className="min-w-[140px]"
-              description={t('providers.maxOutputTokensHint')}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  type="number"
-                  min={1}
-                  value={formMaxOutputTokens}
-                  onChange={(event) => setFormMaxOutputTokens(event.target.value)}
-                  placeholder={t('providers.tuningDefaultPlaceholder')}
-                />
-              )}
-            </Field>
-            <Field
-              label={t('providers.requestTimeoutSeconds')}
-              className="min-w-[140px]"
-              description={t('providers.requestTimeoutSecondsHint')}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  type="number"
-                  min={1}
-                  value={formTimeoutSeconds}
-                  onChange={(event) => setFormTimeoutSeconds(event.target.value)}
-                  placeholder={t('providers.tuningDefaultPlaceholder')}
-                />
-              )}
-            </Field>
-            <Field
-              label={t('providers.maxCorrectionAttempts')}
-              className="min-w-[140px]"
-              description={t('providers.maxCorrectionAttemptsHint')}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  type="number"
-                  min={1}
-                  value={formMaxCorrectionAttempts}
-                  onChange={(event) => setFormMaxCorrectionAttempts(event.target.value)}
-                  placeholder={t('providers.tuningDefaultPlaceholder')}
-                />
-              )}
-            </Field>
-            <Field
-              label={t('providers.imageModel')}
-              className="min-w-[200px]"
-              description={t('providers.imageModelHint')}
-            >
-              {(control) => (
-                <Input
-                  {...control}
-                  value={formImageModel}
-                  onChange={(event) => setFormImageModel(event.target.value)}
-                  placeholder={t('providers.imageModelPlaceholder')}
-                />
-              )}
-            </Field>
-            {/* Secondary by design: an image endpoint only means anything once
-                a model is named, so it stays out of the way until then rather
-                than sitting there as a field nobody can act on. */}
-            {formWantsImages && (
+          </div>
+          {/* Everything a first setup can leave alone. Opened for a custom
+              endpoint, whose address is required. */}
+          <details
+            className="rounded-md border border-border px-4 py-3"
+            {...(isCustomProvider ? { open: true } : {})}
+          >
+            <summary className="cursor-pointer text-sm font-medium">
+              {t('providers.advancedOptions')}
+            </summary>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field
-                label={t('providers.imageBaseUrl')}
-                className="min-w-[220px]"
-                description={t('providers.imageBaseUrlHint')}
+                label={t('providers.baseUrl')}
+                description={isCustomProvider ? t('providers.baseUrlRequiredForCustom') : undefined}
               >
                 {(control) => (
                   <Input
                     {...control}
-                    value={formImageBaseUrl}
-                    onChange={(event) => setFormImageBaseUrl(event.target.value)}
-                    placeholder={t('providers.imageBaseUrlPlaceholder')}
+                    value={formBaseUrl}
+                    onChange={(event) => setFormBaseUrl(event.target.value)}
+                    placeholder={t('providers.baseUrlPlaceholder')}
                   />
                 )}
               </Field>
-            )}
-            {formImagesUnsupported && (
-              <div className="w-full">
-                <Notice tone="warning">
-                  <p>{t('providers.imageUnsupported', { provider: effectiveProviderId })}</p>
-                </Notice>
-              </div>
-            )}
+              <Field
+                label={t('providers.maxOutputTokens')}
+                description={t('providers.maxOutputTokensHint')}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="number"
+                    min={1}
+                    value={formMaxOutputTokens}
+                    onChange={(event) => setFormMaxOutputTokens(event.target.value)}
+                    placeholder={t('providers.tuningDefaultPlaceholder')}
+                  />
+                )}
+              </Field>
+              <Field
+                label={t('providers.requestTimeoutSeconds')}
+                description={t('providers.requestTimeoutSecondsHint')}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="number"
+                    min={1}
+                    value={formTimeoutSeconds}
+                    onChange={(event) => setFormTimeoutSeconds(event.target.value)}
+                    placeholder={t('providers.tuningDefaultPlaceholder')}
+                  />
+                )}
+              </Field>
+              <Field
+                label={t('providers.maxCorrectionAttempts')}
+                description={t('providers.maxCorrectionAttemptsHint')}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="number"
+                    min={1}
+                    value={formMaxCorrectionAttempts}
+                    onChange={(event) => setFormMaxCorrectionAttempts(event.target.value)}
+                    placeholder={t('providers.tuningDefaultPlaceholder')}
+                  />
+                )}
+              </Field>
+              <Field label={t('providers.imageModel')} description={t('providers.imageModelHint')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    value={formImageModel}
+                    onChange={(event) => setFormImageModel(event.target.value)}
+                    placeholder={t('providers.imageModelPlaceholder')}
+                  />
+                )}
+              </Field>
+              {/* Secondary by design: an image endpoint only means anything once
+                a model is named, so it stays out of the way until then rather
+                than sitting there as a field nobody can act on. */}
+              {formWantsImages && (
+                <Field
+                  label={t('providers.imageBaseUrl')}
+                  description={t('providers.imageBaseUrlHint')}
+                >
+                  {(control) => (
+                    <Input
+                      {...control}
+                      value={formImageBaseUrl}
+                      onChange={(event) => setFormImageBaseUrl(event.target.value)}
+                      placeholder={t('providers.imageBaseUrlPlaceholder')}
+                    />
+                  )}
+                </Field>
+              )}
+              {formImagesUnsupported && (
+                <div className="sm:col-span-2">
+                  <Notice tone="warning">
+                    <p>{t('providers.imageUnsupported', { provider: effectiveProviderId })}</p>
+                  </Notice>
+                </div>
+              )}
+            </div>
+          </details>
+          <div className="flex justify-end">
             <Button
               disabled={
                 busy === 'save' ||
@@ -629,98 +743,15 @@ export function ProvidersRoute(): JSX.Element {
         </CardBody>
       </Card>
 
-      {loading && <p>{t('common.loading')}</p>}
-
-      {!loading && (
-        <TableRoot label={t('providers.heading')}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeader>{t('providers.provider')}</TableHeader>
-                <TableHeader>{t('providers.model')}</TableHeader>
-                <TableHeader>{t('providers.apiKey')}</TableHeader>
-                <TableHeader>{t('providers.tuningColumn')}</TableHeader>
-                <TableHeader>{t('providers.imagesColumn')}</TableHeader>
-                <TableHeader>{t('providers.state')}</TableHeader>
-                <TableHeader>{t('agents.actions')}</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {providers.map((provider) => (
-                <TableRow key={provider.provider}>
-                  <TableCell>{provider.provider}</TableCell>
-                  <TableCell>{provider.model}</TableCell>
-                  <TableCell>{provider.maskedKey}</TableCell>
-                  <TableCell>
-                    {provider.maxOutputTokens === undefined &&
-                    provider.requestTimeoutMs === undefined &&
-                    provider.maxCorrectionAttempts === undefined ? (
-                      <span className="text-muted-foreground">{t('providers.tuningDefault')}</span>
-                    ) : (
-                      <span className="text-sm">
-                        {[
-                          provider.maxOutputTokens === undefined
-                            ? undefined
-                            : t('providers.tuningTokens', { count: provider.maxOutputTokens }),
-                          provider.requestTimeoutMs === undefined
-                            ? undefined
-                            : t('providers.tuningTimeout', {
-                                seconds: Math.round(provider.requestTimeoutMs / 1000),
-                              }),
-                          provider.maxCorrectionAttempts === undefined
-                            ? undefined
-                            : t('providers.tuningAttempts', {
-                                count: provider.maxCorrectionAttempts,
-                              }),
-                        ]
-                          .filter((part) => part !== undefined)
-                          .join(' · ')}
-                      </span>
-                    )}
-                  </TableCell>
-                  {/* The capability, read exactly the way the server derives
-                      it: a model is named, or this vendor does text only. */}
-                  <TableCell>
-                    {provider.imageModel === undefined || provider.imageModel === '' ? (
-                      <span className="text-muted-foreground">{t('providers.imageTextOnly')}</span>
-                    ) : (
-                      <Badge tone="info">{provider.imageModel}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {provider.enabled ? t('providers.enabled') : t('providers.disabled')}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="secondary" onClick={() => startEdit(provider)}>
-                        {t('providers.edit')}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={provider.enabled ? 'destructive' : 'secondary'}
-                        disabled={busy === provider.provider}
-                        onClick={() => void toggle(provider)}
-                      >
-                        {provider.enabled ? t('providers.disable') : t('providers.enable')}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy === provider.provider}
-                        onClick={() => void remove(provider)}
-                      >
-                        {t('providers.remove')}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {providers.length === 0 && (
-                <TableEmpty colSpan={7}>{t('providers.noProviders')}</TableEmpty>
-              )}
-            </TableBody>
-          </Table>
-        </TableRoot>
+      {token !== null && (
+        <details className="group">
+          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+            {t('providers.defaultsDisclosure')}
+          </summary>
+          <div className="mt-3">
+            <DefaultTuningCard token={token} autosaveEnabled={autosaveEnabled} />
+          </div>
+        </details>
       )}
 
       {editing !== null && (
@@ -737,7 +768,11 @@ export function ProvidersRoute(): JSX.Element {
                 {t('common.cancel')}
               </Button>
               <Button
-                disabled={editBusy || editModel.trim().length === 0}
+                disabled={
+                  editBusy ||
+                  editModel.trim().length === 0 ||
+                  (editEndpointMoved && editApiKey.trim().length === 0)
+                }
                 onClick={() => void submitEdit()}
               >
                 {t('common.save')}
@@ -765,6 +800,20 @@ export function ProvidersRoute(): JSX.Element {
               />
             )}
           </Field>
+          {editEndpointMoved && (
+            <Field label={t('providers.apiKey')} description={t('providers.editApiKeyHint')}>
+              {(control) => (
+                <Input
+                  {...control}
+                  type="password"
+                  autoComplete="off"
+                  value={editApiKey}
+                  onChange={(event) => setEditApiKey(event.target.value)}
+                  placeholder={t('providers.apiKeyPlaceholder')}
+                />
+              )}
+            </Field>
+          )}
           <Field
             label={t('providers.maxOutputTokens')}
             description={t('providers.maxOutputTokensHint')}

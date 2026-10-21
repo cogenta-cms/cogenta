@@ -655,3 +655,24 @@ export const ScheduledIcon = icon(
     <path d="M10 10.5v2.3l1.8 1" />
   </>,
 )
+
+// AI section (2026-10-21): five screens shared the robot of their group, so
+// the unfolded "IA" list read as five times the same thing.
+export const PaletteIcon = icon(
+  <>
+    <path d="M10 2.5a7.5 7.5 0 1 0 0 15c1 0 1.6-.7 1.6-1.5 0-1-.9-1.3-.9-2.2 0-.8.7-1.4 1.6-1.4h2.1a3.1 3.1 0 0 0 3.1-3.1C17.5 5.6 14.1 2.5 10 2.5z" />
+    <path d="M6.5 9h.01M9 6h.01M12.5 6.5h.01" />
+  </>,
+)
+
+export const ProviderIcon = icon(
+  <path d="M7 2.5v4M13 2.5v4M5 6.5h10v3a5 5 0 0 1-10 0v-3zM10 14.5v3" />,
+)
+
+export const SkillIcon = icon(
+  <path d="M4.5 3.5h9a2 2 0 0 1 2 2v11h-9a2 2 0 0 1-2-2v-11zM4.5 14.5a2 2 0 0 1 2-2h9" />,
+)
+
+export const PromptIcon = icon(<path d="M3.5 4.5h13v11h-13zM6.5 8l2.5 2-2.5 2M10.5 12.5h3" />)
+
+export const ChannelsIcon = icon(<path d="M17.5 2.5L2.5 9l6 2.5 2.5 6 6.5-15zM8.5 11.5l9-9" />)

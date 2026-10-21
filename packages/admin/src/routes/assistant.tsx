@@ -1,11 +1,21 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import type { AssistCapabilities, AssistCapability } from '../api/assist-client.js'
 import { getAssistCapabilities } from '../api/assist-client.js'
 import { ApiError } from '../api/client.js'
+import { NoProviderNotice } from '../assist/no-provider-notice.js'
 import { toolDescription, toolLabel } from '../assist/tool-text.js'
 import { useAuth } from '../auth/auth-context.js'
-import { Button, Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
+import {
+  Button,
+  buttonVariants,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Notice,
+} from '../ui/index.js'
 import { AssistantChatRoute } from './assistant-chat.js'
 import { AssistantIndexRoute } from './assistant-index.js'
 import { DuplicatesRoute } from './duplicates.js'
@@ -107,7 +117,16 @@ export function AssistantRoute(): JSX.Element | null {
     return (
       <section aria-labelledby="assistant-heading">
         <h1 id="assistant-heading">{t('assistant.heading')}</h1>
-        <Notice tone="info" live="off" title={t('assistant.offTitle')}>
+        <Notice
+          tone="info"
+          live="off"
+          title={t('assistant.offTitle')}
+          actions={
+            <Link to="/providers" className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
+              {t('providers.configureAction')}
+            </Link>
+          }
+        >
           <p className="m-0">{capabilities.reason ?? t('assistant.offReasonFallback')}</p>
           <p className="m-0 mt-2">{t('assistant.offHowTo')}</p>
           <ul className="m-0 mt-2 list-disc pl-5">
@@ -167,6 +186,15 @@ export function AssistantRoute(): JSX.Element | null {
               <p className="m-0 text-sm text-muted-foreground">
                 {t('assistant.modelLine', { model: capabilities.model })}
               </p>
+            )}
+
+            {/* Duplicate detection needs no provider (a local embedder), so
+                a site without one still lands here — with one tool, and no
+                word about the others. */}
+            {capabilities.tools.every((tool) => tool.tool === 'assist.find_duplicates') && (
+              <NoProviderNotice>
+                <p>{t('assistant.moreWithProvider')}</p>
+              </NoProviderNotice>
             )}
 
             <Card aria-labelledby="assistant-tools-heading">

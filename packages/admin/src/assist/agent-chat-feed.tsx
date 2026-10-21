@@ -116,6 +116,7 @@ export function AgentChatFeed({
       <form onSubmit={(event) => void submit(event)} className="flex gap-2">
         <textarea
           aria-label={t('agentChat.inputLabel')}
+          placeholder={t('agentChat.placeholder')}
           className={
             dense
               ? 'h-16 flex-1 resize-none rounded-md border border-input bg-card p-2 text-sm shadow-card'

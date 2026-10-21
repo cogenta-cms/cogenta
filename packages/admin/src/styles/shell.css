@@ -530,6 +530,19 @@
   margin-top: 2px;
 }
 
+/* The current section, unfolded in place in the sidebar (see
+   `renderSidebarNav`): its heading is not a button — there is nothing to
+   open — and its items sit indented under it, the active one marked by the
+   same rail styles as any other active link. */
+.app-shell__nav-inline {
+  padding-left: var(--space-4);
+  margin: 2px 0 var(--space-2);
+}
+
+.app-shell__nav-group--inline > .app-shell__nav-group-trigger {
+  cursor: default;
+}
+
 /* The hamburger that opens the mobile drawer — a topbar button, hidden
    above the breakpoint where the ordinary sidebar already does the job. */
 .app-shell__drawer-trigger {
@@ -984,4 +997,20 @@
     width: auto;
     max-height: calc(100dvh - 4rem);
   }
+}
+
+/* An unfolded section is marked by its active item, not by its heading as
+   well: two highlighted rows for one place read as two places. */
+.app-shell__sidebar
+  .app-shell__nav-group--inline[data-current="true"]
+  > .app-shell__nav-group-trigger {
+  background: transparent;
+  box-shadow: none;
+  color: var(--rail-fg);
+}
+
+.app-shell__sidebar
+  .app-shell__nav-group--inline[data-current="true"]
+  > .app-shell__nav-group-trigger::before {
+  content: none;
 }

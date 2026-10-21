@@ -252,12 +252,12 @@
     "audit": "Journal d'audit",
     "analytics": "Statistiques",
     "agents": "Agents",
-    "providers": "Fournisseurs",
+    "providers": "Fournisseurs d’IA",
     "agentSkills": "Compétences",
-    "promptSettings": "Réglages des prompts",
+    "promptSettings": "Prompts",
     "mcpServer": "Serveur MCP",
     "mcpClients": "Clients MCP",
-    "channels": "Canaux",
+    "channels": "Canaux de discussion",
     "users": "Utilisateurs",
     "apiKeys": "Clés API",
     "roles": "Rôles et permissions",
@@ -266,6 +266,7 @@
     "opsSettings": "Sécurité & webhooks",
     "updates": "Mises à jour",
     "createSite": "Générer le site",
+    "themeGenerator": "Générer un thème",
     "marketplace": "Marketplace",
     "health": "Santé",
     "tools": "Outils",
@@ -720,7 +721,7 @@
     "confirmLeaveDiscard": "Quitter sans enregistrer",
     "confirmLeaveSave": "Enregistrer",
     "assistantSectionLabel": "Assistant",
-    "assistantSectionEmpty": "Aucun fournisseur LLM n'est configuré sur ce site : l'assistant d'écriture n'est pas disponible. Tout le reste de cet écran fonctionne sans lui.",
+    "assistantSectionEmpty": "Aucun fournisseur d’IA n'est configuré sur ce site : l'assistant d'écriture n'est pas disponible. Tout le reste de cet écran fonctionne sans lui.",
     "translationsSectionLabel": "Traductions",
     "translationsSectionEmpty": "Ce site n'a qu'une seule langue configurée : il n'y a pas de traduction à gérer ici.",
     "historySectionLabel": "Historique",
@@ -1829,6 +1830,7 @@
     "empty": "Posez n'importe quelle question à cet agent — il peut lire, et avec votre approbation, écrire sur ce site.",
     "thinking": "Réflexion…",
     "inputLabel": "Message",
+    "placeholder": "Écrivez votre demande… (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)",
     "send": "Envoyer",
     "noReply": "(pas de réponse)",
     "sendError": "Impossible de joindre cet agent.",
@@ -1838,10 +1840,12 @@
   },
   "agents": {
     "heading": "Agents",
+    "noProviderNotice": "Aucun fournisseur d’IA n’est configuré : les agents ne peuvent pas encore s’exécuter. Ils utiliseront le premier fournisseur que vous ajouterez.",
     "adminOnly": "Réservé au rôle « admin » : cette page pilote l'activation, les outils et le budget de chaque agent.",
     "name": "Nom",
     "state": "État",
     "model": "Modèle",
+    "providerColumn": "Fournisseur",
     "autonomy": "Autonomie",
     "budget": "Consommation quotidienne de jetons",
     "actions": "Actions",
@@ -1873,6 +1877,7 @@
     "identitySystemPrompt": "Prompt système",
     "identitySystemPromptHint": "Instructions permanentes supplémentaires que cet agent doit toujours suivre, au-delà du rôle, des objectifs et du style — une règle, un format de sortie, une limite stricte.",
     "identityHeading": "Identité",
+    "identityForModel": "Consignes données au modèle",
     "generateHeading": "Générer à partir d'un besoin",
     "generateHint": "Décrivez le but de cet agent et le modèle rédige un rôle, des objectifs, un style et un prompt système ci-dessus — rien n'est enregistré tant que vous n'avez pas relu le brouillon et cliqué sur Enregistrer.",
     "generatePurpose": "Objet",
@@ -1886,6 +1891,7 @@
     "generatedReview": "Généré — relisez le rôle, les objectifs, le style et le prompt système ci-dessus avant d'enregistrer.",
     "modelNone": "Aucune préférence de modèle déclarée.",
     "modelPreferred": "Préféré : {{model}}",
+    "modelUsedInstead": "Aucun des deux n’est configuré : cet agent utilise « {{provider}} ».",
     "modelFallback": "repli : {{model}}",
     "modelExplicit": "modèle : {{model}}",
     "autonomyDefault": "Niveau par défaut : {{level}}",
@@ -1924,43 +1930,48 @@
     "providerUnavailable": "Activé, fournisseur indisponible"
   },
   "providers": {
-    "heading": "Fournisseurs",
-    "adminOnly": "Réservé au rôle « admin » : cette page gère la clé API de chaque fournisseur LLM.",
-    "intro": "Quels fournisseurs LLM ce site peut utiliser, et leur modèle par défaut. La préférence de modèle de chaque agent nomme l'un d'entre eux.",
-    "defaultsHeading": "Réglages par défaut",
-    "defaultsIntro": "Le plancher que suit chaque fournisseur ci-dessous quand un réglage n'est pas surchargé pour lui spécifiquement.",
+    "heading": "Fournisseurs d’IA",
+    "adminOnly": "Réservé au rôle « admin » : cette page gère la clé API de chaque fournisseur d’IA.",
+    "intro": "Les services d’IA que ce site peut appeler, avec leur modèle par défaut. Sans fournisseur, tout le site fonctionne, sauf l’assistant et les agents.",
+    "configuredHeading": "Fournisseurs configurés",
+    "defaultsHeading": "Réglages communs",
+    "defaultsDisclosure": "Réglages communs à tous les fournisseurs (avancé)",
+    "defaultsIntro": "Les valeurs qu’utilise tout fournisseur qui n’a pas les siennes.",
     "defaultsLoadError": "Impossible de charger les réglages par défaut.",
     "defaultsSaveAction": "Enregistrer les réglages par défaut",
     "defaultsSaved": "Enregistré.",
-    "addHeading": "Ajouter ou mettre à jour un fournisseur",
+    "addHeading": "Ajouter un fournisseur",
+    "configureAction": "Configurer un fournisseur d’IA",
+    "advancedOptions": "Options avancées : adresse personnalisée, limites, génération d’images",
     "provider": "Fournisseur",
     "customProviderOption": "Fournisseur personnalisé…",
     "customProviderId": "Identifiant du fournisseur",
     "customProviderIdPlaceholder": "ex. my-vllm-server",
     "customProviderHint": "Minuscules, chiffres et tirets uniquement (ex. « my-vllm-server »).",
     "apiKey": "Clé API",
-    "apiKeyPlaceholder": "Plus jamais affichée une fois enregistrée",
+    "apiKeyPlaceholder": "Collez la clé fournie par le service",
+    "editApiKeyHint": "Vous changez l’adresse où partent les requêtes : saisissez à nouveau la clé API. La clé enregistrée n’est jamais envoyée seule vers une nouvelle adresse.",
     "model": "Modèle par défaut",
     "modelPlaceholder": "ex. claude-sonnet-4",
     "knownModel": "Modèle connu",
     "customModelOption": "— modèle personnalisé —",
     "baseUrl": "URL de base",
-    "baseUrlPlaceholder": "Uniquement pour un point de terminaison auto-hébergé ou en proxy",
+    "baseUrlPlaceholder": "Vide pour l’adresse officielle du service",
     "baseUrlRequiredForCustom": "Requise pour un fournisseur personnalisé — l'URL complète du point de terminaison de complétion de discussion, compatible OpenAI.",
     "catalogLoadError": "Impossible de charger le catalogue de fournisseurs.",
     "maxOutputTokens": "Tokens de sortie max",
-    "maxOutputTokensHint": "Un modèle qui « réfléchit » avant de répondre (DeepSeek, o1…) a besoin de bien plus que la réponse visible seule — laissez vide pour suivre le réglage par défaut du site, ci-dessus.",
+    "maxOutputTokensHint": "Longueur maximale d’une réponse. Un modèle qui « réfléchit » avant de répondre (DeepSeek, o1…) en demande plus. Vide : la valeur commune.",
     "requestTimeoutSeconds": "Délai d'attente (secondes)",
-    "requestTimeoutSecondsHint": "Un modèle plus lent a besoin de plus de temps, pas seulement de plus de tokens — laissez vide pour suivre le réglage par défaut du site, ci-dessus.",
+    "requestTimeoutSecondsHint": "Temps d’attente maximal d’une réponse. Vide : la valeur commune.",
     "maxCorrectionAttempts": "Tentatives de correction max",
-    "maxCorrectionAttemptsHint": "Combien de fois relancer ce modèle s'il ne produit pas une réponse exploitable du premier coup — laissez vide pour suivre le réglage par défaut du site, ci-dessus.",
+    "maxCorrectionAttemptsHint": "Nombre de nouvelles tentatives quand la réponse est inutilisable. Vide : la valeur commune.",
     "tuningDefaultPlaceholder": "Par défaut",
     "imageModel": "Modèle d'image",
     "imageModelPlaceholder": "ex. gpt-image-1",
-    "imageModelHint": "Le modèle avec lequel ce fournisseur génère des images, en partageant la même clé API. Laissez vide : ce fournisseur ne fait que du texte.",
+    "imageModelHint": "Pour générer des images avec la même clé. Vide : ce fournisseur ne fait que du texte.",
     "imageBaseUrl": "Point d'accès image",
     "imageBaseUrlPlaceholder": "ex. https://proxy.interne/v1/images/generations",
-    "imageBaseUrlHint": "L'URL complète du point d'accès image, uniquement pour un proxy. Distincte de l'URL de base ci-dessus, qui est celle de la discussion : les confondre enverrait une charge image à une adresse de discussion.",
+    "imageBaseUrlHint": "Adresse complète de génération d’images, seulement derrière un proxy. Différente de l’adresse de base, qui sert au texte.",
     "imageUnsupported": "« {{provider}} » ne sait pas générer d'images aujourd'hui : seuls OpenAI et Stability le peuvent. Le modèle d'image saisi ici sera ignoré et ce fournisseur restera un fournisseur texte.",
     "imagesColumn": "Images",
     "imageTextOnly": "Texte seulement",
@@ -1979,22 +1990,22 @@
     "enable": "Activer",
     "disable": "Désactiver",
     "remove": "Retirer",
-    "noProviders": "Aucun fournisseur configuré — les agents ne peuvent pas s'exécuter tant qu'aucun n'est ajouté.",
+    "noProviders": "Aucun fournisseur pour l’instant. Ajoutez-en un ci-dessous pour utiliser l’assistant et les agents.",
     "loadError": "Impossible de charger la liste des fournisseurs.",
     "saveError": "Impossible d'enregistrer ce fournisseur.",
     "field": {
       "assistant": {
         "defaultMaxOutputTokens": {
-          "label": "Tokens de sortie max — défaut du site",
-          "help": "Le plancher que suit tout fournisseur sans réglage « Tokens de sortie max » qui lui soit propre."
+          "label": "Longueur maximale d’une réponse (tokens)",
+          "help": "Pour tout fournisseur qui n’a pas sa propre valeur."
         },
         "defaultRequestTimeoutSeconds": {
-          "label": "Délai d'attente — défaut du site (secondes)",
-          "help": "Le plancher que suit tout fournisseur sans réglage « Délai d'attente » qui lui soit propre."
+          "label": "Temps d’attente maximal (secondes)",
+          "help": "Pour tout fournisseur qui n’a pas sa propre valeur."
         },
         "defaultMaxCorrectionAttempts": {
-          "label": "Tentatives de correction max — défaut du site",
-          "help": "Le plancher que suit tout fournisseur sans réglage « Tentatives de correction max » qui lui soit propre."
+          "label": "Nouvelles tentatives maximales",
+          "help": "Pour tout fournisseur qui n’a pas sa propre valeur."
         }
       }
     }
@@ -2002,7 +2013,7 @@
   "agentSkills": {
     "heading": "Compétences",
     "adminOnly": "Réservé au rôle « admin » : cette page gère les compétences disponibles pour chaque agent.",
-    "intro": "Une compétence est un texte d'instruction nommé qu'un agent charge dans son contexte, édité ici en Markdown SKILL.md brut (frontmatter compris) — le même format qu'une vraie compétence Claude Code/Codex, pour pouvoir en coller ou en importer une telle quelle. Un nouvel agent hérite de toute compétence marquée « activée par défaut » — exclure une compétence d'un agent précis se fait depuis son propre écran d'édition.",
+    "intro": "Une compétence est un mode d’emploi que les agents lisent avant d’agir : comment écrire dans le ton du site, comment rendre compte d’une analyse de sécurité… Elle s’écrit en Markdown, au format SKILL.md de Claude Code et Codex : une compétence existante s’importe telle quelle. Chaque nouvel agent reçoit les compétences « activées par défaut » ; on en retire une depuis l’écran de l’agent.",
     "createSkill": "Créer une compétence",
     "name": "Nom",
     "description": "Description",
@@ -2031,9 +2042,9 @@
     }
   },
   "promptSettings": {
-    "heading": "Réglages des prompts",
+    "heading": "Prompts",
     "adminOnly": "Réservé au rôle « admin » : cette page gère le texte d'instruction que chaque outil de l'assistant envoie au modèle.",
-    "intro": "Chaque prompt utilitaire qu'un outil de l'assistant envoie réellement au modèle, éditable ici plutôt que codé en dur. Un espace réservé entre doubles accolades est rempli par l'outil au moment de l'appel — n'en retirez un que si vous retirez aussi ce qui en dépend. Un prompt intégré reste toujours modifiable, jamais supprimable, pour que le site garde un réglage par défaut fonctionnel.",
+    "intro": "Les consignes que l’assistant envoie au modèle pour chaque outil : réécrire, traduire, résumer… Adaptez-les au ton du site. Les noms entre doubles accolades sont remplacés au moment de l’appel : gardez-les. Une consigne fournie avec Cogenta se modifie, mais ne se supprime pas.",
     "createTemplate": "Créer un modèle",
     "name": "Nom",
     "description": "Description",
@@ -2190,7 +2201,7 @@
     "aiHeading": "Générer un thème avec l'IA",
     "aiIntro": "Décrivez un thème, joignez des captures d'écran ou des documents, et obtenez un ou plusieurs candidats à prévisualiser puis activer — dans une page entière, faute de place dans cette carte.",
     "aiOpenWorkshopAction": "Générer un thème avec l'IA",
-    "aiNoProviderNotice": "Générer ou personnaliser un thème avec l'IA nécessite un fournisseur LLM, et aucun n'est configuré sur cette instance. Tout le reste de cet écran fonctionne sans.",
+    "aiNoProviderNotice": "Générer ou personnaliser un thème avec l'IA nécessite un fournisseur d’IA, et aucun n'est configuré sur ce site. Tout le reste de cet écran fonctionne sans.",
     "aiNoProviderAction": "Configurer un fournisseur",
     "group": {
       "color": "Couleurs",
@@ -2365,6 +2376,7 @@
     "checking": "Vérification…",
     "checkError": "Ce bac à sable n'a pas pu être vérifié.",
     "checkPassed": "Ce bac à sable est prêt à être déployé.",
+    "deployWarning": "Une fois déployé, ce thème s’exécute sur le serveur, avec les droits du site. Ne le déployez que si vous savez d’où vient son code : un fichier zip reçu, ou du code écrit par un agent à partir d’un document externe, peut contenir des instructions malveillantes que la vérification automatique ne voit pas.",
     "checkFailed": "Ce bac à sable ne peut pas encore être déployé :",
     "cancelAction": "Annuler",
     "confirmDeployAction": "Déployer",
@@ -2401,7 +2413,7 @@
     "intro": "Décrivez un thème, joignez des captures d'écran, des maquettes ou des documents, et obtenez un ou plusieurs candidats à prévisualiser puis activer. Rien n'est appliqué avant que vous ne choisissiez « Activer » sur un candidat.",
     "adminOnly": "Seul le rôle admin peut générer ou personnaliser un thème.",
     "loadError": "Impossible de charger le thème actuel.",
-    "noProviderNotice": "Générer ou personnaliser un thème avec l'IA nécessite un fournisseur LLM, et aucun n'est configuré sur cette instance.",
+    "noProviderNotice": "Générer ou personnaliser un thème avec l'IA nécessite un fournisseur d’IA, et aucun n'est configuré sur ce site.",
     "noProviderAction": "Configurer un fournisseur",
     "modeGroupLabel": "Que faire",
     "modeGenerateAction": "Nouveau thème",
@@ -2975,7 +2987,7 @@
   "mcp": {
     "heading": "Serveur MCP",
     "adminOnly": "Réservé au rôle « admin » : cette page crée et révoque des identifiants MCP.",
-    "intro": "Connectez un client MCP — Claude Desktop, Claude Code, Cursor, ou tout autre client parlant le Model Context Protocol — au contenu et aux outils de ce site. Générez une clé ci-dessous, puis collez la configuration affichée dans votre client.",
+    "intro": "Laissez un assistant externe (Claude Desktop, Claude Code, Cursor…) travailler sur ce site par le protocole MCP. Créez une clé, puis collez dans l’assistant la configuration affichée.",
     "newButton": "Nouvelle clé MCP",
     "newHeading": "Créer une clé MCP",
     "newDescription": "La clé est générée par le serveur et affichée une seule fois, avec une configuration client prête à coller.",
@@ -3033,7 +3045,7 @@
   "mcpClients": {
     "heading": "Clients MCP",
     "adminOnly": "Réservé au rôle admin : cet écran connecte ce site à des serveurs MCP externes.",
-    "intro": "Connectez les agents de ce site à un serveur MCP externe — un process stdio que ce serveur lance et avec lequel il parle via le Model Context Protocol. Chaque outil distant est désactivé par défaut : cochez précisément ceux qu'un agent peut appeler, un par un.",
+    "intro": "Donnez aux agents de ce site les outils d’un serveur MCP externe, lancé par ce serveur. Aucun outil distant n’est utilisable tant que vous ne l’avez pas coché.",
     "newButton": "Nouvelle connexion",
     "newHeading": "Connecter un serveur MCP",
     "newDescription": "Seules les connexions « stdio » sont prises en charge aujourd'hui — une commande que ce serveur lance et avec laquelle il parle via son entrée/sortie standard.",
@@ -3104,8 +3116,8 @@
     "toolCost": "Coût"
   },
   "channels": {
-    "heading": "Canaux",
-    "intro": "Liez un compte Telegram, Slack ou Discord personnel. Une fois lié, il peut recevoir les notices de ce site.",
+    "heading": "Canaux de discussion",
+    "intro": "Liez votre compte Telegram, Slack ou Discord pour y recevoir les notices du site.",
     "chatHint": "En tant qu'admin, un compte lié peut aussi discuter avec un agent directement depuis le canal — envoyez-lui un message, ou « @Nom de l'agent : message » pour en choisir un précis.",
     "notAdminHint": "Discuter avec un agent depuis un canal demande le rôle admin — la liaison fonctionne quand même, pour les notices.",
     "name": {
@@ -3981,7 +3993,7 @@
     "heading": "Générer le site",
     "intro": "Téléversez un cahier des charges et un agent propose un modèle de contenu, des pages, des gabarits et du contenu de départ. Rien n'est appliqué tant que vous n'avez pas jugé chaque élément.",
     "adminOnly": "Réservé au rôle « admin » : un plan de site change la structure du site.",
-    "noProvider": "Aucun fournisseur LLM n'est configuré : un nouveau document ne peut pas être analysé ici. Les plans proposés ailleurs restent consultables et applicables. Tout le reste de cette administration fonctionne sans fournisseur.",
+    "noProvider": "Aucun fournisseur d’IA n'est configuré : un nouveau document ne peut pas être analysé ici. Les plans proposés ailleurs restent consultables et applicables. Tout le reste de cette administration fonctionne sans fournisseur.",
     "uploadHeading": "Lire un document",
     "uploadHelp": "PDF, DOCX, Markdown ou texte brut. Un brief, un cahier des charges, une spécification.",
     "uploadLabel": "Choisir le ou les documents",
@@ -4231,10 +4243,11 @@
   },
   "assistant": {
     "heading": "Assistant",
+    "moreWithProvider": "Seule la détection de doublons fonctionne sans fournisseur d’IA. Réécrire, relire, traduire, résumer, interroger le site et générer des images demandent un fournisseur.",
     "loadError": "Impossible de lire l'état de l'assistant. Réessayez.",
     "offTitle": "Aucun fournisseur IA n'est configuré",
     "offReasonFallback": "Ce site n'a aucun fournisseur IA configuré, l'assistant de rédaction est donc désactivé.",
-    "offHowTo": "Pour l'activer, configurez un fournisseur LLM :",
+    "offHowTo": "Pour l'activer, configurez un fournisseur d’IA :",
     "offStepConfig": "Ajoutez un bloc « llm » à cogenta.config (provider, model).",
     "offStepEnv": "Ou définissez COGENTA_LLM_API_KEY (et COGENTA_LLM_PROVIDER/COGENTA_LLM_MODEL) dans l'environnement.",
     "offNoImpact": "Rien d'autre sur ce site n'est affecté — contenu, publication et rendu fonctionnent exactement pareil sans lui.",
@@ -5551,7 +5564,9 @@
     "promptCategories": {
       "text": "Texte",
       "seo": "SEO",
-      "agent": "Agent"
+      "agent": "Agent",
+      "moderation": "Modération",
+      "translation": "Traduction"
     },
     "adminThemes": {
       "nightops": {
@@ -5632,6 +5647,20 @@
       },
       "theme-saas": {
         "description": "Un thème de logiciel B2B : du blanc et une gamme de gris structurée, une encre presque noire et un seul bleu signal, Geist et Geist Mono, des captures produit encadrées, un comparatif d'offres à filets et un mode sombre dessiné."
+      }
+    },
+    "skills": {
+      "content-writing": {
+        "name": "Rédaction de contenu",
+        "description": "Écrire et corriger le contenu du site dans le ton qui est le sien."
+      },
+      "basic-security-review": {
+        "name": "Revue de sécurité simple",
+        "description": "Lire une analyse des dépendances et en rendre compte sans alarmisme."
+      },
+      "site-structure-and-menus": {
+        "name": "Structure du site et menus",
+        "description": "Raisonner sur la navigation et l’organisation des pages du site."
       }
     }
   }

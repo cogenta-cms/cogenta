@@ -116,6 +116,11 @@ function PreviewModal({
         <iframe
           title={t('themeSandbox.previewIframeTitle', { id })}
           srcDoc={result.html}
+          // No script, and an origin of its own: this HTML comes from theme
+          // code an agent or a ZIP may have written, and an iframe without
+          // `sandbox` shares the admin's origin — and its session token
+          // (security review of 2026-10-21). A preview needs neither.
+          sandbox=""
           className="h-[60vh] w-full rounded-md border border-border bg-white"
         />
       )}
@@ -227,6 +232,11 @@ function DeployModal({
       {check?.ok === true && (
         <Notice tone="success">
           <p>{t('themeSandbox.checkPassed')}</p>
+        </Notice>
+      )}
+      {check?.ok === true && (
+        <Notice tone="warning">
+          <p>{t('themeSandbox.deployWarning')}</p>
         </Notice>
       )}
       {check !== null && !check.ok && (

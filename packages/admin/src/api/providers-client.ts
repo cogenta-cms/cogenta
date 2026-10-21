@@ -126,6 +126,8 @@ export function updateProviderSettings(
     readonly maxCorrectionAttempts?: number | null
     readonly imageModel?: string | null
     readonly imageBaseUrl?: string | null
+    /** Required by the server when an endpoint moves (`PROVIDER_KEY_REQUIRED`). */
+    readonly apiKey?: string
   },
 ): Promise<ProviderSummary> {
   return request(`/api/providers/${encodeURIComponent(provider)}`, {

@@ -24,6 +24,7 @@ import {
 } from '../api/agent-skills-client.js'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { shippedText } from '../i18n/shipped-text.js'
 import {
   Button,
   Card,
@@ -40,6 +41,14 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
+
+/** A built-in skill's key under `shippedText.skills`, from the name it ships with. */
+function skillKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-|-$/gu, '')
+}
 
 const NEW_SKILL_TEMPLATE = '---\nname: \ndescription: \n---\n\n'
 
@@ -317,8 +326,20 @@ export function AgentSkillsRoute(): JSX.Element {
               {skills.map((skill) => (
                 <Fragment key={skill.id}>
                   <TableRow key={skill.id}>
-                    <TableCell>{skill.name}</TableCell>
-                    <TableCell>{skill.description}</TableCell>
+                    <TableCell>
+                      {skill.builtin
+                        ? shippedText(`skills.${skillKey(skill.name)}.name`, skill.name, t)
+                        : skill.name}
+                    </TableCell>
+                    <TableCell>
+                      {skill.builtin
+                        ? shippedText(
+                            `skills.${skillKey(skill.name)}.description`,
+                            skill.description,
+                            t,
+                          )
+                        : skill.description}
+                    </TableCell>
                     <TableCell>
                       {skill.enabledByDefault ? t('common.yes') : t('common.no')}
                     </TableCell>

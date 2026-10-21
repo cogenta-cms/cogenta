@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useSearchParams } from 'react-router'
+import { useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import { getSitePlan } from '../api/site-plan-client.js'
 import {
@@ -27,11 +27,11 @@ import {
   toGenerateThemeAttachment,
 } from '../api/theme-client.js'
 import { checkSandboxDeployment, deploySandbox } from '../api/theme-sandbox-client.js'
+import { NoProviderNotice } from '../assist/no-provider-notice.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
   ActivityLog,
   Button,
-  buttonVariants,
   Card,
   CardBody,
   CardDescription,
@@ -509,16 +509,9 @@ export function ThemeGeneratorRoute(): JSX.Element {
       )}
 
       {theme !== null && !theme.aiAvailable && (
-        <Notice
-          tone="info"
-          actions={
-            <Link to="/providers" className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
-              {t('themeGenerator.noProviderAction')}
-            </Link>
-          }
-        >
+        <NoProviderNotice>
           <p>{t('themeGenerator.noProviderNotice')}</p>
-        </Notice>
+        </NoProviderNotice>
       )}
 
       {theme?.aiAvailable && (

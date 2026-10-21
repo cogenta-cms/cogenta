@@ -252,12 +252,12 @@
     "audit": "Audit log",
     "analytics": "Analytics",
     "agents": "Agents",
-    "providers": "Providers",
+    "providers": "AI providers",
     "agentSkills": "Skills",
-    "promptSettings": "Prompt Settings",
+    "promptSettings": "Prompts",
     "mcpServer": "MCP Server",
     "mcpClients": "MCP Clients",
-    "channels": "Channels",
+    "channels": "Chat channels",
     "users": "Users",
     "apiKeys": "API keys",
     "roles": "Roles & permissions",
@@ -266,6 +266,7 @@
     "opsSettings": "Security & webhooks",
     "updates": "Updates",
     "createSite": "Generate the site",
+    "themeGenerator": "Generate a theme",
     "marketplace": "Marketplace",
     "health": "Health",
     "tools": "Tools",
@@ -1829,6 +1830,7 @@
     "empty": "Ask this agent anything — it can read and, with your approval, write to this site.",
     "thinking": "Thinking…",
     "inputLabel": "Message",
+    "placeholder": "Write your request… (Enter to send, Shift+Enter for a new line)",
     "send": "Send",
     "noReply": "(no reply)",
     "sendError": "Could not reach this agent.",
@@ -1838,10 +1840,12 @@
   },
   "agents": {
     "heading": "Agents",
+    "noProviderNotice": "No AI provider is configured: the agents cannot run yet. They will use the first provider you add.",
     "adminOnly": "Restricted to the \"admin\" role: this manages every agent's activation, tools and budget.",
     "name": "Name",
     "state": "State",
     "model": "Model",
+    "providerColumn": "Provider",
     "autonomy": "Autonomy",
     "budget": "Daily token consumption",
     "actions": "Actions",
@@ -1873,6 +1877,7 @@
     "identitySystemPrompt": "System prompt",
     "identitySystemPromptHint": "Extra standing instructions this agent should always follow, beyond role, objectives and style — a rule, an output format, a hard boundary.",
     "identityHeading": "Identity",
+    "identityForModel": "Instructions given to the model",
     "generateHeading": "Generate from a brief",
     "generateHint": "Describe this agent's purpose and the model drafts a role, objectives, style and system prompt above — nothing is saved until you review the draft and click Save.",
     "generatePurpose": "Purpose",
@@ -1886,6 +1891,7 @@
     "generatedReview": "Generated — review the role, objectives, style and system prompt above before saving.",
     "modelNone": "No model preference declared.",
     "modelPreferred": "Preferred: {{model}}",
+    "modelUsedInstead": "Neither is configured: this agent uses “{{provider}}”.",
     "modelFallback": "fallback: {{model}}",
     "modelExplicit": "model: {{model}}",
     "autonomyDefault": "Default level: {{level}}",
@@ -1924,43 +1930,48 @@
     "providerUnavailable": "Enabled, provider unavailable"
   },
   "providers": {
-    "heading": "Providers",
+    "heading": "AI providers",
     "adminOnly": "Restricted to the \"admin\" role: this manages every LLM provider's API key.",
-    "intro": "Which LLM providers this site can use, and their default model. Every agent's model preference names one of these.",
-    "defaultsHeading": "Default settings",
-    "defaultsIntro": "The floor every provider below follows when a setting is not overridden specifically for it.",
+    "intro": "The AI services this site may call, with their default model. Without one, the whole site works except the assistant and the agents.",
+    "configuredHeading": "Configured providers",
+    "defaultsHeading": "Shared settings",
+    "defaultsDisclosure": "Settings shared by every provider (advanced)",
+    "defaultsIntro": "The values any provider without its own uses.",
     "defaultsLoadError": "Could not load the default settings.",
     "defaultsSaveAction": "Save default settings",
     "defaultsSaved": "Saved.",
-    "addHeading": "Add or update a provider",
+    "addHeading": "Add a provider",
+    "configureAction": "Set up an AI provider",
+    "advancedOptions": "Advanced options: custom address, limits, image generation",
     "provider": "Provider",
     "customProviderOption": "Custom provider…",
     "customProviderId": "Provider id",
     "customProviderIdPlaceholder": "e.g. my-vllm-server",
     "customProviderHint": "Lowercase letters, digits and hyphens only (e.g. \"my-vllm-server\").",
     "apiKey": "API key",
-    "apiKeyPlaceholder": "Never shown again once saved",
+    "apiKeyPlaceholder": "Paste the key the service gave you",
+    "editApiKeyHint": "You are changing where requests are sent: type the API key again. The saved key is never sent to a new address on its own.",
     "model": "Default model",
     "modelPlaceholder": "e.g. claude-sonnet-4",
     "knownModel": "Known model",
     "customModelOption": "— custom model —",
     "baseUrl": "Base URL",
-    "baseUrlPlaceholder": "Only for a self-hosted or proxied endpoint",
+    "baseUrlPlaceholder": "Empty for the service’s official address",
     "baseUrlRequiredForCustom": "Required for a custom provider — the full OpenAI-compatible chat completions endpoint URL.",
     "catalogLoadError": "Could not load the provider catalog.",
     "maxOutputTokens": "Max output tokens",
-    "maxOutputTokensHint": "A model that \"thinks\" before answering (DeepSeek, o1…) needs far more than the visible answer alone — leave empty to follow the site's default setting, above.",
+    "maxOutputTokensHint": "The longest answer allowed. A model that “thinks” before answering (DeepSeek, o1…) needs more. Empty: the shared value.",
     "requestTimeoutSeconds": "Request timeout (seconds)",
-    "requestTimeoutSecondsHint": "A slower model needs more time, not just more tokens — leave empty to follow the site's default setting, above.",
+    "requestTimeoutSecondsHint": "How long to wait for an answer. Empty: the shared value.",
     "maxCorrectionAttempts": "Max correction attempts",
-    "maxCorrectionAttemptsHint": "How many times to retry this model when it does not produce a usable answer on the first try — leave empty to follow the site's default setting, above.",
+    "maxCorrectionAttemptsHint": "How many times to retry an unusable answer. Empty: the shared value.",
     "tuningDefaultPlaceholder": "Default",
     "imageModel": "Image model",
     "imageModelPlaceholder": "e.g. gpt-image-1",
-    "imageModelHint": "The model this provider renders images with, sharing the same API key. Leave it empty and this provider does text only.",
+    "imageModelHint": "To generate images with the same key. Empty: this provider does text only.",
     "imageBaseUrl": "Image endpoint",
     "imageBaseUrlPlaceholder": "e.g. https://internal-proxy/v1/images/generations",
-    "imageBaseUrlHint": "The full image endpoint URL, for a proxy only. Distinct from the base URL above, which is the chat one: mixing them up would POST an image payload at a chat address.",
+    "imageBaseUrlHint": "The full image-generation address, only behind a proxy. Not the base address, which is for text.",
     "imageUnsupported": "\"{{provider}}\" cannot generate images today — only OpenAI and Stability can. The image model entered here will be ignored and this provider stays a text-only provider.",
     "imagesColumn": "Images",
     "imageTextOnly": "Text only",
@@ -1979,22 +1990,22 @@
     "enable": "Enable",
     "disable": "Disable",
     "remove": "Remove",
-    "noProviders": "No provider configured yet — agents cannot run until one is added.",
+    "noProviders": "No provider yet. Add one below to use the assistant and the agents.",
     "loadError": "Could not load the provider list.",
     "saveError": "Could not save this provider.",
     "field": {
       "assistant": {
         "defaultMaxOutputTokens": {
-          "label": "Max output tokens — site default",
-          "help": "The floor any provider with no \"Max output tokens\" of its own follows."
+          "label": "Longest answer (tokens)",
+          "help": "For any provider without its own value."
         },
         "defaultRequestTimeoutSeconds": {
-          "label": "Request timeout — site default (seconds)",
-          "help": "The floor any provider with no \"Request timeout\" of its own follows."
+          "label": "Longest wait (seconds)",
+          "help": "For any provider without its own value."
         },
         "defaultMaxCorrectionAttempts": {
-          "label": "Max correction attempts — site default",
-          "help": "The floor any provider with no \"Max correction attempts\" of its own follows."
+          "label": "Most retries",
+          "help": "For any provider without its own value."
         }
       }
     }
@@ -2002,7 +2013,7 @@
   "agentSkills": {
     "heading": "Skills",
     "adminOnly": "Restricted to the \"admin\" role: this manages every agent's available skills.",
-    "intro": "A skill is a named piece of instruction text an agent loads into its context, edited here as raw SKILL.md Markdown (frontmatter included) — the same format a real Claude Code/Codex skill ships as, so you can paste or import one as-is. New agents inherit every skill marked \"enabled by default\" — exclude one from a specific agent on its own edit screen.",
+    "intro": "A skill is a how-to the agents read before acting: how to write in the site’s voice, how to report a security scan… It is written in Markdown, in the SKILL.md format of Claude Code and Codex, so an existing skill imports as is. Every new agent gets the skills “enabled by default”; remove one from the agent’s own screen.",
     "createSkill": "Create skill",
     "name": "Name",
     "description": "Description",
@@ -2031,9 +2042,9 @@
     }
   },
   "promptSettings": {
-    "heading": "Prompt Settings",
+    "heading": "Prompts",
     "adminOnly": "Restricted to the \"admin\" role: this manages the instruction text every writing-assistant tool sends the model.",
-    "intro": "Every utility prompt an assistant tool actually sends the model, editable here instead of hard-coded. A double-brace placeholder is filled in by the tool at call time — remove one only if you also remove what depends on it. A builtin can always be edited, never deleted, so the site always has a working default.",
+    "intro": "The instructions the assistant sends the model for each tool: rewrite, translate, summarise… Adapt them to the site’s voice. Names between double braces are filled in at call time: keep them. An instruction that ships with Cogenta can be edited, not deleted.",
     "createTemplate": "Create template",
     "name": "Name",
     "description": "Description",
@@ -2365,6 +2376,7 @@
     "checking": "Checking…",
     "checkError": "This sandbox could not be checked.",
     "checkPassed": "This sandbox is ready to deploy.",
+    "deployWarning": "Once deployed, this theme runs on the server with the site’s own rights. Only deploy it if you know where its code comes from: a zip file you were sent, or code an agent wrote from an outside document, can carry malicious instructions the automatic check does not see.",
     "checkFailed": "This sandbox cannot be deployed yet:",
     "cancelAction": "Cancel",
     "confirmDeployAction": "Deploy",
@@ -2975,7 +2987,7 @@
   "mcp": {
     "heading": "MCP Server",
     "adminOnly": "Admin role only: this page creates and revokes MCP credentials.",
-    "intro": "Connect an MCP client — Claude Desktop, Claude Code, Cursor, or any other client that speaks the Model Context Protocol — to this site's content and tools. Generate a key below, then paste the configuration it shows into your client.",
+    "intro": "Let an outside assistant (Claude Desktop, Claude Code, Cursor…) work on this site through MCP. Create a key, then paste the configuration shown into the assistant.",
     "newButton": "New MCP key",
     "newHeading": "Create an MCP key",
     "newDescription": "The key is generated by the server and shown exactly once, together with a ready-to-paste client configuration.",
@@ -3033,7 +3045,7 @@
   "mcpClients": {
     "heading": "MCP Clients",
     "adminOnly": "Admin role only: this page connects this site to external MCP servers.",
-    "intro": "Connect this site's agents to an external MCP server — a stdio process this server spawns and talks to over the Model Context Protocol. Every remote tool is off by default: check exactly the ones an agent may call, one at a time.",
+    "intro": "Give this site’s agents the tools of an outside MCP server, started by this server. No remote tool can be used until you tick it.",
     "newButton": "New connection",
     "newHeading": "Connect an MCP server",
     "newDescription": "Only \"stdio\" connections are supported today — a command this server spawns and talks to over its standard input/output.",
@@ -3104,8 +3116,8 @@
     "toolCost": "Cost"
   },
   "channels": {
-    "heading": "Channels",
-    "intro": "Link a personal Telegram, Slack or Discord account. Once linked, it can receive notices from this site.",
+    "heading": "Chat channels",
+    "intro": "Link your Telegram, Slack or Discord account to receive the site’s notices there.",
     "chatHint": "As an admin, a linked account can also chat with an agent directly from the channel — send it a message, or \"@Agent Name: message\" to pick a specific one.",
     "notAdminHint": "Chatting with an agent from a channel needs the admin role — linking still works, for notices.",
     "name": {
@@ -4231,6 +4243,7 @@
   },
   "assistant": {
     "heading": "Assistant",
+    "moreWithProvider": "Only duplicate detection works without an AI provider. Rewriting, proofreading, translating, summarising, asking the site and generating images need one.",
     "loadError": "Could not read the assistant's status. Try again.",
     "offTitle": "No AI provider is configured",
     "offReasonFallback": "This site has no AI provider configured, so the writing assistant is off.",
@@ -5551,7 +5564,9 @@
     "promptCategories": {
       "text": "text",
       "seo": "seo",
-      "agent": "agent"
+      "agent": "agent",
+      "moderation": "moderation",
+      "translation": "translation"
     },
     "adminThemes": {
       "nightops": {
@@ -5632,6 +5647,20 @@
       },
       "theme-saas": {
         "description": "A B2B software theme: white and a structured grey scale, near-black ink and one signal blue, Geist and Geist Mono, framed product screenshots, a ruled plan comparison and a designed dark mode."
+      }
+    },
+    "skills": {
+      "content-writing": {
+        "name": "Content writing",
+        "description": "How to write and edit site content in this CMS’s voice."
+      },
+      "basic-security-review": {
+        "name": "Basic security review",
+        "description": "How to read a dependency scan and report findings without alarmism."
+      },
+      "site-structure-and-menus": {
+        "name": "Site structure and menus",
+        "description": "How to reason about this site’s navigation and information architecture."
       }
     }
   }

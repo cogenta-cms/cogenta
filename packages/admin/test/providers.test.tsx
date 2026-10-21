@@ -12,8 +12,8 @@ afterEach(() => {
 
 async function goToProviders(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(await screen.findByRole('link', { name: 'Fournisseurs' }))
-  await screen.findByRole('heading', { name: 'Fournisseurs' })
+  fireEvent.click(await screen.findByRole('link', { name: 'Fournisseurs d’IA' }))
+  await screen.findByRole('heading', { name: 'Fournisseurs d’IA' })
 }
 
 describe('providers', () => {
@@ -39,9 +39,9 @@ describe('providers', () => {
     render(<App />)
     await goToProviders()
 
-    expect(await screen.findByText(/Aucun fournisseur configuré/)).toBeDefined()
+    expect(await screen.findByText(/Aucun fournisseur pour l’instant/)).toBeDefined()
 
-    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+    fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-ant-secret-value' },
     })
     fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
@@ -56,7 +56,7 @@ describe('providers', () => {
     expect(await screen.findByText('Désactivé')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Retirer' }))
-    expect(await screen.findByText(/Aucun fournisseur configuré/)).toBeDefined()
+    expect(await screen.findByText(/Aucun fournisseur pour l’instant/)).toBeDefined()
   })
 
   it('the model select fills the free-text model field for the selected provider', async () => {
@@ -66,7 +66,7 @@ describe('providers', () => {
 
     render(<App />)
     await goToProviders()
-    await screen.findByText(/Aucun fournisseur configuré/)
+    await screen.findByText(/Aucun fournisseur pour l’instant/)
 
     fireEvent.change(screen.getByLabelText('Modèle connu'), {
       target: { value: 'claude-sonnet-5' },
@@ -85,9 +85,9 @@ describe('providers', () => {
 
     render(<App />)
     await goToProviders()
-    await screen.findByText(/Aucun fournisseur configuré/)
+    await screen.findByText(/Aucun fournisseur pour l’instant/)
 
-    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+    fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-deepseek-secret' },
     })
     fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
@@ -114,9 +114,9 @@ describe('providers', () => {
 
     render(<App />)
     await goToProviders()
-    await screen.findByText(/Aucun fournisseur configuré/)
+    await screen.findByText(/Aucun fournisseur pour l’instant/)
 
-    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+    fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-ant-secret-value' },
     })
     fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
@@ -137,9 +137,9 @@ describe('providers', () => {
 
     render(<App />)
     await goToProviders()
-    await screen.findByText(/Aucun fournisseur configuré/)
+    await screen.findByText(/Aucun fournisseur pour l’instant/)
 
-    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+    fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-ant-secret-value' },
     })
     fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
@@ -151,9 +151,7 @@ describe('providers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
     const dialog = await screen.findByRole('dialog', { name: /Modifier —/ })
     // The dialog never asks for the API key at all.
-    expect(
-      within(dialog).queryByPlaceholderText('Plus jamais affichée une fois enregistrée'),
-    ).toBeNull()
+    expect(within(dialog).queryByPlaceholderText('Collez la clé fournie par le service')).toBeNull()
 
     fireEvent.change(within(dialog).getByLabelText('Tokens de sortie max'), {
       target: { value: '20000' },
@@ -186,13 +184,13 @@ describe('providers', () => {
 
     render(<App />)
     await goToProviders()
-    await screen.findByText(/Aucun fournisseur configuré/)
+    await screen.findByText(/Aucun fournisseur pour l’instant/)
 
     fireEvent.change(screen.getByLabelText('Fournisseur'), { target: { value: '__custom__' } })
     fireEvent.change(screen.getByLabelText('Identifiant du fournisseur'), {
       target: { value: 'my-vllm-server' },
     })
-    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+    fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-local-secret' },
     })
     fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
@@ -224,9 +222,9 @@ describe('providers — image model', () => {
 
     render(<App />)
     await goToProviders()
-    await screen.findByText(/Aucun fournisseur configuré/)
+    await screen.findByText(/Aucun fournisseur pour l’instant/)
 
-    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+    fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-ant-secret-value' },
     })
     fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
@@ -244,10 +242,10 @@ describe('providers — image model', () => {
 
     render(<App />)
     await goToProviders()
-    await screen.findByText(/Aucun fournisseur configuré/)
+    await screen.findByText(/Aucun fournisseur pour l’instant/)
 
     fireEvent.change(screen.getByLabelText('Fournisseur'), { target: { value: 'openai' } })
-    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+    fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-openai-secret' },
     })
     fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
@@ -277,10 +275,10 @@ describe('providers — image model', () => {
 
     render(<App />)
     await goToProviders()
-    await screen.findByText(/Aucun fournisseur configuré/)
+    await screen.findByText(/Aucun fournisseur pour l’instant/)
 
     // anthropic is the first catalog entry, and has no image client server-side.
-    fireEvent.change(screen.getByPlaceholderText('Plus jamais affichée une fois enregistrée'), {
+    fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-ant-secret-value' },
     })
     fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
@@ -335,7 +333,7 @@ describe('providers — image model', () => {
 
     const { container } = render(<App />)
     await goToProviders()
-    await screen.findByText(/Aucun fournisseur configuré/)
+    await screen.findByText(/Aucun fournisseur pour l’instant/)
 
     fireEvent.change(screen.getByLabelText("Modèle d'image"), {
       target: { value: 'some-image-model' },
@@ -359,17 +357,19 @@ describe('providers — "Réglages par défaut" card', () => {
     render(<App />)
     await goToProviders()
 
-    const card = await screen.findByRole('region', { name: 'Réglages par défaut' })
+    const card = await screen.findByRole('region', { name: 'Réglages communs' })
     // The card renders before the site settings that fill it have arrived.
     expect(
-      await within(card).findByLabelText('Tokens de sortie max — défaut du site'),
+      await within(card).findByLabelText('Longueur maximale d’une réponse (tokens)'),
     ).toHaveProperty('value', '8000')
-    expect(
-      within(card).getByLabelText("Délai d'attente — défaut du site (secondes)"),
-    ).toHaveProperty('value', '180')
-    expect(
-      within(card).getByLabelText('Tentatives de correction max — défaut du site'),
-    ).toHaveProperty('value', '3')
+    expect(within(card).getByLabelText('Temps d’attente maximal (secondes)')).toHaveProperty(
+      'value',
+      '180',
+    )
+    expect(within(card).getByLabelText('Nouvelles tentatives maximales')).toHaveProperty(
+      'value',
+      '3',
+    )
   })
 
   it('writes a changed default on blur, distinct from any one provider’s own override', async () => {
@@ -380,8 +380,8 @@ describe('providers — "Réglages par défaut" card', () => {
     render(<App />)
     await goToProviders()
 
-    const card = await screen.findByRole('region', { name: 'Réglages par défaut' })
-    const field = await within(card).findByLabelText('Tokens de sortie max — défaut du site')
+    const card = await screen.findByRole('region', { name: 'Réglages communs' })
+    const field = await within(card).findByLabelText('Longueur maximale d’une réponse (tokens)')
     fireEvent.change(field, { target: { value: '12000' } })
     fireEvent.blur(field)
 

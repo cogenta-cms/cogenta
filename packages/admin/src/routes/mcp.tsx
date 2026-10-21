@@ -21,6 +21,7 @@ import {
   Input,
   Modal,
   Notice,
+  PageHeader,
   Select,
   Table,
   TableBody,
@@ -294,15 +295,12 @@ export function McpRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="mcp-heading" className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 id="mcp-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
-            {t('mcp.heading')}
-          </h1>
-          <p className="mt-1 text-sm">{t('mcp.intro')}</p>
-        </div>
-        <Button onClick={() => setCreating(true)}>{t('mcp.newButton')}</Button>
-      </div>
+      <PageHeader
+        id="mcp-heading"
+        title={t('mcp.heading')}
+        description={t('mcp.intro')}
+        actions={<Button onClick={() => setCreating(true)}>{t('mcp.newButton')}</Button>}
+      />
 
       {created !== null && (
         <Notice

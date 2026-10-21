@@ -155,7 +155,9 @@ function useSiteSettingField(
     defaultValue: setting.key,
   })
   const help = t(`${translationNamespace}.field.${setting.key}.help`, { defaultValue: '' })
-  const provenance = canEdit ? t('settings.provenanceEditable') : t('settings.provenanceReadOnly')
+  // Only the read-only case says something: "Modifiable ici" under a field
+  // that is plainly a field told the reader nothing, on every row.
+  const provenance = canEdit ? '' : t('settings.provenanceReadOnly')
   const description = [help, provenance].filter((part) => part !== '').join(' — ')
 
   async function commit(next: unknown): Promise<void> {

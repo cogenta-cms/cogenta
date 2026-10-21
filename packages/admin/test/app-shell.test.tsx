@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { expectNoSeriousA11yViolations } from './helpers/axe.js'
@@ -255,7 +255,7 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
     expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
   })
 
-  it('closes a pinned-open flyout after navigating to one of its own items', async () => {
+  it('unfolds the section a navigation lands in, in place, instead of leaving its flyout open', async () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
@@ -265,7 +265,13 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
 
     fireEvent.click(await screen.findByRole('link', { name: 'Médiathèque' }))
     await screen.findByRole('heading', { name: 'Médiathèque' })
-    expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
+    // 2026-10-21: the current section shows its items in the sidebar itself,
+    // as WordPress does — no flyout left open, and the page you are on
+    // visible among its neighbours.
+    expect(document.querySelector('.app-shell__sidebar [aria-expanded="true"]')).toBeNull()
+    const section = screen.getByRole('navigation', { name: 'Contenu' })
+    expect(section.closest('.app-shell__flyout')).toBeNull()
+    expect(within(section).getByRole('link', { name: 'Médiathèque' }).className).toContain('active')
   })
 
   it('blurs a still-focused flyout link after navigating, so a real click cannot leave the flyout open forever', async () => {
@@ -288,7 +294,7 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
     await screen.findByRole('heading', { name: 'Médiathèque' })
 
     expect(document.activeElement).not.toBe(mediaLink)
-    expect(contentTrigger.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('.app-shell__sidebar [aria-expanded="true"]')).toBeNull()
   })
 
   it('renders a group left with exactly one item as a direct link, no disclosure button', async () => {
@@ -327,7 +333,7 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'Médiathèque' }))
     await screen.findByRole('heading', { name: 'Médiathèque' })
 
-    const contentGroup = screen.getByRole('button', { name: 'Contenu' }).closest('li')
+    const contentGroup = screen.getByRole('navigation', { name: 'Contenu' }).closest('li')
     expect(contentGroup?.getAttribute('data-current')).toBe('true')
   })
 

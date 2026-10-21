@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { CogentaError, type DatabaseHandle } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
 import type {
@@ -8,6 +8,7 @@ import type {
   RegistrationResponseJSON,
 } from '@simplewebauthn/server'
 import { createCredentialStore } from './credentials.js'
+import { hashPassword, verifyPassword } from './password.js'
 import { createRateLimiter } from './rate-limit.js'
 import { generateRecoveryCodes, hashRecoveryCode } from './recovery-codes.js'
 import { createSessionStore } from './sessions.js'
@@ -158,6 +159,34 @@ export interface LoginContext {
    * session, since no session exists yet to hold it in.
    */
   readonly ttlMs?: number
+  /**
+   * The connecting address, when the transport knows it. Failed passwords
+   * are backed off per account *and* address, so a stranger guessing from
+   * elsewhere cannot lock the owner out with five wrong passwords every
+   * fifteen minutes; the account alone only backs off at ten times the
+   * usual count (a guess spread over many addresses). Hashed before it is
+   * stored, never kept as such.
+   */
+  readonly ip?: string
+}
+
+/**
+ * Threshold multiplier for the account-wide counter: the per-address one
+ * does the everyday work, this one only catches a guess spread across
+ * many addresses.
+ */
+const ACCOUNT_WIDE_SCALE = 10
+
+let dummyHash: Promise<string> | undefined
+
+/**
+ * A password check against a hash nobody owns, so an unknown address costs
+ * the same scrypt work as a real one: answering at once told an attacker
+ * which addresses have an account.
+ */
+async function spendOnePasswordCheck(password: string): Promise<void> {
+  dummyHash ??= hashPassword('cogenta-timing-equaliser')
+  await verifyPassword(password, await dummyHash)
 }
 
 export interface WebAuthnRegistrationChallenge {
@@ -361,13 +390,19 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
   return {
     passwordLogin: async (email, password, context) => {
       const subject = email.trim().toLowerCase()
-      await rateLimit.check(subject)
+      if (context?.ip === undefined || context.ip === '') {
+        await rateLimit.reserve(subject)
+      } else {
+        const place = `ip:${createHash('sha256').update(context.ip).digest('base64url').slice(0, 16)}`
+        await rateLimit.reserveScoped(subject, place, ACCOUNT_WIDE_SCALE)
+      }
 
       const user = await users.byEmail(subject)
-      const valid = user !== null && (await credentials.verifyPassword(user.id, password))
+      let valid = false
+      if (user === null) await spendOnePasswordCheck(password)
+      else valid = await credentials.verifyPassword(user.id, password)
 
       if (!valid || user === null || user.status !== 'active') {
-        await rateLimit.record(subject)
         throw new CogentaError({
           code: 'AUTH_INVALID_CREDENTIALS',
           message: 'Incorrect email or password.',
@@ -392,7 +427,7 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       if (verified === null || verified.userId === null) throw invalidTicket()
       const userId = verified.userId
 
-      await rateLimit.check(`mfa:${userId}`)
+      await rateLimit.reserve(`mfa:${userId}`)
       const stored = await credentials.totpSecret(userId)
       const ok =
         stored !== null &&
@@ -400,7 +435,6 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
         verifyTotp(token, stored.secret, { now: Math.floor(now() / 1000) })
 
       if (!ok) {
-        await rateLimit.record(`mfa:${userId}`)
         throw new CogentaError({
           code: 'AUTH_INVALID_CREDENTIALS',
           message: 'Incorrect verification code.',
@@ -429,11 +463,10 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       // counter) and `totp-setup:` — a wrong code here is a different event
       // from a wrong 6-digit code, and neither should give the other a free
       // pass on attempts.
-      await rateLimit.check(`recovery:${userId}`)
+      await rateLimit.reserve(`recovery:${userId}`)
       const consumed = await credentials.consumeRecoveryCode(userId, code)
 
       if (!consumed) {
-        await rateLimit.record(`recovery:${userId}`)
         throw new CogentaError({
           code: 'AUTH_RECOVERY_CODE_INVALID',
           message: 'This recovery code is not valid.',
@@ -483,13 +516,12 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     },
 
     confirmTotpEnrolment: async (userId, token) => {
-      await rateLimit.check(`totp-setup:${userId}`)
+      await rateLimit.reserve(`totp-setup:${userId}`)
       const stored = await credentials.totpSecret(userId)
       const ok =
         stored !== null && verifyTotp(token, stored.secret, { now: Math.floor(now() / 1000) })
 
       if (!ok) {
-        await rateLimit.record(`totp-setup:${userId}`)
         throw new CogentaError({
           code: 'AUTH_INVALID_CREDENTIALS',
           message: 'Incorrect verification code.',

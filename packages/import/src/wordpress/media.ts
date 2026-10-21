@@ -1,6 +1,12 @@
 import { lookup } from 'node:dns/promises'
 import { basename } from 'node:path'
-import type { CreateMediaInput, MediaAsset, MediaStore, StorageDriver } from '@cogenta/core'
+import {
+  type CreateMediaInput,
+  type MediaAsset,
+  type MediaStore,
+  type StorageDriver,
+  sniffImageFormat,
+} from '@cogenta/core'
 import { assertPublicUrl } from '../ssrf.js'
 
 export interface MediaDownloadFailure {
@@ -44,6 +50,57 @@ function filenameFrom(url: string): string {
   }
 }
 
+/** Redirects followed per media URL, each hop checked like the first. */
+const MAX_REDIRECTS = 5
+
+/**
+ * The response for `url`, following redirects by hand: `fetch` follows
+ * them itself and checks nothing, so a public host answering
+ * `302 → http://169.254.169.254/…` made the import fetch the cloud
+ * metadata and store it as a media file (security review of 2026-10-21).
+ * Every hop is checked as a public address before it is requested.
+ */
+async function fetchPublic(
+  url: string,
+  doFetch: typeof fetch,
+  lookupImpl: typeof lookup,
+  signal: AbortSignal,
+): Promise<Response> {
+  let current = url
+  for (let hop = 0; ; hop++) {
+    await assertPublicUrl(current, { lookupImpl })
+    const response = await doFetch(current, { signal, redirect: 'manual' })
+    const location = response.headers.get('location')
+    if (response.status < 300 || response.status >= 400 || location === null) return response
+    if (hop >= MAX_REDIRECTS) throw new Error(`More than ${MAX_REDIRECTS} redirects.`)
+    current = new URL(location, current).toString()
+  }
+}
+
+/** Formats whose type is read from the bytes, never taken from the remote server. */
+const SAFE_DECLARED_TYPES = new Set([
+  'application/pdf',
+  'video/mp4',
+  'video/webm',
+  'audio/mpeg',
+  'audio/ogg',
+  'audio/wav',
+])
+
+/**
+ * The type a downloaded file is stored as. An image is named by its bytes;
+ * a handful of plainly inert formats keep the type the server declared;
+ * anything else — `text/html`, `image/svg+xml` — is stored as an opaque
+ * download, so a hostile host cannot plant a page on this site's origin.
+ */
+function storedTypeOf(declared: string, bytes: Uint8Array): string {
+  const image = sniffImageFormat(bytes)
+  if (image !== null) return `image/${image}`
+  if (bytes.length >= 4 && String.fromCharCode(...bytes.subarray(0, 4)) === 'GIF8')
+    return 'image/gif'
+  return SAFE_DECLARED_TYPES.has(declared) ? declared : 'application/octet-stream'
+}
+
 function kindFor(mimeType: string): CreateMediaInput['kind'] {
   if (mimeType.startsWith('image/')) return 'image'
   if (mimeType.startsWith('video/')) return 'video'
@@ -79,13 +136,11 @@ export async function downloadAndStoreMedia(
 
   for (const url of distinct.slice(0, MAX_MEDIA_ITEMS)) {
     try {
-      await assertPublicUrl(url, { lookupImpl: options.lookupImpl ?? lookup })
-
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
       let response: Response
       try {
-        response = await doFetch(url, { signal: controller.signal })
+        response = await fetchPublic(url, doFetch, options.lookupImpl ?? lookup, controller.signal)
       } finally {
         clearTimeout(timeout)
       }
@@ -100,13 +155,15 @@ export async function downloadAndStoreMedia(
         continue
       }
 
-      const mimeType =
-        response.headers.get('content-type')?.split(';')[0]?.trim() ?? 'application/octet-stream'
+      const declaredType =
+        response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ??
+        'application/octet-stream'
       const buffer = Buffer.from(await response.arrayBuffer())
       if (buffer.byteLength > MAX_MEDIA_BYTES) {
         failed.push({ url, reason: `Larger than the ${MAX_MEDIA_BYTES} byte limit.` })
         continue
       }
+      const mimeType = storedTypeOf(declaredType, buffer)
       const filename = filenameFrom(url)
       const storageKey = `imports/wordpress/${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`
 

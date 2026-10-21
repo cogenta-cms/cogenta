@@ -31,6 +31,7 @@ import {
   AssistantIcon,
   AuditIcon,
   CalendarIcon,
+  ChannelsIcon,
   ChevronRightIcon,
   CollectionsIcon,
   CommentsIcon,
@@ -56,7 +57,10 @@ import {
   McpIcon,
   MediaIcon,
   MenusIcon,
+  PaletteIcon,
   ProfileIcon,
+  PromptIcon,
+  ProviderIcon,
   ReviewIcon,
   RolesIcon,
   ScheduledIcon,
@@ -64,6 +68,7 @@ import {
   SeoIcon,
   SettingsIcon,
   SitePlanIcon,
+  SkillIcon,
   TaxonomiesIcon,
   ToolsIcon,
   TranslationsIcon,
@@ -130,6 +135,11 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/mcp': McpIcon,
   '/mcp-clients': McpIcon,
   '/create-site': SitePlanIcon,
+  '/theme-generator': PaletteIcon,
+  '/providers': ProviderIcon,
+  '/agent-skills': SkillIcon,
+  '/prompt-settings': PromptIcon,
+  '/channels': ChannelsIcon,
   '/users': UsersIcon,
   '/api-keys': ApiKeysIcon,
   '/roles': RolesIcon,
@@ -645,6 +655,32 @@ export function AppShell(): JSX.Element {
                   <span className="app-shell__nav-group-label">{label}</span>
                   {badge}
                 </NavLink>
+              </li>
+            )
+          }
+
+          // The section you are in shows its items in place, as WordPress
+          // does: behind a hover-only flyout nobody could see which screen
+          // of "IA" or "Réglages" they were on, nor reach its neighbours in
+          // one click. A collapsed (icon-only) sidebar keeps the flyout.
+          if (!sidebarCollapsed && groupContainsPath(group, location.pathname)) {
+            return (
+              <li
+                key={group.id}
+                className="app-shell__nav-group app-shell__nav-group--inline reveal"
+                style={style}
+                data-current="true"
+              >
+                <span className="app-shell__nav-group-trigger">
+                  <GroupIcon className="size-[1.3125rem] shrink-0" />
+                  <span className="app-shell__nav-group-label">{label}</span>
+                  {badge}
+                </span>
+                <nav aria-label={label}>
+                  <ul className="app-shell__nav-subitems app-shell__nav-inline">
+                    {items.map((item) => renderNavItemRow(item))}
+                  </ul>
+                </nav>
               </li>
             )
           }

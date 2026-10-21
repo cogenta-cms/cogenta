@@ -32,6 +32,12 @@ export const UNLOCK_PATH = '/_cogenta/unlock'
  */
 export const UNLOCK_ATTEMPTS_PER_WINDOW = 10
 export const UNLOCK_WINDOW_MS = 10 * 60 * 1000
+/**
+ * Every address together, per entry: the per-address count alone let a
+ * guesser rotating through an IPv6 /64 try without end, and behind a reverse
+ * proxy (one address for everybody) one guesser locked every reader out.
+ */
+export const UNLOCK_ATTEMPTS_PER_ENTRY_PER_WINDOW = 100
 
 export interface PasswordFormStrings {
   readonly heading: string

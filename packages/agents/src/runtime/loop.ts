@@ -1,5 +1,6 @@
 import { CogentaError } from '@cogenta/core'
 import { Annotation, END, GraphRecursionError, START, StateGraph } from '@langchain/langgraph'
+import { fenceToolOutput } from '../identity/context.js'
 import { assertProviderAllowed } from '../privacy/assert-provider-allowed.js'
 import { NOOP_PROGRESS } from '../progress/types.js'
 import type { ChatMessage, ChatResponse, ProviderToolCall, TokenUsage } from '../providers/types.js'
@@ -276,9 +277,10 @@ function buildAgentGraph(input: RunAgentLoopInput) {
           role: 'tool',
           toolCallId: call.id,
           toolName: call.name,
-          content: outcome.ok
-            ? (outcome.output ?? '')
-            : `Error: ${outcome.error ?? 'unknown error'}`,
+          content: fenceToolOutput(
+            call.name,
+            outcome.ok ? (outcome.output ?? '') : `Error: ${outcome.error ?? 'unknown error'}`,
+          ),
         },
       ]
     }

@@ -8,7 +8,7 @@ import type { RichTextDocument } from '@cogenta/blocks'
 
 export const DEFAULT_PRODUCT_NAME = 'Relay'
 
-const DOCS_SUFFIX = /\s+(docs|documentation|developer docs|dev docs)$/i
+const DOCS_SUFFIX = /(?<!\s)\s+(docs|documentation|developer docs|dev docs)$/i
 
 /** "Relay Docs" → "Relay"; an empty or absent name → "Relay". */
 export function productName(siteName: string | undefined): string {

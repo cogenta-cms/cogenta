@@ -26,6 +26,7 @@ import {
 } from '@cogenta/analytics'
 import {
   type AccessContext,
+  type Actor,
   type AdminThemeRouter,
   type AgentSkillsRouter,
   type AgentsRouter,
@@ -241,7 +242,12 @@ import {
   type StorageDriver,
   sql,
 } from '@cogenta/core'
-import { createFormStore, ensureFormsTables, type FormStore } from '@cogenta/forms'
+import {
+  createFormStore,
+  ensureFormsTables,
+  FORM_FILE_HARD_MAX_BYTES,
+  type FormStore,
+} from '@cogenta/forms'
 import {
   analyzeGeneric,
   analyzeJson,
@@ -401,6 +407,7 @@ import { DEFAULT_LOGO_CONTENT_TYPE, DEFAULT_LOGO_PATH, defaultLogoBytes } from '
 import { runDoctor } from './doctor.js'
 import {
   parseCookies,
+  UNLOCK_ATTEMPTS_PER_ENTRY_PER_WINDOW,
   UNLOCK_ATTEMPTS_PER_WINDOW,
   UNLOCK_PATH,
   UNLOCK_WINDOW_MS,
@@ -2897,7 +2904,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         registry: paymentRegistry,
         config: paymentConfig,
         testMode: options.payment?.testMode ?? true,
-        webhookUrl: `${site.url.replace(/\/+$/u, '')}/api/commerce/payments/webhook`,
+        webhookUrl: `${site.url.replace(/(?<!\/)\/+$/u, '')}/api/commerce/payments/webhook`,
       },
       permissions: commercePermissions,
     }),
@@ -3011,14 +3018,14 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       signingKey: options.signingKey,
       // A URL-prefix property (the form GSC's own UI defaults to) — always
       // exactly one trailing slash, whatever `site.url` was written as.
-      siteUrl: `${site.url.replace(/\/+$/u, '')}/`,
+      siteUrl: `${site.url.replace(/(?<!\/)\/+$/u, '')}/`,
       ...(options.searchConsole === undefined
         ? {}
         : {
             oauth: {
               clientId: options.searchConsole.clientId,
               clientSecret: options.searchConsole.clientSecret,
-              redirectUri: `${site.url.replace(/\/+$/u, '')}/api/seo/search-console/callback`,
+              redirectUri: `${site.url.replace(/(?<!\/)\/+$/u, '')}/api/seo/search-console/callback`,
             },
           }),
     }),
@@ -3337,14 +3344,35 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
  */
 const MAX_REQUEST_BODY_BYTES = 64 * 1024 * 1024
 
+/**
+ * What a caller nobody has authenticated may send. 64 MiB read into memory
+ * before any check let some thirty parallel anonymous requests (a comment,
+ * a sign-in) take the process down; nothing anonymous needs more than a
+ * form's worth of JSON — except a public form's file field, whose own hard
+ * ceiling (`FORM_FILE_HARD_MAX_BYTES`) bounds a multipart body.
+ */
+const MAX_ANONYMOUS_BODY_BYTES = 1024 * 1024
+const MAX_ANONYMOUS_MULTIPART_BYTES = FORM_FILE_HARD_MAX_BYTES + 1024 * 1024
+
+/** The ceiling for one request, set once its actor is known (`createRequestListener`). */
+const bodyLimits = new WeakMap<IncomingMessage, number>()
+
+function bodyLimitFor(req: IncomingMessage, actor: Actor): number {
+  if (actor.id !== null) return MAX_REQUEST_BODY_BYTES
+  return (req.headers['content-type'] ?? '').includes('multipart/form-data')
+    ? MAX_ANONYMOUS_MULTIPART_BYTES
+    : MAX_ANONYMOUS_BODY_BYTES
+}
+
 async function readRawBodyBuffer(req: IncomingMessage): Promise<Buffer | undefined> {
+  const limit = bodyLimits.get(req) ?? MAX_REQUEST_BODY_BYTES
   const chunks: Buffer[] = []
   let total = 0
   let tooLarge = false
   for await (const chunk of req) {
     const buf = chunk as Buffer
     total += buf.length
-    if (total > MAX_REQUEST_BODY_BYTES) {
+    if (total > limit) {
       // Bound memory by not buffering any more chunks, but keep draining the
       // socket rather than destroying it: a client mid-write over the same
       // TCP connection this response has to go out on can be reset by an
@@ -3358,8 +3386,8 @@ async function readRawBodyBuffer(req: IncomingMessage): Promise<Buffer | undefin
   if (tooLarge) {
     throw new CogentaError({
       code: 'REQUEST_BODY_TOO_LARGE',
-      message: `The request body exceeds the ${MAX_REQUEST_BODY_BYTES}-byte limit.`,
-      hint: 'Send a smaller payload.',
+      message: `The request body exceeds the ${limit}-byte limit.`,
+      hint: 'Send a smaller payload, or sign in first if this needs a large one.',
     })
   }
   if (chunks.length === 0) return undefined
@@ -3456,6 +3484,7 @@ function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestReque
     query,
     headers,
     ...(body === undefined ? {} : { body }),
+    ...(req.socket.remoteAddress === undefined ? {} : { clientIp: req.socket.remoteAddress }),
   }
 }
 
@@ -3863,6 +3892,22 @@ function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): Comme
  * make analytics *less* accurate, never leak anything (the header is never
  * stored, only hashed).
  */
+/**
+ * A redirect target taken from a request is only ever a path of this site.
+ * Browsers read a backslash as a slash and drop tabs and line breaks, so
+ * "/\\evil.example" and "/\t/evil.example" both reach "//evil.example":
+ * any control character refuses the target, as do "//" and a backslash.
+ */
+function isSameSitePath(target: string): boolean {
+  return (
+    target.startsWith('/') &&
+    !target.startsWith('//') &&
+    !target.includes('\\') &&
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: that is the point
+    !/[\u0000-\u001f\u007f]/u.test(target)
+  )
+}
+
 function clientIpOf(req: IncomingMessage): string {
   return req.socket.remoteAddress ?? 'unknown'
 }
@@ -4310,7 +4355,19 @@ async function recordSiteShapeAudit(
   actor: AccessContext['actor'],
   method: string,
   pathname: string,
-  action: 'menu.write' | 'widget.write' | 'redirect.write' | 'theme.write',
+  action:
+    | 'menu.write'
+    | 'widget.write'
+    | 'redirect.write'
+    | 'theme.write'
+    // The AI configuration (security review of 2026-10-21): an agent set to
+    // autopilot, a rewritten system prompt or a provider pointed elsewhere
+    // left no trace. Method and path only — never a body, so never a key.
+    | 'agent.write'
+    | 'provider.write'
+    | 'skill.write'
+    | 'prompt.write'
+    | 'mcp.write',
   response: RestResponse,
   logger: Logger,
 ): Promise<void> {
@@ -4739,6 +4796,7 @@ export function createRequestListener(
         ),
         site.requestQuota === undefined ? {} : { requestQuota: site.requestQuota },
       )
+      bodyLimits.set(req, bodyLimitFor(req, actor))
       // The `?preview=` token the admin's "Prévisualiser" button issues
       // (`POST /{collection}/{id}/preview`, `router.ts`) is only ever
       // consumed here for the public *page* route below — `createContentGateway`'s
@@ -6743,21 +6801,55 @@ export function createRequestListener(
         // enable/disable-only router never needed one, this one does.
         const body = req.method === 'GET' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.agentsRouter.handle(request, context.actor))
+        const response = await site.agentsRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        // A run or a conversation is journalled by the runtime itself, action
+        // by action; what is recorded here is the configuration.
+        if (!/\/(?:run|conversation)(?:\/|$)/u.test(url.pathname)) {
+          await recordSiteShapeAudit(
+            site,
+            actor,
+            req.method ?? 'GET',
+            url.pathname,
+            'agent.write',
+            response,
+            logger,
+          )
+        }
         return
       }
 
       if (url.pathname.startsWith('/api/providers') && site.providersRouter !== undefined) {
         const body = req.method === 'GET' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.providersRouter.handle(request, context.actor))
+        const response = await site.providersRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        await recordSiteShapeAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          'provider.write',
+          response,
+          logger,
+        )
         return
       }
 
       if (url.pathname.startsWith('/api/agent-skills') && site.agentSkillsRouter !== undefined) {
         const body = req.method === 'GET' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.agentSkillsRouter.handle(request, context.actor))
+        const response = await site.agentSkillsRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        await recordSiteShapeAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          'skill.write',
+          response,
+          logger,
+        )
         return
       }
 
@@ -6770,7 +6862,17 @@ export function createRequestListener(
       ) {
         const body = req.method === 'GET' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.mcpConnectionsRouter.handle(request, context.actor))
+        const response = await site.mcpConnectionsRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        await recordSiteShapeAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          'mcp.write',
+          response,
+          logger,
+        )
         return
       }
 
@@ -6780,7 +6882,17 @@ export function createRequestListener(
       ) {
         const body = req.method === 'GET' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
-        writeRestResponse(res, await site.promptTemplatesRouter.handle(request, context.actor))
+        const response = await site.promptTemplatesRouter.handle(request, context.actor)
+        writeRestResponse(res, response)
+        await recordSiteShapeAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          'prompt.write',
+          response,
+          logger,
+        )
         return
       }
 
@@ -6960,8 +7072,11 @@ export function createRequestListener(
             return
           }
           const cacheableByBrowsersAndCrawlers = redirect.status === 301 || redirect.status === 308
+          // A row stored before the stores refused them must still never send
+          // a visitor to another site: "//host" and "/\\host" are both one.
+          const to = redirect.to.startsWith('//') || redirect.to.includes('\\') ? '/' : redirect.to
           res.writeHead(redirect.status, {
-            location: `${redirect.to}${url.search}`,
+            location: `${to}${url.search}`,
             'cache-control': cacheableByBrowsersAndCrawlers ? 'public, max-age=3600' : 'no-store',
           })
           res.end()
@@ -7144,7 +7259,7 @@ export function createRequestListener(
         const next = form.get('next') ?? '/'
         // Only ever back to a path of this site: a redirect target from a
         // form field is an open redirect waiting to happen.
-        const back = /^\/(?!\/)[^\s]*$/u.test(next) ? next : '/'
+        const back = isSameSitePath(next) && !/\s/u.test(next) ? next : '/'
 
         // The ceiling, before the check and regardless of whether the entry
         // exists: an answer that came faster for an unknown id would say
@@ -7153,10 +7268,16 @@ export function createRequestListener(
         // than locking every reader out of every protected page.
         const quota = site.requestQuota
         if (quota !== undefined) {
-          const attempt = await quota.consume(`unlock:${clientIpOf(req)}:${entryId}`, {
+          const fromAddress = await quota.consume(`unlock:${clientIpOf(req)}:${entryId}`, {
             limit: UNLOCK_ATTEMPTS_PER_WINDOW,
             windowMs: UNLOCK_WINDOW_MS,
           })
+          const attempt = fromAddress.allowed
+            ? await quota.consume(`unlock-entry:${entryId}`, {
+                limit: UNLOCK_ATTEMPTS_PER_ENTRY_PER_WINDOW,
+                windowMs: UNLOCK_WINDOW_MS,
+              })
+            : fromAddress
           if (!attempt.allowed) {
             logger.warn('unlock attempts throttled', { path: back })
             res.writeHead(303, {
@@ -7265,16 +7386,10 @@ export function createRequestListener(
 
       if (url.pathname === '/_cogenta/go' && req.method === 'GET') {
         const target = url.searchParams.get('to') ?? '/'
-        // A same-site path only. Browsers drop tabs and line breaks from a URL, so
-        // "/\t/evil.example" would otherwise reach "//evil.example": any control
-        // character refuses the target, as do "//" and a backslash.
-        const safe =
-          target.startsWith('/') &&
-          !target.startsWith('//') &&
-          !target.includes('\\') &&
-          // biome-ignore lint/suspicious/noControlCharactersInRegex: that is the point
-          !/[\u0000-\u001f\u007f]/u.test(target)
-        res.writeHead(303, { location: safe ? target : '/', 'cache-control': 'no-store' })
+        res.writeHead(303, {
+          location: isSameSitePath(target) ? target : '/',
+          'cache-control': 'no-store',
+        })
         res.end()
         return
       }
@@ -8747,7 +8862,12 @@ export async function runServe(options: ServeOptions): Promise<number> {
         user.email,
         token,
         expiresAt,
-      ).then(() => undefined),
+      ).then(
+        () => undefined,
+        // The route no longer waits for the mail (its timing told real
+        // addresses from unknown ones), so a failure is reported here.
+        (error: unknown) => logger.error('reset mail failed', { error: String(error) }),
+      ),
     // Fiche 17 task 1. Same file, same transport, same "the token is redeemed
     // at /admin/reset-password" screen `onForgotPassword` already points at
     // — accepting an invitation and resetting a forgotten password are the

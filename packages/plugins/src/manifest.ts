@@ -344,7 +344,7 @@ const CAPABILITY_NAME_SET: ReadonlySet<string> = new Set(PLUGIN_CAPABILITY_NAMES
 const PACKAGE_NAME_PATTERN = /^(@[a-z0-9-]+\/)?[a-z0-9-]+$/
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 /** Deliberately loose: `^1.0.0`, `~1.2.3`, `>=1.0.0 <2.0.0`, or a bare `1.0.0`. */
-const SEMVER_RANGE_PATTERN = /^[\^~]?\d+\.\d+\.\d+.*$/
+const SEMVER_RANGE_PATTERN = /^[\^~]?\d+\.\d+\.\d+/
 /** A real hostname shape — no wildcard, no scheme, no path. */
 const HOSTNAME_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i
 

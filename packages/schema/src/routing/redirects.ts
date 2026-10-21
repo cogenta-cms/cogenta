@@ -205,6 +205,20 @@ export function createRedirectStore(options: RedirectStoreOptions): RedirectStor
       })
     }
 
+    // "//evil.example" and "/\\evil.example" are another site to a browser,
+    // and it drops control characters before reading either: a redirect
+    // path is a path of this site, nothing else (security review of
+    // 2026-10-21 — the Site Monitor agent could be talked into one).
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: that is the point
+    if (normalised.startsWith('//') || /[\\\u0000-\u001f\u007f]/u.test(normalised)) {
+      throw new CogentaError({
+        code: 'CONTENT_ROUTE_INVALID',
+        message: `A redirect ${field === 'from' ? 'source' : 'target'} must be a path of this site.`,
+        hint: 'Write a path starting with a single "/", with no backslash and no control character.',
+        details: { field },
+      })
+    }
+
     if (normalised.length > MAX_PATH_LENGTH) {
       throw new CogentaError({
         code: 'CONTENT_ROUTE_INVALID',

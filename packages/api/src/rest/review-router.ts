@@ -212,6 +212,6 @@ export function createReviewRouter(options: ReviewRouterOptions): ReviewRouter {
 }
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }

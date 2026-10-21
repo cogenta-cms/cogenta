@@ -121,7 +121,7 @@ function stringField(body: Record<string, unknown>, key: string): string {
 }
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 

@@ -302,6 +302,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // (AssistantChatRoute/DuplicatesRoute) keep their own capability check and
   // disappear on their own, so the umbrella nav entry itself is not gated on
   // one specific tool.
+  // AI — ordered by use (2026-10-21): what the AI does for the site first,
+  // then how it is set up, then the integrations that reach outside it.
   {
     to: '/assistant',
     labelKey: 'nav.assistant',
@@ -311,6 +313,27 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     to: '/agents',
     labelKey: 'nav.agents',
+    group: 'ai',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
+    // Renamed from `/site-plan` (fiche 21, task 1): the old path and label
+    // read as a sitemap feature, but this screen is the L19 AI-driven site
+    // creation wizard — an unrelated thing that happened to reuse a name
+    // already familiar from "site map" navigation. `/site-plan` still
+    // resolves (see the redirect route in `app.tsx`) so an old bookmark
+    // keeps working.
+    to: '/create-site',
+    labelKey: 'nav.createSite',
+    group: 'ai',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
+    // Also reached from "Apparence du site", where it started; listed here
+    // too because it is one of the things the AI does for a site, and a
+    // page with no nav entry had no "you are here" anywhere.
+    to: '/theme-generator',
+    labelKey: 'nav.themeGenerator',
     group: 'ai',
     visibleWhen: { kind: 'role', role: 'admin' },
   },
@@ -341,6 +364,20 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    // L22 task 2 — linking a personal Telegram/Slack/Discord account. Open
+    // to any signed-in role, like `/assistant`: the link itself is personal
+    // (used for notices regardless of role, fiche 38), and chatting with an
+    // agent through it is gated separately, server-side, on the linked
+    // account actually holding `admin` (`@cogenta/channels`' chat bridge) —
+    // exactly what `/api/agents/:name/run` itself already requires, so a
+    // non-admin who links an account gains no capability this nav entry's
+    // own visibility could have hidden anyway.
+    to: '/channels',
+    labelKey: 'nav.channels',
+    group: 'ai',
+    visibleWhen: { kind: 'anyRole' },
+  },
+  {
     // Fiche 21 task 6: a screen dedicated to managing *this site's own* MCP
     // server, parallel to "Agents" rather than folded into the generic
     // "Clés API" screen — same underlying key store, different audience
@@ -365,33 +402,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'ai',
     visibleWhen: { kind: 'role', role: 'admin' },
   },
-  {
-    // L22 task 2 — linking a personal Telegram/Slack/Discord account. Open
-    // to any signed-in role, like `/assistant`: the link itself is personal
-    // (used for notices regardless of role, fiche 38), and chatting with an
-    // agent through it is gated separately, server-side, on the linked
-    // account actually holding `admin` (`@cogenta/channels`' chat bridge) —
-    // exactly what `/api/agents/:name/run` itself already requires, so a
-    // non-admin who links an account gains no capability this nav entry's
-    // own visibility could have hidden anyway.
-    to: '/channels',
-    labelKey: 'nav.channels',
-    group: 'ai',
-    visibleWhen: { kind: 'anyRole' },
-  },
-  {
-    // Renamed from `/site-plan` (fiche 21, task 1): the old path and label
-    // read as a sitemap feature, but this screen is the L19 AI-driven site
-    // creation wizard — an unrelated thing that happened to reuse a name
-    // already familiar from "site map" navigation. `/site-plan` still
-    // resolves (see the redirect route in `app.tsx`) so an old bookmark
-    // keeps working.
-    to: '/create-site',
-    labelKey: 'nav.createSite',
-    group: 'ai',
-    visibleWhen: { kind: 'role', role: 'admin' },
-  },
-
   // Accounts
   {
     to: '/users',

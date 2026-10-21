@@ -101,7 +101,7 @@ const SCAN_PAGE = 100
 const RECOMMENDED_MAX_TITLE = 60
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 

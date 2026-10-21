@@ -363,7 +363,7 @@ function publicUser(user: User, context: UserViewContext, now: number): unknown 
 }
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 
@@ -1204,9 +1204,8 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
 
     // Rate-limited on the same store as sign-in: this route verifies a
     // password, so it is as much of a guessing oracle as the login route is.
-    await auth.rateLimit.check(`password-change:${userId}`)
+    await auth.rateLimit.reserve(`password-change:${userId}`)
     if (!(await auth.credentials.verifyPassword(userId, currentPassword))) {
-      await auth.rateLimit.record(`password-change:${userId}`)
       throw new CogentaError({
         code: 'AUTH_INVALID_CREDENTIALS',
         message: 'The current password is not correct.',
@@ -1216,6 +1215,12 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     await auth.rateLimit.clear(`password-change:${userId}`)
 
     await auth.credentials.setPassword(userId, newPassword)
+    // Someone who changes their password because they suspect a stolen one
+    // expects the thief to be signed out: every other session goes, this
+    // one stays (the same call "sign out everywhere else" makes).
+    const current = await currentSession(request)
+    if (current !== null) await auth.sessions.revokeAllExcept(userId, current.id)
+    else await auth.sessions.revokeAll(userId)
 
     // T09-05 — direct write at the point of mutation; neither password ever
     // enters `diff`.
@@ -1338,6 +1343,6 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
 function bearerToken(headers: RestRequest['headers']): string | null {
   const raw = headers?.['authorization']
   if (raw === undefined) return null
-  const match = /^Bearer\s+(.+)$/iu.exec(raw)
+  const match = /^Bearer\s+(\S.*)$/iu.exec(raw)
   return match?.[1]?.trim() ?? null
 }

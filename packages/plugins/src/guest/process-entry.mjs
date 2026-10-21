@@ -56,7 +56,9 @@ process.on('message', (message) => {
     if (pending === undefined) return
     pendingSdkCalls.delete(message.callId)
     if (message.type === 'sdk-result') pending.resolve(message.value)
-    else pending.reject(new Error(message.message))
+    // A string, never an Error: an object of this realm reaching the
+    // sandbox is a way out of it (sandbox-core.mjs rebuilds the error).
+    else pending.reject(String(message.message))
     return
   }
 

@@ -215,7 +215,7 @@ function publicUsage(usage: ApiKeyUsage): Record<string, unknown> {
 }
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 

@@ -153,6 +153,51 @@ describe('passwordLogin', () => {
     ).rejects.toMatchObject({ code: 'AUTH_RATE_LIMITED' })
   })
 
+  // Security review of 2026-10-21: the limiter used to count failures only
+  // after the (slow) password check, so parallel guesses all passed the
+  // check before the first one was recorded.
+  it('checks no more than the allowed passwords when guesses arrive in parallel', async () => {
+    const { users, credentials, auth } = await setup(NO_MFA_COLLECTIONS)
+    const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+    await credentials.setPassword(user.id, 'correct horse battery staple')
+
+    const outcomes = await Promise.all(
+      Array.from({ length: 20 }, (_, i) =>
+        auth.passwordLogin('alice@example.com', `guess-${i}`).then(
+          () => 'session',
+          (error: unknown) => (isCogentaError(error) ? error.code : 'other'),
+        ),
+      ),
+    )
+
+    expect(
+      outcomes.filter((code) => code === 'AUTH_INVALID_CREDENTIALS').length,
+    ).toBeLessThanOrEqual(5)
+    expect(outcomes.filter((code) => code === 'AUTH_RATE_LIMITED').length).toBeGreaterThanOrEqual(
+      15,
+    )
+  })
+
+  it('backs off one address without locking the account out from another', async () => {
+    const { users, credentials, auth } = await setup(NO_MFA_COLLECTIONS)
+    const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })
+    await credentials.setPassword(user.id, 'correct horse battery staple')
+
+    for (let i = 0; i < 6; i += 1) {
+      await auth
+        .passwordLogin('alice@example.com', 'wrong', { ip: '203.0.113.9' })
+        .catch(() => undefined)
+    }
+    await expect(
+      auth.passwordLogin('alice@example.com', 'wrong', { ip: '203.0.113.9' }),
+    ).rejects.toMatchObject({ code: 'AUTH_RATE_LIMITED' })
+
+    const fromHome = await auth.passwordLogin('alice@example.com', 'correct horse battery staple', {
+      ip: '198.51.100.4',
+    })
+    expect(fromHome.status).toBe('session')
+  })
+
   it('clears the rate-limit counter after a successful login', async () => {
     const { users, credentials, auth } = await setup(NO_MFA_COLLECTIONS)
     const user = await users.create({ email: 'alice@example.com', roles: ['viewer'] })

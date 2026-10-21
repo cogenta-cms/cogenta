@@ -17,6 +17,12 @@ export interface RestRequest {
   /** Already parsed by the transport: this layer never sees a raw body. */
   readonly body?: unknown
   readonly headers?: Readonly<Record<string, string | undefined>>
+  /**
+   * The connecting socket's address, set by the transport — never read
+   * from a header a client could write. Only the sign-in route uses it, to
+   * back off a guessing script per address rather than per account alone.
+   */
+  readonly clientIp?: string
 }
 
 export interface RestResponse {
@@ -342,6 +348,7 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // A saved maxOutputTokens/requestTimeoutMs/maxCorrectionAttempts outside
   // sane bounds, or not a whole number — the caller's malformed write.
   PROVIDER_TUNING_INVALID: 400,
+  PROVIDER_KEY_REQUIRED: 400,
 
   // A verified-broken chain is a server-side integrity failure, not
   // something the caller's request could have avoided — the default 500

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { actionSchema, linkTargetSchema } from './action.js'
 import { defineBlock } from './define-block.js'
 import { f } from './field.js'
+import { isScriptUrl, SCRIPT_URL_MESSAGE } from './link-safety.js'
 import { plainTextSchema } from './plain-text.js'
 import { richTextDocumentSchema } from './rich-text.js'
 import type { BlockValue } from './types.js'
@@ -257,7 +258,10 @@ const logoItemSchema = z.strictObject({
   media: z.string().min(1),
   /** The organisation's name. It is also the accessible name of the link. */
   name: plainTextSchema.min(1).max(160),
-  url: z.url().optional(),
+  url: z
+    .url()
+    .refine((url) => !isScriptUrl(url), { error: SCRIPT_URL_MESSAGE })
+    .optional(),
 })
 
 export type LogoItem = z.infer<typeof logoItemSchema>

@@ -35,7 +35,7 @@ export function normaliseBaseUrl(baseUrl: string): string {
     })
   }
 
-  const path = parsed.pathname.replace(/\/+$/u, '')
+  const path = parsed.pathname.replace(/(?<!\/)\/+$/u, '')
   return `${parsed.origin}${path}`
 }
 

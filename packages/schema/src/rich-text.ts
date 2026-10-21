@@ -53,11 +53,27 @@ const spanSchema = z.strictObject({
  * target does not break the link, and deleting the target is detectable —
  * neither is true of a stored href.
  */
+/**
+ * `javascript:`, `vbscript:` and `data:` links run script when clicked
+ * (security review of 2026-10-21). The same rule as `@cogenta/blocks`'
+ * `isScriptUrl`, repeated because this package does not depend on that one.
+ */
+function isScriptUrl(value: string): boolean {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: browsers ignore them in a scheme
+  const probe = value.replace(/[\u0000-\u0020\u007f]/gu, '').toLowerCase()
+  return /^(?:javascript|vbscript|data):/u.test(probe)
+}
+
 const markDefinitionSchema = z.discriminatedUnion('_type', [
   z.strictObject({
     _key: keySchema,
     _type: z.literal('link'),
-    href: z.string().min(1),
+    href: z
+      .string()
+      .min(1)
+      .refine((href) => !isScriptUrl(href), {
+        error: 'must not be a javascript:, vbscript: or data: URL',
+      }),
     rel: z.string().optional(),
   }),
   z.strictObject({

@@ -39,6 +39,12 @@ const REFUSED: readonly { readonly pattern: RegExp; readonly reason: string }[] 
   { pattern: /-moz-binding/iu, reason: '-moz-binding: script by another name' },
   { pattern: /javascript\s*:/iu, reason: 'javascript: URL' },
   { pattern: /<\/?[a-z]/iu, reason: 'markup inside a stylesheet' },
+  // Review of 2026-10-21: a CSS escape spells `url(` as `u\\72l(`, and
+  // `image-set()` and `src()` fetch without `url(` — the check below never
+  // saw them, and a stylesheet that can fetch can track every visitor.
+  { pattern: /\\/u, reason: 'a CSS escape, which can spell a fetch the check cannot read' },
+  { pattern: /image-set\s*\(/iu, reason: 'image-set(): a fetch outside url()' },
+  { pattern: /(?:^|[^-\w])src\s*\(/iu, reason: 'src(): a fetch outside url()' },
 ]
 
 /** CSS comments removed, so a rule this file documents is not mistaken for a rule it breaks. */

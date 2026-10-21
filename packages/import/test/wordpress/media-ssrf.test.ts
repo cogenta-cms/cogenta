@@ -85,6 +85,64 @@ describe('downloadAndStoreMedia — SSRF and size guards', () => {
     }
   })
 
+  // Security review of 2026-10-21: `fetch` followed redirects on its own,
+  // so a public host answering 302 to the metadata address was fetched.
+  it('refuses a public URL that redirects to a private address', async () => {
+    const { mediaStore, storage, dispose } = await withSite()
+    try {
+      const requested: string[] = []
+      const lookupImpl = (async (host: string) => [
+        { address: host === '169.254.169.254' ? '169.254.169.254' : '93.184.216.34', family: 4 },
+      ]) as never
+      const fetchImpl = (async (input: string | URL) => {
+        requested.push(String(input))
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'http://169.254.169.254/latest/meta-data/' },
+        })
+      }) as unknown as typeof fetch
+
+      const result = await downloadAndStoreMedia(['http://public.example/image.jpg'], {
+        mediaStore,
+        storage,
+        createdBy: null,
+        fetchImpl,
+        lookupImpl,
+      })
+
+      expect(requested).toEqual(['http://public.example/image.jpg'])
+      expect(result.imported).toEqual([])
+      expect(result.failed[0]?.reason).toContain('private')
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('stores an HTML answer as an opaque download, never as a page of this site', async () => {
+    const { mediaStore, storage, dispose } = await withSite()
+    try {
+      const lookupImpl = (async () => [{ address: '93.184.216.34', family: 4 }]) as never
+      const fetchImpl = (async () =>
+        new Response('<script>alert(1)</script>', {
+          status: 200,
+          headers: { 'content-type': 'text/html' },
+        })) as unknown as typeof fetch
+
+      const result = await downloadAndStoreMedia(['http://public.example/page.html'], {
+        mediaStore,
+        storage,
+        createdBy: null,
+        fetchImpl,
+        lookupImpl,
+      })
+
+      expect(result.imported[0]?.mimeType).toBe('application/octet-stream')
+      expect(result.imported[0]?.kind).toBe('file')
+    } finally {
+      await dispose()
+    }
+  })
+
   it('reports an oversized download as a failure without storing it', async () => {
     const { mediaStore, storage, dispose } = await withSite()
     try {

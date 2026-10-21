@@ -14,6 +14,36 @@ function levelFor(toolName: string, autonomy: AutonomyConfig): AutonomyLevel {
   return autonomy.overrides?.[toolName] ?? autonomy.default
 }
 
+/** Least to most freedom. */
+const LEVEL_ORDER: readonly AutonomyLevel[] = [
+  'observe',
+  'propose',
+  'execute_with_approval',
+  'autonomous',
+]
+
+function stricter(a: AutonomyLevel, b: AutonomyLevel): AutonomyLevel {
+  return LEVEL_ORDER.indexOf(a) <= LEVEL_ORDER.indexOf(b) ? a : b
+}
+
+/**
+ * The autonomy a delegated run gets: for every tool, the stricter of what
+ * the delegating agent and the delegate are each allowed. A sub-agent ran
+ * on its own settings, so an agent limited to proposing could reach an
+ * autopilot one and have it act — content an author wrote, read by the
+ * first, was enough to trigger it (security review of 2026-10-21).
+ */
+export function stricterAutonomy(parent: AutonomyConfig, child: AutonomyConfig): AutonomyConfig {
+  const overrides: Record<string, AutonomyLevel> = {}
+  for (const name of new Set([
+    ...Object.keys(parent.overrides ?? {}),
+    ...Object.keys(child.overrides ?? {}),
+  ])) {
+    overrides[name] = stricter(levelFor(name, parent), levelFor(name, child))
+  }
+  return { default: stricter(parent.default, child.default), overrides }
+}
+
 function assertActive(ctx: ToolExecutionContext): void {
   if (ctx.signal.aborted)
     throw new CogentaError({

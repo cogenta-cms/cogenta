@@ -183,7 +183,7 @@ function decodeAuditCursor(raw: string): { readonly at: string; readonly id: str
 }
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 

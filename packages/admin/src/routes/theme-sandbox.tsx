@@ -116,6 +116,12 @@ function PreviewModal({
         <iframe
           title={t('themeSandbox.previewIframeTitle', { id })}
           srcDoc={result.html}
+          // No script at all: this HTML comes from theme code an agent or a
+          // ZIP may have written, and an iframe without `sandbox` ran it on
+          // the admin's origin, next to its session token (security review
+          // of 2026-10-21). Same origin is kept — without `allow-scripts`
+          // nothing can use it — so the theme's own fonts still load.
+          sandbox="allow-same-origin"
           className="h-[60vh] w-full rounded-md border border-border bg-white"
         />
       )}
@@ -227,6 +233,11 @@ function DeployModal({
       {check?.ok === true && (
         <Notice tone="success">
           <p>{t('themeSandbox.checkPassed')}</p>
+        </Notice>
+      )}
+      {check?.ok === true && (
+        <Notice tone="warning">
+          <p>{t('themeSandbox.deployWarning')}</p>
         </Notice>
       )}
       {check !== null && !check.ok && (

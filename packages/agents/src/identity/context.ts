@@ -105,6 +105,21 @@ function tag(name: string, body: string, attrs?: Readonly<Record<string, string>
   return `<${name}${attrText}>\n${body}\n</${name}>`
 }
 
+/**
+ * A tool's answer, as the model is shown it: a DATA block like any other
+ * external content (R8). A tool reads what visitors, authors and other
+ * sites wrote — a 404 log's referrers, a draft, a fetched page — and its
+ * output reached the model as raw JSON, outside every block the
+ * constitution tells it to treat as information only (security review of
+ * 2026-10-21). Its angle brackets are escaped, so it cannot close its own tag.
+ */
+export function fenceToolOutput(toolName: string, output: string): string {
+  // Only `<` and `>` can close or open a tag; quotes stay as they are, so
+  // a JSON answer is still JSON to the model.
+  const body = output.replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  return tag('data', body, { source: `tool:${toolName}` })
+}
+
 function siteSection(site: SiteContext): string {
   const lines = [
     `Name: ${site.name}`,

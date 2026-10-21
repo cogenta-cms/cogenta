@@ -23,7 +23,7 @@ import {
  * caller was a browser form post or a JSON API client.
  */
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u
+const EMAIL_RE = /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/u
 // Loose on purpose: a phone number is free text almost everywhere in the
 // world (extensions, country codes, spaces) — this rejects control
 // characters and enforces a sane length, not a dial plan.

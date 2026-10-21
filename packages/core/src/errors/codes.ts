@@ -645,6 +645,10 @@ export const ERROR_CODES = [
   // maxCorrectionAttempts) — an admin-set value outside sane bounds, or not
   // a whole number.
   'PROVIDER_TUNING_INVALID',
+  // Changing where a saved provider's requests go — its text or image
+  // endpoint — without typing its key again: refused, or the saved key
+  // would be sent to whatever address was entered.
+  'PROVIDER_KEY_REQUIRED',
 
   // Role permission overrides in the database (fiche 63, ADR-0028): a
   // production-applicable surcharge over `cogenta.schema.*`'s `permissions`

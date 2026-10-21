@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isScriptUrl, SCRIPT_URL_MESSAGE } from './link-safety.js'
 import { plainTextSchema } from './plain-text.js'
 
 /**
@@ -22,7 +23,10 @@ const markDefinitionSchema = z.discriminatedUnion('_type', [
   z.strictObject({
     _key: keySchema,
     _type: z.literal('link'),
-    href: z.string().min(1),
+    href: z
+      .string()
+      .min(1)
+      .refine((href) => !isScriptUrl(href), { error: SCRIPT_URL_MESSAGE }),
     rel: z.string().optional(),
   }),
   z.strictObject({

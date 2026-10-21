@@ -34,7 +34,7 @@ function escapeHtml(value: string): string {
  * (`dispatchApproval`) — anything else is refused rather than guessed at.
  */
 function actionToLink(action: ChannelAction, links: EmailActionLinkOptions): string {
-  const match = /^(approve|deny)\s+(.+)$/.exec(action.id)
+  const match = /^(approve|deny)\s+(\S.*)$/.exec(action.id)
   if (match === null) {
     throw new CogentaError({
       code: 'CHANNEL_EMAIL_TRANSPORT_ERROR',

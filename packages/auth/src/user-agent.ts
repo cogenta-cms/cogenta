@@ -18,7 +18,9 @@ const UNKNOWN: ParsedUserAgent = Object.freeze({ browser: 'unknown', device: 'un
 
 function deviceOf(ua: string): string {
   if (/ipad|tablet|kindle|playbook/iu.test(ua)) return 'tablet'
-  if (/mobi|iphone|ipod|android.*mobile|windows phone|blackberry/iu.test(ua)) return 'mobile'
+  if (/mobi|iphone|ipod|windows phone|blackberry/iu.test(ua)) return 'mobile'
+  // `mobi` already covers "Android … Mobile"; the former `android.*mobile`
+  // added nothing and backtracked quadratically on a long header.
   if (/bot|crawler|spider|curl\/|wget\/|python-requests|axios\//iu.test(ua)) return 'bot'
   return 'desktop'
 }

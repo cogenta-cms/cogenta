@@ -35,7 +35,7 @@ export function createEmbedRouter(options: EmbedRouterOptions): EmbedRouter {
   return {
     handle: async (request, context = { actor: ANONYMOUS }) => {
       try {
-        const pathname = (request.path.split('?')[0] ?? request.path).replace(/\/+$/u, '')
+        const pathname = (request.path.split('?')[0] ?? request.path).replace(/(?<!\/)\/+$/u, '')
         if (pathname !== resolvePath) {
           throw new CogentaError({
             code: 'CONTENT_NOT_FOUND',

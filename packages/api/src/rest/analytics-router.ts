@@ -93,7 +93,7 @@ const MAX_WINDOW_DAYS = 90
 const MAX_SUMMARY_LIMIT = 100
 
 function normalise(path: string): string {
-  const trimmed = path.replace(/\/+$/u, '')
+  const trimmed = path.replace(/(?<!\/)\/+$/u, '')
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 

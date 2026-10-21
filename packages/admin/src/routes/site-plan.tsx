@@ -16,6 +16,7 @@ import {
   type SitePlanSummary,
   toUploadedDocument,
 } from '../api/site-plan-client.js'
+import { NoProviderNotice } from '../assist/no-provider-notice.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
   Button,
@@ -239,9 +240,9 @@ export function SitePlanRoute(): JSX.Element {
       )}
 
       {!plannerAvailable && (
-        <Notice tone="info">
+        <NoProviderNotice>
           <p>{t('sitePlan.noProvider')}</p>
-        </Notice>
+        </NoProviderNotice>
       )}
 
       <Card>

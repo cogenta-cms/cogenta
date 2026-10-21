@@ -77,6 +77,33 @@ describe('createFileProviderConfigStore', () => {
     expect(await store.decryptKey('anthropic')).toBe('sk-1')
   })
 
+  // Security review of 2026-10-21: the key travels to the endpoint, so
+  // moving the endpoint alone would send the saved key — which the admin
+  // never shows — to any address a stolen session typed in.
+  it('updateSettings refuses to move an endpoint without the key', async () => {
+    await store.upsert({ provider: 'openai', apiKey: 'sk-1', model: 'gpt' })
+    await expect(
+      store.updateSettings('openai', { baseUrl: 'https://attacker.example/v1' }),
+    ).rejects.toMatchObject({ code: 'PROVIDER_KEY_REQUIRED' })
+    await expect(
+      store.updateSettings('openai', {
+        imageModel: 'gpt-image-1',
+        imageBaseUrl: 'https://attacker.example/images',
+      }),
+    ).rejects.toMatchObject({ code: 'PROVIDER_KEY_REQUIRED' })
+    expect((await store.get('openai'))?.baseUrl).toBeUndefined()
+  })
+
+  it('updateSettings moves an endpoint when the key is typed again, and keeps that key', async () => {
+    await store.upsert({ provider: 'openai', apiKey: 'sk-1', model: 'gpt' })
+    const updated = await store.updateSettings('openai', {
+      baseUrl: 'https://proxy.example/v1',
+      apiKey: 'sk-2',
+    })
+    expect(updated.baseUrl).toBe('https://proxy.example/v1')
+    expect(await store.decryptKey('openai')).toBe('sk-2')
+  })
+
   it('updateSettings throws PROVIDER_NOT_CONFIGURED for a provider with no saved key', async () => {
     await expect(store.updateSettings('anthropic', { model: 'x' })).rejects.toMatchObject({
       code: 'PROVIDER_NOT_CONFIGURED',

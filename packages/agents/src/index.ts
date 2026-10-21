@@ -112,7 +112,11 @@ export type {
   AutonomyLevel,
 } from './autonomy/types.js'
 export type { WithAutonomyOptions } from './autonomy/with-autonomy.js'
-export { withAutonomy, withAutonomyForManifest } from './autonomy/with-autonomy.js'
+export {
+  stricterAutonomy,
+  withAutonomy,
+  withAutonomyForManifest,
+} from './autonomy/with-autonomy.js'
 export type { MutableKillSwitch } from './budget/kill-switch.js'
 export { createKillSwitch } from './budget/kill-switch.js'
 export type { BudgetTrackerOptions } from './budget/tracker.js'

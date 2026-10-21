@@ -1,6 +1,27 @@
 import type { SeoFinding } from './types.js'
 
-const LINK_PATTERN = /\[[^\]]+\]\([^)]+\)/
+/**
+ * Whether the text holds a markdown link `[text](url)`, in one pass. The
+ * regular expression this replaces backtracked quadratically on a long run
+ * of `[` (security review of 2026-10-21).
+ */
+function hasMarkdownLink(text: string): boolean {
+  let open = -1
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]
+    if (char === '[') {
+      if (open === -1) open = i
+    } else if (char === ']') {
+      if (open !== -1 && i - open >= 2 && text[i + 1] === '(') {
+        const close = text.indexOf(')', i + 2)
+        if (close === -1) return false
+        if (close > i + 2) return true
+      }
+      open = -1
+    }
+  }
+  return false
+}
 
 /**
  * "Vérification de llms.txt" (the AEO/GEO differentiator) — checks the
@@ -34,7 +55,7 @@ export function validateLlmsTxt(content: string): readonly SeoFinding[] {
     })
   }
 
-  if (!LINK_PATTERN.test(content)) {
+  if (!hasMarkdownLink(content)) {
     findings.push({
       check: 'llms_txt',
       severity: 'warning',

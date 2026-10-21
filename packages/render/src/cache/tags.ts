@@ -46,7 +46,7 @@ export function pathTag(path: string): string {
  */
 export function normalisePath(path: string): string {
   const withLeading = path.startsWith('/') ? path : `/${path}`
-  const trimmed = withLeading.replace(/\/+$/u, '')
+  const trimmed = withLeading.replace(/(?<!\/)\/+$/u, '')
   return trimmed.length === 0 ? '/' : trimmed
 }
 

@@ -162,6 +162,12 @@ export function ThemeCandidatePreview({
         <iframe
           title={t('themeGenerator.previewTitle', { label: candidate.label })}
           srcDoc={html}
+          // No script at all: this HTML comes from theme code an agent or a
+          // ZIP may have written, and an iframe without `sandbox` ran it on
+          // the admin's origin, next to its session token (security review
+          // of 2026-10-21). Same origin is kept — without `allow-scripts`
+          // nothing can use it — so the theme's own fonts still load.
+          sandbox="allow-same-origin"
           {...(interactive ? {} : { tabIndex: -1, 'aria-hidden': true as const })}
           className={interactive ? 'border-0' : 'pointer-events-none border-0'}
           style={{

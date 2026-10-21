@@ -11,8 +11,8 @@ afterEach(() => {
 
 async function goToPromptSettings(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(await screen.findByRole('link', { name: 'Réglages des prompts' }))
-  await screen.findByRole('heading', { name: 'Réglages des prompts' })
+  fireEvent.click(await screen.findByRole('link', { name: 'Prompts' }))
+  await screen.findByRole('heading', { name: 'Prompts' })
 }
 
 describe('prompt settings', () => {
@@ -117,7 +117,7 @@ describe('prompt settings — the open row has its own URL (fiche 71)', () => {
     window.history.pushState(null, '', '/prompt-settings?editing=template-does-not-exist')
 
     render(<App />)
-    await screen.findByRole('heading', { name: 'Réglages des prompts' })
+    await screen.findByRole('heading', { name: 'Prompts' })
 
     expect(await screen.findByText("Ce modèle de prompt n'existe pas ou plus.")).toBeDefined()
   })

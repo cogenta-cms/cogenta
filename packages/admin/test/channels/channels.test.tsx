@@ -36,8 +36,8 @@ afterEach(() => {
 
 async function goToChannels(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
-  fireEvent.click(await screen.findByRole('link', { name: 'Canaux' }))
-  await screen.findByRole('heading', { name: 'Canaux' })
+  fireEvent.click(await screen.findByRole('link', { name: 'Canaux de discussion' }))
+  await screen.findByRole('heading', { name: 'Canaux de discussion' })
   // The page heading renders before either of the screen's two requests has
   // answered: the channel cards wait for the linked-account list, and the
   // bot name fields (and the guide's wording) for the site settings.

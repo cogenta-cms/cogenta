@@ -235,6 +235,7 @@ export function ChannelsRoute(): JSX.Element {
                   <Button
                     type="button"
                     variant="secondary"
+                    className="self-start"
                     onClick={() => setGuideChannel(channelName)}
                   >
                     {t('channels.howTo.button')}

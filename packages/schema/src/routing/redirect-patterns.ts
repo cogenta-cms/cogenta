@@ -242,7 +242,13 @@ export function createRedirectPatternStore(
 
       const rest =
         target === best.fromPrefix.slice(0, -1) ? '' : target.slice(best.fromPrefix.length)
-      const to = `${best.toPrefix}${rest}`.replace(/\/+$/u, '') || '/'
+      // Leading slashes of the rest dropped, and never more than one slash
+      // in front of the result: "/blog/*" → "/" asked for "/blog//evil.example"
+      // used to answer "//evil.example", which a browser reads as another site.
+      const to =
+        `${best.toPrefix}${rest.replace(/^\/+/u, '')}`
+          .replace(/^\/{2,}/u, '/')
+          .replace(/(?<!\/)\/+$/u, '') || '/'
       const status = best.status === 302 ? 302 : 301
       return { to, status }
     },

@@ -51,3 +51,13 @@ describe('a plugin’s stylesheet', () => {
     expect(checkPluginStylesheet(huge)).toMatchObject({ ok: false })
   })
 })
+
+describe('fetches spelled another way (review of 2026-10-21)', () => {
+  it.each([
+    ['a CSS escape spelling url(', '.x { background: u\\72l(https://tracker.example/p) }'],
+    ['image-set()', '.x { background-image: image-set("https://tracker.example/p" 1x) }'],
+    ['src()', '.x { background: src("https://tracker.example/p") }'],
+  ])('refuses %s', (_label, css) => {
+    expect(checkPluginStylesheet(css).ok).toBe(false)
+  })
+})

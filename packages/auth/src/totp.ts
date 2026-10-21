@@ -112,7 +112,7 @@ function base32Encode(bytes: Buffer): string {
 }
 
 function base32Decode(text: string): Buffer | null {
-  const normalised = text.toUpperCase().replace(/=+$/u, '')
+  const normalised = text.toUpperCase().replace(/(?<!=)=+$/u, '')
   if (normalised.length === 0 || !/^[A-Z2-7]+$/u.test(normalised)) return null
 
   const bytes: number[] = []

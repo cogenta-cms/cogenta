@@ -175,7 +175,7 @@ function trimLead(spans: readonly Span[]): readonly Span[] {
 }
 
 function codeLines(source: string): readonly HtmlNode[] {
-  const lines = source.replace(/^\n+|\n+$/g, '').split('\n')
+  const lines = source.replace(/^\n+|(?<!\n)\n+$/g, '').split('\n')
   const shell = lines.some((line) => line.startsWith('$ '))
   const nodes: HtmlNode[] = []
   // A command that ends in a backslash goes on to the next line.

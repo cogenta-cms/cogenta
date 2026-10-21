@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
 import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAuthRouter, resolveActor } from '../../src/rest/auth-router.js'
 import type { RestRequest } from '../../src/rest/http.js'
 import { ANONYMOUS } from '../../src/types.js'
@@ -80,6 +80,17 @@ function request(
       ...(options.token === undefined ? {} : { authorization: `Bearer ${options.token}` }),
     },
   }
+}
+
+/**
+ * The reset mail is no longer awaited by the route (its timing told a real
+ * address from an unknown one), so a test that reads what was delivered
+ * waits for it.
+ */
+async function eventually(check: () => unknown): Promise<void> {
+  await vi.waitFor(() => {
+    if (!check()) throw new Error('not delivered yet')
+  })
 }
 
 async function createLoggedInUser(email: string, password: string) {
@@ -807,6 +818,7 @@ describe('POST /api/auth/forgot-password', () => {
       request('POST', '/api/auth/forgot-password', { body: { email: 'ghost@example.com' } }),
     )
 
+    await eventually(() => delivered.length > 0)
     expect(delivered).toHaveLength(1)
     expect(delivered[0]?.email).toBe('real@example.com')
     expect(delivered[0]?.token).toBeTruthy()
@@ -826,6 +838,7 @@ describe('POST /api/auth/forgot-password', () => {
       request('POST', '/api/auth/forgot-password', { body: { email: 'MIXED@Example.com' } }),
     )
 
+    await eventually(() => delivered.length > 0)
     expect(delivered).toEqual(['mixed@example.com'])
   })
 
@@ -894,6 +907,7 @@ describe('POST /api/auth/reset-password', () => {
     await router.handle(
       request('POST', '/api/auth/forgot-password', { body: { email: 'loop@example.com' } }),
     )
+    await eventually(() => issuedToken)
     expect(issuedToken).toBeTruthy()
 
     const reset = await router.handle(
@@ -933,6 +947,7 @@ describe('POST /api/auth/reset-password', () => {
     await router.handle(
       request('POST', '/api/auth/forgot-password', { body: { email: 'sessions@example.com' } }),
     )
+    await eventually(() => issuedToken)
     await router.handle(
       request('POST', '/api/auth/reset-password', {
         body: { token: issuedToken, newPassword: 'a brand new long passphrase' },
@@ -954,6 +969,7 @@ describe('POST /api/auth/reset-password', () => {
     await router.handle(
       request('POST', '/api/auth/forgot-password', { body: { email: 'once@example.com' } }),
     )
+    await eventually(() => issuedToken)
 
     const first = await router.handle(
       request('POST', '/api/auth/reset-password', {
@@ -996,6 +1012,7 @@ describe('POST /api/auth/reset-password', () => {
     await router.handle(
       request('POST', '/api/auth/forgot-password', { body: { email: 'short@example.com' } }),
     )
+    await eventually(() => issuedToken)
 
     const response = await router.handle(
       request('POST', '/api/auth/reset-password', {

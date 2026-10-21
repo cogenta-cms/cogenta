@@ -38,6 +38,15 @@ describe('validateSubmission — server-side, independent of the client', () => 
     expect(() => validateSubmission(def, { email: 'not-an-email' })).toThrow()
   })
 
+  it('rejects a hostile e-mail value in linear time, never stalling the server', () => {
+    // `[^\s@]+\.[^\s@]+` backtracked quadratically: 20 000 dots took ~2 s.
+    const def = definition([{ name: 'email', label: 'E-mail', kind: 'email', required: true }])
+    const started = process.cpuUsage()
+    expect(() => validateSubmission(def, { email: `a@${'.'.repeat(100_000)}@` })).toThrow()
+    const { user, system } = process.cpuUsage(started)
+    expect((user + system) / 1000).toBeLessThan(200)
+  })
+
   it('lower-cases a valid e-mail address', () => {
     const def = definition([{ name: 'email', label: 'E-mail', kind: 'email', required: true }])
     expect(validateSubmission(def, { email: 'Visitor@Example.COM' }).values.email).toBe(

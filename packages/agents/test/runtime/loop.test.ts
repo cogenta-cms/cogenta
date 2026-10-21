@@ -122,7 +122,8 @@ describe('runAgentLoop', () => {
       role: 'tool',
       toolCallId: 'call-1',
       toolName: 'content.publish',
-      content: '{"url":"/entries/e1"}',
+      // A DATA block, like any external content (R8, review of 2026-10-21).
+      content: '<data source="tool:content.publish">\n{"url":"/entries/e1"}\n</data>',
     })
   })
 

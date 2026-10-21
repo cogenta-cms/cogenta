@@ -579,7 +579,11 @@ export async function reindexVectorEntry(
     }
 
     const published = await store.read(id, { state: 'published' })
-    if (published === null) {
+    // A private or password-protected entry is never indexed, the same rule
+    // site search follows (ADR-0037): the assistant's chat quotes what it
+    // retrieves, so an indexed private page was readable by any account
+    // allowed to ask (security review of 2026-10-21).
+    if (published === null || published.visibility !== 'public') {
       await options.store.remove([chunkIdFor(options.collection.name, id)])
       options.onIndexed?.()
       return
@@ -647,6 +651,11 @@ export function withVectorIndexing(
     publish: async (id, input) => after(await store.publish(id, input)),
     unpublish: async (id, input) => after(await store.unpublish(id, input)),
     restore: async (id, version, input) => after(await store.restore(id, version, input)),
+    // Visibility is a write of its own (`schema@2.3`): a page made private
+    // must leave the index then, not at its next save.
+    setVisibility: async (id, visibility, setOptions) =>
+      after(await store.setVisibility(id, visibility, setOptions)),
+    untrash: async (id) => after(await store.untrash(id)),
     delete: async (id) => {
       const removed = await store.delete(id)
       try {

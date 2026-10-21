@@ -136,7 +136,7 @@ describe('the theme generator workshop', () => {
     expect(
       await screen.findByText(/Générer ou personnaliser un thème avec l'IA nécessite/),
     ).toBeDefined()
-    expect(screen.getByRole('link', { name: 'Configurer un fournisseur' })).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Configurer un fournisseur d’IA' })).toBeDefined()
     expect(screen.queryByRole('button', { name: 'Générer' })).toBeNull()
     expect(screen.queryByLabelText('Description')).toBeNull()
   })

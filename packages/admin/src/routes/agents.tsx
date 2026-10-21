@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
@@ -17,6 +18,7 @@ import {
   type ProviderCatalogEntry,
   type ProviderSummary,
 } from '../api/providers-client.js'
+import { NoProviderNotice } from '../assist/no-provider-notice.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
   Button,
@@ -127,6 +129,36 @@ export function splitLines(text: string): readonly string[] {
  * read from `GET /api/providers` filtered to `enabled: true` (task 3/4),
  * never a hard-coded three-option list.
  */
+/**
+ * The provider an agent will actually run on, in the order the runtime
+ * tries them (`resolveProvider`): its preferred one, its fallback, then any
+ * configured provider. Showing the preferred name alone said "anthropic" on
+ * a site that only had DeepSeek, which is not what would run.
+ */
+/**
+ * The summary Cogenta ships for one of its own agents, in the reader's
+ * language, or nothing for an agent this site created.
+ */
+function builtinPurpose(name: string, t: TFunction): string | undefined {
+  const key = `shippedText.agents.${name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-|-$/gu, '')}.summary`
+  const text = t(key, { defaultValue: '' })
+  return text === '' ? undefined : text
+}
+
+function effectiveProvider(
+  model: { readonly preferred: string; readonly fallback?: string } | undefined,
+  providers: readonly { readonly provider: string }[],
+): string | undefined {
+  const configured = providers.map((provider) => provider.provider)
+  if (model === undefined) return configured[0]
+  if (configured.includes(model.preferred)) return model.preferred
+  if (model.fallback !== undefined && configured.includes(model.fallback)) return model.fallback
+  return [...configured].sort()[0] ?? model.preferred
+}
+
 export function AgentsRoute(): JSX.Element {
   const { t, i18n } = useTranslation()
   const auth = useAuth()
@@ -314,6 +346,11 @@ export function AgentsRoute(): JSX.Element {
         </Button>
       </div>
 
+      {!loading && enabledProviders.length === 0 && (
+        <NoProviderNotice>
+          <p>{t('agents.noProviderNotice')}</p>
+        </NoProviderNotice>
+      )}
       {token !== null && <AgentApprovals token={token} />}
       {creating && (
         <Card aria-labelledby="agents-create-heading">
@@ -595,7 +632,7 @@ export function AgentsRoute(): JSX.Element {
               <TableRow>
                 <TableHeader>{t('agents.name')}</TableHeader>
                 <TableHeader>{t('agents.state')}</TableHeader>
-                <TableHeader>{t('agents.model')}</TableHeader>
+                <TableHeader>{t('agents.providerColumn')}</TableHeader>
                 <TableHeader>{t('agents.autonomy')}</TableHeader>
                 <TableHeader>{t('agents.budget')}</TableHeader>
                 <TableHeader>{t('agents.actions')}</TableHeader>
@@ -611,22 +648,27 @@ export function AgentsRoute(): JSX.Element {
                     >
                       {agent.name}
                     </Link>
+                    {/* What the agent is for, in a sentence: thirteen English
+                        names told a reader nothing about which one to open. */}
+                    {agent.builtin === true && builtinPurpose(agent.name, t) !== undefined && (
+                      <p className="m-0 mt-1 max-w-md text-xs text-muted-foreground">
+                        {builtinPurpose(agent.name, t)}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell>
                     {agent.enabled ? t('agents.enabled') : t('agents.disabled')}
                     {agent.enabled &&
-                      !enabledProviders.some(
-                        (provider) =>
-                          provider.provider === agent.model?.preferred ||
-                          provider.provider === agent.model?.fallback ||
-                          agent.model === undefined,
-                      ) && (
+                      // An agent runs on its preferred provider, its
+                      // fallback, or else any configured one — so it is
+                      // only stuck when there is none at all.
+                      enabledProviders.length === 0 && (
                         <p className="m-0 text-xs text-muted-foreground">
                           {t('agents.providerUnavailable')}
                         </p>
                       )}
                   </TableCell>
-                  <TableCell>{agent.model?.preferred ?? '—'}</TableCell>
+                  <TableCell>{effectiveProvider(agent.model, enabledProviders) ?? '—'}</TableCell>
                   <TableCell>
                     {t(
                       `agents.autonomyLevel.${LEVEL_TO_UI[agent.autonomy?.default ?? ''] ?? 'co-pilot'}`,

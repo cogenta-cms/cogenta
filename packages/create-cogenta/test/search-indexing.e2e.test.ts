@@ -67,7 +67,9 @@ describe('a scaffolded site indexes its own seeded demo content', () => {
 
     // `runServe` resolves `onListening` synchronously once bound; poll briefly
     // rather than assume it has already fired by the time control returns here.
-    for (let attempt = 0; attempt < 100 && address === undefined; attempt += 1) {
+    // Generous, as in `seo-fields-blueprint.test.ts`: one second was not
+    // enough for a cold Windows runner, the one flake left on CI.
+    for (let attempt = 0; attempt < 3000 && address === undefined; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10))
     }
     if (address === undefined) throw new Error('server never started listening')

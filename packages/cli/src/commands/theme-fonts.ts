@@ -108,9 +108,8 @@ export interface ThemeFontAsset {
  *
  * The file name carries a hash of the file's bytes (`scripts/fetch-theme-fonts
  * .mjs`), so the URL changes whenever the file does and a year-long
- * `immutable` cache can never serve a stale face. Served with an open CORS
- * header (`serve.ts`): the admin's sandboxed theme previews have an opaque
- * origin, and a font request is a CORS request.
+ * `immutable` cache can never serve a stale face. There is no CORS header: the
+ * font is requested by the site's own stylesheet, same origin.
  */
 export async function serveThemeFont(pathname: string): Promise<ThemeFontAsset | null> {
   if (!pathname.startsWith(FONT_ROUTE_PREFIX)) return null

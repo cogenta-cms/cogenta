@@ -58,8 +58,17 @@ export interface RateLimiter {
    * caller (an account, whoever is guessing), where the usual five would let
    * any stranger lock its owner out.
    */
-  reserve(subject: string, scale?: number): Promise<void>
-  /** Called after a successful login: past failures stop counting against them. */
+  reserve(subject: string): Promise<void>
+  /**
+   * `reserve` for one subject seen from one place — an account and the
+   * address guessing at it. One row per attempt, under `account|scope`:
+   * the place is backed off at the usual thresholds, the account (every
+   * place together) only at `accountScale` times them, so a stranger
+   * cannot lock the owner out with five wrong passwords, and a guess spread
+   * across many addresses still is.
+   */
+  reserveScoped(account: string, scope: string, accountScale: number): Promise<void>
+  /** Called after a successful login: past failures stop counting against them — every place's, for an account. */
   clear(subject: string): Promise<void>
   /**
    * Failed attempts still inside the window, worst first.
@@ -77,6 +86,11 @@ export interface RateLimiter {
   }): Promise<readonly LoginAttemptSummary[]>
 }
 
+/** `account|%`, with the account's own `!`, `%` and `_` escaped. */
+function scopedPattern(account: string): string {
+  return `${account.replace(/[!%_]/gu, (char) => `!${char}`)}|%`
+}
+
 export function createRateLimiter(db: DatabaseHandle, now: () => number = Date.now): RateLimiter {
   const table = identifier(TABLES.loginAttempts, db.dialect)
 
@@ -85,6 +99,23 @@ export function createRateLimiter(db: DatabaseHandle, now: () => number = Date.n
     const result = await db.query<{ n: number }>(
       sql`select count(*) as n from ${table} where subject = ${subject} and at >= ${since}`,
     )
+    return Number(result.rows[0]?.n ?? 0)
+  }
+
+  /**
+   * Rows of an account under any scope (`account|…`), plus any unscoped
+   * ones. `like` with the account escaped — an e-mail address may hold `_`
+   * or `%` — and `!` as the escape character, which needs no quoting in
+   * any of the three dialects (`@cogenta/core`'s media store explains why
+   * a backslash breaks MySQL). Not a `>`/`<` range: a database collation
+   * need not sort `|` and `}` by code point.
+   */
+  async function countAccount(account: string): Promise<number> {
+    const since = new Date(now() - WINDOW_MS).toISOString()
+    const result = await db.query<{ n: number }>(sql`
+      select count(*) as n from ${table}
+      where at >= ${since}
+        and (subject = ${account} or subject like ${scopedPattern(account)} escape '!')`)
     return Number(result.rows[0]?.n ?? 0)
   }
 
@@ -112,15 +143,24 @@ export function createRateLimiter(db: DatabaseHandle, now: () => number = Date.n
 
     record: insertAttempt,
 
-    reserve: async (subject, scale = 1) => {
+    reserve: async (subject) => {
       await insertAttempt(subject)
       // Every row this one could have raced with is already written, so the
       // count it sees includes them; minus one for this attempt itself.
-      refuseIfPast((await countRecent(subject)) - 1, scale)
+      refuseIfPast((await countRecent(subject)) - 1)
+    },
+
+    reserveScoped: async (account, scope, accountScale) => {
+      const subject = `${account}|${scope}`
+      await insertAttempt(subject)
+      refuseIfPast((await countRecent(subject)) - 1)
+      refuseIfPast((await countAccount(account)) - 1, accountScale)
     },
 
     clear: async (subject) => {
-      await db.query(sql`delete from ${table} where subject = ${subject}`)
+      await db.query(sql`
+        delete from ${table}
+        where subject = ${subject} or subject like ${scopedPattern(subject)} escape '!'`)
     },
 
     recentFailures: async (options) => {
@@ -145,14 +185,28 @@ export function createRateLimiter(db: DatabaseHandle, now: () => number = Date.n
         group by subject
         order by count(*) desc`)
 
-      return result.rows
-        .map((row) => ({
-          subject: row.subject,
-          attempts: Number(row.n),
-          firstAt: row.first_at,
-          lastAt: row.last_at,
-          blocked: Number(row.n) >= FIRST_THRESHOLD,
+      // One account guessed at from several places is one subject to a
+      // reader: `account|scope` rows fold back into their account.
+      const byAccount = new Map<string, { n: number; first: string; last: string }>()
+      for (const row of result.rows) {
+        const account = row.subject.split('|')[0] ?? row.subject
+        const seen = byAccount.get(account)
+        byAccount.set(account, {
+          n: (seen?.n ?? 0) + Number(row.n),
+          first: seen === undefined || row.first_at < seen.first ? row.first_at : seen.first,
+          last: seen === undefined || row.last_at > seen.last ? row.last_at : seen.last,
+        })
+      }
+
+      return [...byAccount.entries()]
+        .map(([subject, seen]) => ({
+          subject,
+          attempts: seen.n,
+          firstAt: seen.first,
+          lastAt: seen.last,
+          blocked: seen.n >= FIRST_THRESHOLD,
         }))
+        .sort((a, b) => b.attempts - a.attempts)
         .filter((summary) => summary.attempts >= minAttempts)
         .slice(0, limit)
     },

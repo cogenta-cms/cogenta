@@ -390,15 +390,11 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
   return {
     passwordLogin: async (email, password, context) => {
       const subject = email.trim().toLowerCase()
-      const fromAddress =
-        context?.ip === undefined || context.ip === ''
-          ? undefined
-          : `${subject}|ip:${createHash('sha256').update(context.ip).digest('base64url').slice(0, 16)}`
-      if (fromAddress === undefined) {
+      if (context?.ip === undefined || context.ip === '') {
         await rateLimit.reserve(subject)
       } else {
-        await rateLimit.reserve(fromAddress)
-        await rateLimit.reserve(subject, ACCOUNT_WIDE_SCALE)
+        const place = `ip:${createHash('sha256').update(context.ip).digest('base64url').slice(0, 16)}`
+        await rateLimit.reserveScoped(subject, place, ACCOUNT_WIDE_SCALE)
       }
 
       const user = await users.byEmail(subject)
@@ -415,7 +411,6 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       }
 
       await rateLimit.clear(subject)
-      if (fromAddress !== undefined) await rateLimit.clear(fromAddress)
       // What decides the challenge is what this person enrolled, not what
       // their role is (ADR-0021). A brand-new admin signs straight in; an
       // account that turned TOTP on still has to produce a code, because

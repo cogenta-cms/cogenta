@@ -416,7 +416,9 @@ export function inspectIsolatedModule(
     {
       readPaths: options.readPaths,
       callbacks: {},
-      timeoutMs: options.timeoutMs ?? 20_000,
+      // A fresh process loads every module again (no worker shares this
+      // one's cache): on a loaded CI runner that alone took past 20 s.
+      timeoutMs: options.timeoutMs ?? 60_000,
       maxOldGenerationSizeMb: DEFAULT_MAX_OLD_GENERATION_MB,
     },
   )

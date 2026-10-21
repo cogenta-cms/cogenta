@@ -248,7 +248,7 @@ export async function renderSandboxPreview(
     // heavier under real filesystem/module-resolution cost. A longer
     // default here reflects that a preview is one explicit click (§ 3.3),
     // never a hot path a short timeout needs to protect.
-    timeoutMs: options.timeoutMs ?? 20_000,
+    timeoutMs: options.timeoutMs ?? 60_000,
   })
 
   if (!result.ok) {

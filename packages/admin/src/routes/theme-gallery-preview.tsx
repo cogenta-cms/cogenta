@@ -106,11 +106,12 @@ export function ThemeGalleryPreview({
         <iframe
           title={t('appearance.themePreviewTitle', { theme: label })}
           srcDoc={html}
-          // No script, and an origin of its own: this HTML comes from theme
-          // code an agent or a ZIP may have written, and an iframe without
-          // `sandbox` shares the admin's origin — and its session token
-          // (security review of 2026-10-21). A preview needs neither.
-          sandbox=""
+          // No script at all: this HTML comes from theme code an agent or a
+          // ZIP may have written, and an iframe without `sandbox` ran it on
+          // the admin's origin, next to its session token (security review
+          // of 2026-10-21). Same origin is kept — without `allow-scripts`
+          // nothing can use it — so the theme's own fonts still load.
+          sandbox="allow-same-origin"
           // Decorative in this context — the picker's own button, not this
           // frame, is what an admin uses to act on a theme. A screen reader
           // user gets the theme's name and description from the card's own

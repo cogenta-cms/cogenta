@@ -4981,10 +4981,6 @@ export function createRequestListener(
           'content-length': font.body.length,
           'cache-control': font.cacheControl,
           'x-content-type-options': 'nosniff',
-          // A font is fetched in CORS mode; the admin's theme previews are
-          // sandboxed (an opaque origin) and need it too. Openly licensed
-          // files a visitor downloads anyway: nothing to keep to one origin.
-          'access-control-allow-origin': '*',
         })
         res.end(req.method === 'HEAD' ? undefined : font.body)
         return

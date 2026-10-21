@@ -26,7 +26,34 @@ export interface HtmlSegment {
 
 export type ContentSegment = GutenbergBlockSegment | HtmlSegment
 
-const BLOCK_COMMENT = /<!--\s*(\/)?wp:([a-zA-Z0-9][\w/-]*)\s*(?:({[^}]*})\s*)?(\/)?-->/g
+/**
+ * One block comment, matched against a single `<!-- … -->` at a time
+ * (`nextBlockComment`). Run over the whole content, an unclosed `{` in
+ * each of many comments made every attempt scan to the end of the
+ * document — quadratic on a hostile export (security review of
+ * 2026-10-21). Bounded by one comment, each attempt is linear.
+ */
+const BLOCK_COMMENT = /^<!--\s*(\/)?wp:([a-zA-Z0-9][\w/-]*)\s*(?:({[^}]*})\s*)?(\/)?-->$/
+
+interface BlockCommentMatch {
+  readonly index: number
+  readonly length: number
+  readonly groups: readonly (string | undefined)[]
+}
+
+/** The next `<!-- wp:… -->` comment at or after `from`, found with `indexOf`: linear over the content. */
+function nextBlockComment(content: string, from: number): BlockCommentMatch | null {
+  let start = content.indexOf('<!--', from)
+  while (start !== -1) {
+    const end = content.indexOf('-->', start + 4)
+    if (end === -1) return null
+    const comment = content.slice(start, end + 3)
+    const match = BLOCK_COMMENT.exec(comment)
+    if (match !== null) return { index: start, length: comment.length, groups: match }
+    start = content.indexOf('<!--', start + 4)
+  }
+  return null
+}
 
 function parseAttrs(raw: string | undefined): Record<string, unknown> {
   if (raw === undefined) return {}
@@ -51,14 +78,13 @@ export function splitContentSegments(content: string): readonly ContentSegment[]
   let currentAttrs: Record<string, unknown> = {}
   let currentInnerStart = 0
 
-  BLOCK_COMMENT.lastIndex = 0
-  let match: RegExpExecArray | null = BLOCK_COMMENT.exec(content)
+  let match = nextBlockComment(content, 0)
 
   while (match !== null) {
-    const isClose = match[1] === '/'
-    const name = match[2] ?? ''
-    const attrsRaw = match[3]
-    const selfClosed = match[4] === '/'
+    const isClose = match.groups[1] === '/'
+    const name = match.groups[2] ?? ''
+    const attrsRaw = match.groups[3]
+    const selfClosed = match.groups[4] === '/'
 
     if (depth === 0 && !isClose) {
       // Anything between the previous top-level block and this one is loose
@@ -68,11 +94,11 @@ export function splitContentSegments(content: string): readonly ContentSegment[]
 
       if (selfClosed) {
         segments.push({ kind: 'block', name, attrs: parseAttrs(attrsRaw), innerHtml: '' })
-        cursor = match.index + match[0].length
+        cursor = match.index + match.length
       } else {
         currentName = name
         currentAttrs = parseAttrs(attrsRaw)
-        currentInnerStart = match.index + match[0].length
+        currentInnerStart = match.index + match.length
         depth = 1
       }
     } else if (!isClose && !selfClosed && name === currentName) {
@@ -85,13 +111,13 @@ export function splitContentSegments(content: string): readonly ContentSegment[]
       if (depth === 0) {
         const innerHtml = content.slice(currentInnerStart, match.index)
         segments.push({ kind: 'block', name: currentName, attrs: currentAttrs, innerHtml })
-        cursor = match.index + match[0].length
+        cursor = match.index + match.length
         currentName = null
         currentAttrs = {}
       }
     }
 
-    match = BLOCK_COMMENT.exec(content)
+    match = nextBlockComment(content, match.index + match.length)
   }
 
   const tail = content.slice(cursor).trim()

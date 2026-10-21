@@ -408,6 +408,26 @@ export function listLowStockVariants(
   return requestBody('/api/commerce/variants/low-stock', { headers: authHeader(token) })
 }
 
+/** A variant and its product, as returned by a "pick a product" search. */
+export interface VariantSearchHit {
+  readonly variant: Variant
+  readonly product: Product
+}
+
+/** Finds sellable variants by SKU or name — so nobody has to paste an internal id. */
+export function searchVariants(
+  token: string,
+  query: string,
+  options?: { readonly limit?: number; readonly signal?: AbortSignal },
+): Promise<{ readonly hits: readonly VariantSearchHit[] }> {
+  const params = new URLSearchParams({ q: query })
+  if (options?.limit !== undefined) params.set('limit', String(options.limit))
+  return requestBody(`/api/commerce/variants/search?${params.toString()}`, {
+    headers: authHeader(token),
+    ...(options?.signal === undefined ? {} : { signal: options.signal }),
+  })
+}
+
 export function listStockMovements(
   token: string,
   variantId: string,

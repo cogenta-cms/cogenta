@@ -58,6 +58,7 @@ import { type EntryVisibility, VisibilityCard } from '../content/visibility-card
 import { previewPermalink } from '../lib/permalink.js'
 import { slugify } from '../lib/slugify.js'
 import { useDirtyGuard } from '../lib/use-dirty-guard.js'
+import { fieldLabel } from '../schema/field-label.js'
 import { canPerform, PUBLIC_ROLE } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import { normalisePermissionRule } from '../schema/types.js'
@@ -1213,7 +1214,7 @@ export function EntryEditRoute(): JSX.Element {
     .filter((field) => field.kind === 'text')
     .map((field) => ({
       name: field.name,
-      label: field.admin?.label ?? field.name,
+      label: fieldLabel(field.name, t, field),
       value: typeof values[field.name] === 'string' ? (values[field.name] as string) : '',
     }))
 
@@ -1936,7 +1937,7 @@ export function EntryEditRoute(): JSX.Element {
               text={entryText}
               field={{
                 name: classifyField.name,
-                label: classifyField.admin?.label ?? classifyField.name,
+                label: fieldLabel(classifyField.name, t, classifyField),
                 options: classifyVocabulary,
               }}
               currentValue={classifyCurrentValue}

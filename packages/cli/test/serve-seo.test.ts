@@ -222,7 +222,7 @@ describe('cogenta serve — SEO in the rendered page (L10 task 1)', () => {
       expect(response.status).toBe(200)
       const html = await response.text()
 
-      expect(html).toContain('<title>Hello world</title>')
+      expect(html).toContain('<title>Hello world — Test site</title>')
       expect(html).toContain('<meta name="description" content="A first post about nothing." />')
       expect(html).toContain('<link rel="canonical" href="https://example.com/hello-world" />')
       expect(html).toContain('<meta property="og:title" content="Hello world" />')
@@ -380,14 +380,14 @@ describe('cogenta serve — editable SEO settings (fiche 21 task 3)', () => {
       await seed(root, [{ title: 'Hello world', slug: 'hello-world' }])
 
       const unstyled = await (await fetch(`${server.base}/hello-world`)).text()
-      expect(unstyled).toContain('<title>Hello world</title>')
+      expect(unstyled).toContain('<title>Hello world — Test site</title>')
       expect(unstyled).not.toContain('name="description"')
 
       const { createSqliteHandle } = await import('@cogenta/core')
       const { createSiteSettingsStore, SITE_SETTINGS_SITE_SCOPE } = await import('@cogenta/schema')
       const db = await createSqliteHandle({ url: join(root, 'site.db') })
       const settings = createSiteSettingsStore({ db })
-      await settings.set('seo.titleTemplate', SITE_SETTINGS_SITE_SCOPE, '%title% — Test site', null)
+      await settings.set('seo.titleTemplate', SITE_SETTINGS_SITE_SCOPE, '%title% | The Journal', null)
       await settings.set(
         'seo.defaultMetaDescription',
         SITE_SETTINGS_SITE_SCOPE,
@@ -400,8 +400,8 @@ describe('cogenta serve — editable SEO settings (fiche 21 task 3)', () => {
       // No restart, no re-request of a different route: the very next fetch
       // of the same page carries the new settings.
       const styled = await (await fetch(`${server.base}/hello-world`)).text()
-      expect(styled).toContain('<title>Hello world — Test site</title>')
-      expect(styled).toContain('<meta property="og:title" content="Hello world — Test site" />')
+      expect(styled).toContain('<title>Hello world | The Journal</title>')
+      expect(styled).toContain('<meta property="og:title" content="Hello world | The Journal" />')
       expect(styled).toContain(
         '<meta name="description" content="The site-wide fallback description." />',
       )

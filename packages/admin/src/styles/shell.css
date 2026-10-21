@@ -11,10 +11,13 @@
      overflow happens where a scroll container is waiting for it. */
   grid-template-columns: 248px minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
+  /* Like WordPress's `#wpfooter`, the footer lives in the content column: the
+     rail runs the full height beside content AND footer, so nothing the rail
+     shows (its last entries, its flyouts) can ever sit under the footer. */
   grid-template-areas:
     "topbar topbar"
     "sidebar content"
-    "footer footer";
+    "sidebar footer";
   min-height: 100%;
   background: var(--color-bg);
   transition: grid-template-columns 200ms ease;
@@ -28,20 +31,12 @@
 
 .app-shell__footer {
   grid-area: footer;
-  /* Painted above the sticky rail (z-index 30): a sticky element is
-     constrained by its containing block — the whole grid, footer row
-     included — not by its own grid area, so on a page shorter than one
-     screen the rail's viewport-tall box overlaps this row (seen live on a
-     short dark-mode page with the sidebar collapsed). A percentage
-     max-height on the rail cannot cap it either: the content row is
-     `1fr` inside a `min-height` container, so its height is indefinite
-     and the percentage resolves to `auto`. Letting the footer win the
-     stacking order is the fix that holds regardless of page height. */
-  position: relative;
-  z-index: 31;
   border-top: 1px solid var(--color-border);
   background: var(--card);
   padding: var(--space-2) var(--space-4);
+  /* Room for the floating chat button (bottom-right, 3rem + 1rem inset),
+     which otherwise covered the site name at the end of this row. */
+  padding-right: calc(var(--space-4) + 4.5rem);
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--color-text-muted);
@@ -147,36 +142,7 @@
   font-family: var(--font-mono);
 }
 
-.app-shell__logout {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4em;
-  border: 1px solid var(--color-border);
-  background: transparent;
-  color: var(--color-text);
-  border-radius: var(--radius-sm);
-  padding: var(--space-1) var(--space-3);
-  font-size: 0.75rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    transform 150ms ease;
-}
-
-.app-shell__logout:hover {
-  background: var(--color-surface);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.app-shell__logout:active {
-  transform: translateY(1px);
-}
-
-/* "View site" (fiche 22 tâche 8, part 5) — the same button shape as
-   `.app-shell__logout`, so the two read as one family of topbar actions. */
+/* "View site" (fiche 22 tâche 8, part 5). */
 .app-shell__view-site {
   display: inline-flex;
   align-items: center;
@@ -210,29 +176,17 @@
   }
 }
 
-/* No `overflow` here on purpose, and this is load-bearing, not an
-   oversight: a flyout escapes to the right of its own row via
-   `position: absolute` (`left: calc(100% + 0.5rem)`), and CSS clips an
-   absolutely positioned descendant against ANY ancestor whose overflow-x or
-   overflow-y is not `visible` — the two axes are not independent, either
-   one being `auto`/`hidden` silently forces the other to `auto` too (found
-   the hard way: the flyout still measured `display: block` in the DOM,
-   just invisible, clipped by this element's own scrollbar box). The redesign
-   itself is what makes this affordable: eight top-level rows plus the
-   toggle comfortably fit any real viewport height without ever needing to
-   scroll, unlike the ~30-row flat list this replaces.
+/* The rail. It scrolls by itself (see the pinned rule further down), which
+   is why its flyouts are `position: fixed` rather than absolute: CSS clips an
+   absolutely positioned descendant against any ancestor whose overflow is not
+   `visible`.
 
-   `z-index: 1` is the other half of that same fix, and just as
-   load-bearing: a CSS Grid item with `z-index: auto` (`.app-shell__content`,
-   this element, before this line) never establishes its own stacking
-   context, so a positioned *descendant* of one auto-z-index grid item —
-   however high its own `z-index` climbs — still paints underneath a sibling
-   grid item's in-flow content instead of above it (confirmed empirically:
-   the flyout measured `display: block` with the right pixel `rect`, fully
-   opaque, and was still invisible behind the dashboard heading until this
-   element itself got an explicit `z-index`). Giving the sidebar its own
-   stacking context is what lets the flyout's own z-index finally mean
-   anything relative to `.app-shell__content`. */
+   `z-index: 1` here, raised to 30 below, is load-bearing too: a CSS Grid item
+   with `z-index: auto` (`.app-shell__content`) never establishes its own
+   stacking context, so a positioned descendant of one auto-z-index grid item
+   paints under a sibling's in-flow content. Giving the sidebar its own
+   stacking context is what lets the flyout's z-index mean anything relative
+   to `.app-shell__content`. */
 .app-shell__sidebar {
   grid-area: sidebar;
   position: relative;
@@ -379,11 +333,18 @@
    a tall group's flyout from drifting away from the row that opened it. */
 .app-shell__flyout {
   display: none;
-  position: absolute;
+  /* Fixed, placed from the trigger row's rectangle by `app-shell.tsx`: the
+     rail is a scroll box and would clip an absolutely positioned child. The
+     inline `top`/`left`/`max-height` come from `placeFlyout`; a flyout taller
+     than the window scrolls by itself. */
+  position: fixed;
   top: 0;
-  left: calc(100% + 0.5rem);
+  left: 100%;
   z-index: 20;
   min-width: 14rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   background: var(--card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -573,7 +534,8 @@
   overflow-y: auto;
   background: var(--card);
   border-right: 1px solid var(--color-border);
-  padding: var(--space-6) var(--space-3);
+  padding: var(--space-3);
+  overscroll-behavior: contain;
   z-index: 91;
   box-shadow: var(--shadow-overlay);
 }
@@ -737,7 +699,6 @@
   --accent: var(--rail-active);
   --card: #0f1222;
   --color-primary: var(--rail-accent);
-  background: var(--rail-bg);
   border-right: 1px solid var(--rail-border);
   isolation: isolate;
   /* Above anything the workspace can raise on its own. `.app-shell__content`
@@ -753,27 +714,56 @@
      own behaviour. `sticky`, not `fixed`: the rail keeps its grid column,
      so nothing else in the layout has to know about it. `align-self: start`
      is what lets a sticky grid item actually move; stretched to the row's
-     full height it would have nowhere to go. No `overflow` is set here for
-     the same reason spelled out on the original rule above: it would clip
-     the flyout. */
+     full height it would have nowhere to go. The rail spans the content and
+     footer rows, so it stays pinned right down to the end of the page. */
   position: sticky;
-  top: 72px;
-  height: calc(100vh - 72px);
+  top: var(--app-shell-topbar-h, 72px);
+  height: calc(100dvh - var(--app-shell-topbar-h, 72px));
   align-self: start;
+  /* The rail is as tall as the window under the top bar and scrolls by
+     itself, whatever the window's height: every entry is reachable with the
+     wheel and, since a focused entry is scrolled into view, with the
+     keyboard. (It used to be `overflow: visible` so that absolutely
+     positioned flyouts could escape it; they are `position: fixed` now.) */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rail-border) transparent;
 }
 
-/* An ambient glow anchored to the top of the rail — the one atmospheric
-   flourish, kept behind the content (`z-index: -1` inside the rail's own
-   isolated stacking context) and switched off with reduced motion. */
-.app-shell__sidebar::before {
-  content: "";
-  position: absolute;
-  inset: -20% -40% auto -40%;
-  height: 40%;
-  background: radial-gradient(ellipse at 50% 0%, var(--rail-glow), transparent 70%);
-  pointer-events: none;
-  z-index: -1;
-  filter: blur(24px);
+.app-shell__sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.app-shell__sidebar::-webkit-scrollbar-thumb {
+  background: var(--rail-border);
+  border-radius: 999px;
+}
+
+/* The icon-only rail has no room for a scrollbar; it still scrolls. */
+.app-shell--sidebar-collapsed .app-shell__sidebar {
+  scrollbar-width: none;
+}
+
+.app-shell--sidebar-collapsed .app-shell__sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+/* An ambient glow at the top of the rail — the one atmospheric flourish.
+   A background layer, not a pseudo-element: inside a scroll box a positioned
+   child would scroll away with the entries. */
+.app-shell__sidebar {
+  background:
+    radial-gradient(ellipse 120% 14rem at 50% 0%, var(--rail-glow), transparent 70%) no-repeat,
+    var(--rail-bg);
+}
+
+/* `.reveal` ends on `transform: translateY(0)` and keeps it (`both`), which
+   makes the row a containing block for its `position: fixed` flyout. The
+   entrance only needs to hold its starting frame during the delay. */
+.app-shell__sidebar .reveal {
+  animation-fill-mode: backwards;
 }
 
 .app-shell__sidebar .app-shell__nav-group-trigger,
@@ -886,8 +876,7 @@
   opacity: 0.6;
 }
 
-.app-shell__view-site,
-.app-shell__logout {
+.app-shell__view-site {
   border-radius: 999px;
   transition:
     background-color 160ms ease,
@@ -896,8 +885,7 @@
     transform 160ms ease;
 }
 
-.app-shell__view-site:hover,
-.app-shell__logout:hover {
+.app-shell__view-site:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-card);
 }
@@ -910,13 +898,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-shell__sidebar::before {
-    display: none;
-  }
   .app-shell__sidebar .app-shell__nav-group-trigger,
   .app-shell__sidebar a,
-  .app-shell__view-site,
-  .app-shell__logout {
+  .app-shell__view-site {
     transition: none;
     transform: none !important;
   }
@@ -953,19 +937,16 @@
   .app-shell__account {
     gap: 0.25rem;
   }
-  .app-shell__account-chip {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-  }
-  .app-shell__logout-label {
+  /* Only the avatar survives on a narrow top bar (the menu it opens names the
+     account in full). */
+  .app-shell__account-email,
+  .app-shell__account-caret {
     display: none;
   }
-  .app-shell__view-site,
-  .app-shell__logout {
+  .app-shell__account-chip {
+    padding-right: 0.25rem;
+  }
+  .app-shell__view-site {
     min-width: 32px;
     min-height: 32px;
     justify-content: center;
@@ -1013,4 +994,142 @@
   .app-shell__nav-group--inline[data-current="true"]
   > .app-shell__nav-group-trigger::before {
   content: none;
+}
+
+/* The mobile drawer's head: the site name and a close button (the burger that
+   opened it is under the drawer). */
+.app-shell__drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 var(--space-1) var(--space-3);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-shell__drawer-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.app-shell__drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.app-shell__drawer-close:hover {
+  background: var(--color-surface);
+}
+
+/* The account menu (top bar). */
+.app-shell__account-menu {
+  position: relative;
+}
+
+.app-shell__account-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.25rem 0.5rem 0.25rem 0.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--card) 60%, transparent);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.app-shell__account-chip:hover,
+.app-shell__account-chip[aria-expanded="true"] {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+}
+
+.app-shell__account-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.app-shell__account-panel {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 15rem;
+  max-width: calc(100vw - 1rem);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  box-shadow: var(--shadow-overlay);
+  color: var(--color-text);
+}
+
+.app-shell__account-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.app-shell__account-identity-label,
+.app-shell__account-identity-roles {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.app-shell__account-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 0.5rem var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.app-shell__account-item:hover,
+.app-shell__account-item:focus-visible {
+  background: var(--color-surface);
 }

@@ -1,6 +1,5 @@
 import { type DragEvent, type JSX, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
 import {
   getMedia,
   listMedia,
@@ -17,6 +16,7 @@ import '../styles/entry-picker.css'
 import '../styles/media.css'
 import { cn } from '../ui/cn.js'
 import { Button, Input, Label, Modal, Select } from '../ui/index.js'
+import { describeApiError } from '../api/describe-error.js'
 
 /**
  * The reusable media picker (fiche 03 task 3): browse-and-search the media
@@ -389,7 +389,7 @@ function BrowsePanel({
         setHasMore(page.hasMore)
         setCursor(page.nextCursor ?? undefined)
       } catch (caught) {
-        setError(caught instanceof ApiError ? caught.message : t('media.loadError'))
+        setError(describeApiError(caught, t('media.loadError')).message)
       } finally {
         setLoading(false)
       }

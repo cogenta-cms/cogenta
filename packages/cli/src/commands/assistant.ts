@@ -631,6 +631,38 @@ export async function reindexAllVectors(
   return count
 }
 
+/**
+ * Rebuilds the knowledge index from every collection's published content.
+ *
+ * The write path keeps the index in step with what is saved *after* start-up;
+ * content that was seeded or imported by another route (a starter pack, a
+ * restored backup, an index file deleted by hand) never passed through it, so
+ * the assistant answered "nothing found" about a site full of published
+ * pages. Reference documents are untouched: they are not content entries.
+ */
+export async function reindexKnowledgeIndex(options: {
+  readonly collections: readonly CollectionDefinition[]
+  readonly storeFor: (collection: CollectionDefinition) => ContentStore
+  readonly vectors: NonNullable<AssistantAssembly['vectors']>
+  readonly siteId: string
+  readonly onError?: (error: unknown) => void
+  readonly onIndexed?: () => void
+}): Promise<{ readonly indexed: number }> {
+  let indexed = 0
+  for (const collection of options.collections) {
+    indexed += await reindexAllVectors(options.storeFor(collection), {
+      collection,
+      siteId: options.siteId,
+      store: options.vectors.store,
+      embeddings: options.vectors.embeddings,
+      isEnabled: options.vectors.isEnabled,
+      ...(options.onError === undefined ? {} : { onError: options.onError }),
+      ...(options.onIndexed === undefined ? {} : { onIndexed: options.onIndexed }),
+    })
+  }
+  return { indexed }
+}
+
 export function withVectorIndexing(
   store: ContentStore,
   options: VectorIndexingOptions,

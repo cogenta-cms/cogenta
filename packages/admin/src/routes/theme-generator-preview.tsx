@@ -1,3 +1,4 @@
+import { withoutScripts } from './appearance-preview.js'
 import { type JSX, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
@@ -161,7 +162,7 @@ export function ThemeCandidatePreview({
       {error === null && html !== null && (
         <iframe
           title={t('themeGenerator.previewTitle', { label: candidate.label })}
-          srcDoc={html}
+          srcDoc={withoutScripts(html)}
           // No script at all: this HTML comes from theme code an agent or a
           // ZIP may have written, and an iframe without `sandbox` ran it on
           // the admin's origin, next to its session token (security review

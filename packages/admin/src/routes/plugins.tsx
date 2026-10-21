@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../auth/auth-context.js'
 import { useLocalPagination } from '../lib/use-local-pagination.js'
 import { describeCapability, describeProvides } from '../plugins/plugin-capabilities.js'
+import { describePluginError, describePluginProblem } from '../plugins/plugin-problems.js'
 import { CreatePluginDialog } from '../plugins/plugin-create-dialog.js'
 import { PluginDraftEditor } from '../plugins/plugin-draft-editor.js'
 import { Badge, Button, Field, Input, Notice, PageHeader, Pagination } from '../ui/index.js'
@@ -37,7 +38,7 @@ import { Badge, Button, Field, Input, Notice, PageHeader, Pagination } from '../
  */
 
 export function PluginsRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
@@ -83,7 +84,7 @@ export function PluginsRoute(): JSX.Element {
   }, [load])
 
   const report = useCallback(
-    (caught: unknown) => setError(describeApiError(caught, t('plugins.actionError')).message),
+    (caught: unknown) => setError(describePluginError(t, caught, t('plugins.actionError'))),
     [t],
   )
 
@@ -115,8 +116,11 @@ export function PluginsRoute(): JSX.Element {
     )
   }
 
+  // Said only when it is true: a plugin that is installed but not loaded yet.
+  const needsRestart = (state?.installed ?? []).some(
+    (plugin) => plugin.runtimeState === 'restart-required',
+  )
   const installedNames = new Set((state?.installed ?? []).map((plugin) => plugin.name))
-  const draft = (state?.sandboxes ?? []).find((item) => item.id === openDraft) ?? null
 
   function capabilityRow(plugin: InstalledPlugin, capability: string): JSX.Element {
     const described = describeCapability(t, capability)
@@ -191,7 +195,7 @@ export function PluginsRoute(): JSX.Element {
         </div>
 
         <ul className="m-0 mt-2 list-none p-0 text-sm text-muted-foreground">
-          {describeProvides(t, plugin.provides).map((line) => (
+          {describeProvides(t, plugin.provides, plugin.name).map((line) => (
             <li key={line}>{line}</li>
           ))}
         </ul>
@@ -258,27 +262,46 @@ export function PluginsRoute(): JSX.Element {
   }
 
   function draftCard(item: PluginDraft): JSX.Element {
+    const open = openDraft === item.id
     return (
-      <li
-        key={item.id}
-        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card p-4"
-      >
-        <span className="flex flex-col">
-          <span className="font-semibold">{item.title ?? item.name}</span>
-          <span className="text-xs text-muted-foreground">
-            {item.readable
-              ? describeProvides(t, item.provides).join(' · ')
-              : t('plugins.draft.unreadable')}
+      <li key={item.id} className="min-w-0 rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex min-w-0 flex-col [overflow-wrap:anywhere]">
+            <span className="font-semibold">{item.title ?? item.name}</span>
+            <span className="text-xs text-muted-foreground">
+              {item.readable
+                ? describeProvides(t, item.provides, item.name).join(' · ')
+                : t('plugins.draft.unreadable')}
+            </span>
           </span>
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          variant={openDraft === item.id ? 'secondary' : 'ghost'}
-          onClick={() => setOpenDraft(openDraft === item.id ? null : item.id)}
-        >
-          {openDraft === item.id ? t('plugins.draft.close') : t('plugins.draft.open')}
-        </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={open ? 'secondary' : 'ghost'}
+            aria-expanded={open}
+            onClick={() => setOpenDraft(open ? null : item.id)}
+          >
+            {open ? t('plugins.draft.close') : t('plugins.draft.open')}
+          </Button>
+        </div>
+        {open && token !== null && (
+          <div className="mt-4 border-t border-border pt-4">
+            <PluginDraftEditor
+              key={item.id}
+              token={token}
+              draft={item}
+              installedAlready={installedNames.has(item.name)}
+              busy={busy}
+              onBusy={setBusy}
+              onDone={(message) => {
+                setStatus(message)
+                void load()
+              }}
+              onError={report}
+              onClose={() => setOpenDraft(null)}
+            />
+          </div>
+        )}
       </li>
     )
   }
@@ -295,9 +318,11 @@ export function PluginsRoute(): JSX.Element {
           </Button>
         }
       />
-      <Notice tone="info" live="off">
-        <p>{t('plugins.restartHelp')}</p>
-      </Notice>
+      {needsRestart && (
+        <Notice tone="info" live="off">
+          <p>{t('plugins.restartHelp')}</p>
+        </Notice>
+      )}
       {error !== null && (
         <Notice tone="danger" live="polite">
           <p>{error}</p>
@@ -360,7 +385,7 @@ export function PluginsRoute(): JSX.Element {
             <p>
               {t('plugins.brokenPlugin', {
                 directory: failure.directory,
-                message: failure.message,
+                message: describePluginProblem(t, failure.message),
               })}
             </p>
           </Notice>
@@ -394,22 +419,6 @@ export function PluginsRoute(): JSX.Element {
             total: draftsPage.total,
           })}
         />
-        {draft !== null && token !== null && (
-          <PluginDraftEditor
-            key={draft.id}
-            token={token}
-            draft={draft}
-            installedAlready={installedNames.has(draft.name)}
-            busy={busy}
-            onBusy={setBusy}
-            onDone={(message) => {
-              setStatus(message)
-              void load()
-            }}
-            onError={report}
-            onClose={() => setOpenDraft(null)}
-          />
-        )}
       </section>
 
       <CreatePluginDialog
@@ -419,7 +428,7 @@ export function PluginsRoute(): JSX.Element {
         busy={busy}
         onCreate={(name, template) =>
           void act(async () => {
-            const created = await createSandbox(token as string, name, template)
+            const created = await createSandbox(token as string, name, template, i18n.language)
             setOpenDraft(created.id)
           }, t('plugins.status.draftCreated'))
         }

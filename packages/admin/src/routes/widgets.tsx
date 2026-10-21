@@ -38,12 +38,14 @@ import {
   Pagination,
   Select,
 } from '../ui/index.js'
+import { WidgetActionsMenu } from '../widgets/widget-actions-menu.js'
 import { VisibilityEditor } from '../widgets/visibility-editor.js'
 import {
   defaultSettings,
   pluginWidgetType,
   unavailableReason,
   type WidgetSources,
+  missingRequiredText,
   widgetGroups,
 } from '../widgets/widget-catalog.js'
 import { loadPreviewTargets, type PreviewTarget, WidgetPreview } from '../widgets/widget-preview.js'
@@ -74,6 +76,12 @@ interface Draft {
 }
 
 const INACTIVE = '__inactive__'
+const MENU_ITEM =
+  'flex min-h-9 w-full cursor-pointer items-center rounded-md border-0 bg-transparent px-2 text-left text-sm text-foreground hover:bg-accent'
+/** How long a confirmation stays on screen before it clears itself. */
+const STATUS_MS = 6000
+/** Below this width the preview would sit under the zones, so it starts closed. */
+const WIDE_QUERY = '(min-width: 1280px)'
 
 export function WidgetsRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -97,7 +105,9 @@ export function WidgetsRoute(): JSX.Element {
   const [dragged, setDragged] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   // The preview is the site itself, reloaded after every write (`version`).
-  const [previewOpen, setPreviewOpen] = useState(true)
+  const [previewOpen, setPreviewOpen] = useState(
+    () => typeof window.matchMedia !== 'function' || window.matchMedia(WIDE_QUERY).matches,
+  )
   const [previewTargets, setPreviewTargets] = useState<readonly PreviewTarget[]>([])
   const [previewPath, setPreviewPath] = useState('/')
   const [previewVersion, setPreviewVersion] = useState(0)
@@ -172,6 +182,43 @@ export function WidgetsRoute(): JSX.Element {
       : t('widgets.fromPlugin', { plugin: provided.plugin })
   }
 
+  const nameOf = (widget: Widget): string => widget.title ?? typeLabel(widget.type)
+
+  // A confirmation must be seen to be believed: it stays on screen for a few
+  // seconds (and is announced), then clears itself.
+  useEffect(() => {
+    if (status === null) return
+    const timer = setTimeout(() => setStatus(null), STATUS_MS)
+    return () => clearTimeout(timer)
+  }, [status])
+
+  /** The copy is hidden and says so in its name, so two rows never read alike. */
+  async function duplicate(widget: Widget): Promise<void> {
+    if (token === null) return
+    await act(async () => {
+      const copy = await duplicateWidget(token, widget.id)
+      await updateWidget(token, copy.id, {
+        title: t('widgets.copyName', { name: nameOf(widget) }),
+      })
+    }, t('widgets.status.duplicated'))
+  }
+
+  function showPreview(): void {
+    const next = !previewOpen
+    setPreviewOpen(next)
+    if (next) {
+      // Under the zones on a narrow screen: bring it into view.
+      setTimeout(() => {
+        document.getElementById('widgets-preview')?.scrollIntoView({ block: 'start' })
+      }, 0)
+    }
+  }
+
+  function addToArea(area: string): void {
+    setTargetArea(area)
+    document.getElementById('widgets-library')?.scrollIntoView({ block: 'start' })
+  }
+
   async function act(run: () => Promise<unknown>, done: string): Promise<void> {
     setActionError(null)
     try {
@@ -212,6 +259,14 @@ export function WidgetsRoute(): JSX.Element {
 
   async function save(): Promise<void> {
     if (token === null || editor === null || draft === null) return
+    // Said here, in the screen's own words, before the server's: its message
+    // names the widget vocabulary of a package, which is no help to an editor.
+    const type = editor.mode === 'create' ? editor.type : editor.widget.type
+    const missing = missingRequiredText(type, draft.settings)
+    if (missing !== null) {
+      setEditorError(t('widgets.editor.required', { field: t(missing) }))
+      return
+    }
     setSaving(true)
     setEditorError(null)
     try {
@@ -306,7 +361,7 @@ export function WidgetsRoute(): JSX.Element {
               size="sm"
               variant="secondary"
               aria-pressed={previewOpen}
-              onClick={() => setPreviewOpen(!previewOpen)}
+              onClick={showPreview}
             >
               {previewOpen ? t('widgets.preview.hide') : t('widgets.preview.show')}
             </Button>
@@ -326,9 +381,13 @@ export function WidgetsRoute(): JSX.Element {
           <p>{actionError}</p>
         </Notice>
       )}
-      <p className="sr-only" aria-live="polite">
-        {status}
-      </p>
+      <div role="status" aria-live="polite">
+        {status !== null && (
+          <Notice tone="success" live="off">
+            <p>{status}</p>
+          </Notice>
+        )}
+      </div>
 
       {state === null ? (
         loadError === null && <p>{t('common.loading')}</p>
@@ -340,7 +399,7 @@ export function WidgetsRoute(): JSX.Element {
         >
           <aside
             aria-labelledby="widgets-library"
-            className="flex min-w-0 flex-col gap-4 self-start rounded-xl border border-border bg-card p-4 lg:sticky lg:top-4"
+            className="order-2 flex min-w-0 flex-col gap-4 self-start rounded-xl border border-border bg-card p-4 lg:sticky lg:top-4 lg:order-none"
           >
             <h2 id="widgets-library" className="m-0 text-base font-semibold">
               {t('widgets.library')}
@@ -427,7 +486,7 @@ export function WidgetsRoute(): JSX.Element {
             <p className="m-0 text-xs text-muted-foreground">{t('widgets.noHtml')}</p>
           </aside>
 
-          <div className="flex flex-col gap-4">
+          <div className="order-1 flex flex-col gap-4 lg:order-none">
             {[
               ...areas.map((area) => ({ ...area, inactive: false })),
               ...(inactive.length > 0 ? [{ id: INACTIVE, label: '', inactive: true }] : []),
@@ -456,9 +515,25 @@ export function WidgetsRoute(): JSX.Element {
                     </span>
                   </div>
                   {widgets.length === 0 ? (
-                    <p className="m-0 rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-                      {t('widgets.emptyArea')}
-                    </p>
+                    <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                      <p className="m-0">
+                        {t('widgets.emptyArea')}
+                        <span className="hidden [@media(pointer:fine)]:inline">
+                          {' '}
+                          {t('widgets.emptyAreaDrag')}
+                        </span>
+                      </p>
+                      {!area.inactive && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => addToArea(area.id)}
+                        >
+                          {t('widgets.addHere')}
+                        </Button>
+                      )}
+                    </div>
                   ) : (
                     <WidgetAreaItems widgets={widgets}>
                       {(visibleWidgets, start) => (
@@ -517,9 +592,11 @@ export function WidgetsRoute(): JSX.Element {
                                         type="button"
                                         size="sm"
                                         variant="ghost"
+                                        className="w-8 px-0"
+                                        title={t('widgets.actions.up')}
                                         disabled={index === 0}
                                         aria-label={t('widgets.actions.upNamed', {
-                                          name: widget.title ?? typeLabel(widget.type),
+                                          name: nameOf(widget),
                                         })}
                                         onClick={() =>
                                           token !== null &&
@@ -529,15 +606,17 @@ export function WidgetsRoute(): JSX.Element {
                                           )
                                         }
                                       >
-                                        {t('widgets.actions.up')}
+                                        <span aria-hidden="true">↑</span>
                                       </Button>
                                       <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
+                                        className="w-8 px-0"
+                                        title={t('widgets.actions.down')}
                                         disabled={index === widgets.length - 1}
                                         aria-label={t('widgets.actions.downNamed', {
-                                          name: widget.title ?? typeLabel(widget.type),
+                                          name: nameOf(widget),
                                         })}
                                         onClick={() =>
                                           token !== null &&
@@ -547,85 +626,89 @@ export function WidgetsRoute(): JSX.Element {
                                           )
                                         }
                                       >
-                                        {t('widgets.actions.down')}
+                                        <span aria-hidden="true">↓</span>
                                       </Button>
                                     </>
                                   )}
-                                  <Select
-                                    aria-label={t('widgets.actions.moveTo', {
-                                      name: widget.title ?? typeLabel(widget.type),
+                                  <WidgetActionsMenu
+                                    label={t('widgets.actions.more')}
+                                    ariaLabel={t('widgets.actions.moreNamed', {
+                                      name: nameOf(widget),
                                     })}
-                                    className="h-8 w-auto text-xs"
-                                    value=""
-                                    onChange={(event) => {
-                                      const destination = event.target.value
-                                      if (token === null || destination === '') return
-                                      void act(
-                                        () =>
-                                          moveWidget(
-                                            token,
-                                            widget.id,
-                                            destination,
-                                            widgetsIn(destination).length,
-                                          ),
-                                        t('widgets.status.moved'),
-                                      )
-                                    }}
                                   >
-                                    <option value="">{t('widgets.actions.moveToPrompt')}</option>
-                                    {areas
-                                      .filter((candidate) => candidate.id !== widget.area)
-                                      .map((candidate) => (
-                                        <option key={candidate.id} value={candidate.id}>
-                                          {t(`widgets.areas.${candidate.id}`, {
-                                            defaultValue: candidate.label,
-                                          })}
-                                        </option>
-                                      ))}
-                                  </Select>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() =>
-                                      token !== null &&
-                                      void act(
-                                        () => duplicateWidget(token, widget.id),
-                                        t('widgets.status.duplicated'),
-                                      )
-                                    }
-                                  >
-                                    {t('widgets.actions.duplicate')}
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() =>
-                                      token !== null &&
-                                      void act(
-                                        () =>
-                                          updateWidget(token, widget.id, {
-                                            enabled: !widget.enabled,
-                                          }),
-                                        widget.enabled
-                                          ? t('widgets.status.hidden')
-                                          : t('widgets.status.shown'),
-                                      )
-                                    }
-                                  >
-                                    {widget.enabled
-                                      ? t('widgets.actions.hide')
-                                      : t('widgets.actions.show')}
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => setDeleting(widget)}
-                                  >
-                                    {t('widgets.actions.delete')}
-                                  </Button>
+                                    <button
+                                      type="button"
+                                      className={MENU_ITEM}
+                                      data-menu-close=""
+                                      onClick={() => void duplicate(widget)}
+                                    >
+                                      {t('widgets.actions.duplicate')}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={MENU_ITEM}
+                                      data-menu-close=""
+                                      onClick={() =>
+                                        token !== null &&
+                                        void act(
+                                          () =>
+                                            updateWidget(token, widget.id, {
+                                              enabled: !widget.enabled,
+                                            }),
+                                          widget.enabled
+                                            ? t('widgets.status.hidden')
+                                            : t('widgets.status.shown'),
+                                        )
+                                      }
+                                    >
+                                      {widget.enabled
+                                        ? t('widgets.actions.hide')
+                                        : t('widgets.actions.show')}
+                                    </button>
+                                    {areas.filter((candidate) => candidate.id !== widget.area)
+                                      .length > 0 && (
+                                      <>
+                                        <p className="m-0 px-2 pt-2 text-xs font-semibold text-muted-foreground">
+                                          {t('widgets.actions.moveToPrompt')}
+                                        </p>
+                                        {areas
+                                          .filter((candidate) => candidate.id !== widget.area)
+                                          .map((candidate) => (
+                                            <button
+                                              key={candidate.id}
+                                              type="button"
+                                              className={MENU_ITEM}
+                                              data-menu-close=""
+                                              onClick={() =>
+                                                token !== null &&
+                                                void act(
+                                                  () =>
+                                                    moveWidget(
+                                                      token,
+                                                      widget.id,
+                                                      candidate.id,
+                                                      widgetsIn(candidate.id).length,
+                                                    ),
+                                                  t('widgets.status.moved'),
+                                                )
+                                              }
+                                            >
+                                              {t(`widgets.areas.${candidate.id}`, {
+                                                defaultValue: candidate.label,
+                                              })}
+                                            </button>
+                                          ))}
+                                      </>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className={`${MENU_ITEM} text-destructive`}
+                                      data-menu-close=""
+                                      onClick={() => setDeleting(widget)}
+                                    >
+                                      {t('widgets.actions.delete')}
+                                    </button>
+                                  </WidgetActionsMenu>
                                 </div>
                               </li>
                             )

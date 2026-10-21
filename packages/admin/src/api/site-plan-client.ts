@@ -90,16 +90,24 @@ export function listSitePlans(token: string): Promise<SitePlanList> {
   return requestBody('/api/site-plans', { headers: authHeader(token) })
 }
 
-export function getSitePlan(token: string, id: string): Promise<SitePlanDetail> {
-  return request(`/api/site-plans/${encodeURIComponent(id)}`, { headers: authHeader(token) })
+/** `?locale=` asks the server to word the review screen in the admin's language. */
+function localeQuery(locale: string | undefined): string {
+  return locale === undefined ? '' : `?locale=${encodeURIComponent(locale)}`
+}
+
+export function getSitePlan(token: string, id: string, locale?: string): Promise<SitePlanDetail> {
+  return request(`/api/site-plans/${encodeURIComponent(id)}${localeQuery(locale)}`, {
+    headers: authHeader(token),
+  })
 }
 
 export function proposeSitePlan(
   token: string,
   documents: readonly UploadedDocument[],
   siteName?: string,
+  locale?: string,
 ): Promise<SitePlanDetail> {
-  return request('/api/site-plans', {
+  return request(`/api/site-plans${localeQuery(locale)}`, {
     method: 'POST',
     headers: { ...authHeader(token), 'content-type': 'application/json' },
     body: JSON.stringify({ documents, ...(siteName === undefined ? {} : { siteName }) }),

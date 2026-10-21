@@ -3,12 +3,10 @@ import {
   CONTRAST_PAIRS,
   compositeOver,
   contrastRatio,
-  DENSITIES,
   meetsContrastAa,
   parseColor,
   TOKEN_GROUPS,
   TOKEN_SPECS,
-  type TokenSpec,
 } from '@cogenta/render/browser'
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -31,7 +29,9 @@ import {
 import { useAuth } from '../auth/auth-context.js'
 import { MediaPicker } from '../fields/media-picker.js'
 import { shippedText } from '../i18n/shipped-text.js'
+import { PALETTE_PRESETS, type PalettePreset } from '../lib/appearance-palettes.js'
 import { useAutosaveEnabled } from '../lib/autosave-prefs.js'
+import { useDirtyGuard } from '../lib/use-dirty-guard.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
 import { useSectionAutosave } from '../settings/site-settings-section.js'
 import {
@@ -44,14 +44,14 @@ import {
   CardHeader,
   CardTitle,
   Field,
-  Input,
   Label,
   Modal,
   Notice,
   SavedIndicator,
-  Select,
   useSavedIndicator,
 } from '../ui/index.js'
+import { TokenField } from './appearance-fields.js'
+import { AppearancePreviewFrame } from './appearance-preview.js'
 import { ThemeApplyDialog } from './theme-apply-dialog.js'
 import { ThemeGalleryPreview } from './theme-gallery-preview.js'
 
@@ -96,6 +96,22 @@ function valueAt(tokens: Record<string, unknown> | null, group: string, name: st
   return at?.[name]
 }
 
+/**
+ * A comparable form of an overlay: keys sorted, empty groups dropped. The draft
+ * is built by spreading the saved overlay and adding keys as they are edited,
+ * so two overlays that mean the same thing do not always serialise the same.
+ */
+function canonicalOverlay(overlay: TokenOverrides | null): string {
+  const groups: Record<string, Record<string, unknown>> = {}
+  for (const group of Object.keys(overlay ?? {}).sort()) {
+    const values = overlay?.[group] ?? {}
+    const names = Object.keys(values).sort()
+    if (names.length === 0) continue
+    groups[group] = Object.fromEntries(names.map((name) => [name, values[name]]))
+  }
+  return JSON.stringify(groups)
+}
+
 interface ContrastWarning {
   readonly foreground: string
   readonly background: string
@@ -134,6 +150,36 @@ function computeContrastWarnings(
 const PREVIEW_DEBOUNCE_MS = 300
 
 /**
+ * The refusal of a save or a preview, in the admin's language. The server's
+ * own message is written for a developer ("Skin fails WCAG 2.2 AA contrast on
+ * 1 pair: color.accentFg (#ffffff) on …") and names the code, not the person's
+ * screen, so the codes a colour or font edit can actually hit are translated
+ * here and anything else falls back to the generic sentence.
+ */
+function skinErrorMessage(
+  caught: unknown,
+  fallback: string,
+  t: (key: string) => string,
+): string {
+  if (caught instanceof ApiError) {
+    switch (caught.code) {
+      case 'SKIN_CONTRAST_INSUFFICIENT':
+        return t('appearance.errors.contrast')
+      case 'SKIN_TOKEN_INVALID':
+        return t('appearance.errors.invalidValue')
+      case 'SKIN_TOKEN_MISSING':
+      case 'SKIN_TOKEN_UNKNOWN':
+        return t('appearance.errors.tokenSet')
+      case 'SKIN_SCALE_NOT_MONOTONIC':
+        return t('appearance.errors.scale')
+      default:
+        return fallback
+    }
+  }
+  return fallback
+}
+
+/**
  * "Marque" (fiche 68 task 5) — moved here from the "Réglages" screen's own
  * tab (fiche L21 task 8), on the reasoning that whether the site credits
  * Cogenta and what logo replaces that credit is a question about how the
@@ -150,13 +196,21 @@ const PREVIEW_DEBOUNCE_MS = 300
  * the site-settings store, not the theme-overrides one this screen is
  * otherwise entirely about, and mixing the two would make one `load()`
  * respond to two unrelated failure modes.
+ *
+ * It has no save button of its own: the screen's single "Enregistrer" flushes
+ * it (`registerFlush`) and reads whether it has anything pending
+ * (`onPendingChange`), so one click saves everything on the page.
  */
 function BrandingCard({
   token,
   autosaveEnabled,
+  onPendingChange,
+  registerFlush,
 }: {
   readonly token: string
   readonly autosaveEnabled: boolean
+  onPendingChange(pending: boolean): void
+  registerFlush(flush: () => Promise<void>): void
 }): JSX.Element {
   const { t } = useTranslation()
   const [settings, setSettings] = useState<readonly SiteSetting[] | null>(null)
@@ -187,6 +241,15 @@ function BrandingCard({
 
   const section = useSectionAutosave(autosaveEnabled, (key, value) => save(key, value))
 
+  const flushRef = useRef(section.flush)
+  flushRef.current = section.flush
+  useEffect(() => {
+    registerFlush(() => flushRef.current())
+  }, [registerFlush])
+  useEffect(() => {
+    onPendingChange(section.hasPending)
+  }, [section.hasPending, onPendingChange])
+
   return (
     <Card aria-labelledby="appearance-branding-heading">
       <CardHeader>
@@ -213,16 +276,6 @@ function BrandingCard({
         <p className="m-0 text-xs text-muted-foreground">{t('appearance.brandingNote')}</p>
       </CardBody>
       <CardFooter>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          loading={section.saving}
-          disabled={!section.hasPending}
-          onClick={() => void section.flush()}
-        >
-          {t('appearance.brandingSaveAction')}
-        </Button>
         <SavedIndicator visible={indicator.visible} label={t('appearance.saved')} />
       </CardFooter>
       {section.error !== null && (
@@ -236,109 +289,36 @@ function BrandingCard({
   )
 }
 
-function TokenField({
-  spec,
-  value,
-  onChange,
+/** The four colours of a palette, as a row of swatches. */
+function Swatches({
+  colors,
 }: {
-  readonly spec: TokenSpec
-  readonly value: unknown
-  onChange(value: unknown): void
+  readonly colors: readonly string[]
 }): JSX.Element {
-  const { t } = useTranslation()
-  const label = t(`appearance.token.${spec.group}.${spec.name}`, {
-    defaultValue: `${spec.group}.${spec.name}`,
-  })
-
-  if (spec.kind === 'boolean') {
-    return (
-      <label className="flex items-center gap-2 font-sans text-sm text-foreground">
-        <input
-          type="checkbox"
-          checked={value === true}
-          onChange={(event) => onChange(event.target.checked)}
-        />
-        {label}
-      </label>
-    )
-  }
-
-  if (spec.kind === 'density') {
-    return (
-      <Field label={label}>
-        {(control) => (
-          <Select
-            {...control}
-            value={typeof value === 'string' ? value : ''}
-            onChange={(event) => onChange(event.target.value)}
-          >
-            {DENSITIES.map((density) => (
-              <option key={density} value={density}>
-                {density}
-              </option>
-            ))}
-          </Select>
-        )}
-      </Field>
-    )
-  }
-
-  if (spec.kind === 'ratio') {
-    return (
-      <Field label={label}>
-        {(control) => (
-          <Input
-            {...control}
-            type="number"
-            step="0.01"
-            min="1.01"
-            value={typeof value === 'number' ? value : ''}
-            onChange={(event) => onChange(Number(event.target.value))}
-          />
-        )}
-      </Field>
-    )
-  }
-
-  if (spec.kind === 'color') {
-    return (
-      <Field label={label}>
-        {(control) => (
-          <div className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className="size-6 shrink-0 rounded border border-input"
-              style={{ background: typeof value === 'string' ? value : 'transparent' }}
-            />
-            <Input
-              {...control}
-              type="text"
-              value={typeof value === 'string' ? value : ''}
-              onChange={(event) => onChange(event.target.value)}
-            />
-          </div>
-        )}
-      </Field>
-    )
-  }
-
-  // length | duration | text
   return (
-    <Field label={label}>
-      {(control) => (
-        <Input
-          {...control}
-          type="text"
-          value={typeof value === 'string' ? value : ''}
-          onChange={(event) => onChange(event.target.value)}
+    <span aria-hidden="true" className="flex overflow-hidden rounded-md border border-input">
+      {colors.map((color, index) => (
+        <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed-length row of colours that never reorders
+          key={index}
+          className="h-8 flex-1"
+          style={{ background: color }}
         />
-      )}
-    </Field>
+      ))}
+    </span>
+  )
+}
+
+function paletteMatches(palette: PalettePreset, tokens: Record<string, unknown> | null): boolean {
+  const color = tokens?.['color'] as Record<string, unknown> | undefined
+  if (color === undefined) return false
+  return Object.entries(palette.colors).every(
+    ([name, value]) => String(color[name] ?? '').toLowerCase() === value,
   )
 }
 
 export function AppearanceRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
@@ -373,12 +353,17 @@ export function AppearanceRoute(): JSX.Element {
   const [autosaveEnabled] = useAutosaveEnabled()
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [switchingTheme, setSwitchingTheme] = useState<string | null>(null)
   const [switchThemeError, setSwitchThemeError] = useState<string | null>(null)
   const [deletingTheme, setDeletingTheme] = useState<AvailableTheme | null>(null)
   const [selectingTheme, setSelectingTheme] = useState<AvailableTheme | null>(null)
+  const [selectingFocus, setSelectingFocus] = useState<'theme' | 'sample'>('theme')
+  const [enlargedTheme, setEnlargedTheme] = useState<AvailableTheme | null>(null)
   const [deleteThemeInProgress, setDeleteThemeInProgress] = useState(false)
   const [deleteThemeError, setDeleteThemeError] = useState<string | null>(null)
+  const [confirmingReset, setConfirmingReset] = useState(false)
+  const [leavingToGallery, setLeavingToGallery] = useState(false)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -406,10 +391,28 @@ export function AppearanceRoute(): JSX.Element {
     [effectiveTokens],
   )
 
+  // What is saved, to know whether the screen holds anything that would be
+  // lost by leaving it.
+  const savedOverlay = (theme?.overrides.tokenOverrides as TokenOverrides | null) ?? null
+  const savedCss = theme?.overrides.additionalCss ?? ''
+  const tokensDirty =
+    theme !== null &&
+    (canonicalOverlay(overrideDraft) !== canonicalOverlay(savedOverlay) || additionalCss !== savedCss)
+  const hasSavedOverrides =
+    canonicalOverlay(savedOverlay) !== '{}' || savedCss !== ''
+
   function setToken(group: string, name: string, value: unknown): void {
     setOverrideDraft((previous) => ({
       ...previous,
       [group]: { ...previous[group], [name]: value },
+    }))
+    savedIndicator.hide()
+  }
+
+  function applyPalette(palette: PalettePreset): void {
+    setOverrideDraft((previous) => ({
+      ...previous,
+      color: { ...previous['color'], ...palette.colors },
     }))
     savedIndicator.hide()
   }
@@ -431,9 +434,7 @@ export function AppearanceRoute(): JSX.Element {
         })
         .catch((caught: unknown) => {
           if (abandoned) return
-          setPreviewError(
-            caught instanceof ApiError ? caught.message : t('appearance.previewError'),
-          )
+          setPreviewError(skinErrorMessage(caught, t('appearance.previewError'), t))
         })
     }, PREVIEW_DEBOUNCE_MS)
     return () => {
@@ -442,19 +443,89 @@ export function AppearanceRoute(): JSX.Element {
     }
   }, [token, theme, overrideDraft, additionalCss, t])
 
-  async function save(): Promise<void> {
+  /**
+   * "Identité" (logo/logo sombre/favicon/image de partage) — four
+   * `MediaPicker`s that used to call `saveThemeOverrides` straight from
+   * `onChange`, with no confirmation at all. Same draft-then-flush shape as
+   * `SectionAutosave` (`site-settings-section.ts`), hand-rolled here rather
+   * than reused: these four fields are not `SiteSettingsField`s (a media
+   * reference has no setting *key* the registry knows), and they share one
+   * PUT (`saveThemeOverrides` merges all four keys at once) rather than one
+   * write per field.
+   */
+  const identityIndicator = useSavedIndicator()
+  const [identityDraft, setIdentityDraft] = useState<
+    Partial<
+      Pick<
+        ThemeState['overrides'],
+        'logoMediaId' | 'logoDarkMediaId' | 'faviconMediaId' | 'shareImageMediaId'
+      >
+    >
+  >({})
+  const [brandingPending, setBrandingPending] = useState(false)
+  const brandingFlush = useRef<(() => Promise<void>) | null>(null)
+  const registerBrandingFlush = useCallback((flush: () => Promise<void>) => {
+    brandingFlush.current = flush
+  }, [])
+
+  type IdentityField = 'logoMediaId' | 'logoDarkMediaId' | 'faviconMediaId' | 'shareImageMediaId'
+
+  function identityValue(field: IdentityField): string | null {
+    if (field in identityDraft) return identityDraft[field] ?? null
+    return theme?.overrides[field] ?? null
+  }
+
+  async function handleIdentityChange(field: IdentityField, value: string | null): Promise<void> {
+    if (!autosaveEnabled) {
+      setIdentityDraft((previous) => ({ ...previous, [field]: value }))
+      savedIndicator.hide()
+      return
+    }
     if (token === null) return
+    await saveThemeOverrides(token, { [field]: value })
+    await load()
+    identityIndicator.show()
+  }
+
+  const identityDirty = Object.keys(identityDraft).length > 0
+  const dirty = tokensDirty || identityDirty || brandingPending
+
+  // Leaving with unsaved changes asks first — a click on any link of the
+  // admin (`useDirtyGuard`), the tab being closed (`beforeunload`), and the
+  // screen's own "back to the gallery" button, which is not a link.
+  const blocker = useDirtyGuard(dirty && view === 'customize')
+
+  /**
+   * One "Enregistrer" for the whole screen: the colours, fonts and CSS, the
+   * four identity images and the Cogenta credit used to have three buttons of
+   * their own, and a change made in the second was lost by clicking the first.
+   * Returns whether everything was written, so a guarded exit can continue.
+   */
+  async function saveAll(): Promise<boolean> {
+    if (token === null) return false
+    if (contrastWarnings.length > 0) return false
     setSaving(true)
     setSaveError(null)
     try {
-      await saveThemeOverrides(token, {
-        tokenOverrides: Object.keys(overrideDraft).length === 0 ? null : overrideDraft,
-        additionalCss: additionalCss === '' ? null : additionalCss,
-      })
+      if (tokensDirty || identityDirty) {
+        await saveThemeOverrides(token, {
+          ...(tokensDirty
+            ? {
+                tokenOverrides: Object.keys(overrideDraft).length === 0 ? null : overrideDraft,
+                additionalCss: additionalCss === '' ? null : additionalCss,
+              }
+            : {}),
+          ...identityDraft,
+        })
+        setIdentityDraft({})
+      }
+      if (brandingPending) await brandingFlush.current?.()
       savedIndicator.show()
       await load()
+      return true
     } catch (caught) {
-      setSaveError(caught instanceof ApiError ? caught.message : t('appearance.saveError'))
+      setSaveError(skinErrorMessage(caught, t('appearance.saveError'), t))
+      return false
     } finally {
       setSaving(false)
     }
@@ -465,6 +536,7 @@ export function AppearanceRoute(): JSX.Element {
     await clearThemeOverrides(token)
     setOverrideDraft({})
     setAdditionalCss('')
+    setConfirmingReset(false)
     await load()
   }
 
@@ -493,6 +565,7 @@ export function AppearanceRoute(): JSX.Element {
         await activateTheme(token, name, applySkin)
       }
       setSelectingTheme(null)
+      setEnlargedTheme(null)
       await load()
     } catch (caught) {
       setSwitchThemeError(
@@ -534,63 +607,25 @@ export function AppearanceRoute(): JSX.Element {
     await load()
   }
 
-  /**
-   * "Identité" (logo/logo sombre/favicon/image de partage) — four
-   * `MediaPicker`s that used to call `saveThemeOverrides` straight from
-   * `onChange`, with no confirmation at all. Same draft-then-flush shape as
-   * `SectionAutosave` (`site-settings-section.ts`), hand-rolled here rather
-   * than reused: these four fields are not `SiteSettingsField`s (a media
-   * reference has no setting *key* the registry knows), and they share one
-   * PUT (`saveThemeOverrides` merges all four keys at once) rather than one
-   * write per field.
-   */
-  const identityIndicator = useSavedIndicator()
-  const [identityDraft, setIdentityDraft] = useState<
-    Partial<
-      Pick<
-        ThemeState['overrides'],
-        'logoMediaId' | 'logoDarkMediaId' | 'faviconMediaId' | 'shareImageMediaId'
-      >
-    >
-  >({})
-  const [identitySaving, setIdentitySaving] = useState(false)
-  const [identityError, setIdentityError] = useState<string | null>(null)
-
-  type IdentityField = 'logoMediaId' | 'logoDarkMediaId' | 'faviconMediaId' | 'shareImageMediaId'
-
-  function identityValue(field: IdentityField): string | null {
-    if (field in identityDraft) return identityDraft[field] ?? null
-    return theme?.overrides[field] ?? null
+  function openSelection(candidate: AvailableTheme, focus: 'theme' | 'sample'): void {
+    setSelectingFocus(focus)
+    setSelectingTheme(candidate)
   }
 
-  async function handleIdentityChange(field: IdentityField, value: string | null): Promise<void> {
-    if (!autosaveEnabled) {
-      setIdentityDraft((previous) => ({ ...previous, [field]: value }))
+  function goBackToGallery(): void {
+    if (dirty) {
+      setLeavingToGallery(true)
       return
     }
-    if (token === null) return
-    await saveThemeOverrides(token, { [field]: value })
-    await load()
-    identityIndicator.show()
+    setView('gallery')
   }
 
-  async function flushIdentity(): Promise<void> {
-    if (token === null || Object.keys(identityDraft).length === 0) return
-    setIdentitySaving(true)
-    setIdentityError(null)
-    try {
-      await saveThemeOverrides(token, identityDraft)
-      setIdentityDraft({})
-      await load()
-      identityIndicator.show()
-    } catch (caught) {
-      setIdentityError(caught instanceof ApiError ? caught.message : t('appearance.saveError'))
-    } finally {
-      setIdentitySaving(false)
-    }
+  function formatRatio(value: number): string {
+    return value.toLocaleString(i18n.language, { maximumFractionDigits: 2, minimumFractionDigits: 2 })
   }
 
-  const iframe = useRef<HTMLIFrameElement | null>(null)
+  const tokenLabel = (name: string): string =>
+    t(`appearance.token.color.${name}`, { defaultValue: name })
 
   if (!isAdmin) {
     return (
@@ -600,6 +635,13 @@ export function AppearanceRoute(): JSX.Element {
       </section>
     )
   }
+
+  const activeTheme =
+    (theme?.availableThemes ?? []).find(
+      (candidate) =>
+        theme?.overrides.activeTheme === candidate.name ||
+        (theme?.overrides.activeTheme === null && candidate.name === '@cogenta/theme-canonical'),
+    ) ?? null
 
   return (
     <section aria-labelledby="appearance-heading" className="flex flex-col gap-6">
@@ -714,6 +756,7 @@ export function AppearanceRoute(): JSX.Element {
                             token={token}
                             themeName={candidate.name}
                             label={candidate.label}
+                            onOpen={() => setEnlargedTheme(candidate)}
                           />
                         )}
                         <span className="flex items-center justify-between gap-2">
@@ -751,19 +794,10 @@ export function AppearanceRoute(): JSX.Element {
                             )}
                           </span>
                         )}
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant={active ? 'secondary' : 'primary'}
-                            size="sm"
-                            disabled={active || switchingTheme !== null}
-                            onClick={() => setSelectingTheme(candidate)}
-                          >
-                            {switchingTheme === candidate.name
-                              ? t('appearance.themeSwitching')
-                              : t('appearance.themeSelectAction')}
-                          </Button>
-                          {active && (
+                        {/* `mt-auto` pins the buttons to the card's bottom edge,
+                            so they line up across a row whatever the text above. */}
+                        <div className="mt-auto flex flex-wrap gap-2 pt-1">
+                          {active ? (
                             <Button
                               type="button"
                               variant="primary"
@@ -772,16 +806,30 @@ export function AppearanceRoute(): JSX.Element {
                             >
                               {t('appearance.themePersonalizeAction')}
                             </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="sm"
+                              disabled={switchingTheme !== null}
+                              onClick={() => openSelection(candidate, 'theme')}
+                            >
+                              {switchingTheme === candidate.name
+                                ? t('appearance.themeSwitching')
+                                : t('appearance.themeSelectAction')}
+                            </Button>
                           )}
                           {theme.sampleData?.themes.includes(candidate.name) === true && (
                             // Every theme that ships a demo site says so on its
                             // own card (L28) — including the active one, which
                             // cannot be "selected" again but can still import it.
+                            // It opens straight on the sample-data choice: the
+                            // switch-the-theme-only step is not what was asked.
                             <Button
                               type="button"
                               variant="secondary"
                               size="sm"
-                              onClick={() => setSelectingTheme(candidate)}
+                              onClick={() => openSelection(candidate, 'sample')}
                             >
                               {t('appearance.sampleData.activeAction')}
                             </Button>
@@ -822,62 +870,114 @@ export function AppearanceRoute(): JSX.Element {
 
           {view === 'customize' && (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Button type="button" variant="ghost" onClick={() => setView('gallery')}>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Button type="button" variant="ghost" onClick={goBackToGallery}>
                   {t('appearance.customizeBackAction')}
                 </Button>
                 <h2 className="m-0 text-lg leading-6 font-semibold text-foreground">
-                  {t('appearance.customizeHeading')}
+                  {activeTheme === null
+                    ? t('appearance.customizeHeading')
+                    : t('appearance.customizeHeadingTheme', { theme: activeTheme.label })}
                 </h2>
               </div>
 
-              <Notice tone="info">
+              <Notice tone={tokensDirty ? 'warning' : 'info'}>
                 <p>
-                  {Object.keys(overrideDraft).length === 0 && additionalCss === ''
-                    ? t('appearance.provenanceFileOnly')
-                    : t('appearance.provenanceOverridden')}
+                  {tokensDirty
+                    ? t('appearance.provenanceUnsaved')
+                    : hasSavedOverrides
+                      ? t('appearance.provenanceOverridden')
+                      : t('appearance.provenanceFileOnly')}
                 </p>
               </Notice>
 
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div className="flex flex-col gap-4">
-                  {TOKEN_GROUPS.map((group) => (
-                    <Card key={group} aria-labelledby={`appearance-group-${group}`}>
-                      <CardHeader>
-                        <CardTitle>
-                          <h2 id={`appearance-group-${group}`}>{t(`appearance.group.${group}`)}</h2>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        {TOKEN_SPECS.filter((spec) => spec.group === group).map((spec) => (
-                          <TokenField
-                            key={`${spec.group}.${spec.name}`}
-                            spec={spec}
-                            value={valueAt(effectiveTokens, spec.group, spec.name)}
-                            onChange={(value) => setToken(spec.group, spec.name, value)}
-                          />
-                        ))}
-                      </CardBody>
-                    </Card>
-                  ))}
-
-                  {contrastWarnings.length > 0 && (
-                    <Notice tone="warning" live="polite">
-                      <p className="m-0 font-medium">{t('appearance.contrastWarningHeading')}</p>
-                      <ul className="m-0 mt-1 list-disc pl-5">
-                        {contrastWarnings.map((warning) => (
-                          <li key={`${warning.foreground}-${warning.background}`}>
-                            {t('appearance.contrastWarningLine', {
-                              foreground: warning.foreground,
-                              background: warning.background,
-                              ratio: warning.ratio.toFixed(2),
-                              required: warning.required.toFixed(1),
-                            })}
-                          </li>
-                        ))}
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+                <div className="flex min-w-0 flex-col gap-4">
+                  <Card aria-labelledby="appearance-palettes-heading">
+                    <CardHeader>
+                      <CardTitle>
+                        <h2 id="appearance-palettes-heading">{t('appearance.palettesHeading')}</h2>
+                      </CardTitle>
+                      <CardDescription>{t('appearance.palettesIntro')}</CardDescription>
+                    </CardHeader>
+                    <CardBody>
+                      <ul className="m-0 grid list-none grid-cols-2 gap-2 p-0 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
+                        {PALETTE_PRESETS.map((palette) => {
+                          const current = paletteMatches(palette, effectiveTokens)
+                          const label = t(`appearance.palette.${palette.id}`)
+                          return (
+                            <li key={palette.id}>
+                              <button
+                                type="button"
+                                onClick={() => applyPalette(palette)}
+                                aria-pressed={current}
+                                aria-label={t('appearance.paletteApply', { name: label })}
+                                className={`flex w-full cursor-pointer flex-col gap-1.5 rounded-md border bg-card p-2 text-left font-sans text-xs text-card-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
+                                  current ? 'border-primary ring-1 ring-primary' : 'border-border'
+                                }`}
+                              >
+                                <Swatches
+                                  colors={[
+                                    palette.colors.bg,
+                                    palette.colors.fg,
+                                    palette.colors.accent,
+                                    palette.colors.muted,
+                                  ]}
+                                />
+                                <span className="font-medium">{label}</span>
+                              </button>
+                            </li>
+                          )
+                        })}
                       </ul>
-                    </Notice>
-                  )}
+                    </CardBody>
+                  </Card>
+
+                  {TOKEN_GROUPS.map((group) => (
+                    <div key={group} className="contents">
+                      <Card aria-labelledby={`appearance-group-${group}`}>
+                        <CardHeader>
+                          <CardTitle>
+                            <h2 id={`appearance-group-${group}`}>
+                              {t(`appearance.group.${group}`)}
+                            </h2>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          {TOKEN_SPECS.filter((spec) => spec.group === group).map((spec) => (
+                            <TokenField
+                              key={`${spec.group}.${spec.name}`}
+                              spec={spec}
+                              value={valueAt(effectiveTokens, spec.group, spec.name)}
+                              onChange={(value) => setToken(spec.group, spec.name, value)}
+                            />
+                          ))}
+                        </CardBody>
+                      </Card>
+
+                      {/* Right under the colours it is about, not at the foot of a
+                          page this long: nobody who has just picked a yellow accent
+                          scrolls down to learn it cannot be read. */}
+                      {group === 'color' && contrastWarnings.length > 0 && (
+                        <Notice tone="warning" live="polite">
+                          <p className="m-0 font-medium">{t('appearance.contrastWarningHeading')}</p>
+                          <ul className="m-0 mt-1 list-disc pl-5">
+                            {contrastWarnings.map((warning) => (
+                              <li key={`${warning.foreground}-${warning.background}`}>
+                                {t('appearance.contrastWarningLine', {
+                                  foreground: tokenLabel(warning.foreground),
+                                  background: tokenLabel(warning.background),
+                                  ratio: formatRatio(warning.ratio),
+                                  required: warning.required.toLocaleString(i18n.language),
+                                })}
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="m-0 mt-2">{t('appearance.contrastWarningAdvice')}</p>
+                        </Notice>
+                      )}
+                    </div>
+                  ))}
 
                   <Card aria-labelledby="appearance-css-heading">
                     <CardHeader>
@@ -913,118 +1013,55 @@ export function AppearanceRoute(): JSX.Element {
                       </CardTitle>
                     </CardHeader>
                     <CardBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="appearance-logo">{t('appearance.logoLabel')}</Label>
-                        <MediaPicker
-                          id="appearance-logo"
-                          token={token ?? ''}
-                          accept={['image']}
-                          many={false}
-                          value={
-                            identityValue('logoMediaId') === null
-                              ? []
-                              : [identityValue('logoMediaId') as string]
-                          }
-                          onChange={(ids) =>
-                            void handleIdentityChange('logoMediaId', ids[0] ?? null)
-                          }
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="appearance-logo-dark">
-                          {t('appearance.logoDarkLabel')}
-                        </Label>
-                        <MediaPicker
-                          id="appearance-logo-dark"
-                          token={token ?? ''}
-                          accept={['image']}
-                          many={false}
-                          value={
-                            identityValue('logoDarkMediaId') === null
-                              ? []
-                              : [identityValue('logoDarkMediaId') as string]
-                          }
-                          onChange={(ids) =>
-                            void handleIdentityChange('logoDarkMediaId', ids[0] ?? null)
-                          }
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="appearance-favicon">{t('appearance.faviconLabel')}</Label>
-                        <MediaPicker
-                          id="appearance-favicon"
-                          token={token ?? ''}
-                          accept={['image']}
-                          many={false}
-                          value={
-                            identityValue('faviconMediaId') === null
-                              ? []
-                              : [identityValue('faviconMediaId') as string]
-                          }
-                          onChange={(ids) =>
-                            void handleIdentityChange('faviconMediaId', ids[0] ?? null)
-                          }
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label htmlFor="appearance-share-image">
-                          {t('appearance.shareImageLabel')}
-                        </Label>
-                        <MediaPicker
-                          id="appearance-share-image"
-                          token={token ?? ''}
-                          accept={['image']}
-                          many={false}
-                          value={
-                            identityValue('shareImageMediaId') === null
-                              ? []
-                              : [identityValue('shareImageMediaId') as string]
-                          }
-                          onChange={(ids) =>
-                            void handleIdentityChange('shareImageMediaId', ids[0] ?? null)
-                          }
-                        />
-                      </div>
+                      {(
+                        [
+                          ['appearance-logo', 'logoMediaId', 'appearance.logoLabel'],
+                          ['appearance-logo-dark', 'logoDarkMediaId', 'appearance.logoDarkLabel'],
+                          ['appearance-favicon', 'faviconMediaId', 'appearance.faviconLabel'],
+                          [
+                            'appearance-share-image',
+                            'shareImageMediaId',
+                            'appearance.shareImageLabel',
+                          ],
+                        ] as const
+                      ).map(([id, field, labelKey]) => (
+                        <div key={id} className="flex flex-col gap-1.5">
+                          <Label htmlFor={id}>{t(labelKey)}</Label>
+                          <MediaPicker
+                            id={id}
+                            token={token ?? ''}
+                            accept={['image']}
+                            many={false}
+                            value={identityValue(field) === null ? [] : [identityValue(field) as string]}
+                            onChange={(ids) => void handleIdentityChange(field, ids[0] ?? null)}
+                          />
+                        </div>
+                      ))}
                     </CardBody>
                     <CardFooter>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        loading={identitySaving}
-                        disabled={Object.keys(identityDraft).length === 0}
-                        onClick={() => void flushIdentity()}
-                      >
-                        {t('appearance.identitySaveAction')}
-                      </Button>
                       <SavedIndicator
                         visible={identityIndicator.visible}
                         label={t('appearance.saved')}
                       />
                     </CardFooter>
-                    {identityError !== null && (
-                      <div className="px-5 pb-4">
-                        <Notice tone="danger" live="assertive">
-                          <p>{identityError}</p>
-                        </Notice>
-                      </div>
-                    )}
                   </Card>
 
-                  <BrandingCard token={token ?? ''} autosaveEnabled={autosaveEnabled} />
+                  <BrandingCard
+                    token={token ?? ''}
+                    autosaveEnabled={autosaveEnabled}
+                    onPendingChange={setBrandingPending}
+                    registerFlush={registerBrandingFlush}
+                  />
 
-                  <Card aria-labelledby="appearance-gallery-heading">
-                    <CardHeader>
-                      <CardTitle>
-                        <h2 id="appearance-gallery-heading">{t('appearance.galleryHeading')}</h2>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardBody className="flex flex-col gap-2">
-                      {theme.skins.length === 0 ? (
-                        <p className="m-0 text-sm text-muted-foreground">
-                          {t('appearance.galleryEmpty')}
-                        </p>
-                      ) : (
+                  {theme.skins.length > 0 && (
+                    <Card aria-labelledby="appearance-gallery-heading">
+                      <CardHeader>
+                        <CardTitle>
+                          <h2 id="appearance-gallery-heading">{t('appearance.galleryHeading')}</h2>
+                        </CardTitle>
+                        <CardDescription>{t('appearance.galleryIntro')}</CardDescription>
+                      </CardHeader>
+                      <CardBody className="flex flex-col gap-2">
                         <ul className="m-0 flex flex-col gap-2 p-0">
                           {theme.skins.map((skin) => (
                             <li
@@ -1060,9 +1097,9 @@ export function AppearanceRoute(): JSX.Element {
                             </li>
                           ))}
                         </ul>
-                      )}
-                    </CardBody>
-                  </Card>
+                      </CardBody>
+                    </Card>
+                  )}
 
                   {theme.aiAvailable ? (
                     <Card aria-labelledby="appearance-ai-heading">
@@ -1105,53 +1142,78 @@ export function AppearanceRoute(): JSX.Element {
                       <p>{t('appearance.aiNoProviderNotice')}</p>
                     </Notice>
                   )}
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button type="button" onClick={() => void save()} disabled={saving}>
-                      {saving ? t('appearance.saving') : t('appearance.saveAction')}
-                    </Button>
-                    <Button type="button" variant="ghost" onClick={() => void reset()}>
-                      {t('appearance.resetAction')}
-                    </Button>
-                    {theme.exportAvailable && (
-                      <Button type="button" variant="secondary" onClick={() => void exportToFile()}>
-                        {t('appearance.exportAction')}
-                      </Button>
-                    )}
-                    <SavedIndicator
-                      visible={savedIndicator.visible}
-                      label={t('appearance.saved')}
-                    />
-                  </div>
-                  {saveError !== null && (
-                    <Notice tone="danger" live="assertive">
-                      <p>{saveError}</p>
-                    </Notice>
-                  )}
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  <h2 className="m-0 text-sm font-semibold text-foreground">
+                {/* Stays on screen while the left column scrolls: the point of a
+                    live preview is to see the effect of the field being edited,
+                    and the fields are a long way from the top. On a phone there
+                    is no room for two columns, so the same frame opens from the
+                    bar below instead. */}
+                <aside
+                  aria-labelledby="appearance-preview-heading"
+                  className="sticky top-20 hidden h-[calc(100dvh-11rem)] min-h-96 flex-col gap-2 lg:flex"
+                >
+                  <h2
+                    id="appearance-preview-heading"
+                    className="m-0 text-sm font-semibold text-foreground"
+                  >
                     {t('appearance.previewHeading')}
                   </h2>
-                  {previewError !== null && (
-                    <Notice tone="danger" live="assertive">
-                      <p>{previewError}</p>
-                    </Notice>
+                  {contrastWarnings.length > 0 && (
+                    <p className="m-0 text-xs text-muted-foreground">
+                      {t('appearance.previewCorrectedNote')}
+                    </p>
                   )}
-                  <div className="overflow-hidden rounded-lg border border-border bg-muted">
-                    <iframe
-                      ref={iframe}
-                      title={t('appearance.previewHeading')}
-                      srcDoc={previewHtml ?? ''}
-                      className="h-[70vh] w-full border-0 bg-white"
-                    />
-                    {previewHtml === null && (
-                      <p className="sr-only">{t('appearance.previewLoading')}</p>
-                    )}
-                  </div>
-                </div>
+                  <AppearancePreviewFrame html={previewHtml} error={previewError} />
+                </aside>
               </div>
+
+              {/* The one save bar of the screen. Sticky, so it is never a
+                  scroll away from what was just edited. */}
+              <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center gap-2 border-t border-border bg-background/95 px-1 py-3 backdrop-blur">
+                <Button
+                  type="button"
+                  onClick={() => void saveAll()}
+                  loading={saving}
+                  disabled={saving || !dirty || contrastWarnings.length > 0}
+                >
+                  {saving ? t('appearance.saving') : t('appearance.saveAction')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={!hasSavedOverrides}
+                  onClick={() => setConfirmingReset(true)}
+                >
+                  {t('appearance.resetAction')}
+                </Button>
+                {theme.exportAvailable && (
+                  <Button type="button" variant="secondary" onClick={() => void exportToFile()}>
+                    {t('appearance.exportAction')}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="lg:hidden"
+                  onClick={() => setPreviewOpen(true)}
+                >
+                  {t('appearance.previewOpenAction')}
+                </Button>
+                {dirty && !saving && (
+                  <span role="status" className="text-sm text-muted-foreground">
+                    {contrastWarnings.length > 0
+                      ? t('appearance.saveBlockedByContrast')
+                      : t('appearance.unsavedChanges')}
+                  </span>
+                )}
+                <SavedIndicator visible={savedIndicator.visible} label={t('appearance.saved')} />
+              </div>
+              {saveError !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{saveError}</p>
+                </Notice>
+              )}
             </>
           )}
         </>
@@ -1161,6 +1223,7 @@ export function AppearanceRoute(): JSX.Element {
         <ThemeApplyDialog
           token={token}
           theme={selectingTheme}
+          focus={selectingFocus}
           hasSampleData={
             selectingTheme !== null &&
             (theme?.sampleData?.themes.includes(selectingTheme.name) ?? false)
@@ -1179,6 +1242,150 @@ export function AppearanceRoute(): JSX.Element {
           onSampleDataApplied={load}
         />
       )}
+
+      <Modal
+        open={enlargedTheme !== null}
+        onOpenChange={(open) => {
+          if (!open) setEnlargedTheme(null)
+        }}
+        title={t('appearance.themePreviewTitle', { theme: enlargedTheme?.label ?? '' })}
+        description={t('appearance.themePreviewLargeHint')}
+        closeLabel={t('appearance.close')}
+        className="w-[min(64rem,calc(100vw-2rem))]"
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={() => setEnlargedTheme(null)}>
+              {t('appearance.close')}
+            </Button>
+            {enlargedTheme !== null &&
+              theme?.overrides.activeTheme !== enlargedTheme.name &&
+              !(
+                theme?.overrides.activeTheme === null &&
+                enlargedTheme.name === '@cogenta/theme-canonical'
+              ) && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => {
+                    const chosen = enlargedTheme
+                    setEnlargedTheme(null)
+                    openSelection(chosen, 'theme')
+                  }}
+                >
+                  {t('appearance.themeSelectAction')}
+                </Button>
+              )}
+          </>
+        }
+      >
+        {enlargedTheme !== null && token !== null && (
+          <ThemeGalleryPreview
+            token={token}
+            themeName={enlargedTheme.name}
+            label={enlargedTheme.label}
+            size="large"
+          />
+        )}
+      </Modal>
+
+      <Modal
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        title={t('appearance.previewHeading')}
+        closeLabel={t('appearance.close')}
+        className="w-[calc(100vw-1rem)]"
+      >
+        <div className="flex h-[70dvh] flex-col">
+          <AppearancePreviewFrame html={previewHtml} error={previewError} />
+        </div>
+      </Modal>
+
+      <Modal
+        open={confirmingReset}
+        onOpenChange={setConfirmingReset}
+        title={t('appearance.resetConfirmTitle')}
+        closeLabel={t('appearance.close')}
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={() => setConfirmingReset(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => void reset()}>
+              {t('appearance.resetConfirmAction')}
+            </Button>
+          </>
+        }
+      >
+        <p>{t('appearance.resetConfirmBody')}</p>
+      </Modal>
+
+      <Modal
+        open={blocker.blocked || leavingToGallery}
+        onOpenChange={(open) => {
+          if (!open) {
+            blocker.reset()
+            setLeavingToGallery(false)
+          }
+        }}
+        title={t('appearance.leaveTitle')}
+        closeLabel={t('common.cancel')}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                blocker.reset()
+                setLeavingToGallery(false)
+              }}
+            >
+              {t('appearance.leaveStay')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (leavingToGallery) {
+                  setOverrideDraft(savedOverlay ?? {})
+                  setAdditionalCss(savedCss)
+                  setIdentityDraft({})
+                  setLeavingToGallery(false)
+                  setView('gallery')
+                } else {
+                  blocker.proceed()
+                }
+              }}
+            >
+              {t('appearance.leaveDiscard')}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={contrastWarnings.length > 0}
+              onClick={() => {
+                void saveAll().then((ok) => {
+                  if (!ok) return
+                  if (leavingToGallery) {
+                    setLeavingToGallery(false)
+                    setView('gallery')
+                  } else {
+                    blocker.proceed()
+                  }
+                })
+              }}
+            >
+              {t('appearance.leaveSave')}
+            </Button>
+          </>
+        }
+      >
+        <p>
+          {contrastWarnings.length > 0
+            ? t('appearance.leaveBodyContrast')
+            : t('appearance.leaveBody')}
+        </p>
+      </Modal>
+
       <Modal
         open={deletingTheme !== null}
         onOpenChange={(open) => {

@@ -1,5 +1,5 @@
 import { access, readFile, stat } from 'node:fs/promises'
-import { dirname, isAbsolute, join } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { CogentaError } from '@cogenta/core'
 import { pluginCodeDigest, pluginEntryPath, readPluginCode } from './entry.js'
@@ -122,7 +122,7 @@ async function findManifestFile(packageRoot: string): Promise<string> {
   }
   throw new CogentaError({
     code: 'PLUGIN_MANIFEST_FILE_NOT_FOUND',
-    message: `No plugin manifest found in ${packageRoot}.`,
+    message: `No plugin manifest found in ${basename(packageRoot)}.`,
     hint: `Add ${PLUGIN_MANIFEST_FILE_NAMES[0]} — a JSON file, never a module.`,
     details: { packageRoot },
   })
@@ -140,7 +140,7 @@ async function readManifest(manifestPath: string): Promise<PluginManifest> {
   } catch (error) {
     throw new CogentaError({
       code: 'PLUGIN_MANIFEST_LOAD_FAILED',
-      message: `Could not read ${manifestPath}: ${error instanceof Error ? error.message : String(error)}`,
+      message: `Could not read ${basename(manifestPath)}: ${error instanceof Error ? error.message : String(error)}`,
       hint: 'Check that the file exists and is readable.',
       cause: error,
       details: { manifestPath },
@@ -153,7 +153,7 @@ async function readManifest(manifestPath: string): Promise<PluginManifest> {
   } catch (error) {
     throw new CogentaError({
       code: 'PLUGIN_MANIFEST_INVALID',
-      message: `${manifestPath} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      message: `${basename(manifestPath)} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
       hint: 'A manifest is a JSON object — write it by hand, or generate it with definePlugin and JSON.stringify.',
       cause: error,
       details: { manifestPath },
@@ -163,7 +163,7 @@ async function readManifest(manifestPath: string): Promise<PluginManifest> {
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new CogentaError({
       code: 'PLUGIN_MANIFEST_EXPORT_INVALID',
-      message: `${manifestPath} does not hold a manifest object.`,
+      message: `${basename(manifestPath)} does not hold a manifest object.`,
       hint: 'The file must contain a single JSON object with name, version, engine, capabilities, provides, runtime and isolated.',
       details: { manifestPath },
     })

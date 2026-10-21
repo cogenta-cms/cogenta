@@ -2446,128 +2446,96 @@ const IMPORT_STATEMENT = /@import\s+(?:url\(\s*(["'])[^"']*\1\s*\)|(["'])[^"']*\
 const GALLERY_PREVIEW_BLOCK_VERSION = '1.0.0'
 const GALLERY_PREVIEW_COLLECTION_LIST_KEY = 'gallery-preview-posts'
 
-function galleryPreviewPage(): PageContent {
-  const paragraph = (key: string, text: string) => ({
-    _key: key,
-    _type: 'block' as const,
-    style: 'normal' as const,
-    markDefs: [],
-    children: [{ _key: `${key}-s`, _type: 'span' as const, marks: [], text }],
-  })
-  return {
-    title: GALLERY_PREVIEW_SITE_NAME,
-    blocks: [
-      {
-        _key: 'gallery-preview-hero',
-        _type: 'hero',
-        _version: GALLERY_PREVIEW_BLOCK_VERSION,
-        eyebrow: 'Architects and planners since 2009',
-        title: 'Buildings that stay useful for a hundred years',
-        subtitle:
-          'We design schools, libraries and housing for public clients across the north of England, from the first feasibility study to the last snagging visit.',
-        actions: [
-          { label: 'See our projects', target: { href: '#' }, emphasis: 'primary' },
-          { label: 'Work with us', target: { href: '#' }, emphasis: 'secondary' },
-        ],
-      } as VocabularyBlock,
-      {
-        _key: 'gallery-preview-stats',
-        _type: 'stats',
-        _version: GALLERY_PREVIEW_BLOCK_VERSION,
-        title: 'The practice in figures',
-        items: [
-          { _key: 'gallery-preview-stat-1', value: '64', label: 'buildings completed' },
-          { _key: 'gallery-preview-stat-2', value: '28', label: 'architects and planners' },
-          { _key: 'gallery-preview-stat-3', value: '11', unit: 'awards', label: 'for public work' },
-        ],
-      } as VocabularyBlock,
-      {
-        _key: 'gallery-preview-features',
-        _type: 'featureGrid',
-        _version: GALLERY_PREVIEW_BLOCK_VERSION,
-        title: 'What we do',
-        items: [
-          {
-            _key: 'gallery-preview-feature-1',
-            icon: 'map-pin',
-            title: 'Feasibility and briefing',
-            text: 'We test a site and a budget before anyone draws a plan, so the brief is one a building can meet.',
-          },
-          {
-            _key: 'gallery-preview-feature-2',
-            icon: 'pen',
-            title: 'Design and planning',
-            text: 'Drawings, consultations and planning applications, led by the same architect from start to finish.',
-          },
-          {
-            _key: 'gallery-preview-feature-3',
-            icon: 'home',
-            title: 'Delivery on site',
-            text: 'We stay on the project through construction and the first year of use, when the small problems appear.',
-          },
-        ],
-      } as VocabularyBlock,
-      {
-        _key: GALLERY_PREVIEW_COLLECTION_LIST_KEY,
-        _type: 'collectionList',
-        _version: GALLERY_PREVIEW_BLOCK_VERSION,
-        title: 'Latest news',
-        collection: 'post',
-        sort: { field: 'createdAt', direction: 'desc' },
-        limit: 3,
-        layout: 'list',
-      } as VocabularyBlock,
-      {
-        _key: 'gallery-preview-quote',
-        _type: 'quote',
-        _version: GALLERY_PREVIEW_BLOCK_VERSION,
-        text: 'They asked the teachers what went wrong in the old building before they drew a single classroom. It shows every day.',
-        author: 'Helen Okafor',
-        role: 'Head teacher, Calder Vale Primary',
-      } as VocabularyBlock,
-      {
-        _key: 'gallery-preview-faq',
-        _type: 'faq',
-        _version: GALLERY_PREVIEW_BLOCK_VERSION,
-        title: 'Working with us',
-        items: [
-          {
-            _key: 'gallery-preview-faq-1',
-            question: 'Do you take on private clients?',
-            answer: [
-              paragraph(
-                'gallery-preview-faq-1-a',
-                'Occasionally, when the project has a public side: a community hall, a church, a shared workshop.',
-              ),
-            ],
-          },
-          {
-            _key: 'gallery-preview-faq-2',
-            question: 'How early should we contact you?',
-            answer: [
-              paragraph(
-                'gallery-preview-faq-2-a',
-                'Before a budget is fixed. Most of the savings on a building are decided in its first three months.',
-              ),
-            ],
-          },
-        ],
-      } as VocabularyBlock,
-      {
-        _key: 'gallery-preview-cta',
-        _type: 'cta',
-        _version: GALLERY_PREVIEW_BLOCK_VERSION,
-        title: 'Planning a new building or a renovation',
-        text: 'Tell us about the site, the people who will use it and the date it has to open.',
-        actions: [{ label: 'Start a conversation', target: { href: '#' }, emphasis: 'primary' }],
-      } as VocabularyBlock,
-    ],
-  }
+/**
+ * Every visible string of the demo page, in the two languages the gallery
+ * speaks. An admin working in French was shown a fictional English practice on
+ * every card; the content now follows the site's language, and falls back to
+ * English for any other.
+ */
+interface GalleryCopy {
+  readonly siteName: string
+  readonly tagline: string
+  readonly footerNote: string
+  readonly headerAction: string
+  readonly headerNav: readonly string[]
+  readonly footerNav: readonly string[]
+  readonly eyebrow: string
+  readonly heroTitle: string
+  readonly heroSubtitle: string
+  readonly seeProjects: string
+  readonly workWithUs: string
+  readonly statsTitle: string
+  readonly stats: readonly { readonly value: string; readonly unit?: string; readonly label: string }[]
+  readonly featuresTitle: string
+  readonly features: readonly { readonly title: string; readonly text: string }[]
+  readonly newsTitle: string
+  readonly quoteText: string
+  readonly quoteAuthor: string
+  readonly quoteRole: string
+  readonly faqTitle: string
+  readonly faq: readonly { readonly question: string; readonly answer: string }[]
+  readonly ctaTitle: string
+  readonly ctaText: string
+  readonly ctaAction: string
+  readonly posts: readonly { readonly title: string; readonly excerpt: string }[]
 }
 
-/** Three fabricated posts for the demo `collectionList` above — never a real query result. */
-function galleryPreviewEntries(locale: string): readonly ThemeContentEntry[] {
-  const posts: readonly { readonly title: string; readonly excerpt: string }[] = [
+const GALLERY_COPY_EN: GalleryCopy = {
+  siteName: 'Aldwych & Rowe',
+  tagline: 'Architects and planners for public buildings',
+  footerNote: '14 Castle Street, Leeds LS1 4AP. Registered in England, no. 06854021.',
+  headerAction: 'Contact us',
+  headerNav: ['Projects', 'Practice', 'News', 'Contact'],
+  footerNav: ['Careers', 'Privacy'],
+  eyebrow: 'Architects and planners since 2009',
+  heroTitle: 'Buildings that stay useful for a hundred years',
+  heroSubtitle:
+    'We design schools, libraries and housing for public clients across the north of England, from the first feasibility study to the last snagging visit.',
+  seeProjects: 'See our projects',
+  workWithUs: 'Work with us',
+  statsTitle: 'The practice in figures',
+  stats: [
+    { value: '64', label: 'buildings completed' },
+    { value: '28', label: 'architects and planners' },
+    { value: '11', unit: 'awards', label: 'for public work' },
+  ],
+  featuresTitle: 'What we do',
+  features: [
+    {
+      title: 'Feasibility and briefing',
+      text: 'We test a site and a budget before anyone draws a plan, so the brief is one a building can meet.',
+    },
+    {
+      title: 'Design and planning',
+      text: 'Drawings, consultations and planning applications, led by the same architect from start to finish.',
+    },
+    {
+      title: 'Delivery on site',
+      text: 'We stay on the project through construction and the first year of use, when the small problems appear.',
+    },
+  ],
+  newsTitle: 'Latest news',
+  quoteText:
+    'They asked the teachers what went wrong in the old building before they drew a single classroom. It shows every day.',
+  quoteAuthor: 'Helen Okafor',
+  quoteRole: 'Head teacher, Calder Vale Primary',
+  faqTitle: 'Working with us',
+  faq: [
+    {
+      question: 'Do you take on private clients?',
+      answer:
+        'Occasionally, when the project has a public side: a community hall, a church, a shared workshop.',
+    },
+    {
+      question: 'How early should we contact you?',
+      answer:
+        'Before a budget is fixed. Most of the savings on a building are decided in its first three months.',
+    },
+  ],
+  ctaTitle: 'Planning a new building or a renovation',
+  ctaText: 'Tell us about the site, the people who will use it and the date it has to open.',
+  ctaAction: 'Start a conversation',
+  posts: [
     {
       title: 'Calder Vale Primary opens its new wing',
       excerpt:
@@ -2583,8 +2551,179 @@ function galleryPreviewEntries(locale: string): readonly ThemeContentEntry[] {
       excerpt:
         'Fewer shelves, more tables, and a room that can stay open after the counter closes. Notes from four consultations.',
     },
-  ]
-  return posts.map((post, index) => ({
+  ],
+}
+
+const GALLERY_COPY_FR: GalleryCopy = {
+  siteName: 'Aldwych & Rowe',
+  tagline: 'Architectes et urbanistes de bâtiments publics',
+  footerNote: '14 rue du Château, 59000 Lille. SAS au capital de 40 000 €, RCS Lille 412 345 678.',
+  headerAction: 'Nous contacter',
+  headerNav: ['Projets', 'Agence', 'Actualités', 'Contact'],
+  footerNav: ['Carrières', 'Confidentialité'],
+  eyebrow: 'Architectes et urbanistes depuis 2009',
+  heroTitle: 'Des bâtiments qui restent utiles pendant cent ans',
+  heroSubtitle:
+    'Nous concevons écoles, médiathèques et logements pour des maîtres d’ouvrage publics, de la première étude de faisabilité à la dernière visite de réception.',
+  seeProjects: 'Voir nos projets',
+  workWithUs: 'Travailler avec nous',
+  statsTitle: 'L’agence en chiffres',
+  stats: [
+    { value: '64', label: 'bâtiments livrés' },
+    { value: '28', label: 'architectes et urbanistes' },
+    { value: '11', unit: 'prix', label: 'pour des ouvrages publics' },
+  ],
+  featuresTitle: 'Ce que nous faisons',
+  features: [
+    {
+      title: 'Faisabilité et programme',
+      text: 'Nous éprouvons un site et un budget avant de tracer le moindre plan : le programme est alors un programme que le bâtiment peut tenir.',
+    },
+    {
+      title: 'Conception et permis',
+      text: 'Plans, concertations et dossiers de permis, menés par le même architecte du début à la fin.',
+    },
+    {
+      title: 'Suivi de chantier',
+      text: 'Nous restons sur le projet pendant les travaux et la première année d’usage, quand apparaissent les petits défauts.',
+    },
+  ],
+  newsTitle: 'Dernières actualités',
+  quoteText:
+    'Ils ont demandé aux enseignants ce qui n’allait pas dans l’ancien bâtiment avant de dessiner la moindre salle de classe. Cela se voit tous les jours.',
+  quoteAuthor: 'Hélène Okafor',
+  quoteRole: 'Directrice, école primaire du Val',
+  faqTitle: 'Travailler avec nous',
+  faq: [
+    {
+      question: 'Acceptez-vous des clients privés ?',
+      answer:
+        'Parfois, quand le projet a une dimension publique : une salle des fêtes, une église, un atelier partagé.',
+    },
+    {
+      question: 'Quand faut-il vous contacter ?',
+      answer:
+        'Avant que le budget soit figé. L’essentiel des économies d’un bâtiment se décide dans ses trois premiers mois.',
+    },
+  ],
+  ctaTitle: 'Un nouveau bâtiment ou une rénovation en projet',
+  ctaText:
+    'Parlez-nous du site, de ceux qui l’utiliseront et de la date à laquelle il doit ouvrir.',
+  ctaAction: 'Engager la conversation',
+  posts: [
+    {
+      title: 'L’école du Val ouvre sa nouvelle aile',
+      excerpt:
+        'Huit classes, une salle qui sert aussi de salle des fêtes au village, et une facture de chauffage divisée par trois.',
+    },
+    {
+      title: 'Permis accordé pour 42 logements rue du Moulin',
+      excerpt:
+        'Des maisons de deux et trois chambres autour d’une cour partagée, sur l’ancien dépôt de bus.',
+    },
+    {
+      title: 'Ce dont une médiathèque a besoin en 2026',
+      excerpt:
+        'Moins de rayonnages, plus de tables, et une salle qui reste ouverte après la fermeture du comptoir. Notes de quatre concertations.',
+    },
+  ],
+}
+
+function galleryCopyFor(locale: string): GalleryCopy {
+  return locale.toLowerCase().startsWith('fr') ? GALLERY_COPY_FR : GALLERY_COPY_EN
+}
+
+function galleryPreviewPage(copy: GalleryCopy): PageContent {
+  const paragraph = (key: string, text: string) => ({
+    _key: key,
+    _type: 'block' as const,
+    style: 'normal' as const,
+    markDefs: [],
+    children: [{ _key: `${key}-s`, _type: 'span' as const, marks: [], text }],
+  })
+  return {
+    title: copy.siteName,
+    blocks: [
+      {
+        _key: 'gallery-preview-hero',
+        _type: 'hero',
+        _version: GALLERY_PREVIEW_BLOCK_VERSION,
+        eyebrow: copy.eyebrow,
+        title: copy.heroTitle,
+        subtitle: copy.heroSubtitle,
+        actions: [
+          { label: copy.seeProjects, target: { href: '#' }, emphasis: 'primary' },
+          { label: copy.workWithUs, target: { href: '#' }, emphasis: 'secondary' },
+        ],
+      } as VocabularyBlock,
+      {
+        _key: 'gallery-preview-stats',
+        _type: 'stats',
+        _version: GALLERY_PREVIEW_BLOCK_VERSION,
+        title: copy.statsTitle,
+        items: copy.stats.map((stat, index) => ({
+          _key: `gallery-preview-stat-${index + 1}`,
+          value: stat.value,
+          ...(stat.unit === undefined ? {} : { unit: stat.unit }),
+          label: stat.label,
+        })),
+      } as VocabularyBlock,
+      {
+        _key: 'gallery-preview-features',
+        _type: 'featureGrid',
+        _version: GALLERY_PREVIEW_BLOCK_VERSION,
+        title: copy.featuresTitle,
+        items: copy.features.map((feature, index) => ({
+          _key: `gallery-preview-feature-${index + 1}`,
+          icon: (['map-pin', 'pen', 'home'] as const)[index] ?? 'home',
+          title: feature.title,
+          text: feature.text,
+        })),
+      } as VocabularyBlock,
+      {
+        _key: GALLERY_PREVIEW_COLLECTION_LIST_KEY,
+        _type: 'collectionList',
+        _version: GALLERY_PREVIEW_BLOCK_VERSION,
+        title: copy.newsTitle,
+        collection: 'post',
+        sort: { field: 'createdAt', direction: 'desc' },
+        limit: 3,
+        layout: 'list',
+      } as VocabularyBlock,
+      {
+        _key: 'gallery-preview-quote',
+        _type: 'quote',
+        _version: GALLERY_PREVIEW_BLOCK_VERSION,
+        text: copy.quoteText,
+        author: copy.quoteAuthor,
+        role: copy.quoteRole,
+      } as VocabularyBlock,
+      {
+        _key: 'gallery-preview-faq',
+        _type: 'faq',
+        _version: GALLERY_PREVIEW_BLOCK_VERSION,
+        title: copy.faqTitle,
+        items: copy.faq.map((item, index) => ({
+          _key: `gallery-preview-faq-${index + 1}`,
+          question: item.question,
+          answer: [paragraph(`gallery-preview-faq-${index + 1}-a`, item.answer)],
+        })),
+      } as VocabularyBlock,
+      {
+        _key: 'gallery-preview-cta',
+        _type: 'cta',
+        _version: GALLERY_PREVIEW_BLOCK_VERSION,
+        title: copy.ctaTitle,
+        text: copy.ctaText,
+        actions: [{ label: copy.ctaAction, target: { href: '#' }, emphasis: 'primary' }],
+      } as VocabularyBlock,
+    ],
+  }
+}
+
+/** Three fabricated posts for the demo `collectionList` above — never a real query result. */
+function galleryPreviewEntries(locale: string, copy: GalleryCopy): readonly ThemeContentEntry[] {
+  return copy.posts.map((post, index) => ({
     id: `gallery-preview-${index}`,
     collection: 'post',
     locale,
@@ -2595,35 +2734,18 @@ function galleryPreviewEntries(locale: string): readonly ThemeContentEntry[] {
   }))
 }
 
-/** Demo navigation for the gallery preview's header/footer — never a real menu lookup. */
-const GALLERY_PREVIEW_HEADER_NAV: readonly ChromeNavLink[] = [
-  { label: 'Projects', href: '#', openInNewTab: false, kind: 'url', title: null },
-  { label: 'Practice', href: '#', openInNewTab: false, kind: 'url', title: null },
-  { label: 'News', href: '#', openInNewTab: false, kind: 'url', title: null },
-  { label: 'Contact', href: '#', openInNewTab: false, kind: 'url', title: null },
-]
-const GALLERY_PREVIEW_FOOTER_NAV: readonly ChromeNavLink[] = [
-  { label: 'Careers', href: '#', openInNewTab: false, kind: 'url', title: null },
-  { label: 'Privacy', href: '#', openInNewTab: false, kind: 'url', title: null },
-]
-
 /**
  * Synthetic `theme@1.4` chrome (contract D, L25 D2) — this route reads no
  * database (see `renderThemeGalleryPreview`'s own comment), so a real
  * `general.socialLinks`/`general.tagline`/`general.footerNote` never reaches
- * it; fixed demo values instead, the same way the nav above is fixed rather
- * than empty, so the gallery actually shows what a candidate theme does with
- * these fields rather than leaving them permanently blank.
+ * it; fixed demo values instead (the navigation, the tagline, the footer
+ * note), so the gallery actually shows what a candidate theme does with these
+ * fields rather than leaving them permanently blank.
  */
-const GALLERY_PREVIEW_SITE_NAME = 'Aldwych & Rowe'
-const GALLERY_PREVIEW_TAGLINE = 'Architects and planners for public buildings'
 const GALLERY_PREVIEW_SOCIAL: readonly ChromeLink[] = [
   { label: 'LinkedIn', href: 'https://www.linkedin.com/' },
   { label: 'Instagram', href: 'https://instagram.com/' },
 ]
-const GALLERY_PREVIEW_FOOTER_NOTE =
-  '14 Castle Street, Leeds LS1 4AP. Registered in England, no. 06854021.'
-const GALLERY_PREVIEW_HEADER_ACTION: ChromeLink = { label: 'Contact us', href: '#' }
 
 export interface ThemeGalleryPreviewOptions {
   readonly site: {
@@ -2682,7 +2804,8 @@ export async function renderThemeGalleryPreview(
 
   // The demo page is one fictional practice across every card, so the
   // header and footer name it too, not the site the admin is working on.
-  const site = { ...options.site, name: GALLERY_PREVIEW_SITE_NAME }
+  const copy = galleryCopyFor(locale)
+  const site = { ...options.site, name: copy.siteName }
   const themeContext: RenderContext = {
     site,
     locale,
@@ -2697,9 +2820,9 @@ export async function renderThemeGalleryPreview(
     },
   }
 
-  const pageContent = galleryPreviewPage()
+  const pageContent = galleryPreviewPage(copy)
   const fetchedEntries: FetchedEntries = {
-    [GALLERY_PREVIEW_COLLECTION_LIST_KEY]: galleryPreviewEntries(locale),
+    [GALLERY_PREVIEW_COLLECTION_LIST_KEY]: galleryPreviewEntries(locale, copy),
   }
   const bodyHtml = serialize(theme.renderPage(pageContent, themeContext, fetchedEntries))
 
@@ -2711,13 +2834,13 @@ export async function renderThemeGalleryPreview(
     site,
     locale,
     homeHref: '/',
-    headerNav: GALLERY_PREVIEW_HEADER_NAV,
-    footerNav: GALLERY_PREVIEW_FOOTER_NAV,
+    headerNav: copy.headerNav.map(demoNavLink),
+    footerNav: copy.footerNav.map(demoNavLink),
     brandingHtml,
-    tagline: GALLERY_PREVIEW_TAGLINE,
+    tagline: copy.tagline,
     social: GALLERY_PREVIEW_SOCIAL,
-    footerNote: GALLERY_PREVIEW_FOOTER_NOTE,
-    headerAction: GALLERY_PREVIEW_HEADER_ACTION,
+    footerNote: copy.footerNote,
+    headerAction: { label: copy.headerAction, href: '#' },
   })
 
   return `<!doctype html>
@@ -2726,7 +2849,6 @@ export async function renderThemeGalleryPreview(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<script>${THEME_TOGGLE_SCRIPT}</script>
 <meta name="robots" content="noindex, nofollow">
 <title>${escapeHtml(pageContent.title)}</title>
 ${options.styles === null ? '' : `<style>${options.styles}</style>`}
@@ -2739,6 +2861,11 @@ ${chrome.footer}
 </body>
 </html>
 `
+}
+
+/** A navigation entry of the demo page: a label that goes nowhere. */
+function demoNavLink(label: string): ChromeNavLink {
+  return { label, href: '#', openInNewTab: false, kind: 'url', title: null }
 }
 
 /** The first link of every page, in the page's own language (`a11y.skipToContent`). */

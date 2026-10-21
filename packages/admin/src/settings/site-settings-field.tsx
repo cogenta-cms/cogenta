@@ -208,8 +208,17 @@ function FieldStatus({
 }): JSX.Element | null {
   const { t } = useTranslation()
   if (saving)
-    return <p className="text-xs leading-5 text-muted-foreground">{t('settings.saving')}</p>
-  if (saved) return <p className="text-xs leading-5 text-muted-foreground">{t('settings.saved')}</p>
+    return (
+      <p role="status" className="text-xs leading-5 text-muted-foreground">
+        {t('settings.saving')}
+      </p>
+    )
+  if (saved)
+    return (
+      <p role="status" className="text-xs leading-5 font-medium text-success">
+        {t('settings.saved')}
+      </p>
+    )
   return null
 }
 

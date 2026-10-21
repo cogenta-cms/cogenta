@@ -20,9 +20,16 @@ import {
 } from '@cogenta/agents'
 import { generateSandboxTheme, generateThemeCandidates } from '@cogenta/agents-builtin'
 import type { ThemeRouterOptions } from '@cogenta/api'
-import type { CogentaConfig, DatabaseHandle, Logger } from '@cogenta/core'
+import { type CogentaConfig, CogentaError, type DatabaseHandle, type Logger } from '@cogenta/core'
 import { createSkinGallery, ensureRegistryTables } from '@cogenta/plugins'
-import { mergeSkinTokens, validateSkin } from '@cogenta/render'
+import {
+  CONTRAST_PAIRS,
+  compositeOver,
+  contrastRatio,
+  mergeSkinTokens,
+  parseColor,
+  validateSkin,
+} from '@cogenta/render'
 import type { CollectionDefinition } from '@cogenta/schema'
 import {
   createSiteSettingsStore,
@@ -229,6 +236,16 @@ async function resolveThemeProvider(
         client,
         model: modelOverride === undefined || modelOverride === '' ? client.model : modelOverride,
       }
+    }
+    // Same last resort as every other agent (`orchestrator.ts`): the agent's
+    // preferred pair names anthropic/openai by default, so a site that only
+    // configured DeepSeek, Mistral or a local model must still get a
+    // generator. The agent's model id names a model of the provider it asked
+    // for, so it is not applied to this one.
+    const anyConfigured = registry.names()[0]
+    if (anyConfigured !== undefined) {
+      const client = registry.get(anyConfigured)
+      return { client, model: client.model }
     }
   }
   const llm = options.config.llm
@@ -701,7 +718,21 @@ export async function computePreviewStyles(
   let tokens: Record<string, unknown> = file
   if (candidate.tokens !== undefined) {
     tokens = wiring.mergeTokens(file, candidate.tokens)
-    wiring.validateTokens(tokens)
+    try {
+      wiring.validateTokens(tokens)
+    } catch (error) {
+      // A save refuses a palette that fails WCAG AA, and must keep doing so.
+      // A preview, though, is where the person finds out what the palette
+      // looks like: refusing it froze the screen on the previous render at the
+      // very moment someone was moving a colour. So the preview shows the
+      // palette with its text recoloured black or white wherever it was
+      // unreadable, and every other kind of refusal still stops it.
+      if (!(error instanceof CogentaError) || error.code !== 'SKIN_CONTRAST_INSUFFICIENT') {
+        throw error
+      }
+      tokens = withLegibleForegrounds(tokens)
+      wiring.validateTokens(tokens)
+    }
   }
 
   const skinCss = renderSiteSkin(tokens as never).css
@@ -710,6 +741,31 @@ export async function computePreviewStyles(
       ? skinCss
       : `${skinCss}\n${candidate.additionalCss}`
   return joinStyles(combined, themeCss)
+}
+
+/**
+ * The same tokens with every contract-D foreground that misses WCAG AA on its
+ * background replaced by black or white, whichever reads better. Used for the
+ * live preview only — never for what is saved or served.
+ */
+function withLegibleForegrounds(tokens: Record<string, unknown>): Record<string, unknown> {
+  const color = { ...(tokens['color'] as Record<string, unknown>) }
+  for (const pair of CONTRAST_PAIRS) {
+    const fgValue = color[pair.foreground]
+    const bgValue = color[pair.background]
+    if (typeof fgValue !== 'string' || typeof bgValue !== 'string') continue
+    const fg = parseColor(fgValue)
+    const bg = parseColor(bgValue)
+    if (fg === null || bg === null) continue
+    const required = pair.size === 'large' ? 3 : 4.5
+    const resolved = fg.a >= 1 ? fg : compositeOver(fg, bg)
+    if (contrastRatio(resolved, bg) >= required) continue
+    const black = { r: 0, g: 0, b: 0 }
+    const white = { r: 255, g: 255, b: 255 }
+    color[pair.foreground] =
+      contrastRatio(black, bg) >= contrastRatio(white, bg) ? '#000000' : '#ffffff'
+  }
+  return { ...tokens, color }
 }
 
 /**

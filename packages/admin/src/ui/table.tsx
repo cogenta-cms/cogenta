@@ -5,6 +5,7 @@ import type {
   TdHTMLAttributes,
   ThHTMLAttributes,
 } from 'react'
+import '../styles/stacked-table.css'
 import { cn } from './cn.js'
 
 /**
@@ -24,10 +25,21 @@ import { cn } from './cn.js'
 export interface TableRootProps extends HTMLAttributes<HTMLElement> {
   /** Names the scrollable region. Required: an unnamed region is noise in a landmark list. */
   readonly label: string
+  /**
+   * Below 48rem, lay the rows out as stacked cards (each cell prefixed with
+   * its `label`) instead of a sideways-scrolling table, so no essential column
+   * — the actions above all — is hidden off-screen on a phone.
+   */
+  readonly stacked?: boolean
 }
 
 // biome-ignore-start lint/a11y/noNoninteractiveTabindex: a scroll container only a mouse can scroll fails WCAG 2.1.1 — focusability is the documented fix, and the rule's heuristic cannot see that this box scrolls.
-export function TableRoot({ className, label, ...props }: TableRootProps): JSX.Element {
+export function TableRoot({
+  className,
+  label,
+  stacked = false,
+  ...props
+}: TableRootProps): JSX.Element {
   return (
     // A `<section>` with an accessible name already *is* `role="region"`, so
     // the role is implicit rather than spelled out.
@@ -37,6 +49,7 @@ export function TableRoot({ className, label, ...props }: TableRootProps): JSX.E
       className={cn(
         'min-w-0 max-w-full w-full overflow-x-auto rounded-xl border border-border bg-card shadow-card ' +
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        stacked && 'cg-table-stacked',
         className,
       )}
       {...props}
@@ -112,11 +125,26 @@ export function TableHeader({
   )
 }
 
-export function TableCell({
-  className,
-  ...props
-}: TdHTMLAttributes<HTMLTableCellElement>): JSX.Element {
-  return <td className={cn('px-4 py-3 align-middle leading-5', className)} {...props} />
+export interface TableCellProps extends TdHTMLAttributes<HTMLTableCellElement> {
+  /** The column's name, shown in front of the value when the table is `stacked` on a phone. */
+  readonly label?: string
+  /**
+   * The cell's role when the table is `stacked` on a phone: `heading` is the
+   * card's title (no label), `actions` gets a full-width line of its own, and
+   * `select` is a row checkbox pinned to the card's corner.
+   */
+  readonly stack?: 'heading' | 'actions' | 'select'
+}
+
+export function TableCell({ className, label, stack, ...props }: TableCellProps): JSX.Element {
+  return (
+    <td
+      className={cn('px-4 py-3 align-middle leading-5', className)}
+      data-label={label}
+      data-stack={stack}
+      {...props}
+    />
+  )
 }
 
 export function TableCaption({
@@ -138,7 +166,7 @@ export function TableEmpty({
   ...props
 }: TdHTMLAttributes<HTMLTableCellElement>): JSX.Element {
   return (
-    <tr>
+    <tr className="cg-stacked-empty">
       <td
         colSpan={colSpan}
         className={cn('px-4 py-8 text-center text-sm text-muted-foreground', className)}

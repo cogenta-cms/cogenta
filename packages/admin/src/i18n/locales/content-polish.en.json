@@ -1,0 +1,50 @@
+{
+  "collectionList": {
+    "deleteSelected": "Move to trash ({{count}})",
+    "selectAll": "Select every row on this page",
+    "resetFilters": "Reset filters",
+    "bulkReportSummary": "{{succeeded}} of {{total}} entries processed ({{action}}). See below for what failed.",
+    "bulkActionName": {
+      "publish": "publish",
+      "unpublish": "unpublish",
+      "duplicate": "duplicate",
+      "trash": "move to trash"
+    },
+    "bulkDone": {
+      "publish_one": "{{count}} entry published.",
+      "publish_other": "{{count}} entries published.",
+      "unpublish_one": "{{count}} entry unpublished.",
+      "unpublish_other": "{{count}} entries unpublished.",
+      "duplicate_one": "{{count}} entry duplicated.",
+      "duplicate_other": "{{count}} entries duplicated.",
+      "trash_one": "{{count}} entry moved to the trash.",
+      "trash_other": "{{count}} entries moved to the trash."
+    }
+  },
+  "seo": {
+    "noindexLabel": "Hide this page from search engines",
+    "focusKeywordLocalHint": "Used only by the analysis below. This keyword is not saved with the content: it stays in this browser.",
+    "previewNoindexChecked": "The \"hide from search engines\" box is checked: this page will not be indexed.",
+    "previewNoindex": "This page is not published yet: search engines will only see it once it is published."
+  },
+  "apiErrors": {
+    "ASSIST_RESPONSE_INVALID": {
+      "message": "The assistant answered in a way Cogenta cannot use.",
+      "hint": "Run the request again. If it keeps happening, try another model from the providers screen."
+    },
+    "TAXONOMY_NOT_HIERARCHICAL": {
+      "message": "This taxonomy is flat: its terms cannot be nested under one another.",
+      "hint": "Create the term without a parent."
+    }
+  },
+  "assist": {
+    "schemaTypes": {
+      "FAQPage": "FAQ page",
+      "HowTo": "How-to guide",
+      "Article": "Article",
+      "Recipe": "Recipe",
+      "Event": "Event"
+    },
+    "moderateInlineButton": "Check whether a review is needed"
+  }
+}

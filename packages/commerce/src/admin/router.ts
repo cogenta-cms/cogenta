@@ -1,11 +1,16 @@
 import { CogentaError, type DriverRegistry, isCogentaError } from '@cogenta/core'
-import { applyProductsImport, exportProductsCsv, previewProductsImport } from '../catalog/csv.js'
+import {
+  applyProductsImport,
+  exportProductsCsv,
+  previewProductsImport,
+  productsCsvTemplate,
+} from '../catalog/csv.js'
 import type { CatalogStore } from '../catalog/store.js'
-import { COUPON_KINDS, type CouponKind, type CouponStore } from '../coupon/store.js'
+import type { CouponStore } from '../coupon/store.js'
 import { type Customer, type CustomerStore, encodeCustomerCursor } from '../customer/store.js'
 import type { CreditNoteStore } from '../invoice/credit-note.js'
 import type { InvoiceStore } from '../invoice/store.js'
-import { type OrderExportRow, ordersToCsv } from '../order/csv.js'
+import { type OrderExportRow, ordersToAccountingCsv, ordersToCsv } from '../order/csv.js'
 import type { OrderEmailQueue } from '../order/notify.js'
 import {
   encodeOrderCursor,
@@ -13,15 +18,19 @@ import {
   type PlaceManualOrderLineInput,
 } from '../order/store.js'
 import { ORDER_STATUSES, type OrderStatus, type ShippingAddress } from '../order/types.js'
-import type { PaymentStore } from '../payment/store.js'
+import { MANUAL_PAYMENT_METHODS, type ManualPaymentMethod, type PaymentStore } from '../payment/store.js'
+import { customersOf, productsOfLines, shippingMethodOf } from './order-views.js'
 import type { PaymentConfig, PaymentGateway } from '../payment/types.js'
 import { SHIPPING_KINDS, type ShippingKind, type ShippingStore } from '../shipping/store.js'
 import {
+  type IntervalUnit,
   SUBSCRIPTION_STATUSES,
+  type Subscription,
   type SubscriptionStatus,
   type SubscriptionStore,
 } from '../subscription/store.js'
 import { type TaxStore, taxFor } from '../tax/store.js'
+import { readCouponFields, readCouponKind } from './coupon-input.js'
 import type { CommerceActor, CommercePermissionLayer } from './permissions.js'
 import { COMMERCE_ANONYMOUS, COMMERCE_PERMISSIONS } from './permissions.js'
 
@@ -129,6 +138,14 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   COMMERCE_PRODUCT_INVALID: 400,
   COMMERCE_TRACKING_INVALID: 400,
   COMMERCE_SKU_TAKEN: 409,
+  COMMERCE_PRODUCT_HANDLE_TAKEN: 409,
+  COMMERCE_COUPON_CODE_TAKEN: 409,
+  COMMERCE_REFUND_NO_PAYMENT: 409,
+  COMMERCE_PAYMENT_ALREADY_RECORDED: 409,
+  COMMERCE_INVOICE_NOT_CONFIGURED: 409,
+  COMMERCE_PAYMENT_NOT_CONFIGURED: 409,
+  COMMERCE_REQUEST_INVALID: 400,
+  COMMERCE_CUSTOMER_EMAIL_INVALID: 400,
   COMMERCE_INVOICE_ALREADY_ISSUED: 409,
   COMMERCE_CART_CLOSED: 409,
   COMMERCE_ORDER_TRANSITION_INVALID: 409,
@@ -158,7 +175,11 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
 }
 
 function errorResponse(error: unknown): CommerceResponse {
-  if (isCogentaError(error)) {
+  // A database failure carries the failing driver's own words ("UNIQUE
+  // constraint failed: …table.column"). That is for the log, never for the
+  // person at the screen — a known conflict is reported by its own code before
+  // it ever gets here, and anything else is a fixed sentence.
+  if (isCogentaError(error) && !error.code.startsWith('DB_')) {
     return {
       status: STATUS_BY_CODE[error.code] ?? 500,
       body: {
@@ -181,7 +202,7 @@ function errorResponse(error: unknown): CommerceResponse {
 function readObject(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     throw new CogentaError({
-      code: 'COMMERCE_AMOUNT_INVALID',
+      code: 'COMMERCE_REQUEST_INVALID',
       message: 'This request needs a JSON object as its body.',
       hint: 'Send an object, not an array or a bare value.',
     })
@@ -193,7 +214,7 @@ function readString(body: Record<string, unknown>, key: string): string {
   const value = body[key]
   if (typeof value !== 'string' || value.trim() === '') {
     throw new CogentaError({
-      code: 'COMMERCE_AMOUNT_INVALID',
+      code: 'COMMERCE_REQUEST_INVALID',
       message: `"${key}" is required and must be a non-empty string.`,
       hint: `Add "${key}" to the request body.`,
     })
@@ -240,6 +261,18 @@ function nullableInt(value: unknown): number | null {
     message: 'This field must be a whole number, or null to clear it.',
     hint: 'Send an integer, or null.',
   })
+}
+
+/** A variant's weight is a whole, non-negative number of grams — the shipping-by-weight arithmetic is integer. */
+function wholeGrams(value: number): number {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new CogentaError({
+      code: 'COMMERCE_QUANTITY_INVALID',
+      message: 'The weight must be a whole, non-negative number of grams.',
+      hint: 'Send grams as an integer, such as 250.',
+    })
+  }
+  return value
 }
 
 function nullableContentRef(value: unknown): { collection: string; entryId: string } | null {
@@ -350,6 +383,30 @@ function readShippingAddress(body: Record<string, unknown>): ShippingAddress | n
   }
 }
 
+/**
+ * An optional integer that must be an integer when present — unlike
+ * `readOptionalInt`, which silently ignores `12.5`. A float where whole units
+ * were expected is a caller bug worth refusing out loud.
+ */
+function strictOptionalInt(body: Record<string, unknown>, key: string): number | undefined {
+  if (!(key in body) || body[key] === undefined || body[key] === null) return undefined
+  const value = body[key]
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    throw new CogentaError({
+      code: 'COMMERCE_REQUEST_INVALID',
+      message: `"${key}" must be a whole number.`,
+      hint: 'Money is sent in minor units — 19.99 euros is 1999.',
+      details: { field: key },
+    })
+  }
+  return value
+}
+
+/** `2026-11-01` becomes the ISO instant at the start of that day (UTC); anything else is passed through for the store to judge. */
+function dateOnlyToIso(value: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/u.test(value) ? `${value}T00:00:00.000Z` : value
+}
+
 export function createCommerceAdminRouter(
   options: CommerceAdminRouterOptions,
 ): CommerceAdminRouter {
@@ -387,6 +444,64 @@ export function createCommerceAdminRouter(
       currency: spendable[0]?.currency ?? orders[0]?.currency ?? null,
       subscriptions,
     }
+  }
+
+  /**
+   * The people and products behind a set of subscriptions, by id — so a list
+   * can say "Marie Durand · T-shirt bleu (TSH-BL)" instead of two UUIDs.
+   */
+  async function describeSubscriptions(list: readonly Subscription[]): Promise<{
+    readonly customers: Record<string, { id: string; email: string; name: string | null }>
+    readonly variants: Record<
+      string,
+      {
+        id: string
+        sku: string
+        title: string
+        productId: string
+        productTitle: string
+        priceMinor: number
+        currency: string
+        imageMediaId: string | null
+      }
+    >
+  }> {
+    const customers: Record<string, { id: string; email: string; name: string | null }> = {}
+    const variants: Record<
+      string,
+      {
+        id: string
+        sku: string
+        title: string
+        productId: string
+        productTitle: string
+        priceMinor: number
+        currency: string
+        imageMediaId: string | null
+      }
+    > = {}
+    for (const customerId of new Set(list.map((subscription) => subscription.customerId))) {
+      const customer = await options.customers.read(customerId)
+      if (customer !== null) {
+        customers[customerId] = { id: customer.id, email: customer.email, name: customer.name }
+      }
+    }
+    for (const variantId of new Set(list.map((subscription) => subscription.variantId))) {
+      const variant = await options.catalog.readVariant(variantId)
+      if (variant === null) continue
+      const product = await options.catalog.readProduct(variant.productId)
+      variants[variantId] = {
+        id: variant.id,
+        sku: variant.sku,
+        title: variant.title,
+        productId: variant.productId,
+        productTitle: product?.title ?? variant.title,
+        priceMinor: variant.priceMinor,
+        currency: variant.currency,
+        imageMediaId: variant.imageMediaId ?? product?.imageMediaIds[0] ?? null,
+      }
+    }
+    return { customers, variants }
   }
 
   return {
@@ -486,6 +601,13 @@ export function createCommerceAdminRouter(
         if (segments[0] === 'products' && segments[1] === 'export' && segments.length === 2) {
           if (method === 'GET') {
             permissions.assert('commerce.read', actor)
+            // A file to start from: the header and one worked example.
+            if (request.query?.template === '1') {
+              return {
+                status: 200,
+                body: { csv: productsCsvTemplate(), filename: 'products-template.csv' },
+              }
+            }
             const products = await options.catalog.listProducts({ limit: MAX_CSV_ROWS })
             const variantsByProduct = new Map(
               await Promise.all(
@@ -612,6 +734,24 @@ export function createCommerceAdminRouter(
           }
         }
 
+        // "Pick a product" by typing a SKU or a name (the manual-order and
+        // subscription screens) — nobody should ever have to paste an internal id.
+        if (segments[0] === 'variants' && segments[1] === 'search' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            const q = request.query?.q ?? ''
+            if (q.trim() === '') return { status: 200, body: { hits: [] } }
+            return {
+              status: 200,
+              body: {
+                hits: await options.catalog.searchVariants(q, {
+                  limit: parsePositiveInt(request.query?.limit) ?? 10,
+                }),
+              },
+            }
+          }
+        }
+
         if (
           segments[0] === 'variants' &&
           segments[2] === 'stock-movements' &&
@@ -642,7 +782,9 @@ export function createCommerceAdminRouter(
                 ...(typeof body.allowBackorder === 'boolean'
                   ? { allowBackorder: body.allowBackorder }
                   : {}),
-                ...(typeof body.weightGrams === 'number' ? { weightGrams: body.weightGrams } : {}),
+                ...(typeof body.weightGrams === 'number'
+                  ? { weightGrams: wholeGrams(body.weightGrams) }
+                  : {}),
                 ...(typeof body.taxCategory === 'string' ? { taxCategory: body.taxCategory } : {}),
                 ...optionalField(body, 'lowStockThreshold', nullableInt),
                 ...optionalField(body, 'compareAtPriceMinor', nullableInt),
@@ -671,7 +813,9 @@ export function createCommerceAdminRouter(
                 ...(typeof body.allowBackorder === 'boolean'
                   ? { allowBackorder: body.allowBackorder }
                   : {}),
-                ...(typeof body.weightGrams === 'number' ? { weightGrams: body.weightGrams } : {}),
+                ...(typeof body.weightGrams === 'number'
+                  ? { weightGrams: wholeGrams(body.weightGrams) }
+                  : {}),
                 ...(typeof body.taxCategory === 'string' ? { taxCategory: body.taxCategory } : {}),
                 ...(typeof body.position === 'number' ? { position: body.position } : {}),
                 ...optionalField(body, 'lowStockThreshold', nullableInt),
@@ -701,7 +845,9 @@ export function createCommerceAdminRouter(
             const body = readObject(request.body)
             return {
               status: 200,
-              body: await options.catalog.setStock(segments[1] ?? '', readInt(body, 'onHand')),
+              body: await options.catalog.setStock(segments[1] ?? '', readInt(body, 'onHand'), {
+                actorId: actor.id,
+              }),
             }
           }
         }
@@ -730,12 +876,23 @@ export function createCommerceAdminRouter(
               ...(query.to === undefined ? {} : { placedTo: query.to }),
               limit: 5000,
             })
+            const customerNames = await customersOf(options, orders)
             const rows: OrderExportRow[] = []
             for (const order of orders) {
               const invoice = await options.invoices?.readByOrder(order.id)
-              rows.push({ order, invoiceNumber: invoice?.number ?? null })
+              rows.push({
+                order,
+                invoiceNumber: invoice?.number ?? null,
+                customerName:
+                  order.customerId === null ? null : (customerNames[order.customerId]?.name ?? null),
+              })
             }
-            return { status: 200, body: ordersToCsv(rows) }
+            // `?format=accounting`: the French spreadsheet layout. Without it
+            // the stable machine format (minor units, English) is unchanged.
+            return {
+              status: 200,
+              body: query.format === 'accounting' ? ordersToAccountingCsv(rows) : ordersToCsv(rows),
+            }
           }
         }
 
@@ -762,6 +919,9 @@ export function createCommerceAdminRouter(
             status: 200,
             body: {
               orders,
+              // Who each order belongs to, by customer id — so a list shows a
+              // name rather than only an e-mail.
+              customers: await customersOf(options, orders),
               page: {
                 limit: pageLimit,
                 hasMore,
@@ -792,6 +952,13 @@ export function createCommerceAdminRouter(
           })
           const customerName = readOptionalString(body, 'customerName')
           const shippingAddress = readShippingAddress(body)
+          const country = readOptionalString(body, 'shippingCountry')
+          const region = readOptionalString(body, 'shippingRegion')
+          const shippingMethodId = readOptionalString(body, 'shippingMethodId')
+          const couponCode = readOptionalString(body, 'couponCode')
+          // Read before anything is placed, so a bad `paid` block refuses the
+          // whole request rather than leaving an order half-recorded.
+          const paid = readManualPayment(body.paid)
           const outcome = await options.orders.placeManual({
             email: readString(body, 'email'),
             currency: readString(body, 'currency'),
@@ -799,12 +966,26 @@ export function createCommerceAdminRouter(
             actorId: actor.id,
             ...(customerName === undefined ? {} : { customerName }),
             ...(shippingAddress === undefined ? {} : { shippingAddress }),
+            ...(country === undefined ? {} : { shippingCountry: country }),
+            ...(region === undefined ? {} : { shippingRegion: region }),
+            ...(shippingMethodId === undefined ? {} : { shippingMethodId }),
+            ...(couponCode === undefined ? {} : { couponCode }),
           })
           if (outcome.kind === 'placed') {
+            if (paid !== null) {
+              permissions.assert('commerce.payment.settle', actor)
+              await options.payments.recordManual(outcome.order.id, {
+                method: paid.method,
+                ...(paid.note === undefined ? {} : { note: paid.note }),
+                actorId: actor.id,
+              })
+            }
             if (options.orderEmails !== undefined) {
               await options.orderEmails.enqueue(outcome.order.id, 'confirmation')
             }
-            return { status: 201, body: outcome }
+            // Re-read: recording the payment moved the order to `paid`.
+            const placed = (await options.orders.read(outcome.order.id)) ?? outcome.order
+            return { status: 201, body: { kind: 'placed', order: placed } }
           }
           return { status: 200, body: outcome }
         }
@@ -813,12 +994,23 @@ export function createCommerceAdminRouter(
           permissions.assert('commerce.read', actor)
           const order = await options.orders.read(segments[1] ?? '')
           if (order === null) return notFound('order')
+          const [customer] = Object.values(await customersOf(options, [order]))
           return {
             status: 200,
             body: {
               order,
               history: await options.orders.history(order.id),
               payments: await options.payments.listForOrder(order.id),
+              customer: customer ?? null,
+              products: await productsOfLines(options, order),
+              shippingMethod: await shippingMethodOf(options, order),
+              // Carried here so opening an order does not need a second call
+              // that answers 404 for every order without an invoice.
+              invoice: (await options.invoices?.readByOrder(order.id)) ?? null,
+              invoicing: {
+                available: options.invoices !== undefined,
+                configured: (await options.invoices?.configured()) ?? false,
+              },
             },
           }
         }
@@ -856,9 +1048,50 @@ export function createCommerceAdminRouter(
                 hint: `Use one of: ${ORDER_STATUSES.join(', ')}.`,
               })
             }
-            const updated = await options.orders.transition(segments[1] ?? '', to as OrderStatus, {
+            const orderId = segments[1] ?? ''
+            const note = typeof body.note === 'string' ? body.note : undefined
+
+            // "Paid" is a payment, not a label: marking an order paid records
+            // the money (as a manual payment) so the order, its payments and
+            // its invoice can never disagree about whether it was paid.
+            if (to === 'paid') {
+              const current = await options.orders.read(orderId)
+              if (current?.status === 'pending') {
+                permissions.assert('commerce.payment.settle', actor)
+                await options.payments.recordManual(orderId, {
+                  method: 'other',
+                  ...(note === undefined ? {} : { note }),
+                  actorId: actor.id,
+                })
+                const paidOrder = await options.orders.read(orderId)
+                return { status: 200, body: paidOrder }
+              }
+            }
+
+            // "Refunded" is money going back, so it is only reachable through
+            // a collected payment: the remaining amount is refunded in full.
+            // (A partial refund goes through `POST /payments/{id}/refund`.)
+            if (to === 'refunded') {
+              permissions.assert('commerce.order.refund', actor)
+              const current = await options.orders.read(orderId)
+              if (current === null) return notFound('order')
+              const refundable = await refundablePayment(options.payments, orderId)
+              if (refundable === null) {
+                throw new CogentaError({
+                  code: 'COMMERCE_REFUND_NO_PAYMENT',
+                  message: 'This order has no collected payment, so there is nothing to refund.',
+                  hint: 'Record the payment first, or cancel the order instead.',
+                })
+              }
+              await issueRefund(options, actor, refundable.payment.id, refundable.remainingMinor, {
+                reason: note ?? 'Refund of the whole order',
+              })
+              return { status: 200, body: await options.orders.read(orderId) }
+            }
+
+            const updated = await options.orders.transition(orderId, to as OrderStatus, {
               actorId: actor.id,
-              ...(typeof body.note === 'string' ? { note: body.note } : {}),
+              ...(note === undefined ? {} : { note }),
             })
             return { status: 200, body: updated }
           }
@@ -912,6 +1145,26 @@ export function createCommerceAdminRouter(
         }
 
         // ---- payments -----------------------------------------------------
+        // "The money arrived" by a means this shop cannot see (bank transfer,
+        // cash, cheque, card terminal) — records the payment and moves the
+        // order to `paid`. Money in: the same permission as `settle`.
+        if (segments[0] === 'orders' && segments[2] === 'payments' && segments.length === 3) {
+          if (method === 'POST') {
+            permissions.assert('commerce.payment.settle', actor)
+            const body = request.body === undefined ? {} : readObject(request.body)
+            const paid = readManualPayment(body) ?? { method: 'other' as const }
+            const payment = await options.payments.recordManual(segments[1] ?? '', {
+              method: paid.method,
+              ...('note' in paid && paid.note !== undefined ? { note: paid.note } : {}),
+              actorId: actor.id,
+            })
+            return {
+              status: 201,
+              body: { payment, order: await options.orders.read(payment.orderId) },
+            }
+          }
+        }
+
         if (segments[0] === 'payments' && segments[2] === 'settle' && segments.length === 3) {
           if (method === 'POST') {
             // Money in. Held apart from moving an order along, because "mark
@@ -936,25 +1189,16 @@ export function createCommerceAdminRouter(
             // "Motif obligatoire" (fiche 52 task 6) — a real reason, not an
             // optional courtesy, for money leaving the business.
             const reason = readString(body, 'reason')
-            const refund = await options.payments.refund(
-              segments[1] ?? '',
-              readInt(body, 'amountMinor'),
-              { actorId: actor.id, reason },
-            )
-            // A credit note per refund, automatically — the same gate as
-            // invoicing (billing configured), since a credit note without a
-            // seller address is not a usable accounting document either.
-            const creditNote =
-              options.creditNotes === undefined
-                ? null
-                : await options.creditNotes.issue({
-                    orderId: refund.orderId,
-                    refundId: refund.id,
-                    amountMinor: refund.amountMinor,
-                    reason,
-                    actorId: actor.id,
-                  })
-            return { status: 200, body: { refund, creditNote } }
+            return {
+              status: 200,
+              body: await issueRefund(
+                options,
+                actor,
+                segments[1] ?? '',
+                readInt(body, 'amountMinor'),
+                { reason },
+              ),
+            }
           }
         }
 
@@ -985,10 +1229,13 @@ export function createCommerceAdminRouter(
           const customers = result.slice(0, pageLimit)
           const last = customers.at(-1)
           const hasMore = result.length > pageLimit
+          const stats = await options.customers.stats(customers.map((customer) => customer.id))
           return {
             status: 200,
             body: {
               customers,
+              // Order count, spend and last order per customer, for the list.
+              stats: Object.fromEntries(stats),
               page: {
                 limit: pageLimit,
                 hasMore,
@@ -1069,7 +1316,14 @@ export function createCommerceAdminRouter(
           if (method === 'GET') {
             permissions.assert('commerce.read', actor)
             if (options.invoices === undefined) return notFound('invoice')
-            return { status: 200, body: await options.invoices.preview(segments[1] ?? '') }
+            // The order's own reference works as well as its id: nobody
+            // should have to dig an internal id out of the database.
+            const reference = segments[1] ?? ''
+            const target =
+              (await options.orders.read(reference)) ??
+              (await options.orders.readByReference(reference))
+            if (target === null) return notFound('order')
+            return { status: 200, body: await options.invoices.preview(target.id) }
           }
         }
 
@@ -1111,39 +1365,13 @@ export function createCommerceAdminRouter(
           if (method === 'POST') {
             permissions.assert('commerce.catalog.write', actor)
             const body = readObject(request.body)
-            const kind = readString(body, 'kind')
-            if (!(COUPON_KINDS as readonly string[]).includes(kind)) {
-              throw new CogentaError({
-                code: 'COMMERCE_COUPON_INVALID',
-                message: `"${kind}" is not a coupon kind.`,
-                hint: `Use one of: ${COUPON_KINDS.join(', ')}.`,
-              })
-            }
+            const fields = readCouponFields(body)
             return {
               status: 201,
               body: await options.coupons.create({
+                ...fields,
                 code: readString(body, 'code'),
-                kind: kind as CouponKind,
-                ...(typeof body.value === 'number' ? { value: body.value } : {}),
-                ...(typeof body.currency === 'string' ? { currency: body.currency } : {}),
-                ...(typeof body.minSubtotalMinor === 'number'
-                  ? { minSubtotalMinor: body.minSubtotalMinor }
-                  : {}),
-                ...(typeof body.startsAt === 'string' ? { startsAt: body.startsAt } : {}),
-                ...(typeof body.endsAt === 'string' ? { endsAt: body.endsAt } : {}),
-                ...(typeof body.maxRedemptions === 'number'
-                  ? { maxRedemptions: body.maxRedemptions }
-                  : {}),
-                ...(typeof body.maxRedemptionsPerCustomer === 'number'
-                  ? { maxRedemptionsPerCustomer: body.maxRedemptionsPerCustomer }
-                  : {}),
-                ...(Array.isArray(body.restrictedProductIds)
-                  ? {
-                      restrictedProductIds: body.restrictedProductIds.filter(
-                        (id: unknown): id is string => typeof id === 'string',
-                      ),
-                    }
-                  : {}),
+                kind: readCouponKind(body.kind),
               }),
             }
           }
@@ -1166,146 +1394,231 @@ export function createCommerceAdminRouter(
           }
         }
 
-        // ---- subscriptions --------------------------------------------------
-        if (segments[0] === 'subscriptions' && segments.length === 1) {
-          if (options.subscriptions === undefined) {
+        if (segments[0] === 'coupons' && segments[2] === 'activate' && segments.length === 3) {
+          if (method === 'POST') {
+            permissions.assert('commerce.catalog.write', actor)
+            await options.coupons.activate(segments[1] ?? '')
+            return { status: 204, body: null }
+          }
+        }
+
+        // Edit and delete one coupon. Checked after `metrics` above, which
+        // shares the two-segment shape.
+        if (segments[0] === 'coupons' && segments.length === 2) {
+          const code = segments[1] ?? ''
+          if (method === 'PATCH') {
+            permissions.assert('commerce.catalog.write', actor)
             return {
-              status: 404,
-              body: {
-                error: {
-                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
-                  message: 'Subscriptions are not configured on this site.',
-                },
-              },
+              status: 200,
+              body: await options.coupons.update(code, readCouponFields(readObject(request.body))),
             }
           }
+          if (method === 'DELETE') {
+            permissions.assert('commerce.catalog.write', actor)
+            await options.coupons.remove(code)
+            return { status: 204, body: null }
+          }
+        }
+
+        // ---- subscriptions --------------------------------------------------
+        // One guard for the whole family: a site that never wired the store
+        // answers 404 on every subscription route, never a half-working one.
+        const subscriptionsRoute =
+          segments[0] === 'subscriptions' ||
+          (segments[0] === 'orders' && segments[2] === 'subscriptions')
+        const subscriptionStore = options.subscriptions
+        if (subscriptionsRoute && subscriptionStore === undefined) {
+          return {
+            status: 404,
+            body: {
+              error: {
+                code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
+                message: 'Subscriptions are not configured on this site.',
+              },
+            },
+          }
+        }
+
+        if (
+          subscriptionStore !== undefined &&
+          segments[0] === 'orders' &&
+          segments[2] === 'subscriptions' &&
+          segments.length === 3
+        ) {
+          if (method === 'POST') {
+            // Opens the subscriptions a paid order's recurring lines call for
+            // (idempotent per order and variant).
+            permissions.assert('commerce.order.write', actor)
+            const subscriptions = await subscriptionStore.createFromOrder(segments[1] ?? '')
+            return { status: 200, body: { subscriptions } }
+          }
+        }
+
+        if (
+          subscriptionStore !== undefined &&
+          segments[0] === 'subscriptions' &&
+          segments.length === 1
+        ) {
           if (method === 'GET') {
             permissions.assert('commerce.read', actor)
             const status = request.query?.status
+            const subscriptions = await subscriptionStore.list(
+              (SUBSCRIPTION_STATUSES as readonly string[]).includes(status ?? '')
+                ? { status: status as SubscriptionStatus }
+                : {},
+            )
             return {
               status: 200,
-              body: {
-                subscriptions: await options.subscriptions.list(
-                  (SUBSCRIPTION_STATUSES as readonly string[]).includes(status ?? '')
-                    ? { status: status as SubscriptionStatus }
-                    : {},
-                ),
-              },
+              body: { subscriptions, ...(await describeSubscriptions(subscriptions)) },
+            }
+          }
+          if (method === 'POST') {
+            permissions.assert('commerce.order.write', actor)
+            const body = readObject(request.body)
+            const customerBody = body.customer === undefined ? undefined : readObject(body.customer)
+            const customerId = readOptionalString(body, 'customerId')
+            const startAt = readOptionalString(body, 'startAt')
+            const priceMinor = strictOptionalInt(body, 'priceMinor')
+            const quantity = strictOptionalInt(body, 'quantity')
+            const intervalCount = strictOptionalInt(body, 'intervalCount')
+            const country = readOptionalString(body, 'shippingCountry')
+            const paymentDriver = readOptionalString(body, 'paymentDriver')
+            return {
+              status: 201,
+              body: await subscriptionStore.create({
+                ...(customerId === undefined ? {} : { customerId }),
+                ...(customerBody === undefined
+                  ? {}
+                  : {
+                      customer: {
+                        email: readString(customerBody, 'email'),
+                        name: readOptionalString(customerBody, 'name') ?? null,
+                      },
+                    }),
+                variantId: readString(body, 'variantId'),
+                intervalUnit: readString(body, 'intervalUnit') as IntervalUnit,
+                ...(intervalCount === undefined ? {} : { intervalCount }),
+                ...(quantity === undefined ? {} : { quantity }),
+                ...(priceMinor === undefined ? {} : { priceMinor }),
+                ...(startAt === undefined ? {} : { startAt: dateOnlyToIso(startAt) }),
+                ...(country === undefined ? {} : { shippingCountry: country }),
+                ...(paymentDriver === undefined ? {} : { paymentDriver }),
+              }),
             }
           }
         }
 
         // Read before the generic /subscriptions/{id} route below — "metrics"
         // is not a subscription id, but the two paths share a shape.
-        if (segments[0] === 'subscriptions' && segments[1] === 'metrics' && segments.length === 2) {
-          if (options.subscriptions === undefined) {
-            return {
-              status: 404,
-              body: {
-                error: {
-                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
-                  message: 'Subscriptions are not configured on this site.',
-                },
-              },
-            }
-          }
+        if (
+          subscriptionStore !== undefined &&
+          segments[0] === 'subscriptions' &&
+          segments[1] === 'metrics' &&
+          segments.length === 2
+        ) {
           if (method === 'GET') {
             permissions.assert('commerce.read', actor)
-            return { status: 200, body: await options.subscriptions.metrics() }
+            return { status: 200, body: await subscriptionStore.metrics() }
           }
         }
 
         // A subscription's own billing history (`cycles`) and open dunning
-        // cycle, if any — fiche 53 tasks 1 and 3: pause/resume/cancel were
-        // already routed below, but nothing surfaced either of these.
-        if (segments[0] === 'subscriptions' && segments.length === 2) {
-          if (options.subscriptions === undefined) {
-            return {
-              status: 404,
-              body: {
-                error: {
-                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
-                  message: 'Subscriptions are not configured on this site.',
-                },
-              },
-            }
-          }
+        // cycle, if any, with the names of the people and products involved —
+        // the screen never has to show an internal id.
+        if (
+          subscriptionStore !== undefined &&
+          segments[0] === 'subscriptions' &&
+          segments.length === 2
+        ) {
           if (method === 'GET') {
             permissions.assert('commerce.read', actor)
             const id = segments[1] ?? ''
-            const subscription = await options.subscriptions.read(id)
+            const subscription = await subscriptionStore.read(id)
             if (subscription === null) return notFound('subscription')
+            const cycles = await subscriptionStore.cycles(id)
+            const orderRefs: Record<string, { id: string; reference: string }> = {}
+            const orderIds = new Set(
+              [subscription.originOrderId, ...cycles.map((cycle) => cycle.orderId)].filter(
+                (value): value is string => value !== null,
+              ),
+            )
+            for (const orderId of orderIds) {
+              const order = await options.orders.read(orderId)
+              if (order !== null) orderRefs[orderId] = { id: order.id, reference: order.reference }
+            }
             return {
               status: 200,
               body: {
                 subscription,
-                cycles: await options.subscriptions.cycles(id),
-                dunning: await options.subscriptions.dunning(id),
+                cycles,
+                dunning: await subscriptionStore.dunning(id),
+                orders: orderRefs,
+                ...(await describeSubscriptions([subscription])),
               },
             }
           }
         }
 
         if (
+          subscriptionStore !== undefined &&
           segments[0] === 'subscriptions' &&
           segments.length === 3 &&
           (segments[2] === 'pause' || segments[2] === 'resume' || segments[2] === 'cancel')
         ) {
-          if (options.subscriptions === undefined) {
-            return {
-              status: 404,
-              body: {
-                error: {
-                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
-                  message: 'Subscriptions are not configured on this site.',
-                },
-              },
-            }
-          }
           if (method === 'POST') {
             permissions.assert('commerce.order.write', actor)
             const id = segments[1] ?? ''
-            const subscriptions = options.subscriptions
             const action = segments[2]
             const updated =
               action === 'pause'
-                ? await subscriptions.pause(id)
+                ? await subscriptionStore.pause(id)
                 : action === 'resume'
-                  ? await subscriptions.resume(id)
-                  : await subscriptions.cancel(id)
+                  ? await subscriptionStore.resume(id)
+                  : await subscriptionStore.cancel(id)
             return { status: 200, body: updated }
           }
         }
 
         if (
+          subscriptionStore !== undefined &&
+          segments[0] === 'subscriptions' &&
+          segments[2] === 'next-billing' &&
+          segments.length === 3
+        ) {
+          if (method === 'POST') {
+            permissions.assert('commerce.order.write', actor)
+            const body = readObject(request.body)
+            return {
+              status: 200,
+              body: await subscriptionStore.setNextBilling(
+                segments[1] ?? '',
+                dateOnlyToIso(readString(body, 'nextBillingAt')),
+              ),
+            }
+          }
+        }
+
+        if (
+          subscriptionStore !== undefined &&
           segments[0] === 'subscriptions' &&
           segments[2] === 'change-plan' &&
           segments.length === 3
         ) {
-          if (options.subscriptions === undefined) {
-            return {
-              status: 404,
-              body: {
-                error: {
-                  code: 'COMMERCE_SUBSCRIPTION_NOT_FOUND',
-                  message: 'Subscriptions are not configured on this site.',
-                },
-              },
-            }
-          }
           if (method === 'POST') {
             permissions.assert('commerce.order.write', actor)
             const body = readObject(request.body)
-            const quantity = readOptionalInt(body, 'quantity')
+            const quantity = strictOptionalInt(body, 'quantity')
             const prorate = readOptionalBool(body, 'prorate')
+            const dryRun = readOptionalBool(body, 'dryRun')
             return {
               status: 200,
-              body: await options.subscriptions.changePlan(
+              body: await subscriptionStore.changePlan(
                 segments[1] ?? '',
                 readString(body, 'variantId'),
                 {
                   ...(quantity === undefined ? {} : { quantity }),
                   ...(prorate === undefined ? {} : { prorate }),
+                  ...(dryRun === undefined ? {} : { dryRun }),
                 },
               ),
             }
@@ -1338,6 +1651,15 @@ export function createCommerceAdminRouter(
                 ...(active === undefined ? {} : { active }),
               }),
             }
+          }
+        }
+
+        // The categories a rule or a variant can name — what a picker offers
+        // instead of free text (checked before the generic rule routes).
+        if (segments[0] === 'tax' && segments[1] === 'categories' && segments.length === 2) {
+          if (method === 'GET') {
+            permissions.assert('commerce.read', actor)
+            return { status: 200, body: { categories: await options.tax.listCategories() } }
           }
         }
 
@@ -1396,7 +1718,7 @@ export function createCommerceAdminRouter(
           if (method === 'POST') {
             permissions.assert('commerce.read', actor)
             const body = readObject(request.body)
-            const country = readOptionalString(body, 'country')
+            const country = readOptionalString(body, 'country')?.trim().toUpperCase()
             const zone =
               country === undefined
                 ? null
@@ -1522,7 +1844,7 @@ export function createCommerceAdminRouter(
           if (method === 'POST') {
             permissions.assert('commerce.read', actor)
             const body = readObject(request.body)
-            const country = readOptionalString(body, 'country')
+            const country = readOptionalString(body, 'country')?.trim().toUpperCase()
             const zone =
               country === undefined
                 ? null
@@ -1591,7 +1913,7 @@ export function createCommerceAdminRouter(
             permissions.assert('commerce.payment.settle', actor)
             if (options.payment === undefined) {
               throw new CogentaError({
-                code: 'COMMERCE_PAYMENT_UNSUPPORTED',
+                code: 'COMMERCE_PAYMENT_NOT_CONFIGURED',
                 message: 'Payment is not configured on this site.',
                 hint: 'Pass a `payment` option to createCommerceAdminRouter.',
               })
@@ -1608,12 +1930,21 @@ export function createCommerceAdminRouter(
                   .join(', ')}.`,
               })
             }
+            // Stable codes the admin translates (`message` stays English, for
+            // API clients and logs): `ok`, `not_configured` (no credentials to
+            // try), `unreachable` (credentials present, provider refused or
+            // down) and `error`.
             const reachable = await driver.available(options.payment.config)
             if (!reachable) {
+              // A driver that needs no credentials is always reachable, so this
+              // is a gateway with missing or refused credentials. Whether the
+              // credentials are absent or wrong is never revealed here.
               return {
                 status: 200,
                 body: {
                   ok: false,
+                  driver: name,
+                  code: 'not_configured',
                   message: `${name} is not reachable with the credentials configured on this server.`,
                 },
               }
@@ -1626,13 +1957,20 @@ export function createCommerceAdminRouter(
               const health = await driver.health()
               return {
                 status: 200,
-                body: { ok: health.status === 'ok', message: health.message ?? null },
+                body: {
+                  ok: health.status === 'ok',
+                  driver: name,
+                  code: health.status === 'ok' ? 'ok' : 'unreachable',
+                  message: health.message ?? null,
+                },
               }
             } catch (error) {
               return {
                 status: 200,
                 body: {
                   ok: false,
+                  driver: name,
+                  code: 'error',
                   message: error instanceof Error ? error.message : String(error),
                 },
               }
@@ -1646,6 +1984,77 @@ export function createCommerceAdminRouter(
       }
     },
   }
+}
+
+/** A payment's collected amount less what was already given back — `null` when nothing was ever collected. */
+async function refundablePayment(
+  payments: PaymentStore,
+  orderId: string,
+): Promise<{
+  readonly payment: Awaited<ReturnType<PaymentStore['listForOrder']>>[number]
+  readonly remainingMinor: number
+} | null> {
+  const collected = (await payments.listForOrder(orderId)).find(
+    (payment) => payment.status === 'paid',
+  )
+  if (collected === undefined) return null
+  const refunded = (await payments.listRefunds(collected.id))
+    .filter((refund) => refund.status !== 'failed')
+    .reduce((sum, refund) => sum + refund.amountMinor, 0)
+  const remainingMinor = collected.amountMinor - refunded
+  return remainingMinor > 0 ? { payment: collected, remainingMinor } : null
+}
+
+/**
+ * Gives money back — and, when invoicing is configured, writes the credit
+ * note for it. The credit note is skipped (never half-done) while the seller
+ * details are missing: a credit note without a seller address is not a usable
+ * accounting document, and failing it *after* the money moved would be worse
+ * than not issuing it.
+ */
+async function issueRefund(
+  options: CommerceAdminRouterOptions,
+  actor: CommerceActor,
+  paymentId: string,
+  amountMinor: number,
+  details: { readonly reason: string },
+): Promise<{
+  readonly refund: Awaited<ReturnType<PaymentStore['refund']>>
+  readonly creditNote: Awaited<ReturnType<NonNullable<CommerceAdminRouterOptions['creditNotes']>['issue']>> | null
+}> {
+  const refund = await options.payments.refund(paymentId, amountMinor, {
+    actorId: actor.id,
+    reason: details.reason,
+  })
+  const creditNote =
+    options.creditNotes === undefined || !(await options.creditNotes.configured())
+      ? null
+      : await options.creditNotes.issue({
+          orderId: refund.orderId,
+          refundId: refund.id,
+          amountMinor: refund.amountMinor,
+          reason: details.reason,
+          actorId: actor.id,
+        })
+  return { refund, creditNote }
+}
+
+/** `body.paid` / a payment body: `{ method, note? }`, or `null` when absent. */
+function readManualPayment(
+  value: unknown,
+): { readonly method: ManualPaymentMethod; readonly note?: string } | null {
+  if (value === undefined || value === null) return null
+  const body = readObject(value)
+  const method = readString(body, 'method')
+  if (!(MANUAL_PAYMENT_METHODS as readonly string[]).includes(method)) {
+    throw new CogentaError({
+      code: 'COMMERCE_REQUEST_INVALID',
+      message: `"${method}" is not a payment method.`,
+      hint: `Use one of: ${MANUAL_PAYMENT_METHODS.join(', ')}.`,
+    })
+  }
+  const note = readOptionalString(body, 'note')
+  return { method: method as ManualPaymentMethod, ...(note === undefined ? {} : { note }) }
 }
 
 const NOT_FOUND_CODES: Readonly<Record<string, string>> = {

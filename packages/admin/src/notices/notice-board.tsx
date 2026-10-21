@@ -23,6 +23,22 @@ const POLL_INTERVAL_MS = 60_000
 const VISIBLE_WITHOUT_EXPANDING = 3
 
 /**
+ * Where on the profile screen each notice's action actually leads: the
+ * server only knows the screen (`/profile`), and a link that opens it at the
+ * top leaves the person hunting for the section the notice was about.
+ */
+const ACTION_ANCHORS: Readonly<Record<string, string>> = {
+  'security.mfa-recommended': 'security',
+  'security.recovery-code-used': 'recovery-codes',
+}
+
+/** A notice action's target, with the profile section it concerns appended. */
+export function noticeActionHref(code: string, href: string): string {
+  const anchor = ACTION_ANCHORS[code]
+  return anchor === undefined || href.includes('#') ? href : `${href}#${anchor}`
+}
+
+/**
  * The admin's notice board — L11 task 2, ADR-0021.
  *
  * It sits above the routed page in the shell, so a recommendation is visible
@@ -117,7 +133,7 @@ export function NoticeBoard(): JSX.Element | null {
             : {
                 actions: (
                   <Link
-                    to={notice.action.href}
+                    to={noticeActionHref(notice.code, notice.action.href)}
                     className={buttonVariants({ variant: 'secondary', size: 'sm' })}
                   >
                     {t(`notices.${notice.action.code}`, { defaultValue: notice.action.code })}

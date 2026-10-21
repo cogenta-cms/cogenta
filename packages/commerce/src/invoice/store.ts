@@ -66,7 +66,37 @@ export interface InvoiceDocument {
   readonly taxMinor: number
   readonly totalMinor: number
   readonly footer: string | null
+  /**
+   * The language the labels were printed in (`fr`, `en`). Part of the
+   * snapshot so a PDF regenerated years later reads exactly as it did the day
+   * it was issued; absent on invoices issued before the setting existed, which
+   * were always English.
+   */
+  readonly language?: string
 }
+
+/**
+ * How the invoice reads, as the shop owner set it in the store settings: the
+ * series prefix (`AC` + `2026` → series `AC2026`), the payment terms printed in
+ * the footer, and the language of the labels.
+ */
+export interface InvoiceTemplate {
+  readonly seriesPrefix?: string
+  readonly paymentTerms?: string
+  readonly language?: string
+}
+
+/**
+ * Seller details, or a function that resolves them each time one is needed —
+ * so a change made in the admin applies to the very next invoice without a
+ * restart. `null` means "not filled in yet", which refuses the invoice with
+ * `COMMERCE_INVOICE_NOT_CONFIGURED` rather than printing a made-up address.
+ */
+export type SellerSource =
+  | SellerDetails
+  | (() => SellerDetails | null | Promise<SellerDetails | null>)
+
+export type TemplateSource = InvoiceTemplate | (() => InvoiceTemplate | Promise<InvoiceTemplate>)
 
 export interface SellerDetails {
   /** Address block, one line per string. Shown verbatim on the invoice. */
@@ -85,7 +115,26 @@ export interface IssueInvoiceInput {
 
 export interface InvoiceStoreDependencies {
   readonly orders: OrderStore
-  readonly seller: SellerDetails
+  readonly seller: SellerSource
+  readonly template?: TemplateSource
+}
+
+/** Resolves a seller source, or refuses with a message that says where to fill it in. */
+export async function resolveSeller(source: SellerSource): Promise<SellerDetails> {
+  const seller = typeof source === 'function' ? await source() : source
+  if (seller === null || seller.address.filter((line) => line.trim() !== '').length === 0) {
+    throw new CogentaError({
+      code: 'COMMERCE_INVOICE_NOT_CONFIGURED',
+      message: 'Invoicing needs the seller\'s legal name and address.',
+      hint: 'Fill in the seller details in the shop settings (Boutique → Réglages boutique → Facturation).',
+    })
+  }
+  return seller
+}
+
+export async function resolveTemplate(source: TemplateSource | undefined): Promise<InvoiceTemplate> {
+  if (source === undefined) return {}
+  return typeof source === 'function' ? source() : source
 }
 
 export interface InvoiceStore {
@@ -94,6 +143,8 @@ export interface InvoiceStore {
   read(id: string): Promise<Invoice | null>
   readByOrder(orderId: string): Promise<Invoice | null>
   readByNumber(number: string): Promise<Invoice | null>
+  /** Whether the seller's legal name and address are filled in, so an invoice can be issued. */
+  configured(): Promise<boolean>
   list(options?: { readonly series?: string; readonly limit?: number }): Promise<readonly Invoice[]>
   /** The PDF for an invoice. Regenerated from the snapshot, byte-identical. */
   pdf(id: string): Promise<Uint8Array>
@@ -166,12 +217,22 @@ export function createInvoiceStore(
     return row === undefined ? null : decode(row)
   }
 
-  function documentFor(order: Order, number: string, issuedAt: string, buyer: readonly string[]) {
+  function documentFor(
+    order: Order,
+    number: string,
+    issuedAt: string,
+    buyer: readonly string[],
+    seller: SellerDetails,
+    template: InvoiceTemplate,
+  ) {
+    const footer = [seller.footer, template.paymentTerms]
+      .filter((part): part is string => part !== undefined && part.trim() !== '')
+      .join('\n')
     const snapshot: InvoiceDocument = {
       number,
       issuedAt,
       orderReference: order.reference,
-      seller: dependencies.seller.address,
+      seller: seller.address,
       buyer: buyer.length > 0 ? buyer : [order.email],
       currency: order.currency,
       lines: order.lines.map((line) => ({
@@ -187,7 +248,8 @@ export function createInvoiceStore(
       shippingMinor: order.shippingMinor,
       taxMinor: order.taxMinor,
       totalMinor: order.totalMinor,
-      footer: dependencies.seller.footer ?? null,
+      footer: footer === '' ? null : footer,
+      ...(template.language === undefined ? {} : { language: template.language }),
     }
     return snapshot
   }
@@ -215,8 +277,10 @@ export function createInvoiceStore(
         })
       }
 
+      const seller = await resolveSeller(dependencies.seller)
+      const template = await resolveTemplate(dependencies.template)
       const issuedAt = new Date(now()).toISOString()
-      const series = input.series ?? issuedAt.slice(0, 4)
+      const series = input.series ?? `${template.seriesPrefix ?? ''}${issuedAt.slice(0, 4)}`
       const id = newId(now)
 
       return db.transaction(
@@ -226,7 +290,14 @@ export function createInvoiceStore(
           // the number is not burned — which is what "gapless" requires.
           const seq = await claimSequenceNumber(tx, d, series)
           const number = formatSequenceNumber(series, seq)
-          const document = documentFor(order, number, issuedAt, input.buyerAddress ?? [])
+          const document = documentFor(
+            order,
+            number,
+            issuedAt,
+            input.buyerAddress ?? [],
+            seller,
+            template,
+          )
 
           await tx.query(sql`
             insert into ${invoices} (id, order_id, series, seq, number, issued_at, currency, total_minor, document)
@@ -262,6 +333,15 @@ export function createInvoiceStore(
       )
       const row = result.rows[0]
       return row === undefined ? null : decode(row)
+    },
+
+    configured: async () => {
+      try {
+        await resolveSeller(dependencies.seller)
+        return true
+      } catch {
+        return false
+      }
     },
 
     readByNumber: async (number) => {
@@ -304,7 +384,16 @@ export function createInvoiceStore(
         })
       }
 
-      const document = documentFor(order, 'PREVIEW', new Date(now()).toISOString(), [])
+      const seller = await resolveSeller(dependencies.seller)
+      const template = await resolveTemplate(dependencies.template)
+      const document = documentFor(
+        order,
+        'PREVIEW',
+        new Date(now()).toISOString(),
+        [],
+        seller,
+        template,
+      )
       return renderInvoicePdf(pdfDocumentFor(document))
     },
   }
@@ -318,22 +407,29 @@ export function createInvoiceStore(
  * produces the same bytes, because nothing here reads a clock or a live row.
  */
 export function pdfDocumentFor(document: InvoiceDocument): PdfInvoiceDocument {
+  const labels = LABELS[document.language ?? 'en'] ?? ENGLISH_LABELS
   const money = (amountMinor: number): string =>
-    formatMoney({ amountMinor, currency: document.currency })
+    // French groups digits with a narrow no-break space, which the PDF's
+    // single-byte font cannot print: a plain space it is.
+    formatMoney({ amountMinor, currency: document.currency }, document.language ?? 'en').replace(
+      /[\u202f\u00a0]/gu,
+      ' ',
+    )
 
-  const totals: [string, string][] = [['Subtotal', money(document.subtotalMinor)]]
-  if (document.discountMinor > 0) totals.push(['Discount', `-${money(document.discountMinor)}`])
-  if (document.shippingMinor > 0) totals.push(['Shipping', money(document.shippingMinor)])
-  if (document.taxMinor > 0) totals.push(['Tax', money(document.taxMinor)])
-  totals.push(['Total', money(document.totalMinor)])
+  const totals: [string, string][] = [[labels.subtotal, money(document.subtotalMinor)]]
+  if (document.discountMinor > 0)
+    totals.push([labels.discount, `-${money(document.discountMinor)}`])
+  if (document.shippingMinor > 0) totals.push([labels.shipping, money(document.shippingMinor)])
+  if (document.taxMinor > 0) totals.push([labels.tax, money(document.taxMinor)])
+  totals.push([labels.total, money(document.totalMinor)])
 
   return {
-    title: 'Invoice',
+    title: labels.title,
     number: document.number,
     issuedAt: document.issuedAt.slice(0, 10),
     seller: document.seller,
     buyer: document.buyer,
-    columns: ['SKU', 'Description', 'Qty', 'Unit', 'Amount'],
+    columns: [labels.sku, labels.description, labels.quantity, labels.unit, labels.amount],
     lines: document.lines.map((line) => ({
       cells: [
         line.sku,
@@ -346,4 +442,50 @@ export function pdfDocumentFor(document: InvoiceDocument): PdfInvoiceDocument {
     totals,
     ...(document.footer === null ? {} : { footer: document.footer }),
   }
+}
+
+interface InvoiceLabels {
+  readonly title: string
+  readonly sku: string
+  readonly description: string
+  readonly quantity: string
+  readonly unit: string
+  readonly amount: string
+  readonly subtotal: string
+  readonly discount: string
+  readonly shipping: string
+  readonly tax: string
+  readonly total: string
+}
+
+/** The two languages an invoice is printed in. An unknown language falls back to English. */
+const ENGLISH_LABELS: InvoiceLabels = {
+  title: 'Invoice',
+  sku: 'SKU',
+  description: 'Description',
+  quantity: 'Qty',
+  unit: 'Unit',
+  amount: 'Amount',
+  subtotal: 'Subtotal',
+  discount: 'Discount',
+  shipping: 'Shipping',
+  tax: 'Tax',
+  total: 'Total',
+}
+
+const LABELS: Readonly<Record<string, InvoiceLabels>> = {
+  en: ENGLISH_LABELS,
+  fr: {
+    title: 'Facture',
+    sku: 'Réf.',
+    description: 'Désignation',
+    quantity: 'Qté',
+    unit: 'Prix unit.',
+    amount: 'Montant',
+    subtotal: 'Sous-total',
+    discount: 'Remise',
+    shipping: 'Livraison',
+    tax: 'Taxes',
+    total: 'Total',
+  },
 }

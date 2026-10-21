@@ -105,72 +105,78 @@ const LOCALES_ITEM_ID = 'brief:locales'
  * already removed from this draft, which was removed before the human ever
  * saw it. `SitePlanDraft.violations` says what that was.
  */
-export function summarisePlan(draft: SitePlanDraft): readonly PlanSection[] {
+export function summarisePlan(draft: SitePlanDraft, locale?: string): readonly PlanSection[] {
+  const text = planText(locale)
   const constraintItems: PlanItem[] = draft.brief.constraints.map((constraint, index) => ({
     id: constraintItemId(index),
     section: 'brief' as const,
     title:
       constraint.kind === 'language'
-        ? `Only these languages: ${(constraint.locales ?? []).join(', ')}`
-        : `${constraint.kind === 'exclusion' ? 'No' : 'Must have'} ${constraint.topic ?? 'this'}`,
-    detail: `Read from ${constraint.source}: “${constraint.quote}”`,
+        ? text.onlyLanguages((constraint.locales ?? []).join(', '))
+        : constraint.kind === 'exclusion'
+          ? text.exclusion(constraint.topic)
+          : text.requirement(constraint.topic),
+    detail: text.readFrom(constraint.source, constraint.quote),
   }))
 
   return [
     {
       id: 'brief',
-      title: 'What we understood',
-      description: `${draft.brief.activity} — for ${draft.brief.audience}. Tone: ${draft.brief.tone}.`,
+      title: text.briefTitle,
+      description: text.briefDescription(
+        draft.brief.activity,
+        draft.brief.audience,
+        draft.brief.tone,
+      ),
       mode: 'each',
       items: [
         {
           id: LOCALES_ITEM_ID,
           section: 'brief',
-          title: `Languages: ${draft.brief.languages.join(', ')}`,
-          detail: 'The locales the site will be set up with.',
+          title: text.languages(draft.brief.languages.join(', ')),
+          detail: text.languagesDetail,
         },
         ...constraintItems,
       ],
     },
     {
       id: 'contentModel',
-      title: 'Content model',
-      description: 'The collections the site would be created with. Each is judged on its own.',
+      title: text.contentModelTitle,
+      description: text.contentModelDescription,
       mode: 'each',
       items: draft.contentModel.collections.map((collection) => ({
         id: `contentModel:${collection.definition.name}`,
         section: 'contentModel' as const,
         title: `${collection.definition.labels.plural} (${collection.definition.name})`,
-        detail: `${collection.rationale} Fields: ${Object.entries(collection.definition.fields)
-          .map(([name, field]) => `${name} (${field.kind})`)
-          .join(', ')}. Permissions: ${describePermissions(collection.definition.permissions)}.${
+        detail: `${collection.rationale} ${text.fields(
+          Object.entries(collection.definition.fields)
+            .map(([name, field]) => text.fieldLabel(name, field.kind, field.label))
+            .join(', '),
+        )} ${text.permissions(describePermissions(collection.definition.permissions, text))}${
           collection.definition.routing === undefined
             ? ''
-            : ` Routed at ${collection.definition.routing.pattern}.`
+            : ` ${text.routedAt(collection.definition.routing.pattern)}`
         }`,
       })),
     },
     {
       id: 'taxonomies',
-      title: 'Taxonomies',
-      description:
-        'How content is classified — categories, tags. Each is judged on its own, and a collection field that names one is only as accepted as the taxonomy itself.',
+      title: text.taxonomiesTitle,
+      description: text.taxonomiesDescription,
       mode: 'each',
       items: (draft.contentModel.taxonomies ?? []).map((taxonomy) => ({
         id: `taxonomies:${taxonomy.definition.name}`,
         section: 'taxonomies' as const,
         title: `${labelOf(taxonomy.definition.labels.plural) ?? taxonomy.definition.name} (${taxonomy.definition.name})`,
         detail: `${taxonomy.rationale} ${
-          taxonomy.definition.hierarchical === true
-            ? 'Terms can be nested.'
-            : 'Terms are a flat list.'
-        } Permissions: ${describePermissions(taxonomy.definition.permissions)}.`,
+          taxonomy.definition.hierarchical === true ? text.termsNested : text.termsFlat
+        } ${text.permissions(describePermissions(taxonomy.definition.permissions, text))}`,
       })),
     },
     {
       id: 'pages',
-      title: 'Pages',
-      description: 'The standing pages the brief asks for.',
+      title: text.pagesTitle,
+      description: text.pagesDescription,
       mode: 'each',
       items: draft.pages.map((page) => ({
         id: `pages:${page.slug}`,
@@ -181,9 +187,8 @@ export function summarisePlan(draft: SitePlanDraft): readonly PlanSection[] {
     },
     {
       id: 'structuralGaps',
-      title: 'Suggested standing pages',
-      description:
-        'Pages many sites need that this plan does not yet cover. Nothing here is created unless you accept it (fiche 60).',
+      title: text.gapsTitle,
+      description: text.gapsDescription,
       mode: 'each',
       items: draft.structuralGaps.map((gap) => ({
         id: `structuralGaps:${gap.id}`,
@@ -194,32 +199,261 @@ export function summarisePlan(draft: SitePlanDraft): readonly PlanSection[] {
     },
     {
       id: 'skin',
-      title: 'Design',
-      description: 'Pick one of the proposed designs. They are alternatives, not a checklist.',
+      title: text.skinTitle,
+      description: text.skinDescription,
       mode: 'one-of',
-      items: draft.skins.map((skin) => ({
-        id: `skin:${skin.id}`,
-        section: 'skin' as const,
-        title: skin.label,
-        detail: skin.rationale,
-      })),
+      items: draft.skins.map((skin) => {
+        const localised = text.skin(skin.id, skin.label, skin.rationale)
+        return {
+          id: `skin:${skin.id}`,
+          section: 'skin' as const,
+          title: localised.label,
+          detail: localised.rationale,
+        }
+      }),
     },
     {
       id: 'demoContent',
-      title: 'Demonstration content',
-      description:
-        'Starter entries, so the site is not empty on first sight. Edit or delete later.',
+      title: text.demoTitle,
+      description: text.demoDescription,
       mode: 'each',
       items: draft.demoContent.map((entry, index) => ({
         id: `demoContent:${index}`,
         section: 'demoContent' as const,
-        title: `${entry.collection}: ${String(entry.values.title ?? entry.values.name ?? `entry ${index + 1}`)}`,
+        title: `${entry.collection}: ${String(entry.values.title ?? entry.values.name ?? text.entryFallback(index + 1))}`,
         detail: Object.entries(entry.values)
-          .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+          .map(([key, value]) => `${text.fieldName(key)}: ${demoValue(value)}`)
           .join(' · '),
       })),
     },
   ]
+}
+
+/** A demonstration value in a form a reviewer reads: plain strings unquoted, structures as JSON. */
+function demoValue(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+/**
+ * The wording of the review screen, per language. English is the default (the
+ * installer prints it); French is what the admin asks for on a French site.
+ * Anything the model wrote — a rationale, a page purpose — is shown as it
+ * came, in whichever language the brief was in.
+ */
+interface PlanText {
+  readonly briefTitle: string
+  briefDescription(activity: string, audience: string, tone: string): string
+  languages(list: string): string
+  readonly languagesDetail: string
+  onlyLanguages(list: string): string
+  exclusion(topic: string | undefined): string
+  requirement(topic: string | undefined): string
+  readFrom(source: string, quote: string): string
+  readonly contentModelTitle: string
+  readonly contentModelDescription: string
+  fields(list: string): string
+  fieldLabel(name: string, kind: string, label: string | undefined): string
+  fieldName(name: string): string
+  permissions(list: string): string
+  routedAt(pattern: string): string
+  readonly taxonomiesTitle: string
+  readonly taxonomiesDescription: string
+  readonly termsNested: string
+  readonly termsFlat: string
+  readonly pagesTitle: string
+  readonly pagesDescription: string
+  readonly gapsTitle: string
+  readonly gapsDescription: string
+  readonly skinTitle: string
+  readonly skinDescription: string
+  skin(id: string, label: string, rationale: string): { label: string; rationale: string }
+  readonly demoTitle: string
+  readonly demoDescription: string
+  entryFallback(position: number): string
+  readonly noneGranted: string
+  action(name: string): string
+  readonly ownOnly: string
+}
+
+const ENGLISH_PLAN_TEXT: PlanText = {
+  briefTitle: 'What we understood',
+  briefDescription: (activity, audience, tone) => `${activity} — for ${audience}. Tone: ${tone}.`,
+  languages: (list) => `Languages: ${list}`,
+  languagesDetail: 'The locales the site will be set up with.',
+  onlyLanguages: (list) => `Only these languages: ${list}`,
+  exclusion: (topic) => `No ${topic ?? 'this'}`,
+  requirement: (topic) => `Must have ${topic ?? 'this'}`,
+  readFrom: (source, quote) => `Read from ${source}: “${quote}”`,
+  contentModelTitle: 'Content model',
+  contentModelDescription:
+    'The collections the site would be created with. Each is judged on its own.',
+  fields: (list) => `Fields: ${list}.`,
+  fieldLabel: (name, kind) => `${name} (${kind})`,
+  fieldName: (name) => name,
+  permissions: (list) => `Permissions: ${list}.`,
+  routedAt: (pattern) => `Routed at ${pattern}.`,
+  taxonomiesTitle: 'Taxonomies',
+  taxonomiesDescription:
+    'How content is classified — categories, tags. Each is judged on its own, and a collection field that names one is only as accepted as the taxonomy itself.',
+  termsNested: 'Terms can be nested.',
+  termsFlat: 'Terms are a flat list.',
+  pagesTitle: 'Pages',
+  pagesDescription: 'The standing pages the brief asks for.',
+  gapsTitle: 'Suggested standing pages',
+  gapsDescription:
+    'Pages many sites need that this plan does not yet cover. Nothing here is created unless you accept it.',
+  skinTitle: 'Design',
+  skinDescription: 'Pick one of the proposed designs. They are alternatives, not a checklist.',
+  skin: (_id, label, rationale) => ({ label, rationale }),
+  demoTitle: 'Demonstration content',
+  demoDescription: 'Starter entries, so the site is not empty on first sight. Edit or delete later.',
+  entryFallback: (position) => `entry ${position}`,
+  noneGranted: 'none granted',
+  action: (name) => name,
+  ownOnly: ' (own only)',
+}
+
+const FRENCH_FIELD_NAMES: Readonly<Record<string, string>> = {
+  title: 'Titre',
+  name: 'Nom',
+  slug: 'Identifiant d’URL',
+  body: 'Contenu',
+  content: 'Contenu',
+  summary: 'Résumé',
+  excerpt: 'Extrait',
+  description: 'Description',
+  image: 'Image',
+  coverImage: 'Image de couverture',
+  photo: 'Photo',
+  author: 'Auteur',
+  category: 'Catégorie',
+  tags: 'Étiquettes',
+  date: 'Date',
+  publishedAt: 'Date de publication',
+  price: 'Prix',
+  url: 'Adresse',
+  link: 'Lien',
+  email: 'Adresse e-mail',
+  phone: 'Téléphone',
+  address: 'Adresse',
+  location: 'Lieu',
+  role: 'Fonction',
+  company: 'Entreprise',
+  quote: 'Citation',
+  subtitle: 'Sous-titre',
+  order: 'Ordre',
+  blocks: 'Blocs',
+  seoTitle: 'Titre SEO',
+  seoDescription: 'Méta-description',
+}
+
+const FRENCH_FIELD_KINDS: Readonly<Record<string, string>> = {
+  text: 'texte',
+  richText: 'texte riche',
+  slug: 'identifiant d’URL',
+  number: 'nombre',
+  boolean: 'oui/non',
+  date: 'date',
+  datetime: 'date et heure',
+  media: 'média',
+  relation: 'lien vers un contenu',
+  select: 'choix',
+  json: 'données structurées',
+  geo: 'position',
+  color: 'couleur',
+  blocks: 'blocs',
+  taxonomy: 'classement',
+}
+
+const FRENCH_ACTIONS: Readonly<Record<string, string>> = {
+  read: 'lecture',
+  create: 'création',
+  update: 'modification',
+  delete: 'suppression',
+  publish: 'publication',
+}
+
+const FRENCH_ROLES: Readonly<Record<string, string>> = {
+  public: 'public',
+  admin: 'administrateur',
+  editor: 'éditeur',
+  author: 'auteur',
+  viewer: 'lecteur',
+}
+
+/** The five designs a site plan offers, in French — the model only ever sees the English directions. */
+const FRENCH_SKINS: Readonly<Record<string, { label: string; rationale: string }>> = {
+  editorial: {
+    label: 'Éditorial chaleureux',
+    rationale:
+      'Chaleureux et éditorial : une échelle typographique généreuse, un fond papier plutôt que blanc pur, un seul accent mesuré, une densité confortable.',
+  },
+  clinical: {
+    label: 'Net et clinique',
+    rationale:
+      'Net et clinique : une palette quasi neutre, une échelle typographique resserrée, une densité compacte, un accent froid utilisé avec parcimonie, des angles vifs.',
+  },
+  bold: {
+    label: 'Audacieux et graphique',
+    rationale:
+      'Audacieux et graphique : un accent très saturé, une grande échelle typographique aux écarts marqués, des rayons généreux, un contraste élevé partout.',
+  },
+  quiet: {
+    label: 'Calme et minimal',
+    rationale:
+      'Calme et minimal : presque monochrome, très peu de chroma, des espacements larges, une petite échelle typographique, presque aucun arrondi, un minimum de mouvement.',
+  },
+  classic: {
+    label: 'Classique et sobre',
+    rationale:
+      'Classique et sobre : des tons neutres profonds, une échelle typographique prudente, des titres en empattement, une densité modérée, un accent discret.',
+  },
+}
+
+const FRENCH_PLAN_TEXT: PlanText = {
+  briefTitle: 'Ce que nous avons compris',
+  briefDescription: (activity, audience, tone) => `${activity} — pour ${audience}. Ton : ${tone}.`,
+  languages: (list) => `Langues : ${list}`,
+  languagesDetail: 'Les langues dans lesquelles le site sera configuré.',
+  onlyLanguages: (list) => `Uniquement ces langues : ${list}`,
+  exclusion: (topic) => `Pas de ${topic ?? 'cet élément'}`,
+  requirement: (topic) => `Doit comporter : ${topic ?? 'cet élément'}`,
+  readFrom: (source, quote) => `Lu dans ${source} : « ${quote} »`,
+  contentModelTitle: 'Modèle de contenu',
+  contentModelDescription:
+    'Les collections avec lesquelles le site serait créé. Chacune est jugée séparément.',
+  fields: (list) => `Champs : ${list}.`,
+  fieldLabel: (name, kind, label) =>
+    `${label ?? FRENCH_FIELD_NAMES[name] ?? name} (${FRENCH_FIELD_KINDS[kind] ?? kind})`,
+  fieldName: (name) => FRENCH_FIELD_NAMES[name] ?? name,
+  permissions: (list) => `Droits : ${list}.`,
+  routedAt: (pattern) => `Adresse : ${pattern}.`,
+  taxonomiesTitle: 'Classements',
+  taxonomiesDescription:
+    'La façon de classer le contenu : catégories, étiquettes. Chacun est jugé séparément, et un champ de collection qui en utilise un n’est accepté que si le classement l’est aussi.',
+  termsNested: 'Les termes peuvent être imbriqués.',
+  termsFlat: 'Les termes forment une liste à plat.',
+  pagesTitle: 'Pages',
+  pagesDescription: 'Les pages permanentes que le cahier des charges demande.',
+  gapsTitle: 'Pages permanentes suggérées',
+  gapsDescription:
+    'Des pages dont beaucoup de sites ont besoin et que ce plan ne couvre pas encore. Rien n’est créé sans votre accord.',
+  skinTitle: 'Design',
+  skinDescription: 'Choisissez l’un des designs proposés. Ce sont des alternatives, pas une liste à cocher.',
+  skin: (id, label, rationale) => FRENCH_SKINS[id] ?? { label, rationale },
+  demoTitle: 'Contenu de démonstration',
+  demoDescription:
+    'Des entrées de départ, pour que le site ne soit pas vide au premier regard. À modifier ou supprimer ensuite.',
+  entryFallback: (position) => `entrée ${position}`,
+  noneGranted: 'aucun',
+  action: (name) => FRENCH_ACTIONS[name] ?? name,
+  ownOnly: ' (les siennes seulement)',
+}
+
+function planText(locale: string | undefined): PlanText {
+  return locale !== undefined && locale.toLowerCase().startsWith('fr')
+    ? FRENCH_PLAN_TEXT
+    : ENGLISH_PLAN_TEXT
 }
 
 /**
@@ -234,13 +468,18 @@ export function summarisePlan(draft: SitePlanDraft): readonly PlanSection[] {
  * the fix — what remains after that refusal is still shown, never hidden
  * inside a rationale sentence that never mentioned it.
  */
-function describePermissions(permissions: CollectionDefinition['permissions']): string {
+function describePermissions(permissions: CollectionDefinition['permissions'], text: PlanText): string {
   const entries = Object.entries(permissions)
     .map(([action, rule]) => [action, normalisePermissionRule(rule)] as const)
     .filter(([, rule]) => rule.roles.length > 0)
-  if (entries.length === 0) return 'none granted'
+  if (entries.length === 0) return text.noneGranted
   return entries
-    .map(([action, rule]) => `${action}: ${rule.roles.join(', ')}${rule.own ? ' (own only)' : ''}`)
+    .map(
+      ([action, rule]) =>
+        `${text.action(action)}: ${rule.roles
+          .map((role) => (text === FRENCH_PLAN_TEXT ? (FRENCH_ROLES[role] ?? role) : role))
+          .join(', ')}${rule.own ? text.ownOnly : ''}`,
+    )
     .join('; ')
 }
 

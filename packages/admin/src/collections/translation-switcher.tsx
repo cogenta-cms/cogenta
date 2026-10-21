@@ -1,8 +1,8 @@
 import { type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
-import { ApiError } from '../api/client.js'
 import { type Entry, getTranslations } from '../api/content-client.js'
+import { describeApiError } from '../api/describe-error.js'
 
 /**
  * One entry per language, linked by `translationOf` (ADR-0014) — never a
@@ -39,7 +39,7 @@ export function TranslationSwitcher({
       })
       .catch((caught: unknown) => {
         if (!cancelled) {
-          setError(caught instanceof ApiError ? caught.message : t('translations.loadError'))
+          setError(describeApiError(caught, t('translations.loadError')).message)
         }
       })
     return () => {

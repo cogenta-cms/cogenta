@@ -2,8 +2,9 @@ import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { FaqDraft, SchemaDraft } from '../api/assist-client.js'
 import { getAssistCapabilities, runFaqDraft, runSchemaOrgDraft } from '../api/assist-client.js'
-import { ApiError } from '../api/client.js'
 import type { ContentBlock } from '../api/content-client.js'
+import { describeApiError } from '../api/describe-error.js'
+import { Button, Card, CardBody, CardHeader, CardTitle, Label, Notice } from '../ui/index.js'
 import { freshKey } from '../rich-text/portable-text.js'
 
 /**
@@ -86,7 +87,7 @@ export function FaqSchemaPanel({
     try {
       setFaqDraft(await runFaqDraft(token, { text }))
     } catch (caught) {
-      setFaqError(caught instanceof ApiError ? caught.message : t('assist.faqError'))
+      setFaqError(describeApiError(caught, t('assist.faqError')).message)
     } finally {
       setFaqRunning(false)
     }
@@ -124,7 +125,7 @@ export function FaqSchemaPanel({
         }),
       )
     } catch (caught) {
-      setSchemaError(caught instanceof ApiError ? caught.message : t('assist.schemaOrgError'))
+      setSchemaError(describeApiError(caught, t('assist.schemaOrgError')).message)
     } finally {
       setSchemaRunning(false)
     }
@@ -133,85 +134,106 @@ export function FaqSchemaPanel({
   if (faqAvailable !== true && schemaAvailable !== true) return null
 
   return (
-    <section aria-labelledby="faq-schema-panel-heading">
-      <h2 id="faq-schema-panel-heading">{t('assist.faqSchemaHeading')}</h2>
+    <Card aria-labelledby="faq-schema-panel-heading">
+      <CardHeader>
+        <CardTitle>
+          <h2 id="faq-schema-panel-heading">{t('assist.faqSchemaHeading')}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-5">
+        {!hasText && <p className="m-0 text-sm text-muted-foreground">{t('assist.needsText')}</p>}
 
-      {faqAvailable === true && (
-        <div>
-          <h3>{t('assist.faqButton')}</h3>
-          {!hasText && <p>{t('assist.needsText')}</p>}
-          <button type="button" disabled={!hasText || faqRunning} onClick={() => void draftFaq()}>
-            {faqRunning ? t('assist.running') : t('assist.faqButton')}
-          </button>
-          {faqError !== null && <p role="alert">{faqError}</p>}
-          {faqDraft !== null && (
+        {faqAvailable === true && (
+          <div className="flex flex-col gap-3">
+            <h3 className="m-0 text-sm font-semibold">{t('assist.faqButton')}</h3>
             <div>
-              <ul>
-                {faqDraft.items.map((item) => (
-                  <li key={item.question}>
-                    <strong>{item.question}</strong>
-                    <p>{item.answer}</p>
-                  </li>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={!hasText || faqRunning}
+                onClick={() => void draftFaq()}
+              >
+                {faqRunning ? t('assist.running') : t('assist.faqButton')}
+              </Button>
+            </div>
+            {faqError !== null && (
+              <Notice tone="danger" live="assertive">
+                <p>{faqError}</p>
+              </Notice>
+            )}
+            {faqDraft !== null && (
+              <div className="flex flex-col gap-3">
+                <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                  {faqDraft.items.map((item) => (
+                    <li key={item.question} className="rounded-md border border-input p-3 text-sm">
+                      <strong>{item.question}</strong>
+                      <p className="m-0 mt-1">{item.answer}</p>
+                    </li>
+                  ))}
+                </ul>
+                {blockZone !== null ? (
+                  <div>
+                    <Button type="button" size="sm" disabled={faqApplied} onClick={acceptFaq}>
+                      {faqApplied ? t('assist.faqAccepted') : t('assist.faqAccept')}
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="m-0 text-sm text-muted-foreground">{t('assist.faqNoBlockZone')}</p>
+                )}
+                <p className="m-0 text-xs text-muted-foreground">{t('assist.notApplied')}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {schemaAvailable === true && (
+          <div className="flex flex-col gap-3">
+            <h3 className="m-0 text-sm font-semibold">{t('assist.schemaOrgButton')}</h3>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="schema-org-type">{t('assist.schemaOrgType')}</Label>
+              <select
+                id="schema-org-type"
+                value={schemaType}
+                onChange={(event) =>
+                  setSchemaType(event.target.value as (typeof SCHEMA_TYPES)[number])
+                }
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {SCHEMA_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {t(`assist.schemaTypes.${type}`)}
+                  </option>
                 ))}
-              </ul>
-              {blockZone !== null ? (
-                <button type="button" disabled={faqApplied} onClick={acceptFaq}>
-                  {faqApplied ? t('assist.faqAccepted') : t('assist.faqAccept')}
-                </button>
-              ) : (
-                <p>{t('assist.faqNoBlockZone')}</p>
-              )}
-              <p>{t('assist.notApplied')}</p>
+              </select>
             </div>
-          )}
-        </div>
-      )}
-
-      {schemaAvailable === true && (
-        <div>
-          <h3>{t('assist.schemaOrgButton')}</h3>
-          <label htmlFor="schema-org-type">{t('assist.schemaOrgType')}</label>{' '}
-          <select
-            id="schema-org-type"
-            value={schemaType}
-            onChange={(event) => setSchemaType(event.target.value as (typeof SCHEMA_TYPES)[number])}
-          >
-            {SCHEMA_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>{' '}
-          {!hasText && <p>{t('assist.needsText')}</p>}
-          <button
-            type="button"
-            disabled={!hasText || schemaRunning}
-            onClick={() => void draftSchema()}
-          >
-            {schemaRunning ? t('assist.running') : t('assist.schemaOrgButton')}
-          </button>
-          {schemaError !== null && <p role="alert">{schemaError}</p>}
-          {schemaDraft !== null && (
             <div>
-              <pre>{JSON.stringify(schemaDraft.jsonLd, null, 2)}</pre>
-              <p>{t('assist.schemaOrgNoTarget')}</p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={!hasText || schemaRunning}
+                onClick={() => void draftSchema()}
+              >
+                {schemaRunning ? t('assist.running') : t('assist.schemaOrgButton')}
+              </Button>
             </div>
-          )}
-        </div>
-      )}
-    </section>
+            {schemaError !== null && (
+              <Notice tone="danger" live="assertive">
+                <p>{schemaError}</p>
+              </Notice>
+            )}
+            {schemaDraft !== null && (
+              <div className="flex flex-col gap-2">
+                <pre className="m-0 max-h-72 overflow-auto rounded-md border border-input bg-muted p-3 text-xs">
+                  {JSON.stringify(schemaDraft.jsonLd, null, 2)}
+                </pre>
+                <p className="m-0 text-xs text-muted-foreground">{t('assist.schemaOrgNoTarget')}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </CardBody>
+    </Card>
   )
-}
-
-/** A single-paragraph rich-text document from a plain-text answer — contract A's minimum valid shape, per `packages/blocks/src/rich-text.ts`. */
-function paragraphOf(text: string): readonly unknown[] {
-  return [
-    {
-      _key: freshKey(),
-      _type: 'block',
-      style: 'normal',
-      children: [{ _key: freshKey(), _type: 'span', text, marks: [] }],
-      markDefs: [],
-    },
-  ]
 }

@@ -1,6 +1,5 @@
 import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/http.js'
 import {
   createRedirect,
   deleteRedirect,
@@ -12,11 +11,14 @@ import { useAuth } from '../auth/auth-context.js'
 import { ImportExportPanel } from '../redirects/import-export-panel.js'
 import { NotFoundPanel } from '../redirects/not-found-panel.js'
 import { PatternPanel } from '../redirects/pattern-panel.js'
+import { pathProblem, redirectErrorMessage } from '../redirects/redirect-errors.js'
 import {
   Button,
   Field,
   Input,
+  Modal,
   Notice,
+  SavedIndicator,
   Select,
   Table,
   TableBody,
@@ -26,6 +28,7 @@ import {
   TableHeader,
   TableRoot,
   TableRow,
+  useSavedIndicator,
 } from '../ui/index.js'
 
 /**
@@ -61,6 +64,14 @@ const STATUS_LABEL_KEY: Record<Redirect['status'], string> = {
   410: 'redirects.gone',
 }
 
+const STATUS_SHORT_KEY: Record<Redirect['status'], string> = {
+  301: 'redirects.shortPermanent',
+  302: 'redirects.shortTemporary',
+  307: 'redirects.shortTemporaryStrict',
+  308: 'redirects.shortPermanentStrict',
+  410: 'redirects.shortGone',
+}
+
 export function RedirectsPanel(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -81,6 +92,16 @@ export function RedirectsPanel(): JSX.Element {
   const [status, setStatus] = useState<Redirect['status']>(301)
   const [saving, setSaving] = useState(false)
 
+  const [fieldError, setFieldError] = useState<{
+    readonly field: 'from' | 'to'
+    readonly message: string
+  } | null>(null)
+  // A rule already leaves this path: nothing is written until the editor has
+  // seen what it does today and agreed to replace it.
+  const [replacing, setReplacing] = useState<Redirect | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<Redirect | null>(null)
+  const saved = useSavedIndicator()
+
   const [editingFrom, setEditingFrom] = useState<string | null>(null)
   const [editTo, setEditTo] = useState('')
   const [editStatus, setEditStatus] = useState<Redirect['status']>(301)
@@ -98,7 +119,7 @@ export function RedirectsPanel(): JSX.Element {
       setRedirects(result.data)
       setTotal(result.total)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.loadError'))
+      setError(redirectErrorMessage(caught, 'redirects.loadError', t))
     } finally {
       setLoading(false)
     }
@@ -117,36 +138,96 @@ export function RedirectsPanel(): JSX.Element {
       ?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
   }
 
-  async function submit(event: FormEvent): Promise<void> {
-    event.preventDefault()
+  function describePathProblem(problem: NonNullable<ReturnType<typeof pathProblem>>): string {
+    return t(`redirects.pathProblem.${problem}`)
+  }
+
+  /** Validates the form; on success returns the normalised values to send. */
+  function validate(): { readonly from: string; readonly to: string } | null {
+    setFieldError(null)
+    const fromProblem = pathProblem(from)
+    if (fromProblem !== null) {
+      setFieldError({ field: 'from', message: describePathProblem(fromProblem) })
+      return null
+    }
+    if (from.trim() === '/') {
+      setFieldError({ field: 'from', message: t('redirects.errors.root') })
+      return null
+    }
+    if (status === 410) return { from: from.trim(), to: '' }
+    const toProblem = pathProblem(to)
+    if (toProblem !== null) {
+      setFieldError({
+        field: 'to',
+        message: toProblem === 'empty' ? t('redirects.errors.missingTo') : describePathProblem(toProblem),
+      })
+      return null
+    }
+    if (from.trim().replace(/\/+$/u, '') === to.trim().replace(/\/+$/u, '')) {
+      setFieldError({ field: 'to', message: t('redirects.errors.loop') })
+      return null
+    }
+    return { from: from.trim(), to: to.trim() }
+  }
+
+  async function write(values: { readonly from: string; readonly to: string }): Promise<void> {
     if (token === null) return
     setSaving(true)
     setError(null)
     try {
       await createRedirect(token, {
-        from,
-        ...(status === 410 ? {} : { to }),
+        from: values.from,
+        ...(status === 410 ? {} : { to: values.to }),
         status,
       })
       setFrom('')
       setTo('')
       setStatus(301)
+      setReplacing(null)
       await load()
+      saved.show()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.createError'))
+      setReplacing(null)
+      setError(redirectErrorMessage(caught, 'redirects.createError', t))
     } finally {
       setSaving(false)
     }
   }
 
+  async function submit(event: FormEvent): Promise<void> {
+    event.preventDefault()
+    if (token === null) return
+    saved.hide()
+    setError(null)
+    const values = validate()
+    if (values === null) return
+    // One path has one rule, and the server replaces silently. Ask first.
+    try {
+      const matches = await listRedirects(token, { q: values.from, limit: 50 })
+      const existing = matches.data.find(
+        (rule) => rule.from.replace(/\/+$/u, '') === values.from.replace(/\/+$/u, ''),
+      )
+      if (existing !== undefined) {
+        setReplacing(existing)
+        return
+      }
+    } catch {
+      // The check is a courtesy: if the list cannot be read, the write below
+      // reports the real problem.
+    }
+    await write(values)
+  }
+
   async function remove(redirect: Redirect): Promise<void> {
     if (token === null) return
     setError(null)
+    setPendingDelete(null)
     try {
       await deleteRedirect(token, redirect.from)
       await load()
+      saved.show()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.deleteError'))
+      setError(redirectErrorMessage(caught, 'redirects.deleteError', t))
     }
   }
 
@@ -159,15 +240,28 @@ export function RedirectsPanel(): JSX.Element {
   async function saveEdit(): Promise<void> {
     if (token === null || editingFrom === null) return
     setError(null)
+    saved.hide()
+    if (editStatus !== 410) {
+      const problem = pathProblem(editTo)
+      if (problem !== null) {
+        setError(problem === 'empty' ? t('redirects.errors.missingTo') : t(`redirects.pathProblem.${problem}`))
+        return
+      }
+      if (editTo.trim() === editingFrom) {
+        setError(t('redirects.errors.loop'))
+        return
+      }
+    }
     try {
       await updateRedirect(token, editingFrom, {
-        ...(editStatus === 410 ? {} : { to: editTo }),
+        ...(editStatus === 410 ? {} : { to: editTo.trim() }),
         status: editStatus,
       })
       setEditingFrom(null)
       await load()
+      saved.show()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.editError'))
+      setError(redirectErrorMessage(caught, 'redirects.editError', t))
     }
   }
 
@@ -192,39 +286,46 @@ export function RedirectsPanel(): JSX.Element {
         </Notice>
       )}
 
-      <form onSubmit={(event) => void submit(event)} className="flex flex-wrap items-end gap-4">
-        <div className="min-w-48" id="redirects-from-field">
-          <Field label={t('redirects.from')} description={t('redirects.fromHint')}>
+      <form
+        onSubmit={(event) => void submit(event)}
+        noValidate
+        className="flex flex-wrap items-start gap-4"
+      >
+        <div className="min-w-48 flex-1 basis-56" id="redirects-from-field">
+          <Field
+            label={t('redirects.from')}
+            description={t('redirects.fromHint')}
+            error={fieldError?.field === 'from' ? fieldError.message : null}
+          >
             {(control) => (
               <Input
                 {...control}
-                required
-                placeholder="/old-page"
+                placeholder={t('redirects.fromPlaceholder')}
                 value={from}
                 onChange={(event) => setFrom(event.target.value)}
               />
             )}
           </Field>
         </div>
-        <div className="min-w-48">
+        <div className="min-w-48 flex-1 basis-56">
           <Field
             label={t('redirects.to')}
-            description={status === 410 ? t('redirects.toOptionalHint') : undefined}
+            description={status === 410 ? t('redirects.toOptionalHint') : t('redirects.toHint')}
+            error={fieldError?.field === 'to' ? fieldError.message : null}
           >
             {(control) => (
               <Input
                 {...control}
-                required={status !== 410}
                 disabled={status === 410}
-                placeholder="/new-page"
+                placeholder={t('redirects.toPlaceholder')}
                 value={to}
                 onChange={(event) => setTo(event.target.value)}
               />
             )}
           </Field>
         </div>
-        <div className="min-w-48">
-          <Field label={t('redirects.status')}>
+        <div className="min-w-48 flex-1 basis-56">
+          <Field label={t('redirects.status')} description={t('redirects.statusHint')}>
             {(control) => (
               <Select
                 {...control}
@@ -240,9 +341,12 @@ export function RedirectsPanel(): JSX.Element {
             )}
           </Field>
         </div>
-        <Button type="submit" disabled={saving}>
-          {t('redirects.create')}
-        </Button>
+        <div className="flex items-center gap-3 sm:pt-[1.625rem]">
+          <Button type="submit" disabled={saving}>
+            {t('redirects.create')}
+          </Button>
+          <SavedIndicator visible={saved.visible} label={t('redirects.saved')} />
+        </div>
       </form>
 
       <div className="flex flex-wrap items-end gap-4">
@@ -267,7 +371,7 @@ export function RedirectsPanel(): JSX.Element {
 
       {!loading && (
         <>
-          <TableRoot label={t('redirects.tableLabel')}>
+          <TableRoot label={t('redirects.tableLabel')} stacked>
             <Table>
               <TableHead>
                 <TableRow>
@@ -281,8 +385,10 @@ export function RedirectsPanel(): JSX.Element {
                 {redirects.map((redirect) =>
                   editingFrom === redirect.from ? (
                     <TableRow key={redirect.id}>
-                      <TableCell className="font-mono text-sm">{redirect.from}</TableCell>
-                      <TableCell>
+                      <TableCell stack="heading" className="font-mono text-sm">
+                        {redirect.from}
+                      </TableCell>
+                      <TableCell label={t('redirects.to')}>
                         <Input
                           aria-label={t('redirects.to')}
                           disabled={editStatus === 410}
@@ -290,7 +396,7 @@ export function RedirectsPanel(): JSX.Element {
                           onChange={(event) => setEditTo(event.target.value)}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell label={t('redirects.status')}>
                         <Select
                           aria-label={t('redirects.status')}
                           value={editStatus}
@@ -305,7 +411,7 @@ export function RedirectsPanel(): JSX.Element {
                           ))}
                         </Select>
                       </TableCell>
-                      <TableCell className="flex gap-2">
+                      <TableCell stack="actions" className="flex gap-2">
                         <Button size="sm" onClick={() => void saveEdit()}>
                           {t('redirects.save')}
                         </Button>
@@ -316,19 +422,23 @@ export function RedirectsPanel(): JSX.Element {
                     </TableRow>
                   ) : (
                     <TableRow key={redirect.id}>
-                      <TableCell className="font-mono text-sm">{redirect.from}</TableCell>
-                      <TableCell className="font-mono text-sm">
+                      <TableCell stack="heading" className="font-mono text-sm">
+                        {redirect.from}
+                      </TableCell>
+                      <TableCell label={t('redirects.to')} className="font-mono text-sm">
                         {redirect.status === 410 ? '—' : redirect.to}
                       </TableCell>
-                      <TableCell>{redirect.status}</TableCell>
-                      <TableCell className="flex gap-2">
+                      <TableCell label={t('redirects.status')}>
+                        {redirect.status} · {t(STATUS_SHORT_KEY[redirect.status])}
+                      </TableCell>
+                      <TableCell stack="actions" className="flex gap-2">
                         <Button size="sm" onClick={() => startEdit(redirect)}>
                           {t('redirects.edit')}
                         </Button>
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() => void remove(redirect)}
+                          onClick={() => setPendingDelete(redirect)}
                         >
                           {t('redirects.delete')}
                         </Button>
@@ -372,6 +482,79 @@ export function RedirectsPanel(): JSX.Element {
           )}
         </>
       )}
+
+      <Modal
+        open={replacing !== null}
+        onOpenChange={(open) => {
+          if (!open) setReplacing(null)
+        }}
+        title={t('redirects.replaceTitle')}
+        description={
+          replacing === null
+            ? undefined
+            : t('redirects.replaceDescription', {
+                from: replacing.from,
+                current:
+                  replacing.status === 410
+                    ? t('redirects.shortGone')
+                    : `${replacing.to} (${replacing.status})`,
+              })
+        }
+        closeLabel={t('common.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setReplacing(null)}>
+              {t('redirects.cancel')}
+            </Button>
+            <Button
+              loading={saving}
+              onClick={() => {
+                const values = validate()
+                if (values !== null) void write(values)
+              }}
+            >
+              {t('redirects.replaceConfirm')}
+            </Button>
+          </>
+        }
+      >
+        <p className="m-0 text-sm text-muted-foreground">
+          {t('redirects.replaceNew', {
+            to: status === 410 ? t('redirects.shortGone') : `${to} (${status})`,
+          })}
+        </p>
+      </Modal>
+
+      <Modal
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null)
+        }}
+        title={t('redirects.deleteTitle')}
+        description={
+          pendingDelete === null
+            ? undefined
+            : t('redirects.deleteDescription', { from: pendingDelete.from })
+        }
+        closeLabel={t('common.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPendingDelete(null)}>
+              {t('redirects.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (pendingDelete !== null) void remove(pendingDelete)
+              }}
+            >
+              {t('redirects.delete')}
+            </Button>
+          </>
+        }
+      >
+        <p className="m-0 text-sm text-muted-foreground">{t('redirects.deleteWarning')}</p>
+      </Modal>
 
       {token !== null && <PatternPanel token={token} />}
       {token !== null && <NotFoundPanel token={token} onCreateRedirect={startCreateFromPath} />}

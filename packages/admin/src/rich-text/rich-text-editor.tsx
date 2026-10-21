@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next'
-import { type JSX, type KeyboardEvent, useCallback, useMemo, useState } from 'react'
+import { type JSX, type KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createEditor, type Descendant as SlateDescendant, Transforms } from 'slate'
 import { withHistory } from 'slate-history'
@@ -248,6 +248,20 @@ export function RichTextEditor({
   }
 
   const slashItems = slash === null ? [] : filterSlashItems(slash.query, t)
+
+  // Escape leaves full-screen mode. A document-level listener rather than a
+  // handler on the editable: focus may be on the toolbar or the source view.
+  // Anything that already handled the key (the slash menu, the link panel,
+  // a dialog) marks it as handled and keeps the editor where it is.
+  useEffect(() => {
+    if (!fullscreen) return
+    function onKeyDown(event: globalThis.KeyboardEvent): void {
+      if (event.key !== 'Escape' || event.defaultPrevented || imageModalOpen) return
+      setFullscreen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [fullscreen, imageModalOpen])
 
   function runSlashItem(item: SlashMenuItem): void {
     clearSlashQuery(editor)

@@ -208,6 +208,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    to: '/marketplace',
+    labelKey: 'nav.marketplace',
+    group: 'appearance',
+    visibleWhen: { kind: 'role', role: 'admin' },
+    badge: 'marketplaceUpdates',
+  },
+  {
     to: '/admin-appearance',
     labelKey: 'nav.adminAppearance',
     group: 'appearance',
@@ -441,13 +448,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'nav.import',
     group: 'ops',
     visibleWhen: { kind: 'role', role: 'admin' },
-  },
-  {
-    to: '/marketplace',
-    labelKey: 'nav.marketplace',
-    group: 'ops',
-    visibleWhen: { kind: 'role', role: 'admin' },
-    badge: 'marketplaceUpdates',
   },
   {
     to: '/ops-settings',

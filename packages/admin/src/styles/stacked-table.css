@@ -1,0 +1,106 @@
+/*
+ * A `TableRoot stacked` turns into a stack of cards below 48rem: every row
+ * becomes a card and every cell a "label — value" line, the label taken from
+ * the cell's `label` prop (`data-label`). The point is that no essential
+ * column (the actions above all) ends up scrolled out of sight on a phone.
+ *
+ * The real <table> markup stays; only its CSS display changes.
+ */
+@media (max-width: 47.99rem) {
+  .cg-table-stacked {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .cg-table-stacked table,
+  .cg-table-stacked tbody {
+    display: block;
+    width: 100%;
+  }
+  .cg-table-stacked thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .cg-table-stacked tbody tr {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    margin-bottom: 0.75rem;
+    padding: 0.25rem 0;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--card);
+    box-shadow: var(--shadow-card);
+  }
+  .cg-table-stacked tbody td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.4rem 0.9rem;
+    text-align: right;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .cg-table-stacked tbody td::before {
+    content: attr(data-label);
+    flex: 0 0 34%;
+    max-width: 34%;
+    text-align: left;
+    font-size: 0.7rem;
+    line-height: 1.25rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .cg-table-stacked tbody td:not([data-label])::before,
+  .cg-table-stacked tbody td[data-label='']::before {
+    content: none;
+  }
+  /* The card's title: full width, left aligned, no label. */
+  .cg-table-stacked tbody td[data-stack='heading'] {
+    order: -1;
+    display: block;
+    text-align: left;
+    padding-top: 0.6rem;
+    font-size: 0.95rem;
+  }
+  .cg-table-stacked tbody td[data-stack='heading']::before,
+  .cg-table-stacked tbody td[data-stack='select']::before,
+  .cg-table-stacked tbody td[data-stack='actions']::before {
+    content: none;
+  }
+  .cg-table-stacked tbody tr:has(td[data-stack='select']) td[data-stack='heading'] {
+    padding-right: 2.75rem;
+  }
+  .cg-table-stacked tbody td[data-stack='select'] {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.25rem;
+    display: block;
+    padding: 0.4rem 0.6rem;
+  }
+  /* Actions get a full-width line of their own, wrapping freely. */
+  .cg-table-stacked tbody td[data-stack='actions'] {
+    order: 99;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    text-align: left;
+    margin-top: 0.3rem;
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+    border-top: 1px solid var(--border);
+  }
+  .cg-table-stacked tbody tr.cg-stacked-empty {
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+}

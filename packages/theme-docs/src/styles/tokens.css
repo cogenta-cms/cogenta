@@ -274,7 +274,7 @@
     );
     --cd-line-strong: light-dark(
       color-mix(in oklab, var(--cogenta-color-border) 58%, var(--cogenta-color-fg)),
-      oklch(from var(--cogenta-color-fg) 0.44 calc(c * 0.9) h)
+      oklch(from var(--cogenta-color-fg) 0.5 calc(c * 0.9) h)
     );
     --cd-line-ink: light-dark(
       var(--cogenta-color-fg),

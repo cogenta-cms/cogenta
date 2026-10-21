@@ -253,6 +253,8 @@ export const ERROR_CODES = [
   'MCP_ACTOR_ROLE_EMPTY',
   // MCP server (L21) — "cogenta mcp --api-key"
   'MCP_ACTOR_API_KEY_INVALID',
+  // MCP server — the account behind --email was disabled during a session
+  'MCP_ACTOR_USER_DISABLED',
 
   // MCP client sandboxing floor (fiche 58 task 1bis) — stdio-client.ts's
   // hard per-call timeout, cancellation, process lifecycle and best-effort
@@ -469,6 +471,17 @@ export const ERROR_CODES = [
   'COMMERCE_ORDER_LOCKED',
   'COMMERCE_TRACKING_INVALID',
   'COMMERCE_CREDIT_NOTE_NOT_FOUND',
+
+  // Commerce — admin polish (2026-10-21): conflicts and refusals the back
+  // office used to report as a raw 500 or as a misleading neighbour code.
+  'COMMERCE_REQUEST_INVALID',
+  'COMMERCE_PRODUCT_HANDLE_TAKEN',
+  'COMMERCE_COUPON_CODE_TAKEN',
+  'COMMERCE_CUSTOMER_EMAIL_INVALID',
+  'COMMERCE_REFUND_NO_PAYMENT',
+  'COMMERCE_PAYMENT_ALREADY_RECORDED',
+  'COMMERCE_INVOICE_NOT_CONFIGURED',
+  'COMMERCE_PAYMENT_NOT_CONFIGURED',
 
   // Agents — vector store driver (L18 task 1/5)
   'VECTOR_DIMENSION_MISMATCH',

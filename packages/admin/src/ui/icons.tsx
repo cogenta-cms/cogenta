@@ -676,3 +676,106 @@ export const SkillIcon = icon(
 export const PromptIcon = icon(<path d="M3.5 4.5h13v11h-13zM6.5 8l2.5 2-2.5 2M10.5 12.5h3" />)
 
 export const ChannelsIcon = icon(<path d="M17.5 2.5L2.5 9l6 2.5 2.5 6 6.5-15zM8.5 11.5l9-9" />)
+
+// Shell pass (2026-10-21): the sidebar showed the same glyph on several
+// neighbouring entries (site appearance / widgets / admin appearance, the two
+// MCP screens and the providers, the gear on four operations screens). One
+// meaningful mark per entry.
+
+/** "Site appearance" (`/appearance`) — a page with a side column, the site's layout. */
+export const LayoutIcon = icon(
+  <>
+    <rect x="2.5" y="3.5" width="15" height="13" />
+    <path d="M2.5 7.5h15M7.5 7.5v9" />
+  </>,
+)
+
+/** "Widgets" (`/widgets`) — blocks being added to a page. */
+export const WidgetsIcon = icon(
+  <>
+    <rect x="2.5" y="2.5" width="6" height="6" />
+    <rect x="2.5" y="11.5" width="6" height="6" />
+    <rect x="11.5" y="11.5" width="6" height="6" />
+    <path d="M14.5 2.5v6M11.5 5.5h6" />
+  </>,
+)
+
+/** "Admin appearance" (`/admin-appearance`) — contrast, the admin's own look. */
+export const ContrastIcon = icon(
+  <>
+    <circle cx="10" cy="10" r="7.5" />
+    <path d="M10 2.5a7.5 7.5 0 0 1 0 15z" fill="currentColor" />
+  </>,
+)
+
+/** The "Appearance" group — a brush. */
+export const BrushIcon = icon(
+  <>
+    <path d="M15.5 2.5l2 2-8 8-2-2z" />
+    <path d="M7.5 10.5c-2.2 0-3.5 1.4-3.5 3.5 0 1.2-.7 2-1.5 2.5 3.5.5 7-.5 7-3.5z" />
+  </>,
+)
+
+/** "Plugins" (`/plugins`) — a puzzle piece. */
+export const PluginsIcon = icon(
+  <path d="M8 3.5a1.5 1.5 0 0 1 3 0V5h4v4h-1.5a1.5 1.5 0 0 0 0 3H15v4.5h-4V15a1.5 1.5 0 0 0-3 0v1.5H3.5V12H5a1.5 1.5 0 0 0 0-3H3.5V5H8z" />,
+)
+
+/** "MCP server" (`/mcp`) — a rack, the thing other tools connect to. `McpIcon` (a plug) stays on "MCP clients". */
+export const ServerIcon = icon(
+  <>
+    <rect x="2.5" y="3" width="15" height="5.5" />
+    <rect x="2.5" y="11.5" width="15" height="5.5" />
+    <path d="M5.5 5.75h.01M5.5 14.25h.01M9 5.75h5.5M9 14.25h5.5" />
+  </>,
+)
+
+/** "AI providers" (`/providers`) — a cloud, where the models run. */
+export const CloudIcon = icon(
+  <path d="M5.5 15.5a3.5 3.5 0 0 1-.3-6.98A5 5 0 0 1 14.8 8a3.8 3.8 0 0 1-.3 7.5z" />,
+)
+
+/** "Customers" (`/commerce/customers`) — a contact card. */
+export const CustomerIcon = icon(
+  <>
+    <rect x="2.5" y="4" width="15" height="12" />
+    <circle cx="7.5" cy="9" r="1.8" />
+    <path d="M4.8 13.5c.4-1.5 1.5-2.2 2.7-2.2s2.3.7 2.7 2.2M12 8.5h3.5M12 11.5h3.5" />
+  </>,
+)
+
+/** "Updates" (`/updates`) — a refresh loop. */
+export const UpdatesIcon = icon(<path d="M16.5 10a6.5 6.5 0 1 1-2-4.7M16.5 3v3.5H13" />)
+
+/** "Observability" (`/observability`) — an eye on the running site. */
+export const EyeIcon = icon(
+  <>
+    <path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z" />
+    <circle cx="10" cy="10" r="2.3" />
+  </>,
+)
+
+/** The "Operations" group — a gauge. */
+export const GaugeIcon = icon(
+  <>
+    <path d="M3 14a7 7 0 1 1 14 0" />
+    <path d="M10 14l3.5-5M3 14h2M15 14h2" />
+  </>,
+)
+
+/** "Security & webhooks" (`/ops-settings`) — a padlock. */
+export const LockIcon = icon(
+  <>
+    <rect x="4" y="9" width="12" height="8" />
+    <path d="M7 9V6.5a3 3 0 0 1 6 0V9" />
+  </>,
+)
+
+/** Customise / adjust (the dashboard's "Customise" button) — sliders, not a gear that reads as a sun. */
+export const SlidersIcon = icon(
+  <>
+    <path d="M2.5 6h6.5M13 6h4.5M2.5 14h2.5M9 14h8.5" />
+    <circle cx="11" cy="6" r="2" />
+    <circle cx="7" cy="14" r="2" />
+  </>,
+)

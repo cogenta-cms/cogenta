@@ -2,7 +2,8 @@ import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ClassificationResult } from '../api/assist-client.js'
 import { getAssistCapabilities, runClassify } from '../api/assist-client.js'
-import { ApiError } from '../api/client.js'
+import { describeApiError } from '../api/describe-error.js'
+import { Button, Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
 
 /**
  * `assist.classify` given a screen — a "Suggest categories" button on the
@@ -77,7 +78,7 @@ export function ClassifyPanel({
     try {
       setResult(await runClassify(token, { text, taxonomy: field.options }))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('assist.classifyError'))
+      setError(describeApiError(caught, t('assist.classifyError')).message)
     } finally {
       setRunning(false)
     }
@@ -89,38 +90,68 @@ export function ClassifyPanel({
   }
 
   return (
-    <section aria-labelledby="classify-panel-heading">
-      <h2 id="classify-panel-heading">{t('assist.classifyHeading')}</h2>
-      {!hasText && <p>{t('assist.needsText')}</p>}
-      <button type="button" disabled={!hasText || running} onClick={() => void run()}>
-        {running ? t('assist.running') : t('assist.classifyButton')}
-      </button>
-
-      {error !== null && <p role="alert">{error}</p>}
-
-      {result !== null && (
+    <Card aria-labelledby="classify-panel-heading">
+      <CardHeader>
+        <CardTitle>
+          <h2 id="classify-panel-heading">{t('assist.classifyHeading')}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-3">
+        {!hasText && <p className="m-0 text-sm text-muted-foreground">{t('assist.needsText')}</p>}
         <div>
-          {result.labels.length === 0 && <p>{t('assist.classifyEmpty')}</p>}
-          <ul>
-            {result.labels.map((suggestion) => (
-              <li key={suggestion.label}>
-                {suggestion.label} ({Math.round(suggestion.confidence * 100)}%){' '}
-                {currentValue.includes(suggestion.label) ? (
-                  <span>{t('assist.classifyAlreadyApplied')}</span>
-                ) : (
-                  <button type="button" onClick={() => accept(suggestion.label)}>
-                    {t('assist.use')}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-          {result.rejected.length > 0 && (
-            <p>{t('assist.classifyRejected', { labels: result.rejected.join(', ') })}</p>
-          )}
-          <p>{t('assist.notApplied')}</p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={!hasText || running}
+            onClick={() => void run()}
+          >
+            {running ? t('assist.running') : t('assist.classifyButton')}
+          </Button>
         </div>
-      )}
-    </section>
+
+        {error !== null && (
+          <Notice tone="danger" live="assertive">
+            <p>{error}</p>
+          </Notice>
+        )}
+
+        {result !== null && (
+          <div className="flex flex-col gap-2">
+            {result.labels.length === 0 && (
+              <p className="m-0 text-sm">{t('assist.classifyEmpty')}</p>
+            )}
+            <ul className="m-0 flex list-none flex-col gap-2 p-0">
+              {result.labels.map((suggestion) => (
+                <li
+                  key={suggestion.label}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-input px-3 py-2 text-sm"
+                >
+                  <span>
+                    {suggestion.label}{' '}
+                    <span className="text-muted-foreground">
+                      ({Math.round(suggestion.confidence * 100)} %)
+                    </span>
+                  </span>
+                  {currentValue.includes(suggestion.label) ? (
+                    <span className="text-muted-foreground">{t('assist.classifyAlreadyApplied')}</span>
+                  ) : (
+                    <Button type="button" size="sm" onClick={() => accept(suggestion.label)}>
+                      {t('assist.use')}
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {result.rejected.length > 0 && (
+              <p className="m-0 text-sm text-muted-foreground">
+                {t('assist.classifyRejected', { labels: result.rejected.join(', ') })}
+              </p>
+            )}
+            <p className="m-0 text-xs text-muted-foreground">{t('assist.notApplied')}</p>
+          </div>
+        )}
+      </CardBody>
+    </Card>
   )
 }

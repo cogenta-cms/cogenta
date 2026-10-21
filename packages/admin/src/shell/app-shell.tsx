@@ -5,6 +5,7 @@ import {
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -30,9 +31,12 @@ import {
   ApiKeysIcon,
   AssistantIcon,
   AuditIcon,
+  BrushIcon,
   CalendarIcon,
   ChannelsIcon,
   ChevronRightIcon,
+  CloseIcon,
+  CloudIcon,
   CollectionsIcon,
   CommentsIcon,
   CommerceOrdersIcon,
@@ -43,29 +47,34 @@ import {
   CommerceSubscriptionsIcon,
   CommerceTaxIcon,
   CommerceTicketIcon,
+  ContrastIcon,
+  CustomerIcon,
   DashboardIcon,
   DocumentationIcon,
-  EditIcon,
   ExternalLinkIcon,
+  EyeIcon,
   FormSubmissionsIcon,
   FormsIcon,
+  GaugeIcon,
   HealthIcon,
   type IconProps,
   ImportIcon,
-  LogoutIcon,
+  LayoutIcon,
+  LockIcon,
   MarketplaceIcon,
   McpIcon,
   MediaIcon,
   MenusIcon,
   PaletteIcon,
+  PluginsIcon,
   ProfileIcon,
   PromptIcon,
-  ProviderIcon,
   ReviewIcon,
   RolesIcon,
   ScheduledIcon,
   SearchIcon,
   SeoIcon,
+  ServerIcon,
   SettingsIcon,
   SitePlanIcon,
   SkillIcon,
@@ -74,9 +83,13 @@ import {
   TranslationsIcon,
   TrashIcon,
   TrendIcon,
+  UpdatesIcon,
   UsersIcon,
+  WidgetsIcon,
 } from '../ui/icons.js'
+import { AccountMenu } from './account-menu.js'
 import { breadcrumbFor, documentTitleFor } from './breadcrumb.js'
+import { placeFlyout } from './flyout-position.js'
 import { GlobalSearch } from './global-search.js'
 import type { NavGroupId, NavItem } from './nav-items.js'
 import {
@@ -88,6 +101,11 @@ import { type VisibleNavGroup, visibleNavGroups } from './nav-visibility.js'
 import { chromeStatusOrFallback, useChromeStatus } from './shell-status-context.js'
 import '../styles/shell.css'
 import { ThemeToggle } from './theme-toggle.js'
+
+/** Gap kept between a flyout and the top bar / the window's bottom edge. */
+const FLYOUT_MARGIN_PX = 8
+/** Horizontal gap between the rail's right edge and a flyout. */
+const FLYOUT_GAP_PX = 4
 
 const MAIN_CONTENT_ID = 'main-content'
 const SIDEBAR_ID = 'app-shell-sidebar'
@@ -118,12 +136,14 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/forms': FormsIcon,
   '/form-submissions': FormSubmissionsIcon,
   '/media': MediaIcon,
-  '/appearance': EditIcon,
-  '/widgets': EditIcon,
-  '/admin-appearance': EditIcon,
+  '/appearance': LayoutIcon,
+  '/widgets': WidgetsIcon,
+  '/plugins': PluginsIcon,
+  '/admin-appearance': ContrastIcon,
   '/seo': SeoIcon,
   '/commerce/products': CommerceProductsIcon,
   '/commerce/orders': CommerceOrdersIcon,
+  '/commerce/customers': CustomerIcon,
   '/commerce/coupons': CommerceTicketIcon,
   '/commerce/subscriptions': CommerceSubscriptionsIcon,
   '/commerce/settings': CommerceShopIcon,
@@ -132,11 +152,11 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/commerce/payment': CommercePaymentIcon,
   '/assistant': AssistantIcon,
   '/agents': AgentsIcon,
-  '/mcp': McpIcon,
+  '/mcp': ServerIcon,
   '/mcp-clients': McpIcon,
   '/create-site': SitePlanIcon,
   '/theme-generator': PaletteIcon,
-  '/providers': ProviderIcon,
+  '/providers': CloudIcon,
   '/agent-skills': SkillIcon,
   '/prompt-settings': PromptIcon,
   '/channels': ChannelsIcon,
@@ -147,7 +167,9 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/analytics': TrendIcon,
   '/import': ImportIcon,
   '/marketplace': MarketplaceIcon,
-  '/ops-settings': SettingsIcon,
+  '/ops-settings': LockIcon,
+  '/updates': UpdatesIcon,
+  '/observability': EyeIcon,
   '/health': HealthIcon,
   '/tools': ToolsIcon,
   '/scheduled': ScheduledIcon,
@@ -163,11 +185,11 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
  */
 const GROUP_ICONS: Record<NavGroupId, ComponentType<IconProps>> = {
   content: CollectionsIcon,
-  appearance: EditIcon,
+  appearance: BrushIcon,
   commerce: CommerceShopIcon,
   ai: AgentsIcon,
   accounts: UsersIcon,
-  ops: SettingsIcon,
+  ops: GaugeIcon,
   settings: SettingsIcon,
   help: DocumentationIcon,
 }
@@ -517,6 +539,69 @@ export function AppShell(): JSX.Element {
     document.title = documentTitleFor(breadcrumb, t, t('shell.brand'))
   }, [breadcrumb, t])
 
+  const rootRef = useRef<HTMLDivElement>(null)
+  const topbarRef = useRef<HTMLElement>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
+
+  // The top bar wraps to several lines on a narrow window, so the rail (pinned
+  // right under it) reads the bar's real height from `--app-shell-topbar-h`
+  // instead of assuming 72 px.
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    const topbar = topbarRef.current
+    if (root === null || topbar === null) return
+    const measure = (): void => {
+      root.style.setProperty('--app-shell-topbar-h', `${topbar.offsetHeight}px`)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(topbar)
+    return () => observer.disconnect()
+  }, [])
+
+  // An open flyout is `position: fixed` (the rail scrolls, and a scroll box
+  // would clip an absolutely positioned child): it is placed from its trigger
+  // row's rectangle, slid up when it would pass the bottom of the window, and
+  // capped so that a very tall one scrolls by itself. Re-placed whenever the
+  // rail or the window moves, and closed once its row has left the rail.
+  useLayoutEffect(() => {
+    const sidebar = sidebarRef.current
+    if (openFlyoutGroup === null || sidebar === null) return
+    const row = sidebar.querySelector<HTMLElement>(`[data-flyout-group="${openFlyoutGroup}"]`)
+    const trigger = row?.querySelector<HTMLElement>('.app-shell__nav-group-trigger')
+    const flyout = row?.querySelector<HTMLElement>('.app-shell__flyout')
+    if (!row || !trigger || !flyout) return
+    const place = (): void => {
+      const railRect = sidebar.getBoundingClientRect()
+      const triggerRect = trigger.getBoundingClientRect()
+      if (triggerRect.bottom < railRect.top || triggerRect.top > railRect.bottom) {
+        setOpenFlyoutGroup(null)
+        return
+      }
+      const topInset = topbarRef.current?.getBoundingClientRect().bottom ?? railRect.top
+      flyout.style.maxHeight = 'none'
+      const placement = placeFlyout({
+        triggerTop: triggerRect.top,
+        flyoutHeight: flyout.offsetHeight,
+        viewportHeight: window.innerHeight,
+        topInset,
+        margin: FLYOUT_MARGIN_PX,
+      })
+      flyout.style.top = `${placement.top}px`
+      flyout.style.left = `${railRect.right + FLYOUT_GAP_PX}px`
+      flyout.style.maxHeight = `${placement.maxHeight}px`
+    }
+    place()
+    sidebar.addEventListener('scroll', place, { passive: true })
+    window.addEventListener('scroll', place, { passive: true })
+    window.addEventListener('resize', place)
+    return () => {
+      sidebar.removeEventListener('scroll', place)
+      window.removeEventListener('scroll', place)
+      window.removeEventListener('resize', place)
+    }
+  }, [openFlyoutGroup, sidebarCollapsed])
+
   const drawerRef = useRef<HTMLDivElement>(null)
   const drawerTriggerRef = useRef<HTMLButtonElement>(null)
 
@@ -530,6 +615,9 @@ export function AppShell(): JSX.Element {
     if (container === null) return
     const items = focusableIn(container)
     items[0]?.focus()
+    // The page behind must not scroll under a modal drawer.
+    const previousOverflow = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
 
     function onKeyDown(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
@@ -553,15 +641,17 @@ export function AppShell(): JSX.Element {
     }
 
     document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.documentElement.style.overflow = previousOverflow
+    }
   }, [drawerOpen])
 
-  function isGroupOpen(group: {
-    readonly id: NavGroupId
-    readonly openByDefault: boolean
-  }): boolean {
+  function isGroupOpen(group: VisibleNavGroup): boolean {
     const stored = groupOpen[group.id]
-    return stored ?? group.openByDefault
+    // The group holding the current page is open until the reader says
+    // otherwise: a drawer that hides where you are tells you nothing.
+    return stored ?? (group.openByDefault || groupContainsPath(group, location.pathname))
   }
 
   /** One submenu row — an item's icon, label and own badge. Identical markup inside a sidebar flyout and inside the mobile drawer's inline list; only the `<ul>` around it differs. */
@@ -691,6 +781,7 @@ export function AppShell(): JSX.Element {
               key={group.id}
               className="app-shell__nav-group reveal"
               style={style}
+              data-flyout-group={group.id}
               data-current={groupContainsPath(group, location.pathname) ? 'true' : undefined}
               onMouseEnter={() => openFlyout(group.id)}
               onMouseLeave={() => scheduleCloseFlyout(group.id)}
@@ -872,25 +963,20 @@ export function AppShell(): JSX.Element {
             </span>
           )}
         </span>
-        <span className="app-shell__footer-site">{siteTitle ?? t('shell.footer')}</span>
+        <span className="app-shell__footer-site">{siteTitle ?? window.location.hostname}</span>
       </div>
     )
   }
 
-  function onDrawerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
-    // The trap above also listens at the document level (so `Escape`/`Tab`
-    // work even when focus is on something React does not attach this
-    // handler to), but stopping propagation here keeps a stray `Escape`
-    // inside a form field from doing anything unrelated first.
-    if (event.key === 'Escape') event.stopPropagation()
-  }
-
   return (
-    <div className={`app-shell${sidebarCollapsed ? ' app-shell--sidebar-collapsed' : ''}`}>
+    <div
+      ref={rootRef}
+      className={`app-shell${sidebarCollapsed ? ' app-shell--sidebar-collapsed' : ''}`}
+    >
       <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>
         {t('shell.skipLink')}
       </a>
-      <header className="app-shell__topbar">
+      <header ref={topbarRef} className="app-shell__topbar">
         <button
           type="button"
           className="app-shell__drawer-trigger"
@@ -943,38 +1029,13 @@ export function AppShell(): JSX.Element {
           </a>
           {email !== null && <NotificationCenter />}
           <ThemeToggle />
-          {email !== null && (
-            <>
-              {/* The account chip: an avatar circle (the e-mail's first
-                  letter, decorative — `app-shell__account-email` right next
-                  to it still carries the real accessible text) inside a
-                  pill, matching the "Voir le site"/"Se déconnecter" buttons
-                  either side of it. */}
-              <span className="app-shell__account-chip flex min-w-0 items-center gap-2 rounded-full border border-border bg-card/60 py-1 pr-3 pl-1">
-                <span
-                  aria-hidden="true"
-                  className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-primary"
-                >
-                  {email.charAt(0).toUpperCase()}
-                </span>
-                <span className="app-shell__account-email">{email}</span>
-              </span>
-              <button
-                type="button"
-                className="app-shell__logout"
-                aria-label={t('shell.logout')}
-                onClick={() => void auth.logout()}
-              >
-                <LogoutIcon className="size-3.5" />
-                <span className="app-shell__logout-label">{t('shell.logout')}</span>
-              </button>
-            </>
-          )}
+          {email !== null && <AccountMenu email={email} roles={roles} />}
         </div>
       </header>
 
       <nav
         id={SIDEBAR_ID}
+        ref={sidebarRef}
         className="app-shell__sidebar"
         aria-label={t('shell.nav')}
         data-collapsed={sidebarCollapsed ? 'true' : undefined}
@@ -1017,8 +1078,21 @@ export function AppShell(): JSX.Element {
           role="dialog"
           aria-modal="true"
           aria-label={t('shell.nav')}
-          onKeyDown={onDrawerKeyDown}
         >
+          <div className="app-shell__drawer-head">
+            <span className="app-shell__drawer-title">{siteTitle ?? t('shell.brand')}</span>
+            <button
+              type="button"
+              className="app-shell__drawer-close"
+              aria-label={t('shell.closeNav')}
+              onClick={() => {
+                setDrawerOpen(false)
+                drawerTriggerRef.current?.focus()
+              }}
+            >
+              <CloseIcon className="size-4" />
+            </button>
+          </div>
           {renderDrawerNav()}
         </div>
       )}

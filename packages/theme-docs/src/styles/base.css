@@ -403,7 +403,7 @@ img {
   inline-size: 100%;
   min-block-size: 2.375rem;
   padding: var(--cd-s2) var(--cd-s3) var(--cd-s2) calc(var(--cd-s3) + 1.5rem);
-  border: var(--cd-rule) solid var(--cd-line);
+  border: var(--cd-rule) solid var(--cd-line-strong);
   border-radius: var(--cd-radius-control);
   background: var(--cd-surface);
   color: var(--cd-ink);

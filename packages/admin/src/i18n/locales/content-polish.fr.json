@@ -1,0 +1,50 @@
+{
+  "collectionList": {
+    "deleteSelected": "Mettre à la corbeille ({{count}})",
+    "selectAll": "Sélectionner toutes les lignes de cette page",
+    "resetFilters": "Réinitialiser les filtres",
+    "bulkReportSummary": "{{succeeded}} sur {{total}} entrées traitées ({{action}}). Voir ci-dessous ce qui a échoué.",
+    "bulkActionName": {
+      "publish": "publication",
+      "unpublish": "dépublication",
+      "duplicate": "duplication",
+      "trash": "mise à la corbeille"
+    },
+    "bulkDone": {
+      "publish_one": "{{count}} entrée publiée.",
+      "publish_other": "{{count}} entrées publiées.",
+      "unpublish_one": "{{count}} entrée dépubliée.",
+      "unpublish_other": "{{count}} entrées dépubliées.",
+      "duplicate_one": "{{count}} entrée dupliquée.",
+      "duplicate_other": "{{count}} entrées dupliquées.",
+      "trash_one": "{{count}} entrée mise à la corbeille.",
+      "trash_other": "{{count}} entrées mises à la corbeille."
+    }
+  },
+  "seo": {
+    "noindexLabel": "Ne pas afficher cette page dans les moteurs de recherche",
+    "focusKeywordLocalHint": "Sert uniquement à l'analyse ci-dessous. Ce mot-clé n'est pas enregistré avec le contenu : il reste dans ce navigateur.",
+    "previewNoindexChecked": "La case « ne pas afficher dans les moteurs de recherche » est cochée : cette page ne sera pas référencée.",
+    "previewNoindex": "Cette page n'est pas encore publiée : les moteurs de recherche ne la verront qu'après sa publication."
+  },
+  "apiErrors": {
+    "ASSIST_RESPONSE_INVALID": {
+      "message": "L'assistant a répondu d'une façon que Cogenta ne peut pas utiliser.",
+      "hint": "Relancez la demande. Si cela se répète, essayez avec un autre modèle depuis l'écran des fournisseurs."
+    },
+    "TAXONOMY_NOT_HIERARCHICAL": {
+      "message": "Cette taxonomie est à plat : ses termes ne peuvent pas être placés les uns sous les autres.",
+      "hint": "Créez le terme sans parent."
+    }
+  },
+  "assist": {
+    "schemaTypes": {
+      "FAQPage": "Page de questions fréquentes",
+      "HowTo": "Tutoriel pas à pas",
+      "Article": "Article",
+      "Recipe": "Recette",
+      "Event": "Événement"
+    },
+    "moderateInlineButton": "Vérifier si une revue est nécessaire"
+  }
+}

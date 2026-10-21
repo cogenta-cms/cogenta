@@ -2,6 +2,7 @@ import {
   CogentaError,
   type DatabaseHandle,
   identifier,
+  isCogentaError,
   limit,
   newId,
   type SqlExecutor,
@@ -13,7 +14,7 @@ import { couponRefusal } from '../cart/store.js'
 import type { CatalogStore } from '../catalog/store.js'
 import type { StockShortfall } from '../catalog/types.js'
 import type { CouponStore } from '../coupon/store.js'
-import type { CustomerStore } from '../customer/store.js'
+import { assertUsableEmail, type CustomerStore } from '../customer/store.js'
 import { toInt, toNullableText, toText } from '../rows.js'
 import { TABLES } from '../tables.js'
 import type {
@@ -55,6 +56,11 @@ export interface PlaceManualOrderInput {
   readonly currency: string
   readonly lines: readonly PlaceManualOrderLineInput[]
   readonly shippingAddress?: ShippingAddress | null
+  /** The tax / delivery zone (ISO 3166-1 alpha-2), which prices tax and shipping. */
+  readonly shippingCountry?: string | null
+  readonly shippingRegion?: string | null
+  readonly shippingMethodId?: string | null
+  readonly couponCode?: string | null
   readonly actorId?: string | null
 }
 
@@ -69,7 +75,12 @@ export interface PlaceManualOrderInput {
 export type PlaceOrderOutcome =
   | { readonly kind: 'placed'; readonly order: Order }
   | { readonly kind: 'out_of_stock'; readonly shortfalls: readonly StockShortfall[] }
-  | { readonly kind: 'coupon_refused'; readonly reason: string }
+  | {
+      readonly kind: 'coupon_refused'
+      readonly reason: string
+      /** The refusal's stable code, so a screen can say it in its own language. */
+      readonly code?: string
+    }
   | { readonly kind: 'empty' }
 
 export interface OrderStoreDependencies {
@@ -395,7 +406,13 @@ export function createOrderStore(
       }
       if (totals.lines.length === 0) return { kind: 'empty' }
 
-      const customer = await dependencies.customers.ensure(input.email, input.customerName)
+      // The customer is *not* created here: only an order that is really
+      // placed may leave a customer behind, so `ensure` runs inside the
+      // placement transaction below. A refused order (no stock, a coupon that
+      // ran out) therefore creates nobody. Validated now so a bad address is
+      // refused before anything is touched.
+      assertUsableEmail(input.email)
+      const knownCustomer = await dependencies.customers.readByEmail(input.email)
 
       // Re-checked here, at the last possible moment, against the *final*
       // subtotal. The check the cart did was for the shopper's benefit; this
@@ -411,10 +428,11 @@ export function createOrderStore(
           cart.couponCode,
           totals.subtotalMinor,
           cart.currency,
-          { customerId: customer.id, productIds },
+          { customerId: knownCustomer?.id ?? null, productIds },
         )
         if (check.kind !== 'ok') {
-          return { kind: 'coupon_refused', reason: couponRefusal(check).message }
+          const refusal = couponRefusal(check)
+          return { kind: 'coupon_refused', reason: refusal.message, code: refusal.code }
         }
       }
 
@@ -427,6 +445,11 @@ export function createOrderStore(
         // true or none of it happened.
         return await db.transaction<PlaceOrderOutcome>(
           async (tx) => {
+            const customer = await dependencies.customers.ensure(
+              input.email,
+              input.customerName,
+              tx,
+            )
             const taken = await dependencies.catalog.takeStock(
               totals.lines.map((line) => ({
                 variantId: line.variantId,
@@ -455,6 +478,7 @@ export function createOrderStore(
                 throw new PlacementRefused({
                   kind: 'coupon_refused',
                   reason: 'This discount code was fully used a moment ago.',
+                  code: 'COMMERCE_COUPON_EXHAUSTED',
                 })
               }
             }
@@ -472,7 +496,7 @@ export function createOrderStore(
               values (${id}, ${reference}, ${customer.id}, ${customer.email}, ${'pending'}, ${cart.currency},
                       ${totals.subtotalMinor}, ${totals.discountMinor}, ${totals.shippingMinor},
                       ${totals.taxMinor}, ${totals.totalMinor},
-                      ${cart.couponCode}, ${cart.shippingCountry}, ${cart.shippingRegion},
+                      ${cart.couponCode}, ${cart.shippingCountry ?? address?.country?.trim().toUpperCase() ?? null}, ${cart.shippingRegion},
                       ${cart.shippingMethodId}, ${null},
                       ${address?.line1 ?? null}, ${address?.line2 ?? null}, ${address?.city ?? null},
                       ${address?.postalCode ?? null}, ${address?.recipient ?? null}, ${address?.phone ?? null},
@@ -521,22 +545,57 @@ export function createOrderStore(
     placeManual: async (input) => {
       if (input.lines.length === 0) return { kind: 'empty' }
 
-      const customer = await dependencies.customers.ensure(input.email, input.customerName)
+      // Everything that can be refused is checked before anything is written,
+      // and the customer is only created by `place()` once the order stands.
+      assertUsableEmail(input.email)
+      const known = await dependencies.customers.readByEmail(input.email)
       const cart = await dependencies.carts.open({
         currency: input.currency,
-        customerId: customer.id,
+        customerId: known?.id ?? null,
       })
-      for (const line of input.lines) {
-        await dependencies.carts.addLine(cart.id, line.variantId, line.quantity)
-      }
 
-      return store.place({
-        cartId: cart.id,
-        email: input.email,
-        ...(input.customerName === undefined ? {} : { customerName: input.customerName }),
-        ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
-        ...(input.shippingAddress === undefined ? {} : { shippingAddress: input.shippingAddress }),
-      })
+      try {
+        for (const line of input.lines) {
+          await dependencies.carts.addLine(cart.id, line.variantId, line.quantity)
+        }
+        const country = input.shippingCountry ?? input.shippingAddress?.country ?? null
+        if (country !== null && country.trim() !== '') {
+          await dependencies.carts.setAddress(cart.id, {
+            country: country.trim(),
+            region: input.shippingRegion ?? null,
+          })
+        }
+        if (input.shippingMethodId !== undefined && input.shippingMethodId !== null) {
+          await dependencies.carts.setShippingMethod(cart.id, input.shippingMethodId)
+        }
+        if (input.couponCode !== undefined && input.couponCode !== null && input.couponCode.trim() !== '') {
+          try {
+            await dependencies.carts.applyCoupon(cart.id, input.couponCode.trim())
+          } catch (error) {
+            if (isCogentaError(error) && error.code.startsWith('COMMERCE_COUPON_')) {
+              await dependencies.carts.abandon(cart.id)
+              return { kind: 'coupon_refused', reason: error.message, code: error.code }
+            }
+            throw error
+          }
+        }
+
+        const outcome = await store.place({
+          cartId: cart.id,
+          email: input.email,
+          ...(input.customerName === undefined ? {} : { customerName: input.customerName }),
+          ...(input.actorId === undefined ? {} : { actorId: input.actorId }),
+          ...(input.shippingAddress === undefined
+            ? {}
+            : { shippingAddress: input.shippingAddress }),
+        })
+        // A refused order leaves no open basket behind.
+        if (outcome.kind !== 'placed') await dependencies.carts.abandon(cart.id)
+        return outcome
+      } catch (error) {
+        await dependencies.carts.abandon(cart.id)
+        throw error
+      }
     },
 
     read: async (id) => read(id),
@@ -691,9 +750,17 @@ export function createOrderStore(
 
       const address = patch.shippingAddress
       const at = stamp()
+      const email = patch.email === undefined ? current.email : assertUsableEmail(patch.email)
+      const country =
+        address === undefined || address === null || address.country === undefined
+          ? current.shippingCountry
+          : address.country === null || address.country.trim() === ''
+            ? null
+            : address.country.trim().toUpperCase()
       await db.query(sql`
         update ${orders}
-        set email = ${patch.email ?? current.email},
+        set email = ${email},
+            shipping_country = ${country},
             shipping_address_line1 = ${address === undefined ? current.shippingAddressLine1 : (address?.line1 ?? null)},
             shipping_address_line2 = ${address === undefined ? current.shippingAddressLine2 : (address?.line2 ?? null)},
             shipping_city = ${address === undefined ? current.shippingCity : (address?.city ?? null)},
@@ -728,6 +795,14 @@ export function createOrderStore(
           hint: 'Fill in both fields, or wait until the shipment has a real tracking number.',
         })
       }
+      const trackingUrl = tracking.url?.trim() ?? ''
+      if (trackingUrl !== '' && !isHttpUrl(trackingUrl)) {
+        throw new CogentaError({
+          code: 'COMMERCE_TRACKING_INVALID',
+          message: 'The tracking link must be a web address starting with http:// or https://.',
+          hint: 'Paste the carrier\'s tracking page address, or leave the field empty.',
+        })
+      }
 
       return db.transaction(
         async (tx) => {
@@ -737,7 +812,7 @@ export function createOrderStore(
             update ${orders}
             set tracking_carrier = ${tracking.carrier},
                 tracking_number = ${tracking.number},
-                tracking_url = ${tracking.url ?? null},
+                tracking_url = ${trackingUrl === '' ? null : trackingUrl},
                 shipped_at = ${current.shippedAt ?? at},
                 status = ${wasPaid ? 'shipped' : current.status},
                 updated_at = ${at}
@@ -772,6 +847,16 @@ export function createOrderStore(
   }
 
   return store
+}
+
+/** A web address a person can follow: http or https only (never `javascript:`), with a host. */
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname !== ''
+  } catch {
+    return false
+  }
 }
 
 /** Internal. Unwinds the placement transaction with a caller-facing outcome. */

@@ -186,6 +186,13 @@ export function applyEnv(
     output['payment'] = payment
   }
 
+  const mcp = section(output, 'mcp')
+  if (mcp !== undefined) {
+    const http = read(env, 'COGENTA_MCP_HTTP')
+    if (http !== undefined) mcp['http'] = !['false', '0', 'off', 'no'].includes(http.toLowerCase())
+    output['mcp'] = mcp
+  }
+
   // `OTEL_*` are OpenTelemetry's own standard variable names — honoured as a
   // fallback so an operator who already exports to `OTEL_EXPORTER_OTLP_ENDPOINT`
   // for every other service in their fleet does not have to learn a second

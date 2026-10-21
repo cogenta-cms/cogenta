@@ -179,6 +179,7 @@ export function resolveConfig(
     }),
     analytics: Object.freeze({ retainDays: config.analytics.retainDays }),
     appearance: Object.freeze({ remoteWebFonts: config.appearance.remoteWebFonts }),
+    mcp: Object.freeze({ http: config.mcp.http }),
     llm:
       config.llm === undefined
         ? undefined

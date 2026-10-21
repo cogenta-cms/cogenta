@@ -773,8 +773,33 @@ function createPromptTemplateRegistryAdapter(
 function createProviderRegistryAdapter(
   store: ProviderConfigStore,
   onMutated: () => Promise<void>,
+  live: AgentProviderRegistryLike,
 ): ProviderRegistryLike {
   return {
+    async test(provider) {
+      if (!live.has(provider)) {
+        return {
+          ok: false,
+          detail: 'This provider is disabled or not saved, so no request was sent.',
+        }
+      }
+      const client = live.get(provider)
+      const startedAt = Date.now()
+      try {
+        await client.chat({
+          model: client.model,
+          messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
+          maxTokens: 16,
+        })
+        return { ok: true, latencyMs: Date.now() - startedAt }
+      } catch (error) {
+        return {
+          ok: false,
+          latencyMs: Date.now() - startedAt,
+          detail: error instanceof Error ? error.message : String(error),
+        }
+      }
+    },
     names: KNOWN_PROVIDER_CATALOG.map((entry) => entry.id),
     catalog: providerCatalogSummary(),
     list: () => store.list(),
@@ -934,8 +959,10 @@ export async function buildAgentRuntime(
     },
   }
 
-  const providerRegistry = createProviderRegistryAdapter(providerStore, () =>
-    liveProviders.refresh(),
+  const providerRegistry = createProviderRegistryAdapter(
+    providerStore,
+    () => liveProviders.refresh(),
+    liveProviders,
   )
   const skillRegistry = createSkillRegistryAdapter(skillStore)
   const promptTemplateRegistry = createPromptTemplateRegistryAdapter(promptTemplateStore)

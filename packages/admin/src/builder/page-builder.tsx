@@ -2,7 +2,6 @@ import type { BlockVariant } from '@cogenta/blocks'
 import { type JSX, type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { renderDraft } from '../api/builder-client.js'
-import { ApiError } from '../api/client.js'
 import type { ContentBlock } from '../api/content-client.js'
 import type { Pattern } from '../api/patterns-client.js'
 import { BlockForm } from '../blocks/block-form.js'
@@ -32,6 +31,7 @@ import { applyTemplateBlocks, insertPatternBlocks } from './patterns.js'
 import { PreviewFrame } from './preview-frame.js'
 import type { Viewport } from './viewports.js'
 import { VIEWPORTS } from './viewports.js'
+import { describeApiError } from '../api/describe-error.js'
 
 /**
  * The visual page builder (L16, extended by fiche 05 and fiche 43
@@ -187,7 +187,7 @@ export function PageBuilder({
         })
         .catch((caught: unknown) => {
           if (abandoned) return
-          setError(caught instanceof ApiError ? caught.message : t('builder.previewError'))
+          setError(describeApiError(caught, t('builder.previewError')).message)
         })
         .finally(() => {
           if (!abandoned) setRendering(false)

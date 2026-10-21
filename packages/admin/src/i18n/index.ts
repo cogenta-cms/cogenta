@@ -2,6 +2,26 @@ import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
+import { mergeLocales } from './merge-locales.js'
+
+/**
+ * Extra translation trees dropped next to the main files as
+ * `locales/<name>.fr.json` / `locales/<name>.en.json` (the shop screens keep
+ * theirs there). They are merged over `fr.json` / `en.json`, so a screen group
+ * can own its strings without editing the big shared files.
+ */
+const EXTRA_FR = Object.values(
+  import.meta.glob<Record<string, unknown>>('./locales/*.fr.json', {
+    eager: true,
+    import: 'default',
+  }),
+)
+const EXTRA_EN = Object.values(
+  import.meta.glob<Record<string, unknown>>('./locales/*.en.json', {
+    eager: true,
+    import: 'default',
+  }),
+)
 
 export const SUPPORTED_LANGUAGES = ['fr', 'en'] as const
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
@@ -71,7 +91,10 @@ i18next.on('languageChanged', () => {
 })
 
 void i18next.use(initReactI18next).init({
-  resources: { fr: { translation: fr }, en: { translation: en } },
+  resources: {
+    fr: { translation: mergeLocales(fr, ...EXTRA_FR) },
+    en: { translation: mergeLocales(en, ...EXTRA_EN) },
+  },
   lng: detectLanguage(),
   fallbackLng: DEFAULT_LANGUAGE,
   interpolation: { escapeValue: false },

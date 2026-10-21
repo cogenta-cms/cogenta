@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next'
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   activateMarketplaceItem,
@@ -406,7 +406,7 @@ export function MarketplaceRoute(): JSX.Element {
           <a
             href="https://github.com/cogenta-cms/cogenta/blob/main/docs/guide-plugin.md"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
           >
             {t('marketplace.guideLink')}
           </a>
@@ -414,7 +414,7 @@ export function MarketplaceRoute(): JSX.Element {
           <a
             href="https://github.com/cogenta-cms/cogenta/tree/main/examples/plugin-starter"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
           >
             {t('marketplace.starterLink')}
           </a>
@@ -611,7 +611,18 @@ export function MarketplaceRoute(): JSX.Element {
                       )
                     })}
                     {installedItems.length === 0 && (
-                      <TableEmpty colSpan={6}>{t('marketplace.installed.empty')}</TableEmpty>
+                      <TableEmpty colSpan={6}>
+                        <p className="m-0">{t('marketplace.installed.empty')}</p>
+                        <p className="mt-2 mb-0 text-sm">
+                          <Link to="/appearance" className="text-primary underline">
+                            {t('marketplace.installed.themesLink')}
+                          </Link>
+                          {' · '}
+                          <Link to="/plugins" className="text-primary underline">
+                            {t('marketplace.installed.pluginsLink')}
+                          </Link>
+                        </p>
+                      </TableEmpty>
                     )}
                   </TableBody>
                 </Table>
@@ -701,7 +712,34 @@ export function MarketplaceRoute(): JSX.Element {
                     </TableRow>
                   ))}
                   {items.length === 0 && (
-                    <TableEmpty colSpan={5}>{t('marketplace.empty')}</TableEmpty>
+                    <TableEmpty colSpan={5}>
+                      {query.trim() === '' && kindFilter === '' ? (
+                        <>
+                          <p className="m-0">{t('marketplace.emptyCatalog')}</p>
+                          <p className="mt-2 mb-0 text-sm">
+                            <Link to="/plugins" className="text-primary underline">
+                              {t('marketplace.emptyCatalogPlugins')}
+                            </Link>
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="m-0">{t('marketplace.empty')}</p>
+                          <p className="mt-2 mb-0">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => {
+                                setQuery('')
+                                setKindFilter('')
+                              }}
+                            >
+                              {t('marketplace.clearFilters')}
+                            </Button>
+                          </p>
+                        </>
+                      )}
+                    </TableEmpty>
                   )}
                 </TableBody>
               </Table>

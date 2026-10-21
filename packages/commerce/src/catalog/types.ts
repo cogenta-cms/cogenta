@@ -69,8 +69,18 @@ export interface Variant {
    * a size), same convention as the product's own gallery above but never a
    * list: a variant is one sellable thing, not a set to browse. */
   readonly imageMediaId: string | null
+  /** An optional recurring plan: a paid order containing this variant opens a subscription (`null` = one-off product). */
+  readonly recurring: VariantRecurrence | null
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+/** "Billed every `count` `unit`s" — the same vocabulary as a subscription's own interval. */
+export const RECURRENCE_UNITS = ['day', 'week', 'month', 'year'] as const
+export type RecurrenceUnit = (typeof RECURRENCE_UNITS)[number]
+export interface VariantRecurrence {
+  readonly unit: RecurrenceUnit
+  readonly count: number
 }
 
 export interface CreateProductInput {
@@ -108,6 +118,7 @@ export interface CreateVariantInput {
   readonly heightMm?: number | null
   readonly depthMm?: number | null
   readonly imageMediaId?: string | null
+  readonly recurring?: VariantRecurrence | null
 }
 
 export interface UpdateVariantInput {
@@ -127,6 +138,7 @@ export interface UpdateVariantInput {
   readonly heightMm?: number | null
   readonly depthMm?: number | null
   readonly imageMediaId?: string | null
+  readonly recurring?: VariantRecurrence | null
 }
 
 /** One classification of a product against a term of a taxonomy the site

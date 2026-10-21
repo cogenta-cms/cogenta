@@ -65,7 +65,10 @@ export function CreatePluginDialog({
       }
     >
       <div className="flex flex-col gap-4">
-        <Field label={t('plugins.create.nameLabel')} description={t('plugins.create.nameHint')}>
+        <Field
+          label={t('plugins.create.nameLabel')}
+          description={name.trim() === '' ? t('plugins.create.nameRequired') : t('plugins.create.nameHint')}
+        >
           {(control) => (
             <Input
               {...control}

@@ -12,6 +12,7 @@ import {
 } from '../api/role-permissions-client.js'
 import { listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { roleLabel, roleLabels } from '../lib/role-label.js'
 import {
   diagnosePermissions,
   type PermissionAnomaly,
@@ -47,6 +48,7 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
+import { EditIcon } from '../ui/icons.js'
 
 /**
  * Fiche 19, tasks 1-3 gave this screen its read-only matrix and anomaly
@@ -156,6 +158,9 @@ export function RolesRoute(): JSX.Element {
       ? [...new Set([...knownRoleNames(schema), ...Object.keys(roleUsage)])].sort()
       : []
   const candidateRoles = [...new Set(['public', 'viewer', 'editor', 'admin', ...roleNames])].sort()
+  // The "by role" view lists every role the site speaks of — schema, accounts
+  // and shop alike — administrator and editor first, "everyone" last.
+  const byRoleNames = orderRoles([...candidateRoles, ...Object.keys(commerce?.roles ?? {})])
 
   return (
     <section aria-labelledby="roles-heading" className="flex flex-col gap-6">
@@ -206,9 +211,11 @@ export function RolesRoute(): JSX.Element {
                 aria-selected={tab === key}
                 aria-controls={`roles-panel-${key}`}
                 className={
-                  tab === key
-                    ? 'border-b-2 border-primary px-3 py-2 text-sm font-semibold text-foreground'
-                    : 'border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground'
+                  (tab === key
+                    ? 'border-primary font-semibold text-primary '
+                    : 'border-transparent text-muted-foreground hover:text-foreground ') +
+                  '-mb-px cursor-pointer appearance-none border-0 border-b-2 bg-transparent px-3 py-2 text-sm ' +
+                  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
                 }
                 onClick={() => setTab(key)}
               >
@@ -236,7 +243,7 @@ export function RolesRoute(): JSX.Element {
           {tab === 'byRole' && (
             <div id="roles-panel-byRole" role="tabpanel" aria-labelledby="roles-tab-byRole">
               <ByRoleMatrix
-                roles={roleNames}
+                roles={byRoleNames}
                 collections={collections}
                 taxonomies={taxonomies}
                 locale={i18n.language}
@@ -280,6 +287,16 @@ export function RolesRoute(): JSX.Element {
       )}
     </section>
   )
+}
+
+const ROLE_ORDER = ['admin', 'editor']
+
+/** `admin` and `editor` first, `public` last, everything else alphabetically between them. */
+function orderRoles(roles: readonly string[]): readonly string[] {
+  const unique = [...new Set(roles)]
+  const rank = (role: string): number =>
+    role === 'public' ? 1000 : ROLE_ORDER.includes(role) ? ROLE_ORDER.indexOf(role) : 100
+  return unique.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
 }
 
 /** Shared with `users.tsx`'s role-grants preview — one place that maps a contract A action to its translation key. */
@@ -344,11 +361,11 @@ function anomalyMessage(anomaly: PermissionAnomaly, t: TFunction): string {
       return t('rolesMatrix.anomalyRoutedNotPublic', { label: anomaly.label })
     case 'unknownRoleInUse':
       return t('rolesMatrix.anomalyUnknownRoleInUse', {
-        role: anomaly.subject,
+        role: roleLabel(t, anomaly.subject),
         count: anomaly.accountCount ?? 0,
       })
     case 'unusedRole':
-      return t('rolesMatrix.anomalyUnusedRole', { role: anomaly.subject })
+      return t('rolesMatrix.anomalyUnusedRole', { role: roleLabel(t, anomaly.subject) })
     default:
       return anomaly.kind satisfies never
   }
@@ -383,7 +400,7 @@ function ByCollectionMatrix({
   const { t } = useTranslation()
 
   return (
-    <TableRoot label={t('rolesMatrix.byCollectionTableLabel')}>
+    <TableRoot label={t('rolesMatrix.byCollectionTableLabel')} stacked>
       <Table>
         <TableHead>
           <TableRow>
@@ -396,7 +413,9 @@ function ByCollectionMatrix({
         <TableBody>
           {collections.map((collection) => (
             <TableRow key={`collection-${collection.name}`}>
-              <TableCell className="font-medium">{collection.labels.plural}</TableCell>
+              <TableCell stack="heading" className="font-medium">
+                {collection.labels.plural}
+              </TableCell>
               {ALL_CONTENT_ACTIONS.map((action) => (
                 <PermissionCell
                   key={action}
@@ -415,7 +434,7 @@ function ByCollectionMatrix({
             const label = taxonomyLabel(taxonomy, locale)
             return (
               <TableRow key={`taxonomy-${taxonomy.name}`}>
-                <TableCell className="font-medium">
+                <TableCell stack="heading" className="font-medium">
                   {label}
                   <span className="ml-2 text-xs text-muted-foreground">
                     {t('rolesMatrix.taxonomyBadge')}
@@ -424,7 +443,11 @@ function ByCollectionMatrix({
                 {ALL_CONTENT_ACTIONS.map((action) =>
                   action === 'publish' ? (
                     // Contract A: a term is never published (defineTaxonomy refuses the action outright).
-                    <TableCell key={action} className="text-sm text-muted-foreground">
+                    <TableCell
+                      key={action}
+                      className="text-sm text-muted-foreground"
+                      label={t(ACTION_KEY[action])}
+                    >
                       —
                     </TableCell>
                   ) : (
@@ -468,14 +491,15 @@ function PermissionCell({
 }): JSX.Element {
   const { t } = useTranslation()
   const effective = override ?? fileRule
-  const text = effective.roles.length === 0 ? '—' : effective.roles.join(', ')
+  const text = effective.roles.length === 0 ? '—' : roleLabels(t, effective.roles)
+  const actionLabel = t(ACTION_KEY[action])
 
   return (
-    <TableCell className="text-sm">
-      <div className="flex flex-wrap items-center gap-2">
+    <TableCell className="text-sm" label={actionLabel}>
+      <div className="flex flex-wrap items-center justify-end gap-2 md:justify-start">
         <span>
           {text}
-          {effective.own && ' (own)'}
+          {effective.own && t('rolesMatrix.ownSuffix')}
         </span>
         {override !== undefined && (
           <span
@@ -487,10 +511,12 @@ function PermissionCell({
         )}
         <button
           type="button"
-          className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          aria-label={t('rolesMatrix.editCellLabel', { label, action: actionLabel })}
+          title={t('rolesMatrix.editButton')}
+          className="inline-flex size-6 shrink-0 cursor-pointer appearance-none items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           onClick={() => onEdit({ subjectKind, name, label, action, fileRule })}
         >
-          {t('rolesMatrix.editButton')}
+          <EditIcon className="size-3.5" />
         </button>
       </div>
     </TableCell>
@@ -512,7 +538,7 @@ function ByRoleMatrix({
   const schema = { collections, taxonomies }
 
   return (
-    <TableRoot label={t('rolesMatrix.byRoleTableLabel')}>
+    <TableRoot label={t('rolesMatrix.byRoleTableLabel')} stacked>
       <Table>
         <TableHead>
           <TableRow>
@@ -531,16 +557,24 @@ function ByRoleMatrix({
             const bySubject = new Map(grants.map((grant) => [grant.name, grant]))
             return (
               <TableRow key={role}>
-                <TableCell className="font-medium">
-                  {t(`roles.${role}`, { defaultValue: role })}
+                <TableCell stack="heading" className="font-medium">
+                  {roleLabel(t, role)}
                 </TableCell>
                 {collections.map((collection) => (
-                  <TableCell key={collection.name} className="text-sm">
+                  <TableCell
+                    key={collection.name}
+                    className="text-sm"
+                    label={collection.labels.plural}
+                  >
                     {formatActions(bySubject.get(collection.name)?.actions, t)}
                   </TableCell>
                 ))}
                 {taxonomies.map((taxonomy) => (
-                  <TableCell key={taxonomy.name} className="text-sm">
+                  <TableCell
+                    key={taxonomy.name}
+                    className="text-sm"
+                    label={taxonomyLabel(taxonomy, locale)}
+                  >
                     {formatActions(bySubject.get(taxonomy.name)?.actions, t)}
                   </TableCell>
                 ))}
@@ -573,7 +607,7 @@ function CommerceSection({
   readonly roles: Readonly<Record<string, readonly string[]>>
 }): JSX.Element {
   const { t } = useTranslation()
-  const roleNames = Object.keys(roles).sort()
+  const roleNames = orderRoles(Object.keys(roles))
 
   return (
     <Card aria-labelledby="roles-commerce-heading">
@@ -584,29 +618,43 @@ function CommerceSection({
       </CardHeader>
       <CardBody className="flex flex-col gap-3">
         <p className="m-0 text-sm text-muted-foreground">{t('rolesMatrix.commerceDescription')}</p>
-        <TableRoot label={t('rolesMatrix.commerceTableLabel')}>
+        <TableRoot label={t('rolesMatrix.commerceTableLabel')} stacked>
           <Table>
             <TableHead>
               <TableRow>
-                <TableHeader>{t('rolesMatrix.roleColumn')}</TableHeader>
-                {permissions.map((permission) => (
-                  <TableHeader key={permission} className="font-mono text-xs">
-                    {permission}
+                <TableHeader>{t('rolesMatrix.permissionColumn')}</TableHeader>
+                {roleNames.map((role) => (
+                  <TableHeader key={role} className="text-center">
+                    {roleLabel(t, role)}
                   </TableHeader>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
-              {roleNames.map((role) => (
-                <TableRow key={role}>
-                  <TableCell className="font-medium">
-                    {t(`roles.${role}`, { defaultValue: role })}
+              {permissions.map((permission) => (
+                <TableRow key={permission}>
+                  <TableCell stack="heading" className="font-medium">
+                    {t(`rolesMatrix.commercePermissions.${permission.replaceAll('.', '_')}`, {
+                      defaultValue: permission,
+                    })}
                   </TableCell>
-                  {permissions.map((permission) => (
-                    <TableCell key={permission} className="text-center text-sm">
-                      {(roles[role] ?? []).includes(permission) ? '✓' : '—'}
-                    </TableCell>
-                  ))}
+                  {roleNames.map((role) => {
+                    const granted = (roles[role] ?? []).includes(permission)
+                    return (
+                      <TableCell
+                        key={role}
+                        className="text-center text-sm"
+                        label={roleLabel(t, role)}
+                      >
+                        <span aria-hidden="true">{granted ? '✓' : '—'}</span>
+                        <span className="sr-only">
+                          {granted
+                            ? t('rolesMatrix.permissionGranted')
+                            : t('rolesMatrix.permissionDenied')}
+                        </span>
+                      </TableCell>
+                    )
+                  })}
                 </TableRow>
               ))}
             </TableBody>
@@ -771,7 +819,7 @@ function PermissionEditorModal({
                   checked={selectedRoles.includes(role)}
                   onChange={() => toggleRole(role)}
                 />
-                {t(`roles.${role}`, { defaultValue: role })}
+                {roleLabel(t, role)}
               </label>
             ))}
             {selectedRoles.length === 0 && (
@@ -861,18 +909,22 @@ function PermissionDiff({
           {t('rolesMatrix.diffBefore')}
         </span>
         <span className="text-sm">
-          {beforeRoles.length === 0 ? t('rolesMatrix.noRolesSelected') : beforeRoles.join(', ')}
+          {beforeRoles.length === 0 ? t('rolesMatrix.noRolesSelected') : roleLabels(t, beforeRoles)}
         </span>
-        {showOwn && beforeOwn && <span className="text-xs text-muted-foreground">(own)</span>}
+        {showOwn && beforeOwn && (
+          <span className="text-xs text-muted-foreground">{t('rolesMatrix.ownSuffix').trim()}</span>
+        )}
       </div>
       <div className="flex flex-col gap-1">
         <span className="text-xs font-semibold uppercase text-muted-foreground">
           {t('rolesMatrix.diffAfter')}
         </span>
         <span className="text-sm">
-          {afterRoles.length === 0 ? t('rolesMatrix.noRolesSelected') : afterRoles.join(', ')}
+          {afterRoles.length === 0 ? t('rolesMatrix.noRolesSelected') : roleLabels(t, afterRoles)}
         </span>
-        {showOwn && afterOwn && <span className="text-xs text-muted-foreground">(own)</span>}
+        {showOwn && afterOwn && (
+          <span className="text-xs text-muted-foreground">{t('rolesMatrix.ownSuffix').trim()}</span>
+        )}
       </div>
     </div>
   )

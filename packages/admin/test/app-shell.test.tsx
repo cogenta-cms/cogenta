@@ -81,10 +81,12 @@ describe('App, signed in', () => {
     expect(main.id).toBe('main-content')
   })
 
-  it('shows the signed-in user and lets them sign out', async () => {
+  it('shows the signed-in user and lets them sign out from the account menu', async () => {
     render(<App />)
     expect(await screen.findByText(USER.email)).toBeDefined()
 
+    fireEvent.click(screen.getByRole('button', { name: /Menu du compte/ }))
+    expect(screen.getByRole('link', { name: 'Mon profil' })).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }))
 
     expect(await screen.findByRole('heading', { name: 'Connexion à Cogenta' })).toBeDefined()

@@ -22,7 +22,18 @@ import {
   setMaintenance,
 } from '../api/health-client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { Button, Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  CopyButton,
+  Field,
+  Input,
+  Notice,
+} from '../ui/index.js'
 
 /**
  * "Santé" — fiche 24 tasks 1, 2 and 4.
@@ -33,10 +44,38 @@ import { Button, Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/ind
  * back exactly what that function returned.
  */
 
-function statusTone(status: 'ok' | 'degraded' | 'down'): 'success' | 'warning' | 'danger' {
-  if (status === 'ok') return 'success'
-  if (status === 'degraded') return 'warning'
-  return 'danger'
+/**
+ * A driver in "basic mode" because no external service is configured is the
+ * normal state of a fresh install, not a warning: it is shown as information.
+ * Orange is kept for what deserves attention — a driver that was asked for and
+ * failed (a fallback taken for a reason other than "not installed") — and red
+ * for one that is down.
+ */
+function checkTone(check: DoctorCheck): 'success' | 'info' | 'warning' | 'danger' {
+  if (check.status === 'down') return 'danger'
+  const code = check.reasonCode
+  const failedToStart =
+    code?.code === 'fallback' && code.skipped.some((skip) => skip.reasonCode !== 'not-available')
+  if (failedToStart) return 'warning'
+  return check.status === 'ok' ? 'success' : 'info'
+}
+
+/** A plain-text copy of the diagnostic, for a support request. */
+function reportAsText(report: DoctorReport, t: TFunction): string {
+  const lines = report.checks.map(
+    (check) =>
+      `- ${t('health.driverLine', {
+        need: t(`health.need.${check.need}`, { defaultValue: check.need }),
+        driver: t(`health.driver.${check.driver}`, { defaultValue: check.driver }),
+        tier: t(`health.tier.${check.tier}`, { defaultValue: check.tier }),
+      })}`,
+  )
+  return [
+    `Node ${report.node} · ${report.platform} ${report.arch}`,
+    ...lines,
+    ...report.notes.map((note) => `- ${note}`),
+    ...report.problems.map((problem) => `! ${problem}`),
+  ].join('\n')
 }
 
 /**
@@ -85,8 +124,26 @@ function describeReason(check: DoctorCheck, t: TFunction): string {
   })
 }
 
+/** The notes in the admin's language: translated by code when the server sent codes, the raw English text (flagged as technical) otherwise. */
+function noteLines(
+  report: DoctorReport,
+  t: TFunction,
+): readonly { readonly text: string; readonly technical: boolean }[] {
+  if (report.noteItems === undefined) {
+    return report.notes.map((text) => ({ text, technical: true }))
+  }
+  return report.noteItems.map((item) => {
+    const key = `health.noteCode.${item.code}`
+    const translated = t(key, { ...item.params, defaultValue: '' })
+    return translated === ''
+      ? { text: item.text, technical: true }
+      : { text: translated, technical: false }
+  })
+}
+
 export function HealthRoute(): JSX.Element | null {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const formatWhen = useDateTimeFormatter()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
@@ -188,9 +245,23 @@ export function HealthRoute(): JSX.Element | null {
       aria-labelledby="health-heading"
       className="flex min-w-0 flex-col gap-6 [overflow-wrap:anywhere]"
     >
-      <h1 id="health-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
-        {t('health.heading')}
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 id="health-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
+          {t('health.heading')}
+        </h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {report !== null && (
+            <CopyButton
+              value={reportAsText(report, t)}
+              label={t('health.copyReport')}
+              copiedLabel={t('health.copiedReport')}
+            />
+          )}
+          <Button variant="secondary" size="sm" disabled={loading} onClick={() => void load()}>
+            {t('health.recheck')}
+          </Button>
+        </div>
+      </div>
 
       {loading && <p className="text-sm text-muted-foreground">{t('health.loading')}</p>}
       {error !== null && (
@@ -208,31 +279,45 @@ export function HealthRoute(): JSX.Element | null {
           </CardHeader>
           <CardBody className="flex flex-col gap-3">
             <p className="m-0 text-sm text-muted-foreground">
-              {t('health.driversIntro', { count: report.problems.length })}
+              {report.problems.length === 0
+                ? t('health.driversIntroNone')
+                : t('health.driversIntro', { count: report.problems.length })}
             </p>
             <ul className="m-0 flex flex-col gap-2 pl-0 list-none">
-              {report.checks.map((check) => (
-                <li key={check.need}>
-                  <Notice tone={statusTone(check.status)} live="off">
-                    <strong>{check.need}</strong>: {check.driver} (
-                    {t(`health.tier.${check.tier}`, { defaultValue: check.tier })}) —{' '}
-                    {describeReason(check, t)}
-                    {check.message !== undefined && (
-                      <p className="m-0 mt-1 text-xs">
-                        <TechnicalDetailBadge /> {check.message}
-                      </p>
-                    )}
-                  </Notice>
-                </li>
-              ))}
+              {report.checks.map((check) => {
+                const summaryKey = `health.driverSummary.${check.need}_${check.driver}`
+                return (
+                  <li key={check.need}>
+                    <Notice tone={checkTone(check)} live="off">
+                      <strong>
+                        {t(`health.need.${check.need}`, { defaultValue: check.need })}
+                      </strong>{' '}
+                      — {t(`health.driver.${check.driver}`, { defaultValue: check.driver })} (
+                      {t(`health.tier.${check.tier}`, { defaultValue: check.tier })}),{' '}
+                      {describeReason(check, t)}
+                      {i18n.exists(summaryKey) && (
+                        <p className="m-0 mt-1 text-xs">{t(summaryKey)}</p>
+                      )}
+                      {check.message !== undefined && (
+                        <details className="mt-1 text-xs">
+                          <summary className="cursor-pointer">
+                            <TechnicalDetailBadge />
+                          </summary>
+                          <p className="m-0 mt-1">{check.message}</p>
+                        </details>
+                      )}
+                    </Notice>
+                  </li>
+                )
+              })}
             </ul>
-            {report.notes.length > 0 && (
+            {noteLines(report, t).length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold">{t('health.notesHeading')}</h3>
                 <ul className="m-0 pl-5 text-sm text-muted-foreground">
-                  {report.notes.map((note) => (
-                    <li key={note}>
-                      <TechnicalDetailBadge /> {note}
+                  {noteLines(report, t).map((line) => (
+                    <li key={line.text}>
+                      {line.technical && <TechnicalDetailBadge />} {line.text}
                     </li>
                   ))}
                 </ul>
@@ -266,23 +351,27 @@ export function HealthRoute(): JSX.Element | null {
           {migrations !== null && (
             <>
               <p className="m-0 text-sm text-muted-foreground">
-                {t('health.migrationsSummary', {
-                  total: migrations.items.length,
-                  pending: pendingCount,
-                })}
+                {pendingCount === 0
+                  ? t('health.migrationsAllApplied')
+                  : t('health.migrationsPending', { count: pendingCount })}
               </p>
-              <ul className="m-0 flex flex-col gap-1 pl-0 list-none">
-                {migrations.items.map((item) => (
-                  <li key={item.id} className="text-sm">
-                    {item.applied ? '✓' : '·'} {item.name}
-                    {item.destructive && !item.applied && (
-                      <span className="ml-2 text-xs text-destructive">
-                        {t('health.destructive')}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <details className="text-sm">
+                <summary className="cursor-pointer">
+                  {t('health.migrationsHistory', { total: migrations.items.length })}
+                </summary>
+                <ul className="m-0 mt-2 flex flex-col gap-1 pl-0 list-none">
+                  {migrations.items.map((item) => (
+                    <li key={item.id} className="text-sm">
+                      {item.applied ? '✓' : '·'} {item.name}
+                      {item.destructive && !item.applied && (
+                        <span className="ml-2 text-xs text-destructive">
+                          {t('health.destructive')}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </details>
               {pendingCount > 0 && (
                 <div className="flex flex-col gap-2">
                   <Button
@@ -353,7 +442,7 @@ export function HealthRoute(): JSX.Element | null {
             <ul className="m-0 flex flex-col gap-2 pl-0 list-none">
               {errors.map((entry) => (
                 <li key={entry.id} className="text-sm">
-                  <span className="font-mono text-xs text-muted-foreground">{entry.at}</span>{' '}
+                  <span className="text-xs text-muted-foreground">{formatWhen(entry.at)}</span>{' '}
                   <strong>{entry.code}</strong>: {entry.message}
                 </li>
               ))}
@@ -375,16 +464,16 @@ export function HealthRoute(): JSX.Element | null {
               <Notice tone={maintenance.enabled ? 'warning' : 'info'} live="off">
                 {maintenance.enabled ? t('health.maintenanceOn') : t('health.maintenanceOff')}
               </Notice>
-              <label className="flex flex-col gap-1 text-xs">
-                {t('health.maintenanceMessageLabel')}
-                <input
-                  type="text"
-                  value={maintenanceMessage}
-                  onChange={(event) => setMaintenanceMessage(event.target.value)}
-                  className="rounded border border-input bg-background px-2 py-1 text-sm"
-                  placeholder={t('health.maintenanceMessagePlaceholder')}
-                />
-              </label>
+              <Field label={t('health.maintenanceMessageLabel')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    value={maintenanceMessage}
+                    onChange={(event) => setMaintenanceMessage(event.target.value)}
+                    placeholder={t('health.maintenanceMessagePlaceholder')}
+                  />
+                )}
+              </Field>
               <div>
                 <Button
                   variant={maintenance.enabled ? 'secondary' : 'destructive'}

@@ -24,6 +24,15 @@ export interface ApiKeysRouterOptions {
   readonly basePath?: string
   /** Injected so the 90-day default expiry is deterministic in tests. */
   readonly now?: () => number
+  /**
+   * The roles a key may be granted — the site's real role set (the shipped
+   * roles, every role the schema's permissions name, every role an override
+   * grants). Absent, any role name is accepted, as before. Present, a scope
+   * naming anything else is refused: a key scoped "superadmin" authenticated
+   * and could do nothing, while the screen said "created" (admin audit,
+   * 2026-10-21).
+   */
+  readonly allowedRoles?: () => Promise<readonly string[]> | readonly string[]
 }
 
 export interface ApiKeysRouter {
@@ -298,6 +307,19 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
   const basePath = normalise(options.basePath ?? DEFAULT_BASE_PATH)
   const now = options.now ?? Date.now
 
+  async function assertKnownRoles(scope: readonly string[]): Promise<void> {
+    if (options.allowedRoles === undefined) return
+    const allowed = new Set(await options.allowedRoles())
+    const unknown = scope.filter((role) => !allowed.has(role))
+    if (unknown.length === 0) return
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: `"scope" names roles this site does not have: ${unknown.join(', ')}.`,
+      hint: `Choose among: ${[...allowed].sort().join(', ')}.`,
+      details: { unknown, allowed: [...allowed].sort() },
+    })
+  }
+
   return {
     handle: async (request, actor) => {
       try {
@@ -358,6 +380,7 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
       const body = asRecord(request.body)
       const name = stringField(body, 'name')
       const scope = scopeField(body)
+      await assertKnownRoles(scope)
       const expiresAt = resolveExpiry(body, now)
       const rateLimitPerMinute = rateLimitPerMinuteField(body)
 
@@ -422,7 +445,10 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
         rateLimitPerMinute?: number | null
       } = {}
       if (typeof name === 'string') patch.name = stringField({ name }, 'name')
-      if (scope !== undefined) patch.scope = scopeField({ scope })
+      if (scope !== undefined) {
+        patch.scope = scopeField({ scope })
+        await assertKnownRoles(patch.scope)
+      }
       if (rateLimitRaw === null) patch.rateLimitPerMinute = null
       else if (rateLimitRaw !== undefined)
         patch.rateLimitPerMinute = positiveRateLimit(rateLimitRaw)

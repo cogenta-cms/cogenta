@@ -19,7 +19,7 @@ import { listTerms, type Term } from '../api/taxonomy-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { plainTextOfRichText, truncateAtWordBoundary } from '../collections/word-count.js'
 import { downloadCsv, toCsv } from '../lib/csv.js'
-import { titleOf } from '../lib/entry-title.js'
+import { titleFieldOf, titleOf } from '../lib/entry-title.js'
 import { loadTablePrefs, PAGE_SIZES, saveTablePrefs } from '../lib/table-prefs.js'
 import { fieldLabel } from '../schema/field-label.js'
 import { canPerform } from '../schema/permissions.js'
@@ -350,6 +350,14 @@ export function CollectionListRoute(): JSX.Element {
     )
   }
 
+  function toggleSelectAll(): void {
+    setSelected((current) =>
+      items.length > 0 && items.every((entry) => current.has(entry.id))
+        ? new Set()
+        : new Set(items.map((entry) => entry.id)),
+    )
+  }
+
   function toggleSelected(id: string): void {
     setSelected((current) => {
       const next = new Set(current)
@@ -548,8 +556,12 @@ export function CollectionListRoute(): JSX.Element {
 
   // `blocks` is excluded: its data lives in `entry.blocks`, not `entry.values`
   // — offering it as a column would always render an empty cell.
+  // The title is always the first column, so offering it again as an "extra"
+  // column (unchecked, as it was) only confused: find which field `titleOf`
+  // reads from an empty entry's perspective by asking it for each candidate.
+  const titleFieldName = collection === undefined ? undefined : titleFieldOf(collection)
   const extraColumnFields: readonly SchemaField[] = (collection?.fields ?? []).filter(
-    (field) => field.kind !== 'blocks',
+    (field) => field.kind !== 'blocks' && field.name !== titleFieldName,
   )
   const activeExtraColumns: readonly SchemaField[] = extraColumnFields.filter((field) =>
     (prefs.columns ?? []).includes(field.name),
@@ -574,6 +586,9 @@ export function CollectionListRoute(): JSX.Element {
       </section>
     )
   }
+
+  const hasActiveFilters =
+    status !== '' || localeFilter !== '' || updatedFrom !== '' || updatedTo !== '' || termId !== ''
 
   const totalCount =
     counts === null
@@ -797,11 +812,13 @@ export function CollectionListRoute(): JSX.Element {
             project's own design system has no popover component to reuse
             instead (R9: no new one for a single use). */}
         {extraColumnFields.length > 0 && (
-          <details className="rounded-md border border-border bg-card px-3 py-2">
+          <details className="relative rounded-md border border-border bg-card px-3 py-2">
             <summary className="cursor-pointer font-sans text-sm font-medium">
               {t('collectionList.columnsToggle')}
             </summary>
-            <fieldset className="m-0 mt-2 flex flex-col gap-1 border-none p-0">
+            {/* Floats over the toolbar so opening it never pushes the export
+                button (or anything below) around. */}
+            <fieldset className="absolute top-full left-0 z-20 m-0 mt-1 flex max-h-72 min-w-48 flex-col gap-1 overflow-auto rounded-md border border-border bg-card p-3 shadow-card">
               <legend className="sr-only">{t('collectionList.columnsLegend')}</legend>
               {extraColumnFields.map((field) => (
                 <label key={field.name} className="flex items-center gap-2 font-sans text-sm">
@@ -873,10 +890,13 @@ export function CollectionListRoute(): JSX.Element {
           dismissLabel={t('collectionList.close')}
         >
           <p>
-            {t('collectionList.bulkReportSummary', {
-              succeeded: bulkReport.total - bulkReport.failures.length,
-              total: bulkReport.total,
-            })}
+            {bulkReport.failures.length === 0
+              ? t(`collectionList.bulkDone.${bulkReport.action}`, { count: bulkReport.total })
+              : t('collectionList.bulkReportSummary', {
+                  succeeded: bulkReport.total - bulkReport.failures.length,
+                  total: bulkReport.total,
+                  action: t(`collectionList.bulkActionName.${bulkReport.action}`),
+                })}
           </p>
           {bulkReport.failures.length > 0 && (
             <ul>
@@ -946,26 +966,39 @@ export function CollectionListRoute(): JSX.Element {
           {hits.length === 0 ? (
             <p>{t('collectionList.noMatches')}</p>
           ) : (
-            <TableRoot label={t('collectionList.searchResultsTableLabel')}>
+            <TableRoot label={t('collectionList.searchResultsTableLabel')} stacked>
               <Table>
                 <TableHead>
                   <TableRow>
                     <TableHeader>{t('collectionList.titleColumn')}</TableHeader>
                     <TableHeader>{t('collectionList.statusColumn')}</TableHeader>
+                    <TableHeader>{t('collectionList.actionsColumn')}</TableHeader>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {hits.map((hit) => (
                     <TableRow key={hit.id}>
-                      <TableCell>
+                      <TableCell stack="heading">
                         <Link
-                          className="font-medium text-primary hover:underline"
+                          className="block max-w-[32rem] font-medium text-primary [overflow-wrap:anywhere] hover:underline"
                           to={`/collections/${encodeURIComponent(name)}/${encodeURIComponent(hit.id)}`}
                         >
                           {hit.title === '' ? hit.id : hit.title}
                         </Link>
                       </TableCell>
-                      <TableCell>{t(`entryEdit.status.${hit.status}`)}</TableCell>
+                      <TableCell label={t('collectionList.statusColumn')}>
+                        {t(`entryEdit.status.${hit.status}`)}
+                      </TableCell>
+                      <TableCell stack="actions">
+                        {canUpdate && (
+                          <Link
+                            className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                            to={`/collections/${encodeURIComponent(name)}/${encodeURIComponent(hit.id)}`}
+                          >
+                            {t('collectionList.editAction')}
+                          </Link>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -977,22 +1010,27 @@ export function CollectionListRoute(): JSX.Element {
 
       {hits === null && !loading && error === null && (
         <>
-          <TableRoot label={t('collectionList.tableLabel')}>
+          <TableRoot label={t('collectionList.tableLabel')} stacked>
             <Table>
               <TableHead>
                 <TableRow>
                   {canDelete && (
-                    <TableHeader>
-                      <span className="sr-only">{t('collectionList.selectionColumn')}</span>
+                    <TableHeader className="w-10">
+                      <input
+                        type="checkbox"
+                        aria-label={t('collectionList.selectAll')}
+                        checked={items.length > 0 && items.every((entry) => selected.has(entry.id))}
+                        ref={(node) => {
+                          if (node !== null) {
+                            node.indeterminate =
+                              selected.size > 0 && !items.every((entry) => selected.has(entry.id))
+                          }
+                        }}
+                        onChange={toggleSelectAll}
+                      />
                     </TableHeader>
                   )}
                   <TableHeader>{t('collectionList.titleColumn')}</TableHeader>
-                  <SortableHeader
-                    field="id"
-                    label={t('collectionList.idColumn')}
-                    sort={sort}
-                    onSort={toggleSort}
-                  />
                   <TableHeader>{t('collectionList.statusColumn')}</TableHeader>
                   {siteLocales.length > 1 && (
                     <TableHeader>{t('collectionList.localeColumn')}</TableHeader>
@@ -1004,7 +1042,7 @@ export function CollectionListRoute(): JSX.Element {
                     onSort={toggleSort}
                   />
                   {activeExtraColumns.map((field) => (
-                    <TableHeader key={field.name}>{field.admin?.label ?? field.name}</TableHeader>
+                    <TableHeader key={field.name}>{fieldLabel(field.name, t, field)}</TableHeader>
                   ))}
                   <TableHeader>{t('collectionList.actionsColumn')}</TableHeader>
                 </TableRow>
@@ -1015,7 +1053,7 @@ export function CollectionListRoute(): JSX.Element {
                   return (
                     <TableRow key={entry.id}>
                       {canDelete && (
-                        <TableCell>
+                        <TableCell stack="select">
                           <input
                             type="checkbox"
                             aria-label={t('collectionList.selectRow', {
@@ -1026,41 +1064,42 @@ export function CollectionListRoute(): JSX.Element {
                           />
                         </TableCell>
                       )}
-                      <TableCell>
-                        {/* Capped and breakable: a title is free-form text a
-                            person typed, and the field itself allows 200
-                            characters with no space in them. Without this the
-                            column is as wide as the longest title, which is
-                            how one entry used to make every other column
-                            unreadable. `anywhere` rather than `break-word`
+                      <TableCell stack="heading">
+                        {/* Breakable: a title is free-form text a person typed,
+                            and the field itself allows 200 characters with no
+                            space in them. `anywhere` rather than `break-word`
                             because only the former lowers the cell's
                             min-content width, which is the number the table
-                            actually lays out against. */}
+                            actually lays out against. On a phone the row is a
+                            card (`stacked`), so the title has the full width. */}
                         <Link
-                          className="block max-w-[28rem] font-medium text-primary [overflow-wrap:anywhere] hover:underline"
+                          className="block max-w-[32rem] font-medium text-primary [overflow-wrap:anywhere] hover:underline"
+                          title={entry.id}
                           to={`/collections/${encodeURIComponent(name)}/${encodeURIComponent(entry.id)}`}
                         >
                           {titleOf(entry, collection)}
                         </Link>
                       </TableCell>
-                      <TableCell>
-                        <details>
-                          <summary>{t('collectionList.showId')}</summary>
-                          <code className="text-xs">{entry.id}</code>
-                        </details>
+                      <TableCell label={t('collectionList.statusColumn')}>
+                        {t(`entryEdit.status.${entry.status}`)}
                       </TableCell>
-                      <TableCell>{t(`entryEdit.status.${entry.status}`)}</TableCell>
-                      {siteLocales.length > 1 && <TableCell>{entry.locale}</TableCell>}
-                      <TableCell title={entry.updatedAt}>
+                      {siteLocales.length > 1 && (
+                        <TableCell label={t('collectionList.localeColumn')}>{entry.locale}</TableCell>
+                      )}
+                      <TableCell
+                        className="whitespace-nowrap"
+                        label={t('collectionList.updatedColumn')}
+                        title={entry.updatedAt}
+                      >
                         {formatDateTime(entry.updatedAt)}
                       </TableCell>
                       {activeExtraColumns.map((field) => (
-                        <TableCell key={field.name}>
+                        <TableCell key={field.name} label={fieldLabel(field.name, t, field)}>
                           {renderFieldValue(entry.values[field.name], field, formatDateTime, t)}
                         </TableCell>
                       ))}
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1.5">
+                      <TableCell stack="actions" className="whitespace-nowrap">
+                        <div className="flex flex-wrap gap-1">
                           {canUpdate && (
                             <Link
                               className={buttonVariants({ variant: 'ghost', size: 'sm' })}
@@ -1125,13 +1164,31 @@ export function CollectionListRoute(): JSX.Element {
                   <TableEmpty
                     colSpan={
                       (canDelete ? 1 : 0) +
-                      4 +
+                      3 +
                       (siteLocales.length > 1 ? 1 : 0) +
                       activeExtraColumns.length +
                       1
                     }
                   >
-                    {t('collectionList.noContent')}
+                    <p className="m-0">{t('collectionList.noContent')}</p>
+                    {hasActiveFilters && (
+                      <Button
+                        className="mt-3"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          updateFilters({
+                            status: null,
+                            locale: null,
+                            updatedFrom: null,
+                            updatedTo: null,
+                            term: null,
+                          })
+                        }
+                      >
+                        {t('collectionList.resetFilters')}
+                      </Button>
+                    )}
                   </TableEmpty>
                 )}
               </TableBody>
@@ -1181,7 +1238,7 @@ function SortableHeader({
       <button
         type="button"
         onClick={() => onSort(field)}
-        className="inline-flex cursor-pointer appearance-none items-center gap-1 border-none bg-transparent p-0 font-inherit font-semibold text-inherit"
+        className="inline-flex cursor-pointer appearance-none items-center gap-1 border-none bg-transparent p-0 font-inherit font-semibold text-inherit [letter-spacing:inherit] [text-transform:inherit]"
       >
         {label}
         {active && (sort.direction === 'asc' ? ' ▲' : ' ▼')}

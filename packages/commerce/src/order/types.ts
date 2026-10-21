@@ -98,6 +98,8 @@ export interface ShippingAddress {
   readonly postalCode: string
   readonly recipient?: string | null
   readonly phone?: string | null
+  /** ISO 3166-1 alpha-2. Also the tax / delivery zone, so it is kept on the order itself. */
+  readonly country?: string | null
 }
 
 /** Where a shipment actually went, once it did (fiche 52 task 4). */

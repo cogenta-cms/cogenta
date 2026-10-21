@@ -640,6 +640,15 @@ async function ensureColumns(db: DatabaseHandle): Promise<void> {
     sql`alter table ${products} add column ${identifier('image_media_ids', d)} text`,
     // A variant's own single photo — one id, never a list (see `types.ts`).
     sql`alter table ${variants} add column ${identifier('image_media_id', d)} ${textColumn(d, 64)}`,
+    // An optional recurring plan ("billed every 1 month"): when a *paid* order
+    // contains such a variant, `SubscriptionStore.createFromOrder` opens the
+    // subscription. Both null together means a one-off product, which is what
+    // every variant created before these columns existed already is.
+    sql`alter table ${variants} add column ${identifier('billing_interval_unit', d)} ${textColumn(d, 16)}`,
+    sql`alter table ${variants} add column ${identifier('billing_interval_count', d)} ${int}`,
+    // The order whose payment opened a subscription (`createFromOrder`) — what
+    // makes opening them from the same order twice a no-op.
+    sql`alter table ${identifier(TABLES.subscriptions, d)} add column ${identifier('origin_order_id', d)} ${textColumn(d, 64)}`,
   ]
 
   for (const statement of statements) {

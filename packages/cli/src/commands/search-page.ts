@@ -1,6 +1,12 @@
 import type { AccessContext, ContentGateway, SearchRouter } from '@cogenta/api'
 import type { MediaAsset } from '@cogenta/render'
-import { buildPath, type CollectionDefinition, type SearchHit } from '@cogenta/schema'
+import {
+  buildPath,
+  type CollectionDefinition,
+  MIN_TOKEN_LENGTH,
+  queryTokens,
+  type SearchHit,
+} from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
 import type { WidgetAreas } from '@cogenta/theme-kit'
 import type { SeoRenderDefaults } from './seo.js'
@@ -146,10 +152,10 @@ async function resolveHits(
  */
 const SEARCH_PAGE_FLOOR_CSS = `:where(.cg-search-page) > :where(*){box-sizing:border-box;inline-size:min(100% - 2.5rem, 48rem);margin-inline:auto}
 :where(.cg-search-page) > :where(.cg-page__title){margin-block:2.5rem 1.5rem}
-:where(.cg-search__count){display:block;margin-block-start:.5rem;color:var(--cogenta-color-muted-fg);font-family:var(--cogenta-font-sans);font-size:.875rem;font-weight:400;letter-spacing:0;line-height:1.4}
+:where(.cg-search__count){display:block;margin-block-start:.5rem;color:color-mix(in srgb,currentColor 72%,transparent);font-family:var(--cogenta-font-sans);font-size:.875rem;font-weight:400;letter-spacing:0;line-height:1.4}
 :where(.cg-search__hit){padding-block:1rem}
-:where(.cg-search__excerpt){margin:.375rem 0 0;color:var(--cogenta-color-muted-fg);font-size:.9375rem;line-height:1.5}
-:where(.cg-search__meta){margin:.375rem 0 0;color:var(--cogenta-color-muted-fg);font-family:var(--cogenta-font-sans);font-size:.8125rem}`
+:where(.cg-search__excerpt){margin:.375rem 0 0;color:color-mix(in srgb,currentColor 72%,transparent);font-size:.9375rem;line-height:1.5}
+:where(.cg-search__meta){margin:.375rem 0 0;color:color-mix(in srgb,currentColor 72%,transparent);font-family:var(--cogenta-font-sans);font-size:.8125rem}`
 
 /**
  * The page's own words, in the site's language (L36 audit: `/search` was
@@ -160,6 +166,7 @@ interface SearchPageStrings {
   readonly search: string
   readonly resultsFor: string
   readonly empty: string
+  readonly tooShort: (min: number) => string
   readonly failed: string
   readonly count: (n: number) => string
 }
@@ -169,6 +176,7 @@ const SEARCH_PAGE_STRINGS: Readonly<Record<'en' | 'fr', SearchPageStrings>> = {
     search: 'Search',
     resultsFor: 'Search results for “{query}”',
     empty: 'Nothing matched that search.',
+    tooShort: (min) => `Please enter a word of at least ${min} letters.`,
     failed: 'The search could not be completed. Please try again in a moment.',
     count: (n) => `${n} ${n === 1 ? 'result' : 'results'}`,
   },
@@ -176,6 +184,7 @@ const SEARCH_PAGE_STRINGS: Readonly<Record<'en' | 'fr', SearchPageStrings>> = {
     search: 'Rechercher',
     resultsFor: 'Résultats pour « {query} »',
     empty: 'Aucun résultat pour cette recherche.',
+    tooShort: (min) => `Saisissez un mot d’au moins ${min} lettres.`,
     failed: 'La recherche n’a pas pu aboutir. Réessayez dans un instant.',
     count: (n) => `${n} ${n <= 1 ? 'résultat' : 'résultats'}`,
   },
@@ -239,7 +248,11 @@ export async function renderSearchPage(
   let results: readonly ResolvedHit[] = []
   let failure: string | null = null
 
-  if (trimmed.length > 0) {
+  // A query whose words are all shorter than the index keeps is not "no
+  // result", it is a question the engine cannot answer: say so.
+  const tooShort = trimmed.length > 0 && queryTokens(trimmed).length === 0
+
+  if (trimmed.length > 0 && !tooShort) {
     const response = await options.router.handle(
       { method: 'GET', path: '/api/search', query: { q: trimmed } },
       context,
@@ -261,16 +274,18 @@ export async function renderSearchPage(
 
   // The count rides in the title, so it sits wherever a theme puts the title.
   const count =
-    trimmed.length === 0 || failure !== null
+    trimmed.length === 0 || failure !== null || tooShort
       ? ''
       : ` <span class="cg-search__count">${escapeHtmlText(strings.count(results.length))}</span>`
 
   const main =
     failure !== null
       ? `<p class="cg-search__error" role="alert">${escapeHtmlText(failure)}</p>`
-      : trimmed.length === 0
-        ? ''
-        : resultList(results, options.site.defaultLocale, strings)
+      : tooShort
+        ? `<p class="cg-search__empty">${escapeHtmlText(strings.tooShort(MIN_TOKEN_LENGTH))}</p>`
+        : trimmed.length === 0
+          ? ''
+          : resultList(results, options.site.defaultLocale, strings)
 
   // The real site chrome (`renderPageChrome`, `theme-render.ts`) — the same
   // skip link, header and footer every collection page renders, not a

@@ -332,12 +332,16 @@ interface UserViewContext {
 /**
  * Ninety days with nobody behind the wheel, on an account that could still
  * sign in (`invited`/`anonymized` are never "dormant" — one has not had its
- * first chance yet, the other is not coming back).
+ * first chance yet, the other is not coming back). An account that has never
+ * signed in counts from the day it was created.
  */
 function isDormant(user: User, lastSignInAt: string | null, now: number): boolean {
   if (user.status !== 'active' && user.status !== 'disabled') return false
-  if (lastSignInAt === null) return true
-  const days = (now - new Date(lastSignInAt).getTime()) / (24 * 60 * 60 * 1000)
+  // An account that never signed in is measured from its creation: one made a
+  // minute ago has not been forgotten, it simply has not had its first visit.
+  const reference = new Date(lastSignInAt ?? user.createdAt).getTime()
+  if (Number.isNaN(reference)) return true
+  const days = (now - reference) / (24 * 60 * 60 * 1000)
   return days > DORMANT_ACCOUNT_DAYS
 }
 

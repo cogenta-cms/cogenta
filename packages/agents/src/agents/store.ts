@@ -208,6 +208,22 @@ export function createFileAgentDeclarationStore(
     return next
   }
 
+  /** A negative or non-numeric limit is not a limit — it was stored as typed and shown back as is. */
+  function assertValidBudget(budget: BudgetLimits | undefined): void {
+    if (budget === undefined) return
+    for (const [limit, value] of Object.entries(budget)) {
+      if (value === undefined) continue
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        throw new CogentaError({
+          code: 'AGENT_DEFINITION_INVALID',
+          message: `The budget limit "${limit}" must be a number of zero or more (got ${String(value)}).`,
+          hint: 'Leave a limit empty for "no limit", or enter 0 or a positive number.',
+          details: { limit },
+        })
+      }
+    }
+  }
+
   return {
     async list() {
       await ready()
@@ -221,6 +237,7 @@ export function createFileAgentDeclarationStore(
 
     async create(input, builtin = false) {
       await ready()
+      assertValidBudget(input.budget)
       const slug = slugOf(input.name)
       return serialised(slug, async () => {
         const existing = await findBySlug(slug)
@@ -257,6 +274,7 @@ export function createFileAgentDeclarationStore(
 
     async update(name, patch) {
       await ready()
+      assertValidBudget(patch.budget)
       const slug = slugOf(name)
       return serialised(slug, async () => {
         const existing = await findBySlug(slug)

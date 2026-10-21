@@ -49,7 +49,31 @@ export type {
   McpToolDefinitionsAssembly,
 } from './registry/tool-definitions.js'
 export { buildMcpToolDefinitions } from './registry/tool-definitions.js'
-export type { McpServer, McpServerOptions } from './server.js'
-export { createMcpServer } from './server.js'
+export type {
+  McpHttpAuthorization,
+  McpHttpHandler,
+  McpHttpHandlerOptions,
+  McpHttpRefusal,
+  McpHttpRequestRecord,
+} from './http-transport.js'
+export { createMcpHttpHandler } from './http-transport.js'
+export type { JsonRpcNotification } from './jsonrpc.js'
+export type {
+  McpCallContext,
+  McpCancellationRegistry,
+  McpHandleOptions,
+  McpServer,
+  McpServerOptions,
+  McpTool,
+  McpToolAnnotations,
+  McpToolSource,
+} from './server.js'
+export {
+  createCancellationRegistry,
+  createMcpServer,
+  describeToolError,
+  handleJsonRpcPayload,
+  MCP_SUPPORTED_PROTOCOL_VERSIONS,
+} from './server.js'
 export type { StdioTransport, StdioTransportOptions } from './stdio-transport.js'
 export { serveMcpOverStdio } from './stdio-transport.js'

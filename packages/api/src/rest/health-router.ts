@@ -36,6 +36,12 @@ export interface HealthReportLike {
   readonly site: { name: string; url: string; locales: readonly string[] } | undefined
   readonly checks: readonly HealthDoctorCheck[]
   readonly notes: readonly string[]
+  /** The same notes as a stable code plus parameters, for a translated screen — optional so a caller built before this field still type-checks. */
+  readonly noteItems?: readonly {
+    readonly code: string
+    readonly params: Readonly<Record<string, string | number>>
+    readonly text: string
+  }[]
   readonly problems: readonly string[]
 }
 

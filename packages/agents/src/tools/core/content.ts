@@ -80,7 +80,8 @@ export function createContentReadTool(
   return defineTool({
     name: 'content.read',
     version: '1.0.0',
-    description: 'Read one content entry by collection and id.',
+    description:
+      'Read one content entry by collection and id (state "working" for the latest draft, "published" for what visitors see). Find ids with content.search or content.list.',
     input: ReadInputSchema,
     output: EntrySchema,
     permissions: ['content.read'],
@@ -116,7 +117,8 @@ export function createContentWriteDraftTool(
   return defineTool({
     name: 'content.write_draft',
     version: '1.0.0',
-    description: 'Create or update a working-state (draft) content entry.',
+    description:
+      'Create (no id) or update (with id) the draft of a content entry; never publishes. `values` holds field values keyed by field name — call content.schema first for the field keys, kinds and block types. An update only changes the fields it sends. A rich-text field takes Portable Text blocks; a blocks field (page builder) takes an array of { type, data } items and replaces that whole zone.',
     input: WriteDraftInputSchema,
     output: EntrySchema,
     permissions: ['content.write_draft'],
@@ -159,7 +161,7 @@ export function createContentPublishTool(
   return defineTool({
     name: 'content.publish',
     version: '1.0.0',
-    description: 'Publish an existing content entry.',
+    description: 'Publish the current draft of an existing content entry, making it visible on the site.',
     input: PublishInputSchema,
     output: EntrySchema,
     permissions: ['content.publish'],
@@ -194,7 +196,8 @@ export function createContentDeleteTool(
   return defineTool({
     name: 'content.delete',
     version: '1.0.0',
-    description: 'Delete a content entry.',
+    description:
+      'Move a content entry to the trash. It stops being visible and can be restored from the trash in the administration until the retention window ends.',
     input: DeleteInputSchema,
     output: DeleteOutputSchema,
     permissions: ['content.delete'],

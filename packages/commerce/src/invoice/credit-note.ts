@@ -11,7 +11,14 @@ import type { Order } from '../order/types.js'
 import { toInt, toNullableText, toText } from '../rows.js'
 import { TABLES } from '../tables.js'
 import { claimSequenceNumber, formatSequenceNumber } from './sequence.js'
-import type { InvoiceDocument, SellerDetails } from './store.js'
+import {
+  type InvoiceDocument,
+  resolveSeller,
+  resolveTemplate,
+  type SellerDetails,
+  type SellerSource,
+  type TemplateSource,
+} from './store.js'
 
 /**
  * A refund's accounting counterpart (fiche 52 task 6): "Avoir : nouvelle
@@ -47,7 +54,9 @@ export interface IssueCreditNoteInput {
 
 export interface CreditNoteStoreDependencies {
   readonly orders: OrderStore
-  readonly seller: SellerDetails
+  readonly seller: SellerSource
+  /** Only its `language` is read here: the one line a credit note prints. */
+  readonly template?: TemplateSource
 }
 
 export interface CreditNoteStore {
@@ -55,6 +64,8 @@ export interface CreditNoteStore {
   read(id: string): Promise<CreditNote | null>
   readByRefund(refundId: string): Promise<CreditNote | null>
   listForOrder(orderId: string): Promise<readonly CreditNote[]>
+  /** Whether the seller details are filled in. Without them no credit note can be issued. */
+  configured(): Promise<boolean>
 }
 
 interface CreditNoteRow {
@@ -93,6 +104,7 @@ function documentFor(
   issuedAt: string,
   amountMinor: number,
   seller: SellerDetails,
+  language: string | undefined,
 ): InvoiceDocument {
   return {
     number,
@@ -107,7 +119,10 @@ function documentFor(
     lines: [
       {
         sku: '—',
-        title: `Refund on order ${order.reference}`,
+        title:
+          language === 'fr'
+            ? `Remboursement de la commande ${order.reference}`
+            : `Refund on order ${order.reference}`,
         quantity: 1,
         unitPriceMinor: amountMinor,
         taxRateBp: 0,
@@ -120,6 +135,7 @@ function documentFor(
     taxMinor: 0,
     totalMinor: amountMinor,
     footer: seller.footer ?? null,
+    ...(language === undefined ? {} : { language }),
   }
 }
 
@@ -153,6 +169,8 @@ export function createCreditNoteStore(
       )
       if (existing.rows[0] !== undefined) return decode(existing.rows[0])
 
+      const seller = await resolveSeller(dependencies.seller)
+      const language = (await resolveTemplate(dependencies.template)).language
       const issuedAt = new Date(now()).toISOString()
       const series = input.series ?? `CN-${issuedAt.slice(0, 4)}`
       const id = newId(now)
@@ -166,7 +184,8 @@ export function createCreditNoteStore(
             number,
             issuedAt,
             input.amountMinor,
-            dependencies.seller,
+            seller,
+            language,
           )
 
           await tx.query(sql`
@@ -200,6 +219,15 @@ export function createCreditNoteStore(
     },
 
     read,
+
+    configured: async () => {
+      try {
+        await resolveSeller(dependencies.seller)
+        return true
+      } catch {
+        return false
+      }
+    },
 
     readByRefund: async (refundId) => {
       const result = await db.query<CreditNoteRow>(

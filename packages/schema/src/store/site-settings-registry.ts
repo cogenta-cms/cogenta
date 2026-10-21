@@ -841,7 +841,7 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     // `%title% — %site%`-style, applied to every page with no per-collection
     // override below and no `seoTitle` field value of its own.
     schema: titleTemplateOrEmpty,
-    defaultValue: '',
+    defaultValue: '%title% — %site%',
     writeRoles: ADMIN_ONLY,
   },
   {

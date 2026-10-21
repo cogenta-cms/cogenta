@@ -1,7 +1,6 @@
 import { type ChangeEvent, type FormEvent, type JSX, useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { ApiError } from '../api/client.js'
 import {
   deleteMedia,
   type ExifData,
@@ -20,6 +19,7 @@ import { fieldLabel } from '../schema/field-label.js'
 import { Button } from '../ui/index.js'
 import { FocalPointEditor } from './focal-point-editor.js'
 import { ImageEditor } from './image-editor.js'
+import { describeApiError } from '../api/describe-error.js'
 
 /** `1.2 KB`, `3.4 MB` — binary units, one decimal past the first, matching what a file manager shows. */
 function formatBytes(bytes: number): string {
@@ -193,7 +193,7 @@ export function MediaDetail({
       })
       onChange(updated)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('media.updateError'))
+      setError(describeApiError(caught, t('media.updateError')).message)
     } finally {
       setSaving(false)
     }
@@ -206,7 +206,7 @@ export function MediaDetail({
       await deleteMedia(token, asset.id)
       onDeleted(asset.id)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('media.deleteError'))
+      setError(describeApiError(caught, t('media.deleteError')).message)
       setDeleting(false)
     }
   }
@@ -224,7 +224,7 @@ export function MediaDetail({
       onChange(updated)
       setTagDraft('')
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('media.updateError'))
+      setError(describeApiError(caught, t('media.updateError')).message)
     } finally {
       setTagBusy(false)
     }
@@ -238,7 +238,7 @@ export function MediaDetail({
       })
       onChange(updated)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('media.updateError'))
+      setError(describeApiError(caught, t('media.updateError')).message)
     } finally {
       setTagBusy(false)
     }
@@ -252,7 +252,7 @@ export function MediaDetail({
       const updated = await moveMedia(token, asset.id, value)
       onChange(updated)
     } catch (caught) {
-      setFolderError(caught instanceof ApiError ? caught.message : t('media.moveError'))
+      setFolderError(describeApiError(caught, t('media.moveError')).message)
     } finally {
       setMovingFolder(false)
     }
@@ -268,7 +268,7 @@ export function MediaDetail({
       const updated = await replaceMedia(token, asset.id, file)
       onChange(updated)
     } catch (caught) {
-      setReplaceError(caught instanceof ApiError ? caught.message : t('media.replaceError'))
+      setReplaceError(describeApiError(caught, t('media.replaceError')).message)
     } finally {
       setReplacing(false)
     }

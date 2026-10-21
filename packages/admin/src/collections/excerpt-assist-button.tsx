@@ -5,8 +5,8 @@ import {
   getAssistCapabilities,
   runAssistTool,
 } from '../api/assist-client.js'
-import { ApiError } from '../api/client.js'
 import { Button, Notice } from '../ui/index.js'
+import { describeApiError } from '../api/describe-error.js'
 
 /**
  * Fiche 44 task 3 — "Generate the excerpt with AI", rendered next to the
@@ -79,7 +79,7 @@ export function ExcerptAssistButton({
       })
       setSuggestions(result.suggestions)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('excerptAssist.error'))
+      setError(describeApiError(caught, t('excerptAssist.error')).message)
     } finally {
       setSuggesting(false)
     }

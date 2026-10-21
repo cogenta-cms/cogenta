@@ -29,9 +29,14 @@ export function AgentChatFeed({
   const [draft, setDraft] = useState('')
   const logRef = useRef<HTMLDivElement>(null)
 
+  // Pinned to the newest message: on open, when a turn arrives, and when the
+  // "thinking" line appears (the question just sent would otherwise sit cut
+  // off at the bottom with the reply out of view).
+  const turnCount = turns.length
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the counters are the triggers, the body only reads the ref.
   useEffect(() => {
     if (logRef.current !== null) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [])
+  }, [turnCount, sending, loading])
 
   // Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
   // Keeps the feed pinned to the bottom as `progress` grows, the same way a
@@ -119,8 +124,8 @@ export function AgentChatFeed({
           placeholder={t('agentChat.placeholder')}
           className={
             dense
-              ? 'h-16 flex-1 resize-none rounded-md border border-input bg-card p-2 text-sm shadow-card'
-              : 'h-20 flex-1 resize-none rounded-md border border-input bg-card p-3 text-sm shadow-card'
+              ? 'h-16 flex-1 resize-none rounded-md border border-input bg-card p-2 font-sans text-sm shadow-card'
+              : 'h-20 flex-1 resize-none rounded-md border border-input bg-card p-3 font-sans text-sm shadow-card'
           }
           value={draft}
           disabled={sending || disabled}
@@ -131,6 +136,7 @@ export function AgentChatFeed({
           {t('agentChat.send')}
         </Button>
       </form>
+      <p className="m-0 text-[0.7rem] text-muted-foreground">{t('agentChat.composerHint')}</p>
     </div>
   )
 }

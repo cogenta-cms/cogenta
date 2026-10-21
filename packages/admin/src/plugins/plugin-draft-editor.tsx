@@ -9,8 +9,9 @@ import {
   type SandboxState,
   writeSandboxFile,
 } from '../api/plugins-client.js'
-import { Badge, Button, Field, Notice } from '../ui/index.js'
-import { describeCapability } from './plugin-capabilities.js'
+import { Badge, Button, Field, Modal, Notice } from '../ui/index.js'
+import { describeCapability, describeProvides } from './plugin-capabilities.js'
+import { describePluginError, describePluginProblem } from './plugin-problems.js'
 
 /**
  * A draft, opened: what it will be able to do, whether it would install, its
@@ -53,6 +54,12 @@ export function PluginDraftEditor({
   // asks before it does, in place, rather than opening a dialog that a reflex
   // dismisses.
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // Installing is the act that matters here: it goes through a screen that
+  // says what the plugin will be able to do, not through a lone button.
+  const [confirmingInstall, setConfirmingInstall] = useState(false)
+  // An error about the file being edited is shown next to it, where the
+  // person is looking, not at the top of a page they have scrolled past.
+  const [saveError, setSaveError] = useState<string | null>(null)
   const panel = useRef<HTMLElement | null>(null)
 
   const act = useCallback(
@@ -109,8 +116,10 @@ export function PluginDraftEditor({
     }
   }, [])
 
-  const refresh = async (): Promise<void> => {
-    setState(await getSandbox(token, draft.id))
+  const refresh = async (): Promise<SandboxState> => {
+    const loaded = await getSandbox(token, draft.id)
+    setState(loaded)
+    return loaded
   }
 
   const ready = state?.check.ok === true
@@ -121,19 +130,13 @@ export function PluginDraftEditor({
       aria-label={t('plugins.draft.editing', { name: draft.title ?? draft.name })}
       className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4"
     >
-      <header className="flex flex-wrap items-center justify-between gap-2">
+      {state !== null && (
         <div className="flex items-center gap-2">
-          <h3 className="m-0 text-sm font-semibold">{draft.title ?? draft.name}</h3>
-          {state !== null && (
-            <Badge tone={ready ? 'success' : 'warning'}>
-              {ready ? t('plugins.draft.ready') : t('plugins.draft.notReady')}
-            </Badge>
-          )}
+          <Badge tone={ready ? 'success' : 'warning'}>
+            {ready ? t('plugins.draft.ready') : t('plugins.draft.notReady')}
+          </Badge>
         </div>
-        <Button type="button" size="sm" variant="ghost" onClick={onClose}>
-          {t('plugins.draft.close')}
-        </Button>
-      </header>
+      )}
 
       {state === null ? (
         <p className="m-0 text-sm text-muted-foreground">{t('common.loading')}</p>
@@ -144,21 +147,28 @@ export function PluginDraftEditor({
               <p className="m-0 font-medium">{t('plugins.draft.problems')}</p>
               <ul className="m-0 pl-4">
                 {state.check.problems.map((problem) => (
-                  <li key={problem}>{problem}</li>
+                  <li key={problem}>{describePluginProblem(t, problem)}</li>
                 ))}
               </ul>
             </Notice>
           )}
 
-          {draft.capabilities.length > 0 && (
-            <p className="m-0 text-sm text-muted-foreground">
-              {t('plugins.draft.willAsk', {
-                capabilities: draft.capabilities
-                  .map((capability) => describeCapability(t, capability).label)
-                  .join(' · '),
+          <section aria-label={t('plugins.draft.willDo')} className="flex flex-col gap-1">
+            <h4 className="m-0 text-sm font-semibold">{t('plugins.draft.willDo')}</h4>
+            <ul className="m-0 list-disc pl-5 text-sm text-muted-foreground">
+              {describeProvides(t, draft.provides, draft.name).map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+              {draft.capabilities.map((capability) => {
+                const described = describeCapability(t, capability)
+                return (
+                  <li key={capability}>
+                    {t('plugins.draft.asksFor', { permission: described.label })}
+                  </li>
+                )
               })}
-            </p>
-          )}
+            </ul>
+          </section>
 
           <nav aria-label={t('plugins.draft.files')}>
             <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
@@ -180,6 +190,11 @@ export function PluginDraftEditor({
 
           {file !== null && (
             <div className="flex flex-col gap-2">
+              {saveError !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{saveError}</p>
+                </Notice>
+              )}
               <Field label={file.path}>
                 {(control) => (
                   <textarea
@@ -191,6 +206,7 @@ export function PluginDraftEditor({
                     onChange={(event: { target: { value: string } }) => {
                       setFile({ path: file.path, content: event.target.value })
                       setDirty(true)
+                      setSaveError(null)
                     }}
                   />
                 )}
@@ -202,7 +218,13 @@ export function PluginDraftEditor({
                   disabled={busy || !dirty}
                   onClick={() =>
                     void act(async () => {
-                      await writeSandboxFile(token, draft.id, file.path, file.content)
+                      setSaveError(null)
+                      try {
+                        await writeSandboxFile(token, draft.id, file.path, file.content)
+                      } catch (caught) {
+                        setSaveError(describePluginError(t, caught, t('plugins.actionError')))
+                        return
+                      }
                       setDirty(false)
                       // Saving re-checks: "is it installable now?" is the
                       // question every edit is asking.
@@ -225,34 +247,27 @@ export function PluginDraftEditor({
           <footer className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
             <Button
               type="button"
-              disabled={busy || !ready}
+              variant="secondary"
+              disabled={busy}
               onClick={() =>
                 void act(async () => {
-                  const deployment = await deploySandbox(token, draft.id, installedAlready)
-                  if (!deployment.ok) throw new Error(deployment.problems.join(' '))
+                  const checked = await refresh()
                   onDone(
-                    installedAlready
-                      ? t('plugins.status.replacedRestart')
-                      : t('plugins.status.installedRestart'),
+                    checked.check.ok
+                      ? t('plugins.status.checkedOk')
+                      : t('plugins.status.checkedProblems', { count: checked.check.problems.length }),
                   )
                 })
               }
             >
-              {installedAlready ? t('plugins.draft.replace') : t('plugins.draft.install')}
+              {t('plugins.draft.check')}
             </Button>
             <Button
               type="button"
-              variant="secondary"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                void act(async () => {
-                  await refresh()
-                  onDone(t('plugins.status.checked'))
-                })
-              }
+              disabled={busy || !ready}
+              onClick={() => setConfirmingInstall(true)}
             >
-              {t('plugins.draft.check')}
+              {installedAlready ? t('plugins.draft.replace') : t('plugins.draft.install')}
             </Button>
             <Button
               type="button"
@@ -275,6 +290,84 @@ export function PluginDraftEditor({
             </Button>
             <span className="text-xs text-muted-foreground">{t('plugins.draft.installHelp')}</span>
           </footer>
+
+          <Modal
+            open={confirmingInstall}
+            onOpenChange={setConfirmingInstall}
+            title={t(
+              installedAlready ? 'plugins.draft.installConfirm.titleReplace' : 'plugins.draft.installConfirm.title',
+              { name: draft.title ?? draft.name },
+            )}
+            closeLabel={t('common.close')}
+            footer={
+              <>
+                <Button type="button" variant="ghost" onClick={() => setConfirmingInstall(false)}>
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setConfirmingInstall(false)
+                    void act(async () => {
+                      const deployment = await deploySandbox(token, draft.id, installedAlready)
+                      if (!deployment.ok) {
+                        throw new Error(
+                          deployment.problems
+                            .map((problem) => describePluginProblem(t, problem))
+                            .join(' '),
+                        )
+                      }
+                      onDone(
+                        installedAlready
+                          ? t('plugins.status.replacedRestart')
+                          : t('plugins.status.installedRestart'),
+                      )
+                    })
+                  }}
+                >
+                  {installedAlready ? t('plugins.draft.replace') : t('plugins.draft.install')}
+                </Button>
+              </>
+            }
+          >
+            <div className="flex flex-col gap-3 text-sm">
+              <p className="m-0">{t('plugins.draft.installConfirm.intro')}</p>
+              <ul className="m-0 list-disc pl-5">
+                {describeProvides(t, draft.provides, draft.name).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              {draft.capabilities.length === 0 ? (
+                <p className="m-0">{t('plugins.draft.installConfirm.nothing')}</p>
+              ) : (
+                <>
+                  <p className="m-0 font-medium">{t('plugins.draft.installConfirm.asks')}</p>
+                  <ul className="m-0 list-disc pl-5">
+                    {draft.capabilities.map((capability) => {
+                      const described = describeCapability(t, capability)
+                      return (
+                        <li key={capability}>
+                          {described.label}
+                          <span className="block text-xs text-muted-foreground">
+                            {described.scope === null
+                              ? described.raw
+                              : t('plugins.limitedTo', {
+                                  scope: described.scope,
+                                  raw: described.raw,
+                                })}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </>
+              )}
+              <Notice tone="info" live="off">
+                <p className="m-0">{t('plugins.draft.installConfirm.noGrant')}</p>
+              </Notice>
+            </div>
+          </Modal>
         </>
       )}
     </section>

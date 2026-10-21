@@ -5,12 +5,12 @@ import {
   getAssistCapabilities,
   runAssistTool,
 } from '../api/assist-client.js'
-import { ApiError } from '../api/client.js'
 import { runSeoPreview, type SeoPreview } from '../api/seo-client.js'
 import { FieldInput } from '../fields/field-input.js'
 import type { CollectionSummary, SchemaField } from '../schema/types.js'
 import { Button, Card, CardBody, CardHeader, CardTitle, Input, Label, Notice } from '../ui/index.js'
 import { analyseContent, type ContentCheckId } from './content-score.js'
+import { describeApiError } from '../api/describe-error.js'
 
 /**
  * Fiche 13 (SEO éditorial), Task 1 — the panel `entry-edit.tsx` never had:
@@ -86,6 +86,23 @@ function stringValue(values: Readonly<Record<string, unknown>>, name: string): s
   return typeof value === 'string' ? value : ''
 }
 
+function readLocalKeyword(key: string): string {
+  try {
+    return window.localStorage.getItem(key) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function writeLocalKeyword(key: string, value: string): void {
+  try {
+    if (value === '') window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, value)
+  } catch {
+    // Private mode or blocked storage: the keyword then lives for this visit only.
+  }
+}
+
 function counterTone(length: number, recommended: number): 'muted' | 'warning' {
   return length > recommended ? 'warning' : 'muted'
 }
@@ -120,6 +137,17 @@ export function SeoPanel({
 
   const [expanded, setExpanded] = useState(true)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+
+  // A collection that does not declare `seoFocusKeyword` (contract A has no
+  // such field) can still be analysed: the keyword is typed here, kept in this
+  // browser only, and never written to the entry.
+  const keywordStorageKey = `cogenta.seo.keyword.${collection.name}.${entryId ?? 'new'}`
+  const [localKeyword, setLocalKeyword] = useState(() => readLocalKeyword(keywordStorageKey))
+  useEffect(() => setLocalKeyword(readLocalKeyword(keywordStorageKey)), [keywordStorageKey])
+  function changeLocalKeyword(next: string): void {
+    setLocalKeyword(next)
+    writeLocalKeyword(keywordStorageKey, next)
+  }
 
   const [preview, setPreview] = useState<SeoPreview | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -165,7 +193,7 @@ export function SeoPanel({
         await runSeoPreview(token, { collection: collection.name, id: entryId, overrides: values }),
       )
     } catch (caught) {
-      setPreviewError(caught instanceof ApiError ? caught.message : t('seo.previewError'))
+      setPreviewError(describeApiError(caught, t('seo.previewError')).message)
     } finally {
       setPreviewLoading(false)
     }
@@ -203,11 +231,19 @@ export function SeoPanel({
     return analyseContent({
       title: titleForAnalysis,
       ...(descriptionForAnalysis ? { description: descriptionForAnalysis } : {}),
-      focusKeyword: stringValue(values, 'seoFocusKeyword'),
+      focusKeyword:
+        focusKeywordField === undefined ? localKeyword : stringValue(values, 'seoFocusKeyword'),
       body: bodyValue,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusKeywordField, bodyValue, JSON.stringify(values), preview?.title, preview?.description])
+  }, [
+    focusKeywordField,
+    localKeyword,
+    bodyValue,
+    JSON.stringify(values),
+    preview?.title,
+    preview?.description,
+  ])
 
   if (!hasAnyField) return null
 
@@ -215,7 +251,16 @@ export function SeoPanel({
   const descriptionValue = stringValue(values, 'seoDescription')
   const canonicalValue = stringValue(values, 'seoCanonical')
   const noindexValue = values['seoNoindex'] === true
-  const focusKeywordValue = stringValue(values, 'seoFocusKeyword')
+  const focusKeywordValue =
+    focusKeywordField === undefined ? localKeyword : stringValue(values, 'seoFocusKeyword')
+  const previewTitle =
+    preview === null
+      ? ""
+      : preview.title !== ''
+        ? preview.title
+        : titleValue !== ''
+          ? titleValue
+          : stringValue(values, 'title')
 
   async function suggestTitles(): Promise<void> {
     if (suggestingTitle) return
@@ -228,7 +273,7 @@ export function SeoPanel({
       })
       setTitleSuggestions(result.suggestions)
     } catch (caught) {
-      setSuggestError(caught instanceof ApiError ? caught.message : t('seo.suggestError'))
+      setSuggestError(describeApiError(caught, t('seo.suggestError')).message)
     } finally {
       setSuggestingTitle(false)
     }
@@ -246,7 +291,7 @@ export function SeoPanel({
       })
       setDescriptionSuggestions(result.suggestions)
     } catch (caught) {
-      setSuggestError(caught instanceof ApiError ? caught.message : t('seo.suggestError'))
+      setSuggestError(describeApiError(caught, t('seo.suggestError')).message)
     } finally {
       setSuggestingDescription(false)
     }
@@ -271,12 +316,6 @@ export function SeoPanel({
 
       {expanded && (
         <CardBody className="flex flex-col gap-5">
-          {entryId === null && (
-            <Notice tone="info">
-              <p>{t('seo.saveFirst')}</p>
-            </Notice>
-          )}
-
           {titleField !== undefined && (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
@@ -383,17 +422,25 @@ export function SeoPanel({
             </Notice>
           )}
 
-          {focusKeywordField !== undefined && (
+          {contentAnalysis !== null && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="seo-focus-keyword">{t('seo.focusKeywordLabel')}</Label>
               <Input
                 id="seo-focus-keyword"
                 value={focusKeywordValue}
-                disabled={disabled}
+                disabled={disabled && focusKeywordField !== undefined}
                 placeholder={t('seo.focusKeywordPlaceholder')}
-                onChange={(event) => onChange('seoFocusKeyword', event.target.value)}
+                onChange={(event) =>
+                  focusKeywordField === undefined
+                    ? changeLocalKeyword(event.target.value)
+                    : onChange('seoFocusKeyword', event.target.value)
+                }
               />
-              <p className="text-xs text-muted-foreground">{t('seo.focusKeywordHint')}</p>
+              <p className="text-xs text-muted-foreground">
+                {focusKeywordField === undefined
+                  ? t('seo.focusKeywordLocalHint')
+                  : t('seo.focusKeywordHint')}
+              </p>
             </div>
           )}
 
@@ -476,16 +523,18 @@ export function SeoPanel({
             )}
             {preview !== null && (
               <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-3">
-                <p className="truncate text-base text-[#1a0dab]">{preview.title}</p>
+                <p className="truncate text-base text-[#1a0dab]">{previewTitle}</p>
                 {preview.canonical !== null && (
                   <p className="truncate text-xs text-[#006621]">{preview.canonical}</p>
                 )}
                 {preview.description !== null && (
                   <p className="text-sm text-muted-foreground">{preview.description}</p>
                 )}
-                {preview.robots === 'noindex' && (
+                {preview.robots === 'noindex' && (noindexValue || status !== 'published') && (
                   <Notice tone="warning">
-                    <p>{t('seo.previewNoindex')}</p>
+                    <p>
+                      {noindexValue ? t('seo.previewNoindexChecked') : t('seo.previewNoindex')}
+                    </p>
                   </Notice>
                 )}
               </div>

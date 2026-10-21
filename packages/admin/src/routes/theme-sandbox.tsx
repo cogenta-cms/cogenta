@@ -1,3 +1,4 @@
+import { withoutScripts } from './appearance-preview.js'
 import { type ChangeEvent, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
@@ -115,7 +116,7 @@ function PreviewModal({
       {loadError === null && result !== null && result.ok && (
         <iframe
           title={t('themeSandbox.previewIframeTitle', { id })}
-          srcDoc={result.html}
+          srcDoc={withoutScripts(result.html)}
           // No script at all: this HTML comes from theme code an agent or a
           // ZIP may have written, and an iframe without `sandbox` ran it on
           // the admin's origin, next to its session token (security review

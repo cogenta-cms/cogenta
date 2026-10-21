@@ -31,6 +31,7 @@ import {
   CardTitle,
   Input,
   Notice,
+  SavedIndicator,
   Select,
   Table,
   TableBody,
@@ -39,6 +40,7 @@ import {
   TableHeader,
   TableRoot,
   TableRow,
+  useSavedIndicator,
 } from '../ui/index.js'
 import { RedirectsPanel } from './redirects.js'
 
@@ -155,7 +157,7 @@ export function SeoRoute(): JSX.Element {
 
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')
-  const [tab, setTab] = useState<TabId>(isTabId(requestedTab) ? requestedTab : 'general')
+  const [tab, setTab] = useState<TabId>(isTabId(requestedTab) ? requestedTab : TAB_ORDER[0])
 
   function selectTab(next: TabId): void {
     setTab(next)
@@ -220,7 +222,7 @@ export function SeoRoute(): JSX.Element {
       <div
         role="tablist"
         aria-label={t('seo.pageHeading')}
-        className="flex flex-wrap gap-1 border-b border-border"
+        className="-mx-1 flex flex-nowrap gap-1 overflow-x-auto border-b border-border px-1"
       >
         {TAB_ORDER.map((id) => (
           <button
@@ -230,8 +232,11 @@ export function SeoRoute(): JSX.Element {
             id={`seo-tab-${id}`}
             aria-selected={tab === id}
             aria-controls={`seo-panel-${id}`}
+            ref={(node) => {
+              if (node !== null && tab === id) node.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+            }}
             className={cn(
-              'rounded-t-md px-3 py-2 font-sans text-sm font-medium transition-colors',
+              'shrink-0 whitespace-nowrap rounded-t-md px-3 py-2 font-sans text-sm font-medium transition-colors',
               tab === id
                 ? 'border border-b-0 border-border bg-card text-card-foreground'
                 : 'text-muted-foreground hover:text-foreground',
@@ -243,12 +248,17 @@ export function SeoRoute(): JSX.Element {
         ))}
       </div>
 
+      {(tab === 'general' || tab === 'social' || tab === 'diagnostics') && (
+        <p className="text-muted-foreground -mt-2 text-sm">{t('seo.autosaveHint')}</p>
+      )}
+
       <div id={`seo-panel-${tab}`} role="tabpanel" aria-labelledby={`seo-tab-${tab}`}>
         {tab === 'features' && (
           <FeaturesTab
             settings={seoSettings}
             collections={routedCollections}
             onSave={saveSetting}
+            onGoToTab={selectTab}
           />
         )}
         {tab === 'general' && (
@@ -309,14 +319,16 @@ interface FeatureCardDescriptor {
     | 'searchVerification'
     | 'robotsCustomRules'
   readonly settingKey: string
+  /** The tab where what the card depends on is filled in, when there is one. */
+  readonly configureIn?: TabId
 }
 
 const FEATURE_CARDS: readonly FeatureCardDescriptor[] = [
   { id: 'contentScore', settingKey: 'seo.contentScoreEnabled' },
   { id: 'linkAssistant', settingKey: 'seo.linkAssistantEnabled' },
-  { id: 'searchVerification', settingKey: 'seo.searchVerificationEnabled' },
-  { id: 'robotsCustomRules', settingKey: 'seo.robotsCustomRulesEnabled' },
-  { id: 'indexNow', settingKey: 'seo.indexNowEnabled' },
+  { id: 'searchVerification', settingKey: 'seo.searchVerificationEnabled', configureIn: 'general' },
+  { id: 'robotsCustomRules', settingKey: 'seo.robotsCustomRulesEnabled', configureIn: 'diagnostics' },
+  { id: 'indexNow', settingKey: 'seo.indexNowEnabled', configureIn: 'general' },
   { id: 'llmsTxt', settingKey: 'seo.llmsTxtEnabled' },
 ]
 
@@ -354,6 +366,7 @@ function FeaturesTab({
   settings,
   collections,
   onSave,
+  onGoToTab,
 }: {
   readonly settings: readonly SiteSetting[]
   readonly collections: readonly {
@@ -361,6 +374,7 @@ function FeaturesTab({
     readonly labels: { readonly singular: string }
   }[]
   readonly onSave: TabSaveHandler
+  readonly onGoToTab: (tab: TabId) => void
 }): JSX.Element {
   const { t } = useTranslation()
 
@@ -378,6 +392,7 @@ function FeaturesTab({
             settings={settings}
             dependencyMissing={isDependencyMissing(card.id, settings, collections)}
             onSave={onSave}
+            onGoToTab={onGoToTab}
           />
         ))}
       </div>
@@ -390,11 +405,13 @@ function FeatureCard({
   settings,
   dependencyMissing,
   onSave,
+  onGoToTab,
 }: {
   readonly card: FeatureCardDescriptor
   readonly settings: readonly SiteSetting[]
   readonly dependencyMissing: boolean
   readonly onSave: TabSaveHandler
+  readonly onGoToTab: (tab: TabId) => void
 }): JSX.Element {
   const { t } = useTranslation()
   const setting = settings.find((candidate) => candidate.key === card.settingKey)
@@ -411,7 +428,7 @@ function FeatureCard({
   }
 
   return (
-    <Card className={dependencyMissing ? 'opacity-60' : undefined}>
+    <Card>
       <CardBody className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-3">
           <h3 className="m-0 text-sm font-semibold text-foreground">
@@ -432,9 +449,22 @@ function FeatureCard({
           {t(`seo.feature.${card.id}.description`)}
         </p>
         {dependencyMissing && (
-          <p className="text-muted-foreground m-0 text-xs italic">
-            {t(`seo.feature.${card.id}.dependencyHint`)}
-          </p>
+          <div className="flex flex-col items-start gap-1">
+            <p className="text-muted-foreground m-0 text-xs">
+              {enabled ? t('seo.featureIncomplete') : t('seo.featureToComplete')}{' '}
+              {t(`seo.feature.${card.id}.dependencyHint`)}
+            </p>
+            {card.configureIn !== undefined && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => onGoToTab(card.configureIn as TabId)}
+              >
+                {t('seo.featureGoTo', { tab: t(`seo.tab.${card.configureIn}`) })}
+              </Button>
+            )}
+          </div>
         )}
       </CardBody>
     </Card>
@@ -505,7 +535,7 @@ export function GeneralTab({
           {collections.length === 0 ? (
             <p className="text-muted-foreground m-0 text-sm">{t('seo.noRoutedCollections')}</p>
           ) : (
-            <TableRoot label={t('seo.collectionTemplatesHeading')}>
+            <TableRoot label={t('seo.collectionTemplatesHeading')} stacked>
               <Table>
                 <TableHead>
                   <TableRow>
@@ -531,6 +561,7 @@ export function GeneralTab({
 
       <SearchEngineVerificationCard settings={settings} onSave={onSave} />
       <IndexingExtrasCard settings={settings} onSave={onSave} />
+      <LlmsTxtCard settings={settings} onSave={onSave} />
     </div>
   )
 }
@@ -605,7 +636,6 @@ function IndexingExtrasCard({
   const { t } = useTranslation()
   const enabled = settings.find((setting) => setting.key === 'seo.indexNowEnabled')
   const keySetting = settings.find((setting) => setting.key === 'seo.indexNowKey')
-  const llmsTxtEnabled = settings.find((setting) => setting.key === 'seo.llmsTxtEnabled')
 
   const [keyValue, setKeyValue] = useState(
     typeof keySetting?.value === 'string' ? keySetting.value : '',
@@ -682,13 +712,36 @@ function IndexingExtrasCard({
             </p>
           )}
         </div>
-        {llmsTxtEnabled !== undefined && (
-          <SiteSettingsField
-            setting={llmsTxtEnabled}
-            canEdit
-            onSave={(value) => onSave('seo.llmsTxtEnabled', value)}
-          />
-        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+/** Fiche 50 task 5 — the off-by-default `llms.txt` index, a feature of its own rather than a line of IndexNow's card. */
+function LlmsTxtCard({
+  settings,
+  onSave,
+}: {
+  readonly settings: readonly SiteSetting[]
+  readonly onSave: TabSaveHandler
+}): JSX.Element | null {
+  const { t } = useTranslation()
+  const llmsTxtEnabled = settings.find((setting) => setting.key === 'seo.llmsTxtEnabled')
+  if (llmsTxtEnabled === undefined) return null
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h2>{t('seo.llmsTxtHeading')}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-4">
+        <p className="text-muted-foreground m-0 text-sm">{t('seo.llmsTxtDescription')}</p>
+        <SiteSettingsField
+          setting={llmsTxtEnabled}
+          canEdit
+          onSave={(value) => onSave('seo.llmsTxtEnabled', value)}
+        />
       </CardBody>
     </Card>
   )
@@ -704,16 +757,41 @@ function TemplateRow({
   readonly onSave: (value: string) => Promise<void>
 }): JSX.Element {
   const { t } = useTranslation()
+  const saved = useSavedIndicator()
+  const [error, setError] = useState<string | null>(null)
+
+  async function commit(next: string): Promise<void> {
+    if (next === value) return
+    saved.hide()
+    setError(null)
+    try {
+      await onSave(next)
+      saved.show()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : t('settings.saveError'))
+    }
+  }
+
   return (
     <TableRow>
-      <TableCell className="font-mono text-sm">{collection.labels.singular}</TableCell>
-      <TableCell>
-        <Input
-          aria-label={t('seo.templateColumn')}
-          placeholder={t('seo.templatePlaceholder')}
-          defaultValue={value}
-          onBlur={(event) => void onSave(event.target.value)}
-        />
+      <TableCell stack="heading" className="text-sm font-medium">
+        {collection.labels.singular}
+      </TableCell>
+      <TableCell label={t('seo.templateColumn')}>
+        <div className="flex w-full min-w-0 flex-col gap-1">
+          <Input
+            aria-label={`${t('seo.templateColumn')} — ${collection.labels.singular}`}
+            placeholder={t('seo.templatePlaceholder')}
+            defaultValue={value}
+            onBlur={(event) => void commit(event.target.value)}
+          />
+          <SavedIndicator visible={saved.visible} label={t('settings.saved')} className="text-xs" />
+          {error !== null && (
+            <p role="alert" className="m-0 text-xs font-medium text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   )
@@ -756,7 +834,7 @@ export function SitemapTab({
         {collections.length === 0 ? (
           <p className="text-muted-foreground m-0 text-sm">{t('seo.noRoutedCollections')}</p>
         ) : (
-          <TableRoot label={t('seo.tab.sitemap')}>
+          <TableRoot label={t('seo.tab.sitemap')} stacked>
             <Table>
               <TableHead>
                 <TableRow>
@@ -794,25 +872,37 @@ function SitemapRow({
   readonly onSave: (patch: Partial<SitemapOverride>) => Promise<void>
 }): JSX.Element {
   const { t } = useTranslation()
+  const saved = useSavedIndicator()
+  const name = collection.labels.singular
+
+  async function save(patch: Partial<SitemapOverride>): Promise<void> {
+    saved.hide()
+    await onSave(patch)
+    saved.show()
+  }
+
   return (
     <TableRow>
-      <TableCell className="font-mono text-sm">{collection.labels.singular}</TableCell>
-      <TableCell>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            aria-label={t('seo.includedColumn')}
-            checked={override.included}
-            onChange={(event) => void onSave({ included: event.target.checked })}
-          />
-        </label>
+      <TableCell stack="heading" className="text-sm font-medium">
+        <span className="flex flex-wrap items-center gap-3">
+          {name}
+          <SavedIndicator visible={saved.visible} label={t('settings.saved')} className="text-xs" />
+        </span>
       </TableCell>
-      <TableCell>
+      <TableCell label={t('seo.includedColumn')}>
+        <input
+          type="checkbox"
+          aria-label={`${t('seo.includedColumn')} — ${name}`}
+          checked={override.included}
+          onChange={(event) => void save({ included: event.target.checked })}
+        />
+      </TableCell>
+      <TableCell label={t('seo.changefreqColumn')}>
         <Select
-          aria-label={t('seo.changefreqColumn')}
+          aria-label={`${t('seo.changefreqColumn')} — ${name}`}
           value={override.changefreq}
           onChange={(event) =>
-            void onSave({ changefreq: event.target.value as SitemapOverride['changefreq'] })
+            void save({ changefreq: event.target.value as SitemapOverride['changefreq'] })
           }
         >
           {CHANGE_FREQUENCIES.map((frequency) => (
@@ -822,9 +912,9 @@ function SitemapRow({
           ))}
         </Select>
       </TableCell>
-      <TableCell>
+      <TableCell label={t('seo.priorityColumn')}>
         <Input
-          aria-label={t('seo.priorityColumn')}
+          aria-label={`${t('seo.priorityColumn')} — ${name}`}
           type="number"
           min={0}
           max={1}
@@ -834,11 +924,11 @@ function SitemapRow({
           onBlur={(event) => {
             const raw = event.target.value.trim()
             if (raw === '') {
-              void onSave({ priority: '' })
+              void save({ priority: '' })
               return
             }
             const parsed = Number(raw)
-            if (!Number.isNaN(parsed)) void onSave({ priority: parsed })
+            if (!Number.isNaN(parsed)) void save({ priority: parsed })
           }}
         />
       </TableCell>
@@ -972,7 +1062,9 @@ function RobotsCustomRulesEditor({
         <p className="text-xs leading-5 text-muted-foreground">{t('settings.saving')}</p>
       )}
       {error === null && !saving && saved && (
-        <p className="text-xs leading-5 text-muted-foreground">{t('settings.saved')}</p>
+        <p role="status" className="text-xs leading-5 font-medium text-success">
+          {t('settings.saved')}
+        </p>
       )}
     </div>
   )
@@ -1007,6 +1099,19 @@ function DiagnosticsTab({
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
+
+  const schema = useSchema()
+  // Every report names a collection by its label ("Page"), never by the
+  // technical name the schema file gave it ("case_study").
+  const collectionLabels = useMemo(
+    () =>
+      new Map(
+        schema.status === 'ready'
+          ? schema.schema.collections.map((collection) => [collection.name, collection.labels.plural])
+          : [],
+      ),
+    [schema],
+  )
 
   const [data, setData] = useState<SeoDiagnostics | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -1086,7 +1191,7 @@ function DiagnosticsTab({
               <p className="m-0 text-lg font-semibold">
                 {t('seo.sitemapTotal', { count: data.sitemap.totalUrls })}
               </p>
-              <TableRoot label={t('seo.collectionsTableLabel')}>
+              <TableRoot label={t('seo.collectionsTableLabel')} stacked>
                 <Table>
                   <TableHead>
                     <TableRow>
@@ -1099,12 +1204,17 @@ function DiagnosticsTab({
                   <TableBody>
                     {data.sitemap.collections.map((report) => (
                       <TableRow key={report.name}>
-                        <TableCell className="font-mono text-sm">{report.name}</TableCell>
-                        <TableCell>
+                        <TableCell stack="heading" className="text-sm font-medium">
+                          {collectionLabels.get(report.name) ?? report.name}
+                        </TableCell>
+                        <TableCell label={t('seo.includedColumn')}>
                           {report.included ? t('seo.includedYes') : t('seo.includedNo')}
                         </TableCell>
-                        <TableCell>{report.urlCount}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
+                        <TableCell label={t('seo.urlCountColumn')}>{report.urlCount}</TableCell>
+                        <TableCell
+                          label={t('seo.reasonColumn')}
+                          className="text-muted-foreground text-sm"
+                        >
                           {translatedSitemapReason(t, report.reason)}
                         </TableCell>
                       </TableRow>
@@ -1159,14 +1269,12 @@ function DiagnosticsTab({
                 heading={t('seo.missingDescriptionHeading')}
                 items={data.content.missingDescriptionCount}
                 empty={t('seo.noIssues')}
-                viewLabel={t('seo.viewEntry')}
               />
 
               <IssueList
                 heading={t('seo.tooLongTitleHeading', { length: 60 })}
                 items={data.content.tooLongTitleCount}
                 empty={t('seo.noIssues')}
-                viewLabel={t('seo.viewEntry')}
               />
 
               <div>
@@ -1183,7 +1291,7 @@ function DiagnosticsTab({
                         <ul className="m-0 flex list-none flex-col gap-1 p-0 pl-3">
                           {group.entries.map((entry) => (
                             <li key={`${entry.collection}-${entry.id}`}>
-                              <EntryLink entry={entry} label={t('seo.viewEntry')} />
+                              <EntryLink entry={entry} />
                             </li>
                           ))}
                         </ul>
@@ -1506,10 +1614,7 @@ function LinkAssistantSection({
                 <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
                   {suggestions.orphans.map((orphan) => (
                     <li key={orphan.id}>
-                      <EntryLink
-                        entry={orphan}
-                        label={orphan.title === '' ? t('seo.viewEntry') : orphan.title}
-                      />
+                      <EntryLink entry={orphan} />
                     </li>
                   ))}
                 </ul>
@@ -1530,12 +1635,12 @@ function LinkAssistantSection({
                     <li key={entryId}>
                       <EntryLink
                         entry={{ collection: suggestions.collection, id: entryId }}
-                        label={entryId}
+                        title={suggestions.entryTitles?.[entryId] ?? ''}
                       />
                       <ul className="m-0 flex list-none flex-col gap-1 p-0 pl-3">
                         {candidates.map((candidate) => (
                           <li key={candidate.id}>
-                            <EntryLink entry={candidate} label={candidate.title} />
+                            <EntryLink entry={candidate} />
                             <span className="text-muted-foreground ml-2 text-xs">
                               {t('seo.linkAssistantSharedWords', {
                                 count: candidate.sharedWordCount,
@@ -1556,20 +1661,44 @@ function LinkAssistantSection({
   )
 }
 
+/**
+ * Names an entry the way an editor does: its own title, then the kind of
+ * content it is ("Page") and where it lives on the site — never the
+ * technical collection name or the identifier. A server that predates the
+ * `title` field gets "Sans titre" rather than an id.
+ */
 function EntryLink({
   entry,
-  label,
+  title,
 }: {
   readonly entry: SeoContentRef
-  readonly label: string
+  /** Overrides `entry.title` — the link assistant already knows an entry's title from its own report. */
+  readonly title?: string
 }): JSX.Element {
+  const { t } = useTranslation()
+  const schema = useSchema()
+  const kind =
+    schema.status === 'ready'
+      ? schema.schema.collections.find((collection) => collection.name === entry.collection)?.labels
+          .singular
+      : undefined
+  const shown = (title ?? entry.title ?? '').trim()
   return (
-    <Link
-      to={`/collections/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
-      className="text-primary underline"
-    >
-      {entry.collection} — {label}
-    </Link>
+    <span className="flex flex-wrap items-baseline gap-x-2">
+      <Link
+        to={`/collections/${encodeURIComponent(entry.collection)}/${encodeURIComponent(entry.id)}`}
+        className="text-primary underline"
+      >
+        {shown === '' ? t('seo.untitledEntry') : shown}
+      </Link>
+      {(kind !== undefined || (entry.path !== undefined && entry.path !== null)) && (
+        <span className="text-muted-foreground text-xs">
+          {kind}
+          {kind !== undefined && entry.path ? ' · ' : ''}
+          {entry.path ?? ''}
+        </span>
+      )}
+    </span>
   )
 }
 
@@ -1577,12 +1706,10 @@ function IssueList({
   heading,
   items,
   empty,
-  viewLabel,
 }: {
   readonly heading: string
   readonly items: readonly SeoContentRef[]
   readonly empty: string
-  readonly viewLabel: string
 }): JSX.Element {
   return (
     <div>
@@ -1595,7 +1722,7 @@ function IssueList({
         <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
           {items.map((entry) => (
             <li key={`${entry.collection}-${entry.id}`}>
-              <EntryLink entry={entry} label={viewLabel} />
+              <EntryLink entry={entry} />
             </li>
           ))}
         </ul>

@@ -50,6 +50,10 @@ export interface SeoCollectionSitemapReport {
 export interface SeoContentRef {
   readonly collection: string
   readonly id: string
+  /** The editor's own name for the entry; absent from a server that predates it. */
+  readonly title?: string
+  /** Where the entry lives on the public site, when it has a canonical address. */
+  readonly path?: string | null
 }
 
 export interface SeoDuplicateTitleReport {
@@ -108,6 +112,8 @@ export interface SeoLinkSuggestions {
   readonly collection: string
   readonly orphans: readonly SeoOrphanEntry[]
   readonly suggestionsByEntry: Readonly<Record<string, readonly SeoLinkSuggestion[]>>
+  /** The editor's own name for each entry of `suggestionsByEntry`. */
+  readonly entryTitles?: Readonly<Record<string, string>>
 }
 
 export function getSeoLinkSuggestions(

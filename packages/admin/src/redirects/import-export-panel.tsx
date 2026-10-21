@@ -1,15 +1,17 @@
+import { redirectErrorMessage } from './redirect-errors.js'
 import { type ChangeEvent, type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/http.js'
 import {
   applyRedirectsImport,
   exportRedirectsCsv,
+  type ImportIssue,
   type ImportPreview,
   type ImportResult,
   previewRedirectsImport,
 } from '../api/redirects-client.js'
 import {
   Button,
+  FileButton,
   Notice,
   Table,
   TableBody,
@@ -43,6 +45,15 @@ const OUTCOME_KEY: Record<ImportPreview['rows'][number]['outcome'], string> = {
   loop: 'redirects.importOutcomeLoop',
 }
 
+const ISSUE_KEY: Record<NonNullable<ImportIssue['code']>, string> = {
+  'empty-file': 'redirects.importIssue.emptyFile',
+  'missing-columns': 'redirects.importIssue.missingColumns',
+  'missing-from': 'redirects.importIssue.missingFrom',
+  'invalid-status': 'redirects.importIssue.invalidStatus',
+  'missing-to': 'redirects.importIssue.missingTo',
+  truncated: 'redirects.importIssue.truncated',
+}
+
 export function ImportExportPanel({ token }: { readonly token: string }): JSX.Element {
   const { t } = useTranslation()
   const [csv, setCsv] = useState('')
@@ -64,6 +75,20 @@ export function ImportExportPanel({ token }: { readonly token: string }): JSX.El
     reader.readAsText(file)
   }
 
+  function issueText(issue: ImportIssue): string {
+    if (issue.code === undefined) return issue.detail
+    return t(ISSUE_KEY[issue.code], { value: issue.value })
+  }
+
+  function rowDetail(row: ImportPreview['rows'][number]): string | null {
+    if (row.outcome === 'loop') return t('redirects.importDetailLoop')
+    if (row.outcome === 'duplicate') return t('redirects.importDetailDuplicate')
+    if (row.outcome === 'update' && row.current !== undefined) {
+      return t('redirects.importDetailUpdate', { to: row.current.to, status: row.current.status })
+    }
+    return row.detail ?? null
+  }
+
   async function doPreview(): Promise<void> {
     setBusy(true)
     setError(null)
@@ -71,7 +96,7 @@ export function ImportExportPanel({ token }: { readonly token: string }): JSX.El
     try {
       setPreview(await previewRedirectsImport(token, csv))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.importError'))
+      setError(redirectErrorMessage(caught, 'redirects.importError', t))
     } finally {
       setBusy(false)
     }
@@ -85,7 +110,7 @@ export function ImportExportPanel({ token }: { readonly token: string }): JSX.El
       setPreview(null)
       setCsv('')
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.importError'))
+      setError(redirectErrorMessage(caught, 'redirects.importError', t))
     } finally {
       setBusy(false)
     }
@@ -105,7 +130,7 @@ export function ImportExportPanel({ token }: { readonly token: string }): JSX.El
       link.remove()
       URL.revokeObjectURL(url)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.exportError'))
+      setError(redirectErrorMessage(caught, 'redirects.exportError', t))
     }
   }
 
@@ -145,12 +170,13 @@ export function ImportExportPanel({ token }: { readonly token: string }): JSX.El
             setPreview(null)
             setResult(null)
           }}
-          placeholder="from,to,status&#10;/old-page,/new-page,301"
+          placeholder="from,to,status&#10;/ancienne-page,/nouvelle-page,301"
         />
-        <input
-          type="file"
+        <FileButton
           accept=".csv,text/csv"
           aria-label={t('redirects.importFileLabel')}
+          label={t('common.chooseFile')}
+          emptyLabel={t('common.noFileChosen')}
           onChange={onFileChosen}
         />
       </div>
@@ -193,7 +219,7 @@ export function ImportExportPanel({ token }: { readonly token: string }): JSX.El
             )}
           </ul>
 
-          <TableRoot label={t('redirects.importPreviewTableLabel')}>
+          <TableRoot label={t('redirects.importPreviewTableLabel')} stacked>
             <Table>
               <TableHead>
                 <TableRow>
@@ -206,25 +232,26 @@ export function ImportExportPanel({ token }: { readonly token: string }): JSX.El
               <TableBody>
                 {preview.rows.map((row) => (
                   <TableRow key={`${row.line}-${row.from}`}>
-                    <TableCell className="font-mono text-sm">{row.from}</TableCell>
-                    <TableCell className="font-mono text-sm">
+                    <TableCell stack="heading" className="font-mono text-sm">
+                      {row.from}
+                    </TableCell>
+                    <TableCell label={t('redirects.to')} className="font-mono text-sm">
                       {row.to === '' ? '—' : row.to}
                     </TableCell>
-                    <TableCell>{row.status}</TableCell>
-                    <TableCell>
+                    <TableCell label={t('redirects.status')}>{row.status}</TableCell>
+                    <TableCell label={t('redirects.actionsColumn')}>
                       {t(OUTCOME_KEY[row.outcome])}
-                      {row.detail !== undefined && (
-                        <span className="text-muted-foreground"> — {row.detail}</span>
+                      {rowDetail(row) !== null && (
+                        <span className="text-muted-foreground"> — {rowDetail(row)}</span>
                       )}
                     </TableCell>
                   </TableRow>
                 ))}
                 {preview.issues.map((issue) => (
                   <TableRow key={`issue-${issue.line}`}>
-                    <TableCell colSpan={3}>
-                      {t('redirects.importLineLabel', { line: issue.line })}: {issue.detail}
+                    <TableCell colSpan={4}>
+                      {t('redirects.importLineLabel', { line: issue.line })}: {issueText(issue)}
                     </TableCell>
-                    <TableCell />
                   </TableRow>
                 ))}
                 {preview.rows.length === 0 && preview.issues.length === 0 && (

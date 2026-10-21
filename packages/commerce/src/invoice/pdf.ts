@@ -265,7 +265,19 @@ function layoutDocument(document: PdfInvoiceDocument): readonly PageOps[] {
   pages.forEach((target, index) => {
     const baseline = MARGIN - 12
     if (footer !== undefined && footer !== '') {
-      target.texts.push({ x: MARGIN, y: baseline, size: SIZE_FOOTER, bold: false, text: footer })
+      // Legal mentions and payment terms can run long: wrapped to the width
+      // left of the page counter, at most three lines (the space below the
+      // table), the last one sitting on the usual baseline.
+      const footerLines = wrapText(footer, CONTENT_WIDTH - 60, SIZE_FOOTER).slice(0, 3)
+      footerLines.forEach((line, lineIndex) => {
+        target.texts.push({
+          x: MARGIN,
+          y: baseline + (footerLines.length - 1 - lineIndex) * (SIZE_FOOTER + 2),
+          size: SIZE_FOOTER,
+          bold: false,
+          text: line,
+        })
+      })
     }
     const counter = `${index + 1} / ${pages.length}`
     target.texts.push({

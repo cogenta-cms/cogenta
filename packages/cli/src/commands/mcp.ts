@@ -1,38 +1,16 @@
 import { dirname, join } from 'node:path'
 import process from 'node:process'
+import { type ApprovalQueue, createFileApprovalQueue } from '@cogenta/agents'
+import { createContentService, createPermissionLayer, createSearchRouter } from '@cogenta/api'
 import {
-  type ApprovalQueue,
-  buildManifest,
-  type ContentServiceLike,
-  createContentDeleteTool,
-  createContentPublishTool,
-  createContentReadTool,
-  createContentWriteDraftTool,
-  createFileApprovalQueue,
-  createMediaReadTool,
-  createMediaWriteTool,
-  createSiteConfigReadTool,
-  createToolRegistry,
-  type ExecutableTool,
-  type ToolDefinition,
-  withAudit,
-  withAutonomy,
-} from '@cogenta/agents'
-import {
-  type AccessContext,
-  type ContentService,
-  canAccessMedia,
-  createContentService,
-  createPermissionLayer,
-  type PermissionLayer,
-} from '@cogenta/api'
-import {
+  type ApiKey,
   createApiKeyStore,
   createAuditLog,
   createUserStore,
   ensureAuthTables,
   looksLikeApiKey,
 } from '@cogenta/auth'
+import { vocabularyRegistry } from '@cogenta/blocks'
 import {
   CogentaError,
   createDatabaseMediaStore,
@@ -40,11 +18,12 @@ import {
   createDatabaseRegistry,
   createLogger,
   type DatabaseHandle,
+  findConfigFile,
   isCogentaError,
   type Logger,
   loadConfig,
 } from '@cogenta/core'
-import { createMcpServer, serveMcpOverStdio } from '@cogenta/mcp'
+import { createMcpServer, type McpTool, serveMcpOverStdio } from '@cogenta/mcp'
 import {
   type CollectionDefinition,
   createRedirectStore,
@@ -56,7 +35,11 @@ import {
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
 import { createDecoratedContentStores } from './decorated-content-stores.js'
+import { createMcpToolSource, type McpIdentity, mcpServerInstructions } from './mcp-tools.js'
 import { loadSchemaModule } from './serve.js'
+
+/** Read when no --api-key/--email/--role is given, so a client config can keep the key out of `args` (and out of `ps`). */
+export const MCP_API_KEY_ENV = 'COGENTA_MCP_API_KEY'
 
 export interface McpOptions {
   readonly cwd?: string
@@ -93,89 +76,55 @@ export interface McpOptions {
 }
 
 const USAGE = `Usage
-  cogenta mcp [--email <email> | --role <role> | --api-key <key>]
+  cogenta mcp [--cwd <site folder>] [--api-key <key> | --email <email> | --role <role>]
 
-Starts an MCP (Model Context Protocol) server on stdin/stdout, exposing this
-site's content and site tools to whatever process spawned this command
-(Claude Desktop, Claude Code, Cursor, or any other MCP client). See
-packages/mcp/README.md for how to connect one.
+Starts an MCP (Model Context Protocol) server on stdin/stdout for an MCP
+client running on this machine (Claude Desktop, Claude Code, Cursor…). The
+client starts this command itself; run by hand, it waits for a client on its
+standard input and never returns on its own. To drive a site deployed on
+another machine, use the HTTP endpoint of "cogenta serve" instead
+(https://<your site>/api/mcp, with "Authorization: Bearer <key>").
 
---email resolves the acting user from this site's own user store: every tool
-call runs with that user's real roles, checked by the same permission layer
-REST and GraphQL use (R4). --role hands a synthetic actor with no id and the
-named role(s) (comma-separated) — meant for local testing, never for a real
-deployment. --api-key resolves the acting roles from a key minted in the
-admin's "MCP" or "Clés API" screen, through the exact same key store and
-verification REST uses for that key — a role the key was not granted is
-refused by the same permission layer, exactly as it would be over HTTP.
+--api-key (or the ${MCP_API_KEY_ENV} environment variable) acts as the key
+minted in the admin's "MCP" screen, with exactly that key's roles; revoking
+the key stops the session at its next message. --email acts as that account
+(it must exist and be active). --role is a synthetic actor for local tests.
+Locally, these options name an identity: whoever can run this command in the
+site folder can read its database anyway — the security boundary is access
+to the machine. Over HTTP, the key is the boundary.
 
-With none of these flags, tool calls run as an anonymous ("public") actor:
-the manifest exposes only the effective collection capabilities. Media and
-site-config tools require authentication; viewers can read media, while only
-editors and admins can write them. Every non-reversible mutation requires
-human approval in the administration; pending requests are shared through
-.cogenta/agents-runtime/approvals. Closing MCP cancels waiting calls.
+With none of these, calls run as the anonymous "public" actor. Every
+non-reversible write waits for a human approval in the administration
+(Agents, "Actions à approuver"); a cancelled call withdraws its request.
 
 Options
-  --email <email>    Run as this user (looked up in the user store; must exist)
-  --role <role,…>    Run as a synthetic actor with these roles, no real user
-  --api-key <key>    Run as the actor a "cogenta_sk_…" API key was granted
+  --cwd <folder>     The site folder (where cogenta.config.* lives)
+  --api-key <key>    Act as the key minted in the admin's "MCP" screen
+  --email <email>    Act as this account (looked up in the user store)
+  --role <role,…>    Act as a synthetic actor with these roles (tests only)
 `
 
-/**
- * Adapts `@cogenta/api`'s real `ContentService` to the narrow
- * `ContentServiceLike` the core content tools (`@cogenta/agents`) declare
- * against — a `SerialisedEntry` is a plain, already-JSON-safe object (the
- * exact shape REST hands back as `data`), it merely lacks the string index
- * signature `Record<string, unknown>` promises structurally. Runtime shape
- * is identical; this is a type-level seam only.
- */
-function contentServiceLikeOf(service: ContentService, defaultLocale: string): ContentServiceLike {
-  return {
-    read: (context, collection, id, options) =>
-      service.read(context, collection, id, options) as unknown as Promise<Record<string, unknown>>,
-    create: (context, collection, input, options) =>
-      service.create(
-        context,
-        collection,
-        { ...input, locale: input.locale ?? defaultLocale, createdBy: context.actor.id },
-        options,
-      ) as unknown as Promise<Record<string, unknown>>,
-    update: (context, collection, id, input, options) =>
-      service.update(
-        context,
-        collection,
-        id,
-        { ...input, updatedBy: context.actor.id },
-        options,
-      ) as unknown as Promise<Record<string, unknown>>,
-    publish: (context, collection, id, input, options) =>
-      service.publish(
-        context,
-        collection,
-        id,
-        { ...input, publishedBy: context.actor.id },
-        options,
-      ) as unknown as Promise<Record<string, unknown>>,
-    remove: (context, collection, id) => service.remove(context, collection, id),
-  }
+function apiKeyIsUsable(key: ApiKey | null, now: number): key is ApiKey {
+  if (key === null || key.revokedAt !== undefined) return false
+  return key.expiresAt === undefined || new Date(key.expiresAt).getTime() > now
 }
 
 /**
- * Resolves the actor this MCP server's tool calls will run as.
+ * Resolves who this server's calls run as — and keeps resolving it: the
+ * function returned is called on every message, so a key revoked, an account
+ * disabled or a role changed in the administration applies to an open
+ * session at once. Before, the actor was read once at start-up and a revoked
+ * key went on reading and submitting writes until the client restarted.
  *
- * `--email` looks the user up in the real user store — the account must
- * already exist (`cogenta users create`); this command never creates one.
- * `--role` is a synthetic actor for local testing. `--api-key` resolves
- * through the same `ApiKeyStore` (`@cogenta/auth`) REST's `resolveActor`
- * verifies against — one store, two callers, never a second lookup path.
- * None given: the anonymous ("public") actor, same as an unauthenticated
- * REST request.
+ * `--email` looks the user up in the real user store; `--api-key` goes
+ * through the same `ApiKeyStore` REST's `resolveActor` verifies against (the
+ * key is verified once at start-up, then re-read by id: no usage counted per
+ * message). None given: the anonymous ("public") actor.
  */
-async function resolveMcpActor(
-  options: McpOptions,
+async function createIdentityResolver(
+  options: McpOptions & { readonly apiKey?: string },
   db: DatabaseHandle,
-): Promise<{ readonly actor: AccessContext['actor']; readonly authenticated: boolean }> {
+): Promise<() => Promise<McpIdentity>> {
   const given = [options.email, options.role, options.apiKey].filter(
     (value) => value !== undefined,
   ).length
@@ -196,19 +145,32 @@ async function resolveMcpActor(
     }
     await ensureAuthTables(db)
     const apiKeys = createApiKeyStore(db)
-    const key = await apiKeys.verify(options.apiKey)
-    if (key === null) {
+    const verified = await apiKeys.verify(options.apiKey)
+    if (verified === null) {
       throw new CogentaError({
         code: 'MCP_ACTOR_API_KEY_INVALID',
         message: 'This API key is unknown, revoked, or expired.',
         hint: 'Mint a new one from the admin\'s "MCP" screen, or "Clés API" for a general-purpose key.',
       })
     }
-    // Mirrors `resolveApiKeyActor` in `@cogenta/api` (`packages/api/src/rest/auth-router.ts`)
-    // exactly: the same id shape and the same "roles = scope" mapping, so a
-    // key behaves identically whether it authenticates an HTTP request or
-    // this stdio server.
-    return { actor: { id: `apikey:${key.id}`, roles: key.scope }, authenticated: true }
+    const keyId = verified.id
+    return async () => {
+      const key = await apiKeys.getById(keyId)
+      if (!apiKeyIsUsable(key, Date.now())) {
+        throw new CogentaError({
+          code: 'MCP_ACTOR_API_KEY_INVALID',
+          message: 'This API key was revoked or has expired: this session no longer authenticates.',
+          hint: 'Create a new key in the admin\'s "MCP" screen and update the client configuration.',
+        })
+      }
+      // Same id shape and "roles = scope" mapping as `resolveApiKeyActor`
+      // in `@cogenta/api`, so a key behaves identically over HTTP and here.
+      return {
+        actor: { id: `apikey:${key.id}`, roles: key.scope },
+        authenticated: true,
+        label: `key "${key.name}"`,
+      }
+    }
   }
   if (options.email !== undefined) {
     await ensureAuthTables(db)
@@ -221,7 +183,22 @@ async function resolveMcpActor(
         hint: 'Create the account first with "cogenta users create --email <email> --roles <role,role>".',
       })
     }
-    return { actor: { id: user.id, roles: user.roles }, authenticated: true }
+    const userId = user.id
+    return async () => {
+      const current = await users.byId(userId)
+      if (current === null || current.status !== 'active') {
+        throw new CogentaError({
+          code: 'MCP_ACTOR_USER_DISABLED',
+          message: `The account ${options.email ?? ''} is no longer active: this session no longer authenticates.`,
+          hint: 'An administrator disabled or removed it. Use another account or an API key.',
+        })
+      }
+      return {
+        actor: { id: current.id, roles: current.roles },
+        authenticated: true,
+        label: `account ${current.email}`,
+      }
+    }
   }
   if (options.role !== undefined) {
     const roles = options.role
@@ -235,81 +212,26 @@ async function resolveMcpActor(
         hint: 'Pass at least one role name, e.g. --role viewer or --role editor,reviewer.',
       })
     }
-    return { actor: { id: null, roles }, authenticated: true }
+    const identity: McpIdentity = {
+      actor: { id: null, roles },
+      authenticated: true,
+      label: 'local test role',
+    }
+    return async () => identity
   }
-  return { actor: { id: null, roles: ['public'] }, authenticated: false }
-}
-
-/** Build capabilities from effective collection grants and the shared media policy.
- * Detailed content ownership is still checked by ContentService on every call (R4).
- */
-function buildSiteManifest(options: {
-  readonly contentService: Parameters<typeof createContentReadTool>[0]
-  readonly mediaStore: Parameters<typeof createMediaReadTool>[0]
-  readonly site: { name: string; url?: string; locales: readonly string[]; defaultLocale: string }
-  readonly actor: AccessContext['actor']
-  readonly authenticated: boolean
-  readonly logger: Logger
-  readonly collections: readonly CollectionDefinition[]
-  readonly permissions: PermissionLayer
-}): readonly ExecutableTool[] {
-  const registered: ToolDefinition[] = [
-    createContentReadTool(options.contentService),
-    createContentWriteDraftTool(options.contentService),
-    createContentPublishTool(options.contentService),
-    createContentDeleteTool(options.contentService),
-  ]
-  if (options.authenticated && canAccessMedia(options.actor, 'media.read')) {
-    registered.push(createMediaReadTool(options.mediaStore))
+  const anonymous: McpIdentity = {
+    actor: { id: null, roles: ['public'] },
+    authenticated: false,
+    label: 'anonymous',
   }
-  if (options.authenticated && canAccessMedia(options.actor, 'media.write')) {
-    registered.push(createMediaWriteTool(options.mediaStore))
-  }
-  if (options.authenticated) registered.push(createSiteConfigReadTool())
-
-  const allowed = registered.filter((tool) => {
-    const actions =
-      tool.name === 'content.write_draft'
-        ? (['create', 'update'] as const)
-        : tool.name === 'content.publish'
-          ? (['publish'] as const)
-          : tool.name === 'content.delete'
-            ? (['delete'] as const)
-            : tool.name === 'content.read'
-              ? (['read'] as const)
-              : undefined
-    if (actions === undefined) return true
-    return options.collections.some((collection) =>
-      actions.some((action) => {
-        return options.permissions.can(
-          action,
-          collection,
-          { actor: options.actor },
-          options.actor.id,
-        ).allowed
-      }),
-    )
-  })
-  const registry = createToolRegistry(allowed)
-  return buildManifest(
-    registry,
-    allowed.map((tool) => tool.name),
-    {
-      site: options.site,
-      actor: options.actor,
-      logger: {
-        info: (message, fields) => options.logger.info(message, fields),
-        warn: (message, fields) => options.logger.warn(message, fields),
-        error: (message, fields) => options.logger.error(message, fields),
-      },
-    },
-  )
+  return async () => anonymous
 }
 
 /**
  * `cogenta mcp` — a real MCP server over stdin/stdout, wired to this site's
- * actual content and tools. `serveMcpOverStdio` never returns on its own; the
- * process exits when its stdin closes (the spawning client disconnected).
+ * actual content and tools through the same assembly as the `/api/mcp` route
+ * of `cogenta serve` (`mcp-tools.ts`). The process exits when its stdin
+ * closes (the spawning client disconnected).
  */
 export async function runMcp(options: McpOptions): Promise<number> {
   const { stderr } = options
@@ -322,17 +244,32 @@ export async function runMcp(options: McpOptions): Promise<number> {
     stderr(`--email, --role and --api-key are mutually exclusive.\n\n${USAGE}`)
     return 2
   }
+  const envKey = env[MCP_API_KEY_ENV]
+  const apiKey =
+    options.apiKey ??
+    (options.email === undefined && options.role === undefined && envKey !== undefined && envKey !== ''
+      ? envKey
+      : undefined)
+
+  const cwd = options.cwd ?? process.cwd()
+  // Said plainly, before the config loader lists the missing fields of a
+  // config that does not exist: a client that ignores `cwd` starts this in
+  // its own folder, and "site.name: Invalid input" sent everyone looking
+  // inside a file that was never read.
+  if ((await findConfigFile(cwd)) === null) {
+    stderr(
+      `CONFIG_NOT_FOUND: No cogenta.config.* in ${cwd} or any folder above it.\nRun "cogenta mcp" in your site's folder, or pass --cwd <site folder> (in a client configuration, put "--cwd", "<site folder>" in "args").\n`,
+    )
+    return 1
+  }
 
   let loaded: Awaited<ReturnType<typeof loadConfig>>
   try {
-    loaded = await loadConfig({
-      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-      env,
-    })
+    loaded = await loadConfig({ cwd, env })
   } catch (error) {
     return reportFailure(stderr, error)
   }
-  const projectRoot = loaded.path === null ? (options.cwd ?? process.cwd()) : dirname(loaded.path)
+  const projectRoot = loaded.path === null ? cwd : dirname(loaded.path)
 
   let collections: readonly CollectionDefinition[]
   let taxonomies: readonly TaxonomyDefinition[]
@@ -357,13 +294,12 @@ export async function runMcp(options: McpOptions): Promise<number> {
     await createSchemaTables(db, collections, taxonomies)
     await ensureAuthTables(db)
 
-    const { actor, authenticated } = await resolveMcpActor(options, db)
+    const resolveIdentity = await createIdentityResolver({ ...options, ...(apiKey === undefined ? {} : { apiKey }) }, db)
+    const firstIdentity = await resolveIdentity()
 
     // Fiche 63, ADR-0028: `cogenta mcp` builds its own `PermissionLayer`
     // (never `assembleSite`'s), so it must consult the same override table —
-    // otherwise a permission an admin just revoked in production would stay
-    // granted to any MCP client until the process restarts, exactly the
-    // silent-widening R4 exists to prevent.
+    // and re-read it before a write runs (`refreshPermissions`).
     const rolePermissionOverlay = await createRolePermissionOverlay(
       createRolePermissionStore({ db, collections, taxonomies }),
     )
@@ -384,101 +320,52 @@ export async function runMcp(options: McpOptions): Promise<number> {
       scheduledPublishQueue: createDatabaseQueue({ db, logger }),
     })
     const contentService = createContentService({ collections, permissions, storeFor })
-    const mediaStore = createDatabaseMediaStore({ db })
-
-    const tools = buildSiteManifest({
-      contentService: contentServiceLikeOf(contentService, loaded.config.site.defaultLocale),
-      collections,
-      permissions,
-      mediaStore,
-      site: {
-        name: loaded.config.site.name,
-        ...(loaded.config.site.url === undefined ? {} : { url: loaded.config.site.url }),
-        locales: loaded.config.site.locales,
-        defaultLocale: loaded.config.site.defaultLocale,
-      },
-      actor,
-      authenticated,
-      logger,
-    })
-
-    // stderr, never `out`. This command speaks JSON-RPC on stdout, and the
-    // real CLI builds `out` on that same stream — so a readiness line printed
-    // through it is the first thing a client reads, and it is not JSON. The
-    // connection then fails before `initialize` is ever answered. Every
-    // stdio MCP server has this rule; ours broke it by using the same output
-    // helper as every other command.
-    stderr(
-      `MCP server ready — ${tools.length} tool(s), actor: ${actor.id ?? '(anonymous)'} [${actor.roles.join(', ')}]\n`,
-    )
-
-    const auditLog = createAuditLog(db)
-    const approvalQueue = cancellableApprovalQueue(
+    const site = {
+      name: loaded.config.site.name,
+      ...(loaded.config.site.url === undefined ? {} : { url: loaded.config.site.url }),
+      locales: loaded.config.site.locales,
+      defaultLocale: loaded.config.site.defaultLocale,
+    }
+    const approvalQueue: ApprovalQueue =
       options.approvalQueue ??
-        createFileApprovalQueue({
-          directory: join(projectRoot, '.cogenta', 'agents-runtime', 'approvals'),
-          signal: cancellation.signal,
+      createFileApprovalQueue({
+        directory: join(projectRoot, '.cogenta', 'agents-runtime', 'approvals'),
+        signal: cancellation.signal,
+      })
+
+    const source = createMcpToolSource(
+      {
+        collections,
+        contentService,
+        permissions,
+        refreshPermissions: () => rolePermissionOverlay.refresh(),
+        mediaStore: createDatabaseMediaStore({ db }),
+        search: createSearchRouter({
+          index: searchIndex,
+          collections,
+          permissions,
+          defaultLocale: loaded.config.site.defaultLocale,
         }),
-      cancellation.signal,
+        blocks: vocabularyRegistry,
+        site,
+        logger,
+        auditLog: createAuditLog(db),
+        approvalQueue,
+        transport: 'stdio',
+        ...(loaded.config.site.url === undefined
+          ? {}
+          : { approvalsUrl: `${loaded.config.site.url.replace(/\/+$/u, '')}/admin/agents` }),
+      },
+      resolveIdentity,
     )
-    const governedTools = tools.map((tool) => {
-      const guarded: ExecutableTool = {
+    // Every call is tracked so closing the process waits for its last
+    // in-flight calls — a cancelled approval is withdrawn before the
+    // database closes, never left pending for a decision that cannot run.
+    const tracked = async (): Promise<readonly McpTool[]> =>
+      (await source()).map((tool) => ({
         ...tool,
         async execute(input, context) {
-          if (context.signal.aborted)
-            throw new CogentaError({
-              code: 'APPROVAL_REQUEST_CANCELLED',
-              message: 'The MCP connection closed before execution.',
-              hint: 'Reconnect and submit a new request if needed.',
-            })
-          // An approval can wait while HTTP administrators revoke a grant.
-          // Re-read the shared overlay before ContentService checks this call.
-          if (tool.spec.name.startsWith('content.')) await rolePermissionOverlay.refresh()
-          return tool.execute(input, context)
-        },
-      }
-      const audited = withAudit(
-        withAutonomy(guarded, {
-          agentName: 'mcp',
-          autonomy: { default: 'autonomous' },
-          approvalQueue,
-        }),
-        {
-          agentName: 'mcp',
-          actor,
-          autonomyLevel: tool.sideEffects === true ? 'execute_with_approval' : 'autonomous',
-          auditLog: {
-            record: (input) => {
-              const output = input.diff?.['output']
-              const entryId =
-                typeof output === 'object' &&
-                output !== null &&
-                'id' in output &&
-                typeof output.id === 'string'
-                  ? output.id
-                  : undefined
-              return auditLog.record({
-                ...input,
-                ...(entryId === undefined ? {} : { entryId }),
-                diff: { ...input.diff, origin: 'mcp' },
-              })
-            },
-          },
-          targetOf: (input) => ({
-            ...(typeof input['collection'] === 'string' ? { collection: input['collection'] } : {}),
-            ...(typeof input['id'] === 'string' ? { entryId: input['id'] } : {}),
-          }),
-          onAuditFailure: (error) =>
-            logger.error('MCP audit write failed', { error: String(error) }),
-        },
-      )
-      return {
-        ...audited,
-        async execute(
-          input: Readonly<Record<string, unknown>>,
-          context: Parameters<ExecutableTool['execute']>[1],
-        ) {
-          const call = audited.execute(input, { ...context, signal: cancellation.signal })
+          const call = tool.execute(input, context)
           activeCalls.add(call)
           try {
             return await call
@@ -486,23 +373,36 @@ export async function runMcp(options: McpOptions): Promise<number> {
             activeCalls.delete(call)
           }
         },
-      }
+      }))
+
+    // stderr, never `out`: this command speaks JSON-RPC on stdout.
+    const initialTools = await source()
+    stderr(
+      `MCP server ready — ${initialTools.length} tool(s), acting as ${firstIdentity.label} [${firstIdentity.actor.roles.join(', ')}]\n`,
+    )
+
+    const server = createMcpServer({
+      name: 'cogenta',
+      version: '1.1.0',
+      instructions: mcpServerInstructions(site),
+      tools: tracked,
     })
-    const server = createMcpServer({ name: 'cogenta', version: '1.0.0', tools: governedTools })
-    serveMcpOverStdio({
+    const transport = serveMcpOverStdio({
       server,
       ...(options.stdin === undefined ? {} : { input: options.stdin as never }),
       ...(options.stdout === undefined ? {} : { output: options.stdout as never }),
     })
 
-    // Runs until stdin closes (the MCP client disconnected) — this command
-    // has no other exit condition, matching stdio MCP servers generally.
     return await new Promise<number>((resolvePromise) => {
-      if (cancellation.signal.aborted) {
+      const finish = () => {
+        transport.close()
         resolvePromise(0)
+      }
+      if (cancellation.signal.aborted) {
+        finish()
         return
       }
-      cancellation.signal.addEventListener('abort', () => resolvePromise(0), { once: true })
+      cancellation.signal.addEventListener('abort', finish, { once: true })
     })
   } catch (error) {
     return reportFailure(stderr, error)
@@ -523,34 +423,4 @@ function reportFailure(stderr: Writer, error: unknown): number {
     stderr(`${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`)
   }
   return 1
-}
-
-/** Disconnecting a process cannot leave a future human decision executing its old call. */
-function cancellableApprovalQueue(queue: ApprovalQueue, signal: AbortSignal): ApprovalQueue {
-  return {
-    ...queue,
-    request(input) {
-      return new Promise((resolve, reject) => {
-        const abort = () => {
-          signal.removeEventListener('abort', abort)
-          reject(
-            new CogentaError({
-              code: 'APPROVAL_REQUEST_CANCELLED',
-              message: 'Waiting for human approval was cancelled.',
-              hint: 'Reconnect and submit a new request if the action is still needed.',
-            }),
-          )
-        }
-        if (signal.aborted) {
-          abort()
-          return
-        }
-        signal.addEventListener('abort', abort, { once: true })
-        queue
-          .request(input)
-          .then(resolve, reject)
-          .finally(() => signal.removeEventListener('abort', abort))
-      })
-    },
-  }
 }

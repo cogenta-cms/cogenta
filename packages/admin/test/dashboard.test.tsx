@@ -99,7 +99,7 @@ describe('dashboard', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
     await screen.findByRole('heading', { name: 'Résumé du contenu' })
-    const draftLink = await screen.findByRole('link', { name: '1 brouillons' })
+    const draftLink = await screen.findByRole('link', { name: '1 brouillon' })
     expect(draftLink.getAttribute('href')).toBe('/collections/article?status=draft')
     const totalLink = screen.getByRole('link', { name: '2 au total' })
     expect(totalLink.getAttribute('href')).toBe('/collections/article')
@@ -121,7 +121,7 @@ describe('dashboard', () => {
     // count, so the absence of a drafts link is checked against a loaded
     // card rather than an empty one.
     expect(await screen.findByRole('link', { name: '1 au total' })).toBeDefined()
-    expect(screen.queryByRole('link', { name: /brouillons/u })).toBeNull()
+    expect(screen.queryByRole('link', { name: /brouillon/u })).toBeNull()
   })
 
   it('offers a "new article" shortcut only to a role that may create one', async () => {

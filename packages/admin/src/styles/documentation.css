@@ -74,6 +74,20 @@
   font-size: 0.6875rem;
 }
 
+.doc-flow__node-step {
+  fill: var(--foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.doc-flow__glyph {
+  fill: none;
+  stroke: var(--muted-foreground);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .doc-flow__node-sublabel {
   fill: var(--muted-foreground);
   font-size: 0.5625rem;

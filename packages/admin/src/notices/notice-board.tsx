@@ -1,7 +1,12 @@
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { type AdminNotice, dismissNotice, listNotices } from '../api/notices-client.js'
+import {
+  type AdminNotice,
+  dismissNotice,
+  listNotices,
+  restoreNotice,
+} from '../api/notices-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { buttonVariants, Notice } from '../ui/index.js'
 
@@ -21,6 +26,9 @@ const POLL_INTERVAL_MS = 60_000
  * so it is excluded from the count that triggers collapsing.
  */
 const VISIBLE_WITHOUT_EXPANDING = 3
+
+/** How long "Undo" stays on screen after a recommendation is hidden. */
+const UNDO_WINDOW_MS = 8_000
 
 /**
  * Where on the profile screen each notice's action actually leads: the
@@ -56,6 +64,21 @@ export function NoticeBoard(): JSX.Element | null {
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const [notices, setNotices] = useState<readonly AdminNotice[]>([])
   const [expanded, setExpanded] = useState(false)
+  // The notice just hidden, kept for a few seconds so "Undo" can bring it back.
+  const [justHidden, setJustHidden] = useState<AdminNotice | null>(null)
+
+  const fetchNotices = useCallback(
+    (isLive: () => boolean = () => true): void => {
+      if (token === null) return
+      listNotices(token).then(
+        (found) => {
+          if (isLive()) setNotices(found)
+        },
+        () => undefined,
+      )
+    },
+    [token],
+  )
 
   useEffect(() => {
     if (token === null) {
@@ -63,21 +86,21 @@ export function NoticeBoard(): JSX.Element | null {
       return
     }
     let live = true
-    const fetchNotices = (): void => {
-      listNotices(token).then(
-        (found) => {
-          if (live) setNotices(found)
-        },
-        () => undefined,
-      )
-    }
-    fetchNotices()
-    const timer = setInterval(fetchNotices, POLL_INTERVAL_MS)
+    fetchNotices(() => live)
+    const timer = setInterval(() => fetchNotices(() => live), POLL_INTERVAL_MS)
     return () => {
       live = false
       clearInterval(timer)
     }
-  }, [token])
+  }, [token, fetchNotices])
+
+  // The undo offer lapses on its own: a hidden recommendation stays reachable
+  // in the notification centre, this is only the moment to change your mind.
+  useEffect(() => {
+    if (justHidden === null) return
+    const timer = setTimeout(() => setJustHidden(null), UNDO_WINDOW_MS)
+    return () => clearTimeout(timer)
+  }, [justHidden])
 
   const dismiss = useCallback(
     (id: string) => {
@@ -87,11 +110,26 @@ export function NoticeBoard(): JSX.Element | null {
       // of a failed write is that it comes back next time — which is a great
       // deal better than a notice that refuses to go away while a request is
       // in flight.
+      const hidden = notices.find((notice) => notice.id === id)
+      if (hidden !== undefined) setJustHidden(hidden)
       setNotices((current) => current.filter((notice) => notice.id !== id))
       void dismissNotice(token, id).catch(() => undefined)
     },
-    [token],
+    [token, notices],
   )
+
+  const undo = useCallback(() => {
+    if (token === null || justHidden === null) return
+    const restored = justHidden
+    setJustHidden(null)
+    setNotices((current) =>
+      current.some((n) => n.id === restored.id) ? current : [restored, ...current],
+    )
+    void restoreNotice(token, restored.id).then(
+      () => fetchNotices(),
+      () => fetchNotices(),
+    )
+  }, [token, justHidden, fetchNotices])
 
   // Critical (`danger`) notices are always shown in full; everything else
   // collapses past `VISIBLE_WITHOUT_EXPANDING` until the person asks for
@@ -110,7 +148,7 @@ export function NoticeBoard(): JSX.Element | null {
     }
   }, [notices, expanded])
 
-  if (notices.length === 0) return null
+  if (notices.length === 0 && justHidden === null) return null
 
   return (
     <div className="mb-5 flex flex-col gap-2">
@@ -160,6 +198,21 @@ export function NoticeBoard(): JSX.Element | null {
           )}
         </Notice>
       ))}
+      {justHidden !== null && (
+        <div
+          role="status"
+          className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground"
+        >
+          <span>{t('notices.hidden')}</span>
+          <button
+            type="button"
+            onClick={undo}
+            className="cursor-pointer border-0 bg-transparent p-0 text-sm font-medium text-primary underline-offset-2 hover:underline"
+          >
+            {t('notices.undo')}
+          </button>
+        </div>
+      )}
       {hiddenCount > 0 && (
         <button
           type="button"

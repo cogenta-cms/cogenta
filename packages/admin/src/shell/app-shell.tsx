@@ -3,7 +3,6 @@ import {
   type CSSProperties,
   type JSX,
   type FocusEvent as ReactFocusEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -11,7 +10,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NavLink, Outlet, useLocation } from 'react-router'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { fetchMediaBlobUrl } from '../api/media-client.js'
 import type { ShellStatus } from '../api/shell-status-client.js'
 import { AgentChatWidget } from '../assist/agent-chat-widget.js'
@@ -78,6 +77,7 @@ import {
   SettingsIcon,
   SitePlanIcon,
   SkillIcon,
+  SlidersIcon,
   TaxonomiesIcon,
   ToolsIcon,
   TranslationsIcon,
@@ -98,6 +98,7 @@ import {
   parseNavLayoutOverrides,
 } from './nav-layout.js'
 import { type VisibleNavGroup, visibleNavGroups } from './nav-visibility.js'
+import { PageTitleContext } from './page-title.js'
 import { chromeStatusOrFallback, useChromeStatus } from './shell-status-context.js'
 import '../styles/shell.css'
 import { ThemeToggle } from './theme-toggle.js'
@@ -137,6 +138,7 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/form-submissions': FormSubmissionsIcon,
   '/media': MediaIcon,
   '/appearance': LayoutIcon,
+  '/theme-sandbox': SlidersIcon,
   '/widgets': WidgetsIcon,
   '/plugins': PluginsIcon,
   '/admin-appearance': ContrastIcon,
@@ -146,7 +148,7 @@ const NAV_ICONS: Record<string, ComponentType<IconProps>> = {
   '/commerce/customers': CustomerIcon,
   '/commerce/coupons': CommerceTicketIcon,
   '/commerce/subscriptions': CommerceSubscriptionsIcon,
-  '/commerce/settings': CommerceShopIcon,
+  '/commerce/settings': SettingsIcon,
   '/commerce/tax': CommerceTaxIcon,
   '/commerce/shipping': CommerceShippingIcon,
   '/commerce/payment': CommercePaymentIcon,
@@ -331,6 +333,7 @@ export function AppShell(): JSX.Element {
 
   const email = auth.state.status === 'authenticated' ? auth.state.user.email : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
+  const isAdmin = roles.includes('admin')
   const authToken = auth.state.status === 'authenticated' ? auth.state.token : null
   const chrome = chromeStatusOrFallback(chromeState)
 
@@ -407,6 +410,8 @@ export function AppShell(): JSX.Element {
     useState<Partial<Record<NavGroupId, boolean>>>(readStoredGroupOpen)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(readStoredSidebarCollapsed)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // A screen that names its own tab (see `page-title.tsx`); `null` means "use the breadcrumb".
+  const [pageTitle, setPageTitle] = useState<string | null>(null)
   // Which group's flyout is open — driven entirely from here, in JS, not by
   // a CSS `:hover` rule (removed from `shell.css`; see the comments on
   // `openFlyout`/`scheduleCloseFlyout` below for why a pure-CSS `:hover`
@@ -536,8 +541,11 @@ export function AppShell(): JSX.Element {
   )
 
   useEffect(() => {
-    document.title = documentTitleFor(breadcrumb, t, t('shell.brand'))
-  }, [breadcrumb, t])
+    document.title =
+      pageTitle === null
+        ? documentTitleFor(breadcrumb, t, t('shell.brand'))
+        : `${pageTitle} — ${t('shell.brand')}`
+  }, [breadcrumb, t, pageTitle])
 
   const rootRef = useRef<HTMLDivElement>(null)
   const topbarRef = useRef<HTMLElement>(null)
@@ -554,6 +562,12 @@ export function AppShell(): JSX.Element {
       root.style.setProperty('--app-shell-topbar-h', `${topbar.offsetHeight}px`)
     }
     measure()
+    // Every browser the admin targets has `ResizeObserver`; a bare window
+    // listener is the fallback for an environment without it (a test DOM).
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }
     const observer = new ResizeObserver(measure)
     observer.observe(topbar)
     return () => observer.disconnect()
@@ -957,11 +971,22 @@ export function AppShell(): JSX.Element {
       <div className="app-shell__footer-inner">
         <span className="app-shell__footer-brand">
           {brand}
-          {branding.showCogentaBranding && version !== '' && (
-            <span className="app-shell__footer-version rounded-full border border-border px-2 py-0.5 font-mono">
-              v{version}
-            </span>
-          )}
+          {branding.showCogentaBranding &&
+            version !== '' &&
+            (isAdmin ? (
+              // The version is the way to the release notes and the update screen.
+              <Link
+                to="/updates"
+                className="app-shell__footer-version rounded-full border border-border px-2 py-0.5 font-mono"
+                title={t('shell.versionLink')}
+              >
+                v{version}
+              </Link>
+            ) : (
+              <span className="app-shell__footer-version rounded-full border border-border px-2 py-0.5 font-mono">
+                v{version}
+              </span>
+            ))}
         </span>
         <span className="app-shell__footer-site">{siteTitle ?? window.location.hostname}</span>
       </div>
@@ -1102,7 +1127,9 @@ export function AppShell(): JSX.Element {
             recommendation follows whoever is signed in from screen to screen,
             and it never blocks the page it sits above (ADR-0021). */}
         <NoticeBoard />
-        <Outlet />
+        <PageTitleContext.Provider value={setPageTitle}>
+          <Outlet />
+        </PageTitleContext.Provider>
       </main>
       <footer className="app-shell__footer">{renderFooter()}</footer>
       {/* L22 task 2 — floating chat, admin-only (matches `POST

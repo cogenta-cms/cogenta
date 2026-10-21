@@ -25,7 +25,6 @@ import {
   Input,
   Modal,
   Notice,
-  PageHeader,
   Select,
   Table,
   TableBody,
@@ -301,12 +300,22 @@ export function McpClientsRoute(): JSX.Element {
 
   return (
     <section aria-labelledby="mcp-clients-heading" className="flex flex-col gap-6">
-      <PageHeader
-        id="mcp-clients-heading"
-        title={t('mcpClients.heading')}
-        description={t('mcpClients.intro')}
-        actions={<Button onClick={() => setCreating(true)}>{t('mcpClients.newButton')}</Button>}
-      />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <h1
+            id="mcp-clients-heading"
+            className="m-0 text-2xl leading-tight font-bold tracking-tight"
+          >
+            {t('mcpClients.heading')}
+          </h1>
+          <p className="m-0 max-w-3xl text-sm leading-6 text-muted-foreground">
+            {t('mcpClients.intro')}
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setCreating(true)}>
+          {t('mcpClients.newButton')}
+        </Button>
+      </div>
 
       {actionError !== null && (
         <Notice tone="danger" live="assertive">
@@ -328,7 +337,7 @@ export function McpClientsRoute(): JSX.Element {
             </CardTitle>
           </CardHeader>
           <CardBody>
-            <TableRoot label={t('mcpClients.tableLabel')}>
+            <TableRoot label={t('mcpClients.tableLabel')} stacked>
               <Table>
                 <TableHead>
                   <TableRow>
@@ -343,19 +352,46 @@ export function McpClientsRoute(): JSX.Element {
                 <TableBody>
                   {connections.map((connection) => (
                     <TableRow key={connection.id}>
-                      <TableCell>{connection.name}</TableCell>
-                      <TableCell className="font-mono text-sm">{connection.transport}</TableCell>
-                      <TableCell>{statusLabel(connection)}</TableCell>
-                      <TableCell>
-                        {t('mcpClients.toolsCount', {
-                          exposed: connection.exposedTools.length,
-                          discovered: connection.discoveredTools.length,
-                        })}
+                      <TableCell stack="heading">{connection.name}</TableCell>
+                      <TableCell
+                        className="font-mono text-sm"
+                        label={t('mcpClients.transportColumn')}
+                      >
+                        {connection.transport}
                       </TableCell>
-                      <TableCell>
+                      <TableCell label={t('mcpClients.statusColumn')}>
+                        <div className="flex flex-col gap-1">
+                          <span>{statusLabel(connection)}</span>
+                          {/* Why it failed, or what to do first — the
+                              "Gérer les outils" button stays disabled until
+                              a test has discovered the server's tools. */}
+                          {connection.status === 'error' && connection.lastError !== undefined && (
+                            <span className="text-xs break-words text-destructive">
+                              {connection.lastError}
+                            </span>
+                          )}
+                          {connection.status !== 'ok' && (
+                            <span
+                              id={`mcp-connection-${connection.id}-hint`}
+                              className="text-xs text-muted-foreground"
+                            >
+                              {t('mcpClients.testFirstHint')}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell label={t('mcpClients.toolsColumn')}>
+                        {connection.discoveredTools.length === 0
+                          ? t('mcpClients.toolsNone')
+                          : t('mcpClients.toolsUsed', {
+                              count: connection.exposedTools.length,
+                              discovered: connection.discoveredTools.length,
+                            })}
+                      </TableCell>
+                      <TableCell label={t('mcpClients.enabledColumn')}>
                         {connection.enabled ? t('mcpClients.enabled') : t('mcpClients.disabled')}
                       </TableCell>
-                      <TableCell>
+                      <TableCell stack="actions">
                         <div className="flex flex-wrap gap-2">
                           <Button
                             variant="secondary"
@@ -376,6 +412,9 @@ export function McpClientsRoute(): JSX.Element {
                             variant="secondary"
                             size="sm"
                             disabled={connection.status !== 'ok'}
+                            {...(connection.status === 'ok'
+                              ? {}
+                              : { 'aria-describedby': `mcp-connection-${connection.id}-hint` })}
                             onClick={() => openManage(connection)}
                           >
                             {t('mcpClients.manageToolsButton')}

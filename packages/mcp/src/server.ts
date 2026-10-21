@@ -78,6 +78,8 @@ export interface McpServerOptions {
    * serveur MCP : aucun travail supplémentaire, seulement une exposition."
    */
   readonly tools: McpToolSource
+  /** Told about every failure that is not a `CogentaError` — what the caller is not shown. */
+  readonly onInternalError?: (error: unknown) => void
 }
 
 /**
@@ -153,7 +155,13 @@ function isId(value: unknown): value is string | number {
  * alone gives a model nothing to correct.
  */
 export function describeToolError(error: unknown): string {
-  if (!isCogentaError(error)) return error instanceof Error ? error.message : String(error)
+  // Anything that is not a `CogentaError` was not written for the caller: a
+  // database driver's message can name an internal host or account. The
+  // caller gets a plain sentence; the details go to the server's log
+  // (`McpServerOptions.onInternalError`).
+  if (!isCogentaError(error)) {
+    return 'The server hit an internal error while handling this call. The details are in the site’s server log.'
+  }
   const lines = [error.message]
   const details = error.details
   const issues = isRecord(details) ? details['issues'] : undefined
@@ -184,9 +192,14 @@ export function createMcpServer(options: McpServerOptions): McpServer {
     return typeof options.tools === 'function' ? options.tools() : options.tools
   }
 
+  function describe(error: unknown): string {
+    if (!isCogentaError(error)) options.onInternalError?.(error)
+    return describeToolError(error)
+  }
+
   /** A tool source that refuses (a revoked key, a disabled account) answers every request with that refusal. */
   function unauthorized(id: string | number | null, error: unknown): JsonRpcResponse {
-    return jsonRpcError(id, JsonRpcErrorCode.UNAUTHORIZED, describeToolError(error))
+    return jsonRpcError(id, JsonRpcErrorCode.UNAUTHORIZED, describe(error))
   }
 
   async function callTool(
@@ -264,7 +277,7 @@ export function createMcpServer(options: McpServerOptions): McpServer {
       // successful result, never a JSON-RPC error — because the call itself
       // succeeded, the tool it invoked did not.
       if (controller.signal.aborted) return null
-      return jsonRpcSuccess(id, toolResultContent(describeToolError(error), true))
+      return jsonRpcSuccess(id, toolResultContent(describe(error), true))
     } finally {
       unregister()
       transportSignal?.removeEventListener('abort', onTransportAbort)
@@ -308,7 +321,11 @@ export function createMcpServer(options: McpServerOptions): McpServer {
 
       const id = message['id']
       if (!isId(id)) {
-        return jsonRpcError(null, JsonRpcErrorCode.INVALID_REQUEST, 'The id must be a string or a number.')
+        return jsonRpcError(
+          null,
+          JsonRpcErrorCode.INVALID_REQUEST,
+          'The id must be a string or a number.',
+        )
       }
 
       if (method === 'initialize') {

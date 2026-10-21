@@ -40,8 +40,9 @@ function menuLabelField(): HTMLElement {
 
 function itemLabelField(): HTMLElement {
   const fields = screen.getAllByLabelText('Libellé')
-  const field = fields[1]
-  if (field === undefined) throw new Error('No second "Libellé" field found.')
+  // The "New menu" form closes once a menu exists: the item form's field is the last one.
+  const field = fields[fields.length - 1]
+  if (field === undefined) throw new Error('No "Libellé" field found for the item.')
   return field
 }
 
@@ -70,7 +71,7 @@ async function createMenu(name: string, label: string): Promise<void> {
   fireEvent.change(screen.getByLabelText('Nom'), { target: { value: name } })
   fireEvent.change(menuLabelField(), { target: { value: label } })
   fireEvent.click(screen.getByRole('button', { name: 'Créer' }))
-  await screen.findByRole('option', { name: new RegExp(`^${label} \\(`, 'u') })
+  await screen.findByRole('option', { name: new RegExp(`^${label}`, 'u') })
 }
 
 /** The tree region `MenuTree` renders — scoping queries here avoids matching the "parent" `<select>`'s own options, which repeat every item's label as text. */
@@ -252,7 +253,9 @@ describe('the menu screen', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('option', { name: /^Menu principal \(.+, primary\)$/u }),
+        screen.getByRole('option', {
+          name: /^Menu principal — (?:\w+ · )?En-tête \(principal\)$/u,
+        }),
       ).toBeDefined()
     })
     // No free-text field is left showing once a named slot is chosen.
@@ -273,7 +276,7 @@ describe('the menu screen', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('option', { name: /^Menu principal \(.+, sidebar\)$/u }),
+        screen.getByRole('option', { name: /^Menu principal — (?:\w+ · )?sidebar$/u }),
       ).toBeDefined()
     })
   })
@@ -287,14 +290,16 @@ describe('the menu screen', () => {
     fireEvent.change(await slotSelect(), { target: { value: 'footer' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
     await waitFor(() => {
-      expect(screen.getByRole('option', { name: /^Menu principal \(.+, footer\)$/u })).toBeDefined()
+      expect(
+        screen.getByRole('option', { name: /^Menu principal — (?:\w+ · )?Pied de page$/u }),
+      ).toBeDefined()
     })
 
     fireEvent.change(await slotSelect(), { target: { value: 'none' } })
     fireEvent.click(screen.getByRole('button', { name: "Enregistrer l'emplacement" }))
 
     await waitFor(() => {
-      expect(screen.getByRole('option', { name: /^Menu principal \([^,]+\)$/u })).toBeDefined()
+      expect(screen.getByRole('option', { name: /^Menu principal(?: — \w+)?$/u })).toBeDefined()
     })
   })
 })

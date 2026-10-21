@@ -1,8 +1,9 @@
 import { type JSX, useEffect, useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { agentDisplayName } from '../ai/server-text.js'
 import { type AgentSummary, listAgents } from '../api/agents-client.js'
-import { CloseIcon } from '../ui/icons.js'
+import { AssistantIcon, CloseIcon } from '../ui/icons.js'
 import { Button, Select } from '../ui/index.js'
 import { AgentChatFeed } from './agent-chat-feed.js'
 import { useAgentConversation } from './use-agent-conversation.js'
@@ -127,7 +128,7 @@ export function AgentChatWidget({ token }: { readonly token: string }): JSX.Elem
               {activeAgents.length === 0 && <option value="">{t('agentChat.noAgents')}</option>}
               {activeAgents.map((agent) => (
                 <option key={agent.name} value={agent.name}>
-                  {agent.name}
+                  {agentDisplayName(agent.name, agent.builtin, t)}
                 </option>
               ))}
             </Select>
@@ -176,10 +177,10 @@ export function AgentChatWidget({ token }: { readonly token: string }): JSX.Elem
         type="button"
         aria-label={t(open ? 'agentChat.close' : 'agentChat.open')}
         aria-expanded={open}
-        className="size-12 rounded-full p-0 text-xl shadow-lg"
+        className="size-12 rounded-full p-0 shadow-lg max-sm:size-11"
         onClick={() => setOpen((current) => !current)}
       >
-        {open ? <CloseIcon className="size-5" /> : '💬'}
+        {open ? <CloseIcon className="size-5" /> : <AssistantIcon className="size-6" />}
       </Button>
     </div>
   )

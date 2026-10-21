@@ -52,6 +52,28 @@ describe('password login', () => {
   })
 })
 
+describe('login form messages', () => {
+  it('names a blank field in the admin language instead of leaving it to the browser', async () => {
+    installMockFetch()
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Connexion à Cogenta' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Se connecter' }))
+
+    expect(await screen.findByText('Saisissez votre adresse e-mail.')).toBeDefined()
+    expect(screen.getByText('Saisissez votre mot de passe.')).toBeDefined()
+  })
+
+  it('says the sign-out went through, once, after the account menu signed out', async () => {
+    sessionStorage.setItem('cogenta.admin.signedOut', '1')
+    installMockFetch()
+    render(<App />)
+
+    expect(await screen.findByText('Vous êtes déconnecté.')).toBeDefined()
+    expect(sessionStorage.getItem('cogenta.admin.signedOut')).toBeNull()
+  })
+})
+
 describe('passkey login', () => {
   it('reaches the dashboard when the browser returns a matching assertion', async () => {
     installMockFetch()

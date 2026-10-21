@@ -1,0 +1,19 @@
+{
+  "agentSkills": {
+    "nameRequired": "The name is required: fill in the “name:” line of the header.",
+    "descriptionRequired": "The description is required: fill in the “description:” line of the header.",
+    "created": "Skill “{{name}}” created.",
+    "updated": "Skill “{{name}}” saved.",
+    "removed": "Skill “{{name}}” deleted.",
+    "chooseFile": "Choose a file",
+    "noFileChosen": "No file chosen",
+    "builtin": "Built-in",
+    "builtinNote": "This skill ships with Cogenta. Its text is written in English, the language models follow instructions best in: edit it knowingly.",
+    "removeNamed": "Delete the skill {{name}}",
+    "removeTitle": "Delete the skill “{{name}}”?",
+    "removeBody": "The agents that use it will no longer read it. This cannot be undone.",
+    "removeConfirm": "Delete the skill",
+    "importLabel": "Import a .md file (SKILL.md)",
+    "defaultColumn": "By default"
+  }
+}

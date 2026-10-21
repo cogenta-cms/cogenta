@@ -189,7 +189,18 @@ export function applyEnv(
   const mcp = section(output, 'mcp')
   if (mcp !== undefined) {
     const http = read(env, 'COGENTA_MCP_HTTP')
-    if (http !== undefined) mcp['http'] = !['false', '0', 'off', 'no'].includes(http.toLowerCase())
+    if (http !== undefined) {
+      // Strict, both ways: a security switch that reads "disabled" or "n"
+      // as "on" leaves the endpoint open while the operator believes it
+      // closed. Anything else is left as the raw string, which the schema
+      // refuses (CONFIG_INVALID) instead of guessing.
+      const value = http.trim().toLowerCase()
+      mcp['http'] = ['true', '1', 'on', 'yes'].includes(value)
+        ? true
+        : ['false', '0', 'off', 'no'].includes(value)
+          ? false
+          : http
+    }
     output['mcp'] = mcp
   }
 

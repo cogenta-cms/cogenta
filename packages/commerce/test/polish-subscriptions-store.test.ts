@@ -255,7 +255,11 @@ describe('subscription creation, resume, preview and order hand-off', () => {
       expect(sub.quantity).toBe(2)
       expect(sub.priceMinor).toBe(1500)
       expect(sub.originOrderId).toBe(order.id)
-      expect(sub.nextBillingAt).toBe('2026-02-15T10:00:00.000Z')
+      // One month after the day the order was paid (the order store keeps its own clock).
+      const paidAt = (await shop.orders.history(order.id)).find((e) => e.toStatus === 'paid')?.at
+      const expected = new Date(paidAt ?? '')
+      expected.setUTCMonth(expected.getUTCMonth() + 1)
+      expect(sub.nextBillingAt).toBe(expected.toISOString())
 
       const cycles = await subscriptions.cycles(sub.id)
       expect(cycles).toHaveLength(1)
@@ -266,6 +270,17 @@ describe('subscription creation, resume, preview and order hand-off', () => {
       const second = await subscriptions.createFromOrder(order.id)
       expect(second).toHaveLength(1)
       expect((await subscriptions.list()).length).toBe(1)
+    })
+
+    it('sweeps paid orders with a recurring line that have no subscription yet, once', async () => {
+      const order = await paidOrder(true)
+      expect(await subscriptions.list()).toHaveLength(0)
+      const opened = await subscriptions.openFromPaidOrders()
+      expect(opened).toHaveLength(1)
+      expect(opened[0]?.originOrderId).toBe(order.id)
+      // Nothing left to open: a second sweep is a no-op.
+      expect(await subscriptions.openFromPaidOrders()).toHaveLength(0)
+      expect(await subscriptions.list()).toHaveLength(1)
     })
 
     it('opens nothing for a one-off order, and refuses an unpaid one', async () => {

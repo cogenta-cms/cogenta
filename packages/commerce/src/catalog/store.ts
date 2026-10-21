@@ -962,6 +962,7 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
       // `like` wildcards are not searchable characters in a SKU or a title;
       // dropping them is dialect-proof, where an `escape` clause is not.
       const escaped = needle.replace(/[\\%_]/gu, '')
+      if (escaped === '') return []
       const contains = `%${escaped}%`
       const prefix = `${escaped}%`
       const statusFilter =

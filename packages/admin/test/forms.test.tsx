@@ -78,7 +78,7 @@ describe('the forms builder', () => {
     await goToForms()
 
     expect(await screen.findByText('Contact us')).toBeDefined()
-    expect(screen.getByText('contact')).toBeDefined()
+    expect(screen.getByText('/forms/contact')).toBeDefined()
   })
 
   it('pages the complete list, resets a filter and keeps the last page reachable after deletion', async () => {
@@ -169,10 +169,10 @@ describe('the forms builder', () => {
       (screen.getByRole('option', { name: 'Adresse e-mail' }) as HTMLOptionElement).value,
     ).toBe('email')
     expect(screen.getByLabelText('Aide du champ')).toBeDefined()
-    expect(screen.getByLabelText('Étape')).toBeDefined()
-    expect(screen.getByLabelText('Champ de la condition')).toBeDefined()
-    expect(screen.getByLabelText('Opérateur de la condition')).toBeDefined()
-    expect(screen.getByLabelText('Valeur de la condition')).toBeDefined()
+    expect(screen.getByLabelText('Étape (laisser vide pour une seule page)')).toBeDefined()
+    expect(screen.getByLabelText('Afficher seulement si le champ…')).toBeDefined()
+    expect(screen.getByLabelText('Condition')).toBeDefined()
+    expect(screen.getByLabelText('Valeur attendue')).toBeDefined()
     expect((screen.getByRole('option', { name: 'Est égal à' }) as HTMLOptionElement).value).toBe(
       'equals',
     )

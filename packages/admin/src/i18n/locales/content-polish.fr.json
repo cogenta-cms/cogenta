@@ -35,6 +35,21 @@
     "TAXONOMY_NOT_HIERARCHICAL": {
       "message": "Cette taxonomie est à plat : ses termes ne peuvent pas être placés les uns sous les autres.",
       "hint": "Créez le terme sans parent."
+    },
+    "MENU_LOCATION_TAKEN": {
+      "message": "Un autre menu occupe déjà cet emplacement dans cette langue.",
+      "hint": "Retirez l'emplacement de l'autre menu d'abord, ou modifiez ce menu-là."
+    },
+    "MENU_NAME_TAKEN": {
+      "message": "Un menu porte déjà ce nom.",
+      "hint": "Choisissez un autre nom."
+    },
+    "MENU_CYCLE": {
+      "message": "Cet élément ne peut pas être placé sous lui-même ni sous l'un de ses propres sous-éléments."
+    },
+    "MENU_ITEM_INVALID": {
+      "message": "Cet élément de menu n'est pas valide.",
+      "hint": "Vérifiez son type et sa destination : une adresse https://, mailto: ou tel:, un chemin comme /contact, ou un contenu choisi dans la liste."
     }
   },
   "assist": {
@@ -46,5 +61,111 @@
       "Event": "Événement"
     },
     "moderateInlineButton": "Vérifier si une revue est nécessaire"
+  },
+  "entryEdit": {
+    "schedulePast": "Choisissez une date et une heure à venir : une publication ne peut pas être programmée dans le passé.",
+    "publishedOn": "Publié le {{at}}.",
+    "visibility": {
+      "passwordRequired": "Saisissez le mot de passe à demander aux visiteurs : le bouton « Appliquer » s'active ensuite."
+    },
+    "commentsInherit": "Selon le réglage du site"
+  },
+  "versions": {
+    "formattingOnly": "Le texte est identique ; seule la mise en forme (liste, gras, lien…) a changé."
+  },
+  "builder": {
+    "patterns": {
+      "kindPattern": "Motif",
+      "kindTemplate": "Modèle de page"
+    }
+  },
+  "comments": {
+    "targetFallback": "Voir : {{collection}}",
+    "done": {
+      "approved": "Commentaire approuvé : il est maintenant visible sur le site.",
+      "spam": "Commentaire marqué comme indésirable.",
+      "trash": "Commentaire mis à la corbeille.",
+      "reply": "Réponse publiée.",
+      "bulk_one": "{{count}} commentaire mis à jour.",
+      "bulk_other": "{{count}} commentaires mis à jour."
+    }
+  },
+  "taxonomies": {
+    "slug": "Identifiant d'URL (slug)",
+    "entryCountFlat_one": "{{count}} entrée",
+    "entryCountFlat_other": "{{count}} entrées"
+  },
+  "menus": {
+    "created": "Menu « {{name}} » créé. Ajoutez-lui maintenant des éléments.",
+    "deleted": "Menu « {{name}} » supprimé.",
+    "locationSaved": "Emplacement enregistré.",
+    "itemAdded": "Élément ajouté au menu.",
+    "urlInvalid": "Saisissez une adresse valable : un lien commençant par https://, mailto: ou tel:, ou un chemin du site comme /contact. Les adresses sans protocole et les espaces ne sont pas acceptés.",
+    "entryRequired": "Choisissez le contenu vers lequel pointe cet élément, dans la liste ci-dessous.",
+    "termRequired": "Choisissez le terme vers lequel pointe cet élément, dans la liste ci-dessous.",
+    "deleteMenuTitle": "Supprimer le menu « {{name}} » ?",
+    "deleteMenuBody": "Le menu et tous ses éléments seront supprimés. Si le site l'affiche à un emplacement, cet emplacement sera vide tant qu'un autre menu n'y est pas assigné.",
+    "delete": "Supprimer",
+    "editItem": "Modifier",
+    "moveUp": "Monter",
+    "moveDown": "Descendre"
+  },
+  "forms": {
+    "description": "Créez un formulaire de contact, d'inscription ou de demande : il est publié sur une page de votre site, sans une ligne de code.",
+    "columnName": "Page publique",
+    "fieldNameHelp": "Sert d'adresse à la page du formulaire (par exemple « contact » donne /forms/contact). Rempli automatiquement à partir du libellé.",
+    "notifyChannelsHelp": "Un canal par ligne, sous la forme canal:destinataire (par exemple slack:#contact). Le canal doit d'abord être configuré dans « Canaux ».",
+    "redirectToHelp": "Une page du site (par exemple /merci) vers laquelle envoyer le visiteur après un envoi réussi, au lieu du message de confirmation.",
+    "rowLabelMissing": "Le champ n° {{position}} n'a pas de libellé : donnez-lui un nom que le visiteur verra (par exemple « Votre e-mail »).",
+    "rowKindMissing": "Choisissez le type du champ n° {{position}} (« {{label}} »).",
+    "rowChoicesMissing": "Le champ n° {{position}} (« {{label}} ») propose des choix : saisissez-les, séparés par des virgules.",
+    "unnamedField": "Champ n° {{position}}",
+    "editorFields": {
+      "name": "Nom technique (facultatif)",
+      "showIfField": "Afficher seulement si le champ…",
+      "showIfOperator": "Condition",
+      "showIfValue": "Valeur attendue",
+      "step": "Étape (laisser vide pour une seule page)"
+    }
+  },
+  "formSubmissions": {
+    "gdprEraseTitle": "Effacer toutes les soumissions de cette personne ?",
+    "gdprEraseBody": "Toutes les soumissions qui mentionnent l'adresse « {{email}} » seront définitivement effacées, quel que soit le formulaire. Cette action ne peut pas être annulée."
+  },
+  "replace": {
+    "inBlockPlain": "Bloc {{position}}",
+    "inZoneBlockPlain": "Zone {{zone}}, bloc {{position}}",
+    "inParagraph": "{{field}} · paragraphe {{position}}"
+  },
+  "units": {
+    "byte": "o",
+    "kilobyte": "Ko",
+    "megabyte": "Mo",
+    "gigabyte": "Go"
+  },
+  "media": {
+    "uploadLimits": "Taille maximale : {{maxSize}} par fichier.",
+    "uploadImageTypes": "Images acceptées : {{types}} (le contenu du fichier est contrôlé, pas son extension). Tout autre fichier, comme un PDF, est accepté et proposé au téléchargement.",
+    "uploadDropHint": "ou glissez des fichiers n'importe où sur cette page",
+    "chooseFiles": "Choisir des fichiers",
+    "noFilesChosen": "Aucun fichier choisi",
+    "uploadDone": "Téléversé",
+    "copyUrl": "Copier le lien",
+    "copied": "Lien copié",
+    "pageOf": "Page {{page}} sur {{count}}"
+  },
+  "calendar": {
+    "nothingThisPeriod": "Rien de programmé ni de publié ce mois-ci."
+  },
+  "trash": {
+    "deletedByUnknown": "Non renseigné",
+    "neverSweptYet": "Le nettoyage automatique de la corbeille ne s'est pas encore exécuté depuis le démarrage du site."
+  },
+  "translationDashboard": {
+    "singleLocaleNote": "Ce site n'a qu'une seule langue : il n'y a rien à comparer. Pour proposer le site en plusieurs langues, ajoutez-en une dans",
+    "singleLocaleLink": "les réglages du site."
+  },
+  "fields": {
+    "taxonomyNewTermPlaceholder": "Nom du terme"
   }
 }

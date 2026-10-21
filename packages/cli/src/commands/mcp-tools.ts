@@ -31,7 +31,7 @@ import {
   type PermissionLayer,
   type SearchRouter,
 } from '@cogenta/api'
-import type { AuditLog } from '@cogenta/auth'
+import type { ApiKey, ApiKeyStore, AuditLog } from '@cogenta/auth'
 import { type BlockRegistry, safeParseBlock } from '@cogenta/blocks'
 import { CogentaError, isCogentaError, type Logger, type MediaStore } from '@cogenta/core'
 import type { McpCallContext, McpTool, McpToolAnnotations } from '@cogenta/mcp'
@@ -75,6 +75,43 @@ export interface McpIdentity {
   readonly label: string
 }
 
+/** Read by `cogenta mcp` when no --api-key/--email/--role is given, so a client config can keep the key out of `args` (and out of `ps`). */
+export const MCP_API_KEY_ENV = 'COGENTA_MCP_API_KEY'
+
+function apiKeyIsUsable(key: ApiKey | null, now: number): key is ApiKey {
+  if (key === null || key.revokedAt !== undefined) return false
+  return key.expiresAt === undefined || new Date(key.expiresAt).getTime() > now
+}
+
+/**
+ * Who an API key acts as, re-read on every call — the same resolution for
+ * both transports. Same id shape and "roles = scope" mapping as
+ * `resolveApiKeyActor` in `@cogenta/api`, so a key behaves identically over
+ * REST, over MCP HTTP and over stdio. A key revoked or expired since the
+ * previous message refuses the next one.
+ */
+export function apiKeyIdentityResolver(
+  apiKeys: Pick<ApiKeyStore, 'getById'>,
+  keyId: string,
+  now: () => number = Date.now,
+): () => Promise<McpIdentity> {
+  return async () => {
+    const key = await apiKeys.getById(keyId)
+    if (!apiKeyIsUsable(key, now())) {
+      throw new CogentaError({
+        code: 'MCP_ACTOR_API_KEY_INVALID',
+        message: 'This API key was revoked or has expired: this session no longer authenticates.',
+        hint: 'Create a new key in the administration ("MCP" screen) and update the client configuration.',
+      })
+    }
+    return {
+      actor: { id: `apikey:${key.id}`, roles: key.scope },
+      authenticated: true,
+      label: `key "${key.name}"`,
+    }
+  }
+}
+
 export interface McpToolSite {
   readonly name: string
   readonly url?: string
@@ -105,6 +142,13 @@ export interface McpSiteToolsOptions {
 
 const APPROVALS_PLACE = 'the Cogenta administration, Agents screen, "Actions à approuver"'
 
+/**
+ * How many writes one caller may have waiting for a person at once. A
+ * person reviews them one by one; a leaked key queuing thousands would bury
+ * a real request among them and fill the disk the queue lives on.
+ */
+export const MCP_MAX_PENDING_APPROVALS = 5
+
 /** Presentation for a client: a title, MCP's advisory hints, and what the call costs a human. */
 const PRESENTATION: Readonly<
   Record<string, { readonly title: string; readonly annotations: McpToolAnnotations }>
@@ -131,15 +175,30 @@ const PRESENTATION: Readonly<
   },
   'content.write_draft': {
     title: 'Write a draft',
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
   },
   'content.publish': {
     title: 'Publish an entry',
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   },
   'content.delete': {
     title: 'Move an entry to the trash',
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   },
   'media.read': {
     title: 'Read a media asset',
@@ -151,7 +210,12 @@ const PRESENTATION: Readonly<
   },
   'media.write': {
     title: 'Edit media metadata',
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   },
   'site.config_read': {
     title: 'Read site settings',
@@ -325,7 +389,8 @@ function assertValuesValid(
     const parsed = fieldSchema(field).safeParse(value)
     if (!parsed.success) {
       const issue = parsed.error.issues[0]
-      const path = issue === undefined || issue.path.length === 0 ? '' : ` (at ${issue.path.join('.')})`
+      const path =
+        issue === undefined || issue.path.length === 0 ? '' : ` (at ${issue.path.join('.')})`
       throw invalid(
         `"${key}" is not a valid ${field.kind} value${path}: ${issue?.message ?? 'invalid'}.`,
         field.kind === 'richText'
@@ -349,10 +414,15 @@ function contentServiceLikeOf(
   service: ContentService,
   options: { readonly defaultLocale: string; readonly agent: string; readonly now: () => number },
 ): ContentServiceLike {
-  const provenanceDetail = () => ({ agent: options.agent, at: new Date(options.now()).toISOString() })
+  const provenanceDetail = () => ({
+    agent: options.agent,
+    at: new Date(options.now()).toISOString(),
+  })
   return {
     read: (context, collection, id, readOptions) =>
-      service.read(context, collection, id, readOptions) as unknown as Promise<Record<string, unknown>>,
+      service.read(context, collection, id, readOptions) as unknown as Promise<
+        Record<string, unknown>
+      >,
     create: async (context, collection, input, readOptions) => {
       const split = splitBlockZones(service.collection(collection), input.values)
       const created = await service.create(
@@ -533,8 +603,7 @@ function searchServiceOf(
         const error = isRecord(body) && isRecord(body['error']) ? body['error'] : undefined
         throw new CogentaError({
           code: 'QUERY_INVALID',
-          message:
-            typeof error?.['message'] === 'string' ? error['message'] : 'The search failed.',
+          message: typeof error?.['message'] === 'string' ? error['message'] : 'The search failed.',
           hint: typeof error?.['hint'] === 'string' ? error['hint'] : 'Try a different query.',
         })
       }
@@ -551,7 +620,9 @@ function searchServiceOf(
 }
 
 /** Which collection actions a tool needs at least once on this site to be offered at all. */
-function actionsFor(name: string): readonly ('read' | 'create' | 'update' | 'publish' | 'delete')[] {
+function actionsFor(
+  name: string,
+): readonly ('read' | 'create' | 'update' | 'publish' | 'delete')[] {
   if (name === 'content.write_draft') return ['create', 'update']
   if (name === 'content.publish') return ['publish']
   if (name === 'content.delete') return ['delete']
@@ -643,13 +714,23 @@ export function createMcpToolSource(
         state: 'working',
         depth: 0,
       })
-      assertAllowed(tool === 'content.publish' ? 'publish' : 'delete', collection, actor, entry.createdBy)
+      assertAllowed(
+        tool === 'content.publish' ? 'publish' : 'delete',
+        collection,
+        actor,
+        entry.createdBy,
+      )
       if (tool === 'content.publish') {
         const missing = Object.entries(collection.fields)
           .filter(([key, field]) => {
             if (field.required !== true || field.kind === 'blocks') return false
             const value = entry.values[key]
-            return value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)
+            return (
+              value === undefined ||
+              value === null ||
+              value === '' ||
+              (Array.isArray(value) && value.length === 0)
+            )
           })
           .map(([key]) => key)
         if (missing.length > 0) {
@@ -675,13 +756,30 @@ export function createMcpToolSource(
   }
 
   /** The queue as one call sees it: it says it is waiting, and withdraws its request if the client gives up. */
-  function queueForCall(agentName: string, context: McpCallContext): ApprovalQueue {
-    const where = options.approvalsUrl === undefined ? APPROVALS_PLACE : `${APPROVALS_PLACE} (${options.approvalsUrl})`
+  function queueForCall(
+    agentName: string,
+    callerPrefix: string,
+    context: McpCallContext,
+  ): ApprovalQueue {
+    const where =
+      options.approvalsUrl === undefined
+        ? APPROVALS_PLACE
+        : `${APPROVALS_PLACE} (${options.approvalsUrl})`
     return {
       list: (status) => options.approvalQueue.list(status),
       decide: (id, decision, decidedBy, reason) =>
         options.approvalQueue.decide(id, decision, decidedBy, reason),
       async request(input, signal) {
+        const waiting = (await options.approvalQueue.list('pending')).filter((item) =>
+          item.agentName.startsWith(callerPrefix),
+        ).length
+        if (waiting >= MCP_MAX_PENDING_APPROVALS) {
+          throw new CogentaError({
+            code: 'MCP_APPROVALS_PENDING_LIMIT',
+            message: `${waiting} writes from this connection are already waiting for a human approval; this one was not queued.`,
+            hint: `Ask the user to approve or reject the waiting ones in ${where}, then send it again.`,
+          })
+        }
         context.progress?.(`Waiting for a human approval in ${where}.`)
         const started = now()
         const keepAlive = setInterval(() => {
@@ -735,7 +833,10 @@ export function createMcpToolSource(
       spec: { ...tool.spec, description },
       ...(presentation === undefined
         ? {}
-        : { title: presentation.title, annotations: { title: presentation.title, ...presentation.annotations } }),
+        : {
+            title: presentation.title,
+            annotations: { title: presentation.title, ...presentation.annotations },
+          }),
       async execute(input, context) {
         if (context.signal.aborted) {
           throw new CogentaError({
@@ -747,7 +848,8 @@ export function createMcpToolSource(
         await preflight(name, input, identity.actor)
 
         const reference = randomUUID().slice(0, 8)
-        const agentName = `mcp · ${identity.label} · ${identity.actor.roles.join(', ')} · #${reference}`
+        const callerPrefix = `mcp · ${identity.label} · `
+        const agentName = `${callerPrefix}${identity.actor.roles.join(', ')} · #${reference}`
         const guarded: ExecutableTool = {
           ...tool,
           async execute(toolInput, toolContext) {
@@ -761,7 +863,8 @@ export function createMcpToolSource(
             ) {
               throw new CogentaError({
                 code: 'FORBIDDEN',
-                message: 'The roles of this connection changed while the action waited; it was not run.',
+                message:
+                  'The roles of this connection changed while the action waited; it was not run.',
                 hint: 'Send it again: it will be checked against the current roles.',
               })
             }
@@ -773,7 +876,7 @@ export function createMcpToolSource(
           withAutonomy(guarded, {
             agentName,
             autonomy: { default: 'autonomous' },
-            approvalQueue: queueForCall(agentName, context),
+            approvalQueue: queueForCall(agentName, callerPrefix, context),
             logger: options.logger,
           }),
           {
@@ -788,7 +891,12 @@ export function createMcpToolSource(
                 return options.auditLog.record({
                   ...record,
                   ...(entryId === undefined ? {} : { entryId }),
-                  diff: { ...record.diff, origin: 'mcp', transport: options.transport, client: identity.label },
+                  diff: {
+                    ...record.diff,
+                    origin: 'mcp',
+                    transport: options.transport,
+                    client: identity.label,
+                  },
                 })
               },
             },
@@ -826,7 +934,10 @@ export function createMcpToolSource(
       createContentDeleteTool(content),
     ]
     if (authenticated && canAccessMedia(actor, 'media.read')) {
-      definitions.push(createMediaReadTool(options.mediaStore), createMediaListTool(options.mediaStore))
+      definitions.push(
+        createMediaReadTool(options.mediaStore),
+        createMediaListTool(options.mediaStore),
+      )
     }
     if (authenticated && canAccessMedia(actor, 'media.write')) {
       definitions.push(createMediaWriteTool(options.mediaStore))
@@ -837,7 +948,9 @@ export function createMcpToolSource(
       const actions = actionsFor(tool.name)
       if (actions.length === 0) return true
       return options.collections.some((collection) =>
-        actions.some((action) => options.permissions.can(action, collection, { actor }, actor.id).allowed),
+        actions.some(
+          (action) => options.permissions.can(action, collection, { actor }, actor.id).allowed,
+        ),
       )
     })
     const manifest = buildManifest(

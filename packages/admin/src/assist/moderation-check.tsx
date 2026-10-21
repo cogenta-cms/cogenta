@@ -79,7 +79,11 @@ export function ModerationCheck({
         >
           {running
             ? t('assist.running')
-            : t(contextLabel === undefined ? 'assist.moderateButton' : 'assist.moderateInlineButton')}
+            : t(
+                contextLabel === undefined
+                  ? 'assist.moderateButton'
+                  : 'assist.moderateInlineButton',
+              )}
         </Button>
       </div>
 

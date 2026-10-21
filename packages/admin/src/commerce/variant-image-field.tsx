@@ -1,9 +1,9 @@
 import { type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { updateVariant, type Variant } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
 import { MediaPicker } from '../fields/media-picker.js'
 import { Notice } from '../ui/index.js'
+import { commerceErrorMessage } from './commerce-errors.js'
 
 /**
  * A single variant's own photo (a colour, a size) — never a list, unlike
@@ -34,7 +34,7 @@ export function VariantImageField({
       await updateVariant(token, variant.id, { imageMediaId: ids[0] ?? null })
       await onChanged()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.imagesError'))
+      setError(commerceErrorMessage(t, caught, 'commerceProducts.imagesError'))
     } finally {
       setSaving(false)
     }

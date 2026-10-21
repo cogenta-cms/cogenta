@@ -131,6 +131,22 @@ function requireAdmin(actor: Actor, what: string): void {
   })
 }
 
+/**
+ * Accounts are made, changed and removed by a person. An admin API key or an
+ * agent that could create an admin account would get a second identity able
+ * to approve its own pending writes — the same reason `api-keys-router.ts`
+ * keeps key management to a signed-in administrator.
+ */
+function requireHumanAdmin(actor: Actor, what: string): void {
+  requireAdmin(actor, what)
+  if (actor.id !== null && !/^(apikey|agent|role|mcp):/u.test(actor.id)) return
+  throw new CogentaError({
+    code: 'FORBIDDEN',
+    message: `Only a signed-in administrator may ${what}; an API key or an agent may not.`,
+    hint: 'Sign in to the administration with an administrator account to manage accounts.',
+  })
+}
+
 function requireSelfOrAdmin(actor: Actor, userId: string, what: string): void {
   if (actor.id === userId) return
   requireAdmin(actor, what)
@@ -488,13 +504,13 @@ function compareSortKey(a: SortedUser, b: SortedUser, direction: 'asc' | 'desc')
 
 /** Opaque only in the sense of "not a row id" — nothing here is secret, so no signature is needed, unlike a session or reset token. */
 function encodeUsersCursor(key: string, id: string): string {
-  return Buffer.from(`${key} ${id}`, 'utf8').toString('base64url')
+  return Buffer.from(`${key}\u0000${id}`, 'utf8').toString('base64url')
 }
 
 function decodeUsersCursor(raw: string): { key: string; id: string } | null {
   try {
     const decoded = Buffer.from(raw, 'base64url').toString('utf8')
-    const separator = decoded.indexOf(' ')
+    const separator = decoded.indexOf('\u0000')
     if (separator === -1) return null
     return { key: decoded.slice(0, separator), id: decoded.slice(separator + 1) }
   } catch {
@@ -822,7 +838,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     }
 
     if (method === 'POST') {
-      requireAdmin(actor, 'create an account')
+      requireHumanAdmin(actor, 'create an account')
       const body = asRecord(request.body)
       const email = stringField(body, 'email')
       const roles = rolesField(body, 'roles')
@@ -895,7 +911,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     method: string,
   ): Promise<RestResponse> {
     if (method !== 'POST') return methodNotAllowed(['POST'])
-    requireAdmin(actor, 'act on more than one account at once')
+    requireHumanAdmin(actor, 'act on more than one account at once')
 
     const body = asRecord(request.body)
     const ids = idsField(body)
@@ -948,7 +964,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     }
 
     if (method === 'PATCH') {
-      requireAdmin(actor, 'change an account')
+      requireHumanAdmin(actor, 'change an account')
       const body = asRecord(request.body)
       const user = await auth.users.byId(userId)
       if (user === null) throw userNotFound()
@@ -1006,7 +1022,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
 
   /** `POST`/`DELETE /api/users/{id}/invite` (fiche 17 task 1) — resend and cancel. */
   async function inviteRoute(actor: Actor, userId: string, method: string): Promise<RestResponse> {
-    requireAdmin(actor, 'manage an invitation')
+    requireHumanAdmin(actor, 'manage an invitation')
     const user = await auth.users.byId(userId)
     if (user === null) throw userNotFound()
 
@@ -1079,7 +1095,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     method: string,
   ): Promise<RestResponse> {
     if (method !== 'POST') return methodNotAllowed(['POST'])
-    requireAdmin(actor, 'anonymize an account')
+    requireHumanAdmin(actor, 'anonymize an account')
 
     const user = await auth.users.byId(userId)
     if (user === null) throw userNotFound()

@@ -301,3 +301,11 @@ export function deleteAssistantDocument(
     headers: authHeader(token),
   })
 }
+
+/**
+ * `POST /api/assistant/reindex` — rebuilds the knowledge index from the
+ * published content (admin only). Resolves with how many entries were read.
+ */
+export function reindexAssistant(token: string): Promise<{ readonly indexed: number }> {
+  return request('/api/assistant/reindex', { method: 'POST', headers: authHeader(token) })
+}

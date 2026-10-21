@@ -72,6 +72,21 @@ async function project(): Promise<string> {
       delete: ['editor'],
     },
   },
+  {
+    name: 'page',
+    labels: { singular: 'Page', plural: 'Pages' },
+    fields: {
+      title: { kind: 'text', required: true, options: { max: 200 } },
+      body: { kind: 'blocks', options: { allow: ['hero', 'cta'] } },
+    },
+    permissions: {
+      read: ['public'],
+      create: ['editor'],
+      update: ['editor'],
+      publish: ['editor'],
+      delete: ['editor'],
+    },
+  },
 ]
 `,
     'utf8',
@@ -252,10 +267,15 @@ describe('cogenta mcp', () => {
     // Content tools always present; media/site-config only for an authenticated actor.
     expect(names).toEqual(
       [
+        'content.collections',
         'content.delete',
+        'content.list',
         'content.publish',
         'content.read',
+        'content.schema',
+        'content.search',
         'content.write_draft',
+        'media.list',
         'media.read',
         'media.write',
         'site.config_read',
@@ -368,7 +388,7 @@ describe('cogenta mcp', () => {
     }
   })
 
-  it('disconnects a pending call and cannot execute it after a later shared human approval', async () => {
+  it('withdraws a pending request when its client disconnects, so a later approval cannot run it', async () => {
     const root = await project()
     const session = new McpSession(root, { role: 'editor' })
     activeSessions.push(session)
@@ -388,7 +408,12 @@ describe('cogenta mcp', () => {
     session.close()
     expect(await session.done).toBe(0)
     if (request === undefined) throw new Error('No human review request.')
-    await humanQueue.decide(request.id, 'approved', 'human-admin')
+    // The abandoned request is closed as rejected: nobody can approve an
+    // action whose caller already gave up (and may retry, writing twice).
+    expect(await humanQueue.list('pending')).toHaveLength(0)
+    await expect(humanQueue.decide(request.id, 'approved', 'human-admin')).rejects.toThrow(
+      /already has a decision/u,
+    )
     const db = await createSqliteHandle({ url: join(root, 'site.db') })
     try {
       const found = await (await createSearchIndex({ db })).search({
@@ -636,4 +661,207 @@ describe('cogenta mcp', () => {
     session.close()
     expect(await session.done).toBe(2)
   }, 30_000)
+})
+
+describe('cogenta mcp — protocol, discovery and gates (MCP audit, 2026-10-21)', () => {
+  it('answers ping and never answers a notification', async () => {
+    const root = await project()
+    const session = new McpSession(root, { role: 'editor' })
+    activeSessions.push(session)
+
+    session.stdin.write(
+      `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`,
+    )
+    const ping = await session.waitForReply(session.send('ping'))
+    expect(ping.result).toEqual({})
+    // The only reply on the stream is the ping's: nothing was sent for the notification.
+    expect(session.replies.map((reply) => reply.id)).toEqual([ping.id])
+  })
+
+  it('finds content without an id: collections, schema with block types, list and search', async () => {
+    const root = await project()
+    const queue = createMemoryApprovalQueue()
+    const session = new McpSession(root, { role: 'editor' }, queue)
+    activeSessions.push(session)
+
+    const created = session.send('tools/call', {
+      name: 'content.write_draft',
+      arguments: { collection: 'article', values: { title: 'Opening hours' } },
+    })
+    await approveNext(queue)
+    const entry = JSON.parse(textOf((await session.waitForReply(created)).result)) as { id: string }
+
+    const collections = await session.waitForReply(
+      session.send('tools/call', { name: 'content.collections', arguments: {} }),
+    )
+    expect(textOf(collections.result)).toContain('"article"')
+    const schema = await session.waitForReply(
+      session.send('tools/call', { name: 'content.schema', arguments: { collection: 'page' } }),
+    )
+    expect(textOf(schema.result)).toContain('"blocks"')
+    const list = await session.waitForReply(
+      session.send('tools/call', { name: 'content.list', arguments: { collection: 'article' } }),
+    )
+    expect(textOf(list.result)).toContain(entry.id)
+    const search = await session.waitForReply(
+      session.send('tools/call', { name: 'content.search', arguments: { query: 'opening' } }),
+    )
+    expect(textOf(search.result)).toContain(entry.id)
+  })
+
+  it('writes page-builder blocks as blocks, validated against contract B, marked as generated', async () => {
+    const root = await project()
+    const queue = createMemoryApprovalQueue()
+    const session = new McpSession(root, { role: 'editor' }, queue)
+    activeSessions.push(session)
+
+    const id = session.send('tools/call', {
+      name: 'content.write_draft',
+      arguments: {
+        collection: 'page',
+        values: { title: 'Home', body: [{ type: 'hero', data: { title: 'Welcome' } }] },
+      },
+    })
+    await approveNext(queue)
+    const reply = await session.waitForReply(id)
+    expect(reply.result).toMatchObject({ isError: false })
+    const entry = JSON.parse(textOf(reply.result)) as {
+      state: string
+      provenance: string
+      provenanceDetail: { agent: string }
+      blocks: { body: { type: string; data: { title: string } }[] }
+    }
+    expect(entry.state).toBe('working')
+    expect(entry.provenance).toBe('generated')
+    expect(entry.provenanceDetail.agent).toMatch(/^mcp:/u)
+    expect(entry.blocks.body[0]).toMatchObject({ type: 'hero', data: { title: 'Welcome' } })
+  })
+
+  it('refuses invalid blocks and unknown fields at once, without asking a human', async () => {
+    const root = await project()
+    const queue = createMemoryApprovalQueue()
+    const session = new McpSession(root, { role: 'editor' }, queue)
+    activeSessions.push(session)
+
+    const notAllowed = await session.waitForReply(
+      session.send('tools/call', {
+        name: 'content.write_draft',
+        arguments: {
+          collection: 'page',
+          values: { title: 'x', body: [{ type: 'faq', data: { items: [] } }] },
+        },
+      }),
+    )
+    expect(textOf(notAllowed.result)).toMatch(/does not accept "faq"/u)
+    const invalidHero = await session.waitForReply(
+      session.send('tools/call', {
+        name: 'content.write_draft',
+        arguments: {
+          collection: 'page',
+          values: { title: 'x', body: [{ type: 'hero', data: {} }] },
+        },
+      }),
+    )
+    expect(invalidHero.result).toMatchObject({ isError: true })
+    expect(textOf(invalidHero.result)).toMatch(/hero/u)
+    const unknownField = await session.waitForReply(
+      session.send('tools/call', {
+        name: 'content.write_draft',
+        arguments: { collection: 'article', values: { title: 'x', nonexistent: 1 } },
+      }),
+    )
+    expect(textOf(unknownField.result)).toMatch(/"nonexistent" is not a field/u)
+    expect(await queue.list('pending')).toHaveLength(0)
+  })
+
+  it('stops an open session at its next message once its key is revoked', async () => {
+    const root = await project()
+    const key = await createApiKey(root, ['editor'])
+    const session = new McpSession(root, { apiKey: key })
+    activeSessions.push(session)
+    expect((await session.waitForReply(session.send('tools/list'))).result).toBeDefined()
+
+    const { createApiKeyStore } = await import('@cogenta/auth')
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    try {
+      const store = createApiKeyStore(db)
+      const [only] = await store.list()
+      if (only === undefined) throw new Error('No key.')
+      await store.revoke(only.id)
+    } finally {
+      await db.close()
+    }
+    const after = await session.waitForReply(session.send('tools/list'))
+    expect(after.error?.message).toMatch(/revoked/u)
+  })
+
+  it('reads the key from COGENTA_MCP_API_KEY when no option names an identity', async () => {
+    const root = await project()
+    const key = await createApiKey(root, ['editor'])
+    let err = ''
+    const stdin = new PassThrough()
+    const done = runMcp({
+      out: createOutput(() => undefined, false),
+      stderr: (text) => {
+        err += text
+      },
+      cwd: root,
+      env: {
+        COGENTA_AUTH_SIGNING_KEY: 'test-signing-key-not-a-real-secret',
+        COGENTA_MCP_API_KEY: key,
+      },
+      stdin,
+      stdout: new PassThrough(),
+    })
+    for (let attempt = 0; attempt < 200 && !err.includes('ready'); attempt += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 25))
+    }
+    stdin.end()
+    expect(await done).toBe(0)
+    expect(err).toMatch(/acting as key "test key" \[editor\]/u)
+  })
+
+  it('says plainly where to run it when started outside a site folder', async () => {
+    const empty = await mkdtemp(join(tmpdir(), 'cogenta-mcp-nowhere-'))
+    let err = ''
+    const code = await runMcp({
+      out: createOutput(() => undefined, false),
+      stderr: (text) => {
+        err += text
+      },
+      cwd: empty,
+      env: {},
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+    })
+    expect(code).toBe(1)
+    expect(err).toMatch(/CONFIG_NOT_FOUND/u)
+    expect(err).toMatch(/--cwd/u)
+  })
+
+  it('queues at most five writes from one caller for approval', async () => {
+    const root = await project()
+    const queue = createMemoryApprovalQueue()
+    const session = new McpSession(root, { role: 'editor' }, queue)
+    activeSessions.push(session)
+
+    for (let index = 0; index < 5; index += 1) {
+      session.send('tools/call', {
+        name: 'content.write_draft',
+        arguments: { collection: 'article', values: { title: `Waiting ${index}` } },
+      })
+    }
+    for (let attempt = 0; attempt < 200 && (await queue.list('pending')).length < 5; attempt += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 25))
+    }
+    const sixth = await session.waitForReply(
+      session.send('tools/call', {
+        name: 'content.write_draft',
+        arguments: { collection: 'article', values: { title: 'One too many' } },
+      }),
+    )
+    expect(sixth.result).toMatchObject({ isError: true })
+    expect(textOf(sixth.result)).toMatch(/already waiting/u)
+    expect(await queue.list('pending')).toHaveLength(5)
+  })
 })

@@ -1,6 +1,8 @@
 import { type FormEvent, type JSX, useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getMediaLimits, type MediaAsset, type MediaLimits } from '../api/media-client.js'
+import { Button, Field, FileButton, Input, Label } from '../ui/index.js'
+import { formatBytes, imageFormatName } from './format-bytes.js'
 import { type UploadQueue, useUploadQueue } from './upload-queue.js'
 
 /**
@@ -53,11 +55,9 @@ export function UploadForm({
    */
   readonly defaultFolderId?: string | null
 }): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const fileId = useId()
-  const altId = useId()
   const decorativeId = useId()
-  const justificationId = useId()
 
   const [queue, setQueue] = useState<readonly File[]>(
     initialFile === undefined ? [] : [initialFile],
@@ -121,111 +121,138 @@ export function UploadForm({
   }
 
   return (
-    <div className="upload-form-wrapper">
-      <form className="upload-form" onSubmit={submit}>
-        <div className="field">
-          <label htmlFor={fileId}>{t('media.fileLabel')}</label>
+    <div className="upload-form-wrapper flex flex-col gap-3">
+      <form className="upload-form flex flex-col gap-3" onSubmit={submit}>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={fileId}>{t('media.fileLabel')}</Label>
           {pickingFile ? (
             <>
-              <input
+              <FileButton
                 id={fileId}
-                type="file"
                 multiple={initialFile === undefined}
+                label={t('media.chooseFiles')}
+                emptyLabel={t('media.noFilesChosen')}
                 onChange={(event) => pickFiles(event.target.files)}
               />
               {limits !== null && (
-                <p className="upload-form__limits">
+                <p className="upload-form__limits m-0 text-xs leading-5 text-muted-foreground">
                   {/* This used to print `acceptedMimeTypes` as "Types
                       acceptés: …", a closed whitelist the server never
                       enforced: a `.txt`, a `.docx` or a CSV all uploaded
                       fine and none of them was on the list. The real rule
-                      has two halves, and now the screen states both. */}
-                  {t('media.uploadLimits', { maxSize: formatBytes(limits.maxUploadBytes) })}{' '}
+                      has two halves, and now the screen states both — in
+                      the names a person knows (JPEG, PNG), not as MIME
+                      types. */}
+                  {t('media.uploadLimits', {
+                    maxSize: formatBytes(limits.maxUploadBytes, t, i18n.language),
+                  })}{' '}
                   {t('media.uploadImageTypes', {
                     types: (limits.imageMimeTypes ?? limits.acceptedMimeTypes)
                       .filter((type) => type.startsWith('image/'))
+                      .map(imageFormatName)
                       .join(', '),
                   })}
                 </p>
               )}
             </>
           ) : (
-            <p className="upload-form__filename">
-              {current?.name}
+            <p className="upload-form__filename m-0 flex flex-wrap items-center gap-2 text-sm">
+              <strong className="font-medium [overflow-wrap:anywhere]">{current?.name}</strong>
               {batchTotal > 1 && (
-                <span className="upload-form__progress">
-                  {' '}
+                <span className="upload-form__progress text-muted-foreground">
                   {t('media.uploadProgress', { current: batchDescribed + 1, total: batchTotal })}
                 </span>
-              )}{' '}
-              <button type="button" onClick={() => setPickingFile(true)}>
+              )}
+              <Button type="button" size="sm" variant="ghost" onClick={() => setPickingFile(true)}>
                 {t('media.changeFile')}
-              </button>
+              </Button>
             </p>
           )}
         </div>
 
-        {!decorative && (
-          <div className="field">
-            <label htmlFor={altId}>
-              {t('media.altLabel')}
-              <span aria-hidden="true" className="field__required">
-                {' '}
-                *
-              </span>
+        {current !== null && (
+          <>
+            {!decorative && (
+              <Field
+                label={
+                  <>
+                    {t('media.altLabel')}
+                    <span aria-hidden="true" className="field__required text-destructive">
+                      {' '}
+                      *
+                    </span>
+                  </>
+                }
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="text"
+                    required={!decorative}
+                    value={alt}
+                    onChange={(event) => setAlt(event.target.value)}
+                  />
+                )}
+              </Field>
+            )}
+
+            <label
+              htmlFor={decorativeId}
+              className="flex items-center gap-2 text-sm font-medium text-foreground"
+            >
+              <input
+                id={decorativeId}
+                type="checkbox"
+                checked={decorative}
+                onChange={(event) => setDecorative(event.target.checked)}
+              />
+              {t('media.decorativeLabel')}
             </label>
-            <input
-              id={altId}
-              type="text"
-              required={!decorative}
-              value={alt}
-              onChange={(event) => setAlt(event.target.value)}
-            />
-          </div>
+
+            {decorative && (
+              <Field
+                label={
+                  <>
+                    {t('media.justificationLabel')}
+                    <span aria-hidden="true" className="field__required text-destructive">
+                      {' '}
+                      *
+                    </span>
+                  </>
+                }
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="text"
+                    required={decorative}
+                    value={justification}
+                    onChange={(event) => setJustification(event.target.value)}
+                  />
+                )}
+              </Field>
+            )}
+
+            <div>
+              <Button type="submit">{t('media.uploadButton')}</Button>
+            </div>
+          </>
         )}
-
-        <div className="field field--checkbox">
-          <input
-            id={decorativeId}
-            type="checkbox"
-            checked={decorative}
-            onChange={(event) => setDecorative(event.target.checked)}
-          />
-          <label htmlFor={decorativeId}>{t('media.decorativeLabel')}</label>
-        </div>
-
-        {decorative && (
-          <div className="field">
-            <label htmlFor={justificationId}>
-              {t('media.justificationLabel')}
-              <span aria-hidden="true" className="field__required">
-                {' '}
-                *
-              </span>
-            </label>
-            <input
-              id={justificationId}
-              type="text"
-              required={decorative}
-              value={justification}
-              onChange={(event) => setJustification(event.target.value)}
-            />
-          </div>
-        )}
-
-        <button type="submit" disabled={current === null}>
-          {t('media.uploadButton')}
-        </button>
       </form>
 
       {uploads.items.length > 0 && (
-        <ul className="upload-form__queue" aria-label={t('media.uploadQueueHeading')}>
+        <ul
+          className="upload-form__queue m-0 flex list-none flex-col gap-1 p-0 text-sm"
+          aria-label={t('media.uploadQueueHeading')}
+        >
           {uploads.items.map((item) => (
             <li
               key={item.id}
-              className={`upload-form__queue-item upload-form__queue-item--${item.status}`}
+              className={`upload-form__queue-item upload-form__queue-item--${item.status} flex flex-wrap items-center gap-2`}
             >
-              <span className="upload-form__queue-filename">{item.filename}</span>
+              <span className="upload-form__queue-filename min-w-0 [overflow-wrap:anywhere]">
+                {item.filename}
+              </span>
               {item.status === 'uploading' && (
                 <progress
                   className="upload-form__queue-progress"
@@ -237,17 +264,29 @@ export function UploadForm({
                 </progress>
               )}
               {item.status === 'pending' && (
-                <span className="upload-form__queue-status">{t('media.uploadPending')}</span>
+                <span className="upload-form__queue-status text-muted-foreground">
+                  {t('media.uploadPending')}
+                </span>
               )}
               {item.status === 'done' && (
-                <span className="upload-form__queue-status">{t('media.uploadDone')}</span>
+                <span className="upload-form__queue-status text-muted-foreground">
+                  {t('media.uploadDone')}
+                </span>
               )}
               {item.status === 'failed' && (
-                <span className="upload-form__queue-error" role="alert">
+                <span
+                  className="upload-form__queue-error flex flex-wrap items-center gap-2 text-destructive"
+                  role="alert"
+                >
                   {item.error ?? t('media.uploadError')}
-                  <button type="button" onClick={() => uploads.retry(item.id)}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => uploads.retry(item.id)}
+                  >
                     {t('media.retryUpload')}
-                  </button>
+                  </Button>
                 </span>
               )}
             </li>
@@ -256,16 +295,4 @@ export function UploadForm({
       )}
     </div>
   )
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB']
-  let value = bytes / 1024
-  let unitIndex = 0
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex += 1
-  }
-  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unitIndex]}`
 }

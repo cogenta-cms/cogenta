@@ -2,6 +2,7 @@ import {
   CogentaError,
   type DatabaseHandle,
   identifier,
+  limit,
   newId,
   type SqlExecutor,
   sql,
@@ -216,6 +217,13 @@ export interface SubscriptionStore {
    * after the order's paid date.
    */
   createFromOrder(orderId: string): Promise<readonly Subscription[]>
+  /**
+   * Sweeps the paid orders that contain a recurring variant and have no
+   * subscription for it yet, opening them. This is how an order paid online
+   * (the provider's webhook, which has no screen to react) still opens its
+   * subscription: the scheduler calls it before every billing run.
+   */
+  openFromPaidOrders(options?: { readonly limit?: number }): Promise<readonly Subscription[]>
   cancel(id: string): Promise<Subscription>
   cycles(id: string): Promise<readonly SubscriptionCycle[]>
   /**
@@ -748,7 +756,7 @@ export function createSubscriptionStore(
     return load(id)
   }
 
-  return {
+  const store: SubscriptionStore = {
     create: (input) => createSubscription(input),
 
     read,
@@ -910,6 +918,32 @@ export function createSubscriptionStore(
           values (${newId(now)}, ${subscription.id}, ${paidAt}, ${subscription.currentPeriodEnd},
                   ${`${subscription.id}:${paidAt}`}, ${order.id}, ${'billed'}, ${stamp()})`)
         opened.push(subscription)
+      }
+      return opened
+    },
+
+    openFromPaidOrders: async (options) => {
+      const variantsTable = identifier(TABLES.variants, d)
+      const candidates = await db.query<{ id: unknown }>(sql`
+        select distinct o.id as id, o.placed_at as placed_at
+        from ${orders} o
+        inner join ${orderLines} l on l.order_id = o.id
+        inner join ${variantsTable} v on v.id = l.variant_id
+        where o.status in (${'paid'}, ${'shipped'}, ${'delivered'})
+          and v.billing_interval_unit is not null
+          and not exists (
+            select 1 from ${subscriptions} s
+            where s.origin_order_id = o.id and s.variant_id = l.variant_id)
+        order by o.placed_at asc
+        limit ${limit(options?.limit ?? 50)}`)
+      const opened: Subscription[] = []
+      for (const row of candidates.rows) {
+        try {
+          opened.push(...(await store.createFromOrder(toText(row.id, 'order.id'))))
+        } catch {
+          // One order that cannot open (a variant removed since) must not stop
+          // the others; it is retried on the next tick.
+        }
       }
       return opened
     },
@@ -1236,6 +1270,7 @@ export function createSubscriptionStore(
       }
     },
   }
+  return store
 }
 
 /** A subscription's price normalised to a monthly cadence, for MRR. */

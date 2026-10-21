@@ -704,3 +704,20 @@ describe('search console (fiche 70 task 4, ADR-0032)', () => {
     }
   })
 })
+
+describe('resolveConfig — the MCP HTTP endpoint switch', () => {
+  it('serves /api/mcp by default and turns it off from the file or the environment', () => {
+    expect(resolveConfig(minimal, noEnv).mcp.http).toBe(true)
+    expect(resolveConfig({ ...minimal, mcp: { http: false } }, noEnv).mcp.http).toBe(false)
+    expect(resolveConfig(minimal, { COGENTA_MCP_HTTP: 'off' }).mcp.http).toBe(false)
+    expect(resolveConfig(minimal, { COGENTA_MCP_HTTP: 'FALSE' }).mcp.http).toBe(false)
+    expect(resolveConfig({ ...minimal, mcp: { http: false } }, { COGENTA_MCP_HTTP: 'yes' }).mcp.http).toBe(
+      true,
+    )
+  })
+
+  it('refuses a switch value it cannot read rather than leaving the endpoint on', () => {
+    expect(() => resolveConfig(minimal, { COGENTA_MCP_HTTP: 'disabled' })).toThrow()
+    expect(() => resolveConfig(minimal, { COGENTA_MCP_HTTP: 'n' })).toThrow()
+  })
+})

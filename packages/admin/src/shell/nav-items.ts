@@ -196,6 +196,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    to: '/theme-sandbox',
+    labelKey: 'nav.themeSandbox',
+    group: 'appearance',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
     to: '/widgets',
     labelKey: 'nav.widgets',
     group: 'appearance',

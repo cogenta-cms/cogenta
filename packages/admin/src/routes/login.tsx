@@ -1,9 +1,12 @@
-import { type FormEvent, type JSX, useState } from 'react'
+import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { AuthLayout } from '../auth/auth-layout.js'
+import { PasswordInput } from '../auth/password-input.js'
+import { SIGNED_OUT_FLAG_KEY } from '../shell/account-menu.js'
+import { useDocumentTitle } from '../shell/use-document-title.js'
 import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
 
 interface LocationState {
@@ -35,6 +38,7 @@ type Step =
  */
 export function LoginRoute(): JSX.Element {
   const { t } = useTranslation()
+  useDocumentTitle(t('login.pageTitle'))
   const auth = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -50,6 +54,34 @@ export function LoginRoute(): JSX.Element {
   const [recoveryCode, setRecoveryCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Blank-field messages come from this screen, in the admin's own language —
+  // the browser's native bubbles ("Please fill out this field") follow the
+  // browser's language, not the admin's, and cover the field they complain about.
+  const [fieldErrors, setFieldErrors] = useState<Readonly<Record<string, string>>>({})
+  // Set by the account menu just before it signs out; read once, so the
+  // confirmation shows after a sign-out and never after a mere page reload.
+  const [signedOut, setSignedOut] = useState(false)
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(SIGNED_OUT_FLAG_KEY) !== null) {
+        sessionStorage.removeItem(SIGNED_OUT_FLAG_KEY)
+        setSignedOut(true)
+      }
+    } catch {
+      // Private mode: the sign-in screen just does not mention it.
+    }
+  }, [])
+
+  /** Fills `fieldErrors` for every blank required field; true when the form may go ahead. */
+  function requireFields(fields: Readonly<Record<string, [string, string]>>): boolean {
+    const missing: Record<string, string> = {}
+    for (const [name, [value, messageKey]] of Object.entries(fields)) {
+      if (value.trim() === '') missing[name] = t(messageKey)
+    }
+    setFieldErrors(missing)
+    return Object.keys(missing).length === 0
+  }
 
   /**
    * `ApiError#message` is the server's own English string (`@cogenta/auth`
@@ -107,6 +139,15 @@ export function LoginRoute(): JSX.Element {
   async function submitPassword(event: FormEvent): Promise<void> {
     event.preventDefault()
     setError(null)
+    setSignedOut(false)
+    if (
+      !requireFields({
+        email: [email, 'auth.emailRequired'],
+        password: [password, 'auth.passwordRequired'],
+      })
+    ) {
+      return
+    }
     setSubmitting(true)
     try {
       const result = await auth.login(email, password, rememberMe)
@@ -126,6 +167,7 @@ export function LoginRoute(): JSX.Element {
     event.preventDefault()
     if (step.kind !== 'totp') return
     setError(null)
+    if (!requireFields({ code: [code, 'auth.codeRequired'] })) return
     setSubmitting(true)
     try {
       await auth.completeTotp(step.ticket, code)
@@ -141,6 +183,7 @@ export function LoginRoute(): JSX.Element {
     event.preventDefault()
     if (step.kind !== 'recovery') return
     setError(null)
+    if (!requireFields({ code: [recoveryCode, 'auth.codeRequired'] })) return
     setSubmitting(true)
     try {
       await auth.completeRecoveryCode(step.ticket, recoveryCode)
@@ -159,6 +202,7 @@ export function LoginRoute(): JSX.Element {
           <CardBody>
             <form
               onSubmit={submitTotp}
+              noValidate
               aria-labelledby="totp-heading"
               className="flex flex-col gap-4"
             >
@@ -171,14 +215,13 @@ export function LoginRoute(): JSX.Element {
                 </h1>
                 <p className="m-0 text-sm text-muted-foreground">{t('login.totpPrompt')}</p>
               </div>
-              <Field label={t('login.code')}>
+              <Field label={t('login.code')} error={fieldErrors.code ?? null}>
                 {(control) => (
                   <Input
                     {...control}
                     name="totp-code"
                     inputMode="numeric"
                     autoComplete="one-time-code"
-                    pattern="[0-9]{6}"
                     maxLength={6}
                     required
                     value={code}
@@ -220,6 +263,7 @@ export function LoginRoute(): JSX.Element {
           <CardBody>
             <form
               onSubmit={submitRecoveryCode}
+              noValidate
               aria-labelledby="recovery-heading"
               className="flex flex-col gap-4"
             >
@@ -232,7 +276,7 @@ export function LoginRoute(): JSX.Element {
                 </h1>
                 <p className="m-0 text-sm text-muted-foreground">{t('login.recoveryPrompt')}</p>
               </div>
-              <Field label={t('login.code')}>
+              <Field label={t('login.code')} error={fieldErrors.code ?? null}>
                 {(control) => (
                   <Input
                     {...control}
@@ -278,6 +322,11 @@ export function LoginRoute(): JSX.Element {
           <h1 id="login-heading" className="m-0 text-xl leading-7 font-semibold tracking-tight">
             {t('login.heading')}
           </h1>
+          {signedOut && (
+            <Notice tone="success" live="polite">
+              <p>{t('login.signedOut')}</p>
+            </Notice>
+          )}
           <Button
             variant="secondary"
             onClick={() => void submitPasskey()}
@@ -289,10 +338,11 @@ export function LoginRoute(): JSX.Element {
           <p className="m-0 text-center text-sm text-muted-foreground">{t('login.or')}</p>
           <form
             onSubmit={submitPassword}
+            noValidate
             aria-labelledby="login-heading"
             className="flex flex-col gap-4"
           >
-            <Field label={t('login.email')}>
+            <Field label={t('login.email')} error={fieldErrors.email ?? null}>
               {(control) => (
                 <Input
                   {...control}
@@ -306,12 +356,11 @@ export function LoginRoute(): JSX.Element {
                 />
               )}
             </Field>
-            <Field label={t('login.password')}>
+            <Field label={t('login.password')} error={fieldErrors.password ?? null}>
               {(control) => (
-                <Input
+                <PasswordInput
                   {...control}
                   name="password"
-                  type="password"
                   autoComplete="current-password"
                   required
                   value={password}

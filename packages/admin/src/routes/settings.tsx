@@ -11,6 +11,7 @@ import { SiteSettingsField } from '../settings/site-settings-field.js'
 import { type SectionAutosave, useSectionAutosave } from '../settings/site-settings-section.js'
 import { NAV_GROUPS, NAV_ITEMS, type NavGroupId } from '../shell/nav-items.js'
 import {
+  EMPTY_NAV_LAYOUT_OVERRIDES,
   type NavLayoutOverrides,
   parseNavLayoutOverrides,
   reorderByKey,
@@ -64,6 +65,15 @@ type TabId = (typeof TAB_ORDER)[number]
  * skipping them is the correct behaviour until a future group earns its own
  * tab.
  */
+/** "fr" → "français", in the admin's language; the code itself when the runtime does not know it. */
+function languageName(code: string, displayLocale: string): string {
+  try {
+    return new Intl.DisplayNames([displayLocale], { type: 'language' }).of(code) ?? code
+  } catch {
+    return code
+  }
+}
+
 function groupOf(setting: SiteSetting): TabId | null {
   return TAB_ORDER.includes(setting.group as TabId) ? (setting.group as TabId) : null
 }
@@ -221,7 +231,7 @@ export function SettingsRoute(): JSX.Element {
       <div
         role="tablist"
         aria-label={t('settings.heading')}
-        className="flex flex-wrap gap-1 border-b border-border"
+        className="flex flex-wrap gap-x-1 border-b border-border"
       >
         {TAB_ORDER.map((id) => (
           <button
@@ -232,10 +242,14 @@ export function SettingsRoute(): JSX.Element {
             aria-selected={tab === id}
             aria-controls={`settings-panel-${id}`}
             className={cn(
-              'rounded-t-md px-3 py-2 font-sans text-sm font-medium transition-colors',
+              // The reset is explicit (`appearance-none`, `border-0`): a bare
+              // button otherwise arrives with the browser's own raised border.
+              '-mb-px cursor-pointer appearance-none border-0 border-b-2 bg-transparent px-3 py-2 ' +
+                'font-sans text-sm font-medium transition-colors focus-visible:outline-2 ' +
+                'focus-visible:outline-offset-2 focus-visible:outline-ring',
               tab === id
-                ? 'border border-b-0 border-border bg-card text-card-foreground'
-                : 'text-muted-foreground hover:text-foreground',
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
             )}
             onClick={() => setTab(id)}
           >
@@ -317,8 +331,7 @@ function SectionSaveFooter({
       <CardFooter>
         <Button
           type="button"
-          size="sm"
-          variant="secondary"
+          variant="primary"
           loading={section.saving}
           disabled={!section.hasPending}
           onClick={() => void section.flush()}
@@ -354,7 +367,7 @@ function GeneralTab({
   readonly onSave: TabSaveHandler
   readonly autosaveEnabled: boolean
 }): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const section = useSectionAutosave(autosaveEnabled, onSave)
   return (
     <div className="flex flex-col gap-4">
@@ -393,7 +406,7 @@ function GeneralTab({
               >
                 {locales.map((code) => (
                   <option key={code} value={code}>
-                    {code}
+                    {languageName(code, i18n.language)} ({code})
                   </option>
                 ))}
               </Select>
@@ -425,7 +438,8 @@ function GeneralTab({
         </CardHeader>
         <CardBody>
           <p className="m-0 text-sm">
-            {defaultLocale} — {t('settings.provenanceReadOnly')}
+            {languageName(defaultLocale, i18n.language)} ({defaultLocale}) —{' '}
+            {t('settings.provenanceReadOnly')}
           </p>
         </CardBody>
       </Card>
@@ -615,6 +629,7 @@ function NavigationTab({
 }): JSX.Element {
   const { t } = useTranslation()
   const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
 
   const displayedGroups = reorderByKey(NAV_GROUPS, (group) => group.id, overrides.sectionOrder)
   const displayedItemsByGroup = new Map(
@@ -630,8 +645,10 @@ function NavigationTab({
 
   async function persist(next: NavLayoutOverrides): Promise<void> {
     setSaving(true)
+    setMessage(null)
     try {
       await onSave(next)
+      setMessage(t('settings.navigationSaved'))
     } finally {
       setSaving(false)
     }
@@ -687,15 +704,35 @@ function NavigationTab({
     })
   }
 
+  const hasOverrides =
+    overrides.sectionOrder.length > 0 ||
+    overrides.hiddenSections.length > 0 ||
+    overrides.itemOrder.length > 0 ||
+    overrides.hiddenItems.length > 0
+
   return (
     <Card aria-busy={saving}>
       <CardBody className="flex flex-col gap-4">
         <p className="m-0 text-xs text-muted-foreground">{t('settings.navigationNote')}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={saving || !hasOverrides}
+            onClick={() => void persist(EMPTY_NAV_LAYOUT_OVERRIDES)}
+          >
+            {t('settings.navigationResetAction')}
+          </Button>
+          <p role="status" className="m-0 text-xs font-medium text-success">
+            {saving ? t('settings.saving') : (message ?? '')}
+          </p>
+        </div>
         <ul className="m-0 flex list-none flex-col gap-3 p-0">
           {displayedGroups.map((group, groupIndex) => (
             <li key={group.id} className="rounded-md border border-border p-3">
-              <div className="flex items-center gap-2">
-                <label className="flex flex-1 items-center gap-2 font-medium">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex min-w-0 flex-1 items-center gap-2 font-medium">
                   <input
                     type="checkbox"
                     checked={!overrides.hiddenSections.includes(group.id)}
@@ -703,59 +740,85 @@ function NavigationTab({
                   />
                   {t(group.labelKey)}
                 </label>
-                <button
-                  type="button"
-                  onClick={() => moveGroup(group.id, 'up')}
-                  disabled={groupIndex === 0}
-                  className="rounded-sm border border-border px-2 py-0.5 text-xs disabled:opacity-40"
-                >
-                  {t('dashboard.moveUp')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moveGroup(group.id, 'down')}
-                  disabled={groupIndex === displayedGroups.length - 1}
-                  className="rounded-sm border border-border px-2 py-0.5 text-xs disabled:opacity-40"
-                >
-                  {t('dashboard.moveDown')}
-                </button>
+                <MoveButtons
+                  name={t(group.labelKey)}
+                  canUp={groupIndex > 0}
+                  canDown={groupIndex < displayedGroups.length - 1}
+                  onUp={() => moveGroup(group.id, 'up')}
+                  onDown={() => moveGroup(group.id, 'down')}
+                />
               </div>
 
               <ul className="m-0 mt-2.5 flex list-none flex-col gap-1.5 border-l border-dashed border-border py-0 pr-0 pl-3">
-                {(displayedItemsByGroup.get(group.id) ?? []).map((item, itemIndex, items) => (
-                  <li key={item.to} className="flex items-center gap-2 text-sm">
-                    <label className="flex flex-1 items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={!overrides.hiddenItems.includes(item.to)}
-                        onChange={() => toggleItemHidden(item.to)}
+                {(displayedItemsByGroup.get(group.id) ?? [])
+                  // The dashboard is always the first entry of the sidebar, outside any section.
+                  .filter((item) => item.to !== '/')
+                  .map((item, itemIndex, items) => (
+                    <li key={item.to} className="flex flex-wrap items-center gap-2 text-sm">
+                      <label className="flex min-w-0 flex-1 items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={!overrides.hiddenItems.includes(item.to)}
+                          onChange={() => toggleItemHidden(item.to)}
+                        />
+                        {t(item.labelKey)}
+                      </label>
+                      <MoveButtons
+                        name={t(item.labelKey)}
+                        canUp={itemIndex > 0}
+                        canDown={itemIndex < items.length - 1}
+                        onUp={() => moveItem(group.id, item.to, 'up')}
+                        onDown={() => moveItem(group.id, item.to, 'down')}
                       />
-                      {t(item.labelKey)}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => moveItem(group.id, item.to, 'up')}
-                      disabled={itemIndex === 0}
-                      className="rounded-sm border border-border px-2 py-0.5 text-xs disabled:opacity-40"
-                    >
-                      {t('dashboard.moveUp')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveItem(group.id, item.to, 'down')}
-                      disabled={itemIndex === items.length - 1}
-                      className="rounded-sm border border-border px-2 py-0.5 text-xs disabled:opacity-40"
-                    >
-                      {t('dashboard.moveDown')}
-                    </button>
-                  </li>
-                ))}
+                    </li>
+                  ))}
               </ul>
             </li>
           ))}
         </ul>
       </CardBody>
     </Card>
+  )
+}
+
+/** The up/down pair of one row, each named after the row it moves (a screen reader hears "Monter Médias", not "Monter" a hundred times). */
+function MoveButtons({
+  name,
+  canUp,
+  canDown,
+  onUp,
+  onDown,
+}: {
+  readonly name: string
+  readonly canUp: boolean
+  readonly canDown: boolean
+  onUp(): void
+  onDown(): void
+}): JSX.Element {
+  const { t } = useTranslation()
+  return (
+    <span className="flex shrink-0 gap-1">
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        disabled={!canUp}
+        aria-label={t('settings.navigationMoveUp', { name })}
+        onClick={onUp}
+      >
+        {t('settings.navigationUp')}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        disabled={!canDown}
+        aria-label={t('settings.navigationMoveDown', { name })}
+        onClick={onDown}
+      >
+        {t('settings.navigationDown')}
+      </Button>
+    </span>
   )
 }
 

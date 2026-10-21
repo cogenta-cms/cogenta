@@ -150,7 +150,7 @@ export function summarisePlan(draft: SitePlanDraft, locale?: string): readonly P
         title: `${collection.definition.labels.plural} (${collection.definition.name})`,
         detail: `${collection.rationale} ${text.fields(
           Object.entries(collection.definition.fields)
-            .map(([name, field]) => text.fieldLabel(name, field.kind, field.label))
+            .map(([name, field]) => text.fieldLabel(name, field.kind, field.admin?.label))
             .join(', '),
         )} ${text.permissions(describePermissions(collection.definition.permissions, text))}${
           collection.definition.routing === undefined

@@ -3,7 +3,6 @@ import process from 'node:process'
 import { type ApprovalQueue, createFileApprovalQueue } from '@cogenta/agents'
 import { createContentService, createPermissionLayer, createSearchRouter } from '@cogenta/api'
 import {
-  type ApiKey,
   createApiKeyStore,
   createAuditLog,
   createUserStore,
@@ -35,11 +34,16 @@ import {
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
 import { createDecoratedContentStores } from './decorated-content-stores.js'
-import { createMcpToolSource, type McpIdentity, mcpServerInstructions } from './mcp-tools.js'
+import {
+  apiKeyIdentityResolver,
+  createMcpToolSource,
+  MCP_API_KEY_ENV,
+  type McpIdentity,
+  mcpServerInstructions,
+} from './mcp-tools.js'
 import { loadSchemaModule } from './serve.js'
 
-/** Read when no --api-key/--email/--role is given, so a client config can keep the key out of `args` (and out of `ps`). */
-export const MCP_API_KEY_ENV = 'COGENTA_MCP_API_KEY'
+export { MCP_API_KEY_ENV }
 
 export interface McpOptions {
   readonly cwd?: string
@@ -104,11 +108,6 @@ Options
   --role <role,…>    Act as a synthetic actor with these roles (tests only)
 `
 
-function apiKeyIsUsable(key: ApiKey | null, now: number): key is ApiKey {
-  if (key === null || key.revokedAt !== undefined) return false
-  return key.expiresAt === undefined || new Date(key.expiresAt).getTime() > now
-}
-
 /**
  * Resolves who this server's calls run as — and keeps resolving it: the
  * function returned is called on every message, so a key revoked, an account
@@ -153,24 +152,7 @@ async function createIdentityResolver(
         hint: 'Mint a new one from the admin\'s "MCP" screen, or "Clés API" for a general-purpose key.',
       })
     }
-    const keyId = verified.id
-    return async () => {
-      const key = await apiKeys.getById(keyId)
-      if (!apiKeyIsUsable(key, Date.now())) {
-        throw new CogentaError({
-          code: 'MCP_ACTOR_API_KEY_INVALID',
-          message: 'This API key was revoked or has expired: this session no longer authenticates.',
-          hint: 'Create a new key in the admin\'s "MCP" screen and update the client configuration.',
-        })
-      }
-      // Same id shape and "roles = scope" mapping as `resolveApiKeyActor`
-      // in `@cogenta/api`, so a key behaves identically over HTTP and here.
-      return {
-        actor: { id: `apikey:${key.id}`, roles: key.scope },
-        authenticated: true,
-        label: `key "${key.name}"`,
-      }
-    }
+    return apiKeyIdentityResolver(apiKeys, verified.id)
   }
   if (options.email !== undefined) {
     await ensureAuthTables(db)
@@ -247,7 +229,10 @@ export async function runMcp(options: McpOptions): Promise<number> {
   const envKey = env[MCP_API_KEY_ENV]
   const apiKey =
     options.apiKey ??
-    (options.email === undefined && options.role === undefined && envKey !== undefined && envKey !== ''
+    (options.email === undefined &&
+    options.role === undefined &&
+    envKey !== undefined &&
+    envKey !== ''
       ? envKey
       : undefined)
 
@@ -294,7 +279,10 @@ export async function runMcp(options: McpOptions): Promise<number> {
     await createSchemaTables(db, collections, taxonomies)
     await ensureAuthTables(db)
 
-    const resolveIdentity = await createIdentityResolver({ ...options, ...(apiKey === undefined ? {} : { apiKey }) }, db)
+    const resolveIdentity = await createIdentityResolver(
+      { ...options, ...(apiKey === undefined ? {} : { apiKey }) },
+      db,
+    )
     const firstIdentity = await resolveIdentity()
 
     // Fiche 63, ADR-0028: `cogenta mcp` builds its own `PermissionLayer`
@@ -386,6 +374,13 @@ export async function runMcp(options: McpOptions): Promise<number> {
       version: '1.1.0',
       instructions: mcpServerInstructions(site),
       tools: tracked,
+      onInternalError: (error) => {
+        // stderr, never stdout (which carries JSON-RPC): what the caller
+        // was not shown, for whoever reads the client's MCP log.
+        stderr(
+          `MCP internal error: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+        )
+      },
     })
     const transport = serveMcpOverStdio({
       server,

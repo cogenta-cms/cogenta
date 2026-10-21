@@ -61,6 +61,24 @@ function requireAdmin(actor: Actor, what: string): void {
   })
 }
 
+/**
+ * Minting, editing, rotating, recovering or removing a credential is a
+ * person's act. An API key — even one scoped `admin` — must not mint a
+ * second key: revoking the first would no longer end the access it
+ * granted, and an assistant driven by a prompt injection could keep itself
+ * in (security review of the MCP HTTP endpoint, 2026-10-21). Same rule, same
+ * pattern as the approvals router: machine identities never approve.
+ */
+function requireHumanAdmin(actor: Actor, what: string): void {
+  requireAdmin(actor, what)
+  if (actor.id !== null && !/^(apikey|agent|role|mcp):/u.test(actor.id)) return
+  throw new CogentaError({
+    code: 'FORBIDDEN',
+    message: `Only a signed-in administrator may ${what}; an API key or an agent may not.`,
+    hint: 'Sign in to the administration with an administrator account to manage API keys.',
+  })
+}
+
 function asRecord(body: unknown): Record<string, unknown> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     throw new CogentaError({
@@ -328,6 +346,11 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
         const method = request.method.toUpperCase()
 
         if (segments.length === 0) return await collectionRoute(request, actor, method)
+        // A fixed segment, never a key id (ids are UUIDs): the closed list a
+        // scope is chosen from, so the screen offers a picker, not free text.
+        if (segments.length === 1 && segments[0] === 'roles') {
+          return await rolesRoute(actor, method)
+        }
         if (segments.length === 1) {
           return await keyRoute(request, actor, segments[0] as string, method)
         }
@@ -345,6 +368,14 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
         return errorResponse(error)
       }
     },
+  }
+
+  async function rolesRoute(actor: Actor, method: string): Promise<RestResponse> {
+    if (method !== 'GET') return methodNotAllowed(['GET'])
+    requireAdmin(actor, 'list the roles an API key may be scoped to')
+    const roles =
+      options.allowedRoles === undefined ? null : [...(await options.allowedRoles())].sort()
+    return jsonResponse(200, { data: { roles } })
   }
 
   async function collectionRoute(
@@ -376,7 +407,7 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
     }
 
     if (method === 'POST') {
-      requireAdmin(actor, 'create an API key')
+      requireHumanAdmin(actor, 'create an API key')
       const body = asRecord(request.body)
       const name = stringField(body, 'name')
       const scope = scopeField(body)
@@ -407,7 +438,7 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
     method: string,
   ): Promise<RestResponse> {
     if (method === 'DELETE') {
-      requireAdmin(actor, 'revoke an API key')
+      requireHumanAdmin(actor, 'revoke an API key')
 
       const existing = await auth.apiKeys.getById(id)
       if (existing === null) throw keyNotFound()
@@ -421,7 +452,7 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
     // never touches the key's secret, prefix, or lifecycle fields (rotate
     // it to change the secret, revoke it to end it).
     if (method === 'PATCH') {
-      requireAdmin(actor, 'edit an API key')
+      requireHumanAdmin(actor, 'edit an API key')
 
       const existing = await auth.apiKeys.getById(id)
       if (existing === null) throw keyNotFound()
@@ -476,7 +507,7 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
     method: string,
   ): Promise<RestResponse> {
     if (method !== 'POST') return methodNotAllowed(['POST'])
-    requireAdmin(actor, 'rotate an API key')
+    requireHumanAdmin(actor, 'rotate an API key')
 
     const body = asRecord(request.body ?? {})
     const graceHours = graceHoursField(body)
@@ -502,7 +533,7 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
    */
   async function purgeRoute(actor: Actor, id: string, method: string): Promise<RestResponse> {
     if (method !== 'DELETE') return methodNotAllowed(['DELETE'])
-    requireAdmin(actor, 'purge an API key')
+    requireHumanAdmin(actor, 'purge an API key')
 
     const existing = await auth.apiKeys.getById(id)
     if (existing === null) throw keyNotFound()
@@ -520,7 +551,7 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
    */
   async function recoverRoute(actor: Actor, id: string, method: string): Promise<RestResponse> {
     if (method !== 'POST') return methodNotAllowed(['POST'])
-    requireAdmin(actor, 'recover a revoked API key')
+    requireHumanAdmin(actor, 'recover a revoked API key')
 
     const issued = await auth.apiKeys.recover(id)
     return jsonResponse(201, { data: { ...publicKey(issued), key: issued.key } })

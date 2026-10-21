@@ -1,11 +1,14 @@
 import { type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { describeApiError } from '../api/describe-error.js'
 import type { SiteSetting } from '../api/settings-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { blockLabel } from '../blocks/localize-block-fields.js'
+import { blockLibrary } from '../builder/block-library.js'
 import { MediaPicker } from '../fields/media-picker.js'
 import { formatDate, formatDateTime, formatTimeOnly } from '../lib/format.js'
 import { cn } from '../ui/cn.js'
-import { Field, Input, Select } from '../ui/index.js'
+import { Button, Field, Input, Select } from '../ui/index.js'
 
 /**
  * Renders one editorial site setting, generically, from its `uiType`
@@ -128,6 +131,8 @@ interface UseSiteSettingFieldResult {
   readonly commit: (next: unknown) => Promise<void>
   readonly label: string
   readonly description: string | undefined
+  /** An example value shown while the field is empty; `undefined` when none is translated. */
+  readonly placeholder: string | undefined
 }
 
 function useSiteSettingField(
@@ -155,6 +160,9 @@ function useSiteSettingField(
     defaultValue: setting.key,
   })
   const help = t(`${translationNamespace}.field.${setting.key}.help`, { defaultValue: '' })
+  const placeholder = t(`${translationNamespace}.field.${setting.key}.placeholder`, {
+    defaultValue: '',
+  })
   // Only the read-only case says something: "Modifiable ici" under a field
   // that is plainly a field told the reader nothing, on every row.
   const provenance = canEdit ? '' : t('settings.provenanceReadOnly')
@@ -182,7 +190,11 @@ function useSiteSettingField(
       setValue(next)
       setSaved(true)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t('settings.saveError'))
+      // A refused value is said in the admin's language (with what to do), never as the server's schema message.
+      const described = describeApiError(caught, t('settings.saveError'))
+      setError(
+        described.hint === undefined ? described.message : `${described.message} ${described.hint}`,
+      )
     } finally {
       setSaving(false)
     }
@@ -196,6 +208,7 @@ function useSiteSettingField(
     commit,
     label,
     description: description === '' ? undefined : description,
+    placeholder: placeholder === '' ? undefined : placeholder,
   }
 }
 
@@ -287,6 +300,159 @@ function MediaSettingField({
   )
 }
 
+/** The most links the registry accepts for a `linkList` setting (`general.socialLinks`). */
+const LINK_LIST_MAX = 12
+
+/**
+ * One row per link — a label and an address — instead of a `Label | https://…`
+ * line typed by hand. A row with an empty label or address is not saved (it is
+ * still being typed); adding or removing a row saves at once, typing saves when
+ * the field is left.
+ */
+function LinkListEditor({
+  id,
+  describedBy,
+  value,
+  disabled,
+  onCommit,
+}: {
+  readonly id: string
+  readonly describedBy: string | undefined
+  readonly value: unknown
+  readonly disabled: boolean
+  onCommit(entries: readonly LinkListEntry[]): void
+}): JSX.Element {
+  const { t } = useTranslation()
+  const [rows, setRows] = useState<readonly LinkListEntry[]>(() =>
+    Array.isArray(value) ? value.filter(isLinkListEntry) : [],
+  )
+  useEffect(() => {
+    setRows(Array.isArray(value) ? value.filter(isLinkListEntry) : [])
+  }, [value])
+
+  const complete = (list: readonly LinkListEntry[]): readonly LinkListEntry[] =>
+    list
+      .map((row) => ({ label: row.label.trim(), url: row.url.trim() }))
+      .filter((row) => row.label !== '' && row.url !== '')
+
+  function update(index: number, patch: Partial<LinkListEntry>): void {
+    setRows((current) =>
+      current.map((row, position) => (position === index ? { ...row, ...patch } : row)),
+    )
+  }
+
+  return (
+    <div id={id} aria-describedby={describedBy} className="flex flex-col gap-2">
+      {rows.map((row, index) => (
+        // The rows have no identity of their own; their position is the key.
+        // biome-ignore lint/suspicious/noArrayIndexKey: a row is edited in place and only ever added or removed at its position.
+        <div key={index} className="flex flex-wrap items-center gap-2">
+          <Input
+            aria-label={t('settings.linkList.label', { n: index + 1 })}
+            className="min-w-0 flex-1 basis-40"
+            placeholder={t('settings.linkList.labelPlaceholder')}
+            disabled={disabled}
+            value={row.label}
+            onChange={(event) => update(index, { label: event.target.value })}
+            onBlur={() => onCommit(complete(rows))}
+          />
+          <Input
+            aria-label={t('settings.linkList.url', { n: index + 1 })}
+            className="min-w-0 flex-[2] basis-56"
+            type="url"
+            placeholder="https://"
+            disabled={disabled}
+            value={row.url}
+            onChange={(event) => update(index, { url: event.target.value })}
+            onBlur={() => onCommit(complete(rows))}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={disabled}
+            aria-label={t('settings.linkList.remove', { n: index + 1 })}
+            onClick={() => {
+              const next = rows.filter((_, position) => position !== index)
+              setRows(next)
+              onCommit(complete(next))
+            }}
+          >
+            {t('settings.linkList.removeShort')}
+          </Button>
+        </div>
+      ))}
+      <div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={disabled || rows.length >= LINK_LIST_MAX}
+          onClick={() => setRows([...rows, { label: '', url: '' }])}
+        >
+          {t('settings.linkList.add')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** The blocks a new entry may start with, as checkboxes; the saved value keeps the order they were ticked in. */
+function BlockTypesChecklist({
+  id,
+  describedBy,
+  value,
+  disabled,
+  onCommit,
+}: {
+  readonly id: string
+  readonly describedBy: string | undefined
+  readonly value: string
+  readonly disabled: boolean
+  onCommit(next: string): void
+}): JSX.Element {
+  const { t } = useTranslation()
+  const selected = value
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name !== '')
+  const library = blockLibrary()
+  const known = new Set(library.map((entry) => entry.definition.name))
+  function toggle(name: string): void {
+    const next = selected.includes(name)
+      ? selected.filter((candidate) => candidate !== name)
+      : [...selected, name]
+    onCommit(next.join(','))
+  }
+  return (
+    <fieldset
+      id={id}
+      aria-describedby={describedBy}
+      disabled={disabled}
+      className="m-0 grid grid-cols-1 gap-x-4 gap-y-1.5 border-0 p-0 sm:grid-cols-2 lg:grid-cols-3"
+    >
+      {library.map(({ definition }) => (
+        <label key={definition.name} className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={selected.includes(definition.name)}
+            onChange={() => toggle(definition.name)}
+          />
+          {blockLabel(definition, t)}
+        </label>
+      ))}
+      {selected
+        .filter((name) => !known.has(name))
+        .map((name) => (
+          <label key={name} className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input type="checkbox" checked onChange={() => toggle(name)} />
+            {name}
+          </label>
+        ))}
+    </fieldset>
+  )
+}
+
 export function SiteSettingsField({
   setting,
   canEdit,
@@ -296,14 +462,8 @@ export function SiteSettingsField({
   onDraftChange,
 }: SiteSettingsFieldProps): JSX.Element {
   const { t } = useTranslation()
-  const { value, saving, saved, error, commit, label, description } = useSiteSettingField(
-    setting,
-    canEdit,
-    onSave,
-    translationNamespace,
-    autosave,
-    onDraftChange,
-  )
+  const { value, saving, saved, error, commit, label, description, placeholder } =
+    useSiteSettingField(setting, canEdit, onSave, translationNamespace, autosave, onDraftChange)
   const fieldId = `site-setting-${setting.key}`
 
   if (setting.uiType === 'boolean') {
@@ -470,6 +630,7 @@ export function SiteSettingsField({
             <Input
               {...control}
               type="number"
+              placeholder={placeholder}
               disabled={!canEdit || saving}
               defaultValue={typeof value === 'number' ? value : 0}
               onBlur={(event) => {
@@ -493,6 +654,7 @@ export function SiteSettingsField({
               {...control}
               className={cn(TEXTAREA_CLASSES)}
               rows={3}
+              placeholder={placeholder}
               disabled={!canEdit || saving}
               defaultValue={typeof value === 'string' ? value : ''}
               onBlur={(event) => void commit(event.target.value)}
@@ -516,14 +678,33 @@ export function SiteSettingsField({
       <div className="flex flex-col gap-1">
         <Field label={label} description={description} error={error}>
           {(control) => (
-            <textarea
-              {...control}
-              className={cn(TEXTAREA_CLASSES)}
-              rows={4}
-              placeholder="X | https://x.com/yoursite"
+            <LinkListEditor
+              id={control.id}
+              describedBy={control['aria-describedby']}
+              value={value}
               disabled={!canEdit || saving}
-              defaultValue={linkListToText(value)}
-              onBlur={(event) => void commit(textToLinkList(event.target.value))}
+              onCommit={(entries) => void commit(entries)}
+            />
+          )}
+        </Field>
+        {error === null && <FieldStatus saving={saving} saved={saved} />}
+      </div>
+    )
+  }
+
+  // `uiType: 'blockTypes'` — a comma-separated list of block type names,
+  // shown as a checklist under the blocks' own labels.
+  if (setting.uiType === 'blockTypes') {
+    return (
+      <div className="flex flex-col gap-1">
+        <Field label={label} description={description} error={error}>
+          {(control) => (
+            <BlockTypesChecklist
+              id={control.id}
+              describedBy={control['aria-describedby']}
+              value={typeof value === 'string' ? value : ''}
+              disabled={!canEdit || saving}
+              onCommit={(next) => void commit(next)}
             />
           )}
         </Field>
@@ -542,6 +723,7 @@ export function SiteSettingsField({
           <Input
             {...control}
             type={inputType}
+            placeholder={placeholder}
             disabled={!canEdit || saving}
             defaultValue={typeof value === 'string' ? value : ''}
             onBlur={(event) => void commit(event.target.value)}

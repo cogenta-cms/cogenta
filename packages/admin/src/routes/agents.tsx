@@ -11,16 +11,19 @@ import {
   listAgents,
 } from '../api/agents-client.js'
 import { type GeneratedAgentIdentity, runGenerateAgentIdentity } from '../api/assist-client.js'
-import { ApiError } from '../api/client.js'
 import {
   getProviderCatalog,
   listProviders,
   type ProviderCatalogEntry,
   type ProviderSummary,
 } from '../api/providers-client.js'
+import { agentDisplayName, describeAiErrorLine, toolName } from '../ai/server-text.js'
+import { useFlash } from '../ai/use-flash.js'
 import { NoProviderNotice } from '../assist/no-provider-notice.js'
 import { useAuth } from '../auth/auth-context.js'
+import { shippedText } from '../i18n/shipped-text.js'
 import {
+  Badge,
   Button,
   Card,
   CardBody,
@@ -97,6 +100,14 @@ export const LEVEL_TO_UI: Record<string, AutonomyUiLevel> = {
   autonomous: 'autopilot',
 }
 
+/**
+ * "Let Cogenta pick": an agent whose provider is this runs on whichever
+ * provider is enabled (`orchestrator.ts` falls through to it when the named
+ * provider is not registered). `@cogenta/agents` refuses it as a provider id,
+ * so it can never be mistaken for a real one.
+ */
+export const AUTOMATIC_PROVIDER = 'auto'
+
 /** Sentinel model-select value meaning "leave the free-text model field alone" — same convention as `providers.tsx`'s `CUSTOM_MODEL`. */
 export const CUSTOM_MODEL = ''
 
@@ -153,10 +164,25 @@ function effectiveProvider(
   providers: readonly { readonly provider: string }[],
 ): string | undefined {
   const configured = providers.map((provider) => provider.provider)
-  if (model === undefined) return configured[0]
+  if (model === undefined) return [...configured].sort()[0]
   if (configured.includes(model.preferred)) return model.preferred
   if (model.fallback !== undefined && configured.includes(model.fallback)) return model.fallback
-  return [...configured].sort()[0] ?? model.preferred
+  return [...configured].sort()[0]
+}
+
+/** What the "Fournisseur" column says: the one that will answer, and when it is Cogenta's pick rather than the agent's own. */
+function providerLabel(
+  model: { readonly preferred: string; readonly fallback?: string } | undefined,
+  providers: readonly { readonly provider: string }[],
+  t: TFunction,
+): string {
+  const effective = effectiveProvider(model, providers)
+  if (effective === undefined) return t('agents.providerNone')
+  const chosenByAgent =
+    model !== undefined &&
+    (model.preferred === effective || model.fallback === effective) &&
+    model.preferred !== AUTOMATIC_PROVIDER
+  return chosenByAgent ? effective : t('agents.providerAutomaticNamed', { provider: effective })
 }
 
 export function AgentsRoute(): JSX.Element {
@@ -172,10 +198,12 @@ export function AgentsRoute(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
+  const flash = useFlash()
 
   const [creating, setCreating] = useState(false)
   const [createName, setCreateName] = useState('')
-  const [createProvider, setCreateProvider] = useState('')
+  const [createProvider, setCreateProvider] = useState(AUTOMATIC_PROVIDER)
+  const [createEnabled, setCreateEnabled] = useState(true)
   const [createModelChoice, setCreateModelChoice] = useState(CUSTOM_MODEL)
   const [createModel, setCreateModel] = useState('')
   const [createRole, setCreateRole] = useState('')
@@ -205,7 +233,7 @@ export function AgentsRoute(): JSX.Element {
       setProviders(foundProviders)
       setCatalog(foundCatalog)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agents.loadError'))
+      setError(describeAiErrorLine(caught, t, t('agents.loadError')))
     } finally {
       setLoading(false)
     }
@@ -217,21 +245,20 @@ export function AgentsRoute(): JSX.Element {
 
   const enabledProviders = useMemo(() => providers.filter((p) => p.enabled), [providers])
 
-  useEffect(() => {
-    if (createProvider === '' && enabledProviders.length > 0) {
-      setCreateProvider(enabledProviders[0]?.provider ?? '')
-    }
-  }, [enabledProviders, createProvider])
-
   async function toggle(agent: AgentSummary): Promise<void> {
     if (token === null) return
     setToggling(agent.name)
     try {
       if (agent.enabled) await disableAgent(token, agent.name)
       else await enableAgent(token, agent.name)
+      flash.show(
+        t(agent.enabled ? 'agents.nowDisabled' : 'agents.nowEnabled', {
+          name: agentDisplayName(agent.name, agent.builtin, t),
+        }),
+      )
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agents.toggleError'))
+      setError(describeAiErrorLine(caught, t, t('agents.toggleError')))
     } finally {
       setToggling(null)
     }
@@ -239,6 +266,8 @@ export function AgentsRoute(): JSX.Element {
 
   function resetCreateForm(): void {
     setCreateName('')
+    setCreateProvider(AUTOMATIC_PROVIDER)
+    setCreateEnabled(true)
     setCreateModelChoice(CUSTOM_MODEL)
     setCreateModel('')
     setCreateRole('')
@@ -284,16 +313,14 @@ export function AgentsRoute(): JSX.Element {
       setCreateSystemPrompt(result.systemPrompt ?? '')
       setGenerated(true)
     } catch (caught) {
-      setGenerateError(caught instanceof ApiError ? caught.message : t('agents.generateError'))
+      setGenerateError(describeAiErrorLine(caught, t, t('agents.generateError')))
     } finally {
       setGenerating(false)
     }
   }
 
   async function submitCreate(): Promise<void> {
-    if (token === null || createName.trim().length === 0 || createProvider.trim().length === 0) {
-      return
-    }
+    if (token === null || createName.trim().length === 0) return
     setSaving(true)
     setError(null)
     try {
@@ -311,16 +338,26 @@ export function AgentsRoute(): JSX.Element {
         },
         model: {
           preferred: createProvider,
-          ...(createModel.trim().length > 0 ? { model: createModel.trim() } : {}),
+          // A model id names a model of one vendor: meaningless when Cogenta
+          // is the one picking the vendor.
+          ...(createModel.trim().length > 0 && createProvider !== AUTOMATIC_PROVIDER
+            ? { model: createModel.trim() }
+            : {}),
         },
         tools: createTools,
         autonomy: { default: UI_TO_LEVEL[createAutonomyUi] },
+        enabled: createEnabled,
       })
+      flash.show(
+        t(createEnabled ? 'agents.createdEnabled' : 'agents.createdDisabled', {
+          name: createName.trim(),
+        }),
+      )
       resetCreateForm()
       setCreating(false)
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agents.saveError'))
+      setError(describeAiErrorLine(caught, t, t('agents.saveError')))
     } finally {
       setSaving(false)
     }
@@ -366,8 +403,8 @@ export function AgentsRoute(): JSX.Element {
                   <p className="m-0 text-sm">{t('agents.createNoProviders')}</p>
                 </Notice>
               )}
-              <div className="flex flex-wrap items-end gap-3">
-                <Field label={t('agents.name')} className="min-w-[240px]">
+              <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Field label={t('agents.name')}>
                   {(control) => (
                     <Input
                       {...control}
@@ -377,7 +414,7 @@ export function AgentsRoute(): JSX.Element {
                     />
                   )}
                 </Field>
-                <Field label={t('agents.createProvider')} className="min-w-[200px]">
+                <Field label={t('agents.createProvider')}>
                   {(control) => (
                     <Select
                       {...control}
@@ -387,52 +424,61 @@ export function AgentsRoute(): JSX.Element {
                         setCreateModelChoice(CUSTOM_MODEL)
                         setCreateModel('')
                       }}
-                      disabled={enabledProviders.length === 0}
                     >
-                      {enabledProviders.map((provider) => (
+                      <option value={AUTOMATIC_PROVIDER}>{t('agents.providerAutomatic')}</option>
+                      {providers.map((provider) => (
                         <option key={provider.provider} value={provider.provider}>
-                          {provider.provider}
+                          {provider.enabled
+                            ? provider.provider
+                            : t('agents.providerDisabledOption', { provider: provider.provider })}
                         </option>
                       ))}
                     </Select>
                   )}
                 </Field>
-                {(createCatalogEntry?.knownModels.length ?? 0) > 0 && (
-                  <Field label={t('providers.knownModel')} className="min-w-[200px]">
+                {createProvider !== AUTOMATIC_PROVIDER &&
+                  (createCatalogEntry?.knownModels.length ?? 0) > 0 && (
+                    <Field label={t('providers.knownModel')}>
+                      {(control) => (
+                        <Select
+                          {...control}
+                          value={createModelChoice}
+                          onChange={(event) => selectCreateKnownModel(event.target.value)}
+                        >
+                          <option value={CUSTOM_MODEL}>{t('providers.customModelOption')}</option>
+                          {(createCatalogEntry?.knownModels ?? []).map((modelId) => (
+                            <option key={modelId} value={modelId}>
+                              {modelId}
+                            </option>
+                          ))}
+                        </Select>
+                      )}
+                    </Field>
+                  )}
+                {createProvider !== AUTOMATIC_PROVIDER && (
+                  <Field
+                    label={t('agents.createModel')}
+                    description={t('agents.createModelHint')}
+                  >
                     {(control) => (
-                      <Select
+                      <Input
                         {...control}
-                        value={createModelChoice}
-                        onChange={(event) => selectCreateKnownModel(event.target.value)}
-                      >
-                        <option value={CUSTOM_MODEL}>{t('providers.customModelOption')}</option>
-                        {(createCatalogEntry?.knownModels ?? []).map((modelId) => (
-                          <option key={modelId} value={modelId}>
-                            {modelId}
-                          </option>
-                        ))}
-                      </Select>
+                        value={createModel}
+                        onChange={(event) => {
+                          setCreateModel(event.target.value)
+                          setCreateModelChoice(CUSTOM_MODEL)
+                        }}
+                        placeholder={t('providers.modelPlaceholder')}
+                      />
                     )}
                   </Field>
                 )}
-                <Field
-                  label={t('agents.createModel')}
-                  description={t('agents.createModelHint')}
-                  className="min-w-[200px]"
-                >
-                  {(control) => (
-                    <Input
-                      {...control}
-                      value={createModel}
-                      onChange={(event) => {
-                        setCreateModel(event.target.value)
-                        setCreateModelChoice(CUSTOM_MODEL)
-                      }}
-                      placeholder={t('providers.modelPlaceholder')}
-                    />
-                  )}
-                </Field>
               </div>
+              {createProvider === AUTOMATIC_PROVIDER && (
+                <p className="m-0 -mt-2 text-xs text-muted-foreground">
+                  {t('agents.providerAutomaticHint')}
+                </p>
+              )}
 
               <div className="flex flex-col gap-3">
                 <Field label={t('agents.identityRole')}>
@@ -537,7 +583,7 @@ export function AgentsRoute(): JSX.Element {
                         <p className="m-0 text-sm">{t('agents.generatedReview')}</p>
                       </Notice>
                     )}
-                    <div>
+                    <div className="flex flex-wrap items-center gap-3">
                       <Button
                         size="sm"
                         variant="secondary"
@@ -546,10 +592,20 @@ export function AgentsRoute(): JSX.Element {
                           createName.trim().length === 0 ||
                           createPurpose.trim().length === 0
                         }
+                        aria-describedby={
+                          createName.trim().length === 0 || createPurpose.trim().length === 0
+                            ? 'agents-generate-needs'
+                            : undefined
+                        }
                         onClick={() => void submitGenerate()}
                       >
                         {generating ? t('agents.generating') : t('agents.generateButton')}
                       </Button>
+                      {(createName.trim().length === 0 || createPurpose.trim().length === 0) && (
+                        <p id="agents-generate-needs" className="m-0 text-xs text-muted-foreground">
+                          {t('agents.generateNeeds')}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </CardBody>
@@ -570,7 +626,9 @@ export function AgentsRoute(): JSX.Element {
                           checked={createTools.includes(permission)}
                           onChange={() => setCreateTools(toggleIn(createTools, permission))}
                         />
-                        <label htmlFor={inputId}>{permission}</label>
+                        <label htmlFor={inputId} title={permission}>
+                          {toolName(permission, t)}
+                        </label>
                       </li>
                     )
                   })}
@@ -593,11 +651,18 @@ export function AgentsRoute(): JSX.Element {
                 )}
               </Field>
 
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={createEnabled}
+                  onChange={(event) => setCreateEnabled(event.target.checked)}
+                />
+                {t('agents.createEnabled')}
+              </label>
+
               <div className="flex gap-3">
                 <Button
-                  disabled={
-                    saving || createName.trim().length === 0 || createProvider.trim().length === 0
-                  }
+                  disabled={saving || createName.trim().length === 0}
                   onClick={() => void submitCreate()}
                 >
                   {t('common.save')}
@@ -623,10 +688,15 @@ export function AgentsRoute(): JSX.Element {
           <p>{error}</p>
         </Notice>
       )}
+      {flash.message !== null && (
+        <Notice tone="success" live="polite" onDismiss={flash.clear} dismissLabel={t('common.close')}>
+          <p>{flash.message}</p>
+        </Notice>
+      )}
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && error === null && (
-        <TableRoot label={t('agents.heading')}>
+        <TableRoot label={t('agents.heading')} stacked>
           <Table>
             <TableHead>
               <TableRow>
@@ -641,53 +711,60 @@ export function AgentsRoute(): JSX.Element {
             <TableBody>
               {agents.map((agent) => (
                 <TableRow key={agent.name}>
-                  <TableCell>
+                  <TableCell stack="heading">
                     <Link
                       to={`/agents/${encodeURIComponent(agent.name)}`}
                       className="font-medium text-primary underline-offset-2 hover:underline"
                     >
-                      {agent.name}
+                      {agentDisplayName(agent.name, agent.builtin, t)}
                     </Link>
-                    {/* What the agent is for, in a sentence: thirteen English
-                        names told a reader nothing about which one to open. */}
+                    {/* What the agent is for, in a sentence: thirteen names told
+                        a reader nothing about which one to open. */}
                     {agent.builtin === true && builtinPurpose(agent.name, t) !== undefined && (
-                      <p className="m-0 mt-1 max-w-md text-xs text-muted-foreground">
+                      <p className="m-0 mt-1 max-w-md text-xs font-normal text-muted-foreground">
                         {builtinPurpose(agent.name, t)}
                       </p>
                     )}
                   </TableCell>
-                  <TableCell>
-                    {agent.enabled ? t('agents.enabled') : t('agents.disabled')}
-                    {agent.enabled &&
-                      // An agent runs on its preferred provider, its
-                      // fallback, or else any configured one — so it is
-                      // only stuck when there is none at all.
-                      enabledProviders.length === 0 && (
-                        <p className="m-0 text-xs text-muted-foreground">
-                          {t('agents.providerUnavailable')}
-                        </p>
-                      )}
+                  <TableCell label={t('agents.state')}>
+                    {/* One word, once. An agent runs on its preferred
+                        provider, its fallback, or else any enabled one — so
+                        it is only stuck when there is none at all. */}
+                    {!agent.enabled ? (
+                      <Badge tone="neutral">{t('agents.disabled')}</Badge>
+                    ) : enabledProviders.length === 0 ? (
+                      <Badge tone="warning">{t('agents.enabledNoProvider')}</Badge>
+                    ) : (
+                      <Badge tone="success">{t('agents.enabled')}</Badge>
+                    )}
                   </TableCell>
-                  <TableCell>{effectiveProvider(agent.model, enabledProviders) ?? '—'}</TableCell>
-                  <TableCell>
+                  <TableCell label={t('agents.providerColumn')}>
+                    {providerLabel(agent.model, enabledProviders, t)}
+                  </TableCell>
+                  <TableCell label={t('agents.autonomy')}>
                     {t(
                       `agents.autonomyLevel.${LEVEL_TO_UI[agent.autonomy?.default ?? ''] ?? 'co-pilot'}`,
                     )}
                   </TableCell>
-                  <TableCell>
-                    {t('agents.budgetConsumption', {
-                      used: new Intl.NumberFormat(i18n.language).format(
-                        agent.usage?.tokensToday ?? 0,
-                      ),
-                      limit:
-                        agent.budget?.tokensPerDay === undefined
-                          ? t('agents.budgetNoLimit')
-                          : new Intl.NumberFormat(i18n.language).format(agent.budget.tokensPerDay),
-                    })}
+                  <TableCell label={t('agents.budget')}>
+                    {agent.budget?.tokensPerDay === undefined
+                      ? t('agents.budgetConsumptionUnlimited', {
+                          used: new Intl.NumberFormat(i18n.language).format(
+                            agent.usage?.tokensToday ?? 0,
+                          ),
+                        })
+                      : t('agents.budgetConsumption', {
+                          used: new Intl.NumberFormat(i18n.language).format(
+                            agent.usage?.tokensToday ?? 0,
+                          ),
+                          limit: new Intl.NumberFormat(i18n.language).format(
+                            agent.budget.tokensPerDay,
+                          ),
+                        })}
                   </TableCell>
-                  <TableCell>
+                  <TableCell stack="actions">
                     <Button
-                      variant={agent.enabled ? 'destructive' : 'secondary'}
+                      variant="secondary"
                       size="sm"
                       disabled={toggling === agent.name}
                       onClick={() => void toggle(agent)}

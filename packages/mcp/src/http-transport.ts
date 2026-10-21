@@ -1,8 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { JsonRpcErrorCode, jsonRpcError } from './jsonrpc.js'
+import { JsonRpcErrorCode, type JsonRpcNotification, jsonRpcError } from './jsonrpc.js'
 import {
   createCancellationRegistry,
-  handleJsonRpcPayload,
   MCP_SUPPORTED_PROTOCOL_VERSIONS,
   type McpCancellationRegistry,
   type McpServer,
@@ -10,14 +9,25 @@ import {
 
 /**
  * MCP's Streamable HTTP transport, the stateless subset of it: every message
- * is a `POST` whose reply is one JSON body. No session id is issued and no
- * SSE stream is offered (`GET` answers 405, which the specification allows),
- * so a server restart, a second replica or a load balancer changes nothing
- * for a client — each request authenticates and stands on its own.
+ * is one `POST`. No session id is issued and no standalone SSE stream is
+ * offered (`GET` answers 405, which the specification allows), so a server
+ * restart, a second replica or a load balancer changes nothing for a
+ * client — each request authenticates and stands on its own.
+ *
+ * The reply is one JSON body, except for a `tools/call` from a client that
+ * accepts `text/event-stream` (the official SDKs always do): that reply is a
+ * short SSE stream — progress notifications while the call waits (a write
+ * waiting for a human can take minutes), a keep-alive comment every 15 s so
+ * no proxy closes an idle connection, then the response. Both shapes are
+ * what the specification lets a server choose per request.
  *
  * Authentication is the caller's (`authorize`), and it runs on **every**
  * request, before the body is read: a key revoked a second ago is refused on
  * the next message, not at the next connection.
+ *
+ * One message per request: JSON-RPC batches were removed from MCP in the
+ * 2025-06-18 revision, and over HTTP a batch would turn one request — one
+ * unit of the key's per-minute quota — into thousands of tool calls.
  */
 
 export interface McpHttpAuthorization {
@@ -40,7 +50,9 @@ export interface McpHttpRefusal {
 export interface McpHttpRequestRecord {
   readonly scope: string | null
   readonly status: number
-  readonly methods: readonly string[]
+  /** The JSON-RPC method of the message, when it named a plausible one. */
+  readonly method: string | null
+  /** The tool a `tools/call` named, when it is a plausible tool name. */
   readonly tool: string | null
   readonly durationMs: number
 }
@@ -57,11 +69,16 @@ export interface McpHttpHandlerOptions {
   readonly allowOrigin?: (origin: string, request: IncomingMessage) => boolean
   /** One line per request for the operator's log — never a key, never a body. */
   readonly onRequest?: (record: McpHttpRequestRecord) => void
+  /** How often an SSE reply sends a keep-alive comment. 15 s by default. */
+  readonly keepAliveMs?: number
 }
 
 export type McpHttpHandler = (request: IncomingMessage, response: ServerResponse) => Promise<void>
 
 const DEFAULT_MAX_BODY_BYTES = 4 * 1024 * 1024
+const DEFAULT_KEEP_ALIVE_MS = 15_000
+/** What a method or tool name may look like to be logged as is — anything else is a client's free text. */
+const LOGGABLE_NAME = /^[\w./-]{1,64}$/u
 
 function send(
   response: ServerResponse,
@@ -97,49 +114,77 @@ async function readLimited(request: IncomingMessage, limit: number): Promise<Buf
   return tooLarge ? null : Buffer.concat(chunks)
 }
 
-function methodsOf(payload: unknown): { methods: string[]; tool: string | null } {
-  const messages = Array.isArray(payload) ? payload : [payload]
-  const methods: string[] = []
-  let tool: string | null = null
-  for (const message of messages) {
-    if (typeof message !== 'object' || message === null) continue
-    const method = (message as Record<string, unknown>)['method']
-    if (typeof method !== 'string') continue
-    methods.push(method)
-    const params = (message as Record<string, unknown>)['params']
-    if (method === 'tools/call' && typeof params === 'object' && params !== null) {
-      const name = (params as Record<string, unknown>)['name']
-      if (typeof name === 'string') tool = name
-    }
-  }
-  return { methods, tool }
+function describe(payload: unknown): { method: string | null; tool: string | null } {
+  if (typeof payload !== 'object' || payload === null) return { method: null, tool: null }
+  const raw = (payload as Record<string, unknown>)['method']
+  const method = typeof raw === 'string' && LOGGABLE_NAME.test(raw) ? raw : null
+  const params = (payload as Record<string, unknown>)['params']
+  const name =
+    method === 'tools/call' && typeof params === 'object' && params !== null
+      ? (params as Record<string, unknown>)['name']
+      : undefined
+  return { method, tool: typeof name === 'string' && LOGGABLE_NAME.test(name) ? name : null }
+}
+
+function acceptsEventStream(request: IncomingMessage): boolean {
+  const accept = request.headers.accept
+  return typeof accept === 'string' && accept.toLowerCase().includes('text/event-stream')
+}
+
+function isToolCall(payload: unknown): boolean {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    (payload as Record<string, unknown>)['method'] === 'tools/call' &&
+    'id' in payload
+  )
 }
 
 export function createMcpHttpHandler(options: McpHttpHandlerOptions): McpHttpHandler {
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
-  const registries = new Map<string, McpCancellationRegistry>()
+  const keepAliveMs = options.keepAliveMs ?? DEFAULT_KEEP_ALIVE_MS
+  /**
+   * One cancellation registry per caller, kept while that caller has a
+   * request in flight — counted by request, not by registered call: a
+   * `tools/call` that has not registered yet (still loading its tools) must
+   * not see its registry dropped by a `ping` finishing next to it, or its
+   * later `notifications/cancelled` would land in a fresh, empty one.
+   */
+  const scopes = new Map<string, { registry: McpCancellationRegistry; active: number }>()
 
-  function registryFor(scope: string): McpCancellationRegistry {
-    const existing = registries.get(scope)
-    if (existing !== undefined) return existing
-    const created = createCancellationRegistry()
-    registries.set(scope, created)
-    return created
+  function enter(scope: string): McpCancellationRegistry {
+    const existing = scopes.get(scope)
+    if (existing !== undefined) {
+      existing.active += 1
+      return existing.registry
+    }
+    const created = { registry: createCancellationRegistry(), active: 1 }
+    scopes.set(scope, created)
+    return created.registry
+  }
+
+  function leave(scope: string): void {
+    const entry = scopes.get(scope)
+    if (entry === undefined) return
+    entry.active -= 1
+    if (entry.active <= 0) scopes.delete(scope)
   }
 
   return async (request, response) => {
     const started = Date.now()
     let scope: string | null = null
-    let parsed: { methods: string[]; tool: string | null } = { methods: [], tool: null }
-    const finish = (status: number, body?: unknown, headers?: Readonly<Record<string, string>>) => {
-      send(response, status, body, headers)
+    let described: { method: string | null; tool: string | null } = { method: null, tool: null }
+    const record = (status: number) =>
       options.onRequest?.({
         scope,
         status,
-        methods: parsed.methods,
-        tool: parsed.tool,
+        method: described.method,
+        tool: described.tool,
         durationMs: Date.now() - started,
       })
+    const finish = (status: number, body?: unknown, headers?: Readonly<Record<string, string>>) => {
+      send(response, status, body, headers)
+      record(status)
     }
 
     if (request.method !== 'POST') {
@@ -157,7 +202,11 @@ export function createMcpHttpHandler(options: McpHttpHandlerOptions): McpHttpHan
       request.resume()
       finish(
         403,
-        jsonRpcError(null, JsonRpcErrorCode.INVALID_REQUEST, 'This origin may not call the MCP endpoint.'),
+        jsonRpcError(
+          null,
+          JsonRpcErrorCode.INVALID_REQUEST,
+          'This origin may not call the MCP endpoint.',
+        ),
       )
       return
     }
@@ -173,7 +222,7 @@ export function createMcpHttpHandler(options: McpHttpHandlerOptions): McpHttpHan
         jsonRpcError(
           null,
           JsonRpcErrorCode.INVALID_REQUEST,
-          `Unsupported MCP-Protocol-Version "${version}". Supported: ${MCP_SUPPORTED_PROTOCOL_VERSIONS.join(', ')}.`,
+          `Unsupported MCP-Protocol-Version. Supported: ${MCP_SUPPORTED_PROTOCOL_VERSIONS.join(', ')}.`,
         ),
       )
       return
@@ -196,7 +245,11 @@ export function createMcpHttpHandler(options: McpHttpHandlerOptions): McpHttpHan
       request.resume()
       finish(
         415,
-        jsonRpcError(null, JsonRpcErrorCode.INVALID_REQUEST, 'Send the message as application/json.'),
+        jsonRpcError(
+          null,
+          JsonRpcErrorCode.INVALID_REQUEST,
+          'Send the message as application/json.',
+        ),
       )
       return
     }
@@ -221,31 +274,78 @@ export function createMcpHttpHandler(options: McpHttpHandlerOptions): McpHttpHan
       finish(400, jsonRpcError(null, JsonRpcErrorCode.PARSE_ERROR, 'Invalid JSON.'))
       return
     }
-    parsed = methodsOf(payload)
+    if (Array.isArray(payload)) {
+      finish(
+        400,
+        jsonRpcError(
+          null,
+          JsonRpcErrorCode.INVALID_REQUEST,
+          'Send one JSON-RPC message per request: batches are not accepted over HTTP.',
+        ),
+      )
+      return
+    }
+    described = describe(payload)
 
     // A client that gives up on a call (closes the request before the
     // reply) cancels it: an approval decided after that no longer executes.
     const connection = new AbortController()
+    let replied = false
     const onClose = () => {
-      if (!response.writableEnded) connection.abort('the client closed the request')
+      if (!replied) connection.abort('the client closed the request')
     }
     response.on('close', onClose)
 
-    const registry = registryFor(scope)
+    const registry = enter(scope)
+    const streamed = isToolCall(payload) && acceptsEventStream(request)
+    let keepAlive: NodeJS.Timeout | undefined
+    const writeEvent = (message: unknown): void => {
+      if (response.writableEnded || response.destroyed) return
+      response.write(`event: message\ndata: ${JSON.stringify(message)}\n\n`)
+    }
+    if (streamed) {
+      response.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-store',
+        // nginx buffers proxied responses unless told not to.
+        'x-accel-buffering': 'no',
+      })
+      keepAlive = setInterval(() => {
+        if (!response.writableEnded && !response.destroyed) response.write(': keep-alive\n\n')
+      }, keepAliveMs)
+      keepAlive.unref?.()
+    }
+
     try {
-      const reply = await handleJsonRpcPayload(authorization.server, payload, {
+      const reply = await authorization.server.handle(payload, {
         signal: connection.signal,
         cancellations: registry,
+        ...(streamed
+          ? { notify: (notification: JsonRpcNotification) => writeEvent(notification) }
+          : {}),
       })
-      if (connection.signal.aborted) return
+      replied = true
+      // 499, nginx's "client closed request": logged, never sent — nobody is listening.
+      if (connection.signal.aborted) {
+        record(499)
+        return
+      }
+      if (streamed) {
+        if (reply !== null) writeEvent(reply)
+        response.end()
+        record(200)
+        return
+      }
       if (reply === null) {
         finish(202)
         return
       }
       finish(200, reply)
     } finally {
+      replied = true
+      if (keepAlive !== undefined) clearInterval(keepAlive)
       response.off('close', onClose)
-      if (registry.size() === 0) registries.delete(scope)
+      leave(scope)
     }
   }
 }

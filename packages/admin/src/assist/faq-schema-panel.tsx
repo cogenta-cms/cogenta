@@ -4,8 +4,8 @@ import type { FaqDraft, SchemaDraft } from '../api/assist-client.js'
 import { getAssistCapabilities, runFaqDraft, runSchemaOrgDraft } from '../api/assist-client.js'
 import type { ContentBlock } from '../api/content-client.js'
 import { describeApiError } from '../api/describe-error.js'
-import { Button, Card, CardBody, CardHeader, CardTitle, Label, Notice } from '../ui/index.js'
 import { freshKey } from '../rich-text/portable-text.js'
+import { Button, Card, CardBody, CardHeader, CardTitle, Label, Notice } from '../ui/index.js'
 
 /**
  * `assist.faq_draft` and `assist.schema_org_draft` given a screen — both
@@ -236,4 +236,17 @@ export function FaqSchemaPanel({
       </CardBody>
     </Card>
   )
+}
+
+/** A single-paragraph rich-text document from a plain-text answer — contract A's minimum valid shape, per `packages/blocks/src/rich-text.ts`. */
+function paragraphOf(text: string): readonly unknown[] {
+  return [
+    {
+      _key: freshKey(),
+      _type: 'block',
+      style: 'normal',
+      children: [{ _key: freshKey(), _type: 'span', text, marks: [] }],
+      markDefs: [],
+    },
+  ]
 }

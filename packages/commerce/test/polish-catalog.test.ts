@@ -282,7 +282,7 @@ describe('finding a variant by typing', () => {
       { method: 'GET', path: '/api/commerce/variants/search', query: { q: 'mug' } },
       NOBODY,
     )
-    expect(denied.status).toBe(403)
+    expect(denied.status).toBe(401)
   })
 })
 

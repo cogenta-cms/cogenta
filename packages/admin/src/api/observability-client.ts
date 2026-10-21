@@ -32,6 +32,11 @@ export interface ObservabilitySnapshot {
   readonly enabled: boolean
   readonly traces: readonly ObservabilityTrace[]
   readonly logs: readonly ObservabilityLog[]
+  /** Where traces are exported (OTLP), as the running process resolved it at startup. */
+  readonly export?: {
+    readonly endpoint: string | null
+    readonly source: 'config' | 'setting' | null
+  }
 }
 
 /** Admin-only on the server; a non-admin caller gets `ApiError` with a 403. */

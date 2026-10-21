@@ -14,9 +14,9 @@ import { UploadForm } from '../media/upload-form.js'
 import { useUploadQueue } from '../media/upload-queue.js'
 import '../styles/entry-picker.css'
 import '../styles/media.css'
+import { describeApiError } from '../api/describe-error.js'
 import { cn } from '../ui/cn.js'
 import { Button, Input, Label, Modal, Select } from '../ui/index.js'
-import { describeApiError } from '../api/describe-error.js'
 
 /**
  * The reusable media picker (fiche 03 task 3): browse-and-search the media
@@ -316,6 +316,7 @@ export function MediaPicker({
         onOpenChange={setBrowsing}
         title={t('fields.mediaDialogTitle')}
         closeLabel={t('common.cancel')}
+        className="w-[min(46rem,calc(100vw-2rem))]"
       >
         {browsing && <BrowsePanel token={token} accept={accept} selected={value} onPick={pick} />}
       </Modal>
@@ -445,7 +446,14 @@ function BrowsePanel({
         </div>
       </form>
 
-      <Button type="button" variant="ghost" size="sm" onClick={() => setUploading((v) => !v)}>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="self-start"
+        aria-expanded={uploading}
+        onClick={() => setUploading((v) => !v)}
+      >
         {t('fields.mediaUploadToggle')}
       </Button>
       {uploading && (
@@ -480,6 +488,11 @@ function BrowsePanel({
                   type="button"
                   disabled={already}
                   onClick={() => onPick(asset)}
+                  title={
+                    asset.width !== null && asset.height !== null
+                      ? `${asset.filename} — ${asset.width} × ${asset.height}${asset.alt === '' ? '' : ` — ${asset.alt}`}`
+                      : asset.filename
+                  }
                   className={cn('media-grid__item', already && 'media-picker__result--picked')}
                 >
                   <MediaThumbnail

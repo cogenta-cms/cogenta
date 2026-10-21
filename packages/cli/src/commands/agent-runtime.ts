@@ -27,6 +27,9 @@ import {
   createDepsScanTool,
   createDocumentExtractTool,
   createFileAgentConversationStore,
+  builtinPromptTemplateSeeds,
+  createFileTraceStore,
+  type TraceStore,
   createFileAgentDeclarationStore,
   createFileAgentSkillStore,
   createFilePromptTemplateStore,
@@ -76,7 +79,7 @@ import type {
   ProviderRegistryLike,
 } from '@cogenta/api'
 import type { AuditLog } from '@cogenta/auth'
-import type { Logger, MediaStore } from '@cogenta/core'
+import { CogentaError, type Logger, type MediaStore } from '@cogenta/core'
 import { buildMcpToolDefinitions, type McpConnectionStore } from '@cogenta/mcp'
 import { buildPath, type CollectionDefinition, type SiteSettingsStore } from '@cogenta/schema'
 
@@ -128,6 +131,9 @@ export const PROVIDERS_SUBDIR = 'providers'
  */
 const PROMPT_TEMPLATES_SUBDIR = 'prompt-templates'
 const CONVERSATIONS_SUBDIR = 'conversations'
+const TRACES_SUBDIR = 'agent-traces'
+/** How long a finished run stays in the agent's run list. */
+const TRACE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 export interface BuildAgentRuntimeOptions {
   /** `.cogenta/agents-runtime` under the project root, by convention — see `runServe`. */
@@ -276,6 +282,8 @@ export interface AgentRuntimeAssembly {
   readonly skillRegistry: AgentSkillRegistryLike
   /** `/api/agents/:name/conversation` — one file store, same tier as the agent/skill/provider file stores below (R1). */
   readonly conversations: AgentConversationStoreLike
+  /** The recent runs of each agent, listed on its page — one JSON file per run, thirty days. */
+  readonly traces: TraceStore
   /** `/api/prompt-templates` (fiche 45) — the same store the assistant's `assist.*` tools resolve their instruction text against, so an edit here really does change what the next tool call sends the model. */
   readonly promptTemplateRegistry: PromptTemplateRegistryLike
   /**
@@ -761,12 +769,40 @@ function providerCatalogSummary(): readonly {
 function createPromptTemplateRegistryAdapter(
   store: PromptTemplateStore,
 ): PromptTemplateRegistryLike {
+  // A shipped template is identified by the id its name slugs to — the same
+  // rule `ensureBuiltinPromptTemplates` seeded it under.
+  const slugOf = (name: string): string =>
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gu, '-')
+      .replace(/^-|-$/gu, '')
+  const seeds = new Map(builtinPromptTemplateSeeds().map((seed) => [slugOf(seed.name), seed]))
+  const withOriginal = <T extends { readonly id: string; readonly builtin: boolean }>(
+    template: T,
+  ): T & { readonly originalTemplate?: string } => {
+    const seed = template.builtin ? seeds.get(template.id) : undefined
+    return seed === undefined ? template : { ...template, originalTemplate: seed.template }
+  }
   return {
-    list: () => store.list(),
-    get: (id) => store.get(id),
+    list: async () => (await store.list()).map(withOriginal),
+    get: async (id) => {
+      const found = await store.get(id)
+      return found === undefined ? undefined : withOriginal(found)
+    },
     create: (input) => store.create(input),
-    update: (id, patch) => store.update(id, patch),
+    update: async (id, patch) => withOriginal(await store.update(id, patch)),
     remove: (id) => store.remove(id),
+    async reset(id) {
+      const seed = seeds.get(id)
+      if (seed === undefined) {
+        throw new CogentaError({
+          code: 'PROMPT_TEMPLATE_UNKNOWN',
+          message: `"${id}" is not a template Cogenta ships, so there is no original to put back.`,
+          hint: 'Only the built-in prompts can be reset.',
+        })
+      }
+      return withOriginal(await store.update(id, seed))
+    },
   }
 }
 
@@ -872,6 +908,8 @@ export async function buildAgentRuntime(
   const conversationStore = createFileAgentConversationStore({
     dir: join(options.dataDir, CONVERSATIONS_SUBDIR),
   })
+  const traceStore = createFileTraceStore({ dir: join(options.dataDir, TRACES_SUBDIR) })
+  void traceStore.prune(TRACE_RETENTION_MS).catch(() => undefined)
 
   await ensureBuiltinAgents(agentStore)
   await ensureBuiltinAgentSkills(skillStore)
@@ -946,6 +984,7 @@ export async function buildAgentRuntime(
     approvalQueue,
     site: options.site,
     killSwitchFor,
+    traceStore,
   })
 
   const agentRunner: AgentRunnerLike = {
@@ -1021,6 +1060,7 @@ export async function buildAgentRuntime(
     skillRegistry,
     promptTemplateRegistry,
     conversations: conversationStore,
+    traces: traceStore,
     approvalQueue,
     summary,
     refreshMcpTools,

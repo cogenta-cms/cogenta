@@ -288,6 +288,34 @@ describe('createSiteSettingsStore (sqlite)', () => {
   // never free text: the scheduled task that reads it only compares it
   // against a fixed `UpdateBump` union, so an unvalidated typo here must be
   // impossible to write in the first place.
+  describe('observability.otlpEndpoint', () => {
+    it('is empty until an admin writes one, and accepts an http(s) address', async () => {
+      expect(
+        (await store.get('observability.otlpEndpoint', SITE_SETTINGS_SITE_SCOPE))?.value ?? '',
+      ).toBe('')
+      const written = await store.set(
+        'observability.otlpEndpoint',
+        SITE_SETTINGS_SITE_SCOPE,
+        'https://otlp.example.net/v1/traces',
+        null,
+      )
+      expect(written.value).toBe('https://otlp.example.net/v1/traces')
+      await store.set('observability.otlpEndpoint', SITE_SETTINGS_SITE_SCOPE, '', null)
+    })
+
+    it('refuses an address that is not http(s), or that carries a password (rule R7)', async () => {
+      for (const value of [
+        'not a url',
+        'ftp://example.net/x',
+        'https://user:secret@example.net/x',
+      ]) {
+        await expect(
+          store.set('observability.otlpEndpoint', SITE_SETTINGS_SITE_SCOPE, value, null),
+        ).rejects.toMatchObject({ code: 'SITE_SETTING_INVALID' })
+      }
+    })
+  })
+
   describe('the updates group', () => {
     it('is off by default until an admin writes a value', async () => {
       expect(await store.get('updates.autoUpdatePolicy', SITE_SETTINGS_SITE_SCOPE)).toBeNull()

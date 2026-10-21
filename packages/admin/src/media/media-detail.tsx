@@ -1,6 +1,7 @@
 import { type ChangeEvent, type FormEvent, type JSX, useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { describeApiError } from '../api/describe-error.js'
 import {
   deleteMedia,
   type ExifData,
@@ -16,23 +17,10 @@ import {
 } from '../api/media-client.js'
 import { formatDateTime } from '../lib/format.js'
 import { fieldLabel } from '../schema/field-label.js'
-import { Button } from '../ui/index.js'
+import { Button, CopyButton, Field, FileButton, Input, Label, Notice, Select } from '../ui/index.js'
 import { FocalPointEditor } from './focal-point-editor.js'
+import { formatBytes } from './format-bytes.js'
 import { ImageEditor } from './image-editor.js'
-import { describeApiError } from '../api/describe-error.js'
-
-/** `1.2 KB`, `3.4 MB` — binary units, one decimal past the first, matching what a file manager shows. */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let value = bytes / 1024
-  let unitIndex = 0
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex += 1
-  }
-  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unitIndex]}`
-}
 
 /**
  * The chrome around this panel — a heading naming the asset and a way to
@@ -93,8 +81,6 @@ export function MediaDetail({
   const [replacing, setReplacing] = useState(false)
   const [editingImage, setEditingImage] = useState(false)
   const [replaceError, setReplaceError] = useState<string | null>(null)
-
-  const [copied, setCopied] = useState(false)
 
   /**
    * The asset as the single-asset read describes it, which is the only read
@@ -274,282 +260,303 @@ export function MediaDetail({
     }
   }
 
-  async function copyUrl(url: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(url)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard access can be refused by the browser/environment — the URL
-      // is still shown as selectable text, so nothing is actually lost.
-    }
-  }
-
   const publicUrl =
     asset.kind === 'image' ? `${window.location.origin}/_image?id=${asset.id}` : null
 
   return (
-    <div className="media-detail flex flex-col gap-4">
-      {asset.kind === 'image' &&
-        (editingImage ? (
-          <ImageEditor
-            token={token}
-            asset={detail}
-            onDone={(updated) => {
-              setEditingImage(false)
-              onChange(updated)
-            }}
-            onCancel={() => setEditingImage(false)}
-          />
-        ) : (
-          <>
-            <FocalPointEditor
-              token={token}
-              id={asset.id}
-              alt={asset.alt}
-              focal={asset.focal}
-              version={asset.contentHash}
-              onChange={(focal) => onChange({ ...asset, focal })}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => setEditingImage(true)}
+    <div className="media-detail flex flex-col gap-5">
+      {asset.kind === 'image' && editingImage ? (
+        <ImageEditor
+          token={token}
+          asset={detail}
+          onDone={(updated) => {
+            setEditingImage(false)
+            onChange(updated)
+          }}
+          onCancel={() => setEditingImage(false)}
+        />
+      ) : (
+        <div className="grid min-w-0 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col gap-4">
+            {asset.kind === 'image' && (
+              <>
+                <FocalPointEditor
+                  token={token}
+                  id={asset.id}
+                  alt={asset.alt}
+                  focal={asset.focal}
+                  version={asset.contentHash}
+                  onChange={(focal) => onChange({ ...asset, focal })}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setEditingImage(true)}
+                  >
+                    {t('imageEditor.open')}
+                  </Button>
+                  {asset.edited === true && (
+                    <span className="text-sm text-muted-foreground">
+                      {t('imageEditor.editedBadge')}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+
+            <dl className="m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+              {asset.width !== null && asset.height !== null && (
+                <>
+                  <dt className="text-muted-foreground">{t('media.dimensionsLabel')}</dt>
+                  <dd className="m-0">
+                    {asset.width} × {asset.height}
+                  </dd>
+                </>
+              )}
+              <dt className="text-muted-foreground">{t('media.sizeLabel')}</dt>
+              <dd className="m-0">{formatBytes(asset.size, t, i18n.language)}</dd>
+              <dt className="text-muted-foreground">{t('media.typeLabel')}</dt>
+              <dd className="m-0 [overflow-wrap:anywhere]">{asset.mimeType}</dd>
+              <dt className="text-muted-foreground">{t('media.createdLabel')}</dt>
+              <dd className="m-0">{formatDateTime(asset.createdAt, { locale: i18n.language })}</dd>
+              {exif !== null && (exif.make !== null || exif.model !== null) && (
+                <>
+                  <dt className="text-muted-foreground">{t('media.exifCameraLabel')}</dt>
+                  <dd className="m-0">{[exif.make, exif.model].filter(Boolean).join(' ')}</dd>
+                </>
+              )}
+              {exif?.takenAt != null && (
+                <>
+                  <dt className="text-muted-foreground">{t('media.exifTakenAtLabel')}</dt>
+                  <dd className="m-0">{formatDateTime(exif.takenAt, { locale: i18n.language })}</dd>
+                </>
+              )}
+            </dl>
+
+            {publicUrl !== null && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`${altId}-url`}>{t('media.publicUrlLabel')}</Label>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Input id={`${altId}-url`} type="text" readOnly value={publicUrl} />
+                  <CopyButton
+                    value={publicUrl}
+                    label={t('media.copyUrl')}
+                    copiedLabel={t('media.copied')}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-4">
+            <form className="flex flex-col gap-3" onSubmit={(event) => void save(event)}>
+              {!decorative && (
+                <Field label={t('media.altLabel')}>
+                  {(control) => (
+                    <Input
+                      {...control}
+                      type="text"
+                      required={!decorative}
+                      value={alt}
+                      onChange={(event) => setAlt(event.target.value)}
+                    />
+                  )}
+                </Field>
+              )}
+
+              <label
+                htmlFor={decorativeId}
+                className="flex items-center gap-2 text-sm font-medium text-foreground"
               >
-                {t('imageEditor.open')}
-              </Button>
-              {asset.edited === true && (
-                <span className="text-sm text-muted-foreground">
-                  {t('imageEditor.editedBadge')}
-                </span>
+                <input
+                  id={decorativeId}
+                  type="checkbox"
+                  checked={decorative}
+                  onChange={(event) => setDecorative(event.target.checked)}
+                />
+                {t('media.decorativeLabel')}
+              </label>
+
+              {decorative && (
+                <Field label={t('media.justificationLabel')}>
+                  {(control) => (
+                    <Input
+                      {...control}
+                      type="text"
+                      required={decorative}
+                      value={justification}
+                      onChange={(event) => setJustification(event.target.value)}
+                    />
+                  )}
+                </Field>
+              )}
+
+              {error !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{error}</p>
+                </Notice>
+              )}
+
+              <div>
+                <Button type="submit" disabled={saving}>
+                  {t('media.saveButton')}
+                </Button>
+              </div>
+            </form>
+
+            <div className="flex flex-col gap-1.5 border-t border-border pt-4">
+              <Label htmlFor={folderSelectId}>{t('media.folderLabel')}</Label>
+              <Select
+                id={folderSelectId}
+                value={asset.folderId ?? ''}
+                disabled={movingFolder}
+                onChange={(event) => void moveToFolder(event)}
+              >
+                <option value="">{t('media.unclassified')}</option>
+                {folders.map((folder) => (
+                  <option key={folder.id} value={folder.id}>
+                    {'—'.repeat(folder.path.split('/').filter(Boolean).length - 1)} {folder.name}
+                  </option>
+                ))}
+              </Select>
+              {folderError !== null && (
+                <p role="alert" className="m-0 text-xs font-medium text-destructive">
+                  {folderError}
+                </p>
               )}
             </div>
-          </>
-        ))}
 
-      <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-        {asset.width !== null && asset.height !== null && (
-          <>
-            <dt className="text-muted-foreground">{t('media.dimensionsLabel')}</dt>
-            <dd className="m-0">
-              {asset.width} × {asset.height}
-            </dd>
-          </>
-        )}
-        <dt className="text-muted-foreground">{t('media.sizeLabel')}</dt>
-        <dd className="m-0">{formatBytes(asset.size)}</dd>
-        <dt className="text-muted-foreground">{t('media.typeLabel')}</dt>
-        <dd className="m-0">{asset.mimeType}</dd>
-        <dt className="text-muted-foreground">{t('media.createdLabel')}</dt>
-        <dd className="m-0">{formatDateTime(asset.createdAt, { locale: i18n.language })}</dd>
-      </dl>
-
-      {exif !== null && (exif.make !== null || exif.model !== null || exif.takenAt !== null) && (
-        <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-          {(exif.make !== null || exif.model !== null) && (
-            <>
-              <dt className="text-muted-foreground">{t('media.exifCameraLabel')}</dt>
-              <dd className="m-0">{[exif.make, exif.model].filter(Boolean).join(' ')}</dd>
-            </>
-          )}
-          {exif.takenAt !== null && (
-            <>
-              <dt className="text-muted-foreground">{t('media.exifTakenAtLabel')}</dt>
-              <dd className="m-0">{formatDateTime(exif.takenAt, { locale: i18n.language })}</dd>
-            </>
-          )}
-        </dl>
-      )}
-
-      {publicUrl !== null && (
-        <div className="field">
-          <label htmlFor={`${altId}-url`}>{t('media.publicUrlLabel')}</label>
-          <div className="flex gap-2">
-            <input id={`${altId}-url`} type="text" readOnly value={publicUrl} />
-            <button type="button" onClick={() => void copyUrl(publicUrl)}>
-              {copied ? t('media.copied') : t('media.copyUrl')}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="field">
-        <label htmlFor={folderSelectId}>{t('media.folderLabel')}</label>
-        <select
-          id={folderSelectId}
-          value={asset.folderId ?? ''}
-          disabled={movingFolder}
-          onChange={(event) => void moveToFolder(event)}
-        >
-          <option value="">{t('media.unclassified')}</option>
-          {folders.map((folder) => (
-            <option key={folder.id} value={folder.id}>
-              {'—'.repeat(folder.path.split('/').filter(Boolean).length - 1)} {folder.name}
-            </option>
-          ))}
-        </select>
-        {folderError !== null && (
-          <p role="alert" className="entry-form__error">
-            {folderError}
-          </p>
-        )}
-      </div>
-
-      <div className="field">
-        <span id={`${tagInputId}-label`}>{t('media.tagsLabel')}</span>
-        <ul aria-labelledby={`${tagInputId}-label`} className="m-0 flex flex-wrap gap-1.5 p-0">
-          {asset.tags.map((tag) => (
-            <li key={tag} className="list-none">
-              <button
-                type="button"
-                disabled={tagBusy}
-                onClick={() => void removeTag(tag)}
-                aria-label={t('media.removeTag', { tag })}
+            <div className="flex flex-col gap-1.5">
+              <span id={`${tagInputId}-label`} className="text-sm font-medium text-foreground">
+                {t('media.tagsLabel')}
+              </span>
+              <ul
+                aria-labelledby={`${tagInputId}-label`}
+                className="m-0 flex list-none flex-wrap gap-1.5 p-0"
               >
-                {tag} ×
-              </button>
-            </li>
-          ))}
-          {asset.tags.length === 0 && (
-            <li className="list-none text-sm text-muted-foreground">{t('media.noTags')}</li>
-          )}
-        </ul>
-        <form className="flex gap-2" onSubmit={(event) => void addTag(event)}>
-          <label className="sr-only" htmlFor={tagInputId}>
-            {t('media.newTagLabel')}
-          </label>
-          <input
-            id={tagInputId}
-            type="text"
-            value={tagDraft}
-            disabled={tagBusy}
-            onChange={(event) => setTagDraft(event.target.value)}
-          />
-          <button type="submit" disabled={tagBusy || tagDraft.trim().length === 0}>
-            {t('media.addTag')}
-          </button>
-        </form>
-      </div>
-
-      <div className="field">
-        <span>{t('media.usageLabel')}</span>
-        {usageError && <p>{t('media.usageError')}</p>}
-        {usage !== null && usage.matches.length === 0 && <p>{t('media.usageNone')}</p>}
-        {usage !== null && usage.matches.length > 0 && (
-          <ul className="m-0 flex flex-col gap-1 p-0 text-sm">
-            {usage.matches.map((match) => (
-              <li key={`${match.collection}-${match.entryId}-${match.at}`} className="list-none">
-                {/* The entry, reachable. This list is read by someone about to
-                    delete a medium, deciding whether to; "post · Reading on
-                    the 7:52 · coverImage" told them where it is used and left
-                    them to find it by hand. */}
-                <Link
-                  className="text-primary hover:underline"
-                  to={`/collections/${encodeURIComponent(match.collection)}/${encodeURIComponent(match.entryId)}`}
+                {asset.tags.map((tag) => (
+                  <li key={tag}>
+                    <button
+                      type="button"
+                      disabled={tagBusy}
+                      onClick={() => void removeTag(tag)}
+                      aria-label={t('media.removeTag', { tag })}
+                      className="cursor-pointer rounded-full border border-border bg-muted px-2.5 py-0.5 font-sans text-xs text-foreground hover:bg-accent"
+                    >
+                      {tag} ×
+                    </button>
+                  </li>
+                ))}
+                {asset.tags.length === 0 && (
+                  <li className="text-sm text-muted-foreground">{t('media.noTags')}</li>
+                )}
+              </ul>
+              <form className="flex items-center gap-2" onSubmit={(event) => void addTag(event)}>
+                <label className="sr-only" htmlFor={tagInputId}>
+                  {t('media.newTagLabel')}
+                </label>
+                <Input
+                  id={tagInputId}
+                  type="text"
+                  value={tagDraft}
+                  disabled={tagBusy}
+                  onChange={(event) => setTagDraft(event.target.value)}
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="secondary"
+                  disabled={tagBusy || tagDraft.trim().length === 0}
                 >
-                  {match.title}
-                </Link>{' '}
-                <span className="text-muted-foreground">
-                  {t('media.usageItemAt', { at: placeOf(match.at, t) })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {usage?.truncated === true && <p>{t('media.usageTruncated')}</p>}
-      </div>
+                  {t('media.addTag')}
+                </Button>
+              </form>
+            </div>
 
-      <div className="field">
-        <label htmlFor={replaceFileId}>{t('media.replaceFileLabel')}</label>
-        <input
-          id={replaceFileId}
-          type="file"
-          disabled={replacing}
-          onChange={(event) => void replaceFile(event)}
-        />
-        {replacing && <p>{t('media.replacing')}</p>}
-        {replaceError !== null && (
-          <p role="alert" className="entry-form__error">
-            {replaceError}
-          </p>
-        )}
-      </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-foreground">{t('media.usageLabel')}</span>
+              {usageError && <p className="m-0 text-sm">{t('media.usageError')}</p>}
+              {usage !== null && usage.matches.length === 0 && (
+                <p className="m-0 text-sm text-muted-foreground">{t('media.usageNone')}</p>
+              )}
+              {usage !== null && usage.matches.length > 0 && (
+                <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+                  {usage.matches.map((match) => (
+                    <li key={`${match.collection}-${match.entryId}-${match.at}`}>
+                      {/* The entry, reachable. This list is read by someone about to
+                          delete a medium, deciding whether to; "post · Reading on
+                          the 7:52 · coverImage" told them where it is used and left
+                          them to find it by hand. */}
+                      <Link
+                        className="text-primary hover:underline"
+                        to={`/collections/${encodeURIComponent(match.collection)}/${encodeURIComponent(match.entryId)}`}
+                      >
+                        {match.title}
+                      </Link>{' '}
+                      <span className="text-muted-foreground">
+                        {t('media.usageItemAt', { at: placeOf(match.at, t) })}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {usage?.truncated === true && (
+                <p className="m-0 text-sm">{t('media.usageTruncated')}</p>
+              )}
+            </div>
 
-      <form onSubmit={(event) => void save(event)}>
-        {!decorative && (
-          <div className="field">
-            <label htmlFor={altId}>{t('media.altLabel')}</label>
-            <input
-              id={altId}
-              type="text"
-              required={!decorative}
-              value={alt}
-              onChange={(event) => setAlt(event.target.value)}
-            />
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={replaceFileId}>{t('media.replaceFileLabel')}</Label>
+              <FileButton
+                id={replaceFileId}
+                size="sm"
+                disabled={replacing}
+                label={t('common.chooseFile')}
+                emptyLabel={t('common.noFileChosen')}
+                onChange={(event) => void replaceFile(event)}
+              />
+              {replacing && <p className="m-0 text-sm">{t('media.replacing')}</p>}
+              {replaceError !== null && (
+                <p role="alert" className="m-0 text-xs font-medium text-destructive">
+                  {replaceError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 border-t border-border pt-4">
+              {confirmingDelete && (
+                <p role="alert" className="m-0 text-sm">
+                  {usage !== null && usage.matches.length > 0
+                    ? t('media.deleteUsageWarning', { count: usage.matches.length })
+                    : t('media.deleteConfirmBody')}
+                </p>
+              )}
+              <div>
+                <Button
+                  type="button"
+                  variant={confirmingDelete ? 'destructive' : 'secondary'}
+                  disabled={deleting}
+                  onClick={() => {
+                    if (!confirmingDelete) {
+                      setConfirmingDelete(true)
+                      return
+                    }
+                    void remove()
+                  }}
+                >
+                  {deleting
+                    ? t('media.deleting')
+                    : confirmingDelete
+                      ? t('media.deleteConfirmAction')
+                      : t('media.deleteButton')}
+                </Button>
+              </div>
+            </div>
           </div>
-        )}
-
-        <div className="field field--checkbox">
-          <input
-            id={decorativeId}
-            type="checkbox"
-            checked={decorative}
-            onChange={(event) => setDecorative(event.target.checked)}
-          />
-          <label htmlFor={decorativeId}>{t('media.decorativeLabel')}</label>
         </div>
-
-        {decorative && (
-          <div className="field">
-            <label htmlFor={justificationId}>{t('media.justificationLabel')}</label>
-            <input
-              id={justificationId}
-              type="text"
-              required={decorative}
-              value={justification}
-              onChange={(event) => setJustification(event.target.value)}
-            />
-          </div>
-        )}
-
-        {error !== null && (
-          <p role="alert" className="entry-form__error">
-            {error}
-          </p>
-        )}
-
-        <button type="submit" disabled={saving}>
-          {t('media.saveButton')}
-        </button>
-      </form>
-
-      {confirmingDelete && (
-        <p role="alert" className="text-sm">
-          {usage !== null && usage.matches.length > 0
-            ? t('media.deleteUsageWarning', { count: usage.matches.length })
-            : t('media.deleteConfirmBody')}
-        </p>
       )}
-
-      <button
-        type="button"
-        disabled={deleting}
-        onClick={() => {
-          if (!confirmingDelete) {
-            setConfirmingDelete(true)
-            return
-          }
-          void remove()
-        }}
-      >
-        {deleting
-          ? t('media.deleting')
-          : confirmingDelete
-            ? t('media.deleteConfirmAction')
-            : t('media.deleteButton')}
-      </button>
     </div>
   )
 }

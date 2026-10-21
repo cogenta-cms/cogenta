@@ -1,5 +1,6 @@
 import { type FormEvent, type JSX, type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { localizeProgress, toolName } from '../ai/server-text.js'
 import type { AgentConversationTurn } from '../api/agents-client.js'
 import { Badge, Button, Notice } from '../ui/index.js'
 import type { UseAgentConversation } from './use-agent-conversation.js'
@@ -98,7 +99,9 @@ export function AgentChatFeed({
             aria-live="polite"
             data-testid="agent-chat-progress"
           >
-            {progress.at(-1) ?? t('agentChat.thinking')}
+            {progress.length === 0
+              ? t('agentChat.thinking')
+              : localizeProgress(progress.at(-1) ?? '', t)}
           </p>
         )}
       </div>
@@ -168,8 +171,8 @@ function ChatBubble({
             <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
               {turn.toolCalls.map((call, index) => (
                 <li key={`${call.name}-${index}`}>
-                  <Badge tone="neutral" className="font-mono text-[0.7rem]">
-                    {call.name}
+                  <Badge tone="neutral" className="text-[0.7rem]" title={call.name}>
+                    {toolName(call.name, t)}
                   </Badge>
                 </li>
               ))}

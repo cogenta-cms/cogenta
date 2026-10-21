@@ -23,7 +23,7 @@ import { cn } from './cn.js'
  */
 export const buttonVariants = cva(
   'inline-flex items-center justify-center gap-2 appearance-none cursor-pointer select-none ' +
-    'whitespace-nowrap rounded-full border font-sans font-medium leading-none ' +
+    'whitespace-nowrap no-underline rounded-full border font-sans font-medium leading-none ' +
     'transition-all duration-200 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 ' +
     'focus-visible:outline-ring active:scale-[0.97] ' +
     'disabled:pointer-events-none disabled:opacity-60 disabled:cursor-default disabled:active:scale-100',

@@ -5,12 +5,12 @@ import {
   getAssistCapabilities,
   runAssistTool,
 } from '../api/assist-client.js'
+import { describeApiError } from '../api/describe-error.js'
 import { runSeoPreview, type SeoPreview } from '../api/seo-client.js'
 import { FieldInput } from '../fields/field-input.js'
 import type { CollectionSummary, SchemaField } from '../schema/types.js'
 import { Button, Card, CardBody, CardHeader, CardTitle, Input, Label, Notice } from '../ui/index.js'
 import { analyseContent, type ContentCheckId } from './content-score.js'
-import { describeApiError } from '../api/describe-error.js'
 
 /**
  * Fiche 13 (SEO éditorial), Task 1 — the panel `entry-edit.tsx` never had:
@@ -255,7 +255,7 @@ export function SeoPanel({
     focusKeywordField === undefined ? localKeyword : stringValue(values, 'seoFocusKeyword')
   const previewTitle =
     preview === null
-      ? ""
+      ? ''
       : preview.title !== ''
         ? preview.title
         : titleValue !== ''
@@ -532,9 +532,7 @@ export function SeoPanel({
                 )}
                 {preview.robots === 'noindex' && (noindexValue || status !== 'published') && (
                   <Notice tone="warning">
-                    <p>
-                      {noindexValue ? t('seo.previewNoindexChecked') : t('seo.previewNoindex')}
-                    </p>
+                    <p>{noindexValue ? t('seo.previewNoindexChecked') : t('seo.previewNoindex')}</p>
                   </Notice>
                 )}
               </div>

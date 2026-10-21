@@ -6,7 +6,6 @@ import {
   readProduct,
   type Variant,
 } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
 import {
   Button,
   Notice,
@@ -19,6 +18,7 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
+import { commerceErrorMessage } from './commerce-errors.js'
 
 /**
  * The "stock bas" alert (fiche 51 task 4) — every variant at or below its own
@@ -61,9 +61,7 @@ export function LowStockPanel({
       })
       .catch((caught) => {
         if (!cancelled) {
-          setError(
-            caught instanceof ApiError ? caught.message : t('commerceProducts.lowStockError'),
-          )
+          setError(commerceErrorMessage(t, caught, 'commerceProducts.lowStockError'))
         }
       })
       .finally(() => {

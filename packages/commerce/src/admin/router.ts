@@ -30,6 +30,7 @@ import {
   type SubscriptionStore,
 } from '../subscription/store.js'
 import { type TaxStore, taxFor } from '../tax/store.js'
+import { isUniqueViolation } from '../unique.js'
 import { readCouponFields, readCouponKind } from './coupon-input.js'
 import type { CommerceActor, CommercePermissionLayer } from './permissions.js'
 import { COMMERCE_ANONYMOUS, COMMERCE_PERMISSIONS } from './permissions.js'
@@ -137,6 +138,7 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   COMMERCE_CREDIT_NOTE_NOT_FOUND: 404,
   COMMERCE_PRODUCT_INVALID: 400,
   COMMERCE_TRACKING_INVALID: 400,
+  COMMERCE_CONFLICT: 409,
   COMMERCE_SKU_TAKEN: 409,
   COMMERCE_PRODUCT_HANDLE_TAKEN: 409,
   COMMERCE_COUPON_CODE_TAKEN: 409,
@@ -175,6 +177,21 @@ const STATUS_BY_CODE: Readonly<Record<string, number>> = {
 }
 
 function errorResponse(error: unknown): CommerceResponse {
+  // Safety net for any UNIQUE constraint a store did not pre-check: the person
+  // gets a clear conflict, never a 500 carrying a SQL message. (The stores
+  // report the ones they know — handle, SKU, coupon code — by their own codes.)
+  if ((!isCogentaError(error) || error.code.startsWith('DB_')) && isUniqueViolation(error)) {
+    return {
+      status: 409,
+      body: {
+        error: {
+          code: 'COMMERCE_CONFLICT',
+          message: 'A record with the same unique value already exists.',
+          hint: 'Choose a different value.',
+        },
+      },
+    }
+  }
   // A database failure carries the failing driver's own words ("UNIQUE
   // constraint failed: …table.column"). That is for the log, never for the
   // person at the screen — a known conflict is reported by its own code before
@@ -502,6 +519,20 @@ export function createCommerceAdminRouter(
       }
     }
     return { customers, variants }
+  }
+
+  /**
+   * A payment that just landed may open subscriptions (a recurring variant in
+   * the order). Idempotent, and never allowed to fail the payment that
+   * triggered it: the scheduler's sweep (`openFromPaidOrders`) retries.
+   */
+  async function openSubscriptionsFor(orderId: string): Promise<void> {
+    if (options.subscriptions === undefined) return
+    try {
+      await options.subscriptions.createFromOrder(orderId)
+    } catch {
+      // Left to the scheduler's sweep.
+    }
   }
 
   return {
@@ -979,6 +1010,7 @@ export function createCommerceAdminRouter(
                 ...(paid.note === undefined ? {} : { note: paid.note }),
                 actorId: actor.id,
               })
+              await openSubscriptionsFor(outcome.order.id)
             }
             if (options.orderEmails !== undefined) {
               await options.orderEmails.enqueue(outcome.order.id, 'confirmation')
@@ -1063,6 +1095,7 @@ export function createCommerceAdminRouter(
                   ...(note === undefined ? {} : { note }),
                   actorId: actor.id,
                 })
+                await openSubscriptionsFor(orderId)
                 const paidOrder = await options.orders.read(orderId)
                 return { status: 200, body: paidOrder }
               }
@@ -1158,6 +1191,7 @@ export function createCommerceAdminRouter(
               ...('note' in paid && paid.note !== undefined ? { note: paid.note } : {}),
               actorId: actor.id,
             })
+            await openSubscriptionsFor(payment.orderId)
             return {
               status: 201,
               body: { payment, order: await options.orders.read(payment.orderId) },
@@ -1172,13 +1206,12 @@ export function createCommerceAdminRouter(
             // not be able to take on their own say-so.
             permissions.assert('commerce.payment.settle', actor)
             const body = request.body === undefined ? {} : readObject(request.body)
-            return {
-              status: 200,
-              body: await options.payments.settle(segments[1] ?? '', {
-                actorId: actor.id,
-                ...(typeof body.note === 'string' ? { note: body.note } : {}),
-              }),
-            }
+            const settled = await options.payments.settle(segments[1] ?? '', {
+              actorId: actor.id,
+              ...(typeof body.note === 'string' ? { note: body.note } : {}),
+            })
+            await openSubscriptionsFor(settled.orderId)
+            return { status: 200, body: settled }
           }
         }
 

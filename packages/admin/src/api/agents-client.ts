@@ -239,7 +239,7 @@ export interface AgentRunJob<TResult> {
   readonly status: 'running' | 'done' | 'failed'
   readonly events: readonly AgentRunProgressEvent[]
   readonly result?: TResult
-  readonly error?: { readonly message: string }
+  readonly error?: { readonly message: string; readonly code?: string; readonly hint?: string }
 }
 
 export function startAgentMessageJob(

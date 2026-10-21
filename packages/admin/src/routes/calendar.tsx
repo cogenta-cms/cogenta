@@ -21,6 +21,7 @@ import {
   weekStartFor,
 } from '../calendar/calendar-dates.js'
 import { useSchema } from '../schema/schema-context.js'
+import { languageName } from '../search/result-labels.js'
 import {
   Badge,
   Button,
@@ -238,7 +239,7 @@ export function CalendarRoute(): JSX.Element {
           movable ? 'cursor-grab' : 'cursor-pointer',
         ].join(' ')}
       >
-        <span className="truncate font-medium">{title}</span>
+        <span className="line-clamp-2 font-medium [overflow-wrap:anywhere]">{title}</span>
         <span className="truncate text-muted-foreground">
           {withTime && item.publishedAt !== null
             ? `${timeFormat.format(new Date(item.publishedAt))} · `
@@ -288,7 +289,10 @@ export function CalendarRoute(): JSX.Element {
                   type="button"
                   variant={view === 'month' ? 'primary' : 'secondary'}
                   aria-pressed={view === 'month'}
-                  onClick={() => setView('month')}
+                  onClick={() => {
+                    setMonth({ year: weekAnchor.getFullYear(), month: weekAnchor.getMonth() })
+                    setView('month')
+                  }}
                 >
                   {t('calendar.viewMonth')}
                 </Button>
@@ -296,7 +300,16 @@ export function CalendarRoute(): JSX.Element {
                   type="button"
                   variant={view === 'week' ? 'primary' : 'secondary'}
                   aria-pressed={view === 'week'}
-                  onClick={() => setView('week')}
+                  onClick={() => {
+                    // Keep the period on screen: the week shown is the one
+                    // containing today when the month is the current one,
+                    // otherwise the month's first week.
+                    const now = new Date()
+                    const current =
+                      now.getFullYear() === month.year && now.getMonth() === month.month
+                    setWeekAnchor(new Date(month.year, month.month, current ? now.getDate() : 1))
+                    setView('week')
+                  }}
                 >
                   {t('calendar.viewWeek')}
                 </Button>
@@ -330,12 +343,12 @@ export function CalendarRoute(): JSX.Element {
               tabIndex={0}
               className="min-w-0 max-w-full overflow-x-auto"
             >
-              <div className="grid min-w-[44rem] grid-cols-7 gap-px border border-border bg-border">
+              <div className="grid grid-cols-1 gap-px border border-border bg-border md:grid-cols-7">
                 {days.slice(0, 7).map((day) => (
                   <div
                     key={`weekday-${day.getDay()}`}
                     aria-hidden="true"
-                    className="bg-muted px-2 py-1 text-xs font-medium text-muted-foreground first-letter:uppercase"
+                    className="hidden bg-muted px-2 py-1 text-xs font-medium text-muted-foreground first-letter:uppercase md:block"
                   >
                     {weekdayFormat.format(day)}
                   </div>
@@ -364,8 +377,13 @@ export function CalendarRoute(): JSX.Element {
                         if (!past) onDrop(event, day)
                       }}
                       className={[
-                        'flex min-h-28 flex-col gap-1 p-1.5',
+                        'flex flex-col gap-1 p-1.5 md:min-h-28',
                         inMonth ? 'bg-background' : 'bg-muted/40',
+                        // A phone shows the month as an agenda: only the days
+                        // that have something on them (and today).
+                        view === 'month' && items.length === 0 && day.getTime() !== today
+                          ? 'max-md:hidden'
+                          : '',
                         dropTarget === key
                           ? 'outline outline-2 -outline-offset-2 outline-primary'
                           : '',
@@ -373,7 +391,7 @@ export function CalendarRoute(): JSX.Element {
                     >
                       <span
                         className={[
-                          'self-end px-1 text-xs tabular-nums',
+                          'self-start px-1 text-xs tabular-nums md:self-end',
                           day.getTime() === today
                             ? 'bg-primary font-semibold text-primary-foreground'
                             : inMonth
@@ -381,7 +399,10 @@ export function CalendarRoute(): JSX.Element {
                               : 'text-muted-foreground',
                         ].join(' ')}
                       >
-                        {day.getDate()}
+                        <span className="md:hidden first-letter:uppercase">
+                          {dayLabelFormat.format(day)}
+                        </span>
+                        <span className="max-md:hidden">{day.getDate()}</span>
                       </span>
                       <ul className="m-0 flex list-none flex-col gap-1 p-0">
                         {items.map((item) => (
@@ -393,6 +414,11 @@ export function CalendarRoute(): JSX.Element {
                 })}
               </div>
             </section>
+            {view === 'month' && report !== null && report.items.length === 0 && (
+              <p className="m-0 text-sm text-muted-foreground md:hidden">
+                {t('calendar.nothingThisPeriod')}
+              </p>
+            )}
           </CardBody>
         </Card>
 
@@ -454,7 +480,7 @@ export function CalendarRoute(): JSX.Element {
               <Badge tone={selected.status === 'published' ? 'success' : 'primary'}>
                 {t(`calendar.status.${selected.status}`, { defaultValue: selected.status })}
               </Badge>
-              <Badge tone="neutral">{selected.locale}</Badge>
+              <Badge tone="neutral">{languageName(selected.locale, i18n.language)}</Badge>
               {selected.publishedAt !== null && (
                 <span className="text-sm">
                   {dateTimeFormat.format(new Date(selected.publishedAt))}

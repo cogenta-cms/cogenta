@@ -1,4 +1,4 @@
-import type { JSX } from 'react'
+import { type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import {
@@ -8,7 +8,9 @@ import {
   listDocPages,
 } from '../documentation/docs-content.js'
 import { DocsViewer } from '../documentation/docs-viewer.js'
+import { usePageTitle } from '../shell/page-title.js'
 import '../styles/documentation.css'
+import { ChevronDownIcon } from '../ui/icons.js'
 import { Card, CardBody, Notice } from '../ui/index.js'
 
 /**
@@ -49,16 +51,24 @@ export function DocumentationDocsRoute(): JSX.Element {
   const slug = params.slug ?? 'index'
 
   const page = getDocPage(tree, slug)
+  // On a phone the list of pages folds behind a button naming the current
+  // page, so the content is what opens first; on a wide window it is a
+  // permanent sidebar.
+  const [pagesOpen, setPagesOpen] = useState(false)
+  // Every page of the tree used to share one tab name; each now carries its own.
+  usePageTitle(page === undefined ? null : `${page.title} — ${t('nav.documentation')}`)
 
   return (
     <section aria-labelledby="documentation-docs-heading" className="min-w-0 flex flex-col gap-6">
       <div>
-        <h1
+        {/* The page's own `# Title` (below) is the screen's one level-one
+            heading: this is the section's name, not a second h1. */}
+        <p
           id="documentation-docs-heading"
-          className="m-0 text-2xl leading-tight font-bold tracking-tight"
+          className="m-0 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
         >
           {t('documentation.docs.heading')}
-        </h1>
+        </p>
         <p className="m-0 mt-1 text-sm text-muted-foreground">{t('documentation.docs.intro')}</p>
       </div>
 
@@ -84,24 +94,49 @@ export function DocumentationDocsRoute(): JSX.Element {
         ))}
       </div>
 
+      {tree === 'technical' && (
+        <Notice tone="info" live="off">
+          <p>{t('documentation.docs.technicalInEnglish')}</p>
+        </Notice>
+      )}
+
       <div className="doc-browser-layout">
-        <nav aria-label={t('documentation.docs.sidebarLabel')} className="doc-pages-nav">
-          <ul className="m-0 flex flex-col gap-1 pl-0 text-sm">
-            {listDocPages(tree).map((item) => (
-              <li key={item.slug} className="list-none">
-                <Link
-                  to={`/documentation/docs/${tree}/${item.slug}`}
-                  aria-current={item.slug === slug ? 'page' : undefined}
-                  className={
-                    item.slug === slug ? 'font-semibold text-foreground' : 'text-muted-foreground'
-                  }
-                >
-                  {item.title}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <div className="doc-pages-nav">
+          <button
+            type="button"
+            aria-expanded={pagesOpen}
+            aria-controls="doc-pages-list"
+            onClick={() => setPagesOpen((current) => !current)}
+            className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-left text-sm font-medium lg:hidden"
+          >
+            <span className="min-w-0 truncate">
+              {page?.title ?? t('documentation.docs.pagesToggle')}
+            </span>
+            <ChevronDownIcon className={`size-4 shrink-0 ${pagesOpen ? 'rotate-180' : ''}`} />
+          </button>
+          <nav
+            id="doc-pages-list"
+            aria-label={t('documentation.docs.sidebarLabel')}
+            className={`${pagesOpen ? 'block' : 'hidden'} mt-2 lg:mt-0 lg:block`}
+          >
+            <ul className="m-0 flex flex-col gap-1 pl-0 text-sm">
+              {listDocPages(tree).map((item) => (
+                <li key={item.slug} className="list-none">
+                  <Link
+                    to={`/documentation/docs/${tree}/${item.slug}`}
+                    onClick={() => setPagesOpen(false)}
+                    aria-current={item.slug === slug ? 'page' : undefined}
+                    className={
+                      item.slug === slug ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                    }
+                  >
+                    {item.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
 
         <div className="min-w-0 flex-1">
           {page === undefined ? (

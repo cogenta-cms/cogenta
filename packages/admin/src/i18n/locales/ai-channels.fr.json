@@ -1,0 +1,18 @@
+{
+  "channels": {
+    "runnerUp": "Le processus des canaux est actif",
+    "runnerUpDetail": "Connecté à : {{channels}}. Les codes de liaison seront lus.",
+    "runnerUpNone": "Il tourne, mais aucun canal n’est configuré : renseignez les identifiants d’un bot dans l’environnement du serveur.",
+    "runnerDown": "Le processus des canaux est arrêté",
+    "runnerDownDetail": "Démarrez « cogenta channels » sur le serveur : tant qu’il ne tourne pas, un code de liaison n’est lu par personne et aucun message n’est reçu.",
+    "copyCode": "Copier le code",
+    "codeCopied": "Code copié",
+    "codeBodyNamed": "Envoyez ce code en message privé à {{botName}} sur {{channel}} pour terminer la liaison de votre compte.",
+    "stateLinked": "Lié",
+    "stateNotLinked": "Non lié",
+    "unlinked": "Le compte {{channel}} est délié.",
+    "unlinkTitle": "Délier votre compte {{channel}} ?",
+    "unlinkBody": "Vous ne recevrez plus les notices du site sur ce canal et ne pourrez plus y discuter avec un agent. Vous pourrez le lier à nouveau avec un nouveau code.",
+    "unlinkConfirm": "Délier le compte"
+  }
+}

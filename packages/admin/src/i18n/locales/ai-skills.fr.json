@@ -1,0 +1,19 @@
+{
+  "agentSkills": {
+    "nameRequired": "Le nom est obligatoire : renseignez la ligne « name: » de l’en-tête.",
+    "descriptionRequired": "La description est obligatoire : renseignez la ligne « description: » de l’en-tête.",
+    "created": "Compétence « {{name}} » créée.",
+    "updated": "Compétence « {{name}} » enregistrée.",
+    "removed": "Compétence « {{name}} » supprimée.",
+    "chooseFile": "Choisir un fichier",
+    "noFileChosen": "Aucun fichier choisi",
+    "builtin": "Intégrée",
+    "builtinNote": "Cette compétence est fournie avec Cogenta. Son texte est écrit en anglais, la langue dans laquelle les modèles suivent le mieux un mode d’emploi : modifiez-le en connaissance de cause.",
+    "removeNamed": "Supprimer la compétence {{name}}",
+    "removeTitle": "Supprimer la compétence « {{name}} » ?",
+    "removeBody": "Les agents qui l’utilisent ne la liront plus. Cette action est définitive.",
+    "removeConfirm": "Supprimer la compétence",
+    "importLabel": "Importer un fichier .md (SKILL.md)",
+    "defaultColumn": "Par défaut"
+  }
+}

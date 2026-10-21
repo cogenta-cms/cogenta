@@ -64,6 +64,25 @@ describe('semantic search', () => {
     expect(hits[0]?.matched).toContain('semantic')
   })
 
+  it('titles a vector-only hit with the line the indexed chunk opens with, not the first words of its body', async () => {
+    const store = await storeWith([
+      {
+        id: 'a',
+        text: 'Careers\n\nCareers Careers We recruit engineers who like to see their work run in the field.',
+      },
+    ])
+    const search = createSemanticSearch({ store, embeddings })
+
+    const hits = await search.search({
+      text: 'recruit engineers',
+      locale: 'en',
+      siteId: 'site-a',
+      collections: ['articles'],
+    })
+
+    expect(hits[0]?.title).toBe('Careers')
+  })
+
   it('adds the full-text half rather than replacing it', async () => {
     const store = await storeWith([{ id: 'a', text: 'cathedral architecture' }])
     const search = createSemanticSearch({

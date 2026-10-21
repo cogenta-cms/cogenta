@@ -779,3 +779,12 @@ export const SlidersIcon = icon(
     <circle cx="7" cy="14" r="2" />
   </>,
 )
+
+/** An eye with a slash — the "hide" state of a show/hide-password toggle. */
+export const EyeOffIcon = icon(
+  <>
+    <path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z" />
+    <circle cx="10" cy="10" r="2.3" />
+    <path d="M3.5 16.5l13-13" />
+  </>,
+)

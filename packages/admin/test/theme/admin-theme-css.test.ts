@@ -128,6 +128,14 @@ describe('buildAdminThemeCss', () => {
     expect(css).toContain('--font-display: "Plex Mono"')
   })
 
+  it('keeps the monospace font fixed-width whatever the body font is', () => {
+    const css = buildAdminThemeCss(state('nightops', { fontBody: 'plex-sans' }))
+    const mono = /--font-mono: ([^;]+);/u.exec(css)?.[1] ?? ''
+    expect(mono).toContain('monospace')
+    expect(mono).not.toContain('Space Grotesk')
+    expect(mono).not.toContain('Plex Sans')
+  })
+
   it('scopes every block to a caller-supplied selector instead of `:root`, for a preview panel (fiche 49)', () => {
     const scope = '[data-admin-theme-preview="abc"]'
     const css = buildAdminThemeCss(state('nightops'), scope)

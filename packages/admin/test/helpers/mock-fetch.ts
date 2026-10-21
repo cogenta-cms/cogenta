@@ -3260,6 +3260,25 @@ export function installMockFetch(
         }
       }
 
+      // `/api/mcp-info` — what the "MCP" screen prints client configurations from.
+      if (url.endsWith('/api/mcp-info') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, { error: { code: 'FORBIDDEN', message: 'Only the admin role may do this.' } })
+        }
+        return json(200, {
+          data: {
+            http: { enabled: true, path: '/api/mcp' },
+            stdio: {
+              command: '/usr/bin/node',
+              args: ['/srv/site/node_modules/@cogenta/cli/dist/bin.js', 'mcp', '--cwd', '/srv/site'],
+              projectRoot: '/srv/site',
+              apiKeyEnv: 'COGENTA_MCP_API_KEY',
+            },
+            approvalsPath: '/admin/agents',
+          },
+        })
+      }
+
       // `/api/api-keys/*`. Admin-only, mirroring the real router: the raw
       // `key` is present only in the `POST`, `POST .../rotate` and
       // `POST .../recover` response bodies, never in the list — proving the
@@ -3276,6 +3295,12 @@ export function installMockFetch(
           error: { code: 'FORBIDDEN', message: 'Only the admin role may do this.' },
         })
         const [, rawId, actionSuffix] = apiKeysMatch
+
+        // The closed list a scope is chosen from (`GET /api/api-keys/roles`).
+        if (rawId === 'roles' && method === 'GET') {
+          if (!isAdmin) return forbidden
+          return json(200, { data: { roles: ['admin', 'editor', 'shopkeeper', 'viewer'] } })
+        }
 
         if (rawId === undefined && method === 'GET') {
           if (!isAdmin) return forbidden
@@ -8830,6 +8855,8 @@ export function installMockFetch(
             reason: 'manual' as const,
             createdAt: Date.parse('2026-03-01T00:00:00.000Z'),
           }
+          // The real store keeps one rule per source path and replaces it.
+          redirects = redirects.filter((redirect) => redirect.from !== created.from)
           redirects.push(created)
           return json(201, { data: created })
         }

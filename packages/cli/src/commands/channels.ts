@@ -40,6 +40,11 @@ import {
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
 import { buildAgentRuntime } from './agent-runtime.js'
+import {
+  CHANNELS_HEARTBEAT_MS,
+  clearChannelsStatus,
+  writeChannelsStatus,
+} from './channels-status.js'
 import { loadSchemaModule } from './serve.js'
 
 /**
@@ -294,6 +299,7 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
   const db = selection.instance
 
   const live: LiveAdapter[] = []
+  const liveNames: string[] = []
   try {
     await createSchemaTables(db, collections, [])
     await ensureChannelTables(db)
@@ -367,6 +373,7 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
         const adapter = await build()
         await adapter.start()
         live.push(adapter)
+        liveNames.push(name)
         out.detail(`${name}: connected.`)
       } catch (error) {
         if (isCogentaError(error) && error.code === 'CHANNEL_PROVIDER_NOT_CONFIGURED') {
@@ -387,6 +394,20 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
       out.detail(`cogenta channels running — ${live.length} channel(s) connected.`)
     }
 
+    // Tell `cogenta serve` (and so the admin's Channels screen) that something
+    // is listening. A failed write only costs that screen its status line.
+    const startedAt = new Date().toISOString()
+    const beat = (): void => {
+      void writeChannelsStatus(projectRoot, {
+        channels: [...liveNames],
+        startedAt,
+        heartbeatAt: new Date().toISOString(),
+      }).catch(() => undefined)
+    }
+    beat()
+    const heartbeat = setInterval(beat, CHANNELS_HEARTBEAT_MS)
+    heartbeat.unref()
+
     // Runs until told to stop — this process has no other exit condition
     // while at least the intent to run exists (mirrors `runServe`'s own
     // `signal`-driven shutdown).
@@ -404,6 +425,7 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
     return reportFailure(stderr, error)
   } finally {
     for (const adapter of live) await adapter.stop()
+    await clearChannelsStatus(projectRoot).catch(() => undefined)
     await selection.dispose()
   }
 }

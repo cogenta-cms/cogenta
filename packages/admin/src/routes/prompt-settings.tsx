@@ -1,24 +1,30 @@
-import { Fragment, type JSX, useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
-import { ApiError } from '../api/client.js'
+import { ConfirmAction } from '../ai/confirm-action.js'
+import { describeAiErrorLine } from '../ai/server-text.js'
+import { useFlash } from '../ai/use-flash.js'
 import {
   createPromptTemplate,
   listPromptTemplates,
   type PromptTemplateSummary,
   removePromptTemplate,
+  resetPromptTemplate,
   updatePromptTemplate,
 } from '../api/prompt-templates-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { shippedText } from '../i18n/shipped-text.js'
 import {
+  Badge,
   Button,
   Card,
   CardBody,
   CardHeader,
   CardTitle,
+  Field,
   Input,
   Notice,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -35,15 +41,22 @@ import {
  * hard-coded, with `{{placeholder}}` slots the tool resolves at call time
  * (`@cogenta/agents`' `resolveInstruction`). A builtin can be edited
  * in place but never removed — the site keeps a working default even if
- * an edit is later reverted by hand.
+ * an edit is later reverted by hand — and, while it differs from what
+ * Cogenta shipped, can be put back in one click.
  *
- * `category` is a free-text field, not a closed picker: the fiche names a
- * suggested vocabulary ("texte/traduction/agent/image/…") but does not
- * close it, and forcing a `<select>` here would refuse a category this
- * screen's own author never anticipated.
+ * `category` is a closed list of the words the screens use, plus whatever
+ * category an existing template already carries: a free-text box invited
+ * "text" and "Text" and "texte" for the same thing.
  */
 
+const CATEGORIES = ['text', 'seo', 'translation', 'moderation', 'agent'] as const
+
 const EMPTY_DRAFT = { name: '', description: '', category: 'text', template: '' }
+
+/** The `{{variable}}` slots a prompt text uses, in order, once each. */
+function placeholdersOf(text: string): readonly string[] {
+  return [...new Set([...text.matchAll(/\{\{\s*([\w.-]+)\s*\}\}/gu)].map((match) => match[1] ?? ''))]
+}
 
 export function PromptSettingsRoute(): JSX.Element {
   const { t } = useTranslation()
@@ -56,6 +69,9 @@ export function PromptSettingsRoute(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const flash = useFlash()
+  const [pendingRemoval, setPendingRemoval] = useState<PromptTemplateSummary | null>(null)
+  const [pendingReset, setPendingReset] = useState<PromptTemplateSummary | null>(null)
   // Fiche 71: which row's edit form is open lives in `?editing=`, not a
   // plain `useState` — an F5 or a shared link used to always collapse back
   // to the plain list, losing the open row.
@@ -74,10 +90,12 @@ export function PromptSettingsRoute(): JSX.Element {
   const [creating, setCreating] = useState(false)
   const [draft, setDraft] = useState(EMPTY_DRAFT)
   const [editDraft, setEditDraft] = useState(EMPTY_DRAFT)
+  const [showErrors, setShowErrors] = useState(false)
   // Tracks which template id the edit fields were last populated from, so a
   // background reload (after creating or removing an unrelated template)
   // never clobbers text the admin is mid-typing in the still-open row.
   const syncedEditIdRef = useRef<string | null>(null)
+  const editBoxRef = useRef<HTMLDivElement | null>(null)
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -86,7 +104,7 @@ export function PromptSettingsRoute(): JSX.Element {
     try {
       setTemplates(await listPromptTemplates(token))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('promptSettings.loadError'))
+      setError(describeAiErrorLine(caught, t, t('promptSettings.loadError')))
     } finally {
       setLoading(false)
     }
@@ -96,19 +114,68 @@ export function PromptSettingsRoute(): JSX.Element {
     void load()
   }, [load])
 
+  /** What the list shows for a template: Cogenta's own words while untouched, the owner's otherwise. */
+  const nameOf = useCallback(
+    (template: PromptTemplateSummary): string =>
+      template.builtin ? shippedText(`prompts.${template.id}.name`, template.name, t) : template.name,
+    [t],
+  )
+  const descriptionOf = useCallback(
+    (template: PromptTemplateSummary): string =>
+      template.builtin
+        ? shippedText(`prompts.${template.id}.description`, template.description, t)
+        : template.description,
+    [t],
+  )
+  const categoryLabel = useCallback(
+    (category: string): string => shippedText(`promptCategories.${category}`, category, t),
+    [t],
+  )
+  /** A shipped template whose name and description are still Cogenta's: they read in the admin's language, so they are not editable text. */
+  const wordsAreShipped = (template: PromptTemplateSummary): boolean =>
+    template.builtin &&
+    nameOf(template) !== template.name &&
+    descriptionOf(template) !== template.description
+  const isModified = (template: PromptTemplateSummary): boolean =>
+    template.builtin &&
+    template.originalTemplate !== undefined &&
+    template.originalTemplate !== template.template
+
+  // By category, then by the name the reader sees — the order the server
+  // seeds them in is no order at all.
+  const sorted = useMemo(
+    () =>
+      [...templates].sort(
+        (a, b) =>
+          categoryLabel(a.category).localeCompare(categoryLabel(b.category)) ||
+          nameOf(a).localeCompare(nameOf(b)),
+      ),
+    [templates, categoryLabel, nameOf],
+  )
+
+  function problemOf(value: { name: string; template: string }): string | null {
+    if (value.name.trim().length === 0) return t('promptSettings.nameRequired')
+    if (value.template.trim().length === 0) return t('promptSettings.templateRequired')
+    return null
+  }
+
   async function submitCreate(): Promise<void> {
-    if (token === null || draft.name.trim().length === 0 || draft.template.trim().length === 0) {
+    if (token === null) return
+    if (problemOf(draft) !== null) {
+      setShowErrors(true)
       return
     }
     setBusy('create')
     setError(null)
     try {
       await createPromptTemplate(token, draft)
+      flash.show(t('promptSettings.created', { name: draft.name.trim() }))
       setDraft(EMPTY_DRAFT)
       setCreating(false)
+      setShowErrors(false)
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('promptSettings.saveError'))
+      setError(describeAiErrorLine(caught, t, t('promptSettings.saveError')))
     } finally {
       setBusy(null)
     }
@@ -122,6 +189,7 @@ export function PromptSettingsRoute(): JSX.Element {
       category: template.category,
       template: template.template,
     })
+    setShowErrors(false)
     syncedEditIdRef.current = template.id
   }
 
@@ -145,16 +213,42 @@ export function PromptSettingsRoute(): JSX.Element {
     syncedEditIdRef.current = editingId
   }, [editingId, templates])
 
-  async function submitEdit(id: string): Promise<void> {
+  // The edit form opens beneath its row, which on a long list is off screen:
+  // bring it into view when it opens.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: opening is the trigger; the ref is read once rendered.
+  useEffect(() => {
+    if (editingId !== null) editBoxRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  }, [editingId, templates.length])
+
+  async function submitEdit(template: PromptTemplateSummary): Promise<void> {
     if (token === null) return
-    setBusy(id)
+    if (problemOf(editDraft) !== null) {
+      setShowErrors(true)
+      return
+    }
+    setBusy(template.id)
     setError(null)
     try {
-      await updatePromptTemplate(token, id, editDraft)
+      // Shipped words that read in the admin's language are not editable
+      // here, so they are sent back exactly as they are stored.
+      await updatePromptTemplate(
+        token,
+        template.id,
+        wordsAreShipped(template)
+          ? { template: editDraft.template }
+          : {
+              name: editDraft.name,
+              description: editDraft.description,
+              category: editDraft.category,
+              template: editDraft.template,
+            },
+      )
       setEditingId(null)
+      setShowErrors(false)
+      flash.show(t('promptSettings.saved', { name: nameOf(template) }))
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('promptSettings.saveError'))
+      setError(describeAiErrorLine(caught, t, t('promptSettings.saveError')))
     } finally {
       setBusy(null)
     }
@@ -166,11 +260,30 @@ export function PromptSettingsRoute(): JSX.Element {
     setError(null)
     try {
       await removePromptTemplate(token, template.id)
+      flash.show(t('promptSettings.removed', { name: template.name }))
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('promptSettings.saveError'))
+      setError(describeAiErrorLine(caught, t, t('promptSettings.saveError')))
     } finally {
       setBusy(null)
+      setPendingRemoval(null)
+    }
+  }
+
+  async function submitReset(template: PromptTemplateSummary): Promise<void> {
+    if (token === null) return
+    setBusy(template.id)
+    setError(null)
+    try {
+      await resetPromptTemplate(token, template.id)
+      flash.show(t('promptSettings.resetDone', { name: nameOf(template) }))
+      if (editingId === template.id) setEditingId(null)
+      await load()
+    } catch (caught) {
+      setError(describeAiErrorLine(caught, t, t('promptSettings.saveError')))
+    } finally {
+      setBusy(null)
+      setPendingReset(null)
     }
   }
 
@@ -183,9 +296,16 @@ export function PromptSettingsRoute(): JSX.Element {
     )
   }
 
+  /** The category picker: the five known words, plus the template's own when it is something else. */
+  function categoryOptions(current: string): readonly string[] {
+    return (CATEGORIES as readonly string[]).includes(current) ? CATEGORIES : [...CATEGORIES, current]
+  }
+
+  const createProblem = showErrors && creating ? problemOf(draft) : null
+
   return (
-    <section className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
+    <section className="flex min-w-0 flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <h1
           id="prompt-settings-heading"
           className="m-0 text-2xl leading-tight font-bold tracking-tight"
@@ -203,62 +323,87 @@ export function PromptSettingsRoute(): JSX.Element {
           <p>{error}</p>
         </Notice>
       )}
+      {flash.message !== null && (
+        <Notice tone="success" live="polite" onDismiss={flash.clear} dismissLabel={t('common.close')}>
+          <p>{flash.message}</p>
+        </Notice>
+      )}
 
       {creating && (
-        <Card aria-labelledby="prompt-settings-create-heading">
+        <Card aria-labelledby="prompt-settings-create-heading" className="min-w-0">
           <CardHeader>
             <CardTitle>
               <h2 id="prompt-settings-create-heading">{t('promptSettings.createTemplate')}</h2>
             </CardTitle>
           </CardHeader>
           <CardBody>
-            <div className="flex flex-col gap-3">
-              <label htmlFor="prompt-template-create-name">{t('promptSettings.name')}</label>
-              <Input
-                id="prompt-template-create-name"
-                value={draft.name}
-                onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-              />
-              <label htmlFor="prompt-template-create-description">
-                {t('promptSettings.description')}
-              </label>
-              <Input
-                id="prompt-template-create-description"
-                value={draft.description}
-                onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-              />
-              <label htmlFor="prompt-template-create-category">
-                {t('promptSettings.category')}
-              </label>
-              <Input
-                id="prompt-template-create-category"
-                value={draft.category}
-                onChange={(event) => setDraft({ ...draft, category: event.target.value })}
-              />
-              <label htmlFor="prompt-template-create-template">
-                {t('promptSettings.template')}
-              </label>
-              <textarea
-                id="prompt-template-create-template"
-                className="w-full rounded-md border border-input bg-card px-3 py-2 font-mono text-sm leading-5 text-card-foreground shadow-card"
-                rows={6}
-                spellCheck={false}
-                value={draft.template}
-                onChange={(event) => setDraft({ ...draft, template: event.target.value })}
-              />
-              <p className="m-0 text-xs opacity-70">{t('promptSettings.placeholderHint')}</p>
+            <div className="flex min-w-0 flex-col gap-3">
+              <p className="m-0 text-xs text-muted-foreground">{t('promptSettings.createHint')}</p>
+              <Field
+                label={t('promptSettings.name')}
+                error={showErrors && draft.name.trim() === '' ? t('promptSettings.nameRequired') : null}
+              >
+                {(control) => (
+                  <Input
+                    {...control}
+                    value={draft.name}
+                    onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                  />
+                )}
+              </Field>
+              <Field label={t('promptSettings.description')}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    value={draft.description}
+                    onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                  />
+                )}
+              </Field>
+              <Field label={t('promptSettings.category')}>
+                {(control) => (
+                  <Select
+                    {...control}
+                    value={draft.category}
+                    onChange={(event) => setDraft({ ...draft, category: event.target.value })}
+                  >
+                    {categoryOptions(draft.category).map((category) => (
+                      <option key={category} value={category}>
+                        {categoryLabel(category)}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <Field
+                label={t('promptSettings.template')}
+                description={t('promptSettings.placeholderHint')}
+                error={
+                  showErrors && draft.name.trim() !== '' && createProblem !== null ? createProblem : null
+                }
+              >
+                {(control) => (
+                  <textarea
+                    {...control}
+                    className="w-full min-w-0 rounded-md border border-input bg-card px-3 py-2 font-mono text-sm leading-5 text-card-foreground shadow-card aria-invalid:border-destructive"
+                    rows={6}
+                    spellCheck={false}
+                    value={draft.template}
+                    onChange={(event) => setDraft({ ...draft, template: event.target.value })}
+                  />
+                )}
+              </Field>
               <div className="flex gap-2">
-                <Button
-                  disabled={
-                    busy === 'create' ||
-                    draft.name.trim().length === 0 ||
-                    draft.template.trim().length === 0
-                  }
-                  onClick={() => void submitCreate()}
-                >
+                <Button disabled={busy === 'create'} onClick={() => void submitCreate()}>
                   {t('common.save')}
                 </Button>
-                <Button variant="ghost" onClick={() => setCreating(false)}>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setCreating(false)
+                    setShowErrors(false)
+                  }}
+                >
                   {t('common.cancel')}
                 </Button>
               </div>
@@ -278,123 +423,208 @@ export function PromptSettingsRoute(): JSX.Element {
         )}
 
       {!loading && (
-        <TableRoot label={t('promptSettings.heading')}>
+        <TableRoot label={t('promptSettings.heading')} stacked>
           <Table>
             <TableHead>
               <TableRow>
                 <TableHeader>{t('promptSettings.name')}</TableHeader>
                 <TableHeader>{t('promptSettings.category')}</TableHeader>
                 <TableHeader>{t('promptSettings.description')}</TableHeader>
-                <TableHeader>{t('promptSettings.builtin')}</TableHeader>
+                <TableHeader>{t('promptSettings.origin')}</TableHeader>
                 <TableHeader>{t('agents.actions')}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
-              {templates.map((template) => (
-                <Fragment key={template.id}>
-                  <TableRow key={template.id}>
-                    <TableCell>
-                      {template.builtin
-                        ? shippedText(`prompts.${template.id}.name`, template.name, t)
-                        : template.name}
-                    </TableCell>
-                    <TableCell>
-                      {shippedText(`promptCategories.${template.category}`, template.category, t)}
-                    </TableCell>
-                    <TableCell>
-                      {template.builtin
-                        ? shippedText(`prompts.${template.id}.description`, template.description, t)
-                        : template.description}
-                    </TableCell>
-                    <TableCell>{template.builtin ? t('common.yes') : t('common.no')}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={() => startEdit(template)}>
-                          {t('agents.edit')}
-                        </Button>
-                        {!template.builtin && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={busy === template.id}
-                            onClick={() => void submitRemove(template)}
-                          >
-                            {t('agents.remove')}
-                          </Button>
+              {sorted.map((template) => {
+                const used = placeholdersOf(editDraft.template)
+                const missing =
+                  template.originalTemplate === undefined
+                    ? []
+                    : placeholdersOf(template.originalTemplate).filter(
+                        (placeholder) => !used.includes(placeholder),
+                      )
+                const editProblem = showErrors ? problemOf(editDraft) : null
+                return (
+                  <Fragment key={template.id}>
+                    <TableRow key={template.id}>
+                      <TableCell stack="heading">{nameOf(template)}</TableCell>
+                      <TableCell label={t('promptSettings.category')}>
+                        {categoryLabel(template.category)}
+                      </TableCell>
+                      <TableCell label={t('promptSettings.description')}>
+                        {descriptionOf(template)}
+                      </TableCell>
+                      <TableCell label={t('promptSettings.origin')}>
+                        {template.builtin ? (
+                          <span className="inline-flex flex-wrap gap-1">
+                            <Badge tone="neutral">{t('promptSettings.builtin')}</Badge>
+                            {isModified(template) && (
+                              <Badge tone="warning">{t('promptSettings.modified')}</Badge>
+                            )}
+                          </span>
+                        ) : (
+                          <Badge tone="info">{t('promptSettings.custom')}</Badge>
                         )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                  {editingId === template.id && (
-                    <TableRow key={`${template.id}-edit`}>
-                      <TableCell colSpan={5}>
-                        <div className="flex flex-col gap-3 py-2">
-                          <label htmlFor={`prompt-template-name-${template.id}`}>
-                            {t('promptSettings.name')}
-                          </label>
-                          <Input
-                            id={`prompt-template-name-${template.id}`}
-                            value={editDraft.name}
-                            onChange={(event) =>
-                              setEditDraft({ ...editDraft, name: event.target.value })
-                            }
-                          />
-                          <label htmlFor={`prompt-template-description-${template.id}`}>
-                            {t('promptSettings.description')}
-                          </label>
-                          <Input
-                            id={`prompt-template-description-${template.id}`}
-                            value={editDraft.description}
-                            onChange={(event) =>
-                              setEditDraft({ ...editDraft, description: event.target.value })
-                            }
-                          />
-                          <label htmlFor={`prompt-template-category-${template.id}`}>
-                            {t('promptSettings.category')}
-                          </label>
-                          <Input
-                            id={`prompt-template-category-${template.id}`}
-                            value={editDraft.category}
-                            onChange={(event) =>
-                              setEditDraft({ ...editDraft, category: event.target.value })
-                            }
-                          />
-                          <label htmlFor={`prompt-template-content-${template.id}`}>
-                            {t('promptSettings.template')}
-                          </label>
-                          <textarea
-                            id={`prompt-template-content-${template.id}`}
-                            className="w-full rounded-md border border-input bg-card px-3 py-2 font-mono text-sm leading-5 text-card-foreground shadow-card"
-                            rows={6}
-                            spellCheck={false}
-                            value={editDraft.template}
-                            onChange={(event) =>
-                              setEditDraft({ ...editDraft, template: event.target.value })
-                            }
-                          />
-                          <p className="m-0 text-xs opacity-70">
-                            {t('promptSettings.placeholderHint')}
-                          </p>
-                          <div className="flex gap-2">
+                      </TableCell>
+                      <TableCell stack="actions">
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" onClick={() => startEdit(template)}>
+                            {t('agents.edit')}
+                          </Button>
+                          {isModified(template) && (
                             <Button
                               size="sm"
-                              disabled={
-                                busy === template.id || editDraft.template.trim().length === 0
-                              }
-                              onClick={() => void submitEdit(template.id)}
+                              variant="secondary"
+                              disabled={busy === template.id}
+                              aria-label={t('promptSettings.resetNamed', { name: nameOf(template) })}
+                              onClick={() => setPendingReset(template)}
                             >
-                              {t('common.save')}
+                              {t('promptSettings.reset')}
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
-                              {t('common.cancel')}
+                          )}
+                          {!template.builtin && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive"
+                              disabled={busy === template.id}
+                              aria-label={t('promptSettings.removeNamed', { name: template.name })}
+                              onClick={() => setPendingRemoval(template)}
+                            >
+                              {t('agents.remove')}
                             </Button>
-                          </div>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
-                  )}
-                </Fragment>
-              ))}
+                    {editingId === template.id && (
+                      <TableRow key={`${template.id}-edit`}>
+                        <TableCell colSpan={5} className="min-w-0">
+                          <div ref={editBoxRef} className="flex min-w-0 flex-col gap-3 py-2">
+                            {wordsAreShipped(template) ? (
+                              <p className="m-0 text-sm text-muted-foreground">
+                                {t('promptSettings.shippedWords', {
+                                  name: nameOf(template),
+                                  description: descriptionOf(template),
+                                })}
+                              </p>
+                            ) : (
+                              <>
+                                <Field
+                                  label={t('promptSettings.name')}
+                                  error={
+                                    showErrors && editDraft.name.trim() === ''
+                                      ? t('promptSettings.nameRequired')
+                                      : null
+                                  }
+                                >
+                                  {(control) => (
+                                    <Input
+                                      {...control}
+                                      value={editDraft.name}
+                                      onChange={(event) =>
+                                        setEditDraft({ ...editDraft, name: event.target.value })
+                                      }
+                                    />
+                                  )}
+                                </Field>
+                                <Field label={t('promptSettings.description')}>
+                                  {(control) => (
+                                    <Input
+                                      {...control}
+                                      value={editDraft.description}
+                                      onChange={(event) =>
+                                        setEditDraft({
+                                          ...editDraft,
+                                          description: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  )}
+                                </Field>
+                                <Field label={t('promptSettings.category')}>
+                                  {(control) => (
+                                    <Select
+                                      {...control}
+                                      value={editDraft.category}
+                                      onChange={(event) =>
+                                        setEditDraft({ ...editDraft, category: event.target.value })
+                                      }
+                                    >
+                                      {categoryOptions(editDraft.category).map((category) => (
+                                        <option key={category} value={category}>
+                                          {categoryLabel(category)}
+                                        </option>
+                                      ))}
+                                    </Select>
+                                  )}
+                                </Field>
+                              </>
+                            )}
+                            <Field
+                              label={t('promptSettings.template')}
+                              description={t('promptSettings.placeholderHint')}
+                              error={
+                                editProblem !== null && editDraft.name.trim() !== ''
+                                  ? editProblem
+                                  : null
+                              }
+                            >
+                              {(control) => (
+                                <textarea
+                                  {...control}
+                                  className="w-full min-w-0 rounded-md border border-input bg-card px-3 py-2 font-mono text-sm leading-5 text-card-foreground shadow-card aria-invalid:border-destructive"
+                                  rows={6}
+                                  spellCheck={false}
+                                  value={editDraft.template}
+                                  onChange={(event) =>
+                                    setEditDraft({ ...editDraft, template: event.target.value })
+                                  }
+                                />
+                              )}
+                            </Field>
+                            {used.length > 0 && (
+                              <p className="m-0 text-xs text-muted-foreground">
+                                {t('promptSettings.variablesUsed', {
+                                  variables: used.map((name) => `{{${name}}}`).join(', '),
+                                })}
+                              </p>
+                            )}
+                            {missing.length > 0 && (
+                              <Notice tone="warning">
+                                <p>
+                                  {t('promptSettings.variablesMissing', {
+                                    variables: missing.map((name) => `{{${name}}}`).join(', '),
+                                  })}
+                                </p>
+                              </Notice>
+                            )}
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                disabled={busy === template.id}
+                                onClick={() => void submitEdit(template)}
+                              >
+                                {t('common.save')}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingId(null)
+                                  setShowErrors(false)
+                                }}
+                              >
+                                {t('common.cancel')}
+                              </Button>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                )
+              })}
               {templates.length === 0 && (
                 <TableEmpty colSpan={5}>{t('promptSettings.noTemplates')}</TableEmpty>
               )}
@@ -402,6 +632,35 @@ export function PromptSettingsRoute(): JSX.Element {
           </Table>
         </TableRoot>
       )}
+
+      <ConfirmAction
+        open={pendingRemoval !== null}
+        title={t('promptSettings.removeTitle', { name: pendingRemoval?.name ?? '' })}
+        confirmLabel={t('promptSettings.removeConfirm')}
+        busy={busy !== null}
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => {
+          if (pendingRemoval !== null) void submitRemove(pendingRemoval)
+        }}
+      >
+        <p className="m-0">{t('promptSettings.removeBody')}</p>
+      </ConfirmAction>
+
+      <ConfirmAction
+        open={pendingReset !== null}
+        title={t('promptSettings.resetTitle', {
+          name: pendingReset === null ? '' : nameOf(pendingReset),
+        })}
+        confirmLabel={t('promptSettings.resetConfirm')}
+        destructive={false}
+        busy={busy !== null}
+        onCancel={() => setPendingReset(null)}
+        onConfirm={() => {
+          if (pendingReset !== null) void submitReset(pendingReset)
+        }}
+      >
+        <p className="m-0">{t('promptSettings.resetBody')}</p>
+      </ConfirmAction>
     </section>
   )
 }

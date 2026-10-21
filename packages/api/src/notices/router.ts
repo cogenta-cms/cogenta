@@ -58,7 +58,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Notice routes are GET /api/notices and POST /api/notices/{id}/dismiss.',
+    hint: 'Notice routes are GET /api/notices, POST /api/notices/{id}/dismiss and POST /api/notices/{id}/restore.',
   })
 }
 
@@ -232,6 +232,16 @@ export function createNoticeRouter(options: NoticeRouterOptions): NoticeRouter {
           }
 
           await dismissals.dismiss(actor.id, noticeId)
+          return { status: 204, body: null, headers: {} }
+        }
+
+        if (segments.length === 2 && segments[1] === 'restore') {
+          if (method !== 'POST') return methodNotAllowed(['POST'])
+          if (actor.id === null) throw signedOut()
+          // Only ever deletes this actor's own row, so there is nothing to
+          // validate against the current sources: a notice that has since
+          // resolved simply has no dismissal left to remove.
+          await dismissals.restore(actor.id, segments[0] ?? '')
           return { status: 204, body: null, headers: {} }
         }
 

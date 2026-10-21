@@ -120,3 +120,58 @@ export function percentTextToBasisPoints(text: string): number | null {
 export function basisPointsToPercentText(basisPoints: number): string {
   return String(basisPoints / 100)
 }
+
+/** The currencies a shop most often sells in — a list to pick from, never a code to type. */
+export const COMMON_CURRENCIES: readonly string[] = [
+  'EUR',
+  'USD',
+  'GBP',
+  'CHF',
+  'CAD',
+  'AUD',
+  'JPY',
+  'SEK',
+  'NOK',
+  'DKK',
+  'PLN',
+  'CZK',
+  'HUF',
+  'RON',
+  'MAD',
+  'TND',
+  'XOF',
+  'XAF',
+  'BRL',
+  'MXN',
+  'INR',
+  'CNY',
+]
+
+export interface CurrencyOption {
+  readonly code: string
+  readonly name: string
+}
+
+/** `EUR` → "euro (EUR)", named in `locale`. `extra` adds a code already in use that is not a common one. */
+export function currencyOptions(
+  locale: string,
+  extra: readonly string[] = [],
+): readonly CurrencyOption[] {
+  let names: Intl.DisplayNames | null = null
+  try {
+    names = new Intl.DisplayNames([locale], { type: 'currency' })
+  } catch {
+    names = null
+  }
+  const codes = [...COMMON_CURRENCIES]
+  for (const code of extra) {
+    const upper = code.toUpperCase()
+    if (upper !== '' && !codes.includes(upper)) codes.push(upper)
+  }
+  return codes.map((code) => ({ code, name: `${names?.of(code) ?? code} (${code})` }))
+}
+
+/** `2050` basis points → "20,5 %" (in `locale`): a rate as a person reads it, with no stray decimals. */
+export function formatBasisPoints(basisPoints: number, locale: string): string {
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(basisPoints / 100)} %`
+}

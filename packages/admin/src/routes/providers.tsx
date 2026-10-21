@@ -1,6 +1,5 @@
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
 import {
   getProviderCatalog,
   listProviders,
@@ -9,9 +8,13 @@ import {
   removeProvider,
   saveProvider,
   setProviderEnabled,
+  testProvider,
   updateProviderSettings,
 } from '../api/providers-client.js'
 import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
+import { ConfirmAction } from '../ai/confirm-action.js'
+import { describeAiErrorLine } from '../ai/server-text.js'
+import { useFlash } from '../ai/use-flash.js'
 import { useAuth } from '../auth/auth-context.js'
 import { useAutosaveEnabled } from '../lib/autosave-prefs.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
@@ -195,6 +198,12 @@ export function ProvidersRoute(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const flash = useFlash()
+  const [pendingRemoval, setPendingRemoval] = useState<ProviderSummary | null>(null)
+  /** The last connection test per provider: shown in the row until it is run again. */
+  const [tests, setTests] = useState<
+    Readonly<Record<string, { readonly ok: boolean; readonly text: string }>>
+  >({})
 
   const [formProviderId, setFormProviderId] = useState<string>(CUSTOM_PROVIDER)
   const [formCustomProviderId, setFormCustomProviderId] = useState('')
@@ -249,7 +258,7 @@ export function ProvidersRoute(): JSX.Element {
           : current,
       )
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('providers.loadError'))
+      setError(describeAiErrorLine(caught, t, t('providers.loadError')))
     } finally {
       setLoading(false)
     }
@@ -270,6 +279,17 @@ export function ProvidersRoute(): JSX.Element {
   const editWantsImages = editImageModel.trim().length > 0
   const editImagesUnsupported =
     editWantsImages && editing !== null && !IMAGE_CAPABLE_PROVIDERS.has(editing.provider)
+
+  /** What still blocks "Enregistrer", worded the way the form labels it. */
+  const missingFields: string[] = []
+  if (isCustomProvider && effectiveProviderId.length === 0) {
+    missingFields.push(t('providers.customProviderId'))
+  }
+  if (formKey.trim().length === 0) missingFields.push(t('providers.apiKey'))
+  if (formModel.trim().length === 0) missingFields.push(t('providers.model'))
+  if (isCustomProvider && formBaseUrl.trim().length === 0) {
+    missingFields.push(t('providers.baseUrl'))
+  }
 
   function selectProvider(id: string): void {
     setFormProviderId(id)
@@ -320,9 +340,10 @@ export function ProvidersRoute(): JSX.Element {
       setFormMaxCorrectionAttempts('')
       setFormImageModel('')
       setFormImageBaseUrl('')
+      flash.show(t('providers.saved', { provider: effectiveProviderId }))
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('providers.saveError'))
+      setError(describeAiErrorLine(caught, t, t('providers.saveError')))
     } finally {
       setBusy(null)
     }
@@ -379,10 +400,11 @@ export function ProvidersRoute(): JSX.Element {
             : editImageBaseUrl.trim(),
         ...(editEndpointMoved ? { apiKey: editApiKey.trim() } : {}),
       })
+      flash.show(t('providers.updated', { provider: editing.provider }))
       setEditing(null)
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('providers.saveError'))
+      setError(describeAiErrorLine(caught, t, t('providers.saveError')))
     } finally {
       setEditBusy(false)
     }
@@ -394,9 +416,14 @@ export function ProvidersRoute(): JSX.Element {
     setError(null)
     try {
       await setProviderEnabled(token, provider.provider, !provider.enabled)
+      flash.show(
+        t(provider.enabled ? 'providers.nowDisabled' : 'providers.nowEnabled', {
+          provider: provider.provider,
+        }),
+      )
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('providers.saveError'))
+      setError(describeAiErrorLine(caught, t, t('providers.saveError')))
     } finally {
       setBusy(null)
     }
@@ -408,9 +435,52 @@ export function ProvidersRoute(): JSX.Element {
     setError(null)
     try {
       await removeProvider(token, provider.provider)
+      setTests((current) => {
+        const { [provider.provider]: _removed, ...rest } = current
+        return rest
+      })
+      flash.show(t('providers.removed', { provider: provider.provider }))
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('providers.saveError'))
+      setError(describeAiErrorLine(caught, t, t('providers.saveError')))
+    } finally {
+      setBusy(null)
+      setPendingRemoval(null)
+    }
+  }
+
+  async function runTest(provider: ProviderSummary): Promise<void> {
+    if (token === null) return
+    setBusy(`test:${provider.provider}`)
+    try {
+      const result = await testProvider(token, provider.provider)
+      const seconds = result.latencyMs === undefined ? undefined : (result.latencyMs / 1000).toFixed(1)
+      setTests((current) => ({
+        ...current,
+        [provider.provider]: result.ok
+          ? {
+              ok: true,
+              text:
+                seconds === undefined
+                  ? t('providers.testOk')
+                  : t('providers.testOkIn', { seconds }),
+            }
+          : {
+              ok: false,
+              text:
+                result.detail === undefined || result.detail === ''
+                  ? t('providers.testFailed')
+                  : t('providers.testFailedWith', { detail: result.detail }),
+            },
+      }))
+    } catch (caught) {
+      setTests((current) => ({
+        ...current,
+        [provider.provider]: {
+          ok: false,
+          text: describeAiErrorLine(caught, t, t('providers.testFailed')),
+        },
+      }))
     } finally {
       setBusy(null)
     }
@@ -437,13 +507,18 @@ export function ProvidersRoute(): JSX.Element {
           <p>{error}</p>
         </Notice>
       )}
+      {flash.message !== null && (
+        <Notice tone="success" live="polite" onDismiss={flash.clear} dismissLabel={t('common.close')}>
+          <p>{flash.message}</p>
+        </Notice>
+      )}
 
       <div className="flex flex-col gap-3">
         <h2 className="m-0 text-lg font-semibold">{t('providers.configuredHeading')}</h2>
         {loading && <p>{t('common.loading')}</p>}
 
         {!loading && (
-          <TableRoot label={t('providers.heading')}>
+          <TableRoot label={t('providers.heading')} stacked>
             <Table>
               <TableHead>
                 <TableRow>
@@ -459,10 +534,19 @@ export function ProvidersRoute(): JSX.Element {
               <TableBody>
                 {providers.map((provider) => (
                   <TableRow key={provider.provider}>
-                    <TableCell>{provider.provider}</TableCell>
-                    <TableCell>{provider.model}</TableCell>
-                    <TableCell>{provider.maskedKey}</TableCell>
-                    <TableCell>
+                    <TableCell stack="heading">
+                      {provider.provider}
+                      {/* A custom endpoint is identified by its address, which
+                          the list used to leave out. */}
+                      {provider.baseUrl !== undefined && provider.baseUrl !== '' && (
+                        <span className="block max-w-[22rem] break-all text-xs font-normal text-muted-foreground">
+                          {provider.baseUrl}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell label={t('providers.model')}>{provider.model}</TableCell>
+                    <TableCell label={t('providers.apiKey')}>{provider.maskedKey}</TableCell>
+                    <TableCell label={t('providers.tuningColumn')}>
                       {provider.maxOutputTokens === undefined &&
                       provider.requestTimeoutMs === undefined &&
                       provider.maxCorrectionAttempts === undefined ? (
@@ -474,7 +558,9 @@ export function ProvidersRoute(): JSX.Element {
                           {[
                             provider.maxOutputTokens === undefined
                               ? undefined
-                              : t('providers.tuningTokens', { count: provider.maxOutputTokens }),
+                              : t('providers.tuningTokens', {
+                                  count: provider.maxOutputTokens,
+                                }),
                             provider.requestTimeoutMs === undefined
                               ? undefined
                               : t('providers.tuningTimeout', {
@@ -493,7 +579,7 @@ export function ProvidersRoute(): JSX.Element {
                     </TableCell>
                     {/* The capability, read exactly the way the server derives
                         it: a model is named, or this vendor does text only. */}
-                    <TableCell>
+                    <TableCell label={t('providers.imagesColumn')}>
                       {provider.imageModel === undefined || provider.imageModel === '' ? (
                         <span className="text-muted-foreground">
                           {t('providers.imageTextOnly')}
@@ -502,17 +588,42 @@ export function ProvidersRoute(): JSX.Element {
                         <Badge tone="info">{provider.imageModel}</Badge>
                       )}
                     </TableCell>
-                    <TableCell>
-                      {provider.enabled ? t('providers.enabled') : t('providers.disabled')}
+                    <TableCell label={t('providers.state')}>
+                      <Badge tone={provider.enabled ? 'success' : 'neutral'}>
+                        {provider.enabled ? t('providers.enabled') : t('providers.disabled')}
+                      </Badge>
+                      {tests[provider.provider] !== undefined && (
+                        <p
+                          role="status"
+                          className={`m-0 mt-1 max-w-[18rem] text-xs ${
+                            tests[provider.provider]?.ok === true
+                              ? 'text-success'
+                              : 'text-destructive'
+                          }`}
+                        >
+                          {tests[provider.provider]?.text}
+                        </p>
+                      )}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
+                    <TableCell stack="actions">
+                      <div className="flex flex-wrap gap-2">
                         <Button size="sm" variant="secondary" onClick={() => startEdit(provider)}>
                           {t('providers.edit')}
                         </Button>
                         <Button
                           size="sm"
-                          variant={provider.enabled ? 'destructive' : 'secondary'}
+                          variant="secondary"
+                          disabled={!provider.enabled || busy === `test:${provider.provider}`}
+                          title={provider.enabled ? undefined : t('providers.testNeedsEnabled')}
+                          onClick={() => void runTest(provider)}
+                        >
+                          {busy === `test:${provider.provider}`
+                            ? t('providers.testing')
+                            : t('providers.test')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
                           disabled={busy === provider.provider}
                           onClick={() => void toggle(provider)}
                         >
@@ -521,8 +632,10 @@ export function ProvidersRoute(): JSX.Element {
                         <Button
                           size="sm"
                           variant="ghost"
+                          className="text-destructive"
                           disabled={busy === provider.provider}
-                          onClick={() => void remove(provider)}
+                          aria-label={t('providers.removeNamed', { provider: provider.provider })}
+                          onClick={() => setPendingRemoval(provider)}
                         >
                           {t('providers.remove')}
                         </Button>
@@ -633,14 +746,22 @@ export function ProvidersRoute(): JSX.Element {
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <Field
                 label={t('providers.baseUrl')}
-                description={isCustomProvider ? t('providers.baseUrlRequiredForCustom') : undefined}
+                description={
+                  isCustomProvider
+                    ? t('providers.baseUrlRequiredForCustom')
+                    : t('providers.baseUrlOptional')
+                }
               >
                 {(control) => (
                   <Input
                     {...control}
                     value={formBaseUrl}
                     onChange={(event) => setFormBaseUrl(event.target.value)}
-                    placeholder={t('providers.baseUrlPlaceholder')}
+                    placeholder={
+                      isCustomProvider
+                        ? t('providers.baseUrlPlaceholderCustom')
+                        : t('providers.baseUrlPlaceholder')
+                    }
                   />
                 )}
               </Field>
@@ -726,15 +847,15 @@ export function ProvidersRoute(): JSX.Element {
               )}
             </div>
           </details>
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {missingFields.length > 0 && (
+              <p className="m-0 text-xs text-muted-foreground" id="providers-missing">
+                {t('providers.missingFields', { fields: missingFields.join(', ') })}
+              </p>
+            )}
             <Button
-              disabled={
-                busy === 'save' ||
-                formKey.trim().length === 0 ||
-                formModel.trim().length === 0 ||
-                effectiveProviderId.length === 0 ||
-                (isCustomProvider && formBaseUrl.trim().length === 0)
-              }
+              disabled={busy === 'save' || missingFields.length > 0}
+              aria-describedby={missingFields.length > 0 ? 'providers-missing' : undefined}
               onClick={() => void submitSave()}
             >
               {t('common.save')}
@@ -753,6 +874,19 @@ export function ProvidersRoute(): JSX.Element {
           </div>
         </details>
       )}
+
+      <ConfirmAction
+        open={pendingRemoval !== null}
+        title={t('providers.removeTitle', { provider: pendingRemoval?.provider ?? '' })}
+        confirmLabel={t('providers.removeConfirm')}
+        busy={busy !== null}
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => {
+          if (pendingRemoval !== null) void remove(pendingRemoval)
+        }}
+      >
+        <p className="m-0">{t('providers.removeBody')}</p>
+      </ConfirmAction>
 
       {editing !== null && (
         <Modal

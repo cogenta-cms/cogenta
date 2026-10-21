@@ -67,6 +67,14 @@ export interface LinkCheckOptions {
   /** Locale routing, so a site-relative path with a locale prefix resolves. */
   readonly locales?: readonly string[]
   readonly defaultLocale?: string
+  /**
+   * Whether the host serves this site-relative path itself, outside any
+   * collection route — taxonomy and author archives, the search page. Asked
+   * only for a path no collection route matches, so it can never mask a real
+   * broken link to a collection entry. Without it such a path is reported as
+   * `unroutable_path`, which is a false alarm on a site that has archives.
+   */
+  readonly isServedPath?: (pathname: string) => boolean | Promise<boolean>
   /** Follow `http(s)` URLs that leave the site. Off by default. */
   readonly checkExternal?: boolean
   /** Defaults to the global `fetch`; overridable for tests. */
@@ -151,7 +159,9 @@ export async function checkLinks(options: LinkCheckOptions): Promise<LinkCheckRe
 
   async function pathVerdict(pathname: string): Promise<BrokenLinkReason | null> {
     const match = matchPath(collections, pathname, routingOptions)
-    if (match === null) return 'unroutable_path'
+    if (match === null) {
+      return (await options.isServedPath?.(pathname)) === true ? null : 'unroutable_path'
+    }
     const target = byName.get(match.collection)
     if (target === undefined) return 'unknown_collection'
 

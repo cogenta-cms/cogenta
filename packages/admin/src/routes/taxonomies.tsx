@@ -1,6 +1,6 @@
 import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
+import { describeApiError } from '../api/describe-error.js'
 import {
   createTerm,
   deleteTerm,
@@ -116,7 +116,7 @@ export function TaxonomiesRoute(): JSX.Element {
     try {
       setTerms(await listTerms(token, current, { counts: true }))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('taxonomies.loadError'))
+      setError(describeApiError(caught, t('taxonomies.loadError')).message)
     } finally {
       setLoading(false)
     }
@@ -185,7 +185,7 @@ export function TaxonomiesRoute(): JSX.Element {
     } catch (caught) {
       // The store refuses a cycle or a subtree past the depth bound — its
       // message says which, and is shown rather than guessed at.
-      setError(caught instanceof ApiError ? caught.message : t('taxonomies.reorderError'))
+      setError(describeApiError(caught, t('taxonomies.reorderError')).message)
     }
   }
 
@@ -321,6 +321,7 @@ export function TaxonomiesRoute(): JSX.Element {
                 locale={i18n.language}
                 mayUpdate={mayUpdate}
                 mayDelete={mayDelete}
+                hierarchical={selected?.hierarchical !== false}
                 onEdit={openEdit}
                 onDelete={setDeleteTarget}
                 onReorder={(plan) => void reorder(plan)}
@@ -333,6 +334,7 @@ export function TaxonomiesRoute(): JSX.Element {
         open={formOpen}
         onOpenChange={setFormOpen}
         locales={locales}
+        hierarchical={selected?.hierarchical !== false}
         terms={terms}
         editing={editingTerm}
         onSave={saveTerm}

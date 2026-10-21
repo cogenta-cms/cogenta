@@ -1,4 +1,3 @@
-import { withoutScripts } from './appearance-preview.js'
 import { type ChangeEvent, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
@@ -27,11 +26,13 @@ import {
   CardHeader,
   CardTitle,
   Field,
+  FileButton,
   Input,
   Modal,
   Notice,
   Select,
 } from '../ui/index.js'
+import { withoutScripts } from './appearance-preview.js'
 
 /**
  * Fiche 73's own admin screen — the last, deliberately deferred piece of
@@ -315,12 +316,15 @@ function VersionsPanel({
         <CardDescription>{t('themeSandbox.versionsDescription')}</CardDescription>
       </CardHeader>
       <CardBody className="flex flex-col gap-4">
-        <Field label={t('themeSandbox.themeNameLabel')}>
-          {(control) => (
-            <div className="flex gap-2">
-              {availableThemeNames.length > 0 ? (
+        {availableThemeNames.length === 0 ? (
+          <p className="m-0 text-sm text-muted-foreground">{t('themeSandbox.noLocalThemes')}</p>
+        ) : (
+          <Field label={t('themeSandbox.themeNameLabel')}>
+            {(control) => (
+              <div className="flex flex-wrap gap-2">
                 <Select
                   {...control}
+                  className="min-w-0 flex-1"
                   value={themeName}
                   onChange={(event) => setThemeName(event.target.value)}
                 >
@@ -331,23 +335,17 @@ function VersionsPanel({
                     </option>
                   ))}
                 </Select>
-              ) : (
-                <Input
-                  {...control}
-                  value={themeName}
-                  onChange={(event) => setThemeName(event.target.value)}
-                />
-              )}
-              <Button
-                variant="secondary"
-                onClick={() => void loadVersions(themeName)}
-                disabled={themeName.trim() === ''}
-              >
-                {t('themeSandbox.loadVersionsAction')}
-              </Button>
-            </div>
-          )}
-        </Field>
+                <Button
+                  variant="secondary"
+                  onClick={() => void loadVersions(themeName)}
+                  disabled={themeName.trim() === ''}
+                >
+                  {t('themeSandbox.loadVersionsAction')}
+                </Button>
+              </div>
+            )}
+          </Field>
+        )}
 
         {error !== null && <ErrorNotice error={error} />}
         {restoredNotice !== null && (
@@ -449,37 +447,36 @@ function ExportImportPanel({
       </CardHeader>
       <CardBody className="flex flex-col gap-6">
         <div className="flex flex-col gap-2">
-          <Field label={t('themeSandbox.exportThemeNameLabel')}>
-            {(control) =>
-              availableThemeNames.length > 0 ? (
-                <Select
-                  {...control}
-                  value={exportThemeName}
-                  onChange={(event) => setExportThemeName(event.target.value)}
-                >
-                  <option value="">{t('themeSandbox.chooseThemePlaceholder')}</option>
-                  {availableThemeNames.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </Select>
-              ) : (
-                <Input
-                  {...control}
-                  value={exportThemeName}
-                  onChange={(event) => setExportThemeName(event.target.value)}
-                />
-              )
-            }
-          </Field>
-          <Button
-            variant="secondary"
-            onClick={() => void runExport()}
-            disabled={exporting || exportThemeName.trim() === ''}
-          >
-            {exporting ? t('themeSandbox.exporting') : t('themeSandbox.exportAction')}
-          </Button>
+          {availableThemeNames.length === 0 ? (
+            <p className="m-0 text-sm text-muted-foreground">{t('themeSandbox.noLocalThemes')}</p>
+          ) : (
+            <>
+              <Field label={t('themeSandbox.exportThemeNameLabel')}>
+                {(control) => (
+                  <Select
+                    {...control}
+                    value={exportThemeName}
+                    onChange={(event) => setExportThemeName(event.target.value)}
+                  >
+                    <option value="">{t('themeSandbox.chooseThemePlaceholder')}</option>
+                    {availableThemeNames.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <Button
+                className="self-start"
+                variant="secondary"
+                onClick={() => void runExport()}
+                disabled={exporting || exportThemeName.trim() === ''}
+              >
+                {exporting ? t('themeSandbox.exporting') : t('themeSandbox.exportAction')}
+              </Button>
+            </>
+          )}
           {exportError !== null && <ErrorNotice error={exportError} />}
         </div>
 
@@ -496,10 +493,17 @@ function ExportImportPanel({
           </Field>
           <Field label={t('themeSandbox.importFileLabel')}>
             {(control) => (
-              <input {...control} type="file" accept=".zip" onChange={onFileSelected} />
+              <FileButton
+                {...control}
+                accept=".zip"
+                onChange={onFileSelected}
+                label={t('themeSandbox.chooseFileAction')}
+                emptyLabel={t('themeSandbox.noFileChosen')}
+              />
             )}
           </Field>
           <Button
+            className="self-start"
             variant="secondary"
             onClick={() => void runImport()}
             disabled={importing || importFile === null || importSandboxId.trim() === ''}
@@ -644,6 +648,9 @@ export function ThemeSandboxRoute(): JSX.Element {
               {creating ? t('themeSandbox.creating') : t('themeSandbox.createAction')}
             </Button>
           </div>
+          {availableThemeNames.length === 0 && (
+            <p className="m-0 text-xs text-muted-foreground">{t('themeSandbox.cloneFromHelp')}</p>
+          )}
           {createError !== null && <ErrorNotice error={createError} />}
 
           {sandboxIds.length === 0 && (

@@ -1,6 +1,7 @@
 import { type DragEvent, type JSX, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { MediaFolder } from '../api/media-client.js'
+import { EditIcon, PlusIcon, TrashIcon } from '../ui/icons.js'
 import { Button } from '../ui/index.js'
 
 /**
@@ -200,9 +201,9 @@ function FolderNode({
             title={t('media.newSubfolder')}
             aria-label={t('media.newSubfolderFor', { name: folder.name })}
             onClick={() => onCreateChild(folder.id)}
-            className="inline-flex size-8 items-center justify-center cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:text-foreground"
+            className="inline-flex size-8 items-center justify-center cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            +
+            <PlusIcon className="size-4" />
           </button>
           <button
             type="button"
@@ -210,9 +211,9 @@ function FolderNode({
             title={t('media.renameFolder')}
             aria-label={t('media.renameFolderFor', { name: folder.name })}
             onClick={() => onRename(folder)}
-            className="inline-flex size-8 items-center justify-center cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:text-foreground"
+            className="inline-flex size-8 items-center justify-center cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            ✎
+            <EditIcon className="size-4" />
           </button>
           <button
             type="button"
@@ -220,9 +221,9 @@ function FolderNode({
             title={t('media.deleteFolder')}
             aria-label={t('media.deleteFolderFor', { name: folder.name })}
             onClick={() => onDelete(folder)}
-            className="inline-flex size-8 items-center justify-center cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:text-destructive"
+            className="inline-flex size-8 items-center justify-center cursor-pointer rounded border-none bg-transparent px-1 text-xs text-muted-foreground hover:bg-accent hover:text-destructive"
           >
-            ×
+            <TrashIcon className="size-4" />
           </button>
         </div>
       </div>

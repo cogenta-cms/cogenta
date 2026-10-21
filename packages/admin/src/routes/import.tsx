@@ -415,7 +415,10 @@ function RunCard({
         ) : (
           <>
             {!finished && source === 'wordpress' && (
-              <WordPressPreview analysis={run.analysis as WordPressAnalysis} />
+              <WordPressPreview
+                analysis={run.analysis as WordPressAnalysis}
+                collections={collections}
+              />
             )}
             {!finished && (source === 'csv' || source === 'rss') && (
               <GenericPreview
@@ -492,7 +495,20 @@ function TechnicalNotes({
   )
 }
 
-function WordPressPreview({ analysis }: { readonly analysis: WordPressAnalysis }): JSX.Element {
+/** A field under the name the editor sees in the entry form (its label, else its humanised name) rather than the identifier. */
+function fieldLabel(collection: CollectionSummary | undefined, name: string): string {
+  return (
+    collection?.fields.find((field) => field.name === name)?.admin?.label ?? humanizeFieldName(name)
+  )
+}
+
+function WordPressPreview({
+  analysis,
+  collections,
+}: {
+  readonly analysis: WordPressAnalysis
+  readonly collections: readonly CollectionSummary[]
+}): JSX.Element {
   const { t } = useTranslation()
   const countKeys = ['posts', 'pages', 'categories', 'tags', 'comments', 'attachments'] as const
 
@@ -520,7 +536,9 @@ function WordPressPreview({ analysis }: { readonly analysis: WordPressAnalysis }
             <div key={kind} className="flex flex-col gap-1 rounded-md border border-border p-3">
               <p className="m-0 text-sm font-semibold">
                 {t(kind === 'post' ? 'importPage.mappingPosts' : 'importPage.mappingPages', {
-                  name: target.collection,
+                  name:
+                    collections.find((candidate) => candidate.name === target.collection)?.labels
+                      .plural ?? target.collection,
                 })}
               </p>
               <p className="m-0 text-xs text-muted-foreground">
@@ -532,7 +550,10 @@ function WordPressPreview({ analysis }: { readonly analysis: WordPressAnalysis }
                     <li key={datum}>
                       {t('importPage.fieldArrow', {
                         datum: t(`importPage.datum.${datum}`, { defaultValue: datum }),
-                        field,
+                        field: fieldLabel(
+                          collections.find((candidate) => candidate.name === target.collection),
+                          field,
+                        ),
                       })}
                     </li>
                   ))}

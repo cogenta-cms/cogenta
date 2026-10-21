@@ -7,6 +7,8 @@ import type {
   FieldChange,
   WordChange,
 } from '../api/content-client.js'
+import { plainTextOfRichText } from '../collections/word-count.js'
+import type { RichTextDocument } from '../rich-text/portable-text.js'
 import { fieldLabel } from '../schema/field-label.js'
 import type { SchemaField } from '../schema/types.js'
 
@@ -76,6 +78,9 @@ function FieldChangeRow({
         </div>
       ) : (
         <>
+          {isFormattingOnly(change) && (
+            <span className="block text-muted-foreground">{t('versions.formattingOnly')}</span>
+          )}
           {change.change !== 'added' && t('versions.before', { value: stringify(change.before) })}
           {change.change !== 'removed' && t('versions.after', { value: stringify(change.after) })}
         </>
@@ -150,8 +155,36 @@ function labelFor(change: ChangeKind | 'moved', t: (key: string) => string): str
   }
 }
 
+/** A rich-text document: what the editor stores for a formatted body. */
+function isRichText(value: unknown): value is RichTextDocument {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (node) =>
+        typeof node === 'object' &&
+        node !== null &&
+        '_type' in node &&
+        (node._type === 'block' || node._type === 'media' || node._type === 'hr'),
+    )
+  )
+}
+
+/** Both sides are formatted bodies that read the same: only marks, lists or styles moved. */
+function isFormattingOnly(change: FieldChange): boolean {
+  return (
+    change.change === 'changed' &&
+    isRichText(change.before) &&
+    isRichText(change.after) &&
+    plainTextOfRichText(change.before) === plainTextOfRichText(change.after)
+  )
+}
+
 function stringify(value: unknown): string {
-  if (value === undefined) return '—'
+  if (value === undefined || value === null) return '—'
   if (typeof value === 'string') return value
+  // A formatted body is shown as the text a reader sees, never as the
+  // Portable Text tree it is stored as.
+  if (isRichText(value)) return plainTextOfRichText(value) || '—'
   return JSON.stringify(value)
 }

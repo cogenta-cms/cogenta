@@ -1,7 +1,6 @@
 import { type JSX, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { type Product, updateVariant, type Variant } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
 import {
   Button,
   Field,
@@ -16,7 +15,8 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
-import { formatMinor } from './money.js'
+import { commerceErrorMessage } from './commerce-errors.js'
+import { formatMinor, parseDecimal } from './money.js'
 
 export interface BulkPriceLine {
   readonly product: Product
@@ -45,8 +45,9 @@ export function BulkPriceModal({
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const percent = Number(percentText)
-  const validPercent = percentText.trim() !== '' && Number.isFinite(percent)
+  const parsedPercent = parseDecimal(percentText)
+  const percent = parsedPercent ?? 0
+  const validPercent = parsedPercent !== null
 
   const preview = useMemo(() => {
     if (!validPercent) return []
@@ -67,7 +68,7 @@ export function BulkPriceModal({
       await onApplied()
       onClose()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.bulkPriceError'))
+      setError(commerceErrorMessage(t, caught, 'commerceProducts.bulkPriceError'))
     } finally {
       setApplying(false)
     }
@@ -80,7 +81,7 @@ export function BulkPriceModal({
         if (!open) onClose()
       }}
       title={t('commerceProducts.bulkPriceHeading')}
-      closeLabel={t('commerceProducts.close')}
+      closeLabel={t('common.close')}
     >
       <div className="flex flex-col gap-4">
         {error !== null && (

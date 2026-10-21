@@ -18,6 +18,7 @@ import {
 } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { roleLabel } from '../lib/role-label.js'
+import { sessionDeviceLabel } from '../lib/session-labels.js'
 import { useLocalPagination } from '../lib/use-local-pagination.js'
 import { grantsForRole, knownRoleNames } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
@@ -656,7 +657,9 @@ export function UsersRoute(): JSX.Element {
                 <TableHeader>{t('users.rolesColumn')}</TableHeader>
                 <TableHeader>{t('users.statusColumn')}</TableHeader>
                 <TableHeader>{t('users.mfaColumn')}</TableHeader>
-                <TableHeader className="whitespace-nowrap">{t('users.lastSignInColumn')}</TableHeader>
+                <TableHeader className="whitespace-nowrap">
+                  {t('users.lastSignInColumn')}
+                </TableHeader>
                 <TableHeader>{t('users.actionsColumn')}</TableHeader>
               </TableRow>
             </TableHead>
@@ -956,7 +959,11 @@ export function UsersRoute(): JSX.Element {
             <Button variant="secondary" onClick={() => setDisabling(null)}>
               {t('common.cancel')}
             </Button>
-            <Button variant="destructive" loading={disableBusy} onClick={() => void confirmDisable()}>
+            <Button
+              variant="destructive"
+              loading={disableBusy}
+              onClick={() => void confirmDisable()}
+            >
               {t('users.disableConfirmButton')}
             </Button>
           </>
@@ -1168,8 +1175,8 @@ export function SessionList({
             <li key={session.id} className="flex flex-wrap items-center justify-between gap-3">
               <span className="min-w-0 break-words text-sm [overflow-wrap:anywhere]">
                 {session.label ?? t('users.unnamedSession')} —{' '}
-                {t('users.sessionDevice', { browser: session.browser, device: session.device })} —{' '}
-                {t('users.lastSeen')} {formatWhen(session.lastSeenAt)}
+                {sessionDeviceLabel(t, session.browser, session.device)} — {t('users.lastSeen')}{' '}
+                {formatWhen(session.lastSeenAt)}
                 {session.isCurrent && (
                   <>
                     {' '}
@@ -1178,9 +1185,9 @@ export function SessionList({
                 )}
               </span>
               <Button
-                variant="destructive"
+                variant="secondary"
                 size="sm"
-                aria-label={`${t('users.revokeSession', { at: formatWhen(session.lastSeenAt) })} — ${session.label ?? t('users.unnamedSession')} (${session.browser}, ${session.device}) — ${t('users.sessionNumber', { number: pagination.start + index + 1 })}`}
+                aria-label={`${t('users.revokeSession', { at: formatWhen(session.lastSeenAt) })} — ${session.label ?? t('users.unnamedSession')} (${sessionDeviceLabel(t, session.browser, session.device)}) — ${t('users.sessionNumber', { number: pagination.start + index + 1 })}`}
                 onClick={() => onRevoke(session.id)}
               >
                 {t('users.revokeSessionShort')}
@@ -1261,7 +1268,11 @@ export function RoleGrantsSummary({
       })}
       {unknown.length > 0 && (
         <Notice tone="warning">
-          <p className="m-0">{t('users.unknownRoleWarning', { roles: unknown.map((role) => roleLabel(t, role)).join(', ') })}</p>
+          <p className="m-0">
+            {t('users.unknownRoleWarning', {
+              roles: unknown.map((role) => roleLabel(t, role)).join(', '),
+            })}
+          </p>
         </Notice>
       )}
       <p className="m-0 text-xs text-muted-foreground">{t('users.roleGrantsLoadNote')}</p>

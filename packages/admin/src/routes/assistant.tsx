@@ -1,15 +1,14 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router'
+import { useSearchParams } from 'react-router'
 import type { AssistCapabilities, AssistCapability } from '../api/assist-client.js'
 import { getAssistCapabilities } from '../api/assist-client.js'
-import { ApiError } from '../api/client.js'
+import { describeAiErrorLine } from '../ai/server-text.js'
 import { NoProviderNotice } from '../assist/no-provider-notice.js'
 import { toolDescription, toolLabel } from '../assist/tool-text.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
   Button,
-  buttonVariants,
   Card,
   CardBody,
   CardHeader,
@@ -65,14 +64,27 @@ function needsProvider(tool: AssistCapability): boolean {
 }
 
 export function AssistantRoute(): JSX.Element | null {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
 
   const [capabilities, setCapabilities] = useState<AssistCapabilities | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('overview')
+  // The tab lives in the address (`?tab=index`), so a link or a reload lands
+  // on the same one instead of the overview.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
+  const tab: Tab =
+    requestedTab === 'index' || requestedTab === 'chat' || requestedTab === 'duplicates'
+      ? requestedTab
+      : 'overview'
+  const setTab = (next: Tab): void => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'overview') params.delete('tab')
+    else params.set('tab', next)
+    setSearchParams(params)
+  }
 
   const load = useCallback(async () => {
     if (token === null) return
@@ -83,7 +95,7 @@ export function AssistantRoute(): JSX.Element | null {
       // this is the one screen whose entire job is to explain the assistant's
       // state, so an editor deserves to know the request itself failed rather
       // than being told, wrongly, that no provider is configured.
-      setError(caught instanceof ApiError ? caught.message : t('assistant.loadError'))
+      setError(describeAiErrorLine(caught, t, t('assistant.loadError')))
     }
   }, [token, t])
 
@@ -95,9 +107,13 @@ export function AssistantRoute(): JSX.Element | null {
 
   if (error !== null) {
     return (
-      <section aria-labelledby="assistant-heading">
-        <h1 id="assistant-heading">{t('assistant.heading')}</h1>
-        <p role="alert">{error}</p>
+      <section aria-labelledby="assistant-heading" className="flex flex-col gap-4">
+        <h1 id="assistant-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
+          {t('assistant.heading')}
+        </h1>
+        <Notice tone="danger" live="assertive">
+          <p>{error}</p>
+        </Notice>
       </section>
     )
   }
@@ -115,32 +131,27 @@ export function AssistantRoute(): JSX.Element | null {
   // (fiche 30 task 2 — everywhere else in this admin, R2 means silence).
   if (!capabilities.available) {
     return (
-      <section aria-labelledby="assistant-heading">
-        <h1 id="assistant-heading">{t('assistant.heading')}</h1>
-        <Notice
-          tone="info"
-          live="off"
-          title={t('assistant.offTitle')}
-          actions={
-            <Link to="/providers" className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
-              {t('providers.configureAction')}
-            </Link>
-          }
-        >
-          <p className="m-0">{capabilities.reason ?? t('assistant.offReasonFallback')}</p>
+      <section aria-labelledby="assistant-heading" className="flex flex-col gap-4">
+        <h1 id="assistant-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
+          {t('assistant.heading')}
+        </h1>
+        <NoProviderNotice>
+          <p className="m-0 font-semibold">{t('assistant.offTitle')}</p>
+          <p className="m-0 mt-1">{capabilities.reason ?? t('assistant.offReasonFallback')}</p>
           <p className="m-0 mt-2">{t('assistant.offHowTo')}</p>
           <ul className="m-0 mt-2 list-disc pl-5">
             <li>{t('assistant.offStepConfig')}</li>
             <li>{t('assistant.offStepEnv')}</li>
           </ul>
           <p className="m-0 mt-2">{t('assistant.offNoImpact')}</p>
-        </Notice>
+        </NoProviderNotice>
       </section>
     )
   }
 
   const usage = capabilities.usage
   const vector = capabilities.vector
+  const number = new Intl.NumberFormat(i18n.language)
   return (
     <section aria-labelledby="assistant-heading" className="flex flex-col gap-6">
       <h1 id="assistant-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
@@ -255,10 +266,10 @@ export function AssistantRoute(): JSX.Element | null {
                   )}
                   <p className="m-0 text-sm text-foreground">
                     {usage.limit === undefined
-                      ? t('assistant.usageNoLimit', { tokens: usage.tokensThisMonth })
+                      ? t('assistant.usageNoLimit', { tokens: number.format(usage.tokensThisMonth) })
                       : t('assistant.usageWithLimit', {
-                          tokens: usage.tokensThisMonth,
-                          limit: usage.limit,
+                          tokens: number.format(usage.tokensThisMonth),
+                          limit: number.format(usage.limit),
                           percent: Math.round(usage.percentUsed ?? 0),
                         })}
                   </p>
@@ -267,7 +278,10 @@ export function AssistantRoute(): JSX.Element | null {
                       {usage.byTool.map((row) => (
                         <li key={row.tool}>
                           {toolLabel({ tool: row.tool, label: row.tool }, t)} —{' '}
-                          {t('assistant.usageRow', { calls: row.calls, tokens: row.tokens })}
+                          {t('assistant.usageRow', {
+                            count: row.calls,
+                            tokens: number.format(row.tokens),
+                          })}
                         </li>
                       ))}
                     </ul>
@@ -289,8 +303,9 @@ export function AssistantRoute(): JSX.Element | null {
                   </p>
                   <p className="m-0 mt-2 text-sm text-foreground">
                     {t('assistant.vectorDriver', {
-                      driver: vector.driver,
-                      dimensions: vector.dimensions,
+                      driver: t(`assistant.vectorDrivers.${vector.driver}`, {
+                        defaultValue: vector.driver,
+                      }),
                     })}
                   </p>
                   <p className="m-0 text-sm text-foreground">
@@ -298,9 +313,11 @@ export function AssistantRoute(): JSX.Element | null {
                   </p>
                   <p className="m-0 text-sm text-muted-foreground">
                     {vector.lastIndexedAt === null
-                      ? t('assistant.vectorNeverIndexed')
+                      ? vector.count === 0
+                        ? t('assistant.vectorNeverIndexed')
+                        : t('assistant.vectorIndexedBeforeStart')
                       : t('assistant.vectorLastIndexed', {
-                          at: new Date(vector.lastIndexedAt).toLocaleString(),
+                          at: new Date(vector.lastIndexedAt).toLocaleString(i18n.language),
                         })}
                   </p>
                   <Button
@@ -330,7 +347,9 @@ export function AssistantRoute(): JSX.Element | null {
 
       {tab === 'chat' && (
         <div id="assistant-panel-chat" role="tabpanel" aria-labelledby="assistant-tab-chat">
-          <AssistantChatRoute />
+          <AssistantChatRoute
+            {...(vector === undefined ? {} : { onOpenIndex: () => setTab('index') })}
+          />
         </div>
       )}
 

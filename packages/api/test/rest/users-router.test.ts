@@ -239,6 +239,22 @@ describe('GET /api/users', () => {
 })
 
 describe('POST /api/users', () => {
+  it('refuses an admin API key that tries to create or promote an account', async () => {
+    const editor = await makeUser('editor@example.com', ['editor'])
+    const key = actorFor('apikey:01a15b7a-0000-7000-8000-000000000001', ['admin'])
+
+    const created = await router().handle(
+      request('POST', '/api/users', { email: 'second-admin@example.com', roles: ['admin'] }),
+      key,
+    )
+    expect(created.status).toBe(403)
+    const promoted = await router().handle(
+      request('PATCH', `/api/users/${editor.id}`, { roles: ['admin'] }),
+      key,
+    )
+    expect(promoted.status).toBe(403)
+  })
+
   it('creates the account and returns a generated password exactly once', async () => {
     const admin = await makeUser('root@example.com', ['admin'])
     const response = await router().handle(

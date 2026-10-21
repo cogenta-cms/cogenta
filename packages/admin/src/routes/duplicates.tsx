@@ -3,14 +3,29 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import type { DuplicateMatch } from '../api/assist-client.js'
 import { getAssistCapabilities, runFindDuplicates } from '../api/assist-client.js'
-import { ApiError } from '../api/client.js'
+import { describeAiErrorLine } from '../ai/server-text.js'
+import { shorten } from '../ai/shorten.js'
 import { listEntries } from '../api/content-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { plainTextOfRichText } from '../collections/word-count.js'
+import { titleOf } from '../lib/entry-title.js'
 import type { RichTextDocument } from '../rich-text/portable-text.js'
 import { canPerform } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary } from '../schema/types.js'
+import {
+  Button,
+  Field,
+  Notice,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRoot,
+  TableRow,
+} from '../ui/index.js'
 
 /**
  * `assist.find_duplicates`, given a screen — the one L18 tool that needs no AI
@@ -50,9 +65,9 @@ export function DuplicatesRoute(): JSX.Element | null {
 
   const [available, setAvailable] = useState<boolean | null>(null)
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null)
-  const [entries, setEntries] = useState<readonly { readonly id: string; readonly text: string }[]>(
-    [],
-  )
+  const [entries, setEntries] = useState<
+    readonly { readonly id: string; readonly text: string; readonly title: string }[]
+  >([])
   const [selectedEntry, setSelectedEntry] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [matches, setMatches] = useState<readonly DuplicateMatch[] | null>(null)
@@ -83,13 +98,20 @@ export function DuplicatesRoute(): JSX.Element | null {
     setError(null)
     try {
       const page = await listEntries(token, current, { limit: 50 })
-      const withText = page.items.map((entry) => ({ id: entry.id, text: textOf(entry.values) }))
+      const summary = collections.find((collection) => collection.name === current)
+      const withText = page.items.map((entry) => ({
+        id: entry.id,
+        text: textOf(entry.values),
+        // What the entry is called everywhere else in the admin, not the
+        // first sixty characters of its text.
+        title: titleOf(entry, summary),
+      }))
       setEntries(withText)
       setSelectedEntry(withText[0]?.id ?? null)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('duplicates.loadError'))
+      setError(describeAiErrorLine(caught, t, t('duplicates.loadError')))
     }
-  }, [token, current, t])
+  }, [token, current, collections, t])
 
   useEffect(() => {
     void loadEntries()
@@ -116,80 +138,103 @@ export function DuplicatesRoute(): JSX.Element | null {
       })
       setMatches(report.duplicates)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('duplicates.runError'))
+      setError(describeAiErrorLine(caught, t, t('duplicates.runError')))
     } finally {
       setRunning(false)
     }
   }
 
   return (
-    <section aria-labelledby="duplicates-heading">
-      <h1 id="duplicates-heading">{t('duplicates.heading')}</h1>
-      <p>{t('duplicates.intro')}</p>
+    <section aria-labelledby="duplicates-heading" className="flex min-w-0 flex-col gap-4">
+      <div>
+        <h2 id="duplicates-heading" className="m-0 text-lg font-semibold">
+          {t('duplicates.heading')}
+        </h2>
+        <p className="m-0 mt-1 text-sm text-muted-foreground">{t('duplicates.intro')}</p>
+      </div>
 
       {collections.length === 0 ? (
         <p>{t('duplicates.noCollections')}</p>
       ) : (
         <>
-          <label htmlFor="duplicates-collection">{t('duplicates.collectionLabel')}</label>{' '}
-          <select
-            id="duplicates-collection"
-            value={current ?? ''}
-            onChange={(event) => setSelectedCollection(event.target.value)}
-          >
-            {collections.map((collection) => (
-              <option key={collection.name} value={collection.name}>
-                {collection.labels.plural}
-              </option>
-            ))}
-          </select>{' '}
-          <label htmlFor="duplicates-entry">{t('duplicates.entryLabel')}</label>{' '}
-          <select
-            id="duplicates-entry"
-            value={selectedEntry ?? ''}
-            onChange={(event) => setSelectedEntry(event.target.value)}
-          >
-            {entries.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.text !== '' ? entry.text.slice(0, 60) : entry.id}
-              </option>
-            ))}
-          </select>{' '}
-          <button
-            type="button"
-            disabled={running || selectedEntry === null}
-            onClick={() => void run()}
-          >
-            {running ? t('duplicates.running') : t('duplicates.runButton')}
-          </button>
-          {error !== null && <p role="alert">{error}</p>}
-          {matches !== null && matches.length === 0 && <p>{t('duplicates.none')}</p>}
+          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_2fr_auto]">
+            <Field label={t('duplicates.collectionLabel')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={current ?? ''}
+                  onChange={(event) => setSelectedCollection(event.target.value)}
+                >
+                  {collections.map((collection) => (
+                    <option key={collection.name} value={collection.name}>
+                      {collection.labels.plural}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label={t('duplicates.entryLabel')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={selectedEntry ?? ''}
+                  onChange={(event) => setSelectedEntry(event.target.value)}
+                >
+                  {entries.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {shorten(entry.title)}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Button
+              type="button"
+              disabled={running || selectedEntry === null}
+              onClick={() => void run()}
+            >
+              {running ? t('duplicates.running') : t('duplicates.runButton')}
+            </Button>
+          </div>
+          {error !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{error}</p>
+            </Notice>
+          )}
+          {matches !== null && matches.length === 0 && (
+            <Notice tone="success" live="polite">
+              <p>{t('duplicates.none')}</p>
+            </Notice>
+          )}
           {matches !== null && matches.length > 0 && (
-            <table>
-              <caption>{t('duplicates.resultsCaption')}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t('duplicates.entry')}</th>
-                  <th scope="col">{t('duplicates.similarity')}</th>
-                  <th scope="col">{t('duplicates.actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {matches.map((match) => (
-                  <tr key={`${match.collection}/${match.entryId}`}>
-                    <td>{match.excerpt}</td>
-                    <td>{Math.round(match.similarity * 100)}%</td>
-                    <td>
-                      <Link
-                        to={`/collections/${encodeURIComponent(match.collection)}/${encodeURIComponent(match.entryId)}`}
-                      >
-                        {t('duplicates.compare')}
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <TableRoot label={t('duplicates.resultsCaption')} stacked>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>{t('duplicates.entry')}</TableHeader>
+                    <TableHeader>{t('duplicates.similarity')}</TableHeader>
+                    <TableHeader>{t('duplicates.actions')}</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {matches.map((match) => (
+                    <TableRow key={`${match.collection}/${match.entryId}`}>
+                      <TableCell stack="heading">{shorten(match.excerpt, 200)}</TableCell>
+                      <TableCell label={t('duplicates.similarity')}>
+                        {Math.round(match.similarity * 100)} %
+                      </TableCell>
+                      <TableCell stack="actions">
+                        <Link
+                          to={`/collections/${encodeURIComponent(match.collection)}/${encodeURIComponent(match.entryId)}`}
+                        >
+                          {t('duplicates.compare')}
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableRoot>
           )}
         </>
       )}

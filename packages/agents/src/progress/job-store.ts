@@ -1,4 +1,4 @@
-import { newId as generateId, type Logger } from '@cogenta/core'
+import { CogentaError, newId as generateId, type Logger } from '@cogenta/core'
 import type { ProgressEvent, ProgressReporter } from './types.js'
 
 /**
@@ -26,7 +26,8 @@ export interface JobRecord<TResult> {
   readonly status: JobStatus
   readonly events: readonly ProgressEvent[]
   readonly result?: TResult
-  readonly error?: { readonly message: string }
+  /** `code`/`hint` are the failure's stable code and advice when it was a `CogentaError`, so a screen can word it in its own language. */
+  readonly error?: { readonly message: string; readonly code?: string; readonly hint?: string }
 }
 
 export interface ProgressJobStore<TResult> {
@@ -61,7 +62,7 @@ export function createProgressJobStore<TResult>(options?: {
     status: JobStatus
     events: ProgressEvent[]
     result?: TResult
-    error?: { readonly message: string }
+    error?: { readonly message: string; readonly code?: string; readonly hint?: string }
   }
 
   const records = new Map<string, MutableRecord>()
@@ -102,7 +103,12 @@ export function createProgressJobStore<TResult>(options?: {
         (error: unknown) => {
           const message = error instanceof Error ? error.message : String(error)
           record.status = 'failed'
-          record.error = { message }
+          record.error = {
+            message,
+            ...(error instanceof CogentaError
+              ? { code: error.code, ...(error.hint === undefined ? {} : { hint: error.hint }) }
+              : {}),
+          }
           logger?.error('progress job failed', { jobId: id, error: message })
           setTimeout(() => records.delete(id), retainMs).unref?.()
         },

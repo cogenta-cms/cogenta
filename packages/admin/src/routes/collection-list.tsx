@@ -1084,7 +1084,9 @@ export function CollectionListRoute(): JSX.Element {
                         {t(`entryEdit.status.${entry.status}`)}
                       </TableCell>
                       {siteLocales.length > 1 && (
-                        <TableCell label={t('collectionList.localeColumn')}>{entry.locale}</TableCell>
+                        <TableCell label={t('collectionList.localeColumn')}>
+                          {entry.locale}
+                        </TableCell>
                       )}
                       <TableCell
                         className="whitespace-nowrap"
@@ -1099,7 +1101,7 @@ export function CollectionListRoute(): JSX.Element {
                         </TableCell>
                       ))}
                       <TableCell stack="actions" className="whitespace-nowrap">
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1 lg:flex-nowrap">
                           {canUpdate && (
                             <Link
                               className={buttonVariants({ variant: 'ghost', size: 'sm' })}

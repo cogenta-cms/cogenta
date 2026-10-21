@@ -5,7 +5,7 @@ import {
   decideAgentApproval,
   listAgentApprovals,
 } from '../api/agent-approvals-client.js'
-import { ApiError } from '../api/http.js'
+import { agentDisplayName, describeAiErrorLine, toolName } from '../ai/server-text.js'
 import { Button, Card, CardBody, CardHeader, CardTitle, Modal, Notice } from '../ui/index.js'
 
 export function AgentApprovals({ token }: { readonly token: string }): JSX.Element {
@@ -25,8 +25,7 @@ export function AgentApprovals({ token }: { readonly token: string }): JSX.Eleme
           setError(null)
         }
       } catch (caught) {
-        if (active)
-          setError(caught instanceof ApiError ? caught.message : t('agentApprovals.loadError'))
+        if (active) setError(describeAiErrorLine(caught, t, t('agentApprovals.loadError')))
       }
     }
     void load()
@@ -48,7 +47,7 @@ export function AgentApprovals({ token }: { readonly token: string }): JSX.Eleme
         setRequests((current) => current.filter((entry) => entry.id !== item.id))
         setReviewing(null)
       } catch (caught) {
-        setError(caught instanceof ApiError ? caught.message : t('agentApprovals.decisionError'))
+        setError(describeAiErrorLine(caught, t, t('agentApprovals.decisionError')))
       } finally {
         setBusy(false)
       }
@@ -63,20 +62,20 @@ export function AgentApprovals({ token }: { readonly token: string }): JSX.Eleme
           <h2 id="agent-approvals-heading">{t('agentApprovals.heading')}</h2>
         </CardTitle>
       </CardHeader>
-      <CardBody>
-        <p>{t('agentApprovals.description')}</p>
+      <CardBody className="flex flex-col gap-2">
+        <p className="m-0 text-sm text-muted-foreground">{t('agentApprovals.description')}</p>
         {error !== null && (
           <Notice tone="danger" live="assertive">
             {error}
           </Notice>
         )}
-        {requests.length === 0 && <p>{t('agentApprovals.empty')}</p>}
+        {requests.length === 0 && <p className="m-0 text-sm font-medium">{t('agentApprovals.empty')}</p>}
         {requests.map((item) => (
           <div key={item.id} className="flex min-w-0 flex-col gap-2 border-b py-4">
-            <h3 className="break-words">
-              {item.toolName} — {item.agentName}
+            <h3 className="m-0 break-words text-base" title={item.toolName}>
+              {toolName(item.toolName, t)} — {agentDisplayName(item.agentName, true, t)}
             </h3>
-            <p>
+            <p className="m-0 text-xs text-muted-foreground">
               <time dateTime={item.requestedAt}>
                 {new Intl.DateTimeFormat(i18n.language, {
                   dateStyle: 'medium',
@@ -84,7 +83,7 @@ export function AgentApprovals({ token }: { readonly token: string }): JSX.Eleme
                 }).format(new Date(item.requestedAt))}
               </time>
             </p>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words">
+            <pre className="m-0 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs">
               {JSON.stringify(item.input, null, 2)}
             </pre>
             <div className="flex flex-wrap gap-2">
@@ -130,10 +129,10 @@ export function AgentApprovals({ token }: { readonly token: string }): JSX.Eleme
       >
         {reviewing !== null && (
           <>
-            <p>
-              {reviewing.toolName} — {reviewing.agentName}
+            <p className="m-0 font-medium" title={reviewing.toolName}>
+              {toolName(reviewing.toolName, t)} — {agentDisplayName(reviewing.agentName, true, t)}
             </p>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words">
+            <pre className="m-0 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs">
               {JSON.stringify(reviewing.input, null, 2)}
             </pre>
           </>

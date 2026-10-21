@@ -24,11 +24,33 @@ export interface AiErrorDescription {
  */
 export function describeAiError(caught: unknown, t: TFunction, fallback: string): AiErrorDescription {
   if (!(caught instanceof ApiError)) return { message: fallback }
-  const message = t(`aiErrors.${caught.code}.message`, { defaultValue: '' })
-  if (message === '') {
-    return { message: caught.message, ...(caught.hint === undefined ? {} : { hint: caught.hint }) }
+  return describeAiFailure(caught, t)
+}
+
+/**
+ * The same for a failure that did not travel as an HTTP error — a background
+ * job that ended `failed` carries its code, message and hint in its record.
+ * Without a code there is nothing to translate, so the fallback is shown.
+ */
+export function describeAiFailure(
+  failure: {
+    readonly code?: string
+    readonly message: string
+    readonly hint?: string | undefined
+  },
+  t: TFunction,
+  fallback?: string,
+): AiErrorDescription {
+  if (failure.code === undefined) {
+    return fallback === undefined
+      ? { message: failure.message, ...(failure.hint === undefined ? {} : { hint: failure.hint }) }
+      : { message: fallback }
   }
-  const hint = t(`aiErrors.${caught.code}.hint`, { defaultValue: '' })
+  const message = t(`aiErrors.${failure.code}.message`, { defaultValue: '' })
+  if (message === '') {
+    return { message: failure.message, ...(failure.hint === undefined ? {} : { hint: failure.hint }) }
+  }
+  const hint = t(`aiErrors.${failure.code}.hint`, { defaultValue: '' })
   return { message, ...(hint === '' ? {} : { hint }) }
 }
 
@@ -91,14 +113,28 @@ const PROGRESS_RULES: readonly Rule[] = [
   { pattern: /^Thinking…?$/u, key: 'thinking' },
   { pattern: /^Thinking… \(step (\d+)\)$/u, key: 'thinkingStep', vars: ['step'] },
   { pattern: /^Calling tool "(.*)"…?$/u, key: 'callingTool', vars: ['tool'] },
+  { pattern: /^Tool "(.*)" finished\.?$/u, key: 'toolFinished', vars: ['tool'] },
+  { pattern: /^Tool "(.*)" failed: (.*)$/su, key: 'toolFailed', vars: ['tool', 'reason'] },
+  {
+    pattern: /^Retrying after a provider error \(attempt (\d+)\/(\d+)\): (.*)$/su,
+    key: 'retrying',
+    vars: ['attempt', 'max', 'reason'],
+  },
 ]
 
 /** A progress line of a long job (theme generation, an agent run), in the reader's language. */
 export function localizeProgress(message: string, t: TFunction): string {
-  const translated = applyRules(message, PROGRESS_RULES, 'aiProgress', t)
-  if (translated === message) return message
-  // A tool name inside a sentence is shown as the person-readable label.
-  return translated.replace(/⁣(.+?)⁣/gu, (_whole, tool: string) => toolName(tool, t))
+  return applyRules(message, PROGRESS_RULES, 'aiProgress', t, (name, value) => {
+    // A tool is named the way a person reads it, never by its identifier.
+    if (name === 'tool') return toolName(value, t)
+    if (name === 'label') return designDirection(value, t).label
+    // `@cogenta/theme-canonical` → "Canonical": the package name is not for readers.
+    if (name === 'theme') {
+      const bare = value.replace(/^@[^/]+\/(theme-)?/u, '')
+      return bare.charAt(0).toUpperCase() + bare.slice(1)
+    }
+    return value
+  })
 }
 
 const PLAN_NOTE_RULES: readonly Rule[] = [

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { ApiError, forgotPassword } from '../api/client.js'
 import { AuthLayout } from '../auth/auth-layout.js'
+import { useDocumentTitle } from '../shell/use-document-title.js'
 import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
 
 /**
@@ -22,14 +23,23 @@ import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
  */
 export function ForgotPasswordRoute(): JSX.Element {
   const { t } = useTranslation()
+  useDocumentTitle(t('forgotPassword.pageTitle'))
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
     setError(null)
+    // The admin's own message, in the admin's own language, rather than the
+    // browser's native bubble.
+    if (email.trim() === '') {
+      setEmailError(t('auth.emailRequired'))
+      return
+    }
+    setEmailError(null)
     setSubmitting(true)
     try {
       await forgotPassword(email)
@@ -67,10 +77,11 @@ export function ForgotPasswordRoute(): JSX.Element {
           ) : (
             <form
               onSubmit={submit}
+              noValidate
               aria-labelledby="forgot-password-heading"
               className="flex flex-col gap-4"
             >
-              <Field label={t('login.email')}>
+              <Field label={t('login.email')} error={emailError}>
                 {(control) => (
                   <Input
                     {...control}

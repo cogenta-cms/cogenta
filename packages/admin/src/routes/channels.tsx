@@ -1,8 +1,12 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
+import { ConfirmAction } from '../ai/confirm-action.js'
+import { describeAiErrorLine } from '../ai/server-text.js'
+import { useFlash } from '../ai/use-flash.js'
 import {
+  type ChannelsRunnerState,
   generateChannelLinkCode,
+  getChannelsRunner,
   type LinkedChannel,
   listLinkedChannels,
   revokeChannelLink,
@@ -10,7 +14,17 @@ import {
 import { listSettings, type SiteSetting, writeSetting } from '../api/settings-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
-import { Button, Card, CardBody, CardHeader, CardTitle, Modal, Notice } from '../ui/index.js'
+import {
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  CopyButton,
+  Modal,
+  Notice,
+} from '../ui/index.js'
 
 /**
  * L22 task 2 — "Canaux" : linking a personal Telegram/Slack/Discord account
@@ -61,7 +75,7 @@ function botNameSettingKey(channelName: SupportedChannel): string {
 }
 
 export function ChannelsRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
@@ -75,6 +89,9 @@ export function ChannelsRoute(): JSX.Element {
   const [generated, setGenerated] = useState<GeneratedCode | null>(null)
   const [settings, setSettings] = useState<readonly SiteSetting[]>([])
   const [guideChannel, setGuideChannel] = useState<SupportedChannel | null>(null)
+  const [runner, setRunner] = useState<ChannelsRunnerState | null>(null)
+  const [pendingUnlink, setPendingUnlink] = useState<string | null>(null)
+  const flash = useFlash()
 
   const load = useCallback(async () => {
     if (token === null) return
@@ -83,7 +100,7 @@ export function ChannelsRoute(): JSX.Element {
     try {
       setLinked(await listLinkedChannels(token))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('channels.loadError'))
+      setError(describeAiErrorLine(caught, t, t('channels.loadError')))
     } finally {
       setLoading(false)
     }
@@ -107,6 +124,28 @@ export function ChannelsRoute(): JSX.Element {
     void loadSettings()
   }, [loadSettings])
 
+  // Whether the standing `cogenta channels` process is up: asked again every
+  // half minute, since it can be started or stopped while this page is open.
+  useEffect(() => {
+    if (token === null) return
+    let active = true
+    const check = (): void => {
+      getChannelsRunner(token)
+        .then((state) => {
+          if (active) setRunner(state)
+        })
+        .catch(() => {
+          if (active) setRunner(null)
+        })
+    }
+    check()
+    const interval = setInterval(check, 30_000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [token])
+
   async function generate(channelName: SupportedChannel): Promise<void> {
     if (token === null) return
     setActionError(null)
@@ -115,7 +154,7 @@ export function ChannelsRoute(): JSX.Element {
       const result = await generateChannelLinkCode(token, channelName)
       setGenerated({ channelName, ...result })
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('channels.generateError'))
+      setActionError(describeAiErrorLine(caught, t, t('channels.generateError')))
     } finally {
       setBusy(null)
     }
@@ -127,9 +166,12 @@ export function ChannelsRoute(): JSX.Element {
     try {
       await revokeChannelLink(token, channelName)
       if (generated?.channelName === channelName) setGenerated(null)
+      flash.show(t('channels.unlinked', { channel: t(`channels.name.${channelName}`) }))
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('channels.unlinkError'))
+      setActionError(describeAiErrorLine(caught, t, t('channels.unlinkError')))
+    } finally {
+      setPendingUnlink(null)
     }
   }
 
@@ -144,8 +186,10 @@ export function ChannelsRoute(): JSX.Element {
     return typeof setting?.value === 'string' ? setting.value : ''
   }
 
+  const botName = generated === null ? '' : botNameFor(generated.channelName)
+
   return (
-    <section aria-labelledby="channels-heading" className="flex flex-col gap-6">
+    <section aria-labelledby="channels-heading" className="flex min-w-0 flex-col gap-6">
       <div>
         <h1 id="channels-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
           {t('channels.heading')}
@@ -155,6 +199,34 @@ export function ChannelsRoute(): JSX.Element {
         {!isAdmin && <p className="mt-1 text-sm">{t('channels.notAdminHint')}</p>}
       </div>
 
+      {/* A code is read by `cogenta channels`, a process of its own: say
+          whether it is there before anyone waits for a reply that cannot come. */}
+      {runner !== null && (
+        <Notice
+          tone={runner.running ? 'success' : 'warning'}
+          live="off"
+          title={runner.running ? t('channels.runnerUp') : t('channels.runnerDown')}
+        >
+          <p>
+            {runner.running
+              ? runner.channels.length > 0
+                ? t('channels.runnerUpDetail', {
+                    channels: runner.channels
+                      .map((name) => t(`channels.name.${name}`, { defaultValue: name }))
+                      .join(', '),
+                  })
+                : t('channels.runnerUpNone')
+              : t('channels.runnerDownDetail')}
+          </p>
+        </Notice>
+      )}
+
+      {flash.message !== null && (
+        <Notice tone="success" live="polite" onDismiss={flash.clear} dismissLabel={t('common.close')}>
+          <p>{flash.message}</p>
+        </Notice>
+      )}
+
       {generated !== null && (
         <Notice
           tone="success"
@@ -163,8 +235,22 @@ export function ChannelsRoute(): JSX.Element {
           onDismiss={() => setGenerated(null)}
           dismissLabel={t('channels.codeDismiss')}
         >
-          <p className="font-mono text-lg tracking-widest">{generated.code}</p>
-          <p>{t('channels.codeBody', { channel: t(`channels.name.${generated.channelName}`) })}</p>
+          <p className="m-0 flex flex-wrap items-center gap-3">
+            <span className="font-mono text-lg tracking-widest">{generated.code}</span>
+            <CopyButton
+              value={generated.code}
+              label={t('channels.copyCode')}
+              copiedLabel={t('channels.codeCopied')}
+            />
+          </p>
+          <p>
+            {botName === ''
+              ? t('channels.codeBody', { channel: t(`channels.name.${generated.channelName}`) })
+              : t('channels.codeBodyNamed', {
+                  channel: t(`channels.name.${generated.channelName}`),
+                  botName,
+                })}
+          </p>
           <p className="mt-1 text-sm">
             {t('channels.codeExpiry', {
               time: new Date(generated.expiresAt).toLocaleTimeString(),
@@ -196,7 +282,12 @@ export function ChannelsRoute(): JSX.Element {
               <Card key={channelName}>
                 <CardHeader>
                   <CardTitle>
-                    <h2>{t(`channels.name.${channelName}`)}</h2>
+                    <h2 className="flex flex-wrap items-center gap-2">
+                      {t(`channels.name.${channelName}`)}
+                      <Badge tone={link === undefined ? 'neutral' : 'success'}>
+                        {link === undefined ? t('channels.stateNotLinked') : t('channels.stateLinked')}
+                      </Badge>
+                    </h2>
                   </CardTitle>
                 </CardHeader>
                 <CardBody className="flex flex-col gap-4">
@@ -218,13 +309,13 @@ export function ChannelsRoute(): JSX.Element {
                       <>
                         <p className="m-0 text-sm">
                           {t('channels.linkedSince', {
-                            time: new Date(link.linkedAt).toLocaleString(),
+                            time: new Date(link.linkedAt).toLocaleString(i18n.language),
                           })}
                         </p>
                         <Button
                           type="button"
-                          variant="destructive"
-                          onClick={() => void unlink(channelName)}
+                          variant="secondary"
+                          onClick={() => setPendingUnlink(channelName)}
                         >
                           {t('channels.unlink')}
                         </Button>
@@ -256,6 +347,20 @@ export function ChannelsRoute(): JSX.Element {
           })}
         </div>
       )}
+
+      <ConfirmAction
+        open={pendingUnlink !== null}
+        title={t('channels.unlinkTitle', {
+          channel: pendingUnlink === null ? '' : t(`channels.name.${pendingUnlink}`),
+        })}
+        confirmLabel={t('channels.unlinkConfirm')}
+        onCancel={() => setPendingUnlink(null)}
+        onConfirm={() => {
+          if (pendingUnlink !== null) void unlink(pendingUnlink)
+        }}
+      >
+        <p className="m-0">{t('channels.unlinkBody')}</p>
+      </ConfirmAction>
 
       <Modal
         open={guideChannel !== null}

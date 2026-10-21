@@ -444,7 +444,7 @@ export function TrashRoute(): JSX.Element {
 
   const now = new Date()
   const showCollectionColumn = activeTab === 'all'
-  const columnCount = 3 + (showCollectionColumn ? 1 : 0) + (isAdmin ? 1 : 0)
+  const columnCount = 6 + (showCollectionColumn ? 1 : 0) + (isAdmin ? 1 : 0)
 
   return (
     <section aria-labelledby="trash-heading" className="flex flex-col gap-6">
@@ -601,11 +601,11 @@ export function TrashRoute(): JSX.Element {
           {loading && <p>{t('common.loading')}</p>}
 
           {!loading && (
-            <TableRoot label={t('trash.caption')}>
+            <TableRoot label={t('trash.caption')} stacked>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableHeader aria-label={t('trash.selectionColumn')}>
+                    <TableHeader className="w-10" aria-label={t('trash.selectionColumn')}>
                       <input
                         type="checkbox"
                         aria-label={t('trash.selectAllOnPage')}
@@ -639,7 +639,7 @@ export function TrashRoute(): JSX.Element {
 
                     return (
                       <TableRow key={key}>
-                        <TableCell>
+                        <TableCell stack="select">
                           <input
                             type="checkbox"
                             aria-label={t('trash.selectRow', { title: rowTitle })}
@@ -647,14 +647,20 @@ export function TrashRoute(): JSX.Element {
                             onChange={() => toggleSelected(row)}
                           />
                         </TableCell>
-                        <TableCell>{rowTitle}</TableCell>
+                        <TableCell stack="heading" className="[overflow-wrap:anywhere]">
+                          {rowTitle}
+                        </TableCell>
                         {showCollectionColumn && (
-                          <TableCell>{collection?.labels.plural ?? row.collection}</TableCell>
+                          <TableCell label={t('trash.collectionColumn')}>
+                            {collection?.labels.plural ?? row.collection}
+                          </TableCell>
                         )}
                         {/* The status it had when it was thrown away, and the
                             one restoring gives back: deletedAt is orthogonal. */}
-                        <TableCell>{t(`entryEdit.status.${row.entry.status}`)}</TableCell>
-                        <TableCell>
+                        <TableCell label={t('trash.status')}>
+                          {t(`entryEdit.status.${row.entry.status}`)}
+                        </TableCell>
+                        <TableCell label={t('trash.deletedAt')}>
                           {row.entry.deletedAt === null ? (
                             '—'
                           ) : (
@@ -663,7 +669,7 @@ export function TrashRoute(): JSX.Element {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell label={t('trash.purgeInColumn')}>
                           {days === null
                             ? '—'
                             : days > 0
@@ -671,11 +677,13 @@ export function TrashRoute(): JSX.Element {
                               : t('trash.purgeDue')}
                         </TableCell>
                         {isAdmin && (
-                          <TableCell>
-                            {author === undefined ? '—' : (actorNames.get(author) ?? author)}
+                          <TableCell label={t('trash.deletedByColumn')}>
+                            {author === undefined
+                              ? t('trash.deletedByUnknown')
+                              : (actorNames.get(author) ?? author)}
                           </TableCell>
                         )}
-                        <TableCell>
+                        <TableCell stack="actions">
                           <div className="flex flex-wrap gap-2">
                             <Button
                               variant="secondary"

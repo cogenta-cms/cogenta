@@ -38,14 +38,14 @@ import {
   Pagination,
   Select,
 } from '../ui/index.js'
-import { WidgetActionsMenu } from '../widgets/widget-actions-menu.js'
 import { VisibilityEditor } from '../widgets/visibility-editor.js'
+import { WidgetActionsMenu } from '../widgets/widget-actions-menu.js'
 import {
   defaultSettings,
+  missingRequiredText,
   pluginWidgetType,
   unavailableReason,
   type WidgetSources,
-  missingRequiredText,
   widgetGroups,
 } from '../widgets/widget-catalog.js'
 import { loadPreviewTargets, type PreviewTarget, WidgetPreview } from '../widgets/widget-preview.js'
@@ -381,11 +381,19 @@ export function WidgetsRoute(): JSX.Element {
           <p>{actionError}</p>
         </Notice>
       )}
-      <div role="status" aria-live="polite">
+      {/* Fixed, not in the flow: the zones are far below the title, and a
+          confirmation that appears above the fold is a confirmation nobody sees. */}
+      <div
+        role="status"
+        aria-live="polite"
+        className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex justify-center px-4"
+      >
         {status !== null && (
-          <Notice tone="success" live="off">
-            <p>{status}</p>
-          </Notice>
+          <div className="pointer-events-auto max-w-md shadow-lg">
+            <Notice tone="success" live="off">
+              <p>{status}</p>
+            </Notice>
+          </div>
         )}
       </div>
 

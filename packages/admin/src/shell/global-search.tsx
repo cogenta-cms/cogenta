@@ -18,11 +18,20 @@ import { listTerms } from '../api/taxonomy-client.js'
 import { listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { formatMinor } from '../commerce/money.js'
+import { humanizeFieldName } from '../lib/humanize-field-name.js'
+import { roleLabels } from '../lib/role-label.js'
 import { canPerform, canPerformOnTerms } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import { matchesQuery } from '../search/fold.js'
 import { parseInlineFilters } from '../search/inline-filters.js'
 import { recentSearches, rememberSearch } from '../search/recent-searches.js'
+import {
+  collectionLabel,
+  languageName,
+  marketplaceKindLabel,
+  mediaKindLabel,
+  menuDisplayName,
+} from '../search/result-labels.js'
 import { useTheme } from '../theme/theme-context.js'
 import { SearchIcon } from '../ui/icons.js'
 import { Input } from '../ui/index.js'
@@ -51,6 +60,12 @@ import { NEXT_MODE } from './theme-toggle.js'
 const DEBOUNCE_MS = 300
 const GROUP_LIMIT = 5
 const MAX_TAXONOMIES_SEARCHED = 3
+
+/** The shortcut the badge advertises: ⌘K where the platform's own key is Command, Ctrl K elsewhere. */
+const SHORTCUT_HINT =
+  typeof navigator !== 'undefined' && /mac|iphone|ipad/iu.test(navigator.userAgent)
+    ? '⌘ K'
+    : 'Ctrl K'
 
 interface ResultItem {
   readonly id: string
@@ -232,7 +247,7 @@ export function GlobalSearch(): JSX.Element {
             items: contentResult.value.hits.map((hit) => ({
               id: `content:${hit.collection}:${hit.id}`,
               label: hit.title.trim().length > 0 ? hit.title : hit.id,
-              sublabel: hit.collection,
+              sublabel: collectionLabel(collections, hit.collection),
               href: `/collections/${encodeURIComponent(hit.collection)}/${encodeURIComponent(hit.id)}`,
             })),
           })
@@ -245,7 +260,7 @@ export function GlobalSearch(): JSX.Element {
             items: mediaResult.value.items.slice(0, GROUP_LIMIT).map((asset) => ({
               id: `media:${asset.id}`,
               label: asset.filename,
-              sublabel: asset.kind,
+              sublabel: mediaKindLabel(t, asset.kind),
               href: '/media',
             })),
           })
@@ -258,7 +273,7 @@ export function GlobalSearch(): JSX.Element {
             items: usersResult.value.slice(0, GROUP_LIMIT).map((user) => ({
               id: `users:${user.id}`,
               label: user.email,
-              sublabel: user.roles.join(', '),
+              sublabel: roleLabels(t, user.roles),
               href: '/users',
             })),
           })
@@ -272,8 +287,8 @@ export function GlobalSearch(): JSX.Element {
               titleKey: 'globalSearch.groups.menus',
               items: matched.slice(0, GROUP_LIMIT).map((menu) => ({
                 id: `menu:${menu.id}`,
-                label: menu.label,
-                sublabel: menu.locale,
+                label: menuDisplayName(menu.label),
+                sublabel: languageName(menu.locale, i18n.language),
                 href: '/menus',
               })),
             })
@@ -287,7 +302,7 @@ export function GlobalSearch(): JSX.Element {
             items: ordersResult.value.orders.slice(0, GROUP_LIMIT).map((order) => ({
               id: `order:${order.id}`,
               label: order.reference,
-              sublabel: `${order.email} — ${formatMinor(order.totalMinor, order.currency)}`,
+              sublabel: `${order.email} — ${formatMinor(order.totalMinor, order.currency, i18n.language)}`,
               href: `/commerce/orders/${encodeURIComponent(order.id)}`,
             })),
           })
@@ -300,7 +315,7 @@ export function GlobalSearch(): JSX.Element {
             items: marketplaceResult.value.slice(0, GROUP_LIMIT).map((item) => ({
               id: `marketplace:${item.id}`,
               label: item.displayName,
-              sublabel: item.kind,
+              sublabel: marketplaceKindLabel(t, item.kind),
               href: '/marketplace',
             })),
           })
@@ -322,7 +337,10 @@ export function GlobalSearch(): JSX.Element {
             termItems.push({
               id: `term:${taxonomy.name}:${term.id}`,
               label,
-              sublabel: taxonomy.labels.singular[i18n.language] ?? taxonomy.name,
+              sublabel:
+                taxonomy.labels.singular[i18n.language] ??
+                Object.values(taxonomy.labels.singular)[0] ??
+                humanizeFieldName(taxonomy.name),
               href: '/taxonomies',
             })
           }
@@ -381,7 +399,18 @@ export function GlobalSearch(): JSX.Element {
       )
       setAnnouncement(t('globalSearch.resultsAnnouncement', { count: resultCount }))
     },
-    [token, isAdmin, isSignedIn, actionsFor, schema, roles, i18n.language, t, navigate],
+    [
+      token,
+      isAdmin,
+      isSignedIn,
+      actionsFor,
+      schema,
+      roles,
+      collections,
+      i18n.language,
+      t,
+      navigate,
+    ],
   )
 
   // Debounced on every keystroke; `onKeyDown` below runs it immediately on
@@ -532,6 +561,9 @@ export function GlobalSearch(): JSX.Element {
           role="combobox"
           aria-expanded={showPopover}
           aria-controls={listboxId}
+          aria-activedescendant={
+            showPopover && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined
+          }
           aria-autocomplete="list"
           autoComplete="off"
           placeholder={t('globalSearch.placeholder')}
@@ -544,12 +576,12 @@ export function GlobalSearch(): JSX.Element {
           onKeyDown={onKeyDown}
           className="rounded-full pr-14 pl-9"
         />
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-        >
-          Ctrl K
-        </span>
+        {/* A keyboard hint is noise on a touch screen (no `hover`), hidden there by CSS. */}
+        {query === '' && (
+          <span aria-hidden="true" className="app-shell__search-hint">
+            {SHORTCUT_HINT}
+          </span>
+        )}
       </div>
       {announcement !== '' && (
         <div className="sr-only" role="status" aria-live="polite">
@@ -561,7 +593,7 @@ export function GlobalSearch(): JSX.Element {
           id={listboxId}
           role="listbox"
           aria-label={t('globalSearch.resultsLabel')}
-          className="absolute top-full left-0 z-50 mt-1 max-h-96 w-full min-w-0 overflow-y-auto rounded-md border border-border bg-card py-1 shadow-overlay"
+          className="app-shell__search-results"
         >
           {groups.map((group) => (
             // A grouping of `option`s inside `listbox`, not a form control
@@ -577,20 +609,25 @@ export function GlobalSearch(): JSX.Element {
                 const index = flatItems.indexOf(item)
                 const active = index === activeIndex
                 return (
-                  <button
+                  // A listbox option, not a form button: the input keeps focus and
+                  // names the active option through `aria-activedescendant`, and
+                  // its keyboard handling (arrows, Enter) lives on that input.
+                  // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard operation is on the combobox input.
+                  <div
                     key={item.id}
-                    type="button"
+                    id={`${listboxId}-option-${index}`}
                     role="option"
+                    tabIndex={-1}
                     aria-selected={active}
-                    className={`flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left font-sans text-sm ${
-                      active ? 'bg-accent text-accent-foreground' : 'text-card-foreground'
-                    }`}
+                    className="app-shell__search-option"
+                    data-active={active ? 'true' : undefined}
                     onMouseEnter={() => setActiveIndex(index)}
+                    onMouseDown={(event) => event.preventDefault()}
                     onClick={() => select(item)}
                   >
-                    <span>{item.label}</span>
-                    <span className="text-xs text-muted-foreground">{item.sublabel}</span>
-                  </button>
+                    <span className="app-shell__search-option-label">{item.label}</span>
+                    <span className="app-shell__search-option-hint">{item.sublabel}</span>
+                  </div>
                 )
               })}
             </div>

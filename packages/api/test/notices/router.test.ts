@@ -164,6 +164,63 @@ describe('GET /api/notices', () => {
   })
 })
 
+describe('POST /api/notices/{id}/restore', () => {
+  it('refuses an anonymous caller', async () => {
+    const response = await mfaRouter().handle(
+      request('POST', `/api/notices/${MFA_RECOMMENDATION_ID}/restore`),
+      ANONYMOUS,
+    )
+    expect(response.status).toBe(401)
+  })
+
+  it('brings a dismissed notice back for that account', async () => {
+    const user = await auth.users.create({ email: 'root@example.com', roles: ['admin'] })
+    const actor = actorFor(user.id, ['admin'])
+    const router = mfaRouter()
+    await router.handle(request('POST', `/api/notices/${MFA_RECOMMENDATION_ID}/dismiss`), actor)
+    expect(noticesOf(await router.handle(request('GET', '/api/notices'), actor))).toEqual([])
+
+    const restored = await router.handle(
+      request('POST', `/api/notices/${MFA_RECOMMENDATION_ID}/restore`),
+      actor,
+    )
+    expect(restored.status).toBe(204)
+    expect(
+      noticesOf(await router.handle(request('GET', '/api/notices'), actor)).map(
+        (notice) => notice.id,
+      ),
+    ).toEqual([MFA_RECOMMENDATION_ID])
+  })
+
+  it('only ever restores the caller own dismissal, never another account', async () => {
+    const one = await auth.users.create({ email: 'one@example.com', roles: ['admin'] })
+    const two = await auth.users.create({ email: 'two@example.com', roles: ['admin'] })
+    const router = mfaRouter()
+    await router.handle(
+      request('POST', `/api/notices/${MFA_RECOMMENDATION_ID}/dismiss`),
+      actorFor(one.id, ['admin']),
+    )
+
+    await router.handle(
+      request('POST', `/api/notices/${MFA_RECOMMENDATION_ID}/restore`),
+      actorFor(two.id, ['admin']),
+    )
+
+    expect(
+      noticesOf(await router.handle(request('GET', '/api/notices'), actorFor(one.id, ['admin']))),
+    ).toEqual([])
+  })
+
+  it('is a no-op for a notice that was never hidden', async () => {
+    const user = await auth.users.create({ email: 'root@example.com', roles: ['admin'] })
+    const response = await mfaRouter().handle(
+      request('POST', `/api/notices/${MFA_RECOMMENDATION_ID}/restore`),
+      actorFor(user.id, ['admin']),
+    )
+    expect(response.status).toBe(204)
+  })
+})
+
 describe('POST /api/notices/{id}/dismiss', () => {
   it('refuses an anonymous caller', async () => {
     const response = await mfaRouter().handle(

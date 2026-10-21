@@ -37,7 +37,7 @@ import { EditorialFlowDiagram, PluginPermissionFlowDiagram } from './documentati
  * review has a data model and components, not yet a wired screen).
  */
 
-const SECTIONS = ['content', 'appearance', 'commerce', 'ai', 'accounts', 'settings'] as const
+const SECTIONS = ['content', 'appearance', 'commerce', 'ai', 'accounts', 'ops', 'settings'] as const
 type Section = (typeof SECTIONS)[number]
 
 const QUICKSTART_STEPS: Readonly<Record<Section, readonly string[]>> = {
@@ -72,6 +72,12 @@ const QUICKSTART_STEPS: Readonly<Record<Section, readonly string[]>> = {
     'documentation.sections.accounts.quickstart.step2',
     'documentation.sections.accounts.quickstart.step3',
     'documentation.sections.accounts.quickstart.step4',
+  ],
+  ops: [
+    'documentation.sections.ops.quickstart.step1',
+    'documentation.sections.ops.quickstart.step2',
+    'documentation.sections.ops.quickstart.step3',
+    'documentation.sections.ops.quickstart.step4',
   ],
   settings: [
     'documentation.sections.settings.quickstart.step1',
@@ -137,11 +143,11 @@ export function DocumentationRoute(): JSX.Element {
         appearance, IA/agents, building a theme or a plugin, …).
       */}
       <Card>
-        <CardBody className="flex items-center justify-between gap-4">
+        <CardBody className="flex flex-wrap items-center justify-between gap-4">
           <p className="m-0 text-sm">{t('documentation.docsLinkIntro')}</p>
           <Link
             to="/documentation/docs"
-            className="shrink-0 rounded-md border border-border px-3 py-2 text-sm font-semibold text-foreground"
+            className="shrink-0 rounded-md border border-border px-3 py-2 text-sm font-semibold text-foreground no-underline hover:bg-muted"
           >
             {t('documentation.docsLinkCta')}
           </Link>

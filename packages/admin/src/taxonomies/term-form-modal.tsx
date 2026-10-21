@@ -1,7 +1,8 @@
 import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
+import { describeApiError } from '../api/describe-error.js'
 import type { Term } from '../api/taxonomy-client.js'
+import { slugify } from '../lib/slugify.js'
 import { Button, Field, Input, Modal, Notice } from '../ui/index.js'
 import { childrenOf, isSelfOrDescendant, subtreeSize } from './term-tree-utils.js'
 
@@ -25,6 +26,8 @@ export interface TermFormModalProps {
   readonly open: boolean
   onOpenChange(open: boolean): void
   readonly locales: readonly string[]
+  /** A flat taxonomy has no parent to choose. */
+  readonly hierarchical?: boolean
   readonly terms: readonly Term[]
   /** `null` creates a new root-eligible term; otherwise the term being edited. */
   readonly editing: Term | null
@@ -41,6 +44,7 @@ export function TermFormModal({
   open,
   onOpenChange,
   locales,
+  hierarchical = true,
   terms,
   editing,
   onSave,
@@ -49,6 +53,8 @@ export function TermFormModal({
   const [slug, setSlug] = useState('')
   const [labels, setLabels] = useState<Record<string, string>>({})
   const [parent, setParent] = useState<string | null>(null)
+  // The slug follows the first label until the editor types one of their own.
+  const [slugTouched, setSlugTouched] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,6 +63,7 @@ export function TermFormModal({
     setSlug(editing?.slug ?? '')
     setLabels({ ...(editing?.labels ?? {}) })
     setParent(editing?.parent ?? null)
+    setSlugTouched(editing !== null)
     setError(null)
   }, [open, editing])
 
@@ -68,10 +75,11 @@ export function TermFormModal({
     setSaving(true)
     setError(null)
     try {
-      await onSave({ slug, labels, parent })
+      const finalSlug = slug.trim() === '' ? slugify(labels[locales[0] ?? ''] ?? '') : slug.trim()
+      await onSave({ slug: finalSlug, labels, parent: hierarchical ? parent : null })
       onOpenChange(false)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('taxonomies.saveError'))
+      setError(describeApiError(caught, t('taxonomies.saveError')).message)
     } finally {
       setSaving(false)
     }
@@ -142,9 +150,11 @@ export function TermFormModal({
                 {...control}
                 value={labels[locale] ?? ''}
                 required={locale === locales[0]}
-                onChange={(event) =>
-                  setLabels((current) => ({ ...current, [locale]: event.target.value }))
-                }
+                onChange={(event) => {
+                  const value = event.target.value
+                  setLabels((current) => ({ ...current, [locale]: value }))
+                  if (locale === locales[0] && !slugTouched) setSlug(slugify(value))
+                }}
               />
             )}
           </Field>
@@ -155,26 +165,30 @@ export function TermFormModal({
             <Input
               {...control}
               value={slug}
-              required
-              onChange={(event) => setSlug(event.target.value)}
+              onChange={(event) => {
+                setSlugTouched(true)
+                setSlug(event.target.value)
+              }}
             />
           )}
         </Field>
 
-        <fieldset className="flex flex-col gap-1 rounded-md border border-input p-3">
-          <legend className="px-1 text-sm font-medium">{t('taxonomies.parent')}</legend>
-          <label className="flex items-center gap-2 py-0.5 text-sm">
-            <input
-              type="radio"
-              name="term-parent"
-              value=""
-              checked={parent === null}
-              onChange={() => setParent(null)}
-            />
-            {t('taxonomies.noParent')}
-          </label>
-          <div className="max-h-48 overflow-y-auto">{renderParentOptions(null, 0)}</div>
-        </fieldset>
+        {hierarchical && (
+          <fieldset className="flex flex-col gap-1 rounded-md border border-input p-3">
+            <legend className="px-1 text-sm font-medium">{t('taxonomies.parent')}</legend>
+            <label className="flex items-center gap-2 py-0.5 text-sm">
+              <input
+                type="radio"
+                name="term-parent"
+                value=""
+                checked={parent === null}
+                onChange={() => setParent(null)}
+              />
+              {t('taxonomies.noParent')}
+            </label>
+            <div className="max-h-48 overflow-y-auto">{renderParentOptions(null, 0)}</div>
+          </fieldset>
+        )}
       </form>
     </Modal>
   )

@@ -427,21 +427,30 @@ export function createCouponStore(db: DatabaseHandle, now: () => number = Date.n
 
       if (await read(code)) throw codeTaken(code)
 
+      const insertCoupon = (executor: SqlExecutor) =>
+        executor.query(sql`
+          insert into ${table} (code, kind, value, currency, min_subtotal_minor, starts_at, ends_at,
+                                max_redemptions, redemptions, max_redemptions_per_customer, active, created_at)
+          values (${code}, ${input.kind}, ${value}, ${currency},
+                  ${assertMinor(input.minSubtotalMinor ?? 0, 'A coupon minimum')},
+                  ${startsAt}, ${endsAt}, ${maxRedemptions}, ${0}, ${maxPerCustomer},
+                  ${fromBool(input.active ?? true, d)}, ${new Date(now()).toISOString()})`)
+
       try {
-        await db.transaction(async (tx) => {
-          await tx.query(sql`
-            insert into ${table} (code, kind, value, currency, min_subtotal_minor, starts_at, ends_at,
-                                  max_redemptions, redemptions, max_redemptions_per_customer, active, created_at)
-            values (${code}, ${input.kind}, ${value}, ${currency},
-                    ${assertMinor(input.minSubtotalMinor ?? 0, 'A coupon minimum')},
-                    ${startsAt}, ${endsAt}, ${maxRedemptions}, ${0}, ${maxPerCustomer},
-                    ${fromBool(input.active ?? true, d)}, ${new Date(now()).toISOString()})`)
-          for (const productId of productIds) {
-            await tx.query(sql`
-              insert into ${restrictions} (id, code, product_id, created_at)
-              values (${newId(now)}, ${code}, ${productId}, ${new Date(now()).toISOString()})`)
-          }
-        })
+        if (productIds.length === 0) {
+          // One statement is atomic by itself: no transaction to interleave with
+          // another creation of the same code.
+          await insertCoupon(db)
+        } else {
+          await db.transaction(async (tx) => {
+            await insertCoupon(tx)
+            for (const productId of productIds) {
+              await tx.query(sql`
+                insert into ${restrictions} (id, code, product_id, created_at)
+                values (${newId(now)}, ${code}, ${productId}, ${new Date(now()).toISOString()})`)
+            }
+          })
+        }
       } catch (error) {
         // Two admins creating the same code at the same instant: the primary
         // key refuses the second, and it gets the same answer as the pre-check.

@@ -30,6 +30,9 @@ import { adminThemeFontById } from '../api/admin-theme-client.js'
  *    either one changes.
  */
 
+const MONO_STACK =
+  '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace'
+
 const CAMEL_TO_KEBAB = /[A-Z]/gu
 
 function cssVarName(key: string): string {
@@ -125,7 +128,9 @@ export function buildAdminThemeCss(state: AdminThemeState, selector = ':root'): 
     `  --radius-lg: ${radius.lg};`,
     `  --radius-xl: ${radius.xl};`,
     `  --font-sans: ${fontSans};`,
-    `  --font-mono: ${fontSans};`,
+    // Code editors and the robots.txt box need a fixed-width face whatever the
+    // template's body font is; the body font is proportional.
+    `  --font-mono: ${MONO_STACK};`,
     `  --font-display: ${fontDisplay};`,
   ].join('\n')
 

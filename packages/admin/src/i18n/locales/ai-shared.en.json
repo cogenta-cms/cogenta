@@ -1,0 +1,352 @@
+{
+  "aiErrors": {
+    "ASSIST_RESPONSE_INVALID": {
+      "message": "The model answered, but its answer could not be used.",
+      "hint": "Run it again. If it keeps happening, try another model in AI providers."
+    },
+    "ASSIST_UNAVAILABLE": {
+      "message": "The assistant is not available.",
+      "hint": "Add and enable an AI provider in AI providers."
+    },
+    "ASSIST_BUDGET_EXCEEDED": {
+      "message": "This month’s AI budget has been reached.",
+      "hint": "Raise the budget in the agent’s settings or wait for next month."
+    },
+    "ASSIST_DOCUMENT_NOT_FOUND": {
+      "message": "This reference document no longer exists.",
+      "hint": "Refresh the list."
+    },
+    "SITE_BRIEF_GENERATION_FAILED": {
+      "message": "The document could not be turned into a site plan.",
+      "hint": "Check that the document really describes a website and that the AI provider answers (the “Test” button in AI providers), then try again."
+    },
+    "SITE_BRIEF_RESPONSE_INVALID": {
+      "message": "The model did not return a usable analysis of the document.",
+      "hint": "Try again, or pick a more capable model in AI providers."
+    },
+    "SITE_PLAN_NO_PROVIDER": {
+      "message": "No active AI provider: the document cannot be analysed.",
+      "hint": "Enable a provider in AI providers."
+    },
+    "SITE_PLAN_DRAFT_NOT_FOUND": {
+      "message": "This proposal no longer exists.",
+      "hint": "Refresh the list of proposals."
+    },
+    "SITE_PLAN_DECISION_MISSING": {
+      "message": "Some items have no decision yet.",
+      "hint": "Keep or drop every item before applying the plan."
+    },
+    "SITE_PLAN_DECISION_UNKNOWN_ITEM": {
+      "message": "Your choice matches nothing in this plan.",
+      "hint": "Reopen the proposal and start again."
+    },
+    "SITE_PLAN_CONSTRAINT_VIOLATED": {
+      "message": "The plan contradicts a constraint in the document.",
+      "hint": "Drop the item concerned."
+    },
+    "DOCUMENT_FORMAT_UNSUPPORTED": {
+      "message": "This file format is not supported.",
+      "hint": "Use a PDF, a DOCX, a Markdown file or plain text."
+    },
+    "DOCUMENT_TOO_LARGE": {
+      "message": "This document is too large.",
+      "hint": "Split it or make it smaller."
+    },
+    "DOCUMENT_EXTRACTION_FAILED": {
+      "message": "The text of this document could not be read.",
+      "hint": "Check that the file is not damaged, or export it in another format."
+    },
+    "DOCUMENT_NO_TEXT_LAYER": {
+      "message": "This document has no readable text (it is probably a scan).",
+      "hint": "Export it as a text PDF, or paste its content into a Markdown file."
+    },
+    "AGENT_NO_PROVIDER": {
+      "message": "No active AI provider: this agent cannot answer.",
+      "hint": "Enable a provider in AI providers."
+    },
+    "AGENT_DISABLED": {
+      "message": "This agent is disabled.",
+      "hint": "Enable it first."
+    },
+    "AGENT_UNKNOWN": {
+      "message": "This agent does not exist (any more).",
+      "hint": "Refresh the list of agents."
+    },
+    "AGENT_DUPLICATE": {
+      "message": "An agent already has this name.",
+      "hint": "Pick another name."
+    },
+    "AGENT_DEFINITION_INVALID": {
+      "message": "This agent’s settings are not valid.",
+      "hint": "Check the name, the budget (zero or more) and the tools."
+    },
+    "AGENT_BUILTIN_UNDELETABLE": {
+      "message": "An agent shipped with Cogenta cannot be deleted.",
+      "hint": "Disable it if you do not want to use it."
+    },
+    "AGENT_LOOP_RECURSION_LIMIT": {
+      "message": "The agent went round in circles and stopped.",
+      "hint": "Rephrase the request more simply."
+    },
+    "AGENT_RUNTIME_UNAVAILABLE": {
+      "message": "Agents are not available on this site.",
+      "hint": "Restart the site or check Operations."
+    },
+    "AGENT_SKILL_UNKNOWN": {
+      "message": "This skill does not exist (any more).",
+      "hint": "Refresh the list."
+    },
+    "AGENT_SKILL_DUPLICATE": {
+      "message": "A skill already has this name.",
+      "hint": "Pick another name."
+    },
+    "AGENT_SKILL_BUILTIN_UNDELETABLE": {
+      "message": "A skill shipped with Cogenta cannot be deleted.",
+      "hint": "You can edit it or remove it from the default skills."
+    },
+    "SKILL_DEFINITION_INVALID": {
+      "message": "This skill is not valid.",
+      "hint": "It must start with a header holding “name” and “description”."
+    },
+    "AGENT_SKILL_RESOURCE_INVALID": {
+      "message": "This file cannot be attached to the skill.",
+      "hint": "Check its name and type."
+    },
+    "PROVIDER_UNKNOWN": {
+      "message": "This provider is not registered.",
+      "hint": "Add it in AI providers."
+    },
+    "PROVIDER_NOT_CONFIGURED": {
+      "message": "This provider is not configured.",
+      "hint": "Add its key in AI providers."
+    },
+    "PROVIDER_ID_INVALID": {
+      "message": "This provider identifier is not valid.",
+      "hint": "Use lowercase letters, digits and hyphens, no spaces (“auto” is reserved)."
+    },
+    "PROVIDER_CUSTOM_BASE_URL_REQUIRED": {
+      "message": "A custom provider needs an address.",
+      "hint": "Enter the address of the OpenAI-compatible endpoint."
+    },
+    "PROVIDER_KEY_REQUIRED": {
+      "message": "Changing a provider’s address means entering its API key again.",
+      "hint": "The saved key is never sent on its own to another address."
+    },
+    "PROVIDER_TUNING_INVALID": {
+      "message": "One of the tuning values is outside the allowed range.",
+      "hint": "Use a reasonable positive whole number or leave the field empty."
+    },
+    "PROVIDER_REQUEST_FAILED": {
+      "message": "The AI provider refused the request.",
+      "hint": "Check the key and the model with the “Test” button in AI providers."
+    },
+    "PROVIDER_RATE_LIMITED": {
+      "message": "The AI provider is limiting the number of requests.",
+      "hint": "Wait a moment before trying again."
+    },
+    "PROVIDER_TIMEOUT": {
+      "message": "The AI provider took too long to answer.",
+      "hint": "Try again, or raise the maximum wait in AI providers."
+    },
+    "PROVIDER_RESPONSE_INVALID": {
+      "message": "The AI provider returned an answer that makes no sense.",
+      "hint": "Try again, or check the provider’s address."
+    },
+    "TOOL_CALL_REJECTED": {
+      "message": "This action is not allowed for this agent.",
+      "hint": "Adjust its permissions in its settings."
+    },
+    "TOOL_INPUT_INVALID": {
+      "message": "The agent asked for a tool with invalid parameters.",
+      "hint": "Try again; the agent usually corrects itself."
+    },
+    "THEME_NO_PROVIDER": {
+      "message": "No active AI provider: the theme cannot be generated.",
+      "hint": "Enable a provider in AI providers."
+    },
+    "PROMPT_TEMPLATE_UNKNOWN": {
+      "message": "This prompt template does not exist (any more).",
+      "hint": "Refresh the list."
+    },
+    "PROMPT_TEMPLATE_DUPLICATE": {
+      "message": "A prompt template already has this name.",
+      "hint": "Pick another name."
+    },
+    "PROMPT_TEMPLATE_BUILTIN_UNDELETABLE": {
+      "message": "A template shipped with Cogenta cannot be deleted.",
+      "hint": "You can edit it."
+    },
+    "PROMPT_TEMPLATE_INVALID": {
+      "message": "This prompt template is not valid.",
+      "hint": "Check its name, category and text."
+    },
+    "PROMPT_TEMPLATE_PLACEHOLDER_UNRESOLVED": {
+      "message": "This template uses an unknown variable.",
+      "hint": "Only use the variables listed under the field."
+    },
+    "CHANNEL_PROVIDER_NOT_CONFIGURED": {
+      "message": "This channel is not configured.",
+      "hint": "Set its credentials on the server, then try again."
+    },
+    "CHANNEL_LINK_CODE_INVALID": {
+      "message": "This link code is no longer valid.",
+      "hint": "Generate a new one."
+    },
+    "CONTENT_READ_ONLY": {
+      "message": "This change is disabled on a production site.",
+      "hint": "Make it from development mode (“cogenta dev”)."
+    },
+    "AUTH_FORBIDDEN": {
+      "message": "Your role does not allow this action.",
+      "hint": "Ask an administrator."
+    },
+    "INTERNAL": {
+      "message": "An unexpected error occurred.",
+      "hint": "Try again; if it persists, check Operations."
+    }
+  },
+  "aiProgress": {
+    "classify": "Checking whether the request needs a custom layout…",
+    "classifyFailed": "The request could not be classified: sticking to colours and fonts.",
+    "layoutNeeded": "Custom layout needed: {{reason}}",
+    "tokensEnough": "Colours and fonts are enough: {{reason}}",
+    "chooseBase": "Choosing a starting theme…",
+    "baseChosen": "Starting theme chosen: {{theme}}",
+    "writeLayout": "Writing a custom layout into workspace “{{id}}”…",
+    "generating": "Creating the “{{label}}” proposal…",
+    "directionDone": "Proposal “{{label}}” is ready.",
+    "directionFailed": "Proposal “{{label}}” abandoned: {{reason}}",
+    "thinking": "Thinking…",
+    "thinkingStep": "Thinking… (step {{step}})",
+    "callingTool": "Using the “{{tool}}” tool…",
+    "toolFinished": "Tool “{{tool}}” finished.",
+    "toolFailed": "Tool “{{tool}}” failed: {{reason}}",
+    "retrying": "Trying again after a provider error (attempt {{attempt}} of {{max}}): {{reason}}"
+  },
+  "aiPlanNotes": {
+    "removedSection": "The document rules out “{{topic}}” (“{{quote}}”). The proposed “{{name}}” was removed from the plan.",
+    "removedPage": "The document rules out “{{topic}}” (“{{quote}}”). The page “{{name}}” was removed from the plan.",
+    "removedLocales": "The document limits the site to {{locales}} (“{{quote}}”). {{dropped}} were removed from the plan.",
+    "designNotOffered": "The “{{label}}” design could not be offered.",
+    "collectionNotProposed": "The “{{name}}” collection could not be proposed.",
+    "demoDropped": "A demonstration entry for “{{collection}}” was dropped.",
+    "noDemo": "No demonstration content could be proposed."
+  },
+  "aiAssistNotes": {
+    "translation": "Suggested translation into “{{locale}}”.",
+    "altText": "Written from the text around the image, not from the image itself: check it before using it."
+  },
+  "aiAgentNames": {
+    "cogenta-agent": "Cogenta Agent",
+    "security-scanner": "Security Scanner",
+    "content-watch": "Content Watch",
+    "site-monitor": "Site Monitor",
+    "cogenta-theme-creator": "Theme Creator",
+    "cogenta-plugin-builder": "Plugin Builder",
+    "media-librarian": "Media Librarian",
+    "translation-watch": "Translation Watch",
+    "comment-moderator": "Comment Moderator",
+    "audience-reader": "Audience Reader",
+    "migration-finisher": "Migration Finisher",
+    "accessibility-auditor": "Accessibility Auditor",
+    "compliance-checker": "Compliance Checker"
+  },
+  "aiDesignDirections": {
+    "warm-editorial": {
+      "label": "Warm editorial",
+      "description": "A generous type scale, a paper background, one restrained accent, comfortable density."
+    },
+    "clean-and-clinical": {
+      "label": "Clean and clinical",
+      "description": "A near-neutral palette, a tight scale, compact density, a cool accent, sharp corners."
+    },
+    "bold-and-graphic": {
+      "label": "Bold and graphic",
+      "description": "A strongly saturated accent, big jumps in size, generous radius, high contrast."
+    },
+    "quiet-and-minimal": {
+      "label": "Quiet and minimal",
+      "description": "Near-monochrome, wide spacing, a small scale, almost no rounding."
+    },
+    "classic-and-formal": {
+      "label": "Classic and formal",
+      "description": "Deep neutral tones, a conservative scale, serif headings, an understated accent."
+    }
+  },
+  "sitePlanReport": {
+    "followUp": {
+      "schemaRewritten": "The schema file was rewritten: commit it (git). The development server restarts on its own to load the new collections; if the site was started another way, restart it.",
+      "demoDrafts_one": "{{count}} demonstration entry is waiting as a draft. Read it before publishing.",
+      "demoDrafts_other": "{{count}} demonstration entries are waiting as drafts. Read them before publishing.",
+      "pageDrafts_one": "{{count}} page is waiting as a draft: it has a title and a purpose, not its content yet.",
+      "pageDrafts_other": "{{count}} pages are waiting as drafts: they have a title and a purpose, not their content yet.",
+      "paletteLive": "The new palette is already live, no restart needed.",
+      "restartForDesign": "Restart the site to show the new design."
+    },
+    "skipped": {
+      "collectionExists": "the site already has a collection with that name: replacing an existing one is a migration, not a simple edit",
+      "taxonomyExists": "the site already has a taxonomy with that name: replacing an existing one is a migration, not a simple edit",
+      "schemaDevOnly": "adding this changes the schema, which only development mode (“cogenta dev”) may do; everything in this plan that is content was applied anyway",
+      "noPageCollection": "the site has no collection that can hold a page (a title, a URL identifier, a public address)"
+    }
+  },
+  "aiCron": {
+    "hourly": "Every hour",
+    "daily": "Every day at {{time}}",
+    "weekly": "Every {{day}} at {{time}}",
+    "monthly": "On day {{dayOfMonth}} of each month at {{time}}",
+    "custom": "Schedule “{{cron}}”"
+  },
+  "aiTools": {
+    "analytics_summary": "Read the statistics",
+    "assist_alt_text": "Write alternative text",
+    "assist_chat": "Ask the site’s content",
+    "assist_classify": "Classify a content",
+    "assist_faq_draft": "Draft an FAQ",
+    "assist_find_duplicates": "Look for duplicates",
+    "assist_generate_agent_identity": "Draft an agent’s identity",
+    "assist_generate_image": "Generate an image",
+    "assist_meta_description": "Write a meta description",
+    "assist_moderate": "Moderate a text",
+    "assist_proofread": "Proofread a text",
+    "assist_rewrite": "Rewrite a text",
+    "assist_schema_org_draft": "Draft structured data",
+    "assist_summarise": "Summarise a text",
+    "assist_tags": "Suggest tags",
+    "assist_titles": "Suggest titles",
+    "assist_translate": "Translate a text",
+    "code_propose_patch": "Propose a code fix",
+    "comments_decide": "Decide on a comment",
+    "comments_list": "List comments",
+    "content_collections": "List content types",
+    "content_delete": "Move a content to the trash",
+    "content_list": "List contents",
+    "content_publish": "Publish a content",
+    "content_read": "Read a content",
+    "content_schema": "Read a content type’s structure",
+    "content_search": "Search the contents",
+    "content_write_draft": "Write a draft",
+    "deps_patch": "Update a dependency",
+    "deps_scan": "Scan the dependencies",
+    "document_extract_text": "Read a document",
+    "http_fetch": "Fetch a web page",
+    "logs_read_not_found": "Read the not-found pages",
+    "media_list": "List media",
+    "media_read": "Read a media file",
+    "media_store_generated_image": "Save a generated image",
+    "media_write": "Add a media file",
+    "plugin_check_sandbox": "Check a plugin in progress",
+    "plugin_read_sandbox_file": "Read a plugin file",
+    "plugin_write_sandbox_file": "Write a plugin file",
+    "redirects_create": "Create a redirect",
+    "site_config_read": "Read the site configuration",
+    "schema_read": "Read the site structure",
+    "theme_list_sandbox_files": "List the files of a theme in progress",
+    "theme_preview_sandbox": "Preview a theme in progress",
+    "theme_propose_theme": "Propose a theme",
+    "theme_read_sandbox_file": "Read a theme file",
+    "theme_write_sandbox_file": "Write a theme file",
+    "redirects_write": "Manage redirects",
+    "logs_read": "Read the logs"
+  }
+}

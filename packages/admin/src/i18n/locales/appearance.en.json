@@ -1,0 +1,176 @@
+{
+  "appearance": {
+    "description": "Change the colours, fonts and identity of the site without touching code. Changes are saved on the site and apply on the next page view.",
+    "themeDescription": "The theme draws the public layout of the site. Your colours and fonts apply on top of it, whichever theme is active. The change takes effect on the next page view, with no restart.",
+    "themeSandboxLinkAction": "Manage my own themes (create, import, export)",
+    "provenanceFileOnly": "These values are the theme's own: you have not customised anything yet.",
+    "provenanceOverridden": "Some values below have been customised and saved on the site.",
+    "resetAction": "Go back to the theme's values",
+    "exportAction": "Write to the theme file",
+    "provenanceUnsaved": "Unsaved changes. The preview already shows them; the public site only changes after you press Save.",
+    "customizeHeadingTheme": "Customise the {{theme}} theme",
+    "galleryHeading": "Saved palettes",
+    "galleryIntro": "Colour palettes added to this site. Applying one replaces the current colours.",
+    "galleryEmpty": "No saved palette yet. Ready-made palettes are at the top of this screen.",
+    "palettesHeading": "Ready-made palettes",
+    "palettesIntro": "A starting point: pick a palette and it fills the seven colours. The preview shows it straight away and nothing is published until you press Save.",
+    "paletteApply": "Use the {{name}} palette",
+    "palette": {
+      "ink": "Ink and blue",
+      "forest": "Forest",
+      "terracotta": "Terracotta",
+      "plum": "Plum",
+      "sand": "Sand and teal",
+      "contrast": "High contrast",
+      "ocean-night": "Ocean night",
+      "graphite": "Graphite and amber"
+    },
+    "colorPickerLabel": "Pick the colour \"{{name}}\"",
+    "fontSystem": "System font",
+    "fontGroup": {
+      "sans": "Sans serif",
+      "serif": "Serif",
+      "mono": "Monospace"
+    },
+    "customFont": "Custom ({{name}})",
+    "customChoice": "Custom",
+    "unitLabel": "Unit of \"{{name}}\"",
+    "millisecondsUnit": "milliseconds",
+    "reducedMotionNote": "Animations are always turned off for visitors who ask for it in their system settings (accessibility): this is not a setting.",
+    "density": {
+      "compact": "Compact",
+      "comfortable": "Comfortable",
+      "spacious": "Spacious"
+    },
+    "easing": {
+      "standard": "Standard",
+      "soft": "Soft",
+      "in": "Slow start",
+      "out": "Slow finish",
+      "inOut": "Slow start and finish",
+      "linear": "Even"
+    },
+    "shadow": {
+      "none": "None",
+      "line": "Thin line",
+      "light": "Light",
+      "medium": "Medium",
+      "strong": "Strong"
+    },
+    "token": {
+      "font": {
+        "sans": "Text font",
+        "serif": "Heading font (serif)",
+        "mono": "Code font",
+        "scale": "Step between heading sizes",
+        "baseSize": "Text size"
+      },
+      "radius": {
+        "sm": "Slightly rounded corners",
+        "md": "Rounded corners",
+        "lg": "Very rounded corners"
+      },
+      "motion": {
+        "duration": "Animation length",
+        "easing": "Animation pacing"
+      },
+      "shadow": {
+        "sm": "Shadow of small elements",
+        "md": "Shadow of cards and windows"
+      },
+      "space": {
+        "unit": "Spacing unit",
+        "density": "Density"
+      }
+    },
+    "tokenHelp": {
+      "font": {
+        "scale": "1.25 makes headings clearly larger than the text; 1.1 brings them closer.",
+        "baseSize": "The size of body text; everything else follows from it."
+      },
+      "space": {
+        "unit": "Margins and gaps are multiples of this value."
+      }
+    },
+    "contrastWarningHeading": "These colours are not contrasted enough to be read comfortably (WCAG AA accessibility standard):",
+    "contrastWarningLine": "\"{{foreground}}\" on \"{{background}}\": contrast {{ratio}}:1, at least {{required}}:1 is needed",
+    "contrastWarningAdvice": "Darken the text or lighten the background (or the other way round). You can only save once the contrast is sufficient.",
+    "previewCorrectedNote": "The preview temporarily corrects unreadable text so you can keep judging the rest.",
+    "saveBlockedByContrast": "Fix the colour contrast to save.",
+    "unsavedChanges": "Unsaved changes",
+    "previewOpenAction": "Show preview",
+    "errors": {
+      "contrast": "These colours are not contrasted enough: the text would be hard to read. Change the text colour or the background.",
+      "invalidValue": "One of the values is not valid. Check the colours (for example #1f4fd8) and the sizes.",
+      "tokenSet": "This setting does not exist in this theme.",
+      "scale": "The step between heading sizes must stay above 1."
+    },
+    "resetConfirmTitle": "Go back to the theme's values?",
+    "resetConfirmBody": "All the colour, font and CSS customisations saved on this site will be erased. The logo and identity are not touched.",
+    "resetConfirmAction": "Go back to the theme's values",
+    "leaveTitle": "Leave without saving?",
+    "leaveBody": "You have changes that are not saved. If you leave now, they will be lost.",
+    "leaveBodyContrast": "You have unsaved changes, but some colours are not contrasted enough: they cannot be saved as they are.",
+    "leaveStay": "Stay here",
+    "leaveDiscard": "Leave without saving",
+    "leaveSave": "Save and leave",
+    "themePreviewOpen": "View the {{theme}} theme full size",
+    "themePreviewOpenHint": "Enlarge",
+    "themePreviewLargeHint": "Preview with demonstration content: your own content is not used.",
+    "sampleData": {
+      "activatesTheme": "The \"{{name}}\" theme will be activated too.",
+      "devOnly": "Importing sample data changes the structure of the site, which is only possible in development mode. The preview stays available; to import, restart the site with the \"cogenta dev\" command."
+    },
+    "field": {
+      "branding": {
+        "customLogoMediaId": {
+          "label": "Logo replacing Cogenta's",
+          "help": "Shown in the footer of the public site and in the admin header once \"Show the Cogenta branding\" is unticked. It does not replace the site logo (\"Identity\" above)."
+        }
+      }
+    }
+  },
+  "nav": {
+    "themeSandbox": "Local themes"
+  },
+  "breadcrumb": {
+    "themeSandbox": "Local themes",
+    "search": "Search",
+    "notFound": "Page not found"
+  },
+  "themeSandbox": {
+    "description": "Build your own theme, or import one you received as a zip file: work on it in a draft, preview it, then deploy it to the site. A draft's files are edited outside this screen, in your own editor or with the agent that writes theme code.",
+    "adminOnly": "Only the admin role can manage local themes.",
+    "sandboxesHeading": "Theme drafts",
+    "sandboxesDescription": "A working copy: no visitor sees it until you deploy it.",
+    "newSandboxIdLabel": "Name of the new draft",
+    "cloneFromLabel": "Copy from",
+    "cloneFromNone": "Start from scratch",
+    "cloneFromHelp": "A copy can only be made from a local theme that is already deployed; none exists yet.",
+    "createError": "This draft could not be created.",
+    "noSandboxes": "No draft yet. Give a name above to create one.",
+    "previewIframeTitle": "Preview of the draft \"{{id}}\"",
+    "deployDescription": "The draft is analysed, you see what will happen, and it only goes live after you confirm.",
+    "targetThemeNameLabel": "Name of the theme once deployed",
+    "checkError": "This draft could not be checked.",
+    "checkPassed": "This draft is ready to be deployed.",
+    "checkFailed": "This draft cannot be deployed yet:",
+    "deployError": "This draft could not be deployed.",
+    "versionsDescription": "Each time a theme is replaced by a new version, the old one is archived with its date. Restoring a version archives the one it replaces.",
+    "noLocalThemes": "No local theme yet: deploy a draft to get one.",
+    "noVersions": "This theme has never been replaced: nothing is archived yet.",
+    "exportImportDescription": "A theme leaves and enters as a single zip file. An import always lands in a draft, never directly on the site.",
+    "importSandboxIdLabel": "Name of the draft that will receive the theme",
+    "importSandboxIdPlaceholder": "imported-theme",
+    "importFileLabel": "Theme zip file",
+    "chooseFileAction": "Choose a file",
+    "noFileChosen": "No file chosen",
+    "importError": "This file could not be imported.",
+    "imported": "Imported into the draft \"{{id}}\": preview it and deploy it like any other draft.",
+    "deployWarning": "Once deployed, this theme's code runs on the server, with the site's rights. Only deploy it if you know where it comes from: a zip file you received, or code an agent wrote from an external document, may contain malicious instructions that the automatic check cannot see."
+  },
+  "adminAppearance": {
+    "previewSample": "A preview of this admin's headings, text and buttons with this template.",
+    "customizeDescription": "These settings apply on top of the chosen template. Clear a field to go back to the template's value."
+  }
+}

@@ -134,7 +134,9 @@ export function ClassifyPanel({
                     </span>
                   </span>
                   {currentValue.includes(suggestion.label) ? (
-                    <span className="text-muted-foreground">{t('assist.classifyAlreadyApplied')}</span>
+                    <span className="text-muted-foreground">
+                      {t('assist.classifyAlreadyApplied')}
+                    </span>
                   ) : (
                     <Button type="button" size="sm" onClick={() => accept(suggestion.label)}>
                       {t('assist.use')}

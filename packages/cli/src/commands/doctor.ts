@@ -248,6 +248,12 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
         names: activeProviders.map((provider) => provider.name).join(', '),
       },
     )
+  } else if (registered.length > 0 && config.llm === undefined) {
+    note(
+      'llm-registered-disabled',
+      `AI providers are registered in the admin but all disabled (${registered.length}). Everything works except the agents.`,
+      { count: registered.length },
+    )
   } else if (config.llm === undefined) {
     note('llm-none', 'No LLM provider configured. Everything works except the agents.')
   } else if (config.llm.apiKey === undefined) {

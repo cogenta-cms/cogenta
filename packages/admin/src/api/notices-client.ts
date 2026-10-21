@@ -30,6 +30,14 @@ export async function dismissNotice(token: string, id: string): Promise<void> {
   })
 }
 
+/** Takes a dismissal back — what the "Undo" shown after hiding a recommendation calls. */
+export async function restoreNotice(token: string, id: string): Promise<void> {
+  await request(`/api/notices/${encodeURIComponent(id)}/restore`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
 /**
  * `/api/notices/history` — fiche 38 task 2's notification centre: what has
  * ever been shown to this person, resolved or not, dismissed or not.
@@ -138,4 +146,16 @@ export function setChannelPreferences(
     headers: authHeader(token),
     body: JSON.stringify(preferences),
   })
+}
+
+export interface ChannelsRunnerState {
+  readonly running: boolean
+  /** The chat channels the `cogenta channels` process is connected to. */
+  readonly channels: readonly string[]
+  readonly since?: string
+}
+
+/** Whether `cogenta channels` is running — a code generated while it is not will never be read. */
+export function getChannelsRunner(token: string): Promise<ChannelsRunnerState> {
+  return request('/api/notices/channels/runner', { headers: authHeader(token) })
 }

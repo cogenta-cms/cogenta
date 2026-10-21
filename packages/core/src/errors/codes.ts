@@ -255,6 +255,8 @@ export const ERROR_CODES = [
   'MCP_ACTOR_API_KEY_INVALID',
   // MCP server — the account behind --email was disabled during a session
   'MCP_ACTOR_USER_DISABLED',
+  // MCP server — one caller may not queue more writes for approval than a person can review
+  'MCP_APPROVALS_PENDING_LIMIT',
 
   // MCP client sandboxing floor (fiche 58 task 1bis) — stdio-client.ts's
   // hard per-call timeout, cancellation, process lifecycle and best-effort

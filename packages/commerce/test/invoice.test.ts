@@ -247,5 +247,7 @@ describe('two invoices issued at the same instant', () => {
     const issued = await Promise.all(issuers)
     const seqs = issued.map((invoice) => invoice.seq).sort((a, b) => a - b)
     expect(seqs).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-  })
+    // Ten connections retrying on one SQLite file: a Windows runner took
+    // past 30 s once (2026-10-21) while every other runner takes seconds.
+  }, 120_000)
 })

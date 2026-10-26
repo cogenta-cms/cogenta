@@ -45,7 +45,7 @@ catalog:
   vite: ^8.2.1
   vitest: ^4.1.11
   wasm-vips: ^0.0.18
-  zod: ^4.4.3
+  zod: ^4.6.7
 
 # Native dependencies are opt-in only (rule R10): each one must ship a WASM fallback
 # or a build-time precomputation before it may run its install scripts.
@@ -59,8 +59,11 @@ onlyBuiltDependencies:
 #   http-cache-semantics: GHSA-ch52-4w7c-c8xp (fixed in 4.3.0)
 #   smol-toml: GHSA-r4xh-jqrq-34v2 · source-map-js: GHSA-68fv-2mgg-jv7q
 #   shell-quote: GHSA-pqg4-j6r4-53mv
+#   zod: GHSA-mrhx-c7xc-m3w5 (fixed in 4.6.6) — @langchain/core and astro pin an
+#   exact zod 4.6.5, so the catalog bump alone leaves a second, vulnerable copy.
 overrides:
   http-cache-semantics: ^4.3.0
   smol-toml: ^1.9.1
   source-map-js: ^1.2.2
   shell-quote: ^1.12.0
+  zod: ^4.6.7

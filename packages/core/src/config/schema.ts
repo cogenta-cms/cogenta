@@ -125,13 +125,21 @@ const auditRetentionSchema = z.strictObject({
 const securitySchema = z.strictObject({
   cors: corsSchema.prefault({}),
   /**
-   * `Content-Security-Policy`, verbatim.
+   * `Content-Security-Policy`.
    *
-   * A string rather than a builder: a CSP is a deployment decision that
-   * depends on which analytics, fonts and embeds a site actually uses, and a
-   * builder that covers half of them produces a policy nobody can predict
-   * from reading the config. `false` sends no header at all — for the site
-   * that already sets one at its reverse proxy.
+   * Absent — the default — sends Cogenta's built-in blocking policy: no inline
+   * script except the two the server itself emits (allowed by sha256 hash),
+   * `object-src 'none'`, `frame-ancestors 'self'`, same-origin connections
+   * and forms, and a separate stricter variant for the JSON API. It is
+   * tailored per path (admin, public pages, form pages, API) and follows
+   * `appearance.remoteWebFonts`.
+   *
+   * A string replaces it, verbatim, on every response: a CSP is a deployment
+   * decision that depends on which analytics, fonts and embeds a site
+   * actually uses, and a builder that covers half of them produces a policy
+   * nobody can predict from reading the config. `false` sends no header at
+   * all — for the site that already sets one at its reverse proxy, or that
+   * must run inline scripts the default would block.
    */
   csp: z.union([nonEmpty, z.literal(false)]).optional(),
   /**

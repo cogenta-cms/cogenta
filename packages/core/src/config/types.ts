@@ -88,7 +88,11 @@ export interface CogentaConfigInput {
       readonly credentials?: boolean
       readonly maxAge?: number
     }
-    /** `Content-Security-Policy`, verbatim. `false` sends none. */
+    /**
+     * `Content-Security-Policy`. Absent: Cogenta's built-in blocking policy
+     * (no inline script but the server's own, by hash). A string: that policy,
+     * verbatim, everywhere. `false`: no header.
+     */
     readonly csp?: string | false
     /** `Strict-Transport-Security` max-age in seconds. `0` — the default — sends none. */
     readonly hstsMaxAge?: number

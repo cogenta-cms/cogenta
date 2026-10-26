@@ -24,3 +24,20 @@ Voir aussi [SEO](personnaliser-lapparence.html#seo) (section Apparence) et
 [Fournisseurs IA](ia-et-agents.html#fournisseurs-et-modeles) (section IA),
 réglés depuis leurs propres écrans plutôt que depuis les réglages généraux —
 chacun vit là où on le cherche en premier.
+
+## La politique de sécurité du contenu (CSP)
+
+Par défaut, Cogenta envoie une politique de sécurité du contenu qui **bloque** tout script
+en ligne ajouté à une page : seuls les scripts de Cogenta lui-même (la bascule clair/sombre,
+les champs conditionnels d'un formulaire) s'exécutent. Elle interdit aussi les objets
+embarqués, limite les connexions et les envois de formulaire au site, et n'autorise les
+cadres que pour les services d'intégration reconnus (YouTube sans cookies, Vimeo,
+Dailymotion, Spotify, SoundCloud) une fois le consentement donné. Les polices Google ne
+sont ouvertes que si vous avez activé `appearance.remoteWebFonts`.
+
+Deux réglages dans `security` du fichier `cogenta.config` :
+
+- `csp: "…"` remplace la politique par la vôtre, mot pour mot, sur toutes les réponses —
+  à utiliser si vous ajoutez un outil d'analyse, un widget ou un script tiers ;
+- `csp: false` n'envoie aucun en-tête — pour un site dont le serveur frontal envoie déjà le
+  sien. L'écran *Réglages → Exploitation* indique laquelle des trois situations s'applique.

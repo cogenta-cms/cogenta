@@ -28,7 +28,8 @@
     "slate-dom": "catalog:",
     "slate-history": "catalog:",
     "slate-react": "catalog:",
-    "tailwind-merge": "catalog:"
+    "tailwind-merge": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@cogenta/blocks": "workspace:*",

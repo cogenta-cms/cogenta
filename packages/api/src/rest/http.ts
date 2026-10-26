@@ -158,6 +158,8 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   BLOCK_UNKNOWN: 400,
   BLOCK_INVALID: 400,
   QUERY_INVALID: 400,
+  REQUEST_BODY_TOO_LARGE: 413,
+  REQUEST_UNSUPPORTED_MEDIA_TYPE: 415,
   FORBIDDEN: 403,
   UNAUTHENTICATED: 401,
   PREVIEW_TOKEN_INVALID: 403,
@@ -547,6 +549,20 @@ export function errorResponse(error: unknown): RestResponse {
       ...response,
       headers: { ...response.headers, 'retry-after': String(retryAfterSeconds) },
     }
+  }
+
+  // `decodeURIComponent` on a path segment throws a bare `URIError` for a
+  // malformed escape such as `%` or `%E0%A4%A`. That is the caller's input, not
+  // a fault of ours, and many routers decode their segments themselves.
+  if (error instanceof URIError) {
+    const malformed: RestErrorBody = {
+      error: {
+        code: 'QUERY_INVALID',
+        message: 'The request path is not validly percent-encoded.',
+        hint: 'Encode the characters of the path as UTF-8 percent-escapes.',
+      },
+    }
+    return jsonResponse(400, malformed)
   }
 
   const internal: RestErrorBody = {

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, rm, stat, statfs, writeFile } from 'node:fs/promises'
+import { mkdtemp, open, readFile, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -4628,12 +4628,17 @@ async function readSecurityTxt(projectRoot: string): Promise<string | undefined>
     join(projectRoot, 'public', '.well-known', 'security.txt'),
     join(projectRoot, 'security.txt'),
   ]) {
+    // One handle for the check and the read, so the file measured is the one served.
+    let handle: Awaited<ReturnType<typeof open>> | undefined
     try {
-      const info = await stat(path)
+      handle = await open(path, 'r')
+      const info = await handle.stat()
       if (!info.isFile() || info.size === 0 || info.size > MAX_SECURITY_TXT_BYTES) continue
-      return await readFile(path, 'utf8')
+      return await handle.readFile('utf8')
     } catch {
       // A missing candidate is the normal case; try the next one.
+    } finally {
+      await handle?.close()
     }
   }
   return undefined

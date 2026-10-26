@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import type { CommentStatus, CommentStore } from '@cogenta/comments'
 import { createDatabaseMediaStore, type DatabaseHandle, type StorageDriver } from '@cogenta/core'
@@ -86,16 +87,32 @@ function wpApprovedToStatus(approved: string): CommentStatus {
  * step of this importer already follows.
  */
 function stripHtmlToPlainText(html: string): string {
-  return html
-    .replace(/<[^>]*>/gu, '')
-    .replace(/&nbsp;/giu, ' ')
-    .replace(/&amp;/giu, '&')
-    .replace(/&lt;/giu, '<')
-    .replace(/&gt;/giu, '>')
-    .replace(/&quot;/giu, '"')
-    .replace(/&#0?39;/giu, "'")
+  // Repeated until stable, so `<<b>script>` cannot reassemble into a tag.
+  let text = html
+  for (let previous = ''; previous !== text; ) {
+    previous = text
+    text = text.replace(/<[^<>]*>/gu, '')
+  }
+  // One pass over the entities, so `&amp;lt;` decodes to `&lt;` and no
+  // further: decoding `&amp;` first and `&lt;` after would unescape twice.
+  // The result is plain text, which contract F escapes when it is rendered.
+  return text
+    .replace(
+      /&(nbsp|amp|lt|gt|quot|#0?39);/giu,
+      (_, name: string) => ENTITIES[name.toLowerCase()] ?? '',
+    )
     .replace(/\s+/gu, ' ')
     .trim()
+}
+
+const ENTITIES: Readonly<Record<string, string>> = {
+  nbsp: ' ',
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  '#39': "'",
+  '#039': "'",
 }
 
 const APPROVED = '1'
@@ -259,7 +276,7 @@ export async function importWordPress(
   }
 
   // ---- Resume (task 3) -------------------------------------------------
-  // Entry ids are deterministic (`store.create({ id: item.postId, … })`
+  // Entry ids are deterministic (`store.create({ id: entryIdFor(item.postId), … })`
   // below), so a WordPress id already recorded for this run was already
   // written by an earlier, interrupted attempt. Filtering it out here — not
   // merely skipping the write — is what also keeps its comments from being
@@ -441,7 +458,7 @@ export async function importWordPress(
     }
 
     const entry = await store.create({
-      id: item.postId,
+      id: entryIdFor(item.postId),
       status,
       createdBy,
       values,
@@ -683,4 +700,22 @@ export async function importWordPress(
     unconvertedBlocks: acc.unconvertedBlocks,
     warnings: acc.warnings,
   }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu
+
+/**
+ * The entry id a WordPress post or page is written under: the same for the
+ * same WordPress id, so an interrupted import resumes instead of duplicating.
+ * A WordPress id is a number, and Postgres stores entry ids as `uuid`, so
+ * writing `"1"` there was refused; it is hashed into a UUID (the version 5
+ * layout, SHA-1 under a fixed name) rather than used as is.
+ */
+export function entryIdFor(postId: string): string {
+  if (UUID.test(postId)) return postId.toLowerCase()
+  const hash = createHash('sha1').update(`cogenta:wordpress:${postId}`).digest()
+  hash[6] = ((hash[6] ?? 0) & 0x0f) | 0x50
+  hash[8] = ((hash[8] ?? 0) & 0x3f) | 0x80
+  const hex = hash.subarray(0, 16).toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }

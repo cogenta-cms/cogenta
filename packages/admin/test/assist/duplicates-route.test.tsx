@@ -86,7 +86,7 @@ describe('the duplicate-detection screen', () => {
     expect(within(results).getByText('93 %')).toBeDefined()
     // Nothing on this screen offers to merge or delete — only a link to go
     // compare the two entries by hand.
-    expect(screen.getByRole('link', { name: 'Comparer' })).toBeDefined()
+    expect(await within(results).findByRole('link', { name: 'Comparer' })).toBeDefined()
     expect(screen.queryByRole('button', { name: /merge|fusion/iu })).toBeNull()
   })
 })

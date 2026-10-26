@@ -251,8 +251,9 @@ function packageJsonContents(answers: ScaffoldAnswers, defaultTheme?: string): s
     name:
       answers.siteName
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '') || 'cogenta-site',
+        .split(/[^a-z0-9]+/u)
+        .filter((part) => part !== '')
+        .join('-') || 'cogenta-site',
     version: '0.0.0',
     private: true,
     type: 'module',

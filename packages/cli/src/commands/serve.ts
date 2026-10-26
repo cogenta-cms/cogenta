@@ -3625,9 +3625,19 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
+/**
+ * A query key that would write an object's prototype instead of a property
+ * (`?__proto__=a&__proto__=b` makes the parsed query inherit from an array).
+ * No route reads such a key, so it is dropped.
+ */
+function isPrototypeKey(key: string): boolean {
+  return key === '__proto__' || key === 'constructor' || key === 'prototype'
+}
+
 function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestRequest {
   const query: Record<string, string | readonly string[] | undefined> = {}
   for (const key of url.searchParams.keys()) {
+    if (isPrototypeKey(key)) continue
     const values = url.searchParams.getAll(key)
     query[key] = values.length > 1 ? values : values[0]
   }
@@ -3659,6 +3669,7 @@ function toCommerceRequest(req: IncomingMessage, url: URL, body: unknown): Comme
     if (typeof value === 'string') headers[name] = value
   }
   for (const key of url.searchParams.keys()) {
+    if (isPrototypeKey(key)) continue
     query[key] = url.searchParams.get(key) ?? undefined
   }
   return {
@@ -4021,6 +4032,7 @@ export interface AuthorArchiveResolution {
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
   const query: Record<string, string | undefined> = {}
   for (const key of url.searchParams.keys()) {
+    if (isPrototypeKey(key)) continue
     query[key] = url.searchParams.get(key) ?? undefined
   }
   // The connecting socket's address only — never `x-forwarded-for`, a

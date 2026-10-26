@@ -163,9 +163,11 @@ export function OpsSettingsRoute(): JSX.Element {
 
               <dt>{t('opsSettings.cspLabel')}</dt>
               <dd className="font-mono break-all">
-                {security.csp === null || security.csp === false
-                  ? t('opsSettings.cspNone')
-                  : security.csp}
+                {security.csp === null
+                  ? t('opsSettings.cspDefault')
+                  : security.csp === false
+                    ? t('opsSettings.cspNone')
+                    : security.csp}
               </dd>
 
               <dt>{t('opsSettings.hstsLabel')}</dt>

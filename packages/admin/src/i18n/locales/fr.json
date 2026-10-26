@@ -1439,6 +1439,7 @@
     "corsDisabled": "Désactivé — aucune origine n'est configurée.",
     "cspLabel": "Content-Security-Policy",
     "cspNone": "Aucune envoyée.",
+    "cspDefault": "Politique par défaut de Cogenta : aucun script en ligne hormis ceux du serveur (autorisés par empreinte), aucun objet embarqué, connexions et formulaires limités au site.",
     "hstsLabel": "HSTS",
     "hstsEnabled": "Activé, max-age={{maxAge}}s",
     "hstsDisabled": "Désactivé — de toute façon jamais envoyé en HTTP clair.",

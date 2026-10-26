@@ -1,3 +1,6 @@
+// Must stay the first import: zod reads this setting while each schema is
+// being constructed, which for a schema imported below happens at module load.
+import './zod-config.js'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './app.js'

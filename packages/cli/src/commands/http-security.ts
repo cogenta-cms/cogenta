@@ -1,5 +1,7 @@
 import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from 'node:http'
 import type { CogentaConfig } from '@cogenta/core'
+import { defaultCspFor } from './csp.js'
+import { remoteWebFontsEnabled } from './theme-fonts.js'
 
 /**
  * CORS, security headers and cache-control for `cogenta serve` (L10 task 6).
@@ -21,8 +23,9 @@ export type SecurityConfig = CogentaConfig['security']
  * an uploaded file is a script; `X-Frame-Options` and `Referrer-Policy` are
  * the two others with no plausible downside and a real failure mode without
  * them. Anything beyond that (`Permissions-Policy`, COEP/COOP) breaks real
- * pages depending on what a site embeds, so it belongs in the site's own
- * `csp` string rather than in a default nobody chose.
+ * pages depending on what a site embeds, so it does not belong in a default
+ * nobody chose. The Content-Security-Policy is separate (`csp.ts`) because it
+ * varies by path and can be replaced or turned off by the site.
  */
 const ALWAYS: Readonly<Record<string, string>> = Object.freeze({
   'x-content-type-options': 'nosniff',
@@ -107,7 +110,14 @@ function baseHeadersFor(
 ): Record<string, string> {
   const headers: Record<string, string> = { ...ALWAYS }
 
-  if (security.csp !== undefined && security.csp !== false) {
+  // Three states: a string is the site's own policy, sent verbatim; `false`
+  // sends nothing (the site sets one at its proxy); absent means Cogenta's
+  // default, which blocks inline scripts (pentest F-04, see `csp.ts`).
+  if (security.csp === undefined) {
+    headers['content-security-policy'] = defaultCspFor(pathname, {
+      remoteWebFonts: remoteWebFontsEnabled(),
+    })
+  } else if (security.csp !== false) {
     headers['content-security-policy'] = security.csp
   }
 

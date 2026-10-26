@@ -1439,6 +1439,7 @@
     "corsDisabled": "Disabled — no origin is configured.",
     "cspLabel": "Content-Security-Policy",
     "cspNone": "None sent.",
+    "cspDefault": "Cogenta default policy: no inline script except the server's own (allowed by hash), no embedded objects, same-origin connections and forms.",
     "hstsLabel": "HSTS",
     "hstsEnabled": "Enabled, max-age={{maxAge}}s",
     "hstsDisabled": "Disabled — never sent over plain HTTP either way.",

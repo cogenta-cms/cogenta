@@ -40,7 +40,9 @@ export async function ensurePreferenceTables(db: DatabaseHandle): Promise<void> 
       min_severity ${t64} not null,
       quiet_start_minute ${int},
       quiet_end_minute ${int},
-      grouping ${t64} not null,
+      -- Quoted: grouping is a reserved word in MySQL 8 (the GROUPING()
+      -- function), so an unquoted column refused the whole table there.
+      ${identifier('grouping', d)} ${t64} not null,
       updated_at ${t64} not null
     )`)
 

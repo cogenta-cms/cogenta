@@ -94,7 +94,7 @@ export function createPreferenceStore(
       )
       await db.query(sql`
         insert into ${preferences}
-          (id, user_id, channel_name, event_types, min_severity, quiet_start_minute, quiet_end_minute, grouping, updated_at)
+          (id, user_id, channel_name, event_types, min_severity, quiet_start_minute, quiet_end_minute, ${identifier('grouping', db.dialect)}, updated_at)
         values (
           ${newId(now)}, ${userId}, ${channelName}, ${next.eventTypes.join(',')}, ${next.minSeverity},
           ${next.quietHours?.startMinute ?? null}, ${next.quietHours?.endMinute ?? null}, ${next.grouping}, ${updatedAt}

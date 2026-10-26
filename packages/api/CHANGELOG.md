@@ -1,5 +1,13 @@
 # @cogenta/api
 
+## 2.12.1
+
+### Patch Changes
+
+- Updated dependencies [[`13a727f`](https://github.com/cogenta-cms/cogenta/commit/13a727f14bd2828b9c908cecbee056831c7861db)]:
+  - @cogenta/channels@0.3.17
+  - @cogenta/forms@0.2.17
+
 ## 2.12.0
 
 ### Minor Changes

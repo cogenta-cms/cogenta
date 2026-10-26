@@ -4610,6 +4610,29 @@ function writeRestResponse(res: ServerResponse, response: RestResponse): void {
   )
 }
 
+const MAX_SECURITY_TXT_BYTES = 64 * 1024
+
+/**
+ * The site's own `security.txt`: `public/.well-known/security.txt` first, then
+ * `security.txt` at the project root. Anything absent, unreadable or larger
+ * than a contact file has any reason to be is "no file".
+ */
+async function readSecurityTxt(projectRoot: string): Promise<string | undefined> {
+  for (const path of [
+    join(projectRoot, 'public', '.well-known', 'security.txt'),
+    join(projectRoot, 'security.txt'),
+  ]) {
+    try {
+      const info = await stat(path)
+      if (!info.isFile() || info.size === 0 || info.size > MAX_SECURITY_TXT_BYTES) continue
+      return await readFile(path, 'utf8')
+    } catch {
+      // A missing candidate is the normal case; try the next one.
+    }
+  }
+  return undefined
+}
+
 /**
  * What the caller got wrong, as a status and a stable code — or `null` when
  * the failure is the server's own. A bad percent-escape surfaces as a
@@ -7382,6 +7405,27 @@ export function createRequestListener(
             'cache-control': cacheableByBrowsersAndCrawlers ? 'public, max-age=3600' : 'no-store',
           })
           res.end()
+          return
+        }
+      }
+
+      // RFC 9116: how to report a vulnerability in *this* site. It is the
+      // site owner's own file or nothing — Cogenta's contact is never served
+      // as every site's, so a report about a site cannot land with the wrong
+      // people. Without the file the path stays an ordinary 404.
+      if (url.pathname === '/.well-known/security.txt' && extras?.projectRoot !== undefined) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.writeHead(405, { allow: 'GET, HEAD' }).end()
+          return
+        }
+        const securityTxt = await readSecurityTxt(extras.projectRoot)
+        if (securityTxt !== undefined) {
+          res.writeHead(200, {
+            'content-type': 'text/plain; charset=utf-8',
+            'cache-control': 'public, max-age=3600',
+            'x-content-type-options': 'nosniff',
+          })
+          res.end(req.method === 'HEAD' ? undefined : securityTxt)
           return
         }
       }

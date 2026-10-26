@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto'
-import { createSqliteHandle, type DatabaseHandle, isCogentaError } from '@cogenta/core'
+import { createSqliteHandle, type DatabaseHandle, isCogentaError, sql } from '@cogenta/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createCredentialStore } from '../src/credentials.js'
 import { type AuthService, createAuthService } from '../src/login.js'
@@ -568,6 +568,21 @@ describe('passkey tickets are accepted once (F-03)', () => {
     expect(await failureCode(f.auth.completeWebAuthnLogin(ticket, GARBAGE_ASSERTION))).toBe(
       'AUTH_SESSION_INVALID',
     )
+    await f.db.close()
+  })
+
+  it('keeps a spent sign-in ticket out of the table until it is spent, and only once', async () => {
+    const f = await webauthnFixture()
+    const count = async (): Promise<number> =>
+      (await f.db.query<{ n: number }>(sql`select count(*) as n from cogenta_login_tickets`))
+        .rows[0]?.n ?? -1
+    const { ticket } = await f.auth.beginWebAuthnLogin()
+    await f.auth.beginWebAuthnLogin()
+    expect(await count()).toBe(0)
+
+    await failureCode(f.auth.completeWebAuthnLogin(ticket, GARBAGE_ASSERTION))
+    await failureCode(f.auth.completeWebAuthnLogin(ticket, GARBAGE_ASSERTION))
+    expect(await count()).toBe(1)
     await f.db.close()
   })
 

@@ -35,10 +35,10 @@ export const STEP_UP_TTL_MS = 5 * 60 * 1000
 type TicketPurpose = 'login' | 'webauthn_register' | 'webauthn_login'
 
 /**
- * Owner recorded in `cogenta_login_tickets` for a `webauthn_login` ticket: the
- * account is not known until the assertion arrives, and the column is not
- * nullable. Not a valid user id, so a change of any account's factors never
- * sweeps it away.
+ * Owner recorded in `cogenta_login_tickets` for a spent `webauthn_login`
+ * ticket: the account is not known until the assertion arrives, and the column
+ * is not nullable. Not a valid user id, so a change of any account's factors
+ * never sweeps it away.
  */
 const WEBAUTHN_LOGIN_TICKET_OWNER = 'webauthn-login:anonymous'
 
@@ -66,6 +66,7 @@ interface TicketPayload {
 }
 
 interface VerifiedTicket {
+  readonly expiresAt: number
   readonly userId: string | null
   readonly challenge: string | undefined
   readonly ttlMs: number | undefined
@@ -128,6 +129,7 @@ function verifyTicket(
     if (parsed.ttlMs !== undefined && typeof parsed.ttlMs !== 'number') return null
     if (parsed.jti !== undefined && typeof parsed.jti !== 'string') return null
     return {
+      expiresAt: parsed.expiresAt,
       userId: parsed.userId,
       challenge: parsed.challenge,
       ttlMs: parsed.ttlMs,
@@ -358,6 +360,42 @@ export interface AuthService {
   ): Promise<LoginResult>
 }
 
+/**
+ * Whether a database error is a primary-key / unique violation on any of the
+ * three dialects: Postgres `23505`, MySQL and MariaDB `ER_DUP_ENTRY` (1062),
+ * SQLite `SQLITE_CONSTRAINT_*`. The driver error arrives wrapped in a
+ * `CogentaError`, so the `cause` chain is walked.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (typeof current === 'object' && current !== null && !seen.has(current)) {
+    seen.add(current)
+    const record = current as {
+      code?: unknown
+      errno?: unknown
+      message?: unknown
+      cause?: unknown
+    }
+    if (
+      record.code === '23505' ||
+      record.code === 'ER_DUP_ENTRY' ||
+      record.errno === 1062 ||
+      (typeof record.code === 'string' && record.code.startsWith('SQLITE_CONSTRAINT'))
+    ) {
+      return true
+    }
+    if (
+      typeof record.message === 'string' &&
+      /unique constraint|duplicate (entry|key)|violates unique|primary key/iu.test(record.message)
+    ) {
+      return true
+    }
+    current = record.cause
+  }
+  return false
+}
+
 function invalidTicket(): CogentaError {
   return new CogentaError({
     code: 'AUTH_SESSION_INVALID',
@@ -427,6 +465,28 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
           where id = ${id} and user_id = ${userId} and used_at is null and expires_at > ${at}`,
     )
     return result.rowsAffected > 0
+  }
+
+  /**
+   * Spends a passkey sign-in ticket by inserting its id: the primary key makes
+   * the insert the claim, and a duplicate-key failure means it was used
+   * already. Nothing is written when the ticket is issued — `begin` is open to
+   * anyone, and a row per call would let an anonymous flood fill this table —
+   * so only a ticket that carried a valid signature and has not expired ever
+   * costs a row. Expired rows are swept here, as for the other tickets.
+   */
+  async function claimWebAuthnLoginTicket(id: string, expiresAtMs: number): Promise<boolean> {
+    const at = new Date(now()).toISOString()
+    await db.query(sql`delete from ${tickets} where expires_at <= ${at}`)
+    try {
+      await db.query(sql`
+        insert into ${tickets} (id, user_id, expires_at, used_at)
+        values (${id}, ${WEBAUTHN_LOGIN_TICKET_OWNER}, ${new Date(expiresAtMs).toISOString()}, ${at})`)
+      return true
+    } catch (error) {
+      if (isUniqueViolation(error)) return false
+      throw error
+    }
   }
 
   /** A change of second factor voids every sign-in step already in flight. */
@@ -863,8 +923,9 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       // it is, rather than the server naming one up front.
       const { options, challenge } = await beginWebAuthnAuthentication(webauthnConfig, [])
       const expiresAt = now() + TICKET_TTL_MS
+      // No row is written here (see `claimWebAuthnLoginTicket`): this call is
+      // anonymous, and the id only becomes a row when the ticket is spent.
       const jti = randomBytes(18).toString('base64url')
-      await registerLoginTicket(jti, WEBAUTHN_LOGIN_TICKET_OWNER, expiresAt)
       return {
         options,
         ticket: signTicket(signingKey, {
@@ -885,7 +946,7 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       }
       // Spent before the assertion is checked or a session issued: a captured
       // assertion replayed against the same challenge finds the ticket gone.
-      if (!(await spendLoginTicket(verified.jti, WEBAUTHN_LOGIN_TICKET_OWNER))) {
+      if (!(await claimWebAuthnLoginTicket(verified.jti, verified.expiresAt))) {
         throw invalidTicket()
       }
 

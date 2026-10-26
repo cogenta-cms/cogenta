@@ -175,5 +175,52 @@ export function runTotpStorageContract(
       expect(outcomes.filter((o) => o.status === 'fulfilled')).toHaveLength(1)
       expect(await createSessionStore(db, now).list(userId)).toHaveLength(1)
     }, 30_000)
+
+    it('writes nothing when a passkey sign-in is begun, and spends the ticket once however many present it', async () => {
+      const auth = createAuthService({
+        db,
+        signingKey: SIGNING_KEY,
+        collections: [],
+        now,
+        webauthn: {
+          relyingPartyName: 'Cogenta Test',
+          relyingPartyId: 'example.com',
+          origin: 'https://example.com',
+        },
+      })
+      const rows = async (): Promise<number> =>
+        (
+          await db.query<{ n: number | string }>(
+            sql`select count(*) as n from ${identifier(TABLES.loginTickets, db.dialect)}`,
+          )
+        ).rows.map((row) => Number(row.n))[0] ?? -1
+
+      const { ticket } = await auth.beginWebAuthnLogin()
+      await auth.beginWebAuthnLogin()
+      // An anonymous caller can begin as often as it likes: no row per call.
+      expect(await rows()).toBe(0)
+
+      // Not a real assertion — it fails verification, which is fine: the
+      // claim happens first, and only one presentation gets past it.
+      const assertion = {
+        id: 'unknown-credential',
+        rawId: 'unknown-credential',
+        type: 'public-key',
+        response: { clientDataJSON: 'e30', authenticatorData: 'AA', signature: 'AA' },
+        clientExtensionResults: {},
+      } as const
+      const outcomes = await Promise.allSettled([
+        auth.completeWebAuthnLogin(ticket, assertion),
+        auth.completeWebAuthnLogin(ticket, assertion),
+        auth.completeWebAuthnLogin(ticket, assertion),
+      ])
+      const codes = outcomes.map((outcome) =>
+        outcome.status === 'rejected' ? (outcome.reason as { code?: string }).code : 'ok',
+      )
+
+      expect(codes.filter((code) => code === 'AUTH_WEBAUTHN_FAILED')).toHaveLength(1)
+      expect(codes.filter((code) => code === 'AUTH_SESSION_INVALID')).toHaveLength(2)
+      expect(await rows()).toBe(1)
+    }, 30_000)
   })
 }

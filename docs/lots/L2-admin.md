@@ -56,6 +56,11 @@ Passkeys en méthode principale, mot de passe plus TOTP en secours. MFA **obliga
 pour tout rôle disposant de `content.publish` ou `site.config_write` — non
 contournable par configuration.
 
+> **Remplacé par ADR-0021** : la MFA est désormais recommandée et jamais bloquante.
+> Une notice persistante de l'admin la réclame aux comptes sensibles ; la connexion
+> n'est plus refusée sans elle. Le texte ci-dessus et le critère d'acceptation « le MFA
+> ne peut pas être désactivé pour un rôle qui publie » sont conservés pour mémoire.
+
 Sessions listées et révocables individuellement. Limitation de débit et backoff
 progressif sur les tentatives.
 
@@ -120,7 +125,7 @@ n'est pas livré.
 
 - Ajouter un type de contenu au schéma le fait apparaître dans l'admin, éditable, sans code d'interface
 - Un utilisateur sans permission ne voit pas l'action correspondante **et** ne peut pas l'appeler par l'API
-- Le MFA ne peut pas être désactivé pour un rôle qui publie
+- Le MFA ne peut pas être désactivé pour un rôle qui publie _(remplacé par ADR-0021 : recommandé, jamais bloquant)_
 - La prévisualisation affiche exactement ce que verra le visiteur
 - Le collage depuis Word ne produit aucun nœud hors allowlist
 - L'admin est navigable au clavier de bout en bout, et vérifié AA automatiquement

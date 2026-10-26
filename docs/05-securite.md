@@ -66,7 +66,9 @@ construction.
 ## 4. Authentification et accès
 
 - **Passkeys/WebAuthn** en méthode principale ; mot de passe + TOTP en secours
-- **MFA obligatoire** pour tout rôle disposant de `content.publish` ou `site.config_write`
+- **MFA fortement recommandée** pour tout rôle disposant de `content.publish` ou `site.config_write` :
+  une notice persistante de l'admin la réclame, mais elle ne bloque jamais la connexion
+  (ADR-0021, qui remplace l'obligation d'origine)
 - Sessions révocables individuellement, liste des sessions actives visible
 - Limitation de débit et backoff progressif sur l'authentification
 - Allowlist IP optionnelle sur l'admin

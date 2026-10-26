@@ -82,6 +82,58 @@ describe('scaffoldSite', () => {
     expect(pkg.engines?.node).toBe('>=22.13')
   })
 
+  // `mysql2` and `postgres` are optional peers of `@cogenta/core`, so nothing
+  // installed them: a MySQL site generated from npm refused every query with
+  // DRIVER_UNAVAILABLE. A SQLite site still installs neither.
+  it('declares no database client for a SQLite site', async () => {
+    const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-'))
+    dirs.push(targetDir)
+
+    await scaffoldSite({
+      targetDir,
+      siteName: 'My Site',
+      siteUrl: 'http://localhost:4000',
+      defaultLocale: 'en',
+      databaseDriver: 'sqlite',
+      adminEmail: 'admin@example.com',
+    })
+
+    const pkg = JSON.parse(await readFile(join(targetDir, 'package.json'), 'utf8')) as {
+      dependencies: Record<string, string>
+    }
+    expect(pkg.dependencies.mysql2).toBeUndefined()
+    expect(pkg.dependencies.postgres).toBeUndefined()
+  })
+
+  const mysqlUrl = process.env.COGENTA_TEST_MYSQL_URL
+  if (mysqlUrl === undefined) {
+    process.stderr.write(
+      'scaffold.test: COGENTA_TEST_MYSQL_URL unset, MySQL scaffold case skipped\n',
+    )
+  }
+  it.skipIf(mysqlUrl === undefined)(
+    'scaffolds a MySQL site whose package.json installs the mysql2 client',
+    async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-'))
+      dirs.push(targetDir)
+
+      await scaffoldSite({
+        targetDir,
+        siteName: 'My Site',
+        siteUrl: 'http://localhost:4000',
+        defaultLocale: 'en',
+        databaseDriver: 'mysql',
+        databaseUrl: mysqlUrl as string,
+        adminEmail: 'admin@example.com',
+      })
+
+      const pkg = JSON.parse(await readFile(join(targetDir, 'package.json'), 'utf8')) as {
+        dependencies: Record<string, string>
+      }
+      expect(pkg.dependencies.mysql2).toMatch(/^\^3\./u)
+    },
+  )
+
   it('writes the llm block into the config file only when a provider was chosen', async () => {
     const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-'))
     dirs.push(targetDir)

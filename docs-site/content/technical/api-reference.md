@@ -40,6 +40,15 @@ One entry point, `/api/graphql`, over the same content schema and the same
 permission layer as REST — the two never diverge in what they allow, only
 in the shape of the request.
 
+Each document has a budget, checked on the parsed document before any
+validation or resolver runs: at most 20 root fields (aliases included), 1000
+field selections after fragments are expanded (a fragment spread three times
+counts three times) and a depth of 12. Introspection is exempt from the
+selection and depth limits. A document over a limit gets a
+`GRAPHQL_QUERY_TOO_COMPLEX` error with HTTP 200, like any validation error.
+A site changes the numbers under `graphql.limits` (`maxRootFields`,
+`maxSelections`, `maxDepth`) in `cogenta.config`.
+
 ## MCP (Model Context Protocol)
 
 `cogenta mcp` starts an MCP server over STDIO — the same contract C tool

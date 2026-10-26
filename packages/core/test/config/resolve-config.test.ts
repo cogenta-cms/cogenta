@@ -339,6 +339,26 @@ describe('resolveConfig — notFoundLog (fiche 12 task 1)', () => {
   })
 })
 
+describe('resolveConfig — graphql limits (pentest 2026-10-26, O-01)', () => {
+  it('defaults to 20 root fields, 1000 selections and a depth of 12', () => {
+    const config = resolveConfig(minimal, noEnv)
+
+    expect(config.graphql.limits).toEqual({ maxRootFields: 20, maxSelections: 1000, maxDepth: 12 })
+  })
+
+  it('lets a site loosen one limit and keeps the defaults of the others', () => {
+    const config = resolveConfig({ ...minimal, graphql: { limits: { maxRootFields: 50 } } }, noEnv)
+
+    expect(config.graphql.limits).toEqual({ maxRootFields: 50, maxSelections: 1000, maxDepth: 12 })
+  })
+
+  it('refuses a limit that is not a positive whole number', () => {
+    expect(() =>
+      resolveConfig({ ...minimal, graphql: { limits: { maxDepth: 0 } } }, noEnv),
+    ).toThrow(CogentaError)
+  })
+})
+
 describe('resolveConfig — scheduler and backup (fiche 28)', () => {
   it('defaults the scheduler clock to internal, and backups to off', () => {
     const config = resolveConfig(minimal, noEnv)

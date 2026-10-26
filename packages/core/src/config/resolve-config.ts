@@ -164,6 +164,13 @@ export function resolveConfig(
       pageMaxAge: config.security.pageMaxAge,
       audit: Object.freeze({ retainDays: config.security.audit.retainDays }),
     }),
+    graphql: Object.freeze({
+      limits: Object.freeze({
+        maxRootFields: config.graphql.limits.maxRootFields,
+        maxSelections: config.graphql.limits.maxSelections,
+        maxDepth: config.graphql.limits.maxDepth,
+      }),
+    }),
     notFoundLog: Object.freeze({
       enabled: config.notFoundLog.enabled,
       maxPaths: config.notFoundLog.maxPaths,

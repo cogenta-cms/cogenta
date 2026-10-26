@@ -55,7 +55,10 @@ describe('bounded expansion depth', () => {
   })
 
   it('stops a circular query rather than following it forever', async () => {
-    const response = await harness.run(nest(40), asPublic(), { id: head })
+    // Ten hops is the deepest document the per-document depth budget lets
+    // through (12 levels); anything deeper never reaches the relation bound,
+    // it is refused earlier (see complexity.test.ts).
+    const response = await harness.run(nest(10), asPublic(), { id: head })
     expect(response.errors?.[0]?.extensions?.['code']).toBe('QUERY_INVALID')
   })
 

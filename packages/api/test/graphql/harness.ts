@@ -18,6 +18,7 @@ import {
   type ContentGateway,
   createContentGateway,
   executeGraphQL,
+  type GraphQLLimits,
   type GraphQLResponse,
 } from '../../src/graphql/index.js'
 import type { AccessContext, Actor } from '../../src/types.js'
@@ -94,7 +95,9 @@ export interface Harness {
   dispose(): Promise<void>
 }
 
-export async function createHarness(options: { maxDepth?: number } = {}): Promise<Harness> {
+export async function createHarness(
+  options: { maxDepth?: number; limits?: Partial<GraphQLLimits> } = {},
+): Promise<Harness> {
   const directory = await mkdtemp(join(tmpdir(), 'cogenta-graphql-'))
   const db = await createSqliteHandle({ url: join(directory, 'api.db') })
   await createSchemaTables(db, COLLECTIONS)
@@ -132,7 +135,7 @@ export async function createHarness(options: { maxDepth?: number } = {}): Promis
     run: (query, access, variables) =>
       executeGraphQL(
         { query, ...(variables === undefined ? {} : { variables }) },
-        { schema, gateway, access },
+        { schema, gateway, access, limits: options.limits },
       ),
     dispose: async () => {
       await db.close()

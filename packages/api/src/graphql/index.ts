@@ -9,6 +9,8 @@
  * two implementations."
  */
 
+export type { ComplexityRule, ComplexityViolation, GraphQLLimits } from './complexity.js'
+export { checkComplexity, complexityError, DEFAULT_GRAPHQL_LIMITS } from './complexity.js'
 export type { GraphQLContext } from './context.js'
 export { createRequestContext } from './context.js'
 export type { BatchLoadFn, Loader } from './dataloader.js'

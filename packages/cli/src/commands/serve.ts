@@ -107,6 +107,7 @@ import {
   type ForgotPasswordEvent,
   type FormsRequestContext,
   type FormsRouter,
+  type GraphQLLimits,
   type HealthRouter,
   type ImportRouter,
   type InvitedUserEvent,
@@ -1021,6 +1022,8 @@ export interface Site {
   /** `null` when no image driver loaded — `/_image` then serves originals only. */
   readonly images: MediaImageProcessor | null
   readonly graphqlSchema: GraphQLSchema
+  /** The per-document budget of `POST /api/graphql` (`graphql.limits`; defaults when absent). */
+  readonly graphqlLimits: Partial<GraphQLLimits> | undefined
   readonly gateway: ReturnType<typeof createContentGateway>
   /**
    * The same layer the gateway and the REST service already ask. Held here so
@@ -1386,6 +1389,8 @@ interface AssembleSiteOptions {
    * readable and dismissible from the admin screen either way.
    */
   readonly notFoundLog: CogentaConfig['notFoundLog']
+  /** `graphql.limits` of the configuration; absent applies the built-in budget. */
+  readonly graphqlLimits?: CogentaConfig['graphql']['limits']
   /**
    * The site's outbound webhook configuration, read-only mirrored at
    * `GET /api/webhooks-status` (audit follow-up to L14 task 1). Distinct from
@@ -3354,6 +3359,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     storage,
     images: options.images ?? null,
     graphqlSchema: buildContentSchema({ collections }),
+    graphqlLimits: options.graphqlLimits,
     gateway,
     permissions,
     schemaDocument: buildSchemaDocument(
@@ -5364,7 +5370,13 @@ export function createRequestListener(
                 : undefined,
             operationName: typeof body?.operationName === 'string' ? body.operationName : undefined,
           },
-          { schema: site.graphqlSchema, gateway: site.gateway, access: context, logger },
+          {
+            schema: site.graphqlSchema,
+            gateway: site.gateway,
+            access: context,
+            logger,
+            limits: site.graphqlLimits,
+          },
         )
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify(result))
@@ -9139,6 +9151,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     images: images?.processor ?? null,
     security: loaded.config.security,
     notFoundLog: loaded.config.notFoundLog,
+    graphqlLimits: loaded.config.graphql.limits,
     webhooks: loaded.config.webhooks,
     billing: loaded.config.billing,
     payment: loaded.config.payment,

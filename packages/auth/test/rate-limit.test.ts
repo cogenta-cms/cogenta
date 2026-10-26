@@ -2,6 +2,7 @@ import { isCogentaError } from '@cogenta/core'
 import { describe, expect, it } from 'vitest'
 import { createRateLimiter } from '../src/rate-limit.js'
 import { testDb } from './helpers/db.js'
+import { runRateLimitContract } from './rate-limit.contract.js'
 
 describe('RateLimiter', () => {
   it('allows a subject with no history', async () => {
@@ -23,22 +24,6 @@ describe('RateLimiter', () => {
     for (let i = 0; i < 5; i += 1) await limiter.record('alice@example.com')
 
     await expect(limiter.check('alice@example.com')).rejects.toSatisfy(isCogentaError)
-  })
-
-  it('escalates the delay as failures climb through more thresholds', async () => {
-    const db = await testDb()
-    const limiter = createRateLimiter(db)
-    for (let i = 0; i < 20; i += 1) await limiter.record('alice@example.com')
-
-    try {
-      await limiter.check('alice@example.com')
-      expect.unreachable()
-    } catch (error) {
-      expect(isCogentaError(error)).toBe(true)
-      if (isCogentaError(error)) {
-        expect(error.details?.retryAfterMs).toBe(15 * 60 * 1000)
-      }
-    }
   })
 
   it('does not block a different subject', async () => {
@@ -68,3 +53,5 @@ describe('RateLimiter', () => {
     await expect(limiter.check('alice@example.com')).resolves.toBeUndefined()
   })
 })
+
+runRateLimitContract('sqlite', async () => ({ db: await testDb() }))

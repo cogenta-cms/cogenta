@@ -21,6 +21,17 @@ describe('errorResponse', () => {
     expect(JSON.stringify(response.body)).not.toContain('secret')
   })
 
+  it('announces a rate-limit wait as Retry-After in whole seconds, rounded up', () => {
+    const limited = new CogentaError({
+      code: 'AUTH_RATE_LIMITED',
+      message: 'Too many attempts.',
+      details: { retryAfterMs: 900_001 },
+    })
+    const response = errorResponse(limited)
+    expect(response.status).toBe(429)
+    expect(response.headers?.['retry-after']).toBe('901')
+  })
+
   it('maps the oversized-body and wrong-media-type codes to 413 and 415', () => {
     const tooLarge = new CogentaError({
       code: 'REQUEST_BODY_TOO_LARGE',

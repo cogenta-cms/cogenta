@@ -209,6 +209,32 @@ const webhooksSchema = z.strictObject({
 })
 
 /**
+ * The per-document budget of `POST /api/graphql` (pentest 2026-10-26, O-01).
+ *
+ * Pagination and relation expansion already bound what one *field* costs; this
+ * bounds what one *document* may ask for, measured on the parsed document
+ * (aliases and fragment spreads expanded, a repeated spread counted every
+ * time) before any resolver runs. The defaults come from a measurement on a
+ * real SQLite store (about 10 ms per aliased list field with two levels of
+ * relations, linear in the number of selections): 20 root fields is about
+ * 200 ms, 1000 selections about a second. They are well above what the admin
+ * or a headless client sends, so a site only touches them to loosen or
+ * tighten its own ceiling.
+ */
+const graphqlLimitsSchema = z.strictObject({
+  /** Root selections of one operation, aliases included. */
+  maxRootFields: z.number().int().positive().max(1000).default(20),
+  /** Field selections of one operation after fragment expansion. */
+  maxSelections: z.number().int().positive().max(100_000).default(1000),
+  /** Nesting of fields, fragments not counted as a level. */
+  maxDepth: z.number().int().positive().max(100).default(12),
+})
+
+const graphqlSchema = z.strictObject({
+  limits: graphqlLimitsSchema.prefault({}),
+})
+
+/**
  * Analytics events retention (fiche 27 task 3).
  *
  * 400 days by default — long enough that "compare this year to last year" (a
@@ -406,6 +432,7 @@ export const configSchema = z.strictObject({
   rateLimit: rateLimitSchema.prefault({}),
   storage: storageSchema.prefault({}),
   security: securitySchema.prefault({}),
+  graphql: graphqlSchema.prefault({}),
   notFoundLog: notFoundLogSchema.prefault({}),
   plugins: pluginsSchema.prefault({}),
   webhooks: webhooksSchema.prefault({}),

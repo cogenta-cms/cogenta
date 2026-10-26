@@ -11,6 +11,12 @@ import {
   validate,
 } from 'graphql'
 import type { AccessContext } from '../types.js'
+import {
+  checkComplexity,
+  complexityError,
+  DEFAULT_GRAPHQL_LIMITS,
+  type GraphQLLimits,
+} from './complexity.js'
 import { createRequestContext } from './context.js'
 import { documentError, scrubError } from './errors.js'
 import type { ContentGateway } from './gateway.js'
@@ -38,6 +44,11 @@ export interface GraphQLTransportOptions {
   readonly access: AccessContext
   /** Where the unscrubbed failure goes. Nothing is written to stdout directly. */
   readonly logger?: Logger
+  /**
+   * The per-document budget (root fields, selections, depth). Any field left
+   * out keeps its default; see `complexity.ts` for what each one counts.
+   */
+  readonly limits?: Partial<GraphQLLimits> | undefined
 }
 
 export interface GraphQLResponse {
@@ -59,6 +70,12 @@ export async function executeGraphQL(
     return { errors: [scrubError(error, options.logger).toJSON()] }
   }
 
+  // Before validation, not after: validation grows with the document too, so
+  // the budget is the first thing a large document meets. A document over it is
+  // refused here, and no resolver — no store read — has run.
+  const violation = checkComplexity(document, request.operationName, resolveLimits(options.limits))
+  if (violation !== undefined) return { errors: [complexityError(violation).toJSON()] }
+
   const problems = validate(options.schema, document, RULES)
   if (problems.length > 0) {
     return { errors: problems.map((problem) => documentError(problem).toJSON()) }
@@ -79,5 +96,14 @@ export async function executeGraphQL(
   return {
     data: result.data ?? null,
     ...(errors === undefined || errors.length === 0 ? {} : { errors }),
+  }
+}
+
+/** An explicit `undefined` in the options must not erase a default. */
+function resolveLimits(limits: Partial<GraphQLLimits> | undefined): GraphQLLimits {
+  return {
+    maxRootFields: limits?.maxRootFields ?? DEFAULT_GRAPHQL_LIMITS.maxRootFields,
+    maxSelections: limits?.maxSelections ?? DEFAULT_GRAPHQL_LIMITS.maxSelections,
+    maxDepth: limits?.maxDepth ?? DEFAULT_GRAPHQL_LIMITS.maxDepth,
   }
 }

@@ -11,7 +11,7 @@ import { createUser, loginWithMfaSetup, startServer } from './helpers/serve-harn
 /** The text of every executable inline `<script>` of a page (not `src=` ones, not JSON data blocks). */
 function inlineScripts(html: string): string[] {
   const found: string[] = []
-  for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu)) {
+  for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/giu)) {
     const attributes = match[1] ?? ''
     if (/\bsrc=/u.test(attributes)) continue
     if (/type="application\/(ld\+)?json"/u.test(attributes)) continue

@@ -1,5 +1,12 @@
 # @cogenta/commerce
 
+## 0.5.12
+
+### Patch Changes
+
+- Updated dependencies [[`13a727f`](https://github.com/cogenta-cms/cogenta/commit/13a727f14bd2828b9c908cecbee056831c7861db)]:
+  - @cogenta/channels@0.3.17
+
 ## 0.5.11
 
 ### Patch Changes

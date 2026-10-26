@@ -8283,6 +8283,18 @@ export function createRequestListener(
         }),
       )
     } catch (error) {
+      // A valid, over-quota API key (fiche 20 task 3) — the one error this
+      // listener turns into rate-limit headers, since `errorResponse` in
+      // `@cogenta/api` deliberately never serialises `details` onto the wire
+      // (that field is for logs, and could otherwise echo caller-controlled
+      // data). `resolveActor` throws this only after resolving a real,
+      // valid key, so the caller is exactly who it says it is; it just has
+      // to wait.
+      if (isCogentaError(error) && error.code === 'API_KEY_RATE_LIMITED') {
+        res.writeHead(429, rateLimitHeaders(error.details))
+        res.end(JSON.stringify({ error: { code: error.code, message: error.message } }))
+        return
+      }
       // A refusal the caller caused (malformed JSON, a bad percent-escape, a
       // typed 4xx) is a normal answer, not an incident: it is neither logged as
       // an error nor kept in the error journal, and it never becomes a 500.
@@ -8300,18 +8312,6 @@ export function createRequestListener(
       // process's own stdout is not — see `createErrorLog` for why redaction
       // here is not optional.
       extras?.errorLog.recordError(error, { method: req.method ?? 'GET', path: url.pathname })
-      // A valid, over-quota API key (fiche 20 task 3) — the one error this
-      // listener turns into rate-limit headers, since `errorResponse` in
-      // `@cogenta/api` deliberately never serialises `details` onto the wire
-      // (that field is for logs, and could otherwise echo caller-controlled
-      // data). `resolveActor` throws this only after resolving a real,
-      // valid key, so the caller is exactly who it says it is; it just has
-      // to wait.
-      if (isCogentaError(error) && error.code === 'API_KEY_RATE_LIMITED') {
-        res.writeHead(429, rateLimitHeaders(error.details))
-        res.end(JSON.stringify({ error: { code: error.code, message: error.message } }))
-        return
-      }
       res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
       res.end(
         JSON.stringify({

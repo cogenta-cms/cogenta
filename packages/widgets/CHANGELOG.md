@@ -1,5 +1,14 @@
 # @cogenta/widgets
 
+## 0.2.8
+
+### Patch Changes
+
+- Updated dependencies [[`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`d1231ec`](https://github.com/cogenta-cms/cogenta/commit/d1231ecea97b3b472a78bef07931e32fedcde900)]:
+  - @cogenta/schema@0.11.1
+  - @cogenta/core@0.14.0
+  - @cogenta/blocks@1.2.0
+
 ## 0.2.7
 
 ### Patch Changes

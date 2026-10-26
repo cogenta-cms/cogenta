@@ -1,5 +1,14 @@
 # @cogenta/theme-blog
 
+## 0.6.1
+
+### Patch Changes
+
+- Updated dependencies [[`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`d1231ec`](https://github.com/cogenta-cms/cogenta/commit/d1231ecea97b3b472a78bef07931e32fedcde900)]:
+  - @cogenta/theme-kit@0.8.0
+  - @cogenta/blocks@1.2.0
+  - @cogenta/render@0.6.1
+
 ## 0.6.0
 
 ### Minor Changes

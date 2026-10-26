@@ -370,6 +370,15 @@ describe('TOTP self-service enrolment', () => {
         }),
       )
 
+      // A session alone no longer removes a confirmed factor (F-01).
+      const refused = await router.handle(request('DELETE', '/api/auth/totp', { token }))
+      expect(refused.status).toBe(403)
+      await router.handle(
+        request('POST', '/api/auth/step-up', {
+          token,
+          body: { password: 'correct horse battery staple' },
+        }),
+      )
       const off = await router.handle(request('DELETE', '/api/auth/totp', { token }))
       expect(off.status).toBe(204)
 
@@ -518,6 +527,12 @@ describe('Recovery codes', () => {
     it('replaces the batch: the old codes stop working, the new ones do', async () => {
       const { db: db_, router, token, codes } = await signedInEditorWithTotpAndCodes()
       try {
+        await router.handle(
+          request('POST', '/api/auth/step-up', {
+            token,
+            body: { password: 'correct horse battery staple' },
+          }),
+        )
         const regenerate = await router.handle(
           request('POST', '/api/auth/totp/recovery-codes/regenerate', { token }),
         )

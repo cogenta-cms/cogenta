@@ -128,6 +128,24 @@ export function confirmTotpEnrolment(token: string, code: string): Promise<Recov
   })
 }
 
+/**
+ * Re-proves who is at the keyboard before a change to the second factor
+ * (pentest 2026-10-26, F-01): the current password **or** a current
+ * authenticator code. The server marks this session as freshly re-authenticated
+ * for five minutes; the sensitive calls below refuse with
+ * `AUTH_STEP_UP_REQUIRED` until then.
+ */
+export function stepUp(
+  token: string,
+  proof: { readonly password: string } | { readonly code: string },
+): Promise<{ readonly expiresAt: string }> {
+  return request('/api/auth/step-up', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(proof),
+  })
+}
+
 export function disableTotp(token: string): Promise<void> {
   return request('/api/auth/totp', { method: 'DELETE', headers: authHeader(token) })
 }

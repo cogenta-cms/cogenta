@@ -35,6 +35,7 @@ interface SessionRow {
   revoked: number | boolean
   browser: string | null
   device: string | null
+  step_up_until: string | null
 }
 
 function fromRow(row: SessionRow): Session {
@@ -47,6 +48,9 @@ function fromRow(row: SessionRow): Session {
     label: row.label ?? undefined,
     browser: row.browser ?? 'unknown',
     device: row.device ?? 'unknown',
+    ...(row.step_up_until === null || row.step_up_until === undefined
+      ? {}
+      : { stepUpUntil: row.step_up_until }),
   }
 }
 
@@ -92,6 +96,13 @@ export interface SessionStore {
    * a bare "done".
    */
   revokeAllExcept(userId: string, keepSessionId: string): Promise<number>
+  /**
+   * Records that this session just re-proved the current password or an
+   * authenticator code, good until `untilMs` (epoch milliseconds). Kept on the
+   * session row rather than in a token the client carries: the proof cannot be
+   * lifted out of the browser, and it dies with the session.
+   */
+  markSteppedUp(sessionId: string, untilMs: number): Promise<void>
 }
 
 export function createSessionStore(db: DatabaseHandle, now: () => number = Date.now): SessionStore {
@@ -166,6 +177,12 @@ export function createSessionStore(db: DatabaseHandle, now: () => number = Date.
       const result = await db.query<{ user_id: string; last_seen: string }>(sql`
         select user_id, max(last_seen_at) as last_seen from ${table} group by user_id`)
       return new Map(result.rows.map((row) => [row.user_id, row.last_seen]))
+    },
+
+    markSteppedUp: async (sessionId, untilMs) => {
+      await db.query(
+        sql`update ${table} set step_up_until = ${new Date(untilMs).toISOString()} where id = ${sessionId}`,
+      )
     },
 
     revokeAllExcept: async (userId, keepSessionId) => {

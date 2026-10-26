@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app.js'
 import { i18next } from '../../src/i18n/index.js'
@@ -232,11 +232,142 @@ describe('my profile — recovery codes', () => {
       screen.getByRole('button', { name: 'Générer de nouveaux codes de récupération' }),
     )
 
+    // A session alone does not replace the codes: the server asks for the
+    // password again, and the click is replayed once it is given.
+    await confirmWithPassword('correct horse battery staple')
+
     expect(
       await screen.findByText(
         'Enregistrez ces codes maintenant — ils ne seront plus jamais montrés',
       ),
     ).toBeDefined()
+  })
+})
+
+/** The password dialog a sensitive change to the second factor opens (pentest 2026-10-26, F-01). */
+async function confirmWithPassword(value: string): Promise<void> {
+  const dialog = await screen.findByRole('dialog', { name: 'Confirmez que c’est bien vous' })
+  fireEvent.change(within(dialog).getByLabelText('Mot de passe actuel'), { target: { value } })
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmer' }))
+}
+
+async function enrolTotp(): Promise<void> {
+  fireEvent.click(
+    screen.getByRole('button', { name: "Configurer une application d'authentification" }),
+  )
+  await screen.findByText('JBSWY3DPEHPK3PXP')
+  fireEvent.change(screen.getByLabelText('Code à 6 chiffres'), { target: { value: '123456' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Confirmer' }))
+  await screen.findByText('CODE0-AAAAA')
+  fireEvent.click(screen.getByRole('button', { name: 'J’ai enregistré ces codes' }))
+  await screen.findByText('10 codes de récupération restants sur 10.')
+}
+
+describe('my profile — re-confirming before changing the second factor', () => {
+  it('does not ask for anything the first time two-step verification is set up', async () => {
+    render(<App />)
+    await goToProfile()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: "Configurer une application d'authentification" }),
+    )
+
+    expect(await screen.findByText('JBSWY3DPEHPK3PXP')).toBeDefined()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('asks for the password before turning two-step verification off, then does it', async () => {
+    render(<App />)
+    await goToProfile()
+    await enrolTotp()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: "Désactiver l'application d'authentification" }),
+    )
+    await confirmWithPassword('correct horse battery staple')
+
+    expect(await screen.findByText('Vérification en deux étapes désactivée.')).toBeDefined()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('keeps the dialog open with a message on a wrong password, and changes nothing', async () => {
+    render(<App />)
+    await goToProfile()
+    await enrolTotp()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: "Désactiver l'application d'authentification" }),
+    )
+    await confirmWithPassword('not the password')
+
+    expect(await screen.findByText('Ce mot de passe n’est pas le bon.')).toBeDefined()
+    expect(screen.getByRole('dialog', { name: 'Confirmez que c’est bien vous' })).toBeDefined()
+    expect(screen.queryByText('Vérification en deux étapes désactivée.')).toBeNull()
+  })
+
+  it('cancelling the dialog abandons the change', async () => {
+    render(<App />)
+    await goToProfile()
+    await enrolTotp()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: "Désactiver l'application d'authentification" }),
+    )
+    const dialog = await screen.findByRole('dialog', { name: 'Confirmez que c’est bien vous' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Annuler' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.queryByText('Vérification en deux étapes désactivée.')).toBeNull()
+  })
+
+  it('accepts an authenticator code instead of the password', async () => {
+    render(<App />)
+    await goToProfile()
+    await enrolTotp()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: "Désactiver l'application d'authentification" }),
+    )
+    const dialog = await screen.findByRole('dialog', { name: 'Confirmez que c’est bien vous' })
+    fireEvent.click(
+      within(dialog).getByRole('button', {
+        name: 'Utiliser un code d’authentification à la place',
+      }),
+    )
+    fireEvent.change(
+      within(dialog).getByLabelText('Code de votre application d’authentification'),
+      {
+        target: { value: '123456' },
+      },
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmer' }))
+
+    expect(await screen.findByText('Vérification en deux étapes désactivée.')).toBeDefined()
+  })
+
+  it('asks for the password before starting a new authenticator setup, and shows its key', async () => {
+    render(<App />)
+    await goToProfile()
+    await enrolTotp()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reconfigurer l’application d’authentification' }),
+    )
+    await confirmWithPassword('correct horse battery staple')
+
+    expect(await screen.findByText('JBSWY3DPEHPK3PXP')).toBeDefined()
+  })
+
+  it('asks for the password before adding a passkey to an account that already has a factor', async () => {
+    startRegistration.mockResolvedValue({ id: 'mock-new-credential-id' })
+    render(<App />)
+    await goToProfile()
+    await enrolTotp()
+
+    fireEvent.click(screen.getByRole('button', { name: "Ajouter une clé d'accès" }))
+    await confirmWithPassword('correct horse battery staple')
+
+    expect(await screen.findByText("Clé d'accès ajoutée.")).toBeDefined()
   })
 })
 

@@ -67,10 +67,28 @@ export function verifyTotp(
   secret: string,
   options: VerifyTotpOptions = {},
 ): boolean {
-  if (!/^\d{6}$/.test(token)) return false
+  return matchTotpStep(token, secret, options) !== null
+}
+
+/**
+ * The time step (`floor(epochSeconds / 30)`) `token` is the code for, or `null`
+ * when it matches none inside the accepted window.
+ *
+ * The step is what a caller needs to refuse a replay: a TOTP code is valid for
+ * its own step *and* the drift window around it, so "this exact string was
+ * already used" is not the same question as "this step was already accepted".
+ * Remembering the step and refusing anything at or below it closes the replay
+ * for the whole window, which a comparison of strings never could.
+ */
+export function matchTotpStep(
+  token: string,
+  secret: string,
+  options: VerifyTotpOptions = {},
+): number | null {
+  if (!/^\d{6}$/.test(token)) return null
 
   const key = base32Decode(secret)
-  if (key === null) return false
+  if (key === null) return null
 
   const now = options.now ?? Math.floor(Date.now() / 1000)
   const windowSteps = options.windowSteps ?? 1
@@ -79,10 +97,13 @@ export function verifyTotp(
   // Every candidate in the window is checked — never short-circuited on the
   // first comparison — and each comparison is constant-time, so accepting on
   // the third of three steps takes the same time as rejecting on the first.
-  let matched = false
+  // When two steps collide on the same six digits (about one in a million) the
+  // later one wins, which is the stricter reading for a replay check.
+  let matched: number | null = null
   for (let offset = -windowSteps; offset <= windowSteps; offset += 1) {
-    const candidate = hotp(key, currentStep + BigInt(offset))
-    if (constantTimeEquals(candidate, token)) matched = true
+    const step = currentStep + BigInt(offset)
+    const candidate = hotp(key, step)
+    if (constantTimeEquals(candidate, token)) matched = Number(step)
   }
   return matched
 }

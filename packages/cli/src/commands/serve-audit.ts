@@ -153,6 +153,17 @@ export async function recordAuthAudit(
     return
   }
 
+  // Changes to the second factor (pentest 2026-10-26, F-01): who turned it on,
+  // off or replaced it, and when someone re-confirmed their identity to do so.
+  // Never the secret, a code or a password — the action name is all that is kept.
+  const factorAction = secondFactorAuditAction(method, pathname)
+  if (factorAction !== null) {
+    await site.auth.audit
+      .record({ actorId: actor.id, actorRoles: actor.roles, action: factorAction })
+      .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+    return
+  }
+
   // Login, TOTP completion and passkey completion all land here the same
   // way: whichever step actually produced a session is the one worth
   // recording, not every intermediate MFA round trip.
@@ -175,6 +186,19 @@ export async function recordAuthAudit(
   await site.auth.audit
     .record({ actorId: userId, actorRoles: roles, action })
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+}
+
+/** The audit action for a successful change to an account's second factor, or `null` for any other auth route. */
+function secondFactorAuditAction(method: string, pathname: string): string | null {
+  if (method === 'DELETE' && pathname.endsWith('/api/auth/totp')) return 'auth.totp_disabled'
+  if (method !== 'POST') return null
+  if (pathname.endsWith('/api/auth/totp/enrol/confirm')) return 'auth.totp_enabled'
+  if (pathname.endsWith('/api/auth/totp/recovery-codes/regenerate')) {
+    return 'auth.recovery_codes_regenerated'
+  }
+  if (pathname.endsWith('/api/auth/webauthn/register/complete')) return 'auth.passkey_added'
+  if (pathname.endsWith('/api/auth/step-up')) return 'auth.step_up'
+  return null
 }
 
 export function responseId(response: RestResponse): string | undefined {

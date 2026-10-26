@@ -2545,6 +2545,23 @@ export function installMockFetch(
   // remain unused.
   const recoveryCodes: Record<string, { total: number; remaining: number }> = {}
 
+  // Step-up (pentest 2026-10-26, F-01): a session alone cannot change or remove
+  // a factor the account already has. `POST /api/auth/step-up` with the right
+  // password marks the session; the sensitive routes below refuse until then.
+  // Like the server, a first enrolment (no factor yet) needs nothing.
+  let steppedUp = false
+  const stepUpRefusal = (): Response =>
+    json(403, {
+      error: {
+        code: 'AUTH_STEP_UP_REQUIRED',
+        message: 'This change needs you to confirm it is you.',
+      },
+    })
+  const accountHasFactor = (): boolean => {
+    const mine = accounts.find((candidate) => candidate.id === user.id)
+    return mine !== undefined && (mine.mfa.totp || mine.mfa.passkeys > 0)
+  }
+
   let apiKeyCounter = 0
   const apiKeys: {
     id: string
@@ -3120,10 +3137,24 @@ export function installMockFetch(
 
       // Self-service enrolment (ADR-0021): identified by the bearer token, never
       // by anything in the request body.
+      if (url.endsWith('/api/auth/step-up') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        if (body.password !== password && body.code !== '123456') {
+          return json(401, {
+            error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Incorrect password.' },
+          })
+        }
+        steppedUp = true
+        return json(200, { data: { expiresAt: '2026-01-01T00:05:00.000Z' } })
+      }
+
       if (url.endsWith('/api/auth/totp/enrol') && method === 'POST') {
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
+        if (accountHasFactor() && !steppedUp) return stepUpRefusal()
         return json(200, {
           data: { secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Cogenta:alice@example.com' },
         })
@@ -3151,6 +3182,7 @@ export function installMockFetch(
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
+        if (accountHasFactor() && !steppedUp) return stepUpRefusal()
         delete recoveryCodes[user.id]
         const disabledAccount = accounts.find((candidate) => candidate.id === user.id)
         if (disabledAccount !== undefined) disabledAccount.mfa.totp = false
@@ -3168,6 +3200,7 @@ export function installMockFetch(
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
+        if (!steppedUp) return stepUpRefusal()
         recoveryCodes[user.id] = { total: 10, remaining: 10 }
         return json(200, { data: { recoveryCodes: mockRecoveryCodeBatch() } })
       }
@@ -4231,6 +4264,7 @@ export function installMockFetch(
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
+        if (accountHasFactor() && !steppedUp) return stepUpRefusal()
         return json(200, {
           data: {
             options: {

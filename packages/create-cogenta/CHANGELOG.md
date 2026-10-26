@@ -1,5 +1,23 @@
 # create-cogenta
 
+## 0.7.5
+
+### Patch Changes
+
+- [#36](https://github.com/cogenta-cms/cogenta/pull/36) [`9217286`](https://github.com/cogenta-cms/cogenta/commit/9217286200df357a90d1fc2bb406f218cd8d58d9) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A site created with MySQL or PostgreSQL now installs its database client. `mysql2` and `postgres` are optional peers of `@cogenta/core`, so nothing installed them: `npm create cogenta` with MySQL failed to create the admin account (`DRIVER_UNAVAILABLE`), and the generated site could not start. The installer now ships both clients, and the generated `package.json` declares the one the chosen driver needs.
+- Updated dependencies [[`d1231ec`](https://github.com/cogenta-cms/cogenta/commit/d1231ecea97b3b472a78bef07931e32fedcde900), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`5dac325`](https://github.com/cogenta-cms/cogenta/commit/5dac3257d9440b5fc1dbfe962b59f8e0d2e41694), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e), [`d1231ec`](https://github.com/cogenta-cms/cogenta/commit/d1231ecea97b3b472a78bef07931e32fedcde900), [`96b7dd8`](https://github.com/cogenta-cms/cogenta/commit/96b7dd84544b24b938ef812e3ee5bf892770241e)]:
+  - @cogenta/agents@0.11.0
+  - @cogenta/cli@0.20.0
+  - @cogenta/api@2.12.0
+  - @cogenta/schema@0.11.1
+  - @cogenta/theme-canonical@1.4.1
+  - @cogenta/core@0.14.0
+  - @cogenta/blocks@1.2.0
+  - @cogenta/auth@0.6.0
+  - @cogenta/comments@0.2.10
+  - @cogenta/render@0.6.1
+  - @cogenta/starters@0.4.1
+
 ## 0.7.4
 
 ### Patch Changes

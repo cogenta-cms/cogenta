@@ -58,11 +58,16 @@ import { type EntryVisibility, VisibilityCard } from '../content/visibility-card
 import { previewPermalink } from '../lib/permalink.js'
 import { slugify } from '../lib/slugify.js'
 import { useDirtyGuard } from '../lib/use-dirty-guard.js'
+import { fieldLabel } from '../schema/field-label.js'
 import { canPerform, PUBLIC_ROLE } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import { normalisePermissionRule } from '../schema/types.js'
+import { languageName } from '../search/result-labels.js'
 import { SeoPanel } from '../seo/seo-panel.js'
-import { useNewEntryDefaultBlocksSetting } from '../settings/site-settings-context.js'
+import {
+  useDateTimeFormatter,
+  useNewEntryDefaultBlocksSetting,
+} from '../settings/site-settings-context.js'
 import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import { cn } from '../ui/cn.js'
 import {
@@ -209,7 +214,7 @@ function analyticsPathFor(
  * whether there was an entry to load first.
  */
 export function EntryEditRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { name = '', id } = useParams<{ name: string; id?: string }>()
   const isNew = id === undefined
   const auth = useAuth()
@@ -230,6 +235,7 @@ export function EntryEditRoute(): JSX.Element {
   /** The configurable starting set for a fresh `blocks` field (L21 task 5) — `settings.tab.general`, "Starting blocks for a new page". */
   const defaultBlockTypes = useNewEntryDefaultBlocksSetting()
 
+  const formatDateTime = useDateTimeFormatter()
   const [values, setValues] = useState<Record<string, unknown>>({})
   /** The last value auto-filled into each slug field, keyed by field name —
    * lets `setFieldValue` tell "still what we suggested" from "the editor
@@ -809,6 +815,24 @@ export function EntryEditRoute(): JSX.Element {
   }
 
   /**
+   * Takes the status, date and revision a publish / unpublish / schedule call
+   * answered with. The publication date lives in two places on the wire (the
+   * entry's own `publishedAt` and the collection's `publishedAt` value), and
+   * the form keeps a copy of the second: left stale, the next plain save would
+   * write the old date back over the schedule that was just set.
+   */
+  function adoptPublication(entry: Entry): void {
+    setStatus(entry.status)
+    setPublishedAt(entry.publishedAt)
+    setLoadedUpdatedAt(entry.updatedAt)
+    setScheduleInput(entry.publishedAt === null ? '' : toDatetimeLocalValue(entry.publishedAt))
+    if (collection?.fields.some((field) => field.name === 'publishedAt') !== true) return
+    const date = entry.values['publishedAt']
+    setValues((current) => ({ ...current, publishedAt: date }))
+    setBaseline((current) => ({ ...current, values: { ...current.values, publishedAt: date } }))
+  }
+
+  /**
    * Moves the entry to `next`: `POST .../publish` for `published`, and
    * `POST .../unpublish` (carrying the target status) for `draft`/`archived`
    * — the two real routes, never a made-up generic status write.
@@ -838,9 +862,7 @@ export function EntryEditRoute(): JSX.Element {
         next === 'published'
           ? await publishEntry(token, name, id)
           : await unpublishEntry(token, name, id, next)
-      setStatus(entry.status)
-      setPublishedAt(entry.publishedAt)
-      setLoadedUpdatedAt(entry.updatedAt)
+      adoptPublication(entry)
       setStatusMessage(
         t('entryEdit.statusChanged', { status: t(`entryEdit.status.${entry.status}`) }),
       )
@@ -866,15 +888,18 @@ export function EntryEditRoute(): JSX.Element {
       setStatusError({ message: t('entryEdit.scheduleDateRequired') })
       return
     }
-    const iso = new Date(scheduleInput).toISOString()
+    const at = new Date(scheduleInput)
+    if (Number.isNaN(at.getTime()) || at.getTime() <= Date.now()) {
+      setStatusError({ message: t('entryEdit.schedulePast') })
+      return
+    }
+    const iso = at.toISOString()
     setStatusBusy(true)
     setStatusError(null)
     setStatusMessage(null)
     try {
       const entry = await unpublishEntry(token, name, id, 'scheduled', iso)
-      setStatus(entry.status)
-      setPublishedAt(entry.publishedAt)
-      setLoadedUpdatedAt(entry.updatedAt)
+      adoptPublication(entry)
       setStatusMessage(
         t('entryEdit.statusChanged', { status: t(`entryEdit.status.${entry.status}`) }),
       )
@@ -1127,6 +1152,10 @@ export function EntryEditRoute(): JSX.Element {
   const skipFields = new Set<string>([
     ...(builderZone === null ? [] : [builderZone]),
     ...seoFieldNames,
+    // One place for the publication date: the status card below publishes or
+    // schedules it. A second "Date de publication" input in the form could
+    // only ever disagree with it.
+    ...(hasScheduling ? ['publishedAt'] : []),
   ])
 
   /**
@@ -1213,7 +1242,7 @@ export function EntryEditRoute(): JSX.Element {
     .filter((field) => field.kind === 'text')
     .map((field) => ({
       name: field.name,
-      label: field.admin?.label ?? field.name,
+      label: fieldLabel(field.name, t, field),
       value: typeof values[field.name] === 'string' ? (values[field.name] as string) : '',
     }))
 
@@ -1298,22 +1327,163 @@ export function EntryEditRoute(): JSX.Element {
     )
   }
 
+  const statusCardNode =
+    !isNew && id !== undefined ? (
+      <Card className="entry-form__status">
+        <CardBody className="flex-row flex-wrap items-center gap-x-4 gap-y-3">
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 text-sm font-medium whitespace-nowrap text-foreground">
+              {t('entryEdit.statusLabel')}
+            </span>
+            {canPublish && isManagedStatus(status) ? (
+              <Select
+                aria-label={t('entryEdit.statusLabel')}
+                value={status}
+                disabled={statusBusy}
+                onChange={(event) => void changeStatus(event.target.value as ManagedStatus)}
+              >
+                {MANAGED_STATUSES.map((option) => (
+                  <option key={option} value={option}>
+                    {t(`entryEdit.status.${option}`)}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <strong>{t(`entryEdit.status.${status}`)}</strong>
+            )}
+          </div>
+
+          {canPublish && status !== 'published' && isManagedStatus(status) && (
+            <Button
+              type="button"
+              variant="primary"
+              disabled={statusBusy}
+              onClick={() => void changeStatus('published')}
+            >
+              {t('entryEdit.publishButton')}
+            </Button>
+          )}
+
+          {/* The button that used to simply not exist for a contributor:
+            without `publish`, there was no way at all to signal "this is
+            ready" — a silent dead end (`schema@2.1`, ADR-0027, fiche 37
+            task 4). Legal to press from `none` or `changes-requested`
+            only, mirroring the server's own transition table. */}
+          {!canPublish &&
+            canSubmitReview &&
+            (reviewState === 'none' || reviewState === 'changes-requested') && (
+              <Button
+                type="button"
+                variant="primary"
+                disabled={workflowBusy}
+                onClick={() => void submitReview()}
+              >
+                {t('entryEdit.workflow.submitButton')}
+              </Button>
+            )}
+
+          {/* Scheduling: `@cogenta/schema`'s queue-based scheduler is now
+            registered by `cogenta serve` (every 60s, plus once at
+            startup), so this really publishes the entry once its date
+            comes — never a no-op control. A real date/time picker, not
+            free text; nothing is sent until "Programmer"/"Reprogrammer"
+            is pressed. */}
+          {canPublish && hasScheduling && isSchedulableStatus(status) && (
+            <div className="flex w-full flex-wrap items-center gap-2">
+              <Label htmlFor="schedule-at">{t('entryEdit.scheduleLabel')}</Label>
+              <Input
+                id="schedule-at"
+                type="datetime-local"
+                min={toDatetimeLocalValue(new Date().toISOString())}
+                value={scheduleInput}
+                disabled={statusBusy}
+                onChange={(event) => setScheduleInput(event.target.value)}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={statusBusy}
+                onClick={() => void schedule()}
+              >
+                {status === 'scheduled'
+                  ? t('entryEdit.rescheduleButton')
+                  : t('entryEdit.scheduleButton')}
+              </Button>
+              {status === 'scheduled' && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={statusBusy}
+                  onClick={() => void changeStatus('draft')}
+                >
+                  {t('entryEdit.cancelScheduleButton')}
+                </Button>
+              )}
+            </div>
+          )}
+        </CardBody>
+
+        {status === 'scheduled' && publishedAt !== null && (
+          <p className="px-4 pb-4 text-xs text-muted-foreground">
+            {t('entryEdit.scheduledFor', { at: formatDateTime(publishedAt) })}
+          </p>
+        )}
+
+        {status === 'published' && publishedAt !== null && hasScheduling && (
+          <p className="px-4 pb-4 text-xs text-muted-foreground">
+            {t('entryEdit.publishedOn', { at: formatDateTime(publishedAt) })}
+          </p>
+        )}
+
+        {!isManagedStatus(status) && status !== 'scheduled' && (
+          <p className="px-4 pb-4 text-xs text-muted-foreground">
+            {t('entryEdit.statusUnmanaged')}
+          </p>
+        )}
+        {publishBlocked && Object.keys(errors).length > 0 && (
+          <Notice tone="danger" live="assertive">
+            <p>{t('entryEdit.publishValidationError')}</p>
+          </Notice>
+        )}
+        {statusError !== null && (
+          <Notice tone="danger" live="assertive">
+            <p>{statusError.message}</p>
+            {statusError.hint !== undefined && <p>{statusError.hint}</p>}
+          </Notice>
+        )}
+        {statusMessage !== null && (
+          <Notice tone="success" live="polite">
+            {statusMessage}
+          </Notice>
+        )}
+      </Card>
+    ) : null
+
+  const visualLayout = editorMode === 'visual' && blockZone !== undefined
+
   return (
     <section aria-labelledby="entry-heading" className="flex flex-col gap-6">
-      <h1 id="entry-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
-        {t(isNew ? 'entryEdit.newHeading' : 'entryEdit.editHeading', {
-          label: collection.labels.singular,
-        })}
-      </h1>
-      {siteLocales.length > 1 && (
-        <p>
-          {t('entryEdit.languageLabel')} <strong>{locale}</strong>
-          {isNew && translationOf !== null && t('entryEdit.newTranslationSuffix')}
+      <div className="flex flex-col gap-1">
+        <h1 id="entry-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
+          {t(isNew ? 'entryEdit.newHeading' : 'entryEdit.editHeading', {
+            label: collection.labels.singular,
+          })}
+        </h1>
+        {!isNew && titleOf(values, '') !== '' && (
+          <p className="m-0 text-base text-muted-foreground [overflow-wrap:anywhere]">
+            {titleOf(values, '')}
+          </p>
+        )}
+        <p className="m-0 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <Link to={`/collections/${encodeURIComponent(name)}`}>{t('entryEdit.backToList')}</Link>
+          {siteLocales.length > 1 && (
+            <span>
+              {t('entryEdit.languageLabel')} <strong>{languageName(locale, i18n.language)}</strong>
+              {isNew && translationOf !== null && t('entryEdit.newTranslationSuffix')}
+            </span>
+          )}
         </p>
-      )}
-      <p>
-        <Link to={`/collections/${encodeURIComponent(name)}`}>{t('entryEdit.backToList')}</Link>
-      </p>
+      </div>
 
       {!canWrite && <p role="alert">{t('entryEdit.readOnly')}</p>}
 
@@ -1410,404 +1580,286 @@ export function EntryEditRoute(): JSX.Element {
               oublie de changer". `lg:order-2` moves it to the right column on
               a wide screen without touching the DOM order that decides the
               small-screen layout. */}
-          <aside className="flex flex-col gap-4 lg:sticky lg:top-4 lg:order-2">
-            {!isNew && id !== undefined && (
-              <Card className="entry-form__status">
-                <CardBody className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="shrink-0 text-sm font-medium whitespace-nowrap text-foreground">
-                      {t('entryEdit.statusLabel')}
-                    </span>
-                    {canPublish && isManagedStatus(status) ? (
-                      <Select
-                        aria-label={t('entryEdit.statusLabel')}
-                        value={status}
-                        disabled={statusBusy}
-                        onChange={(event) => void changeStatus(event.target.value as ManagedStatus)}
-                      >
-                        {MANAGED_STATUSES.map((option) => (
-                          <option key={option} value={option}>
-                            {t(`entryEdit.status.${option}`)}
-                          </option>
-                        ))}
-                      </Select>
-                    ) : (
-                      <strong>{t(`entryEdit.status.${status}`)}</strong>
-                    )}
-                  </div>
-
-                  {canPublish && status !== 'published' && isManagedStatus(status) && (
-                    <Button
-                      type="button"
-                      variant="primary"
-                      disabled={statusBusy}
-                      onClick={() => void changeStatus('published')}
-                    >
-                      {t('entryEdit.publishButton')}
-                    </Button>
-                  )}
-
-                  {/* The button that used to simply not exist for a contributor:
-                      without `publish`, there was no way at all to signal "this is
-                      ready" — a silent dead end (`schema@2.1`, ADR-0027, fiche 37
-                      task 4). Legal to press from `none` or `changes-requested`
-                      only, mirroring the server's own transition table. */}
-                  {!canPublish &&
-                    canSubmitReview &&
-                    (reviewState === 'none' || reviewState === 'changes-requested') && (
-                      <Button
-                        type="button"
-                        variant="primary"
-                        disabled={workflowBusy}
-                        onClick={() => void submitReview()}
-                      >
-                        {t('entryEdit.workflow.submitButton')}
-                      </Button>
-                    )}
-
-                  {/* Scheduling: `@cogenta/schema`'s queue-based scheduler is now
-                      registered by `cogenta serve` (every 60s, plus once at
-                      startup), so this really publishes the entry once its date
-                      comes — never a no-op control. A real date/time picker, not
-                      free text; nothing is sent until "Programmer"/"Reprogrammer"
-                      is pressed. */}
-                  {canPublish && hasScheduling && isSchedulableStatus(status) && (
-                    <div className="flex w-full flex-wrap items-center gap-2">
-                      <Label htmlFor="schedule-at">{t('entryEdit.scheduleLabel')}</Label>
-                      <Input
-                        id="schedule-at"
-                        type="datetime-local"
-                        value={scheduleInput}
-                        disabled={statusBusy}
-                        onChange={(event) => setScheduleInput(event.target.value)}
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={statusBusy}
-                        onClick={() => void schedule()}
-                      >
-                        {status === 'scheduled'
-                          ? t('entryEdit.rescheduleButton')
-                          : t('entryEdit.scheduleButton')}
-                      </Button>
-                      {status === 'scheduled' && (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={statusBusy}
-                          onClick={() => void changeStatus('draft')}
-                        >
-                          {t('entryEdit.cancelScheduleButton')}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </CardBody>
-
-                {status === 'scheduled' && publishedAt !== null && (
-                  <p className="px-4 pb-4 text-xs text-muted-foreground">
-                    {t('entryEdit.scheduledFor', { at: new Date(publishedAt).toLocaleString() })}
-                  </p>
-                )}
-
-                {!isManagedStatus(status) && status !== 'scheduled' && (
-                  <p className="px-4 pb-4 text-xs text-muted-foreground">
-                    {t('entryEdit.statusUnmanaged')}
-                  </p>
-                )}
-                {publishBlocked && Object.keys(errors).length > 0 && (
-                  <Notice tone="danger" live="assertive">
-                    <p>{t('entryEdit.publishValidationError')}</p>
-                  </Notice>
-                )}
-                {statusError !== null && (
-                  <Notice tone="danger" live="assertive">
-                    <p>{statusError.message}</p>
-                    {statusError.hint !== undefined && <p>{statusError.hint}</p>}
-                  </Notice>
-                )}
-                {statusMessage !== null && (
-                  <Notice tone="success" live="polite">
-                    {statusMessage}
-                  </Notice>
-                )}
-              </Card>
-            )}
-
-            {/* The workflow sidebar: state, assigned reviewer, and the contextual
+          <aside className="contents lg:flex lg:flex-col lg:gap-4 lg:sticky lg:top-4 lg:order-2">
+            {/* On a phone the aside's cards are grid items of the form's own grid
+                (`contents`): the status stays on top, where it is seen, and the
+                rest comes after the fields instead of in front of them. */}
+            <div className="order-first lg:order-none">{!visualLayout && statusCardNode}</div>
+            <div className="order-last flex flex-col gap-4 lg:order-none">
+              {/* The workflow sidebar: state, assigned reviewer, and the contextual
                 approve/request-changes pair a reviewer gets (`schema@2.1`,
                 ADR-0027, fiche 37 tasks 2 and 4). Shown only on a collection that
                 turned the workflow on — a site that never does sees none of this. */}
-            {workflowEnabled && !isNew && id !== undefined && (canSubmitReview || canReview) && (
-              <Card className="entry-form__status">
-                <CardBody className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">
-                      {t('entryEdit.workflow.stateLabel')}
-                    </span>
-                    <strong>{t(`entryEdit.workflow.state.${reviewState}`)}</strong>
-                  </div>
+              {workflowEnabled && !isNew && id !== undefined && (canSubmitReview || canReview) && (
+                <Card className="entry-form__status">
+                  <CardBody className="flex-row flex-wrap items-center gap-x-4 gap-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">
+                        {t('entryEdit.workflow.stateLabel')}
+                      </span>
+                      <strong>{t(`entryEdit.workflow.state.${reviewState}`)}</strong>
+                    </div>
 
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="entry-workflow-reviewer">
-                      {t('entryEdit.workflow.reviewerLabel')}
-                    </Label>
-                    <Select
-                      id="entry-workflow-reviewer"
-                      aria-label={t('entryEdit.workflow.reviewerSelectLabel')}
-                      value={assignedReviewer ?? ''}
-                      disabled={workflowBusy}
-                      onChange={(event) =>
-                        void changeReviewer(event.target.value === '' ? null : event.target.value)
-                      }
-                    >
-                      <option value="">{t('entryEdit.workflow.reviewerUnassigned')}</option>
-                      {reviewerCandidates.map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>
-                          {candidate.displayName ?? candidate.email}
-                        </option>
-                      ))}
-                      {/* An id assigned by someone else, or from before this
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="entry-workflow-reviewer">
+                        {t('entryEdit.workflow.reviewerLabel')}
+                      </Label>
+                      <Select
+                        id="entry-workflow-reviewer"
+                        aria-label={t('entryEdit.workflow.reviewerSelectLabel')}
+                        value={assignedReviewer ?? ''}
+                        disabled={workflowBusy}
+                        onChange={(event) =>
+                          void changeReviewer(event.target.value === '' ? null : event.target.value)
+                        }
+                      >
+                        <option value="">{t('entryEdit.workflow.reviewerUnassigned')}</option>
+                        {reviewerCandidates.map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>
+                            {candidate.displayName ?? candidate.email}
+                          </option>
+                        ))}
+                        {/* An id assigned by someone else, or from before this
                           picker existed, that is not in `reviewerCandidates`
                           (a role change, a removed account…) — kept
                           selectable rather than silently reset to
                           unassigned, which would be a write this screen
                           never asked for. */}
-                      {assignedReviewer !== null &&
-                        !reviewerCandidates.some(
-                          (candidate) => candidate.id === assignedReviewer,
-                        ) && <option value={assignedReviewer}>{assignedReviewer}</option>}
-                    </Select>
-                  </div>
-
-                  {canReview && reviewState === 'pending' && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="primary"
-                        disabled={workflowBusy}
-                        onClick={() => void approveReviewNow()}
-                      >
-                        {t('entryEdit.workflow.approveButton')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={workflowBusy}
-                        onClick={() => void requestChangesNow()}
-                      >
-                        {t('entryEdit.workflow.requestChangesButton')}
-                      </Button>
+                        {assignedReviewer !== null &&
+                          !reviewerCandidates.some(
+                            (candidate) => candidate.id === assignedReviewer,
+                          ) && <option value={assignedReviewer}>{assignedReviewer}</option>}
+                      </Select>
                     </div>
+
+                    {canReview && reviewState === 'pending' && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="primary"
+                          disabled={workflowBusy}
+                          onClick={() => void approveReviewNow()}
+                        >
+                          {t('entryEdit.workflow.approveButton')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={workflowBusy}
+                          onClick={() => void requestChangesNow()}
+                        >
+                          {t('entryEdit.workflow.requestChangesButton')}
+                        </Button>
+                      </div>
+                    )}
+                  </CardBody>
+
+                  {workflowError !== null && (
+                    <Notice tone="danger" live="assertive">
+                      <p>{workflowError.message}</p>
+                      {workflowError.hint !== undefined && <p>{workflowError.hint}</p>}
+                    </Notice>
                   )}
-                </CardBody>
+                  {workflowMessage !== null && (
+                    <Notice tone="success" live="polite">
+                      {workflowMessage}
+                    </Notice>
+                  )}
+                </Card>
+              )}
 
-                {workflowError !== null && (
-                  <Notice tone="danger" live="assertive">
-                    <p>{workflowError.message}</p>
-                    {workflowError.hint !== undefined && <p>{workflowError.hint}</p>}
-                  </Notice>
-                )}
-                {workflowMessage !== null && (
-                  <Notice tone="success" live="polite">
-                    {workflowMessage}
-                  </Notice>
-                )}
-              </Card>
-            )}
-
-            {/* Discussion (fiche 15 task 5, ADR-0025): a tri-state toggle,
+              {/* Discussion (fiche 15 task 5, ADR-0025): a tri-state toggle,
                 never a plain checkbox — "inherit" has to stay expressible or
                 this control could only ever force an entry to disagree with
                 its collection, never simply follow it. Stored in
                 `@cogenta/comments`'s own per-entry table, not on the entry. */}
-            {!isNew && id !== undefined && token !== null && (
-              <Card>
-                <CardBody className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-foreground">
-                    {t('entryEdit.commentsLabel')}
-                  </span>
-                  <Select
-                    aria-label={t('entryEdit.commentsLabel')}
-                    value={commentsEnabled === null ? 'inherit' : String(commentsEnabled)}
-                    disabled={commentsSettingsBusy}
-                    onChange={(event) => {
-                      const value = event.target.value
-                      const next = value === 'inherit' ? null : value === 'true'
-                      setCommentsSettingsBusy(true)
-                      setEntryCommentSettings(token, name, id, next)
-                        .then(() => setCommentsEnabled(next))
-                        .catch(() => undefined)
-                        .finally(() => setCommentsSettingsBusy(false))
-                    }}
-                  >
-                    <option value="inherit">{t('entryEdit.commentsInherit')}</option>
-                    <option value="true">{t('entryEdit.commentsOn')}</option>
-                    <option value="false">{t('entryEdit.commentsOff')}</option>
-                  </Select>
-                </CardBody>
-              </Card>
-            )}
+              {!isNew && id !== undefined && token !== null && (
+                <Card>
+                  <CardBody className="flex flex-col gap-1.5">
+                    <span className="text-sm font-medium text-foreground">
+                      {t('entryEdit.commentsLabel')}
+                    </span>
+                    <Select
+                      aria-label={t('entryEdit.commentsLabel')}
+                      value={commentsEnabled === null ? 'inherit' : String(commentsEnabled)}
+                      disabled={commentsSettingsBusy}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        const next = value === 'inherit' ? null : value === 'true'
+                        setCommentsSettingsBusy(true)
+                        setEntryCommentSettings(token, name, id, next)
+                          .then(() => setCommentsEnabled(next))
+                          .catch(() => undefined)
+                          .finally(() => setCommentsSettingsBusy(false))
+                      }}
+                    >
+                      <option value="inherit">{t('entryEdit.commentsInherit')}</option>
+                      <option value="true">{t('entryEdit.commentsOn')}</option>
+                      <option value="false">{t('entryEdit.commentsOff')}</option>
+                    </Select>
+                  </CardBody>
+                </Card>
+              )}
 
-            {/* Visibility (`schema@2.3`, ADR-0037): who may see this entry
+              {/* Visibility (`schema@2.3`, ADR-0037): who may see this entry
                 once it is published. Orthogonal to the status above — a
                 private page is published *and* private — and applied on its
                 own button because the server gates it on `publish` while the
                 form gates on `update`. */}
-            {!isNew && id !== undefined && token !== null && (
-              <VisibilityCard
-                token={token}
-                collection={name}
-                entryId={id}
-                current={visibility}
-                onChanged={setVisibility}
-              />
-            )}
+              {!isNew && id !== undefined && token !== null && (
+                <VisibilityCard
+                  token={token}
+                  collection={name}
+                  entryId={id}
+                  current={visibility}
+                  onChanged={setVisibility}
+                />
+              )}
 
-            {/* Permalink (task 4): a preview, not the source of truth — see
+              {/* Permalink (task 4): a preview, not the source of truth — see
                 `lib/permalink.ts`'s header. The real preview link a few lines
                 down always wins. */}
-            {collection.routing !== undefined && (
-              <Card>
-                <CardBody className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-foreground">
-                    {t('entryEdit.permalinkLabel')}
-                  </span>
-                  {permalink !== null ? (
-                    <code className="break-all text-xs text-muted-foreground">{permalink}</code>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {t('entryEdit.permalinkPending')}
+              {collection.routing !== undefined && (
+                <Card>
+                  <CardBody className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-foreground">
+                      {t('entryEdit.permalinkLabel')}
                     </span>
-                  )}
-                </CardBody>
-              </Card>
-            )}
+                    {permalink !== null ? (
+                      <code className="break-all text-xs text-muted-foreground">{permalink}</code>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {t('entryEdit.permalinkPending')}
+                      </span>
+                    )}
+                  </CardBody>
+                </Card>
+              )}
 
-            {/* The reverse of a product's `contentRef` (fiche 51 task 1): does
+              {/* The reverse of a product's `contentRef` (fiche 51 task 1): does
                 a commercial record point back at this entry. Renders nothing
                 for the overwhelming majority of entries, which sell nothing. */}
-            {!isNew && id !== undefined && token !== null && (
-              <EntryProductLinkCard token={token} collection={name} entryId={id} />
-            )}
+              {!isNew && id !== undefined && token !== null && (
+                <EntryProductLinkCard token={token} collection={name} entryId={id} />
+              )}
 
-            {/* Author (task 4): display only — assigning it is fiche 37's job. */}
-            {!isNew && (createdBy !== null || updatedBy !== null) && (
+              {/* Author (task 4): display only — assigning it is fiche 37's job. */}
+              {!isNew && (createdBy !== null || updatedBy !== null) && (
+                <Card>
+                  <CardBody className="flex flex-col gap-1 text-xs text-muted-foreground">
+                    {createdBy !== null && (
+                      <span>
+                        {t('entryEdit.authorCreatedBy', {
+                          author: authorNames[createdBy] ?? createdBy,
+                        })}
+                      </span>
+                    )}
+                    {updatedBy !== null && (
+                      <span>
+                        {t('entryEdit.authorUpdatedBy', {
+                          author: authorNames[updatedBy] ?? updatedBy,
+                        })}
+                      </span>
+                    )}
+                  </CardBody>
+                </Card>
+              )}
+
               <Card>
-                <CardBody className="flex flex-col gap-1 text-xs text-muted-foreground">
-                  {createdBy !== null && (
-                    <span>
-                      {t('entryEdit.authorCreatedBy', {
-                        author: authorNames[createdBy] ?? createdBy,
-                      })}
+                <CardBody className="flex flex-wrap items-center gap-2">
+                  {!isNew && id !== undefined && (
+                    <button type="button" disabled={previewing} onClick={() => void preview()}>
+                      {previewing ? t('entryEdit.previewGenerating') : t('entryEdit.previewButton')}
+                    </button>
+                  )}
+                  {canDuplicate && !isNew && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={duplicating}
+                      onClick={() => void duplicate()}
+                    >
+                      {duplicating ? t('entryEdit.duplicating') : t('entryEdit.duplicateButton')}
+                    </Button>
+                  )}
+                  {canTrash && !isNew && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={trashing}
+                      onClick={() => void moveToTrash()}
+                    >
+                      {trashing ? t('entryEdit.trashing') : t('entryEdit.trashButton')}
+                    </Button>
+                  )}
+                  {previewError !== null && (
+                    <span role="alert">
+                      {previewError.message}
+                      {previewError.hint !== undefined && ` ${previewError.hint}`}
                     </span>
                   )}
-                  {updatedBy !== null && (
-                    <span>
-                      {t('entryEdit.authorUpdatedBy', {
-                        author: authorNames[updatedBy] ?? updatedBy,
-                      })}
+                  {duplicateError !== null && (
+                    <span role="alert">
+                      {duplicateError.message}
+                      {duplicateError.hint !== undefined && ` ${duplicateError.hint}`}
                     </span>
                   )}
-                </CardBody>
-              </Card>
-            )}
+                  {trashError !== null && (
+                    <span role="alert">
+                      {trashError.message}
+                      {trashError.hint !== undefined && ` ${trashError.hint}`}
+                    </span>
+                  )}
 
-            <Card>
-              <CardBody className="flex flex-wrap items-center gap-2">
-                {!isNew && id !== undefined && (
-                  <button type="button" disabled={previewing} onClick={() => void preview()}>
-                    {previewing ? t('entryEdit.previewGenerating') : t('entryEdit.previewButton')}
-                  </button>
-                )}
-                {canDuplicate && !isNew && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={duplicating}
-                    onClick={() => void duplicate()}
-                  >
-                    {duplicating ? t('entryEdit.duplicating') : t('entryEdit.duplicateButton')}
-                  </Button>
-                )}
-                {canTrash && !isNew && (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={trashing}
-                    onClick={() => void moveToTrash()}
-                  >
-                    {trashing ? t('entryEdit.trashing') : t('entryEdit.trashButton')}
-                  </Button>
-                )}
-                {previewError !== null && (
-                  <span role="alert">
-                    {previewError.message}
-                    {previewError.hint !== undefined && ` ${previewError.hint}`}
-                  </span>
-                )}
-                {duplicateError !== null && (
-                  <span role="alert">
-                    {duplicateError.message}
-                    {duplicateError.hint !== undefined && ` ${duplicateError.hint}`}
-                  </span>
-                )}
-                {trashError !== null && (
-                  <span role="alert">
-                    {trashError.message}
-                    {trashError.hint !== undefined && ` ${trashError.hint}`}
-                  </span>
-                )}
-
-                {/* Keyboard shortcuts help (task 5) — a native `<details>`:
+                  {/* Keyboard shortcuts help (task 5) — a native `<details>`:
                     reachable and operable by keyboard with no script of its
                     own. */}
-                <details className="entry-form__shortcuts">
-                  <summary>{t('entryEdit.shortcutsButton')}</summary>
-                  <dl>
-                    <dt>{t('entryEdit.shortcutSaveKeys')}</dt>
-                    <dd>{t('entryEdit.shortcutSaveLabel')}</dd>
-                    <dt>{t('entryEdit.shortcutPreviewKeys')}</dt>
-                    <dd>{t('entryEdit.shortcutPreviewLabel')}</dd>
-                  </dl>
-                </details>
-              </CardBody>
-            </Card>
+                  <details className="entry-form__shortcuts">
+                    <summary>{t('entryEdit.shortcutsButton')}</summary>
+                    <dl>
+                      <dt>{t('entryEdit.shortcutSaveKeys')}</dt>
+                      <dd>{t('entryEdit.shortcutSaveLabel')}</dd>
+                      <dt>{t('entryEdit.shortcutPreviewKeys')}</dt>
+                      <dd>{t('entryEdit.shortcutPreviewLabel')}</dd>
+                    </dl>
+                  </details>
+                </CardBody>
+              </Card>
 
-            {/* Views over the last 30 days, trend, and rank on the site
+              {/* Views over the last 30 days, trend, and rank on the site
                 (fiche 27 task 2) — the audience of this article, visible
                 while updating it. Renders nothing at all until a stats fetch
                 actually resolves: a silent card for "not applicable" is
                 quieter than a false zero. */}
-            {!isNew && pageStats !== null && (
-              <Card>
-                <CardBody className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-foreground">
-                    {t('entryEdit.analyticsHeading')}
-                  </span>
-                  <span>
-                    {t('entryEdit.analyticsViews', { count: pageStats.views })}
-                    {pageStats.changePercent !== null && (
-                      <>
-                        {' '}
-                        ({pageStats.changePercent >= 0 ? '+' : ''}
-                        {Math.round(pageStats.changePercent * 10) / 10}%{' '}
-                        {t('entryEdit.analyticsVsPrevious')})
-                      </>
-                    )}
-                  </span>
-                  {pageStats.rank !== null && (
-                    <span className="text-muted-foreground text-xs">
-                      {t('entryEdit.analyticsRank', {
-                        rank: pageStats.rank,
-                        total: pageStats.rankedPages,
-                      })}
+              {!isNew && pageStats !== null && (
+                <Card>
+                  <CardBody className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-foreground">
+                      {t('entryEdit.analyticsHeading')}
                     </span>
-                  )}
-                </CardBody>
-              </Card>
-            )}
+                    <span>
+                      {t('entryEdit.analyticsViews', { count: pageStats.views })}
+                      {pageStats.changePercent !== null && (
+                        <>
+                          {' '}
+                          ({pageStats.changePercent >= 0 ? '+' : ''}
+                          {Math.round(pageStats.changePercent * 10) / 10}%{' '}
+                          {t('entryEdit.analyticsVsPrevious')})
+                        </>
+                      )}
+                    </span>
+                    {pageStats.rank !== null && (
+                      <span className="text-muted-foreground text-xs">
+                        {t('entryEdit.analyticsRank', {
+                          rank: pageStats.rank,
+                          total: pageStats.rankedPages,
+                        })}
+                      </span>
+                    )}
+                  </CardBody>
+                </Card>
+              )}
+            </div>
           </aside>
 
           <div className="flex min-w-0 flex-col gap-4 lg:order-1">
@@ -1831,6 +1883,8 @@ export function EntryEditRoute(): JSX.Element {
                 </Button>
               </fieldset>
             )}
+
+            {visualLayout && statusCardNode}
 
             {visualBuilding && <p role="note">{t('builder.unavailableNew')}</p>}
 
@@ -1936,7 +1990,7 @@ export function EntryEditRoute(): JSX.Element {
               text={entryText}
               field={{
                 name: classifyField.name,
-                label: classifyField.admin?.label ?? classifyField.name,
+                label: fieldLabel(classifyField.name, t, classifyField),
                 options: classifyVocabulary,
               }}
               currentValue={classifyCurrentValue}

@@ -133,13 +133,14 @@ function VocabularyWidgetSettingsForm({
       )}
     </Field>
   )
-  const longText = (key: string, label: string) => (
+  const longText = (key: string, label: string, placeholder?: string) => (
     <Field label={label}>
       {(control) => (
         <textarea
           {...control}
           className={TEXTAREA}
           rows={4}
+          placeholder={placeholder}
           value={str(key)}
           onChange={(event) => set(key, event.target.value)}
         />
@@ -371,7 +372,7 @@ function VocabularyWidgetSettingsForm({
     case 'quote':
       return (
         <div className="flex flex-col gap-4">
-          {longText('text', t('widgets.settings.quote'))}
+          {longText('text', t('widgets.settings.quote'), t('widgets.samples.text'))}
           {text('attribution', t('widgets.settings.attribution'))}
           {text('role', t('widgets.settings.role'))}
         </div>
@@ -379,9 +380,13 @@ function VocabularyWidgetSettingsForm({
     case 'cta':
       return (
         <div className="flex flex-col gap-4">
-          {text('heading', t('widgets.settings.heading'))}
+          {text('heading', t('widgets.settings.heading'), {
+            placeholder: t('widgets.samples.heading'),
+          })}
           {longText('body', t('widgets.settings.bodyText'))}
-          {text('label', t('widgets.settings.buttonLabel'))}
+          {text('label', t('widgets.settings.buttonLabel'), {
+            placeholder: t('widgets.samples.link'),
+          })}
           {text('href', t('widgets.settings.buttonHref'), { placeholder: '/page' })}
         </div>
       )
@@ -466,7 +471,7 @@ function VocabularyWidgetSettingsForm({
             onChange={(ids) => set('media', ids[0])}
           />
           {text('heading', t('widgets.settings.heading'))}
-          {longText('body', t('widgets.settings.bodyText'))}
+          {longText('body', t('widgets.settings.bodyText'), t('widgets.samples.text'))}
         </div>
       )
     case 'recentEntries':

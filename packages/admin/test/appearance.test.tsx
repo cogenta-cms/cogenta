@@ -52,7 +52,21 @@ async function goToAppearance(): Promise<void> {
 async function personalize(activeLabel = 'Canonical'): Promise<void> {
   const activeCard = (await screen.findByText(activeLabel)).closest('li') as HTMLElement
   fireEvent.click(within(activeCard).getByRole('button', { name: 'Personnaliser' }))
-  await screen.findByRole('heading', { name: 'Personnaliser', level: 2 })
+  await screen.findByRole('heading', { name: `Personnaliser le thème ${activeLabel}`, level: 2 })
+}
+
+/**
+ * A colour token is edited through a swatch (a colour picker) AND a hex text
+ * field that carry the same value; the text field is what a person types in.
+ */
+async function colorTextField(value: string): Promise<HTMLInputElement> {
+  const matches = await screen.findAllByDisplayValue(value)
+  const text = matches.find(
+    (element): element is HTMLInputElement =>
+      element instanceof HTMLInputElement && element.type === 'text',
+  )
+  if (text === undefined) throw new Error(`No text field holds ${value}`)
+  return text
 }
 
 const CLINICAL_TOKENS = {
@@ -136,10 +150,10 @@ describe('the appearance screen', () => {
 
     expect(
       await screen.findByText(
-        "Chaque valeur affichée ici vient de theme.tokens.json — rien n'a encore été surchargé.",
+        "Ces valeurs sont celles du thème : vous n'avez encore rien personnalisé.",
       ),
     ).toBeDefined()
-    expect(screen.getByDisplayValue('#1d4ed8')).toBeDefined()
+    expect(await colorTextField('#1d4ed8')).toBeDefined()
   })
 
   it('says AI theme generation is unavailable without a provider, and links to configure one', async () => {
@@ -198,12 +212,12 @@ describe('the appearance screen', () => {
     await goToAppearance()
     await personalize()
 
-    const accentInput = await screen.findByDisplayValue('#1d4ed8')
+    const accentInput = await colorTextField('#1d4ed8')
     fireEvent.change(accentInput, { target: { value: '#7c3aed' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await screen.findByText(
-      'Certaines valeurs ci-dessous sont des surcharges enregistrées en base, par-dessus theme.tokens.json.',
+      'Certaines valeurs ci-dessous ont été personnalisées et enregistrées sur le site.',
     )
   })
 
@@ -213,12 +227,17 @@ describe('the appearance screen', () => {
     await goToAppearance()
     await personalize()
 
-    const fgInput = await screen.findByDisplayValue('#16181d')
+    const fgInput = await colorTextField('#16181d')
     fireEvent.change(fgInput, { target: { value: '#fefefe' } })
 
     expect(
-      await screen.findByText(/Certaines combinaisons de couleurs échouent le contraste AA/),
+      await screen.findByText(/Ces couleurs ne sont pas assez contrastées pour être lues/),
     ).toBeDefined()
+    // The editor keeps what was typed, and saving is what is blocked.
+    expect((await colorTextField('#fefefe')).value).toBe('#fefefe')
+    expect(
+      (screen.getByRole('button', { name: 'Enregistrer' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
   })
 
   it('lists gallery skins and applies one on click', async () => {
@@ -243,7 +262,7 @@ describe('the appearance screen', () => {
     await waitFor(() =>
       expect(
         screen.getByText(
-          'Certaines valeurs ci-dessous sont des surcharges enregistrées en base, par-dessus theme.tokens.json.',
+          'Certaines valeurs ci-dessous ont été personnalisées et enregistrées sur le site.',
         ),
       ).toBeDefined(),
     )
@@ -255,7 +274,7 @@ describe('the appearance screen', () => {
     await goToAppearance()
     await personalize()
 
-    expect(screen.queryByRole('button', { name: 'Exporter vers theme.tokens.json' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Écrire dans le fichier du thème' })).toBeNull()
   })
 
   it('shows the export-to-file action under development', async () => {
@@ -265,30 +284,76 @@ describe('the appearance screen', () => {
     await personalize()
 
     expect(
-      await screen.findByRole('button', { name: 'Exporter vers theme.tokens.json' }),
+      await screen.findByRole('button', { name: 'Écrire dans le fichier du thème' }),
     ).toBeDefined()
   })
 })
 
 describe('the appearance screen — gallery/personalize navigation (fiche 48)', () => {
-  it('goes from the gallery to personalization and back, preserving the edit made in between', async () => {
+  it('asks before leaving personalization with an unsaved edit, and keeps the edit when told to stay', async () => {
     signedIn(['admin'])
     render(<App />)
     await goToAppearance()
     await personalize()
 
-    const accentInput = await screen.findByDisplayValue('#1d4ed8')
+    const accentInput = await colorTextField('#1d4ed8')
     fireEvent.change(accentInput, { target: { value: '#7c3aed' } })
 
     fireEvent.click(screen.getByRole('button', { name: 'Retour à la galerie' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Quitter sans enregistrer ?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Rester ici' }))
+
+    // Still on the personalization screen, with the edit intact.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect((await colorTextField('#7c3aed')).value).toBe('#7c3aed')
+    expect(screen.queryByRole('heading', { name: 'Thème du site' })).toBeNull()
+  })
+
+  it('saves the edit and leaves for the gallery in one step, and the saved value is there on return', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+    await personalize()
+
+    fireEvent.change(await colorTextField('#1d4ed8'), { target: { value: '#7c3aed' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Retour à la galerie' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Quitter sans enregistrer ?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer et quitter' }))
+
     await screen.findByRole('heading', { name: 'Thème du site' })
     // Back on the gallery: the personalization controls are gone again.
     expect(screen.queryByDisplayValue('#7c3aed')).toBeNull()
 
     await personalize()
-    // The unsaved edit survived the round trip — this is in-page navigation,
-    // never a reload, so component state is untouched.
-    expect(await screen.findByDisplayValue('#7c3aed')).toBeDefined()
+    expect((await colorTextField('#7c3aed')).value).toBe('#7c3aed')
+  })
+
+  it('drops the edit when told to leave without saving', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+    await personalize()
+
+    fireEvent.change(await colorTextField('#1d4ed8'), { target: { value: '#7c3aed' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Retour à la galerie' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Quitter sans enregistrer ?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Quitter sans enregistrer' }))
+
+    await screen.findByRole('heading', { name: 'Thème du site' })
+    await personalize()
+    expect((await colorTextField('#1d4ed8')).value).toBe('#1d4ed8')
+    expect(screen.queryByDisplayValue('#7c3aed')).toBeNull()
+  })
+
+  it('leaves for the gallery without asking when nothing was edited', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToAppearance()
+    await personalize()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retour à la galerie' }))
+    await screen.findByRole('heading', { name: 'Thème du site' })
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('shows version and author on every gallery card, from the theme manifest', async () => {
@@ -356,12 +421,11 @@ describe('the appearance screen — theme picker (fiche L23)', () => {
     const canonicalCard = (await screen.findByText('Canonical')).closest('li')
     expect(canonicalCard).not.toBeNull()
     expect(canonicalCard?.textContent).toContain('Actif')
-    // The active theme's own action is disabled — visible, never hidden, so
-    // the card's shape stays identical across every theme in the list.
-    const selectButton = within(canonicalCard as HTMLElement).getByRole('button', {
-      name: 'Sélectionner',
-    })
-    expect((selectButton as HTMLButtonElement).disabled).toBe(true)
+    // The active theme offers no "Sélectionner" any more: it is already the
+    // one running, so its card shows "Personnaliser" in that slot instead.
+    expect(
+      within(canonicalCard as HTMLElement).queryByRole('button', { name: 'Sélectionner' }),
+    ).toBeNull()
     // Only the active card gets a way into personalization (fiche 48) —
     // colours apply to whichever theme is active, so there is exactly one
     // meaningful destination, never a "Personnaliser" per inactive theme.
@@ -408,9 +472,7 @@ describe('the appearance screen — theme picker (fiche L23)', () => {
     expect(themeActivations).toEqual([{ theme: '@cogenta/theme-portfolio', applySkin: false }])
     await personalize('Portfolio')
     expect(
-      screen.getByText(
-        "Chaque valeur affichée ici vient de theme.tokens.json — rien n'a encore été surchargé.",
-      ),
+      screen.getByText("Ces valeurs sont celles du thème : vous n'avez encore rien personnalisé."),
     ).toBeDefined()
   })
 
@@ -467,7 +529,10 @@ describe('the appearance screen — a theme with its sample data (L28)', () => {
     const restaurant = (await screen.findByText('Restaurant')).closest('li') as HTMLElement
     expect(within(restaurant).getByText('Site de démonstration inclus')).toBeDefined()
     fireEvent.click(within(restaurant).getByRole('button', { name: "Données d'exemple" }))
-    const dialog = await screen.findByRole('dialog', { name: 'Utiliser « Restaurant »' })
+    // "Données d'exemple" opens straight on the sample-data choice, not on the theme choice.
+    const dialog = await screen.findByRole('dialog', {
+      name: "Appliquer « Restaurant » avec ses données d'exemple",
+    })
     expect(within(dialog).getByRole('button', { name: /Conserver mon contenu/ })).toBeDefined()
     const canonical = screen.getByText('Canonical').closest('li') as HTMLElement
     expect(within(canonical).queryByText('Site de démonstration inclus')).toBeNull()
@@ -578,7 +643,9 @@ describe('the appearance screen — a theme with its sample data (L28)', () => {
     })
     sampleDataApplications.length = 0
     const dialog = await openRestaurant()
-    expect(within(dialog).getByText(/n'est possible que sous « cogenta dev »/)).toBeDefined()
+    expect(
+      within(dialog).getByText(/relancez le site avec la commande « cogenta dev »/),
+    ).toBeDefined()
     fireEvent.click(within(dialog).getByRole('button', { name: /Conserver mon contenu/ }))
     const preview = await screen.findByRole('dialog', {
       name: "Appliquer « Restaurant » avec ses données d'exemple",
@@ -751,7 +818,9 @@ describe('the appearance screen — the sub-view has its own URL (fiche 71)', ()
     window.history.pushState(null, '', '/appearance?view=customize')
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Personnaliser', level: 2 })).toBeDefined()
+    expect(
+      await screen.findByRole('heading', { name: 'Personnaliser le thème Canonical', level: 2 }),
+    ).toBeDefined()
   })
 })
 
@@ -777,41 +846,34 @@ describe('the appearance screen — "Marque" card (fiche 68 task 5, moved from R
     await goToAppearance()
     await personalize()
 
-    await screen.findByText('Logo personnalisé')
+    await screen.findByText('Logo à la place de celui de Cogenta')
     // Scoped to the "Marque" card — the "Identité" card right above it also
     // has four unset media pickers of its own, each showing the very same
     // "Choisir…" label.
     const brandingCard = screen.getByRole('region', { name: 'Marque' })
     expect(within(brandingCard).getByRole('button', { name: 'Choisir…' })).toBeDefined()
-    expect(
-      screen.getByText(/ne prend effet qu'une fois « Afficher la marque Cogenta » désactivé/),
-    ).toBeDefined()
+    expect(screen.getByText(/une fois « Afficher la marque Cogenta » décoché/)).toBeDefined()
   })
 })
 
 describe('the appearance screen — "Enregistrement automatique" toggle (shared with Réglages)', () => {
-  it('shows a "Enregistrer la marque" and a "Enregistrer l\'identité" button, disabled while autosave is on', async () => {
+  it('has one single save button for the whole screen, disabled while autosave leaves nothing pending', async () => {
     signedIn(['admin'])
     render(<App />)
     await goToAppearance()
     await personalize()
 
-    const brandingSave = (await screen.findByRole('button', {
-      name: 'Enregistrer la marque',
-    })) as HTMLButtonElement
-    expect(brandingSave.disabled).toBe(true)
+    const save = (await screen.findByRole('button', { name: 'Enregistrer' })) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
 
-    const identitySave = screen.getByRole('button', {
-      name: "Enregistrer l'identité",
-    }) as HTMLButtonElement
-    expect(identitySave.disabled).toBe(true)
-
-    // Distinct from the token editor's own "Enregistrer" — three buttons,
-    // three different accessible names, never a collision.
-    expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeDefined()
+    // The colours, the identity images and the Cogenta credit used to have a
+    // save button each; a change made in one was lost by saving another.
+    expect(screen.queryByRole('button', { name: 'Enregistrer la marque' })).toBeNull()
+    expect(screen.queryByRole('button', { name: "Enregistrer l'identité" })).toBeNull()
+    expect(screen.getAllByRole('button', { name: /^Enregistrer$/ })).toHaveLength(1)
   })
 
-  it('defers the branding toggle to a draft, with no write, until "Enregistrer la marque" is clicked', async () => {
+  it('defers the branding toggle to a draft, with no write, until the screen\'s "Enregistrer" is clicked', async () => {
     signedIn(['admin'])
     localStorage.setItem('cogenta.admin.autosaveEnabled', 'false')
     render(<App />)
@@ -825,13 +887,14 @@ describe('the appearance screen — "Enregistrement automatique" toggle (shared 
     // Shown right away, locally — but nothing sent yet.
     expect(toggle.checked).toBe(false)
 
-    const brandingSave = screen.getByRole('button', {
-      name: 'Enregistrer la marque',
-    }) as HTMLButtonElement
-    expect(brandingSave.disabled).toBe(false)
+    const save = screen.getByRole('button', { name: 'Enregistrer' }) as HTMLButtonElement
+    await waitFor(() => expect(save.disabled).toBe(false))
 
-    fireEvent.click(brandingSave)
-    await screen.findByText('Enregistré.')
+    fireEvent.click(save)
+    // Confirmed twice: by the Marque card and by the screen's own save bar.
+    expect((await screen.findAllByText('Enregistré.')).length).toBeGreaterThan(0)
+    // Nothing left pending afterwards, so leaving does not ask anything.
+    await waitFor(() => expect(save.disabled).toBe(true))
 
     // Really persisted: leaving and re-entering personalization re-fetches
     // the branding settings from the mock's own store.

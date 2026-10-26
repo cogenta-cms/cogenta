@@ -85,8 +85,10 @@ export interface ImportRouterOptions {
     readonly source: ImportSourceLike
     readonly text: string
     readonly createdBy: string | null
-    /** CSV/RSS only: which collection to propose a field mapping against. Ignored by WordPress and JSON, whose targets are not a single caller choice. */
+    /** CSV/RSS: which collection to propose a field mapping against. WordPress: the collection that receives posts. Ignored by JSON. */
     readonly targetCollection?: string
+    /** WordPress only: the collection that receives pages. */
+    readonly pageCollection?: string
   }) => Promise<ImportRunLike>
   /** Applies a previously analyzed run — resumable, safe to call again on the same id. */
   readonly apply?: (input: {
@@ -222,7 +224,9 @@ export function createImportRouter(options: ImportRouterOptions): ImportRouter {
     if (request.method.toUpperCase() !== 'POST') return methodNotAllowed(['POST'])
     if (options.analyze === undefined) throw notAvailable('preview/apply')
 
-    const body = request.body as { source?: unknown; targetCollection?: unknown } | undefined
+    const body = request.body as
+      | { source?: unknown; targetCollection?: unknown; pageCollection?: unknown }
+      | undefined
     if (!isImportSource(body?.source)) {
       throw new CogentaError({
         code: 'IMPORT_SOURCE_INVALID',
@@ -239,6 +243,7 @@ export function createImportRouter(options: ImportRouterOptions): ImportRouter {
       ...(typeof body.targetCollection === 'string'
         ? { targetCollection: body.targetCollection }
         : {}),
+      ...(typeof body.pageCollection === 'string' ? { pageCollection: body.pageCollection } : {}),
     })
     return jsonResponse(200, { data: run })
   }

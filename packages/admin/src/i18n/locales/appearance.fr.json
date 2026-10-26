@@ -1,0 +1,176 @@
+{
+  "appearance": {
+    "description": "Changez les couleurs, les polices et l'identité du site sans toucher au code. Les changements s'enregistrent sur le site et s'appliquent dès la prochaine page vue.",
+    "themeDescription": "Le thème dessine la mise en page publique du site. Vos couleurs et vos polices s'appliquent par-dessus, quel que soit le thème. Le changement prend effet à la prochaine page vue, sans redémarrage.",
+    "themeSandboxLinkAction": "Gérer mes thèmes personnels (créer, importer, exporter)",
+    "provenanceFileOnly": "Ces valeurs sont celles du thème : vous n'avez encore rien personnalisé.",
+    "provenanceOverridden": "Certaines valeurs ci-dessous ont été personnalisées et enregistrées sur le site.",
+    "provenanceUnsaved": "Modifications non enregistrées. L'aperçu les montre déjà ; le site public ne change qu'après « Enregistrer ».",
+    "customizeHeadingTheme": "Personnaliser le thème {{theme}}",
+    "galleryHeading": "Palettes enregistrées",
+    "galleryIntro": "Des palettes de couleurs ajoutées à ce site. Appliquer une palette remplace les couleurs actuelles.",
+    "galleryEmpty": "Aucune palette enregistrée pour l'instant. Les palettes prêtes à l'emploi se trouvent en haut de cet écran.",
+    "palettesHeading": "Palettes prêtes à l'emploi",
+    "palettesIntro": "Un point de départ : choisissez une palette, elle remplit les sept couleurs. L'aperçu la montre tout de suite et rien n'est publié avant « Enregistrer ».",
+    "paletteApply": "Utiliser la palette {{name}}",
+    "palette": {
+      "ink": "Encre et bleu",
+      "forest": "Forêt",
+      "terracotta": "Terre cuite",
+      "plum": "Prune",
+      "sand": "Sable et sarcelle",
+      "contrast": "Contraste élevé",
+      "ocean-night": "Nuit océan",
+      "graphite": "Graphite et ambre"
+    },
+    "colorPickerLabel": "Choisir la couleur « {{name}} »",
+    "fontSystem": "Police du système",
+    "fontGroup": {
+      "sans": "Sans empattement",
+      "serif": "Avec empattement",
+      "mono": "Chasse fixe"
+    },
+    "customFont": "Personnalisée ({{name}})",
+    "customChoice": "Personnalisé",
+    "unitLabel": "Unité de « {{name}} »",
+    "millisecondsUnit": "millisecondes",
+    "reducedMotionNote": "Les animations sont toujours désactivées pour les visiteurs qui le demandent dans leur système (accessibilité) : ce n'est pas un réglage.",
+    "density": {
+      "compact": "Compacte",
+      "comfortable": "Confortable",
+      "spacious": "Aérée"
+    },
+    "easing": {
+      "standard": "Standard",
+      "soft": "Douce",
+      "in": "Démarrage lent",
+      "out": "Arrivée lente",
+      "inOut": "Démarrage et arrivée lents",
+      "linear": "Régulière"
+    },
+    "shadow": {
+      "none": "Aucune",
+      "line": "Simple filet",
+      "light": "Légère",
+      "medium": "Moyenne",
+      "strong": "Marquée"
+    },
+    "token": {
+      "font": {
+        "sans": "Police du texte",
+        "serif": "Police des titres (avec empattement)",
+        "mono": "Police du code",
+        "scale": "Écart entre les tailles de titres",
+        "baseSize": "Taille du texte"
+      },
+      "space": {
+        "unit": "Unité d'espacement",
+        "density": "Densité"
+      },
+      "radius": {
+        "sm": "Coins légèrement arrondis",
+        "md": "Coins arrondis",
+        "lg": "Coins très arrondis"
+      },
+      "motion": {
+        "duration": "Durée des animations",
+        "easing": "Rythme des animations"
+      },
+      "shadow": {
+        "sm": "Ombre des petits éléments",
+        "md": "Ombre des cartes et fenêtres"
+      }
+    },
+    "tokenHelp": {
+      "font": {
+        "scale": "1,25 donne des titres nettement plus grands que le texte ; 1,1 les rapproche.",
+        "baseSize": "La taille du texte courant ; tout le reste s'en déduit."
+      },
+      "space": {
+        "unit": "Les marges et les espaces sont des multiples de cette valeur."
+      }
+    },
+    "contrastWarningHeading": "Ces couleurs ne sont pas assez contrastées pour être lues confortablement (norme d'accessibilité WCAG AA) :",
+    "contrastWarningLine": "« {{foreground}} » sur « {{background}} » : contraste de {{ratio}}:1, il en faut au moins {{required}}:1",
+    "contrastWarningAdvice": "Assombrissez le texte ou éclaircissez le fond (ou l'inverse). Vous ne pourrez enregistrer qu'une fois le contraste suffisant.",
+    "previewCorrectedNote": "L'aperçu corrige provisoirement les textes illisibles pour que vous puissiez continuer à juger le reste.",
+    "saveBlockedByContrast": "Corrigez le contraste des couleurs pour enregistrer.",
+    "unsavedChanges": "Modifications non enregistrées",
+    "previewOpenAction": "Voir l'aperçu",
+    "errors": {
+      "contrast": "Ces couleurs ne sont pas assez contrastées : le texte serait difficile à lire. Modifiez la couleur du texte ou celle du fond.",
+      "invalidValue": "Une des valeurs saisies n'est pas valide. Vérifiez les couleurs (par exemple #1f4fd8) et les dimensions.",
+      "tokenSet": "Ce réglage n'existe pas dans ce thème.",
+      "scale": "L'écart entre les tailles de titres doit rester supérieur à 1."
+    },
+    "resetConfirmTitle": "Revenir aux valeurs du thème ?",
+    "resetConfirmBody": "Toutes vos personnalisations de couleurs, de polices et de CSS enregistrées sur ce site seront effacées. Le logo et l'identité ne sont pas touchés.",
+    "resetConfirmAction": "Revenir aux valeurs du thème",
+    "resetAction": "Revenir aux valeurs du thème",
+    "exportAction": "Écrire dans le fichier du thème",
+    "leaveTitle": "Quitter sans enregistrer ?",
+    "leaveBody": "Vous avez des modifications qui ne sont pas enregistrées. Si vous quittez maintenant, elles seront perdues.",
+    "leaveBodyContrast": "Vous avez des modifications non enregistrées, mais certaines couleurs ne sont pas assez contrastées : elles ne peuvent pas être enregistrées en l'état.",
+    "leaveStay": "Rester ici",
+    "leaveDiscard": "Quitter sans enregistrer",
+    "leaveSave": "Enregistrer et quitter",
+    "themePreviewOpen": "Voir le thème {{theme}} en grand",
+    "themePreviewOpenHint": "Agrandir",
+    "themePreviewLargeHint": "Aperçu avec un contenu de démonstration : votre contenu n'est pas utilisé.",
+    "sampleData": {
+      "activatesTheme": "Le thème « {{name}} » sera aussi activé.",
+      "devOnly": "Importer des données d'exemple modifie la structure du site, ce qui n'est possible qu'en mode développement. L'aperçu reste consultable ; pour importer, relancez le site avec la commande « cogenta dev »."
+    },
+    "field": {
+      "branding": {
+        "customLogoMediaId": {
+          "label": "Logo à la place de celui de Cogenta",
+          "help": "S'affiche dans le pied de page du site public et dans l'en-tête de l'admin, une fois « Afficher la marque Cogenta » décoché. Ne remplace pas le logo du site (« Identité » ci-dessus)."
+        }
+      }
+    }
+  },
+  "nav": {
+    "themeSandbox": "Thèmes locaux"
+  },
+  "breadcrumb": {
+    "themeSandbox": "Thèmes locaux",
+    "search": "Recherche",
+    "notFound": "Page introuvable"
+  },
+  "themeSandbox": {
+    "description": "Créez votre propre thème, ou importez-en un reçu sous forme de fichier zip : travaillez-le dans un brouillon, prévisualisez-le, puis déployez-le sur le site. Les fichiers d'un brouillon se modifient en dehors de cet écran, dans votre éditeur ou avec l'agent qui écrit du code de thème.",
+    "adminOnly": "Seul le rôle admin peut gérer les thèmes locaux.",
+    "sandboxesHeading": "Brouillons de thème",
+    "sandboxesDescription": "Une copie de travail : aucun visiteur ne la voit tant que vous ne l'avez pas déployée.",
+    "newSandboxIdLabel": "Nom du nouveau brouillon",
+    "cloneFromLabel": "Copier depuis",
+    "cloneFromNone": "Partir de zéro",
+    "cloneFromHelp": "La copie n'est possible que depuis un thème local déjà déployé ; aucun n'existe encore.",
+    "createError": "Ce brouillon n'a pas pu être créé.",
+    "noSandboxes": "Aucun brouillon pour l'instant. Donnez un nom ci-dessus pour en créer un.",
+    "previewIframeTitle": "Aperçu du brouillon « {{id}} »",
+    "deployDescription": "Le brouillon est analysé, vous voyez ce qui va se passer, et il n'est mis en service qu'après votre confirmation.",
+    "targetThemeNameLabel": "Nom du thème une fois déployé",
+    "checkError": "Ce brouillon n'a pas pu être vérifié.",
+    "checkPassed": "Ce brouillon est prêt à être déployé.",
+    "checkFailed": "Ce brouillon ne peut pas encore être déployé :",
+    "deployError": "Ce brouillon n'a pas pu être déployé.",
+    "versionsDescription": "Chaque fois qu'un thème est remplacé par une nouvelle version, l'ancienne est archivée avec sa date. Restaurer une version archive à son tour celle qu'elle remplace.",
+    "noLocalThemes": "Aucun thème local pour l'instant : déployez un brouillon pour en obtenir un.",
+    "noVersions": "Ce thème n'a jamais été remplacé : rien n'est archivé pour l'instant.",
+    "exportImportDescription": "Un thème sort et entre sous la forme d'un seul fichier zip. Un import arrive toujours dans un brouillon, jamais directement sur le site.",
+    "importSandboxIdLabel": "Nom du brouillon qui recevra le thème",
+    "importSandboxIdPlaceholder": "theme-importe",
+    "importFileLabel": "Fichier zip du thème",
+    "chooseFileAction": "Choisir un fichier",
+    "noFileChosen": "Aucun fichier choisi",
+    "importError": "Ce fichier n'a pas pu être importé.",
+    "imported": "Importé dans le brouillon « {{id}} » : prévisualisez-le et déployez-le comme n'importe quel autre brouillon.",
+    "deployWarning": "Une fois déployé, le code de ce thème s'exécute sur le serveur, avec les droits du site. Ne le déployez que si vous savez d'où il vient : un fichier zip reçu, ou du code écrit par un agent à partir d'un document externe, peut contenir des instructions malveillantes que la vérification automatique ne voit pas."
+  },
+  "adminAppearance": {
+    "previewSample": "Un aperçu des titres, du texte et des boutons de cet admin avec ce modèle.",
+    "customizeDescription": "Ces réglages s'appliquent par-dessus le modèle choisi. Videz un champ pour revenir à la valeur du modèle."
+  }
+}

@@ -1,10 +1,10 @@
 import { type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { type Product, type ProductTerm, setProductTerms } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
 import { listTerms, type Term } from '../api/taxonomy-client.js'
 import { useSchema } from '../schema/schema-context.js'
-import { Button, Notice, Select } from '../ui/index.js'
+import { Notice, Select } from '../ui/index.js'
+import { commerceErrorMessage } from './commerce-errors.js'
 
 /**
  * A product's classification against a taxonomy the site declares
@@ -68,17 +68,23 @@ export function ProductCategoryPicker({
   const labelOf = (term: Term): string =>
     term.labels[i18n.language] ?? Object.values(term.labels)[0] ?? term.slug
 
-  async function save(): Promise<void> {
+  /** Each tick is saved at once — there is no separate "save the categories" step to forget. */
+  async function toggle(termId: string): Promise<void> {
     if (taxonomy === '') return
+    const next = selected.includes(termId)
+      ? selected.filter((id) => id !== termId)
+      : [...selected, termId]
+    setSelected(next)
     setSaving(true)
     setError(null)
     setNotice(null)
     try {
-      const result = await setProductTerms(token, product.id, taxonomy, selected)
+      const result = await setProductTerms(token, product.id, taxonomy, next)
       onSaved([...existingTerms.filter((term) => term.taxonomy !== taxonomy), ...result.terms])
       setNotice(t('commerceProducts.categorySaved'))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.categoryError'))
+      setSelected(selected)
+      setError(commerceErrorMessage(t, caught, 'commerceProducts.categoryError'))
     } finally {
       setSaving(false)
     }
@@ -118,34 +124,29 @@ export function ProductCategoryPicker({
             ))}
           </Select>
         )}
-        {terms.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('commerceProducts.categoryEmpty')}</p>
-        ) : (
-          <Select
-            multiple
-            aria-label={t('commerceProducts.categoryTerms')}
-            value={selected}
-            onChange={(event) =>
-              setSelected([...event.target.selectedOptions].map((option) => option.value))
-            }
-          >
-            {terms.map((term) => (
-              <option key={term.id} value={term.id}>
-                {`${'— '.repeat(term.depth)}${labelOf(term)}`}
-              </option>
-            ))}
-          </Select>
-        )}
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          disabled={saving || taxonomy === ''}
-          onClick={() => void save()}
-        >
-          {t('commerceProducts.categorySave')}
-        </Button>
       </div>
+      {terms.length === 0 ? (
+        <p className="m-0 text-sm text-muted-foreground">{t('commerceProducts.categoryEmpty')}</p>
+      ) : (
+        <ul
+          aria-label={t('commerceProducts.categoryTerms')}
+          className="m-0 flex max-h-48 list-none flex-col gap-1 overflow-y-auto rounded-md border border-input bg-card p-2"
+        >
+          {terms.map((term) => (
+            <li key={term.id} style={{ paddingLeft: `${term.depth * 1.25}rem` }}>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(term.id)}
+                  disabled={saving}
+                  onChange={() => void toggle(term.id)}
+                />
+                {labelOf(term)}
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

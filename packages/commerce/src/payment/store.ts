@@ -8,6 +8,7 @@ import {
 } from '@cogenta/core'
 import { assertSameCurrency } from '../money.js'
 import type { OrderStore } from '../order/store.js'
+import { assertTransition } from '../order/types.js'
 import { toInt, toNullableText, toText } from '../rows.js'
 import { TABLES } from '../tables.js'
 import type { PaymentGateway, PaymentRecord, PaymentStatus, RefundRecord } from './types.js'
@@ -16,6 +17,16 @@ export interface PaymentStoreDependencies {
   readonly gateway: PaymentGateway
   readonly orders: OrderStore
 }
+
+/** How a payment recorded by hand arrived. Only for the order's history — the money is `driver: manual`. */
+export const MANUAL_PAYMENT_METHODS = [
+  'bank_transfer',
+  'cash',
+  'cheque',
+  'card_terminal',
+  'other',
+] as const
+export type ManualPaymentMethod = (typeof MANUAL_PAYMENT_METHODS)[number]
 
 export interface PaymentStore {
   /** Starts a payment for an order and records it. Idempotent per order. */
@@ -32,6 +43,26 @@ export interface PaymentStore {
   settle(
     paymentId: string,
     options?: { readonly actorId?: string | null; readonly note?: string },
+  ): Promise<PaymentRecord>
+  /**
+   * "The money arrived by some means this shop cannot see" — a bank transfer
+   * ticked off on the statement, cash, a cheque, a card terminal. Records a
+   * payment for the whole order (driver `manual`) already settled, through the
+   * same `settle` path as a webhook, so the order moves to `paid` exactly the
+   * same way. If a checkout already opened a pending payment for this order,
+   * that one is settled instead of a second being created.
+   *
+   * Refused with `COMMERCE_PAYMENT_ALREADY_RECORDED` when the order already
+   * has collected money, and with the transition error when the order is
+   * cancelled or refunded.
+   */
+  recordManual(
+    orderId: string,
+    options: {
+      readonly method: ManualPaymentMethod
+      readonly note?: string
+      readonly actorId?: string | null
+    },
   ): Promise<PaymentRecord>
   fail(paymentId: string, reason: string): Promise<PaymentRecord>
   /** Re-reads from the gateway and settles if it now says paid. */
@@ -252,6 +283,60 @@ export function createPaymentStore(
       return result.rows.map(decode)
     },
 
+    recordManual: async (orderId, options) => {
+      const order = await dependencies.orders.read(orderId)
+      if (order === null) {
+        throw new CogentaError({
+          code: 'COMMERCE_ORDER_NOT_FOUND',
+          message: 'This order does not exist.',
+          hint: 'Check the order reference.',
+        })
+      }
+      if (!(MANUAL_PAYMENT_METHODS as readonly string[]).includes(options.method)) {
+        throw new CogentaError({
+          code: 'COMMERCE_REQUEST_INVALID',
+          message: `"${options.method}" is not a payment method.`,
+          hint: `Use one of: ${MANUAL_PAYMENT_METHODS.join(', ')}.`,
+        })
+      }
+
+      const existing = await db.query<PaymentRow>(
+        sql`select * from ${payments} where order_id = ${orderId} order by created_at asc`,
+      )
+      const known = existing.rows.map(decode)
+      if (known.some((payment) => payment.status === 'paid' || payment.status === 'refunded')) {
+        throw new CogentaError({
+          code: 'COMMERCE_PAYMENT_ALREADY_RECORDED',
+          message: 'This order already has a collected payment.',
+          hint: 'Nothing more to record. To give money back, issue a refund.',
+          details: { orderId },
+        })
+      }
+      // A cancelled or refunded order is final; so is any other state a
+      // payment cannot move out of.
+      if (order.status !== 'paid') assertTransition(order.status, 'paid')
+
+      const note =
+        `Manual payment recorded (${options.method})` +
+        (options.note === undefined || options.note.trim() === ''
+          ? '.'
+          : `: ${options.note.trim()}`)
+
+      const live = known.find(
+        (payment) => payment.status === 'pending' || payment.status === 'authorised',
+      )
+      if (live !== undefined) return settleOnce(live.id, options.actorId ?? null, note)
+
+      const id = newId(now)
+      const at = stamp()
+      await db.query(sql`
+        insert into ${payments} (id, order_id, driver, external_id, status, amount_minor,
+                                 currency, instructions, created_at, updated_at)
+        values (${id}, ${orderId}, ${'manual'}, ${null}, ${'pending'}, ${order.totalMinor},
+                ${order.currency}, ${null}, ${at}, ${at})`)
+      return settleOnce(id, options.actorId ?? null, note)
+    },
+
     settle: async (paymentId, options) =>
       settleOnce(paymentId, options?.actorId ?? null, options?.note ?? null),
 
@@ -275,7 +360,7 @@ export function createPaymentStore(
       const payment = await load(paymentId)
       if (payment.status !== 'paid' && payment.status !== 'refunded') {
         throw new CogentaError({
-          code: 'COMMERCE_PAYMENT_FAILED',
+          code: 'COMMERCE_REFUND_NO_PAYMENT',
           message: 'Only a settled payment can be refunded.',
           hint: 'Cancel the order instead — nothing has been taken yet.',
           details: { paymentId, status: payment.status },

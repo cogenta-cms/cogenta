@@ -1,7 +1,16 @@
-import { type ChangeEvent, type JSX, useCallback, useEffect, useMemo, useState } from 'react'
+import { type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { ApiError } from '../api/client.js'
+import { ConfirmAction } from '../ai/confirm-action.js'
+import { formatDateTime } from '../ai/format-date.js'
+import {
+  describeAiError,
+  designDirection,
+  localizePlanNote,
+  planFollowUp,
+  planSkipReason,
+} from '../ai/server-text.js'
+import { useFlash } from '../ai/use-flash.js'
 import {
   type AppliedPlanReport,
   applySitePlan,
@@ -19,6 +28,7 @@ import {
 import { NoProviderNotice } from '../assist/no-provider-notice.js'
 import { useAuth } from '../auth/auth-context.js'
 import {
+  Badge,
   Button,
   buttonVariants,
   Card,
@@ -26,8 +36,11 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  FileButton,
+  Modal,
   Notice,
 } from '../ui/index.js'
+import { ThemeCandidatePreview } from './theme-generator-preview.js'
 
 /**
  * L19 tasks 5 and 7 — upload a specification, read what the agent understood,
@@ -48,7 +61,9 @@ import {
  *   simply does not pretend otherwise.
  *
  * A design section is the one exception in shape: its items are alternatives,
- * so they are radio buttons. Choosing one still rejects the others explicitly.
+ * so they are radio buttons — each with a preview of the site in that design,
+ * rendered by the same isolated frame the theme generator uses. Choosing one
+ * still rejects the others explicitly.
  */
 
 type Decisions = Record<string, PlanItemDecision>
@@ -66,7 +81,7 @@ function itemCount(sections: readonly PlanSection[]): number {
 }
 
 export function SitePlanRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
@@ -79,7 +94,12 @@ export function SitePlanRoute(): JSX.Element {
   const [report, setReport] = useState<AppliedPlanReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [analysing, setAnalysing] = useState(false)
+  const [files, setFiles] = useState<readonly File[]>([])
   const [error, setError] = useState<{ message: string; hint?: string } | null>(null)
+  const [pendingDiscard, setPendingDiscard] = useState<SitePlanSummary | null>(null)
+  const [enlarged, setEnlarged] = useState<{ id: string; label: string } | null>(null)
+  const flash = useFlash()
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -90,11 +110,7 @@ export function SitePlanRoute(): JSX.Element {
       setPlans(list.data)
       setPlannerAvailable(list.plannerAvailable)
     } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? { message: caught.message, ...(caught.hint === undefined ? {} : { hint: caught.hint }) }
-          : { message: t('sitePlan.loadError') },
-      )
+      setError(describeAiError(caught, t, t('sitePlan.loadError')))
     } finally {
       setLoading(false)
     }
@@ -104,31 +120,31 @@ export function SitePlanRoute(): JSX.Element {
     void load()
   }, [load])
 
-  const fail = useCallback((caught: unknown, fallback: string) => {
-    setError(
-      caught instanceof ApiError
-        ? { message: caught.message, ...(caught.hint === undefined ? {} : { hint: caught.hint }) }
-        : { message: fallback },
-    )
-  }, [])
+  const fail = useCallback(
+    (caught: unknown, fallback: string) => {
+      setError(describeAiError(caught, t, fallback))
+    },
+    [t],
+  )
 
-  async function upload(event: ChangeEvent<HTMLInputElement>): Promise<void> {
-    const files = [...(event.target.files ?? [])]
-    event.target.value = ''
+  async function analyse(): Promise<void> {
     if (token === null || files.length === 0) return
     setBusy(true)
+    setAnalysing(true)
     setError(null)
     setReport(null)
     try {
       const documents = await Promise.all(files.map(toUploadedDocument))
-      const detail = await proposeSitePlan(token, documents)
+      const detail = await proposeSitePlan(token, documents, undefined, i18n.language)
       setSelected(detail)
       setDecisions({ ...detail.decisions })
+      setFiles([])
       await load()
     } catch (caught) {
       fail(caught, t('sitePlan.proposeError'))
     } finally {
       setBusy(false)
+      setAnalysing(false)
     }
   }
 
@@ -138,7 +154,7 @@ export function SitePlanRoute(): JSX.Element {
     setError(null)
     setReport(null)
     try {
-      const detail = await getSitePlan(token, id)
+      const detail = await getSitePlan(token, id, i18n.language)
       setSelected(detail)
       setDecisions({ ...detail.decisions })
     } catch (caught) {
@@ -168,6 +184,7 @@ export function SitePlanRoute(): JSX.Element {
     setError(null)
     try {
       await recordSitePlanDecisions(token, selected.id, decisions)
+      flash.show(t('sitePlan.progressSaved'))
       await load()
     } catch (caught) {
       fail(caught, t('sitePlan.saveError'))
@@ -195,17 +212,19 @@ export function SitePlanRoute(): JSX.Element {
     }
   }
 
-  async function discard(id: string): Promise<void> {
+  async function discard(plan: SitePlanSummary): Promise<void> {
     if (token === null) return
     setBusy(true)
     try {
-      await deleteSitePlan(token, id)
-      if (selected?.id === id) setSelected(null)
+      await deleteSitePlan(token, plan.id)
+      if (selected?.id === plan.id) setSelected(null)
+      flash.show(t('sitePlan.discarded'))
       await load()
     } catch (caught) {
       fail(caught, t('sitePlan.deleteError'))
     } finally {
       setBusy(false)
+      setPendingDiscard(null)
     }
   }
 
@@ -215,6 +234,13 @@ export function SitePlanRoute(): JSX.Element {
     [selected, decisions],
   )
   const remaining = total - decided
+  const skinsById = useMemo(
+    () =>
+      new Map<string, NonNullable<SitePlanDetail['draft']['skins']>[number]>(
+        (selected?.draft.skins ?? []).map((skin) => [`skin:${skin.id}`, skin]),
+      ),
+    [selected],
+  )
 
   if (!isAdmin) {
     return (
@@ -226,16 +252,28 @@ export function SitePlanRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="site-plan-heading" className="flex flex-col gap-6">
+    <section aria-labelledby="site-plan-heading" className="flex min-w-0 flex-col gap-6">
       <div>
-        <h1 id="site-plan-heading">{t('sitePlan.heading')}</h1>
-        <p className="text-muted-foreground">{t('sitePlan.intro')}</p>
+        <h1 id="site-plan-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
+          {t('sitePlan.heading')}
+        </h1>
+        <p className="m-0 mt-1 max-w-3xl text-sm text-muted-foreground">{t('sitePlan.intro')}</p>
       </div>
 
       {error !== null && (
         <Notice tone="danger" live="assertive">
           <p>{error.message}</p>
           {error.hint !== undefined && <p>{error.hint}</p>}
+        </Notice>
+      )}
+      {flash.message !== null && (
+        <Notice
+          tone="success"
+          live="polite"
+          onDismiss={flash.clear}
+          dismissLabel={t('common.close')}
+        >
+          <p>{flash.message}</p>
         </Notice>
       )}
 
@@ -252,16 +290,46 @@ export function SitePlanRoute(): JSX.Element {
           </CardTitle>
           <CardDescription>{t('sitePlan.uploadHelp')}</CardDescription>
         </CardHeader>
-        <CardBody>
-          <label htmlFor="site-plan-upload">{t('sitePlan.uploadLabel')}</label>
-          <input
+        <CardBody className="flex flex-col gap-3">
+          <label htmlFor="site-plan-upload" className="text-sm font-medium">
+            {t('sitePlan.uploadLabel')}
+          </label>
+          <FileButton
             id="site-plan-upload"
-            type="file"
             multiple
             accept=".pdf,.docx,.md,.markdown,.txt"
+            label={t('sitePlan.chooseFiles')}
+            emptyLabel={t('sitePlan.noFileChosen')}
             disabled={busy || !plannerAvailable}
-            onChange={(event) => void upload(event)}
+            onChange={(event) => setFiles([...(event.target.files ?? [])])}
           />
+          {files.length > 1 && (
+            <p className="m-0 text-xs text-muted-foreground">
+              {t('sitePlan.filesChosen', {
+                count: files.length,
+                names: files.map((f) => f.name).join(', '),
+              })}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              disabled={busy || !plannerAvailable || files.length === 0}
+              onClick={() => void analyse()}
+            >
+              {analysing ? t('sitePlan.analysing') : t('sitePlan.analyse')}
+            </Button>
+            {files.length === 0 && plannerAvailable && (
+              <span className="text-xs text-muted-foreground">
+                {t('sitePlan.analyseNeedsFile')}
+              </span>
+            )}
+            {analysing && (
+              <span role="status" className="text-xs text-muted-foreground">
+                {t('sitePlan.analysingHint')}
+              </span>
+            )}
+          </div>
         </CardBody>
       </Card>
 
@@ -273,28 +341,49 @@ export function SitePlanRoute(): JSX.Element {
         </CardHeader>
         <CardBody>
           {loading && <p>{t('common.loading')}</p>}
-          {!loading && plans.length === 0 && <p>{t('sitePlan.noDrafts')}</p>}
-          <ul>
+          {!loading && plans.length === 0 && (
+            <p className="m-0 text-sm text-muted-foreground">{t('sitePlan.noDrafts')}</p>
+          )}
+          <ul className="m-0 flex list-none flex-col gap-3 p-0">
             {plans.map((plan) => (
-              <li key={plan.id}>
-                <Button type="button" variant="ghost" onClick={() => void open(plan.id)}>
-                  {plan.activity || plan.id}
-                </Button>
-                <span>
-                  {' '}
-                  {plan.sources.join(', ')} — {plan.createdAt}
-                  {plan.appliedAt === undefined
-                    ? ''
-                    : ` — ${t('sitePlan.appliedOn', { at: plan.appliedAt })}`}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => void discard(plan.id)}
-                >
-                  {t('sitePlan.discard')}
-                </Button>
+              <li
+                key={plan.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
+              >
+                <div className="min-w-0">
+                  <p className="m-0 text-sm font-medium break-words">{plan.activity || plan.id}</p>
+                  <p className="m-0 mt-0.5 text-xs text-muted-foreground break-words">
+                    {plan.sources.join(', ')} — {formatDateTime(plan.createdAt, i18n.language)}
+                  </p>
+                  {plan.appliedAt !== undefined && (
+                    <Badge tone="success" className="mt-1">
+                      {t('sitePlan.appliedOn', {
+                        at: formatDateTime(plan.appliedAt, i18n.language),
+                      })}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={selected?.id === plan.id ? 'primary' : 'secondary'}
+                    disabled={busy}
+                    onClick={() => void open(plan.id)}
+                  >
+                    {t('sitePlan.review')}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    disabled={busy}
+                    onClick={() => setPendingDiscard(plan)}
+                  >
+                    {t('sitePlan.discard')}
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
@@ -302,7 +391,7 @@ export function SitePlanRoute(): JSX.Element {
       </Card>
 
       {report !== null && (
-        <Notice tone="success" live="polite">
+        <Notice tone="success" live="polite" title={t('sitePlan.appliedTitle')}>
           <p>
             {t('sitePlan.appliedSummary', {
               added: report.added.length,
@@ -313,17 +402,19 @@ export function SitePlanRoute(): JSX.Element {
           {report.added.length > 0 && <p>{report.added.join(', ')}</p>}
           {report.skipped.map((entry) => (
             <p key={entry.name}>
-              {entry.name}: {entry.reason}
+              {entry.name} : {planSkipReason(entry.reasonKey, entry.reason, t)}
             </p>
           ))}
           {(report.pagesSkipped ?? []).map((page) => (
             <p key={page.title}>
-              {page.title}: {page.reason}
+              {page.title} : {planSkipReason(page.reasonKey, page.reason, t)}
             </p>
           ))}
-          {report.followUp.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
+          {report.followUp.map((line, index) => {
+            const coded = report.followUpKeys?.[index]
+            const worded = coded === undefined ? '' : planFollowUp(coded.key, coded.count, t)
+            return <p key={line}>{worded === '' ? line : worded}</p>
+          })}
           {/*
             The other half of "the AI builds my site". A plan settles what the
             site *is* — its collections, its pages, its palette — and stops
@@ -347,28 +438,32 @@ export function SitePlanRoute(): JSX.Element {
 
       {selected !== null && (
         <section aria-labelledby="site-plan-review-heading" className="flex flex-col gap-4">
-          <h2 id="site-plan-review-heading">{t('sitePlan.reviewHeading')}</h2>
-          <p>{selected.draft.brief.summary}</p>
+          <h2 id="site-plan-review-heading" className="m-0 text-lg font-semibold">
+            {t('sitePlan.reviewHeading')}
+          </h2>
+          <p className="m-0 text-sm">{selected.draft.brief.summary}</p>
 
           {selected.draft.violations.map((violation) => (
             <Notice tone="warning" key={violation.explanation}>
-              <p>{violation.explanation}</p>
+              <p>{localizePlanNote(violation.explanation, t)}</p>
             </Notice>
           ))}
           {selected.draft.warnings.map((warning) => (
             <Notice tone="warning" key={warning}>
-              <p>{warning}</p>
+              <p>{localizePlanNote(warning, t)}</p>
             </Notice>
           ))}
 
           {selected.appliedAt !== undefined && (
             <Notice tone="info">
-              <p>{t('sitePlan.appliedOn', { at: selected.appliedAt })}</p>
+              <p>
+                {t('sitePlan.appliedOn', { at: formatDateTime(selected.appliedAt, i18n.language) })}
+              </p>
             </Notice>
           )}
 
           {selected.sections.map((section) => (
-            <Card key={section.id}>
+            <Card key={section.id} className="min-w-0">
               <CardHeader>
                 <CardTitle>
                   <h3>{section.title}</h3>
@@ -376,64 +471,123 @@ export function SitePlanRoute(): JSX.Element {
                 <CardDescription>{section.description}</CardDescription>
               </CardHeader>
               <CardBody>
-                {section.items.length === 0 && <p>{t('sitePlan.sectionEmpty')}</p>}
+                {section.items.length === 0 && (
+                  <p className="m-0 text-sm text-muted-foreground">{t('sitePlan.sectionEmpty')}</p>
+                )}
 
                 {section.mode === 'one-of' ? (
-                  <fieldset>
-                    <legend>{section.title}</legend>
-                    {section.items.map((item) => (
-                      <div key={item.id}>
-                        <input
-                          type="radio"
-                          id={item.id}
-                          name={`section-${section.id}`}
-                          checked={decisions[item.id] === 'accepted'}
-                          onChange={() => choose(section, item.id)}
-                        />
-                        <label htmlFor={item.id}>{item.title}</label>
-                        <p>{item.detail}</p>
-                      </div>
-                    ))}
+                  <fieldset className="m-0 min-w-0 border-0 p-0">
+                    <legend className="sr-only">{section.title}</legend>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {section.items.map((item) => {
+                        const skin = skinsById.get(item.id)
+                        const direction = designDirection(skin?.label ?? item.title, t)
+                        const chosen = decisions[item.id] === 'accepted'
+                        return (
+                          <div
+                            key={item.id}
+                            className={`flex min-w-0 flex-col gap-2 rounded-lg border p-3 ${
+                              chosen ? 'border-primary bg-accent/40' : 'border-border'
+                            }`}
+                          >
+                            {skin !== undefined && token !== null && (
+                              <button
+                                type="button"
+                                aria-label={t('sitePlan.enlargePreview', {
+                                  label: direction.label,
+                                })}
+                                className="block w-full cursor-zoom-in appearance-none border-0 bg-transparent p-0 text-left"
+                                onClick={() => setEnlarged({ id: item.id, label: direction.label })}
+                              >
+                                <ThemeCandidatePreview
+                                  token={token}
+                                  candidate={{
+                                    kind: 'tokens',
+                                    id: skin.id,
+                                    label: direction.label,
+                                    rationale: skin.rationale,
+                                    tokens: skin.tokens,
+                                  }}
+                                  activeThemeName=""
+                                  className="h-40"
+                                />
+                              </button>
+                            )}
+                            <div className="flex items-start gap-2">
+                              <input
+                                type="radio"
+                                id={item.id}
+                                name={`section-${section.id}`}
+                                className="mt-1 shrink-0"
+                                checked={chosen}
+                                onChange={() => choose(section, item.id)}
+                              />
+                              <label htmlFor={item.id} className="min-w-0 text-sm font-medium">
+                                {direction.label}
+                                <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                                  {direction.description ?? item.detail}
+                                </span>
+                              </label>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </fieldset>
                 ) : (
-                  <ul>
-                    {section.items.map((item) => (
-                      <li key={item.id}>
-                        <p>
-                          <strong>{item.title}</strong>
-                        </p>
-                        <p>{item.detail}</p>
-                        <Button
-                          type="button"
-                          variant={decisions[item.id] === 'accepted' ? 'primary' : 'secondary'}
-                          aria-pressed={decisions[item.id] === 'accepted'}
-                          onClick={() => decide(item.id, 'accepted')}
+                  <ul className="m-0 flex list-none flex-col gap-4 p-0">
+                    {section.items.map((item) => {
+                      const decision = decisions[item.id]
+                      return (
+                        <li
+                          key={item.id}
+                          className="flex min-w-0 flex-col gap-2 border-b border-border pb-4 last:border-b-0 last:pb-0"
                         >
-                          {t('sitePlan.keep')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={decisions[item.id] === 'rejected' ? 'primary' : 'secondary'}
-                          aria-pressed={decisions[item.id] === 'rejected'}
-                          onClick={() => decide(item.id, 'rejected')}
-                        >
-                          {t('sitePlan.drop')}
-                        </Button>
-                      </li>
-                    ))}
+                          <p className="m-0 text-sm font-semibold break-words">{item.title}</p>
+                          <p className="m-0 text-sm text-muted-foreground break-words">
+                            {item.detail}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={decision === 'accepted' ? 'primary' : 'secondary'}
+                              aria-pressed={decision === 'accepted'}
+                              onClick={() => decide(item.id, 'accepted')}
+                            >
+                              {t('sitePlan.keep')}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={decision === 'rejected' ? 'primary' : 'secondary'}
+                              aria-pressed={decision === 'rejected'}
+                              onClick={() => decide(item.id, 'rejected')}
+                            >
+                              {t('sitePlan.drop')}
+                            </Button>
+                            {decision === undefined && (
+                              <span className="text-xs text-muted-foreground">
+                                {t('sitePlan.undecided')}
+                              </span>
+                            )}
+                          </div>
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </CardBody>
             </Card>
           ))}
 
-          <p role="status">
+          <p role="status" className="m-0 text-sm font-medium">
             {remaining === 0
               ? t('sitePlan.allDecided')
               : t('sitePlan.remaining', { count: remaining })}
           </p>
 
-          <div>
+          <div className="flex flex-wrap gap-3">
             <Button type="button" variant="secondary" disabled={busy} onClick={() => void save()}>
               {t('sitePlan.saveProgress')}
             </Button>
@@ -447,6 +601,49 @@ export function SitePlanRoute(): JSX.Element {
           </div>
         </section>
       )}
+
+      <ConfirmAction
+        open={pendingDiscard !== null}
+        title={t('sitePlan.discardTitle')}
+        confirmLabel={t('sitePlan.discardConfirm')}
+        busy={busy}
+        onCancel={() => setPendingDiscard(null)}
+        onConfirm={() => {
+          if (pendingDiscard !== null) void discard(pendingDiscard)
+        }}
+      >
+        <p className="m-0">
+          {t('sitePlan.discardBody', {
+            name: pendingDiscard?.activity || pendingDiscard?.id || '',
+          })}
+        </p>
+      </ConfirmAction>
+
+      <Modal
+        open={enlarged !== null}
+        onOpenChange={(open) => {
+          if (!open) setEnlarged(null)
+        }}
+        title={t('sitePlan.enlargedTitle', { label: enlarged?.label ?? '' })}
+        closeLabel={t('common.close')}
+        className="w-[min(72rem,calc(100vw-2rem))]"
+      >
+        {enlarged !== null && token !== null && skinsById.get(enlarged.id) !== undefined && (
+          <ThemeCandidatePreview
+            token={token}
+            candidate={{
+              kind: 'tokens',
+              id: skinsById.get(enlarged.id)?.id ?? enlarged.id,
+              label: enlarged.label,
+              rationale: skinsById.get(enlarged.id)?.rationale ?? '',
+              tokens: skinsById.get(enlarged.id)?.tokens ?? {},
+            }}
+            activeThemeName=""
+            className="h-[65vh]"
+            interactive
+          />
+        )}
+      </Modal>
     </section>
   )
 }

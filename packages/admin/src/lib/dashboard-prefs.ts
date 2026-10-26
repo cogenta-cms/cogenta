@@ -14,6 +14,7 @@ const STORAGE_KEY = 'cogenta.dashboard.widgets.v1'
 
 /** Every widget the dashboard can show, in the order a fresh install shows them. */
 export const DASHBOARD_WIDGET_IDS = [
+  'kpi',
   'summary',
   'health',
   'activity',
@@ -72,7 +73,11 @@ export function loadDashboardPrefs(): DashboardPrefs {
 
     const storedOrder = Array.isArray(record.order) ? record.order.filter(isWidgetId) : []
     const missing = DASHBOARD_WIDGET_IDS.filter((id) => !storedOrder.includes(id))
-    const order = [...storedOrder, ...missing]
+    // The figures row was a fixed strip before it became a widget: someone
+    // who arranged their dashboard back then still finds it on top.
+    const order = missing.includes('kpi')
+      ? ['kpi' as const, ...storedOrder, ...missing.filter((id) => id !== 'kpi')]
+      : [...storedOrder, ...missing]
 
     const storedHidden = Array.isArray(record.hidden) ? record.hidden.filter(isWidgetId) : []
     const storedCollapsed = Array.isArray(record.collapsed)

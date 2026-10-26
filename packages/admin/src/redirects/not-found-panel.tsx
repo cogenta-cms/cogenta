@@ -1,6 +1,5 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/http.js'
 import { dismissNotFound, listNotFound, type NotFoundEntry } from '../api/redirects-client.js'
 import {
   Button,
@@ -14,6 +13,7 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
+import { redirectErrorMessage } from './redirect-errors.js'
 
 /**
  * The 404 log (fiche 12 task 1) — the missing half of the redirect table:
@@ -48,7 +48,7 @@ export function NotFoundPanel({ token, onCreateRedirect }: NotFoundPanelProps): 
     try {
       setEntries(await listNotFound(token))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.notFoundLoadError'))
+      setError(redirectErrorMessage(caught, 'redirects.notFoundLoadError', t))
     } finally {
       setLoading(false)
     }
@@ -64,7 +64,7 @@ export function NotFoundPanel({ token, onCreateRedirect }: NotFoundPanelProps): 
       await dismissNotFound(token, path)
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.notFoundDismissError'))
+      setError(redirectErrorMessage(caught, 'redirects.notFoundDismissError', t))
     }
   }
 
@@ -86,7 +86,7 @@ export function NotFoundPanel({ token, onCreateRedirect }: NotFoundPanelProps): 
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && (
-        <TableRoot label={t('redirects.notFoundTableLabel')}>
+        <TableRoot label={t('redirects.notFoundTableLabel')} stacked>
           <Table>
             <TableHead>
               <TableRow>
@@ -100,11 +100,17 @@ export function NotFoundPanel({ token, onCreateRedirect }: NotFoundPanelProps): 
             <TableBody>
               {entries.map((entry) => (
                 <TableRow key={entry.path}>
-                  <TableCell className="font-mono text-sm">{entry.path}</TableCell>
-                  <TableCell>{entry.hits}</TableCell>
-                  <TableCell>{formatDate(entry.lastSeen)}</TableCell>
-                  <TableCell className="max-w-64 truncate">{entry.lastReferrer ?? '—'}</TableCell>
-                  <TableCell className="flex gap-2">
+                  <TableCell stack="heading" className="font-mono text-sm">
+                    {entry.path}
+                  </TableCell>
+                  <TableCell label={t('redirects.notFoundHits')}>{entry.hits}</TableCell>
+                  <TableCell label={t('redirects.notFoundLastSeen')}>
+                    {formatDate(entry.lastSeen)}
+                  </TableCell>
+                  <TableCell label={t('redirects.notFoundReferrer')} className="max-w-64 truncate">
+                    {entry.lastReferrer ?? '—'}
+                  </TableCell>
+                  <TableCell stack="actions" className="flex gap-2">
                     <Button size="sm" onClick={() => onCreateRedirect(entry.path)}>
                       {t('redirects.notFoundCreateRedirect')}
                     </Button>

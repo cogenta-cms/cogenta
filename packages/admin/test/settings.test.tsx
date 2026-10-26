@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -38,7 +38,7 @@ function signedIn(
 async function goToSettings(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Paramètres' }))
-  await screen.findByRole('heading', { name: 'Réglages du site' })
+  await screen.findByRole('heading', { name: 'Paramètres' })
 }
 
 describe('the site settings screen', () => {
@@ -346,10 +346,8 @@ describe('the site settings screen — Navigation tab (fiche 22 tâche 8, part 3
       name: 'Boutique',
     })) as HTMLInputElement
     const commerceRow = commerceCheckbox.closest('li') as HTMLLIElement
-    const upButton = Array.from(commerceRow.querySelectorAll(':scope > div > button')).find(
-      (button) => button.textContent === 'Monter',
-    )
-    if (upButton === undefined) throw new Error('expected an "up" button in the Boutique row')
+    // Each move button is named after the row it moves.
+    const upButton = within(commerceRow).getByRole('button', { name: 'Monter « Boutique »' })
     fireEvent.click(upButton)
 
     await waitFor(() => {

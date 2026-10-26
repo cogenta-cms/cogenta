@@ -16,12 +16,21 @@ import { listTerms, type Term } from '../api/taxonomy-client.js'
 import { type AdminUser, listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { formatMinor } from '../commerce/money.js'
+import { humanizeFieldName } from '../lib/humanize-field-name.js'
+import { roleLabels } from '../lib/role-label.js'
 import { canPerformOnTerms, readableCollections } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import { matchesQuery } from '../search/fold.js'
 import { HighlightedExcerpt } from '../search/highlighted-excerpt.js'
 import { parseInlineFilters } from '../search/inline-filters.js'
-import { Field, Input, Notice, Select } from '../ui/index.js'
+import {
+  collectionLabel,
+  languageName,
+  marketplaceKindLabel,
+  mediaKindLabel,
+  menuDisplayName,
+} from '../search/result-labels.js'
+import { Button, Field, Input, Notice, Select } from '../ui/index.js'
 
 /**
  * `/search?q=…` — the page a shareable, back-button-friendly URL needs
@@ -77,6 +86,7 @@ export function SearchRoute(): JSX.Element {
   const sort = (searchParams.get('sort') as SortMode | null) ?? 'relevance'
 
   const [inputValue, setInputValue] = useState(rawQuery)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   useEffect(() => setInputValue(rawQuery), [rawQuery])
 
   const parsed = useMemo(() => parseInlineFilters(rawQuery), [rawQuery])
@@ -234,6 +244,20 @@ export function SearchRoute(): JSX.Element {
     taxonomies: terms.length,
   }
   const totalCount = Object.values(counts).reduce((sum, value) => sum + value, 0)
+  const allCollections = schema.status === 'ready' ? schema.schema.collections : null
+
+  /** A taxonomy by its singular label in the admin's language, never its internal name. */
+  function taxonomyName(name: string): string {
+    const taxonomy =
+      schema.status === 'ready'
+        ? schema.schema.taxonomies?.find((candidate) => candidate.name === name)
+        : undefined
+    return (
+      taxonomy?.labels.singular[i18n.language] ??
+      Object.values(taxonomy?.labels.singular ?? {})[0] ??
+      humanizeFieldName(name)
+    )
+  }
 
   const collections =
     schema.status === 'ready' ? readableCollections(schema.schema.collections, roles) : []
@@ -250,105 +274,125 @@ export function SearchRoute(): JSX.Element {
       </h1>
 
       <search aria-label={t('searchPage.title')}>
-        <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3">
-          <Field label={t('searchPage.title')} className="min-w-[16rem] flex-1">
-            {(control) => (
-              <Input
-                {...control}
-                type="search"
-                value={inputValue}
-                placeholder={t('searchPage.placeholder')}
-                onChange={(event) => setInputValue(event.target.value)}
-              />
-            )}
-          </Field>
+        <form onSubmit={onSubmit} className="flex flex-col gap-3">
+          <div className="flex items-end gap-2">
+            <Field label={t('searchPage.title')} className="min-w-0 flex-1">
+              {(control) => (
+                <Input
+                  {...control}
+                  type="search"
+                  value={inputValue}
+                  placeholder={t('searchPage.placeholder')}
+                  onChange={(event) => setInputValue(event.target.value)}
+                />
+              )}
+            </Field>
+            {/* On a phone the five filters would fill the whole first screen:
+                they fold behind this button there, and are always laid out on
+                a wider window. */}
+            <Button
+              type="button"
+              variant="secondary"
+              className="sm:hidden"
+              aria-expanded={filtersOpen}
+              aria-controls="search-filters"
+              onClick={() => setFiltersOpen((current) => !current)}
+            >
+              {t('searchPage.filtersToggle')}
+            </Button>
+          </div>
 
-          <Field label={t('searchPage.filters.collection')}>
-            {(control) => (
-              <Select
-                {...control}
-                value={collectionFilter}
-                onChange={(event) => updateParam('collection', event.target.value)}
-              >
-                <option value="">{t('searchPage.filters.collectionAny')}</option>
-                {collections.map((collection) => (
-                  <option key={collection.name} value={collection.name}>
-                    {collection.labels.plural}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-
-          <Field label={t('searchPage.filters.status')}>
-            {(control) => (
-              <Select
-                {...control}
-                value={statusFilter}
-                onChange={(event) => updateParam('status', event.target.value)}
-              >
-                <option value="">{t('searchPage.filters.statusAny')}</option>
-                <option value="published">published</option>
-                <option value="draft">draft</option>
-                <option value="scheduled">scheduled</option>
-                <option value="archived">archived</option>
-              </Select>
-            )}
-          </Field>
-
-          {locales.length > 0 && (
-            <Field label={t('searchPage.filters.locale')}>
+          <div
+            id="search-filters"
+            className={`${filtersOpen ? 'flex' : 'hidden'} flex-wrap items-end gap-3 sm:flex`}
+          >
+            <Field label={t('searchPage.filters.collection')}>
               {(control) => (
                 <Select
                   {...control}
-                  value={localeFilter}
-                  onChange={(event) => updateParam('locale', event.target.value)}
+                  value={collectionFilter}
+                  onChange={(event) => updateParam('collection', event.target.value)}
                 >
-                  <option value="">{t('searchPage.filters.localeAny')}</option>
-                  {locales.map((locale) => (
-                    <option key={locale} value={locale}>
-                      {locale}
+                  <option value="">{t('searchPage.filters.collectionAny')}</option>
+                  {collections.map((collection) => (
+                    <option key={collection.name} value={collection.name}>
+                      {collection.labels.plural}
                     </option>
                   ))}
                 </Select>
               )}
             </Field>
-          )}
 
-          <Field label={t('searchPage.filters.period')}>
-            {(control) => (
-              <Select
-                {...control}
-                value={period}
-                onChange={(event) => updateParam('period', event.target.value)}
-              >
-                <option value="">{t('searchPage.filters.periodAny')}</option>
-                <option value="week">{t('searchPage.filters.periodWeek')}</option>
-                <option value="month">{t('searchPage.filters.periodMonth')}</option>
-                <option value="year">{t('searchPage.filters.periodYear')}</option>
-              </Select>
-            )}
-          </Field>
+            <Field label={t('searchPage.filters.status')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={statusFilter}
+                  onChange={(event) => updateParam('status', event.target.value)}
+                >
+                  <option value="">{t('searchPage.filters.statusAny')}</option>
+                  <option value="published">{t('entryEdit.status.published')}</option>
+                  <option value="draft">{t('entryEdit.status.draft')}</option>
+                  <option value="scheduled">{t('entryEdit.status.scheduled')}</option>
+                  <option value="archived">{t('entryEdit.status.archived')}</option>
+                </Select>
+              )}
+            </Field>
 
-          <Field label={t('searchPage.sortLabel')}>
-            {(control) => (
-              <Select
-                {...control}
-                value={sort}
-                onChange={(event) => updateParam('sort', event.target.value)}
-              >
-                <option value="relevance">{t('searchPage.sortRelevance')}</option>
-                <option value="date">{t('searchPage.sortDate')}</option>
-              </Select>
+            {locales.length > 0 && (
+              <Field label={t('searchPage.filters.locale')}>
+                {(control) => (
+                  <Select
+                    {...control}
+                    value={localeFilter}
+                    onChange={(event) => updateParam('locale', event.target.value)}
+                  >
+                    <option value="">{t('searchPage.filters.localeAny')}</option>
+                    {locales.map((locale) => (
+                      <option key={locale} value={locale}>
+                        {languageName(locale, i18n.language)}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
             )}
-          </Field>
+
+            <Field label={t('searchPage.filters.period')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={period}
+                  onChange={(event) => updateParam('period', event.target.value)}
+                >
+                  <option value="">{t('searchPage.filters.periodAny')}</option>
+                  <option value="week">{t('searchPage.filters.periodWeek')}</option>
+                  <option value="month">{t('searchPage.filters.periodMonth')}</option>
+                  <option value="year">{t('searchPage.filters.periodYear')}</option>
+                </Select>
+              )}
+            </Field>
+
+            <Field label={t('searchPage.sortLabel')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={sort}
+                  onChange={(event) => updateParam('sort', event.target.value)}
+                >
+                  <option value="relevance">{t('searchPage.sortRelevance')}</option>
+                  <option value="date">{t('searchPage.sortDate')}</option>
+                </Select>
+              )}
+            </Field>
+          </div>
         </form>
       </search>
 
       <div
         role="tablist"
         aria-label={t('searchPage.title')}
-        className="flex flex-wrap gap-1 border-b border-border"
+        className="flex gap-1 overflow-x-auto border-b border-border sm:flex-wrap"
       >
         {(
           [
@@ -367,7 +411,7 @@ export function SearchRoute(): JSX.Element {
             type="button"
             role="tab"
             aria-selected={tab === id}
-            className="rounded-t-md border border-b-0 border-transparent px-3 py-2 font-sans text-sm font-medium aria-selected:border-border aria-selected:bg-card"
+            className="shrink-0 cursor-pointer rounded-t-md border border-b-0 border-transparent bg-transparent px-3 py-2 font-sans text-sm font-medium whitespace-nowrap aria-selected:border-border aria-selected:bg-card"
             onClick={() => updateParam('type', id === 'all' ? '' : id)}
           >
             {label}
@@ -387,6 +431,15 @@ export function SearchRoute(): JSX.Element {
       )}
 
       {loading && <p>{t('common.loading')}</p>}
+
+      {/* The content index matches words of three letters or more (a deliberate
+          floor of the search service — shorter ones match everything and rank
+          nothing); everything else answers from the first letter. */}
+      {!loading && freeText.length > 0 && freeText.length < 3 && (
+        <Notice tone="info" live="off">
+          <p>{t('searchPage.tooShort')}</p>
+        </Notice>
+      )}
 
       {!loading && freeText.length === 0 && (
         <p className="text-muted-foreground">{t('searchPage.typeToSearch')}</p>
@@ -417,7 +470,9 @@ export function SearchRoute(): JSX.Element {
                     >
                       {hit.title.trim().length > 0 ? hit.title : hit.id}
                     </Link>
-                    <div className="text-xs text-muted-foreground">{hit.collection}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {collectionLabel(allCollections, hit.collection)}
+                    </div>
                     {hit.excerpt.length > 0 && (
                       <p className="m-0 text-sm text-muted-foreground">
                         <HighlightedExcerpt text={hit.excerpt} matches={hit.highlights} />
@@ -440,7 +495,9 @@ export function SearchRoute(): JSX.Element {
                 {media.map((asset) => (
                   <li key={asset.id}>
                     <Link to="/media">{asset.filename}</Link>
-                    <span className="ml-2 text-xs text-muted-foreground">{asset.kind}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {mediaKindLabel(t, asset.kind)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -454,7 +511,7 @@ export function SearchRoute(): JSX.Element {
                   <li key={user.id}>
                     <Link to="/users">{user.email}</Link>
                     <span className="ml-2 text-xs text-muted-foreground">
-                      {user.roles.join(', ')}
+                      {roleLabels(t, user.roles)}
                     </span>
                   </li>
                 ))}
@@ -467,8 +524,10 @@ export function SearchRoute(): JSX.Element {
               <ul className="m-0 flex list-none flex-col gap-2 p-0">
                 {menus.map((menu) => (
                   <li key={menu.id}>
-                    <Link to="/menus">{menu.label}</Link>
-                    <span className="ml-2 text-xs text-muted-foreground">{menu.locale}</span>
+                    <Link to="/menus">{menuDisplayName(menu.label)}</Link>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {languageName(menu.locale, i18n.language)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -498,7 +557,9 @@ export function SearchRoute(): JSX.Element {
                 {extensions.map((item) => (
                   <li key={item.id}>
                     <Link to="/marketplace">{item.displayName}</Link>
-                    <span className="ml-2 text-xs text-muted-foreground">{item.kind}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {marketplaceKindLabel(t, item.kind)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -513,7 +574,9 @@ export function SearchRoute(): JSX.Element {
                     <Link to="/taxonomies">
                       {term.labels[i18n.language] ?? Object.values(term.labels)[0] ?? term.slug}
                     </Link>
-                    <span className="ml-2 text-xs text-muted-foreground">{taxonomy}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {taxonomyName(taxonomy)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -582,7 +645,7 @@ function SemanticTab({
       type="button"
       role="tab"
       aria-selected={active}
-      className="rounded-t-md border border-b-0 border-transparent px-3 py-2 font-sans text-sm font-medium aria-selected:border-border aria-selected:bg-card"
+      className="shrink-0 cursor-pointer rounded-t-md border border-b-0 border-transparent bg-transparent px-3 py-2 font-sans text-sm font-medium whitespace-nowrap aria-selected:border-border aria-selected:bg-card"
       onClick={onActivate}
     >
       {t('searchPage.tabs.semantic')}

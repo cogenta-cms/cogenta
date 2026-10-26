@@ -81,6 +81,19 @@ export interface ProviderRegistryLike {
     },
   ): Promise<ProviderSummary>
   remove(provider: string): Promise<void>
+  /**
+   * Sends one tiny request through the saved key and says whether the
+   * provider answered. Absent when the host cannot build a client for it.
+   */
+  test?(provider: string): Promise<ProviderTestResult>
+}
+
+export interface ProviderTestResult {
+  readonly ok: boolean
+  /** How long the round trip took, when it got that far. */
+  readonly latencyMs?: number
+  /** Why it failed, in the provider's own words — never the key. */
+  readonly detail?: string
 }
 
 export interface ProvidersRouterOptions {
@@ -286,6 +299,13 @@ export function createProvidersRouter(options: ProvidersRouterOptions): Provider
           if (extra !== undefined) throw noRoute()
           if (method !== 'GET') return methodNotAllowed(['GET'])
           return jsonResponse(200, { data: options.providers.catalog })
+        }
+
+        // POST /api/providers/:provider/test — does the saved key work?
+        if (extra === 'test') {
+          if (method !== 'POST') return methodNotAllowed(['POST'])
+          if (options.providers.test === undefined) throw noRoute()
+          return jsonResponse(200, { data: await options.providers.test(provider) })
         }
 
         if (extra !== undefined) throw noRoute()

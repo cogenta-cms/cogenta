@@ -8,7 +8,6 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
 import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
 import {
   bulkDeleteMedia,
@@ -156,12 +155,23 @@ export function MediaRoute(): JSX.Element {
     <Pagination
       variant="pages"
       page={cursors.length - 1}
-      pageCount={cursors.length + (hasMore ? 1 : 0)}
+      pageCount={
+        total === null
+          ? cursors.length + (hasMore ? 1 : 0)
+          : Math.max(cursors.length, Math.ceil(total / PAGE_SIZE))
+      }
       onPageChange={changePage}
       loading={loading}
       previousLabel={t('lists.previous')}
       nextLabel={t('lists.next')}
-      pageInfo={t('lists.page', { page: cursors.length })}
+      pageInfo={
+        total === null
+          ? t('lists.page', { page: cursors.length })
+          : t('media.pageOf', {
+              page: cursors.length,
+              count: Math.max(cursors.length, Math.ceil(total / PAGE_SIZE)),
+            })
+      }
     />
   )
 
@@ -332,7 +342,7 @@ export function MediaRoute(): JSX.Element {
       await loadFolders()
       setFolderModal(null)
     } catch (caught) {
-      setFolderModalError(caught instanceof ApiError ? caught.message : t('media.folderError'))
+      setFolderModalError(describeApiError(caught, t('media.folderError')).message)
     } finally {
       setFolderBusy(false)
     }
@@ -348,7 +358,7 @@ export function MediaRoute(): JSX.Element {
       await loadFolders()
       setDeleteFolderTarget(null)
     } catch (caught) {
-      setDeleteFolderError(caught instanceof ApiError ? caught.message : t('media.folderError'))
+      setDeleteFolderError(describeApiError(caught, t('media.folderError')).message)
     } finally {
       setFolderBusy(false)
     }
@@ -655,6 +665,8 @@ export function MediaRoute(): JSX.Element {
                 {t('media.bulkDelete', { count: selected.size })}
               </Button>
               <Select
+                className="w-48"
+                aria-label={t('media.folderLabel')}
                 value={bulkMoveTarget}
                 disabled={bulkBusy}
                 onChange={(event) => setBulkMoveTarget(event.target.value)}
@@ -753,6 +765,7 @@ export function MediaRoute(): JSX.Element {
         }}
         title={selectedAsset?.filename ?? ''}
         closeLabel={t('media.detailCloseLabel')}
+        className="w-[min(56rem,calc(100vw-2rem))]"
       >
         {selectedAsset !== null && (
           <MediaDetail

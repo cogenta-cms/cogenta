@@ -1,4 +1,4 @@
-import { type FormEvent, type JSX, useEffect, useId, useState } from 'react'
+import { type FormEvent, type JSX, type RefObject, useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import {
@@ -9,7 +9,7 @@ import {
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { downloadCsv, toCsv } from '../lib/csv.js'
-import { CheckIcon, ClockIcon, DownloadIcon, MediaIcon, TrendIcon, UsersIcon } from '../ui/icons.js'
+import { CheckIcon, ClockIcon, DownloadIcon, TrendIcon, UsersIcon } from '../ui/icons.js'
 import {
   Button,
   Card,
@@ -24,11 +24,38 @@ import {
 const WINDOW_OPTIONS = [7, 30, 90] as const
 type WindowDays = (typeof WINDOW_OPTIONS)[number]
 
-const CHART_WIDTH = 640
-const CHART_HEIGHT = 200
-const CHART_PADDING_X = 8
-const CHART_PADDING_TOP = 12
-const CHART_PADDING_BOTTOM = 28
+/** Used until the container has been measured (and in environments with no layout, like a test DOM). */
+const FALLBACK_CHART_WIDTH = 640
+const CHART_HEIGHT = 220
+const MIN_CHART_WIDTH = 260
+const CHART_PADDING_X = 14
+const CHART_PADDING_TOP = 18
+const CHART_PADDING_BOTTOM = 32
+/** Room, in pixels, one date label needs on the x axis. */
+const LABEL_SLOT = 64
+
+/**
+ * The width the chart is drawn at: the box it sits in, measured, so the plot
+ * fills the card and text keeps its real size (an SVG scaled to fit shrinks
+ * its labels along with everything else).
+ */
+function useMeasuredWidth(): [RefObject<HTMLDivElement | null>, number] {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [width, setWidth] = useState(FALLBACK_CHART_WIDTH)
+  useEffect(() => {
+    const element = ref.current
+    if (element === null || typeof ResizeObserver === 'undefined') return
+    const apply = (): void => {
+      const measured = Math.floor(element.getBoundingClientRect().width)
+      if (measured > 0) setWidth(Math.max(MIN_CHART_WIDTH, measured))
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+  return [ref, width]
+}
 
 /**
  * How many rows of `topPages`/`topReferrers` the summary is asked for
@@ -121,8 +148,9 @@ function DailyViewsChart({
   /** Gates the overlay: a period with zero previous traffic gets no ghost line, the same "new traffic" call `ChangeBadge` already makes for the `%` figure. */
   readonly previousTotalViews: number
 }): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const gradientId = useId()
+  const [chartRef, chartWidth] = useMeasuredWidth()
   const data = fillDailyViews(since, until, rawData)
   if (data.length === 0) {
     return <p className="text-muted-foreground text-sm">{t('analytics.noData')}</p>
@@ -134,11 +162,21 @@ function DailyViewsChart({
       : []
 
   const max = Math.max(...data.map((point) => point.views), ...previous.map((p) => p.views), 1)
-  const plotWidth = CHART_WIDTH - CHART_PADDING_X * 2
+  const plotWidth = chartWidth - CHART_PADDING_X * 2
   const plotTop = CHART_PADDING_TOP
   const plotBottom = CHART_HEIGHT - CHART_PADDING_BOTTOM
   const plotHeight = plotBottom - plotTop
-  const showEveryLabel = data.length <= 10
+  // One label per `LABEL_SLOT` pixels at most, always including both ends.
+  const labelEvery = Math.max(
+    1,
+    Math.ceil(data.length / Math.max(2, Math.floor(plotWidth / LABEL_SLOT))),
+  )
+  const dayLabel = (day: string): string =>
+    new Intl.DateTimeFormat(i18n.language, {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+    }).format(new Date(`${day}T00:00:00Z`))
 
   const stepX = data.length > 1 ? plotWidth / (data.length - 1) : 0
   const xAt = (index: number): number => CHART_PADDING_X + index * stepX
@@ -152,10 +190,10 @@ function DailyViewsChart({
     .join(' ')
 
   return (
-    <>
+    <div ref={chartRef} className="w-full">
       <svg
-        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-        width="100%"
+        viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
+        width={chartWidth}
         height={CHART_HEIGHT}
         role="img"
         aria-label={t('analytics.chartLabel')}
@@ -173,7 +211,7 @@ function DailyViewsChart({
         <line
           x1={CHART_PADDING_X}
           y1={plotBottom}
-          x2={CHART_WIDTH - CHART_PADDING_X}
+          x2={chartWidth - CHART_PADDING_X}
           y2={plotBottom}
           stroke="currentColor"
           strokeOpacity={0.25}
@@ -181,21 +219,20 @@ function DailyViewsChart({
         <line
           x1={CHART_PADDING_X}
           y1={plotTop + plotHeight / 2}
-          x2={CHART_WIDTH - CHART_PADDING_X}
+          x2={chartWidth - CHART_PADDING_X}
           y2={plotTop + plotHeight / 2}
           stroke="currentColor"
           strokeOpacity={0.12}
           strokeDasharray="3 3"
         />
-        <text x={CHART_PADDING_X} y={plotTop - 2} fontSize={9} fill="currentColor" opacity={0.6}>
+        <text x={CHART_PADDING_X} y={plotTop - 5} fontSize={11} className="fill-muted-foreground">
           {max}
         </text>
         <text
           x={CHART_PADDING_X}
-          y={plotBottom + 11}
-          fontSize={9}
-          fill="currentColor"
-          opacity={0.6}
+          y={plotBottom - 5}
+          fontSize={11}
+          className="fill-muted-foreground"
         >
           0
         </text>
@@ -223,7 +260,10 @@ function DailyViewsChart({
         />
 
         {data.map((point, index) => {
-          const showLabel = showEveryLabel || index === 0 || index === data.length - 1
+          const showLabel =
+            index === 0 ||
+            index === data.length - 1 ||
+            (index % labelEvery === 0 && data.length - 1 - index >= labelEvery / 2)
           return (
             <g key={point.day}>
               <circle
@@ -240,13 +280,12 @@ function DailyViewsChart({
               {showLabel && (
                 <text
                   x={xAt(index)}
-                  y={CHART_HEIGHT - 8}
-                  fontSize={8}
-                  textAnchor="middle"
-                  fill="currentColor"
-                  opacity={0.55}
+                  y={CHART_HEIGHT - 10}
+                  fontSize={11}
+                  textAnchor={index === 0 ? 'start' : index === data.length - 1 ? 'end' : 'middle'}
+                  className="fill-muted-foreground"
                 >
-                  {point.day.slice(5)}
+                  {dayLabel(point.day)}
                 </text>
               )}
             </g>
@@ -268,7 +307,41 @@ function DailyViewsChart({
           </li>
         </ul>
       )}
-    </>
+    </div>
+  )
+}
+
+/** A monitor, a tablet or a phone — the Media icon this used to borrow said "image", not "device". */
+function DeviceIcon({ device }: { readonly device: string }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      focusable="false"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-3.5 text-muted-foreground"
+    >
+      {device === 'mobile' ? (
+        <>
+          <rect x="6" y="2.5" width="8" height="15" rx="1.5" />
+          <path d="M9 15h2" />
+        </>
+      ) : device === 'tablet' ? (
+        <>
+          <rect x="3.5" y="2.5" width="13" height="15" rx="1.5" />
+          <path d="M9 15h2" />
+        </>
+      ) : (
+        <>
+          <rect x="2.5" y="3.5" width="15" height="10" rx="1.5" />
+          <path d="M7 17h6M10 13.5V17" />
+        </>
+      )}
+    </svg>
   )
 }
 
@@ -448,9 +521,6 @@ export function AnalyticsRoute(): JSX.Element {
   return (
     <section aria-labelledby="analytics-heading" className="flex flex-col gap-8">
       <div className="reveal border-b-2 border-foreground pb-4">
-        <p className="m-0 font-mono text-xs font-medium tracking-[0.2em] text-primary uppercase">
-          {t('shell.brand')}
-        </p>
         <h1 id="analytics-heading" className="m-0 text-3xl leading-tight font-bold">
           {t('analytics.heading')}
         </h1>
@@ -532,13 +602,13 @@ export function AnalyticsRoute(): JSX.Element {
           <Button type="submit" variant="secondary">
             {t('analytics.rangeApply')}
           </Button>
+          {rangeError !== null && (
+            <p role="alert" className="m-0 basis-full text-sm font-medium text-destructive">
+              {rangeError}
+            </p>
+          )}
         </form>
       </div>
-      {rangeError !== null && (
-        <p role="alert" className="m-0 text-sm font-medium text-destructive">
-          {rangeError}
-        </p>
-      )}
 
       {error !== null && (
         <p role="alert" className="m-0 text-sm font-medium text-destructive">
@@ -748,7 +818,7 @@ export function AnalyticsRoute(): JSX.Element {
                     key={device.device}
                     className="flex items-center gap-1.5 rounded-sm border border-border bg-background px-2.5 py-1.5 text-sm"
                   >
-                    <MediaIcon className="size-3.5 text-muted-foreground" />
+                    <DeviceIcon device={device.device} />
                     {t(`analytics.device.${device.device}`)}
                     <span className="font-mono text-muted-foreground">{device.views}</span>
                   </li>

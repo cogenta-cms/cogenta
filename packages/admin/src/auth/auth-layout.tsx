@@ -54,6 +54,7 @@ function LoginBrand({
   readonly version: string | null
   readonly branding: LoginBranding
 }): JSX.Element {
+  const { t } = useTranslation()
   const { showCogentaBranding, customLogoMediaId, siteTitle } = branding
   const mark = showCogentaBranding ? (
     <img src="/_cogenta/logo-cogenta.png" alt="Cogenta" width={40} height={40} />
@@ -77,15 +78,18 @@ function LoginBrand({
   // until now: a white-labelled logo links to nothing, since it names a
   // site the visitor already knows, not this project.
   return showCogentaBranding ? (
-    <a
-      href={COGENTA_PROJECT_URL}
-      rel="noopener"
-      target="_blank"
-      className="flex flex-col items-center gap-2"
-    >
-      {mark}
+    <div className="flex flex-col items-center gap-2">
+      <a
+        href={COGENTA_PROJECT_URL}
+        rel="noopener"
+        target="_blank"
+        aria-label={t('login.projectLink')}
+        title={t('login.projectLink')}
+      >
+        {mark}
+      </a>
       {versionChip}
-    </a>
+    </div>
   ) : (
     <div className="flex flex-col items-center gap-2">
       {mark}

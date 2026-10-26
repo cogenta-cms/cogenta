@@ -1,0 +1,30 @@
+{
+  "promptSettings": {
+    "nameRequired": "Le nom est obligatoire.",
+    "templateRequired": "Le texte de la consigne est obligatoire.",
+    "created": "Consigne « {{name}} » créée.",
+    "saved": "Consigne « {{name}} » enregistrée.",
+    "removed": "Consigne « {{name}} » supprimée.",
+    "resetDone": "Consigne « {{name}} » rétablie à sa version d’origine.",
+    "createHint": "Une consigne créée ici n’est utilisée par aucun outil tant qu’un outil ne la nomme pas : seules les consignes fournies avec Cogenta sont reliées à l’assistant.",
+    "origin": "Origine",
+    "builtin": "Fournie",
+    "custom": "Créée par vous",
+    "modified": "Modifiée",
+    "reset": "Rétablir",
+    "resetNamed": "Rétablir la version d’origine de {{name}}",
+    "resetTitle": "Rétablir « {{name}} » ?",
+    "resetBody": "Le texte reprend la version fournie avec Cogenta. Vos modifications seront perdues.",
+    "resetConfirm": "Rétablir la version d’origine",
+    "removeNamed": "Supprimer la consigne {{name}}",
+    "removeTitle": "Supprimer « {{name}} » ?",
+    "removeBody": "La consigne sera supprimée. Cette action est définitive.",
+    "removeConfirm": "Supprimer la consigne",
+    "shippedWords": "« {{name}} » — {{description}} Le nom et la description sont fournis par Cogenta ; seul le texte de la consigne se modifie.",
+    "variablesUsed": "Variables utilisées : {{variables}}",
+    "variablesMissing": "Cette consigne n’utilise plus {{variables}}, que l’outil renseigne à chaque appel : ce qu’il demande au modèle peut changer.",
+    "placeholderHint": "Les noms entre doubles accolades sont remplacés par l’outil au moment de l’appel : gardez-les.",
+    "category": "Catégorie",
+    "template": "Texte de la consigne"
+  }
+}

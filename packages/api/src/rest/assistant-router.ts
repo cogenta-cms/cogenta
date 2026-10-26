@@ -158,6 +158,12 @@ export interface AssistantRouterOptions {
   readonly vectorInfo?: AssistVectorInfoLike
   /** Absent under the same condition as `vectorInfo` — L22 task 4's document upload flow. */
   readonly documents?: AssistDocumentServiceLike
+  /**
+   * Rebuilds the knowledge index from the published content (admin only).
+   * Absent under the same condition as `vectorInfo`. Resolves with how many
+   * entries were walked.
+   */
+  readonly reindex?: () => Promise<{ readonly indexed: number }>
 }
 
 export interface AssistantRouter {
@@ -364,6 +370,19 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
         executionInput = { ...executionInput, collections }
       }
     }
+    // The index is keyed by the site's own address. A browser only knows the
+    // origin it was served from, which differs behind a proxy, on a second
+    // host name or on another port — and a mismatch reads as "nothing indexed".
+    // The server states which site this is; the client's guess is not used.
+    if (
+      (name === 'assist.chat' || name === 'assist.find_duplicates') &&
+      options.site.url !== undefined &&
+      typeof executionInput === 'object' &&
+      executionInput !== null &&
+      'siteId' in executionInput
+    ) {
+      executionInput = { ...executionInput, siteId: options.site.url }
+    }
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
@@ -476,6 +495,13 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
           return await run(request, context)
         }
 
+        if (path === `${basePath}/reindex`) {
+          if (method !== 'POST') return methodNotAllowed(['POST'])
+          assertMayManageDocuments(context)
+          if (options.reindex === undefined) throw noDocumentService()
+          return jsonResponse(200, { data: await options.reindex() })
+        }
+
         if (path === documentsPath) {
           if (method === 'GET') {
             assertMayUseAssistant(context)
@@ -505,7 +531,7 @@ export function createAssistantRouter(options: AssistantRouterOptions): Assistan
         throw new CogentaError({
           code: 'CONTENT_NOT_FOUND',
           message: 'No route matches this path.',
-          hint: 'The assistant routes are GET /api/assistant, POST /api/assistant/run and /api/assistant/documents.',
+          hint: 'The assistant routes are GET /api/assistant, POST /api/assistant/run, POST /api/assistant/reindex and /api/assistant/documents.',
         })
       } catch (error) {
         return errorResponse(error)

@@ -1,0 +1,171 @@
+{
+  "collectionList": {
+    "deleteSelected": "Move to trash ({{count}})",
+    "selectAll": "Select every row on this page",
+    "resetFilters": "Reset filters",
+    "bulkReportSummary": "{{succeeded}} of {{total}} entries processed ({{action}}). See below for what failed.",
+    "bulkActionName": {
+      "publish": "publish",
+      "unpublish": "unpublish",
+      "duplicate": "duplicate",
+      "trash": "move to trash"
+    },
+    "bulkDone": {
+      "publish_one": "{{count}} entry published.",
+      "publish_other": "{{count}} entries published.",
+      "unpublish_one": "{{count}} entry unpublished.",
+      "unpublish_other": "{{count}} entries unpublished.",
+      "duplicate_one": "{{count}} entry duplicated.",
+      "duplicate_other": "{{count}} entries duplicated.",
+      "trash_one": "{{count}} entry moved to the trash.",
+      "trash_other": "{{count}} entries moved to the trash."
+    }
+  },
+  "seo": {
+    "noindexLabel": "Hide this page from search engines",
+    "focusKeywordLocalHint": "Used only by the analysis below. This keyword is not saved with the content: it stays in this browser.",
+    "previewNoindexChecked": "The \"hide from search engines\" box is checked: this page will not be indexed.",
+    "previewNoindex": "This page is not published yet: search engines will only see it once it is published."
+  },
+  "apiErrors": {
+    "ASSIST_RESPONSE_INVALID": {
+      "message": "The assistant answered in a way Cogenta cannot use.",
+      "hint": "Run the request again. If it keeps happening, try another model from the providers screen."
+    },
+    "TAXONOMY_NOT_HIERARCHICAL": {
+      "message": "This taxonomy is flat: its terms cannot be nested under one another.",
+      "hint": "Create the term without a parent."
+    },
+    "MENU_LOCATION_TAKEN": {
+      "message": "Another menu already uses this location in this language.",
+      "hint": "Clear the location from the other menu first, or edit that menu."
+    },
+    "MENU_NAME_TAKEN": {
+      "message": "A menu already has this name.",
+      "hint": "Choose another name."
+    },
+    "MENU_CYCLE": {
+      "message": "An item cannot be placed under itself or under one of its own sub-items."
+    },
+    "MENU_ITEM_INVALID": {
+      "message": "This menu item is not valid.",
+      "hint": "Check its type and destination: an https://, mailto: or tel: address, a path such as /contact, or a content picked from the list."
+    }
+  },
+  "assist": {
+    "schemaTypes": {
+      "FAQPage": "FAQ page",
+      "HowTo": "How-to guide",
+      "Article": "Article",
+      "Recipe": "Recipe",
+      "Event": "Event"
+    },
+    "moderateInlineButton": "Check whether a review is needed"
+  },
+  "entryEdit": {
+    "schedulePast": "Choose a date and time in the future: a publication cannot be scheduled in the past.",
+    "publishedOn": "Published on {{at}}.",
+    "visibility": {
+      "passwordRequired": "Enter the password to ask visitors for: the “Apply” button then becomes available."
+    },
+    "commentsInherit": "Follow the site setting"
+  },
+  "versions": {
+    "formattingOnly": "The text is identical; only the formatting (list, bold, link…) changed."
+  },
+  "builder": {
+    "patterns": {
+      "kindPattern": "Pattern",
+      "kindTemplate": "Page template"
+    }
+  },
+  "comments": {
+    "targetFallback": "View: {{collection}}",
+    "done": {
+      "approved": "Comment approved: it is now visible on the site.",
+      "spam": "Comment marked as spam.",
+      "trash": "Comment moved to the trash.",
+      "reply": "Reply published.",
+      "bulk_one": "{{count}} comment updated.",
+      "bulk_other": "{{count}} comments updated."
+    }
+  },
+  "taxonomies": {
+    "slug": "URL identifier (slug)",
+    "entryCountFlat_one": "{{count}} entry",
+    "entryCountFlat_other": "{{count}} entries"
+  },
+  "menus": {
+    "created": "Menu “{{name}}” created. Now add items to it.",
+    "deleted": "Menu “{{name}}” deleted.",
+    "locationSaved": "Location saved.",
+    "itemAdded": "Item added to the menu.",
+    "urlInvalid": "Enter a valid address: a link starting with https://, mailto: or tel:, or a site path such as /contact. Addresses without a protocol and spaces are not accepted.",
+    "entryRequired": "Pick the content this item points to from the list below.",
+    "termRequired": "Pick the term this item points to from the list below.",
+    "deleteMenuTitle": "Delete the menu “{{name}}”?",
+    "deleteMenuBody": "The menu and all its items will be deleted. If the site shows it at a location, that location stays empty until another menu is assigned to it.",
+    "delete": "Delete",
+    "editItem": "Edit",
+    "moveUp": "Move up",
+    "moveDown": "Move down"
+  },
+  "forms": {
+    "description": "Create a contact, sign-up or request form: it is published on a page of your site, without a line of code.",
+    "columnName": "Public page",
+    "fieldNameHelp": "Used as the address of the form's page (for example “contact” gives /forms/contact). Filled in from the label.",
+    "notifyChannelsHelp": "One channel per line, as channel:recipient (for example slack:#contact). The channel must be set up first under “Channels”.",
+    "redirectToHelp": "A page of the site (for example /thanks) to send the visitor to after a successful submission, instead of the confirmation message.",
+    "rowLabelMissing": "Field no. {{position}} has no label: give it a name the visitor will see (for example “Your email”).",
+    "rowKindMissing": "Choose the type of field no. {{position}} (“{{label}}”).",
+    "rowChoicesMissing": "Field no. {{position}} (“{{label}}”) offers choices: enter them, separated by commas.",
+    "unnamedField": "Field no. {{position}}",
+    "editorFields": {
+      "name": "Technical name (optional)",
+      "showIfField": "Show only if the field…",
+      "showIfOperator": "Condition",
+      "showIfValue": "Expected value",
+      "step": "Step (leave empty for a single page)"
+    }
+  },
+  "formSubmissions": {
+    "gdprEraseTitle": "Erase every submission from this person?",
+    "gdprEraseBody": "Every submission that mentions the address “{{email}}” will be permanently erased, whatever the form. This cannot be undone."
+  },
+  "replace": {
+    "inBlockPlain": "Block {{position}}",
+    "inZoneBlockPlain": "Zone {{zone}}, block {{position}}",
+    "inParagraph": "{{field}} · paragraph {{position}}"
+  },
+  "units": {
+    "byte": "B",
+    "kilobyte": "KB",
+    "megabyte": "MB",
+    "gigabyte": "GB"
+  },
+  "media": {
+    "uploadLimits": "Maximum size: {{maxSize}} per file.",
+    "uploadImageTypes": "Accepted images: {{types}} (the file's content is checked, not its extension). Any other file, such as a PDF, is accepted and offered as a download.",
+    "uploadDropHint": "or drop files anywhere on this page",
+    "chooseFiles": "Choose files",
+    "noFilesChosen": "No file chosen",
+    "uploadDone": "Uploaded",
+    "copyUrl": "Copy link",
+    "copied": "Link copied",
+    "pageOf": "Page {{page}} of {{count}}"
+  },
+  "calendar": {
+    "nothingThisPeriod": "Nothing scheduled or published this month."
+  },
+  "trash": {
+    "deletedByUnknown": "Not recorded",
+    "neverSweptYet": "The automatic trash clean-up has not run yet since the site started."
+  },
+  "translationDashboard": {
+    "singleLocaleNote": "This site has a single language: there is nothing to compare. To offer the site in several languages, add one in",
+    "singleLocaleLink": "the site settings."
+  },
+  "fields": {
+    "taxonomyNewTermPlaceholder": "Term name"
+  }
+}

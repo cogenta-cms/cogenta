@@ -33,6 +33,12 @@ export interface ThemeApplyDialogProps {
   readonly sampleDataWritable: boolean
   /** The theme is already the active one: only its sample data is on offer. */
   readonly active?: boolean
+  /**
+   * `sample` opens on the sample-data choice alone — what "Données d'exemple"
+   * on a card asks for. `theme` (the default) is "Sélectionner": the theme
+   * first, its sample data as an option below.
+   */
+  readonly focus?: 'theme' | 'sample'
   readonly switching: boolean
   readonly switchError: string | null
   onApplyThemeOnly(applySkin: boolean): void
@@ -62,6 +68,7 @@ export function ThemeApplyDialog({
   hasSampleData,
   sampleDataWritable,
   active = false,
+  focus = 'theme',
   switching,
   switchError,
   onApplyThemeOnly,
@@ -150,8 +157,11 @@ export function ThemeApplyDialog({
     }
   }
 
+  // The theme-only choice is hidden when the person came for sample data, and
+  // for the theme that is already running.
+  const sampleOnly = active || focus === 'sample'
   const title =
-    step.kind === 'choose' && !active
+    step.kind === 'choose' && !sampleOnly
       ? t('appearance.themeSelectConfirmTitle', { name: theme?.label ?? '' })
       : step.kind === 'done'
         ? t('appearance.sampleData.doneTitle')
@@ -226,7 +236,7 @@ export function ThemeApplyDialog({
     if (step.kind === 'choose') {
       return (
         <div className="flex flex-col gap-5">
-          {!active && (
+          {!sampleOnly && (
             <section className="flex flex-col gap-3" aria-labelledby="theme-apply-only">
               <h3 id="theme-apply-only" className="m-0 text-sm font-semibold">
                 {t('appearance.sampleData.themeOnlyTitle')}
@@ -258,7 +268,7 @@ export function ThemeApplyDialog({
           )}
           <section
             className={
-              active ? 'flex flex-col gap-3' : 'flex flex-col gap-3 border-t border-border pt-4'
+              sampleOnly ? 'flex flex-col gap-3' : 'flex flex-col gap-3 border-t border-border pt-4'
             }
             aria-labelledby="theme-apply-sample"
           >
@@ -272,6 +282,11 @@ export function ThemeApplyDialog({
                 <p className="m-0 text-sm text-muted-foreground">
                   {t('appearance.sampleData.withSampleExplanation')}
                 </p>
+                {!active && (
+                  <p className="m-0 text-sm font-medium">
+                    {t('appearance.sampleData.activatesTheme', { name: theme?.label ?? '' })}
+                  </p>
+                )}
                 {!sampleDataWritable && (
                   <Notice tone="info" live="off">
                     <p>{t('appearance.sampleData.devOnly')}</p>

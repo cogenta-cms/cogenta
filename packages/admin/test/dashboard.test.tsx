@@ -56,7 +56,8 @@ describe('dashboard', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
     expect(await screen.findByText(/sqlite/)).toBeDefined()
-    expect(screen.getByText(/local/)).toBeDefined()
+    // Exact text: the footer also names the site's host ("localhost").
+    expect(screen.getByText('local')).toBeDefined()
     expect(await screen.findByText(/Contenu créé/u)).toBeDefined()
   })
 
@@ -99,7 +100,7 @@ describe('dashboard', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
 
     await screen.findByRole('heading', { name: 'Résumé du contenu' })
-    const draftLink = await screen.findByRole('link', { name: '1 brouillons' })
+    const draftLink = await screen.findByRole('link', { name: '1 brouillon' })
     expect(draftLink.getAttribute('href')).toBe('/collections/article?status=draft')
     const totalLink = screen.getByRole('link', { name: '2 au total' })
     expect(totalLink.getAttribute('href')).toBe('/collections/article')
@@ -121,7 +122,7 @@ describe('dashboard', () => {
     // count, so the absence of a drafts link is checked against a loaded
     // card rather than an empty one.
     expect(await screen.findByRole('link', { name: '1 au total' })).toBeDefined()
-    expect(screen.queryByRole('link', { name: /brouillons/u })).toBeNull()
+    expect(screen.queryByRole('link', { name: /brouillon/u })).toBeNull()
   })
 
   it('offers a "new article" shortcut only to a role that may create one', async () => {
@@ -238,7 +239,9 @@ describe('dashboard', () => {
     }
 
     const before = widgetNames()
-    expect(before[0]).toBe('Résumé du contenu')
+    // The key figures row is the first widget of a fresh dashboard.
+    expect(before[0]).toBe('Chiffres clés')
+    expect(before[1]).toBe('Résumé du contenu')
 
     // The first item's "up" button is disabled (nothing above it); the
     // second item's "up" button swaps it with the first — reusing

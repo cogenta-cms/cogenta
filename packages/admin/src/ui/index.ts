@@ -44,8 +44,12 @@ export {
   CardTitle,
 } from './card.js'
 export { cn } from './cn.js'
+export type { CopyButtonProps } from './copy-button.js'
+export { CopyButton } from './copy-button.js'
 export type { FieldControlProps, FieldProps } from './field.js'
 export { Field, Input, Label, Select } from './field.js'
+export type { FileButtonProps } from './file-button.js'
+export { FileButton } from './file-button.js'
 export type { ModalProps } from './modal.js'
 export { Modal } from './modal.js'
 export type { NoticeProps } from './notice.js'

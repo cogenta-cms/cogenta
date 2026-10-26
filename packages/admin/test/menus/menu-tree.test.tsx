@@ -43,7 +43,7 @@ describe('menu actions with per-item accessible names', () => {
     const root = screen.getByRole('list', { name: 'Éléments du menu' })
     const teamRow = within(root).getByText('Équipe').closest('li') as HTMLLIElement
     expect(teamRow.parentElement?.parentElement?.tagName).toBe('LI')
-    const action = screen.getByRole('button', { name: "Modifier l'élément : Équipe" })
+    const action = screen.getByRole('button', { name: 'Modifier : Équipe' })
     action.focus()
     expect(document.activeElement).toBe(action)
     fireEvent.click(action)

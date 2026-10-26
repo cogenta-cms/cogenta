@@ -53,8 +53,20 @@ import type { ProviderName } from './registry.js'
  */
 const PROVIDER_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+){0,10}$/u
 
+/**
+ * An agent whose provider is "auto" asks for whichever provider is enabled
+ * (`orchestrator.ts`'s last resort), so no provider may take that id.
+ */
+export const AUTOMATIC_PROVIDER_ID = 'auto'
+
 function assertValidProviderId(provider: string): void {
-  if (PROVIDER_ID_PATTERN.test(provider) && provider.length <= 64) return
+  if (
+    PROVIDER_ID_PATTERN.test(provider) &&
+    provider.length <= 64 &&
+    provider !== AUTOMATIC_PROVIDER_ID
+  ) {
+    return
+  }
   throw new CogentaError({
     code: 'PROVIDER_ID_INVALID',
     message: `"${provider}" is not a valid provider id.`,

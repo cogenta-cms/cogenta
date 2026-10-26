@@ -79,6 +79,11 @@ export interface TaxStore {
   updateRule(id: string, patch: UpdateTaxRuleInput): Promise<TaxRule>
   deleteRule(id: string): Promise<void>
   listRules(): Promise<readonly TaxRule[]>
+  /**
+   * Every tax category in use — by a rule or by a variant — plus the
+   * defaults, sorted. What a "category" picker offers instead of free text.
+   */
+  listCategories(): Promise<readonly string[]>
   /** The one rule that applies, or null when nothing does. */
   resolve(zone: TaxZone | null, taxCategory: string): Promise<TaxRule | null>
 }
@@ -134,14 +139,55 @@ function specificity(rule: TaxRule, zone: TaxZone | null): number | null {
 }
 
 function assertRateBp(rateBp: number): void {
-  if (!Number.isInteger(rateBp) || rateBp < 0 || rateBp > 100_000) {
+  if (!Number.isInteger(rateBp) || rateBp < 0 || rateBp > 10_000) {
     throw new CogentaError({
       code: 'COMMERCE_TAX_RULE_INVALID',
-      message: `A tax rate must be a whole number of basis points between 0 and 100000, got ${String(rateBp)}.`,
-      hint: '20 % is 2000 basis points. 5.5 % is 550.',
+      message: `A tax rate must be a whole number of basis points between 0 and 10000 (0 to 100 %), got ${String(rateBp)}.`,
+      hint: '20 % is 2000 basis points. 5.5 % is 550. 20.5 % is 2050.',
     })
   }
 }
+
+function invalidRule(message: string, hint: string): CogentaError {
+  return new CogentaError({ code: 'COMMERCE_TAX_RULE_INVALID', message, hint })
+}
+
+/** A country is the two-letter ISO 3166-1 code, or nothing at all ("everywhere"). */
+function assertCountry(country: string | null | undefined): string | null {
+  if (country === undefined || country === null || country.trim() === '') return null
+  const code = country.trim().toUpperCase()
+  if (!/^[A-Z]{2}$/u.test(code)) {
+    throw invalidRule(
+      `"${country}" is not a country code.`,
+      'Use the two-letter ISO code, such as FR or BE, or leave it empty for "everywhere".',
+    )
+  }
+  return code
+}
+
+/** A category is a short machine name the variants point at: `standard`, `reduced`, `books`… */
+const CATEGORY_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/u
+
+function assertCategory(category: string): string {
+  const value = category.trim().toLowerCase()
+  if (!CATEGORY_PATTERN.test(value)) {
+    throw invalidRule(
+      `"${category}" is not a usable tax category.`,
+      'Use lower-case letters, digits, hyphens and underscores, such as "reduced" or "books".',
+    )
+  }
+  return value
+}
+
+function assertName(name: string): string {
+  if (name.trim() === '') {
+    throw invalidRule('A tax rule needs a name.', 'Something a person recognises, like "VAT 20 %".')
+  }
+  return name.trim()
+}
+
+/** The categories every shop is offered (`shipping` is the one the delivery cost is taxed under), whether or not a rule or a product uses them yet. */
+export const DEFAULT_TAX_CATEGORIES = ['standard', 'reduced', 'zero', 'shipping'] as const
 
 function taxRuleNotFound(id: string): CogentaError {
   return new CogentaError({
@@ -154,16 +200,21 @@ function taxRuleNotFound(id: string): CogentaError {
 export function createTaxStore(db: DatabaseHandle, now: () => number = Date.now): TaxStore {
   const d = db.dialect
   const table = identifier(TABLES.taxRules, d)
+  const variants = identifier(TABLES.variants, d)
 
   return {
     createRule: async (input) => {
       assertRateBp(input.rateBp)
+      const name = assertName(input.name)
+      const country = assertCountry(input.country)
+      const taxCategory = assertCategory(input.taxCategory ?? 'standard')
+      const region = input.region?.trim() === '' ? null : (input.region?.trim() ?? null)
 
       const id = newId(now)
       await db.query(sql`
         insert into ${table} (id, country, region, tax_category, name, rate_bp, included_in_price, priority, active, created_at)
-        values (${id}, ${input.country?.toUpperCase() ?? null}, ${input.region ?? null},
-                ${input.taxCategory ?? 'standard'}, ${input.name}, ${input.rateBp},
+        values (${id}, ${country}, ${region},
+                ${taxCategory}, ${name}, ${input.rateBp},
                 ${fromBool(input.includedInPrice ?? true, d)}, ${input.priority ?? 0},
                 ${fromBool(input.active ?? true, d)}, ${new Date(now()).toISOString()})`)
 
@@ -187,11 +238,16 @@ export function createTaxStore(db: DatabaseHandle, now: () => number = Date.now)
 
       if (patch.rateBp !== undefined) assertRateBp(patch.rateBp)
 
-      const country =
-        patch.country === undefined ? current.country : (patch.country?.toUpperCase() ?? null)
-      const region = patch.region === undefined ? current.region : (patch.region ?? null)
-      const taxCategory = patch.taxCategory ?? current.taxCategory
-      const name = patch.name ?? current.name
+      const country = patch.country === undefined ? current.country : assertCountry(patch.country)
+      const region =
+        patch.region === undefined
+          ? current.region
+          : patch.region === null || patch.region.trim() === ''
+            ? null
+            : patch.region.trim()
+      const taxCategory =
+        patch.taxCategory === undefined ? current.taxCategory : assertCategory(patch.taxCategory)
+      const name = patch.name === undefined ? current.name : assertName(patch.name)
       const rateBp = patch.rateBp ?? current.rateBp
       const includedInPrice = patch.includedInPrice ?? current.includedInPrice
       const priority = patch.priority ?? current.priority
@@ -219,6 +275,21 @@ export function createTaxStore(db: DatabaseHandle, now: () => number = Date.now)
 
     deleteRule: async (id) => {
       await db.query(sql`delete from ${table} where id = ${id}`)
+    },
+
+    listCategories: async () => {
+      const found = new Set<string>(DEFAULT_TAX_CATEGORIES)
+      const fromRules = await db.query<{ tax_category: unknown }>(
+        sql`select distinct tax_category from ${table}`,
+      )
+      for (const row of fromRules.rows) found.add(toText(row.tax_category, 'tax_rule.tax_category'))
+      const fromVariants = await db.query<{ tax_category: unknown }>(
+        sql`select distinct tax_category from ${variants}`,
+      )
+      for (const row of fromVariants.rows) {
+        found.add(toText(row.tax_category, 'variant.tax_category'))
+      }
+      return [...found].sort((left, right) => left.localeCompare(right))
     },
 
     listRules: async () => {

@@ -17,10 +17,6 @@ import fr from '../src/i18n/locales/fr.json'
  * exactly one variable.
  */
 const FAKE_PLURALS_STILL_TO_FIX = [
-  'apiKeys.expiresInDays',
-  'apiKeys.gracePeriodUntil',
-  'apiKeys.purgeIn',
-  'apiKeys.rotatedBody',
   'appearance.sampleData.warnings.entries-failed',
   'appearance.sampleData.warnings.menu-merged',
   'appearance.sampleData.warnings.slug-conflict',
@@ -38,11 +34,6 @@ const FAKE_PLURALS_STILL_TO_FIX = [
   'fields.repeaterMin',
   'formSubmissions.gdprErased',
   'formSubmissions.selectedCount',
-  'globalSearch.actions.create',
-  'health.applyResult',
-  'health.destructiveNotice',
-  'health.driversIntro',
-  'health.migrationsSummary',
   'mcpClients.toolsCount',
   'media.bulkDeleteConfirmTitle',
   'media.bulkReportSummary',
@@ -53,10 +44,6 @@ const FAKE_PLURALS_STILL_TO_FIX = [
   'notices.health.migrations-pending-destructive.body',
   'notices.health.migrations-pending.body',
   'notices.security.suspicious-activity.body',
-  'profile.passwordStrengthShort',
-  'profile.sessionsRevokedOthers',
-  'resetPassword.strengthShort',
-  'rolesMatrix.anomalyUnknownRoleInUse',
   'seo.noindexCount',
   'sitePlan.appliedSummary',
   'sitePlan.uploadLabel',

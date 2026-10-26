@@ -1,0 +1,30 @@
+{
+  "promptSettings": {
+    "nameRequired": "The name is required.",
+    "templateRequired": "The prompt text is required.",
+    "created": "Prompt “{{name}}” created.",
+    "saved": "Prompt “{{name}}” saved.",
+    "removed": "Prompt “{{name}}” deleted.",
+    "resetDone": "Prompt “{{name}}” put back to its original version.",
+    "createHint": "A prompt created here is used by no tool until a tool names it: only the prompts shipped with Cogenta are connected to the assistant.",
+    "origin": "Origin",
+    "builtin": "Built-in",
+    "custom": "Created by you",
+    "modified": "Modified",
+    "reset": "Reset",
+    "resetNamed": "Put {{name}} back to its original version",
+    "resetTitle": "Reset “{{name}}”?",
+    "resetBody": "The text goes back to the version shipped with Cogenta. Your changes will be lost.",
+    "resetConfirm": "Restore the original version",
+    "removeNamed": "Delete the prompt {{name}}",
+    "removeTitle": "Delete “{{name}}”?",
+    "removeBody": "The prompt will be deleted. This cannot be undone.",
+    "removeConfirm": "Delete the prompt",
+    "shippedWords": "“{{name}}” — {{description}} The name and description are provided by Cogenta; only the prompt text can be edited.",
+    "variablesUsed": "Variables used: {{variables}}",
+    "variablesMissing": "This prompt no longer uses {{variables}}, which the tool fills in on every call: what it asks the model may change.",
+    "placeholderHint": "Names in double braces are replaced by the tool when it is called: keep them.",
+    "category": "Category",
+    "template": "Prompt text"
+  }
+}

@@ -6,6 +6,7 @@ import type {
   SelectHTMLAttributes,
 } from 'react'
 import { useId } from 'react'
+import '../styles/select.css'
 import { cn } from './cn.js'
 
 /**
@@ -100,5 +101,10 @@ export function Select({
   // A native `<select>`, not a listbox built out of divs: it is keyboard- and
   // screen-reader-correct for free, and it is what a phone renders as a native
   // picker. The design system gains nothing real by replacing it.
-  return <select className={cn(CONTROL_CLASSES, 'cursor-pointer pr-8', className)} {...props} />
+  return (
+    <select
+      className={cn(CONTROL_CLASSES, 'cg-select cursor-pointer pr-8', className)}
+      {...props}
+    />
+  )
 }

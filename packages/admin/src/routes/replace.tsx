@@ -1,10 +1,12 @@
-import type { TFunction } from 'i18next'
 import { type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { type ReplaceReport, replaceContent, restoreVersion } from '../api/content-client.js'
 import { describeApiError } from '../api/describe-error.js'
 import { useAuth } from '../auth/auth-context.js'
+import { describeHitPath } from '../lib/replace-paths.js'
+import { useSchema } from '../schema/schema-context.js'
+import { languageName } from '../search/result-labels.js'
 import { Badge, Button, Card, CardBody, Field, Input, Notice, PageHeader } from '../ui/index.js'
 
 /**
@@ -21,24 +23,12 @@ import { Badge, Button, Card, CardBody, Field, Input, Notice, PageHeader } from 
  * Every replacement lands as an ordinary edit: a new version in each entry's
  * history, restorable there one entry at a time.
  */
-/**
- * Where a match sits, said the way an editor would: `title` stays the field
- * name it is, `blocks.blocks[2].data.heading` becomes "block 3 · heading".
- * The raw path is kept as a tooltip for whoever needs the exact location.
- */
-function describeHitPath(path: string, t: TFunction): string {
-  const block = /^blocks\.([^[]+)\[(\d+)\](?:\.data)?\.?(.*)$/u.exec(path)
-  if (block === null) return path
-  const [, zone = '', index = '0', rest = ''] = block
-  return t(zone === 'blocks' ? 'replace.inBlock' : 'replace.inZoneBlock', {
-    position: Number(index) + 1,
-    zone,
-    field: rest === '' ? '—' : rest,
-  })
-}
-
 export function ReplaceRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const schemaState = useSchema()
+  const collections = schemaState.status === 'ready' ? schemaState.schema.collections : []
+  const multilingual =
+    schemaState.status === 'ready' && (schemaState.schema.site?.locales.length ?? 1) > 1
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
 
@@ -302,8 +292,13 @@ export function ReplaceRoute(): JSX.Element {
                       >
                         {entry.title === '' ? t('replace.untitled') : entry.title}
                       </Link>
-                      <Badge tone="neutral">{entry.collection}</Badge>
-                      <Badge tone="neutral">{entry.locale}</Badge>
+                      <Badge tone="neutral">
+                        {collections.find((candidate) => candidate.name === entry.collection)
+                          ?.labels.singular ?? entry.collection}
+                      </Badge>
+                      {multilingual && (
+                        <Badge tone="neutral">{languageName(entry.locale, i18n.language)}</Badge>
+                      )}
                       <Badge tone="neutral">
                         {t('replace.occurrences', { count: entry.occurrences })}
                       </Badge>
@@ -315,7 +310,12 @@ export function ReplaceRoute(): JSX.Element {
                           className="flex flex-col gap-1 border-t border-border pt-2 text-sm first:border-t-0 first:pt-0"
                         >
                           <span className="text-xs text-muted-foreground" title={hit.path}>
-                            {describeHitPath(hit.path, t)}
+                            {describeHitPath(hit.path, t, {
+                              collection: collections.find(
+                                (candidate) => candidate.name === entry.collection,
+                              ),
+                              blockType: hit.blockType,
+                            })}
                           </span>
                           <del className="break-words text-muted-foreground">{hit.before}</del>
                           <ins className="break-words no-underline">{hit.after}</ins>

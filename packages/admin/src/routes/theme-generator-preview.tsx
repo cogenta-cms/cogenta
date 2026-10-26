@@ -7,6 +7,7 @@ import {
   type ThemeGenerateCandidate,
 } from '../api/theme-client.js'
 import { previewSandbox } from '../api/theme-sandbox-client.js'
+import { withoutScripts } from './appearance-preview.js'
 
 /**
  * One AI-generated theme candidate's live preview, inside the theme
@@ -161,7 +162,7 @@ export function ThemeCandidatePreview({
       {error === null && html !== null && (
         <iframe
           title={t('themeGenerator.previewTitle', { label: candidate.label })}
-          srcDoc={html}
+          srcDoc={withoutScripts(html)}
           // No script at all: this HTML comes from theme code an agent or a
           // ZIP may have written, and an iframe without `sandbox` ran it on
           // the admin's origin, next to its session token (security review

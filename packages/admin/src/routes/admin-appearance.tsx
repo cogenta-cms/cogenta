@@ -388,6 +388,7 @@ export function AdminAppearanceRoute(): JSX.Element {
                       }
                       onChange={(event) => setOverride('radius', Number(event.target.value))}
                     />
+                    <span className="text-sm text-muted-foreground">rem</span>
                     {overrides.radius !== undefined && (
                       <Button
                         type="button"

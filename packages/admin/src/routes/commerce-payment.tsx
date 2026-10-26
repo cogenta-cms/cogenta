@@ -5,9 +5,18 @@ import {
   type PaymentDriverStatus,
   testPaymentConnection,
 } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
 import { useAuth } from '../auth/auth-context.js'
-import { Button, Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
+import { commerceErrorMessage } from '../commerce/commerce-errors.js'
+import {
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  CopyButton,
+  Notice,
+} from '../ui/index.js'
 
 /**
  * Payment — fiche 34 task 3.
@@ -33,7 +42,7 @@ export function CommercePaymentRoute(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
   const [results, setResults] = useState<
-    Readonly<Record<string, { readonly ok: boolean; readonly message: string | null }>>
+    Readonly<Record<string, { readonly ok: boolean; readonly code: string }>>
   >({})
 
   const load = useCallback(async () => {
@@ -46,7 +55,7 @@ export function CommercePaymentRoute(): JSX.Element {
       setTestMode(status.testMode)
       setWebhookUrl(status.webhookUrl)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commercePayment.loadError'))
+      setError(commerceErrorMessage(t, caught, 'commercePayment.loadError'))
     } finally {
       setLoading(false)
     }
@@ -61,15 +70,12 @@ export function CommercePaymentRoute(): JSX.Element {
     setTesting(name)
     try {
       const result = await testPaymentConnection(token, name)
-      setResults((current) => ({ ...current, [name]: result }))
-    } catch (caught) {
       setResults((current) => ({
         ...current,
-        [name]: {
-          ok: false,
-          message: caught instanceof ApiError ? caught.message : t('commercePayment.testError'),
-        },
+        [name]: { ok: result.ok, code: result.code ?? (result.ok ? 'ok' : 'error') },
       }))
+    } catch {
+      setResults((current) => ({ ...current, [name]: { ok: false, code: 'error' } }))
     } finally {
       setTesting(null)
     }
@@ -159,27 +165,19 @@ export function CommercePaymentRoute(): JSX.Element {
                             defaultValue: driver.name,
                           })}
                           {driver.selected === true && (
-                            <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                              {t('commercePayment.active')}
-                            </span>
+                            <Badge tone="primary">{t('commercePayment.active')}</Badge>
                           )}
-                          <span
-                            className={
-                              driver.configured
-                                ? 'rounded bg-success-surface px-2 py-0.5 text-xs font-medium text-success'
-                                : 'rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground'
-                            }
-                          >
-                            {driver.configured
-                              ? t('commercePayment.keyPresent')
-                              : t('commercePayment.keyAbsent')}
-                          </span>
+                          {driver.settlesOffline ? (
+                            <Badge tone="neutral">{t('commercePayment.noKeyNeeded')}</Badge>
+                          ) : (
+                            <Badge tone={driver.configured ? 'success' : 'warning'}>
+                              {driver.configured
+                                ? t('commercePayment.keyPresent')
+                                : t('commercePayment.keyAbsent')}
+                            </Badge>
+                          )}
                         </h3>
                         <p className="m-0 text-sm text-muted-foreground">
-                          {t('commercePayment.tier', {
-                            tier: t(`commercePayment.tierName.${driver.tier}`),
-                          })}
-                          {' — '}
                           {driver.settlesOffline
                             ? t('commercePayment.settlesOffline')
                             : t('commercePayment.settlesOnline')}
@@ -193,22 +191,24 @@ export function CommercePaymentRoute(): JSX.Element {
                                 : 'm-0 text-sm font-medium text-destructive'
                             }
                           >
-                            {results[driver.name]?.ok
-                              ? t('commercePayment.testOk')
-                              : (results[driver.name]?.message ?? t('commercePayment.testFailed'))}
+                            {t(
+                              `commercePayment.testResult.${results[driver.name]?.code ?? 'error'}`,
+                            )}
                           </p>
                         )}
                       </div>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={testing === driver.name}
-                        onClick={() => void runTest(driver.name)}
-                      >
-                        {testing === driver.name
-                          ? t('commercePayment.testing')
-                          : t('commercePayment.testConnection')}
-                      </Button>
+                      {!driver.settlesOffline && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={testing === driver.name}
+                          onClick={() => void runTest(driver.name)}
+                        >
+                          {testing === driver.name
+                            ? t('commercePayment.testing')
+                            : t('commercePayment.testConnection')}
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -227,9 +227,16 @@ export function CommercePaymentRoute(): JSX.Element {
                 <p className="m-0 text-muted-foreground">{t('commercePayment.webhookNone')}</p>
               ) : (
                 <>
-                  <code className="break-all rounded bg-muted px-2 py-1 font-mono text-xs">
-                    {webhookUrl}
-                  </code>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <code className="min-w-0 flex-1 break-all rounded bg-muted px-2 py-1 font-mono text-xs">
+                      {webhookUrl}
+                    </code>
+                    <CopyButton
+                      value={webhookUrl}
+                      label={t('commercePayment.copyUrl')}
+                      copiedLabel={t('commercePayment.copied')}
+                    />
+                  </div>
                   <p className="m-0 text-muted-foreground">
                     {t('commercePayment.webhookNotWired')}
                   </p>

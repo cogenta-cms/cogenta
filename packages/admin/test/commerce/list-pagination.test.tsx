@@ -98,8 +98,7 @@ describe('commerce lists navigate bounded pages', () => {
       expect(calls.at(-1)?.searchParams.has('cursor')).toBe(false)
       expect(calls.at(-1)?.searchParams.get('q')).toBe('matched')
       expect(screen.queryByRole('button', { name: 'Page précédente' })).toBeNull()
-      if (kind === 'orders')
-        expect(screen.getByText(/Total des commandes de cette page/u)).toBeDefined()
+      if (kind === 'orders') expect(screen.getByText(/^Total de cette page/u)).toBeDefined()
     },
   )
 

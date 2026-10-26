@@ -38,7 +38,9 @@ describe('the unified assistant screen', () => {
     await goToAssistant()
 
     expect(await screen.findByText('No AI provider is configured for this site.')).toBeDefined()
-    expect(screen.getByText(/cogenta.config/u)).toBeDefined()
+    // Both ways to switch it on are spelled out: the Providers screen, and the environment.
+    expect(screen.getByText(/ajoutez une clé dans « Fournisseurs d’IA »/u)).toBeDefined()
+    expect(screen.getByText(/COGENTA_LLM_API_KEY/u)).toBeDefined()
     expect(screen.queryByRole('tab')).toBeNull()
   })
 
@@ -152,7 +154,8 @@ describe('the unified assistant screen', () => {
     })
     await goToAssistant()
 
-    expect(await screen.findByText(/850000 sur 1000000/u)).toBeDefined()
+    // Numbers are grouped in the admin's language ("850 000"), not run together.
+    expect(await screen.findByText(/850\s000 sur 1\s000\s000 jetons/u)).toBeDefined()
     expect(screen.getByText(/utilisé 80 % ou plus|used 80% or more/iu)).toBeDefined()
   })
 
@@ -181,7 +184,7 @@ describe('the unified assistant screen', () => {
     })
     await goToAssistant()
 
-    expect(await screen.findByText(/file \(384/u)).toBeDefined()
+    expect(await screen.findByText(/Stockage de l’index : fichier local/u)).toBeDefined()
     expect(screen.getByText(/7 fiches indexées|7 entries indexed/iu)).toBeDefined()
     const indexButton = screen.getByRole('button', {
       name: 'Voir ce qui est indexé et ajouter des documents de référence',

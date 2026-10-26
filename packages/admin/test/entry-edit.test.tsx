@@ -287,8 +287,11 @@ describe('the writing assistant field picker', () => {
     await screen.findByRole('heading', { name: 'Modifier : Article' })
 
     const picker = await screen.findByLabelText('Quel champ ?')
-    expect(screen.getByRole('option', { name: 'title' })).toBeDefined()
-    expect(screen.getByRole('option', { name: 'summary' })).toBeDefined()
+    // Each option is the field's label in the admin's language; its value is the real field name.
+    const titleOption = screen.getByRole('option', { name: 'Titre' }) as HTMLOptionElement
+    const summaryOption = screen.getByRole('option', { name: 'Résumé' }) as HTMLOptionElement
+    expect(titleOption.value).toBe('title')
+    expect(summaryOption.value).toBe('summary')
     expect(screen.queryByRole('option', { name: '0' })).toBeNull()
     expect(screen.queryByRole('option', { name: '1' })).toBeNull()
 
@@ -324,7 +327,8 @@ describe('multilingual editing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'fr — créer la traduction' }))
     await screen.findByRole('heading', { name: 'Nouveau : Article' })
 
-    expect(screen.getByText('fr')).toBeDefined()
+    // The language is named in the admin's language, not by its code.
+    expect(screen.getByText('français')).toBeDefined()
     expect(screen.getByText('(nouvelle traduction)', { exact: false })).toBeDefined()
     expect((screen.getByLabelText('Titre', { exact: false }) as HTMLInputElement).value).toBe(
       'First article',

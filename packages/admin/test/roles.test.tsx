@@ -53,8 +53,9 @@ describe('the permission matrix', () => {
     const table = within(screen.getByRole('tabpanel', { name: 'Par collection' }))
     const articleRow = table.getByText('Articles').closest('tr')
     expect(articleRow).not.toBeNull()
-    expect(within(articleRow as HTMLElement).getByText('public')).toBeDefined()
-    expect(within(articleRow as HTMLElement).getAllByText('editor')).not.toHaveLength(0)
+    // Roles are named by their French label: "public" reads "Tout le monde".
+    expect(within(articleRow as HTMLElement).getByText('Tout le monde')).toBeDefined()
+    expect(within(articleRow as HTMLElement).getAllByText('Éditeur')).not.toHaveLength(0)
 
     const memoRow = table.getByText('Secret memos').closest('tr')
     expect(memoRow).not.toBeNull()
@@ -81,7 +82,7 @@ describe('the permission matrix', () => {
 
     // `bob` holds `viewer`, which `MOCK_SCHEMA` never names anywhere.
     expect(
-      await screen.findByText(/Le rôle « viewer » est détenu par 1 compte\(s\)/u),
+      await screen.findByText(/Le rôle « Lecteur » est détenu par 1 compte mais/u),
     ).toBeDefined()
   })
 
@@ -92,7 +93,7 @@ describe('the permission matrix', () => {
     // `editor` is named throughout `MOCK_SCHEMA` but neither `alice` (admin)
     // nor `bob` (viewer) holds it.
     expect(
-      await screen.findByText(/Le rôle « editor » est déclaré par le schéma mais/u),
+      await screen.findByText(/Le rôle « Éditeur » est prévu par le schéma du site, mais/u),
     ).toBeDefined()
   })
 
@@ -142,8 +143,11 @@ describe('the permission matrix', () => {
         .getByRole('heading', { name: 'Permissions de la boutique' })
         .closest('section') as HTMLElement,
     )
-    expect(commerce.getByText('commerce.order.refund')).toBeDefined()
-    expect(commerce.getByText('shopkeeper')).toBeDefined()
+    // Permissions read as sentences, roles by their French label; the
+    // technical identifier is gone from the screen.
+    expect(commerce.getByText('Rembourser une commande')).toBeDefined()
+    expect(commerce.getByText('Gestionnaire de boutique')).toBeDefined()
+    expect(commerce.queryByText('commerce.order.refund')).toBeNull()
   })
 
   it('tells a non-admin plainly instead of rendering a matrix that would 403', async () => {
@@ -235,7 +239,9 @@ describe('the write UI', () => {
   }
 
   function articleCreateEditButton(): HTMLElement {
-    return within(articleCreateCell()).getByRole('button', { name: 'Modifier' })
+    return within(articleCreateCell()).getByRole('button', {
+      name: 'Modifier qui peut « Créer » sur Articles',
+    })
   }
 
   it('widens a permission through the two-step edit-then-confirm flow, and journals it', async () => {
@@ -247,14 +253,14 @@ describe('the write UI', () => {
     // The file's own rule is already selected — editor may create articles.
     expect(within(modal).getByRole('checkbox', { name: 'Éditeur' })).toHaveProperty('checked', true)
 
-    fireEvent.click(within(modal).getByRole('checkbox', { name: 'viewer' }))
+    fireEvent.click(within(modal).getByRole('checkbox', { name: 'Lecteur' }))
     fireEvent.click(within(modal).getByRole('button', { name: 'Vérifier les changements' }))
 
     // The confirmation screen names before and after — not just a generic "are you sure".
     expect(await within(modal).findByText('Avant')).toBeDefined()
-    expect(within(modal).getByText('editor')).toBeDefined()
+    expect(within(modal).getByText('Éditeur')).toBeDefined()
     expect(within(modal).getByText('Après')).toBeDefined()
-    expect(within(modal).getByText('editor, viewer')).toBeDefined()
+    expect(within(modal).getByText('Éditeur, Lecteur')).toBeDefined()
 
     fireEvent.click(within(modal).getByRole('button', { name: 'Confirmer et enregistrer' }))
 
@@ -269,7 +275,7 @@ describe('the write UI', () => {
     // confused with this one. The dialog closes before the reloaded matrix is
     // back, so the cell is looked up again on every attempt.
     await waitFor(() =>
-      expect(within(articleCreateCell()).getByText('editor, viewer')).toBeDefined(),
+      expect(within(articleCreateCell()).getByText('Éditeur, Lecteur')).toBeDefined(),
     )
     expect(within(articleCreateCell()).getByText('Surchargé')).toBeDefined()
   })
@@ -298,7 +304,7 @@ describe('the write UI', () => {
     // First widen it, exactly as the earlier test does.
     fireEvent.click(articleCreateEditButton())
     let modal = await screen.findByRole('dialog')
-    fireEvent.click(within(modal).getByRole('checkbox', { name: 'viewer' }))
+    fireEvent.click(within(modal).getByRole('checkbox', { name: 'Lecteur' }))
     fireEvent.click(within(modal).getByRole('button', { name: 'Vérifier les changements' }))
     fireEvent.click(within(modal).getByRole('button', { name: 'Confirmer et enregistrer' }))
     await waitFor(() => {
@@ -312,16 +318,16 @@ describe('the write UI', () => {
     // Now revert it.
     fireEvent.click(articleCreateEditButton())
     modal = await screen.findByRole('dialog')
-    fireEvent.click(within(modal).getByRole('button', { name: 'Revenir au fichier' }))
-    expect(await within(modal).findByText('Revenir à cogenta.schema.* ?')).toBeDefined()
+    fireEvent.click(within(modal).getByRole('button', { name: "Revenir à la règle d'origine" }))
+    expect(await within(modal).findByText("Revenir à la règle d'origine ?")).toBeDefined()
     fireEvent.click(within(modal).getByRole('button', { name: 'Confirmer et enregistrer' }))
 
-    expect(await screen.findByText('Revenu à la règle du fichier.')).toBeDefined()
+    expect(await screen.findByText("La règle d'origine est rétablie.")).toBeDefined()
 
     await waitFor(() => {
       expect(within(articleCreateCell()).queryByText('Surchargé')).toBeNull()
     })
-    expect(within(articleCreateCell()).getByText('editor')).toBeDefined()
+    expect(within(articleCreateCell()).getByText('Éditeur')).toBeDefined()
   })
 
   it('an editor cannot see the write UI at all — the nav link itself is admin-only', async () => {

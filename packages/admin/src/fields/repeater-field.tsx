@@ -31,7 +31,10 @@ function defaultForItemField(kind: ItemFieldKind): unknown {
 
 function blankItem(items: readonly ItemFieldDefinition[], keyed: boolean): Record<string, unknown> {
   const data: Record<string, unknown> = {}
-  for (const itemField of items) data[itemField.name] = defaultForItemField(itemField.kind)
+  for (const itemField of items) {
+    data[itemField.name] =
+      itemField.default !== undefined ? itemField.default : defaultForItemField(itemField.kind)
+  }
   if (keyed) data._key = freshItemKey()
   return data
 }

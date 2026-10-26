@@ -2,6 +2,7 @@ import { type FormEvent, type JSX, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router'
 import { type AnalyticsSummary, getAnalyticsSummary } from '../api/analytics-client.js'
+import { listApiKeysPage } from '../api/api-keys-client.js'
 import { type AuditEntry, listAuditEntries } from '../api/audit-client.js'
 import { ApiError } from '../api/client.js'
 import {
@@ -14,6 +15,7 @@ import {
 import { getSiteHealth, type SiteHealth } from '../api/health-client.js'
 import { listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { auditActionLabel, auditActorLabel } from '../lib/audit-actions.js'
 import {
   type DashboardWidgetId,
   loadDashboardPrefs,
@@ -28,18 +30,19 @@ import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import {
   AuditIcon,
   BackupIcon,
+  CalendarIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  ClockIcon,
   CloseIcon,
   CollectionsIcon,
+  DashboardIcon,
   EditIcon,
   GripIcon,
   HealthIcon,
   MediaIcon,
   PlusIcon,
-  PulseIcon,
-  SettingsIcon,
+  ReviewIcon,
+  SlidersIcon,
   TrashIcon,
   TrendIcon,
 } from '../ui/icons.js'
@@ -58,12 +61,13 @@ const IMMINENT_HOURS = 48
  * the only spot with an icon its own card lacks.
  */
 const WIDGET_ICONS: Record<DashboardWidgetId, (props: { className?: string }) => JSX.Element> = {
-  summary: PulseIcon,
-  health: PulseIcon,
+  kpi: DashboardIcon,
+  summary: CollectionsIcon,
+  health: HealthIcon,
   activity: AuditIcon,
   analytics: TrendIcon,
-  scheduled: ClockIcon,
-  todo: ClockIcon,
+  scheduled: CalendarIcon,
+  todo: ReviewIcon,
   shortcuts: PlusIcon,
   backups: BackupIcon,
 }
@@ -127,6 +131,12 @@ const STATUS_DOT: Record<SiteHealth[keyof SiteHealth]['status'], string> = {
 
 function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth] }): JSX.Element {
   const { t } = useTranslation()
+  // A fallback driver that works ("degraded") is the normal state of a fresh
+  // site, not an incident: it reads "simple mode", not "degraded — degraded".
+  const status =
+    report.status === 'degraded'
+      ? t('dashboard.healthSimple')
+      : t(`dashboard.healthStatus.${report.status}`)
   return (
     <span className="flex flex-col gap-1">
       <span className="inline-flex items-center gap-2 rounded-sm border border-border bg-card px-2.5 py-1 font-mono text-xs">
@@ -134,16 +144,9 @@ function HealthBadge({ report }: { readonly report: SiteHealth[keyof SiteHealth]
           className={`size-1.5 shrink-0 rounded-full ${STATUS_DOT[report.status]}`}
           aria-hidden="true"
         />
-        {report.driver}{' '}
-        <span className="text-muted-foreground">
-          ({t(`dashboard.healthTier.${report.tier}`, { defaultValue: report.tier })})
-        </span>{' '}
-        — {t(`dashboard.healthStatus.${report.status}`)}
+        {report.driver} <span className="text-muted-foreground">· {status}</span>
       </span>
-      {/* A raw "degraded" badge, unexplained, reads as an incident to a
-          non-technical admin — it almost always just means "no external
-          service configured", which is the expected state on a fresh site. */}
-      {report.status !== 'ok' && (
+      {report.status !== 'ok' && report.status !== 'down' && (
         <span className="text-xs text-muted-foreground">{t('dashboard.healthDegradedHint')}</span>
       )}
     </span>
@@ -242,11 +245,21 @@ export function DashboardRoute(): JSX.Element {
       return
     }
     let cancelled = false
-    listUsers(token)
-      .then((users) => {
-        if (!cancelled) setActorNames(new Map(users.map((user) => [user.id, user.email])))
-      })
-      .catch(() => undefined)
+    void Promise.all([
+      listUsers(token).catch(() => []),
+      listApiKeysPage(token, { limit: 100 }).then(
+        (page) => page.keys,
+        () => [],
+      ),
+    ]).then(([users, keys]) => {
+      if (cancelled) return
+      setActorNames(
+        new Map<string, string>([
+          ...users.map((user): [string, string] => [user.id, user.email]),
+          ...keys.map((key): [string, string] => [`apikey:${key.id}`, key.name]),
+        ]),
+      )
+    })
     return () => {
       cancelled = true
     }
@@ -582,7 +595,7 @@ export function DashboardRoute(): JSX.Element {
         className="reveal reveal-1 flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
         <h2 id="dashboard-summary-heading" className="m-0 flex items-center gap-3 text-base">
-          <WidgetIconWell icon={PulseIcon} />
+          <WidgetIconWell icon={CollectionsIcon} />
           {t('dashboard.summaryHeading')}
           {collapseToggle('summary')}
         </h2>
@@ -661,7 +674,7 @@ export function DashboardRoute(): JSX.Element {
         className="reveal reveal-2 flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
         <h2 id="dashboard-health-heading" className="m-0 flex items-center gap-3 text-base">
-          <WidgetIconWell icon={PulseIcon} />
+          <WidgetIconWell icon={HealthIcon} />
           {t('dashboard.healthHeading')}
           {collapseToggle('health')}
         </h2>
@@ -736,16 +749,11 @@ export function DashboardRoute(): JSX.Element {
                     </span>
                     <br />
                     <span className="font-medium">
-                      {entry.actorId === null
-                        ? '—'
-                        : (actorNames.get(entry.actorId) ?? entry.actorId)}
+                      {auditActorLabel(t, entry.actorId, actorNames)}
                     </span>{' '}
-                    —{' '}
-                    {t(`audit.actionLabel.${entry.action}`, {
-                      defaultValue: t('audit.actionOther'),
-                    })}
+                    — {auditActionLabel(t, entry.action)}
                     {entry.collection !== null && (
-                      <span className="text-muted-foreground"> ({entry.collection})</span>
+                      <span className="text-muted-foreground"> ({labelFor(entry.collection)})</span>
                     )}
                   </li>
                 ))}
@@ -784,17 +792,13 @@ export function DashboardRoute(): JSX.Element {
             {isAdmin && analytics !== null && (
               <>
                 <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 text-sm sm:grid-cols-2">
-                  <li>
-                    {t('analytics.widgetTotal')}: {analytics.totalViews}
-                  </li>
-                  <li>
-                    {t('analytics.widgetVisitors')}: {analytics.uniqueVisitors}
-                  </li>
+                  <li>{t('analytics.widgetTotalLine', { value: analytics.totalViews })}</li>
+                  <li>{t('analytics.widgetVisitorsLine', { value: analytics.uniqueVisitors })}</li>
                 </ul>
                 <p className="m-0 text-sm">
-                  <a href="/analytics" className="font-medium text-primary hover:underline">
+                  <Link to="/analytics" className="font-medium text-primary hover:underline">
                     {t('analytics.widgetLink')}
-                  </a>
+                  </Link>
                 </p>
               </>
             )}
@@ -811,7 +815,7 @@ export function DashboardRoute(): JSX.Element {
         className="reveal reveal-5 flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
         <h2 id="dashboard-scheduled-heading" className="m-0 flex items-center gap-3 text-base">
-          <WidgetIconWell icon={ClockIcon} />
+          <WidgetIconWell icon={CalendarIcon} />
           {t('dashboard.scheduledHeading')}
           {collapseToggle('scheduled')}
         </h2>
@@ -832,10 +836,20 @@ export function DashboardRoute(): JSX.Element {
                     key={`${item.collection}:${item.entry.id}`}
                     className="flex items-center gap-2 text-sm"
                   >
-                    <span className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                      {item.collection}
+                    <span className="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                      {labelFor(item.collection)}
                     </span>
-                    {titleOf(item.entry)}
+                    <Link
+                      to={`/collections/${encodeURIComponent(item.collection)}/${encodeURIComponent(item.entry.id)}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {titleOf(item.entry)}
+                    </Link>
+                    {item.entry.publishedAt !== null && (
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {formatDateTime(item.entry.publishedAt)}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -854,7 +868,7 @@ export function DashboardRoute(): JSX.Element {
         className="reveal reveal-6 flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
         <h2 id="dashboard-todo-heading" className="m-0 flex items-center gap-3 text-base">
-          <WidgetIconWell icon={ClockIcon} />
+          <WidgetIconWell icon={ReviewIcon} />
           {t('dashboard.todoHeading')}
           {collapseToggle('todo')}
         </h2>
@@ -879,8 +893,8 @@ export function DashboardRoute(): JSX.Element {
                       key={`draft:${item.collection}:${item.entry.id}`}
                       className="flex items-center gap-2 text-sm"
                     >
-                      <span className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                        {item.collection}
+                      <span className="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        {labelFor(item.collection)}
                       </span>
                       <Link
                         to={`/collections/${encodeURIComponent(item.collection)}/${encodeURIComponent(item.entry.id)}`}
@@ -904,10 +918,20 @@ export function DashboardRoute(): JSX.Element {
                       key={`imminent:${item.collection}:${item.entry.id}`}
                       className="flex items-center gap-2 text-sm"
                     >
-                      <span className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-                        {item.collection}
+                      <span className="rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        {labelFor(item.collection)}
                       </span>
-                      {titleOf(item.entry)}
+                      <Link
+                        to={`/collections/${encodeURIComponent(item.collection)}/${encodeURIComponent(item.entry.id)}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {titleOf(item.entry)}
+                      </Link>
+                      {item.entry.publishedAt !== null && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {formatDateTime(item.entry.publishedAt)}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -961,7 +985,7 @@ export function DashboardRoute(): JSX.Element {
             {creatableCollections.length > 0 && (
               <form
                 onSubmit={(event) => void submitQuickDraft(event)}
-                className="flex flex-col gap-2 border-t border-dashed border-border pt-4"
+                className="flex flex-col gap-3 border-t border-border pt-4"
               >
                 <h3 className="m-0 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                   {t('dashboard.quickDraftHeading')}
@@ -976,7 +1000,7 @@ export function DashboardRoute(): JSX.Element {
                   <select
                     value={draftCollection}
                     onChange={(event) => setDraftCollection(event.target.value)}
-                    className="rounded-sm border border-border bg-background px-2 py-1.5"
+                    className="rounded-sm border border-border bg-background px-2 py-1.5 text-sm"
                   >
                     <option value="">{t('dashboard.quickDraftChoose')}</option>
                     {creatableCollections.map((collection) => (
@@ -1023,20 +1047,32 @@ export function DashboardRoute(): JSX.Element {
     return (
       <section
         aria-labelledby="dashboard-backups-heading"
-        className="flex flex-col gap-2 rounded-xl border border-dashed border-border bg-card p-5 text-sm text-muted-foreground"
+        className="reveal flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-card transition hover:-translate-y-px hover:shadow-raised"
       >
-        <h2
-          id="dashboard-backups-heading"
-          className="m-0 flex items-center gap-2 text-xs font-semibold uppercase"
-        >
-          <BackupIcon className="size-4" />
+        <h2 id="dashboard-backups-heading" className="m-0 flex items-center gap-3 text-base">
+          <WidgetIconWell icon={BackupIcon} />
           {t('dashboard.backupsHeading')}
           {collapseToggle('backups')}
         </h2>
         {!prefs.collapsed.has('backups') && (
           <>
-            <p className="m-0">{t('dashboard.backupsBody')}</p>
-            <Link to="/documentation/docs/functional/exploiter-le-site#sauvegarder-et-restaurer">
+            <p className="m-0 text-sm text-muted-foreground">{t('dashboard.backupsBody')}</p>
+            <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+              {(['create', 'list', 'preview'] as const).map((step) => (
+                <li key={step} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <code className="rounded-sm bg-muted px-2 py-0.5 font-mono text-xs">
+                    {t(`dashboard.backupsCommand.${step}`)}
+                  </code>
+                  <span className="text-muted-foreground">
+                    {t(`dashboard.backupsCommandHelp.${step}`)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <Link
+              to="/documentation/docs/functional/exploiter-le-site#sauvegarder-et-restaurer"
+              className="text-sm font-medium text-primary hover:underline"
+            >
               {t('dashboard.backupsHelp')}
             </Link>
           </>
@@ -1052,7 +1088,7 @@ export function DashboardRoute(): JSX.Element {
    * role has no visibility into that figure at all, never a `0` invented to
    * fill the tile.
    */
-  function renderKpiRow(): JSX.Element {
+  function renderKpi(): JSX.Element {
     const tiles: readonly {
       readonly key: string
       readonly labelKey: string
@@ -1082,7 +1118,11 @@ export function DashboardRoute(): JSX.Element {
         labelKey: 'dashboard.kpi.health',
         icon: HealthIcon,
         value:
-          overallHealthStatus === null ? '—' : t(`dashboard.healthStatus.${overallHealthStatus}`),
+          overallHealthStatus === null
+            ? '—'
+            : overallHealthStatus === 'degraded'
+              ? t('dashboard.healthSimple')
+              : t(`dashboard.healthStatus.${overallHealthStatus}`),
       },
     ]
 
@@ -1099,7 +1139,11 @@ export function DashboardRoute(): JSX.Element {
             <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               {t(tile.labelKey)}
             </span>
-            <span className="text-3xl font-bold tabular-nums">{tile.value}</span>
+            <span
+              className={`${tile.key === 'health' ? 'text-xl first-letter:uppercase' : 'text-3xl'} font-bold tabular-nums`}
+            >
+              {tile.value}
+            </span>
           </div>
         ))}
       </div>
@@ -1107,6 +1151,7 @@ export function DashboardRoute(): JSX.Element {
   }
 
   const renderers: Record<DashboardWidgetId, () => JSX.Element> = {
+    kpi: renderKpi,
     summary: renderSummary,
     health: renderHealth,
     activity: renderActivity,
@@ -1151,17 +1196,16 @@ export function DashboardRoute(): JSX.Element {
             onClick={() => setSettingsOpen(true)}
             aria-label={t('dashboard.customize')}
             title={t('dashboard.customize')}
-            className="mt-1 inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="mt-1 inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border border-border bg-card px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
-            <SettingsIcon className="size-5" />
+            <SlidersIcon className="size-4" />
+            <span className="max-sm:sr-only">{t('dashboard.customizeShort')}</span>
           </button>
         </div>
         {/* A thin gradient hairline replaces the old solid 2px rule — same
             role (closes off the page header), lighter weight. */}
         <div className="h-px bg-gradient-to-r from-primary/60 to-transparent" aria-hidden="true" />
       </div>
-
-      {renderKpiRow()}
 
       {/* Fiche 22 tâche 3, redesigned by tâche 8 part 2 and again by fiche 39:
           order and visibility, per person, per browser (`localStorage`,
@@ -1266,42 +1310,47 @@ export function DashboardRoute(): JSX.Element {
       {/* An `<ul>`/`<li>` pair, not `<div>`s: an interactive drag target with
           no semantic role is exactly what `noStaticElementInteractions`
           exists to catch, and a grid of widget cards genuinely is a list. */}
-      <ul
-        aria-label={t('dashboard.widgetGrid')}
-        className="m-0 grid list-none grid-cols-1 gap-5 p-0 lg:grid-cols-2"
-      >
-        {visibleWidgetIds.map((id) => (
-          <li
-            key={id}
-            draggable
-            onDragStart={(event) => {
-              // Fiche 39 tâche 1: the whole card is now the drag target,
-              // reusing `dropBefore`/`reorderWidget`/`saveDashboardPrefs`
-              // unchanged from the settings panel above. A drag gesture that
-              // starts on an actual control inside the card — a link, a
-              // button, or the quick-draft form's own inputs — stays that
-              // control's normal click or text selection instead of being
-              // hijacked into a card reorder.
-              const origin = event.target as HTMLElement
-              if (origin.closest('a, button, input, textarea, select, [contenteditable="true"]')) {
+      {visibleWidgetIds.includes('kpi') && <div className="relative">{renderKpi()}</div>}
+
+      {/* Two columns that flow (not a grid of equal rows): a short card next
+          to a tall one used to leave a hole under it. */}
+      <ul aria-label={t('dashboard.widgetGrid')} className="m-0 list-none gap-5 p-0 lg:columns-2">
+        {visibleWidgetIds
+          .filter((id) => id !== 'kpi')
+          .map((id) => (
+            <li
+              key={id}
+              draggable
+              onDragStart={(event) => {
+                // Fiche 39 tâche 1: the whole card is now the drag target,
+                // reusing `dropBefore`/`reorderWidget`/`saveDashboardPrefs`
+                // unchanged from the settings panel above. A drag gesture that
+                // starts on an actual control inside the card — a link, a
+                // button, or the quick-draft form's own inputs — stays that
+                // control's normal click or text selection instead of being
+                // hijacked into a card reorder.
+                const origin = event.target as HTMLElement
+                if (
+                  origin.closest('a, button, input, textarea, select, [contenteditable="true"]')
+                ) {
+                  event.preventDefault()
+                  return
+                }
+                event.dataTransfer.setData('text/dashboard-widget', id)
+                event.dataTransfer.effectAllowed = 'move'
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
                 event.preventDefault()
-                return
-              }
-              event.dataTransfer.setData('text/dashboard-widget', id)
-              event.dataTransfer.effectAllowed = 'move'
-            }}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault()
-              const raw = event.dataTransfer.getData('text/dashboard-widget')
-              if (raw.length > 0) dropBefore(raw as DashboardWidgetId, id)
-            }}
-            className={`relative${id === 'health' ? ' lg:col-span-2' : ''}`}
-          >
-            <GripIcon className="pointer-events-none absolute top-3 right-12 size-4 text-muted-foreground/70" />
-            {renderers[id]()}
-          </li>
-        ))}
+                const raw = event.dataTransfer.getData('text/dashboard-widget')
+                if (raw.length > 0) dropBefore(raw as DashboardWidgetId, id)
+              }}
+              className="relative mb-5 break-inside-avoid"
+            >
+              <GripIcon className="pointer-events-none absolute top-3 right-12 size-4 text-muted-foreground/70" />
+              {renderers[id]()}
+            </li>
+          ))}
       </ul>
     </section>
   )

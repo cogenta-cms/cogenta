@@ -77,8 +77,8 @@ export function renderThemeToggle(
       'data-label-light': labelLight,
       'data-label-dark': labelDark,
       'data-label-system': labelSystem,
-      // The page loads with no manual override (system), so the next click
-      // switches to light — see `THEME_TOGGLE_SCRIPT`'s own cycle order.
+      // The label of the first click is settled by the script once it knows
+      // the system appearance (light system → "dark", dark system → "light").
       'aria-label': labelLight,
     },
     h(
@@ -113,7 +113,12 @@ export function renderThemeToggle(
  * Raw JavaScript, not markup — see this module's doc comment for why the
  * host, not a theme, wraps this in a `<script>` tag and where it must go.
  *
- * Cycle: system (no attribute) → light → dark → system. Its restore step
+ * Cycle: with no saved choice the first click goes to the appearance the
+ * visitor is *not* looking at (system dark → light, system light → dark), so
+ * the page visibly changes on the first click; the next click returns to the
+ * system setting (the attribute is removed). A saved choice that equals the
+ * system setting would make a click look dead, so it jumps to the opposite
+ * instead. Its restore step
  * runs synchronously and unconditionally (a `<script>` this early in `<head>`
  * blocks parsing until it finishes, which is the point — the attribute is
  * set before the stylesheet is even requested, so there is nothing for a
@@ -124,34 +129,40 @@ export function renderThemeToggle(
 export const THEME_TOGGLE_SCRIPT = `(function(){
 var KEY='cg-theme';
 var root=document.documentElement;
+function systemDark(){
+  try{return !!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);}catch(e){return false;}
+}
+function nextOf(current){
+  var system=systemDark()?'dark':'light';
+  var opposite=system==='dark'?'light':'dark';
+  if(current===null||current===system){return opposite;}
+  return null;
+}
 function apply(next){
   if(next===null){root.removeAttribute('data-theme');}else{root.setAttribute('data-theme',next);}
   try{
     if(next===null){localStorage.removeItem(KEY);}else{localStorage.setItem(KEY,next);}
   }catch(e){}
 }
-function syncLabel(btn,current){
-  var next=current==='light'?'dark':current==='dark'?null:'light';
-  var label=next==='light'?btn.getAttribute('data-label-light'):next==='dark'?btn.getAttribute('data-label-dark'):btn.getAttribute('data-label-system');
-  if(label){btn.setAttribute('aria-label',label);}
+function syncLabels(){
+  var next=nextOf(root.getAttribute('data-theme'));
+  var toggles=document.querySelectorAll('[data-cg-theme-toggle]');
+  for(var i=0;i<toggles.length;i++){
+    var btn=toggles[i];
+    var label=next==='light'?btn.getAttribute('data-label-light'):next==='dark'?btn.getAttribute('data-label-dark'):btn.getAttribute('data-label-system');
+    if(label){btn.setAttribute('aria-label',label);}
+  }
 }
 try{
   var saved=localStorage.getItem(KEY);
   if(saved==='light'||saved==='dark'){root.setAttribute('data-theme',saved);}
 }catch(e){}
-document.addEventListener('DOMContentLoaded',function(){
-  var current=root.getAttribute('data-theme');
-  var toggles=document.querySelectorAll('[data-cg-theme-toggle]');
-  for(var i=0;i<toggles.length;i++){syncLabel(toggles[i],current);}
-});
+document.addEventListener('DOMContentLoaded',syncLabels);
 document.addEventListener('click',function(event){
   var target=event.target;
   var btn=target&&target.closest?target.closest('[data-cg-theme-toggle]'):null;
   if(!btn)return;
-  var current=root.getAttribute('data-theme');
-  var next=current==='light'?'dark':current==='dark'?null:'light';
-  apply(next);
-  var toggles=document.querySelectorAll('[data-cg-theme-toggle]');
-  for(var i=0;i<toggles.length;i++){syncLabel(toggles[i],next);}
+  apply(nextOf(root.getAttribute('data-theme')));
+  syncLabels();
 });
 })();`

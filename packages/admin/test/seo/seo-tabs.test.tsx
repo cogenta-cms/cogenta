@@ -76,9 +76,8 @@ describe('GeneralTab', () => {
       />,
     )
 
-    const rows = screen.getAllByLabelText('Gabarit de titre')
-    const pageField = rows[1]
-    if (pageField === undefined) throw new Error('expected a second row')
+    // Each field is named after its collection, so a screen reader hears which one it edits.
+    const pageField = screen.getByLabelText('Gabarit de titre — Page')
     fireEvent.blur(pageField, { target: { value: '%title% — Page' } })
 
     expect(onSave).toHaveBeenCalledWith('seo.collectionTitleTemplates', {
@@ -194,7 +193,7 @@ describe('SitemapTab', () => {
   it('shows every collection included by default, with no changefreq/priority hint', () => {
     render(<SitemapTab collections={COLLECTIONS} overrides={{}} onSave={() => Promise.resolve()} />)
 
-    const checkboxes = screen.getAllByLabelText('Dans le sitemap') as HTMLInputElement[]
+    const checkboxes = screen.getAllByLabelText(/^Dans le sitemap — /u) as HTMLInputElement[]
     expect(checkboxes).toHaveLength(2)
     for (const checkbox of checkboxes) expect(checkbox.checked).toBe(true)
   })
@@ -209,10 +208,7 @@ describe('SitemapTab', () => {
       />,
     )
 
-    const checkboxes = screen.getAllByLabelText('Dans le sitemap')
-    const articleCheckbox = checkboxes[0]
-    if (articleCheckbox === undefined) throw new Error('expected a first checkbox')
-    fireEvent.click(articleCheckbox)
+    fireEvent.click(screen.getByLabelText('Dans le sitemap — Article'))
 
     expect(onSave).toHaveBeenCalledWith('seo.sitemapCollectionSettings', {
       page: { included: true, changefreq: 'weekly', priority: 0.8 },
@@ -224,17 +220,14 @@ describe('SitemapTab', () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     render(<SitemapTab collections={COLLECTIONS} overrides={{}} onSave={onSave} />)
 
-    const changefreqSelects = screen.getAllByLabelText('Fréquence de changement')
-    const articleSelect = changefreqSelects[0]
-    if (articleSelect === undefined) throw new Error('expected a first select')
-    fireEvent.change(articleSelect, { target: { value: 'weekly' } })
+    fireEvent.change(screen.getByLabelText('Fréquence de changement — Article'), {
+      target: { value: 'weekly' },
+    })
     expect(onSave).toHaveBeenLastCalledWith('seo.sitemapCollectionSettings', {
       article: { included: true, changefreq: 'weekly', priority: '' },
     })
 
-    const priorityInputs = screen.getAllByLabelText('Priorité')
-    const pagePriority = priorityInputs[1]
-    if (pagePriority === undefined) throw new Error('expected a second priority input')
+    const pagePriority = screen.getByLabelText('Priorité — Page')
     fireEvent.blur(pagePriority, { target: { value: '0.5' } })
     expect(onSave).toHaveBeenLastCalledWith('seo.sitemapCollectionSettings', {
       page: { included: true, changefreq: '', priority: 0.5 },
@@ -251,9 +244,7 @@ describe('SitemapTab', () => {
       />,
     )
 
-    const priorityInputs = screen.getAllByLabelText('Priorité')
-    const articlePriority = priorityInputs[0]
-    if (articlePriority === undefined) throw new Error('expected a first priority input')
+    const articlePriority = screen.getByLabelText('Priorité — Article')
     fireEvent.blur(articlePriority, { target: { value: '' } })
 
     expect(onSave).toHaveBeenCalledWith('seo.sitemapCollectionSettings', {

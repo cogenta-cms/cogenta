@@ -91,7 +91,7 @@ export function BlockPicker({
                 }}
                 onClick={() => onAdd(entry.definition.name)}
                 className={cn(
-                  'flex w-full cursor-grab items-center justify-between gap-2 rounded-md border',
+                  'flex w-full cursor-grab items-center gap-2 rounded-md border',
                   'border-input bg-card px-3 py-2 text-left font-sans text-sm text-card-foreground',
                   'transition-colors hover:bg-accent hover:text-accent-foreground',
                   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
@@ -99,9 +99,6 @@ export function BlockPicker({
                 )}
               >
                 <span>{entry.definition.label}</span>
-                <span className="font-mono text-xs text-muted-foreground">
-                  {entry.definition.name}
-                </span>
               </button>
             </li>
           ))}

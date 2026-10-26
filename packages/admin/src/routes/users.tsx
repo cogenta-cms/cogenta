@@ -17,6 +17,8 @@ import {
   updateUser,
 } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { roleLabel } from '../lib/role-label.js'
+import { sessionDeviceLabel } from '../lib/session-labels.js'
 import { useLocalPagination } from '../lib/use-local-pagination.js'
 import { grantsForRole, knownRoleNames } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
@@ -29,6 +31,7 @@ import {
   CardBody,
   CardHeader,
   CardTitle,
+  CopyButton,
   Field,
   Input,
   Modal,
@@ -47,22 +50,24 @@ import {
 import { ACTION_KEY } from './roles.js'
 
 /**
- * The four role names every new site is offered, whether or not any account
- * on it holds them yet.
+ * The two role names every site is offered, whether or not any account holds
+ * them yet: `admin` and `editor` are the vocabulary the shipped site models
+ * (and the admin itself) are written around.
  *
  * This is a **UX convention, not a server constraint** — contract A still
  * only knows five permission actions (`read`/`create`/`update`/`delete`/
- * `publish`) per collection, and a role is still, as far as the server is
+ * `publish`) per collection, and a role is, as far as the server is
  * concerned, an arbitrary string a collection's `permissions` block happens
- * to name. Nothing here is a vocabulary change or a contract A addition:
- * `rolesField` in `users-router.ts` still accepts any non-empty string, and a
- * site can (and does, via the custom-role field below) use names these four
- * were never meant to describe. They exist only so a fresh site's first admin
- * is not staring at an empty checkbox list and a blank text field.
+ * to name. The rest of the list is read off the site itself (see
+ * `offeredRoles` below): offering `author` or `contributor` on a site where no
+ * collection names them would hand out a role that grants nothing.
  */
-const STANDARD_ROLES = ['admin', 'editor', 'author', 'contributor'] as const
+const STANDARD_ROLES = ['admin', 'editor'] as const
 
 const PAGE_SIZE = 25
+
+/** A deliberately loose shape check — the server is the judge of a real address. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u
 
 const STATUS_TONE: Record<AdminUser['status'], 'success' | 'neutral' | 'info' | 'warning'> = {
   active: 'success',
@@ -108,12 +113,14 @@ export function UsersRoute(): JSX.Element {
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const isAdmin = roles.includes('admin')
+  const ownId = auth.state.status === 'authenticated' ? auth.state.user.id : null
 
   const [users, setUsers] = useState<readonly AdminUser[]>([])
   const [hasMore, setHasMore] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [invitationEmailAvailable, setInvitationEmailAvailable] = useState(false)
   const [roleFilter, setRoleFilter] = useState('')
+  const [rolesSeen, setRolesSeen] = useState<ReadonlySet<string>>(() => new Set())
   const [query, setQuery] = useState('')
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [sortChoice, setSortChoice] = useState<SortChoice>('createdAt:desc')
@@ -130,7 +137,12 @@ export function UsersRoute(): JSX.Element {
   const [newRoleSet, setNewRoleSet] = useState<ReadonlySet<string>>(() => new Set(['editor']))
   const [newCustomRole, setNewCustomRole] = useState('')
   const [sendInvite, setSendInvite] = useState(true)
+  const [newEmailError, setNewEmailError] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<ApiErrorDescription | null>(null)
   const [created, setCreated] = useState<CreatedUser | null>(null)
+
+  const [disabling, setDisabling] = useState<AdminUser | 'selection' | null>(null)
+  const [disableBusy, setDisableBusy] = useState(false)
 
   const [editing, setEditing] = useState<AdminUser | null>(null)
   const [editRoleSet, setEditRoleSet] = useState<ReadonlySet<string>>(() => new Set())
@@ -162,6 +174,7 @@ export function UsersRoute(): JSX.Element {
         limit: PAGE_SIZE,
       })
       setUsers(page.users)
+      setRolesSeen((current) => new Set([...current, ...page.users.flatMap((u) => u.roles)]))
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
       setInvitationEmailAvailable(page.invitationEmailAvailable)
@@ -191,6 +204,7 @@ export function UsersRoute(): JSX.Element {
         after: nextCursor,
       })
       setUsers((current) => [...current, ...page.users])
+      setRolesSeen((current) => new Set([...current, ...page.users.flatMap((u) => u.roles)]))
       setHasMore(page.hasMore)
       setNextCursor(page.nextCursor)
     } catch (caught) {
@@ -200,19 +214,19 @@ export function UsersRoute(): JSX.Element {
     }
   }
 
-  /** Every role name any account actually holds — the filter offers real values, not a guessed list. */
-  const knownRoles = [...new Set(users.flatMap((user) => user.roles))].sort()
-
   /**
-   * The checkbox list this admin offers: the four standard names, first and
-   * always, followed by whatever else this site's accounts already use that
-   * is not one of them — a role a previous admin typed into the custom field
-   * shows up here as a checkbox too, next time, rather than only ever being
-   * reachable by retyping it.
+   * The roles this admin offers, for the checkbox lists and for the filter:
+   * the two standard names, then every role this site's collections and
+   * taxonomies actually name, then any role an account already holds (seen
+   * across every page loaded so far, not only the rows on screen — a filter
+   * that forgets its own options the moment it is applied is a trap).
    */
   const offeredRoles = [
-    ...STANDARD_ROLES,
-    ...knownRoles.filter((role) => !(STANDARD_ROLES as readonly string[]).includes(role)),
+    ...new Set([
+      ...STANDARD_ROLES,
+      ...(schema === null ? [] : knownRoleNames(schema)),
+      ...rolesSeen,
+    ]),
   ]
 
   function parseRoles(raw: string): string[] {
@@ -252,15 +266,25 @@ export function UsersRoute(): JSX.Element {
   async function submitCreate(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null) return
-    setActionError(null)
+    setCreateError(null)
+    setNewEmailError(null)
+    const email = newEmail.trim()
+    if (email === '') {
+      setNewEmailError(t('users.emailRequired'))
+      return
+    }
+    if (!EMAIL_PATTERN.test(email)) {
+      setNewEmailError(t('users.emailInvalid'))
+      return
+    }
     const roles = combineRoles(newRoleSet, newCustomRole)
     if (roles.length === 0) {
-      setActionError({ message: t('users.rolesNone') })
+      setCreateError({ message: t('users.rolesNone') })
       return
     }
     try {
       const result = await createUser(token, {
-        email: newEmail,
+        email,
         roles,
         invite: invitationEmailAvailable && sendInvite,
       })
@@ -271,7 +295,7 @@ export function UsersRoute(): JSX.Element {
       setNewCustomRole('')
       await load()
     } catch (caught) {
-      setActionError(describeApiError(caught, t('users.createError')))
+      setCreateError(describeApiError(caught, t('users.createError')))
     }
   }
 
@@ -286,6 +310,7 @@ export function UsersRoute(): JSX.Element {
     }
     try {
       await updateUser(token, editing.id, { roles })
+      setActionNotice(t('users.rolesSaved', { email: editing.email }))
       setEditing(null)
       await load()
     } catch (caught) {
@@ -296,13 +321,29 @@ export function UsersRoute(): JSX.Element {
   async function toggleStatus(user: AdminUser): Promise<void> {
     if (token === null) return
     setActionError(null)
+    setActionNotice(null)
+    const willDisable = user.status === 'active'
     try {
-      await updateUser(token, user.id, {
-        status: user.status === 'active' ? 'disabled' : 'active',
-      })
+      await updateUser(token, user.id, { status: willDisable ? 'disabled' : 'active' })
+      setActionNotice(
+        t(willDisable ? 'users.disabledDone' : 'users.enabledDone', { email: user.email }),
+      )
       await load()
     } catch (caught) {
       setActionError(describeApiError(caught, t('users.updateError')))
+    }
+  }
+
+  /** Disabling is the one action here that shuts somebody out: it is confirmed first. */
+  async function confirmDisable(): Promise<void> {
+    if (disabling === null) return
+    setDisableBusy(true)
+    try {
+      if (disabling === 'selection') await runBulk('disable')
+      else await toggleStatus(disabling)
+    } finally {
+      setDisableBusy(false)
+      setDisabling(null)
     }
   }
 
@@ -459,10 +500,20 @@ export function UsersRoute(): JSX.Element {
             <p>{t('users.invitedBody')}</p>
           ) : (
             <>
-              <p>
-                {invitationEmailAvailable ? t('users.createdBodyNoInvite') : t('users.createdBody')}
-              </p>
-              <p className="font-mono text-sm break-all">{created.password}</p>
+              <p>{t('users.createdBodyShort')}</p>
+              {created.password !== undefined && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-sm font-medium">{t('users.passwordLabel')}</span>
+                  <code className="rounded-md border border-border bg-card px-3 py-1.5 font-mono text-sm tracking-wide break-all select-all">
+                    {created.password}
+                  </code>
+                  <CopyButton
+                    value={created.password}
+                    label={t('users.copyPassword')}
+                    copiedLabel={t('users.copied')}
+                  />
+                </div>
+              )}
             </>
           )}
         </Notice>
@@ -496,9 +547,9 @@ export function UsersRoute(): JSX.Element {
                 onChange={(event) => setRoleFilter(event.target.value)}
               >
                 <option value="">{t('users.allRoles')}</option>
-                {knownRoles.map((role) => (
+                {offeredRoles.map((role) => (
                   <option key={role} value={role}>
-                    {role}
+                    {roleLabel(t, role)}
                   </option>
                 ))}
               </Select>
@@ -554,7 +605,7 @@ export function UsersRoute(): JSX.Element {
             variant="secondary"
             size="sm"
             disabled={bulkBusy}
-            onClick={() => void runBulk('disable')}
+            onClick={() => setDisabling('selection')}
           >
             {t('users.bulkDisable')}
           </Button>
@@ -590,7 +641,7 @@ export function UsersRoute(): JSX.Element {
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && error === null && (
-        <TableRoot label={t('users.tableLabel')}>
+        <TableRoot label={t('users.tableLabel')} stacked>
           <Table>
             <TableHead>
               <TableRow>
@@ -606,14 +657,16 @@ export function UsersRoute(): JSX.Element {
                 <TableHeader>{t('users.rolesColumn')}</TableHeader>
                 <TableHeader>{t('users.statusColumn')}</TableHeader>
                 <TableHeader>{t('users.mfaColumn')}</TableHeader>
-                <TableHeader>{t('users.lastSignInColumn')}</TableHeader>
+                <TableHeader className="whitespace-nowrap">
+                  {t('users.lastSignInColumn')}
+                </TableHeader>
                 <TableHeader>{t('users.actionsColumn')}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
               {users.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell>
+                  <TableCell stack="select">
                     <input
                       type="checkbox"
                       aria-label={t('users.selectOne', { email: user.email })}
@@ -621,25 +674,28 @@ export function UsersRoute(): JSX.Element {
                       onChange={() => toggleSelected(user.id)}
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell stack="heading" className="min-w-[13rem]">
                     <div className="flex flex-col">
-                      <span>{user.displayName ?? user.email}</span>
+                      <span className="flex flex-wrap items-center gap-2">
+                        {user.displayName ?? user.email}
+                        {user.id === ownId && <Badge tone="info">{t('users.youBadge')}</Badge>}
+                      </span>
                       {user.displayName !== null && (
                         <span className="text-xs text-muted-foreground">{user.email}</span>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
+                  <TableCell label={t('users.rolesColumn')}>
+                    <div className="flex flex-wrap justify-end gap-1 md:justify-start">
                       {user.roles.map((role) => (
                         <Badge key={role} tone={role === 'admin' ? 'primary' : 'neutral'}>
-                          {t(`roles.${role}`, { defaultValue: role })}
+                          {roleLabel(t, role)}
                         </Badge>
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
+                  <TableCell label={t('users.statusColumn')}>
+                    <div className="flex flex-col items-end gap-1 md:items-start">
                       <Badge tone={STATUS_TONE[user.status]}>
                         {user.status === 'active' && t('users.active')}
                         {user.status === 'disabled' && t('users.disabled')}
@@ -656,8 +712,8 @@ export function UsersRoute(): JSX.Element {
                       {user.dormant && <Badge tone="warning">{t('users.dormantBadge')}</Badge>}
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
+                  <TableCell label={t('users.mfaColumn')}>
+                    <div className="flex flex-col items-end gap-1 md:items-start">
                       <Badge tone={user.mfa.totp || user.mfa.passkeys > 0 ? 'success' : 'neutral'}>
                         {user.mfa.totp || user.mfa.passkeys > 0
                           ? t('users.mfaOn')
@@ -668,12 +724,12 @@ export function UsersRoute(): JSX.Element {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap">
+                  <TableCell className="whitespace-nowrap" label={t('users.lastSignInColumn')}>
                     {user.lastSignInAt === null
                       ? t('users.neverSignedIn')
                       : formatWhen(user.lastSignInAt)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell stack="actions">
                     {/* Short, generic visible labels — the full email lives
                         only in `aria-label`, disambiguating the same action
                         repeated across rows for assistive tech without
@@ -740,20 +796,26 @@ export function UsersRoute(): JSX.Element {
                           >
                             {t('users.exportDataShort')}
                           </Button>
-                          <Button
-                            variant={user.status === 'active' ? 'destructive' : 'secondary'}
-                            size="sm"
-                            aria-label={
-                              user.status === 'active'
-                                ? t('users.disableAccount', { email: user.email })
-                                : t('users.enableAccount', { email: user.email })
-                            }
-                            onClick={() => void toggleStatus(user)}
-                          >
-                            {user.status === 'active'
-                              ? t('users.disableAccountShort')
-                              : t('users.enableAccountShort')}
-                          </Button>
+                          {user.id !== ownId && (
+                            <Button
+                              variant={user.status === 'active' ? 'destructive' : 'secondary'}
+                              size="sm"
+                              aria-label={
+                                user.status === 'active'
+                                  ? t('users.disableAccount', { email: user.email })
+                                  : t('users.enableAccount', { email: user.email })
+                              }
+                              onClick={() =>
+                                user.status === 'active'
+                                  ? setDisabling(user)
+                                  : void toggleStatus(user)
+                              }
+                            >
+                              {user.status === 'active'
+                                ? t('users.disableAccountShort')
+                                : t('users.enableAccountShort')}
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -791,13 +853,42 @@ export function UsersRoute(): JSX.Element {
 
       <Modal
         open={creating}
-        onOpenChange={setCreating}
+        onOpenChange={(open) => {
+          setCreating(open)
+          if (!open) {
+            setCreateError(null)
+            setNewEmailError(null)
+          }
+        }}
         title={t('users.newHeading')}
         description={t('users.newDescription')}
         closeLabel={t('users.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCreating(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" form="create-user-form">
+              {invitationEmailAvailable && sendInvite
+                ? t('users.inviteButton')
+                : t('users.createButton')}
+            </Button>
+          </>
+        }
       >
-        <form id="create-user-form" onSubmit={submitCreate} className="flex flex-col gap-4">
-          <Field label={t('users.emailColumn')}>
+        <form
+          id="create-user-form"
+          noValidate
+          onSubmit={submitCreate}
+          className="flex flex-col gap-4"
+        >
+          {createError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{createError.message}</p>
+              {createError.hint !== undefined && <p>{createError.hint}</p>}
+            </Notice>
+          )}
+          <Field label={t('users.emailColumn')} error={newEmailError}>
             {(control) => (
               <Input
                 {...control}
@@ -849,17 +940,40 @@ export function UsersRoute(): JSX.Element {
             schema={schema}
             locale={i18n.language}
           />
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setCreating(false)}>
+        </form>
+      </Modal>
+
+      <Modal
+        open={disabling !== null}
+        onOpenChange={(open) => {
+          if (!open) setDisabling(null)
+        }}
+        title={
+          disabling === 'selection'
+            ? t('users.bulkDisableConfirmTitle', { count: selected.size })
+            : t('users.disableConfirmTitle', { email: disabling?.email ?? '' })
+        }
+        closeLabel={t('users.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDisabling(null)}>
               {t('common.cancel')}
             </Button>
-            <Button type="submit">
-              {invitationEmailAvailable && sendInvite
-                ? t('users.inviteButton')
-                : t('users.createButton')}
+            <Button
+              variant="destructive"
+              loading={disableBusy}
+              onClick={() => void confirmDisable()}
+            >
+              {t('users.disableConfirmButton')}
             </Button>
-          </div>
-        </form>
+          </>
+        }
+      >
+        <p className="m-0 text-sm text-muted-foreground">
+          {disabling === 'selection'
+            ? t('users.bulkDisableConfirmBody')
+            : t('users.disableConfirmBody')}
+        </p>
       </Modal>
 
       <Modal
@@ -869,8 +983,24 @@ export function UsersRoute(): JSX.Element {
         }}
         title={t('users.rolesHeading', { email: editing?.email ?? '' })}
         closeLabel={t('users.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" form="edit-user-roles-form">
+              {t('users.saveRoles')}
+            </Button>
+          </>
+        }
       >
-        <form onSubmit={submitRoles} className="flex flex-col gap-4">
+        <form id="edit-user-roles-form" onSubmit={submitRoles} className="flex flex-col gap-4">
+          {actionError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{actionError.message}</p>
+              {actionError.hint !== undefined && <p>{actionError.hint}</p>}
+            </Notice>
+          )}
           <RoleCheckboxList
             idPrefix="edit-user-role"
             legend={t('users.rolesColumn')}
@@ -894,12 +1024,6 @@ export function UsersRoute(): JSX.Element {
             schema={schema}
             locale={i18n.language}
           />
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setEditing(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit">{t('users.saveRoles')}</Button>
-          </div>
         </form>
       </Modal>
 
@@ -1051,8 +1175,8 @@ export function SessionList({
             <li key={session.id} className="flex flex-wrap items-center justify-between gap-3">
               <span className="min-w-0 break-words text-sm [overflow-wrap:anywhere]">
                 {session.label ?? t('users.unnamedSession')} —{' '}
-                {t('users.sessionDevice', { browser: session.browser, device: session.device })} —{' '}
-                {t('users.lastSeen')} {formatWhen(session.lastSeenAt)}
+                {sessionDeviceLabel(t, session.browser, session.device)} — {t('users.lastSeen')}{' '}
+                {formatWhen(session.lastSeenAt)}
                 {session.isCurrent && (
                   <>
                     {' '}
@@ -1061,9 +1185,9 @@ export function SessionList({
                 )}
               </span>
               <Button
-                variant="destructive"
+                variant="secondary"
                 size="sm"
-                aria-label={`${t('users.revokeSession', { at: formatWhen(session.lastSeenAt) })} — ${session.label ?? t('users.unnamedSession')} (${session.browser}, ${session.device}) — ${t('users.sessionNumber', { number: pagination.start + index + 1 })}`}
+                aria-label={`${t('users.revokeSession', { at: formatWhen(session.lastSeenAt) })} — ${session.label ?? t('users.unnamedSession')} (${sessionDeviceLabel(t, session.browser, session.device)}) — ${t('users.sessionNumber', { number: pagination.start + index + 1 })}`}
                 onClick={() => onRevoke(session.id)}
               >
                 {t('users.revokeSessionShort')}
@@ -1100,7 +1224,7 @@ export function SessionList({
  * screen can catch that a generic role list cannot, and the exact bug
  * "editeur" typed instead of "editor" would otherwise cause silently.
  */
-function RoleGrantsSummary({
+export function RoleGrantsSummary({
   roles,
   schema,
   locale,
@@ -1144,7 +1268,11 @@ function RoleGrantsSummary({
       })}
       {unknown.length > 0 && (
         <Notice tone="warning">
-          <p className="m-0">{t('users.unknownRoleWarning', { roles: unknown.join(', ') })}</p>
+          <p className="m-0">
+            {t('users.unknownRoleWarning', {
+              roles: unknown.map((role) => roleLabel(t, role)).join(', '),
+            })}
+          </p>
         </Notice>
       )}
       <p className="m-0 text-xs text-muted-foreground">{t('users.roleGrantsLoadNote')}</p>
@@ -1164,7 +1292,7 @@ function RoleGrantsSummary({
  * independently-labelled checkboxes — `<fieldset>`/`<legend>` is the
  * correct native pairing for a group instead.
  */
-function RoleCheckboxList({
+export function RoleCheckboxList({
   idPrefix,
   legend,
   description,

@@ -163,7 +163,12 @@ import {
   createAuthStore,
   verifyPassword,
 } from '@cogenta/auth'
-import { type BlockRegistry, createBlockRegistry, VOCABULARY_NAMES } from '@cogenta/blocks'
+import {
+  type BlockRegistry,
+  createBlockRegistry,
+  VOCABULARY_NAMES,
+  vocabularyRegistry,
+} from '@cogenta/blocks'
 import {
   type ChannelRegistry,
   createChannelLinkStore,
@@ -263,6 +268,7 @@ import {
   parseJsonImport,
   preflightWordPressTarget,
   undoImport,
+  type WordPressTargetChoice,
 } from '@cogenta/import'
 import { createMcpConnectionStore, ensureMcpConnectionTables } from '@cogenta/mcp'
 import {
@@ -394,8 +400,9 @@ import {
   buildAgentRuntime,
   PROVIDERS_SUBDIR,
 } from './agent-runtime.js'
-import { type AssistantAssembly, buildAssistant } from './assistant.js'
+import { type AssistantAssembly, buildAssistant, reindexKnowledgeIndex } from './assistant.js'
 import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
+import { readChannelsRunner } from './channels-status.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
 import { createDecoratedContentStores } from './decorated-content-stores.js'
 import {
@@ -426,6 +433,8 @@ import {
   type SecurityConfig,
 } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
+import { createMcpHttpEndpoint, type McpHttpEndpoint, mcpConnectionInfo } from './mcp-http.js'
+import { MCP_API_KEY_ENV } from './mcp-tools.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
 import { createPluginBlockRenderer, type PluginBlockRenderer } from './plugin-block-render.js'
@@ -442,6 +451,7 @@ import {
   type PluginRuntime,
 } from './plugin-runtime.js'
 import {
+  assertWritableManifest,
   checkPluginSandbox,
   createPluginSandbox,
   createPluginSandboxToolWiring,
@@ -470,7 +480,9 @@ import {
 import { recordAuthAudit, recordContentAudit, responseId } from './serve-audit.js'
 import { loadRenderMedia } from './serve-render-media.js'
 import { webauthnConfigFor } from './serve-webauthn.js'
+import { createServedPathResolver } from './served-paths.js'
 import { createSitePlanning } from './site-plan.js'
+import { siteRoleNames } from './site-roles.js'
 import {
   authorArchiveKicker,
   renderTermArchivePage,
@@ -906,6 +918,13 @@ export interface Site {
    */
   readonly mcpConnectionsRouter?: McpConnectionsRouter
   /**
+   * `/api/mcp` — MCP over Streamable HTTP, authenticated by an API key, for
+   * a client that is not on this machine (`mcp-http.ts`). Absent when the
+   * configuration turns it off (`mcp.http: false`) or when no agent runtime
+   * (hence no approval queue) was assembled.
+   */
+  readonly mcpHttp?: McpHttpEndpoint
+  /**
    * `/api/site-plans` — L19 task 7's document-driven planning on a live site.
    *
    * Always mounted, even with no LLM provider: the drafts an installer left
@@ -1225,6 +1244,8 @@ interface AssembleSiteOptions {
   }
   /** L19 task 7. Absent in a test that does not care; `runServe` always passes one. */
   readonly sitePlans?: SitePlanRouterOptions
+  /** `mcp.http` of the configuration: whether `/api/mcp` is served. On when absent. */
+  readonly mcpHttp?: boolean
   /**
    * Fiche 70 task 4, ADR-0032. Absent means no
    * `COGENTA_SEARCH_CONSOLE_CLIENT_ID`/`_CLIENT_SECRET` is set — the
@@ -1611,6 +1632,37 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(options.onContentEvent == null ? {} : { onContentEvent: options.onContentEvent }),
   })
 
+  // The knowledge index of the assistant (chat with sources, duplicate
+  // detection). Content seeded or restored without passing through the write
+  // path never reached it, so an empty index is rebuilt once at start-up and
+  // whenever an admin asks for it from the Assistant screen.
+  const assistantVectors = options.assistant?.vectors
+  const reindexKnowledge =
+    assistantVectors === undefined
+      ? undefined
+      : async (): Promise<{ readonly indexed: number }> =>
+          reindexKnowledgeIndex({
+            collections,
+            storeFor,
+            vectors: assistantVectors,
+            siteId: site.url,
+            onError: (error) => logger.warn('knowledge reindex failed', { error: String(error) }),
+            onIndexed: () => options.assistant?.vectorInfo?.noteIndexed(),
+          })
+  if (reindexKnowledge !== undefined && options.assistant?.vectorInfo !== undefined) {
+    const info = options.assistant.vectorInfo
+    void info
+      .count()
+      .then(async (count) => {
+        if (count > 0) return
+        const { indexed } = await reindexKnowledge()
+        if (indexed > 0) logger.info('knowledge index was empty, rebuilt', { entries: indexed })
+      })
+      .catch((error: unknown) =>
+        logger.warn('knowledge index start-up check failed', { error: String(error) }),
+      )
+  }
+
   // Trash auto-purge (fiche 07 task 5): the collections that actually have a
   // trash, and the window each one keeps it for — computed once, since
   // `collection.trash` cannot change without a restart.
@@ -1682,14 +1734,23 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     readonly text: string
     readonly createdBy: string | null
     readonly targetCollection?: string
+    readonly pageCollection?: string
   }): Promise<ImportRun> {
     if (input.source === 'wordpress') {
-      await preflightWordPressTarget(db, collections)
-      const analysis = analyzeWordPress(input.text, collections)
+      // For a WordPress export the "target collection" is the one that
+      // receives posts; pages have their own choice. Both default to the
+      // site's own `post`/`page` — mapped field by field, never refused.
+      const targets: WordPressTargetChoice = {
+        ...(input.targetCollection === undefined ? {} : { post: input.targetCollection }),
+        ...(input.pageCollection === undefined ? {} : { page: input.pageCollection }),
+      }
+      await preflightWordPressTarget(db, collections, targets)
+      const analysis = analyzeWordPress(input.text, collections, targets)
       const run = await importTracking.createRun({
         source: 'wordpress',
         createdBy: input.createdBy,
         analysis,
+        mapping: { targets },
       })
       await storeImportSource(run.id, input.text)
       return run
@@ -1751,7 +1812,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     }
 
     const text = await readImportSource(input.runId)
-    if (run.source === 'wordpress') await preflightWordPressTarget(db, collections)
+    const wordPressTargets: WordPressTargetChoice =
+      (run.mapping as { targets?: WordPressTargetChoice } | null)?.targets ?? {}
+    if (run.source === 'wordpress') {
+      await preflightWordPressTarget(db, collections, wordPressTargets)
+    }
     await importTracking.updateRun(input.runId, { status: 'running' })
 
     try {
@@ -1759,6 +1824,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
         const report = await importWordPress(text, {
           db,
           collections,
+          targets: wordPressTargets,
           storage,
           tracking: importTracking,
           runId: input.runId,
@@ -2686,13 +2752,20 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       ? {}
       : { notifyRenewal: createEmailRenewalNotifier(options.emailTransport) }),
   })
-  // Absent until the site fills in `billing` (contract E, ADR-0024): an
-  // invoice with a made-up seller address is worse than no invoicing at all,
-  // so the route stays unreachable rather than issuing one anyway.
+  // The seller printed on invoices and credit notes: read from the shop
+  // settings each time (so a change applies to the very next invoice, no
+  // restart), falling back to the legacy `billing` block of the config file.
+  // Until one of them is filled in, issuing an invoice is refused with a clear
+  // message (`COMMERCE_INVOICE_NOT_CONFIGURED`) — an invoice with a made-up
+  // seller address is worse than none (contract E, ADR-0024).
+  const readShopText = async (key: string): Promise<string> => {
+    const record = await siteSettingsStore.get(key, SITE_SETTINGS_SITE_SCOPE)
+    return typeof record?.value === 'string' ? record.value.trim() : ''
+  }
   const billing = options.billing
-  const commerceSeller =
+  const configSeller =
     billing === undefined
-      ? undefined
+      ? null
       : {
           address: [billing.legalName, ...billing.address],
           ...(() => {
@@ -2702,17 +2775,54 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             return footer === '' ? {} : { footer }
           })(),
         }
-  const commerceInvoices =
-    commerceSeller === undefined
-      ? undefined
-      : createInvoiceStore(db, { orders: commerceOrders, seller: commerceSeller })
+  const commerceSeller = async (): Promise<{
+    readonly address: readonly string[]
+    readonly footer?: string
+  } | null> => {
+    const legalName = await readShopText('commerce.sellerLegalName')
+    const addressLines = (await readShopText('commerce.sellerAddress'))
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line !== '')
+    if (legalName === '' && addressLines.length === 0) return configSeller
+    const footer = [
+      await readShopText('commerce.sellerTaxId'),
+      await readShopText('commerce.sellerFooter'),
+    ]
+      .filter((part) => part !== '')
+      .join(' — ')
+    return {
+      address: [legalName, ...addressLines].filter((line) => line !== ''),
+      ...(footer === '' ? {} : { footer }),
+    }
+  }
+  const commerceInvoiceTemplate = async (): Promise<{
+    readonly seriesPrefix?: string
+    readonly paymentTerms?: string
+    readonly language?: string
+  }> => {
+    const seriesPrefix = await readShopText('commerce.invoiceSeriesPrefix')
+    const paymentTerms = await readShopText('commerce.invoicePaymentTerms')
+    const language = await readShopText('commerce.invoiceLanguage')
+    return {
+      ...(seriesPrefix === '' ? {} : { seriesPrefix }),
+      ...(paymentTerms === '' ? {} : { paymentTerms }),
+      language: language === 'en' ? 'en' : 'fr',
+    }
+  }
+  const commerceInvoices = createInvoiceStore(db, {
+    orders: commerceOrders,
+    seller: commerceSeller,
+    template: commerceInvoiceTemplate,
+  })
   // A credit note per refund (fiche 52 task 6) needs the same seller details
   // as an invoice — the same gate, deliberately: a credit note without a
   // real seller address is not a usable accounting document either.
-  const commerceCreditNotes =
-    commerceSeller === undefined
-      ? undefined
-      : createCreditNoteStore(db, { orders: commerceOrders, seller: commerceSeller })
+  const commerceCreditNotes = createCreditNoteStore(db, {
+    orders: commerceOrders,
+    seller: commerceSeller,
+    template: commerceInvoiceTemplate,
+  })
   // Transactional order e-mails (fiche 52 task 2) — the same degraded-by-default
   // `EmailTransport` every other transactional sender in this file reuses
   // (R1/R2): absent, orders still place and ship, nobody is ever notified.
@@ -2787,10 +2897,58 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
 
   const reviewRouter = createReviewRouter({ collections, permissions, storeFor })
 
+  const searchRouter = createSearchRouter({
+    index: searchIndex,
+    collections,
+    permissions,
+    defaultLocale: site.defaultLocale,
+    // Real excerpts (fiche 36 task 3): the gateway is already built above
+    // with the same stores and permissions REST/GraphQL use.
+    gateway,
+  })
+
+  // MCP over HTTP (`/api/mcp`): the same tool assembly as `cogenta mcp`,
+  // over this site's own service, permissions, search and blocks, with the
+  // approval queue the Agents screen decides on — a write asked over HTTP
+  // lands where an administrator already looks.
+  const mcpHttp: McpHttpEndpoint | undefined =
+    options.mcpHttp === false || agentsRuntime === undefined
+      ? undefined
+      : createMcpHttpEndpoint({
+          apiKeys: auth.apiKeys,
+          version: cogentaVersion,
+          siteUrl: site.url,
+          onRequest: (record) => logger.info('mcp http request', { ...record }),
+          onInternalError: (error) =>
+            logger.error('mcp http internal error', {
+              error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+            }),
+          tools: {
+            collections,
+            contentService: service,
+            permissions,
+            refreshPermissions: () => rolePermissionOverlay.refresh(),
+            mediaStore,
+            search: searchRouter,
+            blocks: options.blocks ?? vocabularyRegistry,
+            site: {
+              name: site.name,
+              url: site.url,
+              locales: site.locales,
+              defaultLocale: site.defaultLocale,
+            },
+            logger,
+            auditLog: auth.audit,
+            approvalQueue: agentsRuntime.approvalQueue,
+            approvalsUrl: `${site.url.replace(/\/+$/u, '')}/admin/agents`,
+          },
+        })
+
   return {
     db,
     auth,
     cogentaVersion,
+    ...(mcpHttp === undefined ? {} : { mcpHttp }),
     ...(options.pluginWidgets === undefined ? {} : { pluginWidgets: options.pluginWidgets }),
     storeFor,
     restRouter: createRestRouter({ service, siteUrl: site.url }),
@@ -2897,8 +3055,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       subscriptions: commerceSubscriptions,
       tax: commerceTax,
       shipping: commerceShipping,
-      ...(commerceInvoices === undefined ? {} : { invoices: commerceInvoices }),
-      ...(commerceCreditNotes === undefined ? {} : { creditNotes: commerceCreditNotes }),
+      invoices: commerceInvoices,
+      creditNotes: commerceCreditNotes,
       ...(commerceOrderEmails === undefined ? {} : { orderEmails: commerceOrderEmails }),
       payment: {
         registry: paymentRegistry,
@@ -2941,6 +3099,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       // (a subscription billed this tick is no longer the one dunning
       // should be retrying, and a subscription just billed has a fresh
       // `nextBillingAt` a renewal notice should measure against).
+      // A subscription whose order was paid online (webhook) opens here.
+      await commerceSubscriptions.openFromPaidOrders()
       const billing = await commerceSubscriptions.runBilling()
       const dunning = await commerceSubscriptions.runDunning()
       const renewal = await commerceSubscriptions.sendRenewalNotices()
@@ -2982,15 +3142,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       forms: { countUnread: () => formStore.submissions.unreadCount() },
       cogentaVersion,
     }),
-    searchRouter: createSearchRouter({
-      index: searchIndex,
-      collections,
-      permissions,
-      defaultLocale: site.defaultLocale,
-      // Real excerpts (fiche 36 task 3): the gateway is already built above
-      // with the same stores and permissions REST/GraphQL use.
-      gateway,
-    }),
+    searchRouter,
     seoRouter: createSeoRouter({
       collections,
       gateway,
@@ -3113,7 +3265,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       storeFor,
       ...(options.onInvite == null ? {} : { onInvite: options.onInvite }),
     }),
-    apiKeysRouter: createApiKeysRouter({ auth }),
+    apiKeysRouter: createApiKeysRouter({
+      auth,
+      // A scope is chosen from the roles this site really has, never free text.
+      allowedRoles: () =>
+        siteRoleNames({ collections, taxonomies, overrides: rolePermissionStore }),
+    }),
     ...(options.requestQuota === undefined ? {} : { requestQuota: options.requestQuota }),
     assistantRouter: createAssistantRouter({
       toolset: (options.assistant?.toolset ?? EMPTY_TOOLSET) as AssistToolsetLike,
@@ -3133,6 +3290,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       ...(options.assistant?.documents === undefined
         ? {}
         : { documents: options.assistant.documents }),
+      ...(reindexKnowledge === undefined ? {} : { reindex: reindexKnowledge }),
     }),
     ...(agentsRuntime === undefined
       ? {}
@@ -3147,6 +3305,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             audit: auth.audit,
             runner: agentsRuntime.agentRunner,
             conversations: agentsRuntime.conversations,
+            traces: agentsRuntime.traces,
             // Fiche feedback — "je ne sais pas si le traitement est en
             // cours ou pas". One store per `assembleSite` call, same
             // lifetime as every other per-request-runtime singleton here
@@ -3466,9 +3625,19 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
+/**
+ * A query key that would write an object's prototype instead of a property
+ * (`?__proto__=a&__proto__=b` makes the parsed query inherit from an array).
+ * No route reads such a key, so it is dropped.
+ */
+function isPrototypeKey(key: string): boolean {
+  return key === '__proto__' || key === 'constructor' || key === 'prototype'
+}
+
 function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestRequest {
   const query: Record<string, string | readonly string[] | undefined> = {}
   for (const key of url.searchParams.keys()) {
+    if (isPrototypeKey(key)) continue
     const values = url.searchParams.getAll(key)
     query[key] = values.length > 1 ? values : values[0]
   }
@@ -3500,6 +3669,7 @@ function toCommerceRequest(req: IncomingMessage, url: URL, body: unknown): Comme
     if (typeof value === 'string') headers[name] = value
   }
   for (const key of url.searchParams.keys()) {
+    if (isPrototypeKey(key)) continue
     query[key] = url.searchParams.get(key) ?? undefined
   }
   return {
@@ -3862,6 +4032,7 @@ export interface AuthorArchiveResolution {
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
   const query: Record<string, string | undefined> = {}
   for (const key of url.searchParams.keys()) {
+    if (isPrototypeKey(key)) continue
     query[key] = url.searchParams.get(key) ?? undefined
   }
   // The connecting socket's address only — never `x-forwarded-for`, a
@@ -4797,6 +4968,14 @@ export function createRequestListener(
         site.requestQuota === undefined ? {} : { requestQuota: site.requestQuota },
       )
       bodyLimits.set(req, bodyLimitFor(req, actor))
+
+      // MCP over Streamable HTTP (`mcp-http.ts`): API key only, its own body
+      // limit, its own JSON-RPC replies. Turned off by `mcp.http: false`,
+      // which leaves the path to the ordinary 404 below.
+      if (url.pathname === '/api/mcp' && site.mcpHttp !== undefined) {
+        await site.mcpHttp(req, res, actor)
+        return
+      }
       // The `?preview=` token the admin's "Prévisualiser" button issues
       // (`POST /{collection}/{id}/preview`, `router.ts`) is only ever
       // consumed here for the public *page* route below — `createContentGateway`'s
@@ -5830,6 +6009,32 @@ export function createRequestListener(
         return
       }
 
+      // Is `cogenta channels` running? Read from the heartbeat file it leaves
+      // in the project, so the admin can say so before someone generates a
+      // link code nothing will ever read. Any signed-in account may ask.
+      if (url.pathname === '/api/notices/channels/runner' && req.method === 'GET') {
+        if (context.actor.id === null) {
+          writeRestResponse(
+            res,
+            errorResponse(
+              new CogentaError({
+                code: 'AUTH_SESSION_INVALID',
+                message: 'Sign in to see whether the chat channels are running.',
+                hint: 'Send a valid session token.',
+              }),
+            ),
+          )
+          return
+        }
+        const runner =
+          extras?.projectRoot === undefined
+            ? { running: false, channels: [] }
+            : await readChannelsRunner(extras.projectRoot)
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ data: runner }))
+        return
+      }
+
       if (url.pathname.startsWith('/api/notices/channels')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
@@ -5952,6 +6157,11 @@ export function createRequestListener(
             gateway: site.gateway,
             site: await renderSiteFor(site),
             styles: previewStyles,
+            // The chrome and the blocks of the theme that is really serving
+            // the site. Without this the preview fell back to the default
+            // theme's header and hero while the colours came from the active
+            // one, so it looked nothing like the page it claims to preview.
+            activeTheme: () => activeThemeForSite(site),
             loadMedia: (ids) => loadRenderMedia(site, ids),
             // A preview is never a real visit, and never cacheable.
             analyticsBeacon: {},
@@ -6323,7 +6533,7 @@ export function createRequestListener(
         // CLI) that has one.
         if (url.pathname === '/api/plugins/sandbox' && req.method === 'POST') {
           const body = (await readBody(req)) as
-            | { id?: unknown; name?: unknown; template?: unknown }
+            | { id?: unknown; name?: unknown; template?: unknown; locale?: unknown }
             | undefined
           const name = typeof body?.name === 'string' ? body.name.trim() : ''
           const id =
@@ -6349,6 +6559,7 @@ export function createRequestListener(
               name: id,
               ...(name === '' || name === id ? {} : { title: name }),
               ...(typeof body?.template === 'string' ? { template: body.template } : {}),
+              ...(typeof body?.locale === 'string' ? { locale: body.locale } : {}),
             })
           } catch (error) {
             writeRestResponse(res, errorResponse(error))
@@ -6407,6 +6618,7 @@ export function createRequestListener(
             if (req.method === 'PUT') {
               const body = (await readBody(req)) as { content?: unknown } | undefined
               const content = typeof body?.content === 'string' ? body.content : ''
+              assertWritableManifest(path, content)
               await writePluginSandboxFile(projectRoot, id, path, content)
               res.writeHead(200, jsonHeaders)
               res.end(JSON.stringify({ data: { id, path } }))
@@ -6849,6 +7061,35 @@ export function createRequestListener(
           'skill.write',
           response,
           logger,
+        )
+        return
+      }
+
+      // What the "MCP" screen needs to print a client configuration that
+      // works as pasted (the endpoint, and this site's own stdio command).
+      // Admin-only: it names a path on the server's disk.
+      if (url.pathname === '/api/mcp-info' && req.method === 'GET') {
+        if (!context.actor.roles.includes('admin')) {
+          jsonError(
+            res,
+            403,
+            'FORBIDDEN',
+            'Only the admin role may read the MCP connection details.',
+          )
+          return
+        }
+        res.writeHead(200, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'no-store',
+        })
+        res.end(
+          JSON.stringify({
+            data: mcpConnectionInfo({
+              httpEnabled: site.mcpHttp !== undefined,
+              ...(extras?.projectRoot === undefined ? {} : { projectRoot: extras.projectRoot }),
+              apiKeyEnv: MCP_API_KEY_ENV,
+            }),
+          }),
         )
         return
       }
@@ -8725,6 +8966,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
 
   const site = await assembleSite({
     db: selection.instance,
+    mcpHttp: loaded.config.mcp.http,
     ...(options.embedsFetchImpl === undefined ? {} : { embedsFetch: options.embedsFetchImpl }),
     assistant,
     searchIndex,
@@ -8920,13 +9162,24 @@ export async function runServe(options: ServeOptions): Promise<number> {
     }
   }
   await refreshObservabilitySettings()
+  // The export destination: the configuration file (or the standard OTEL_*
+  // variables) wins; otherwise the one saved from the admin's Observability
+  // screen. The exporter is built once, so a saved change applies at the next
+  // restart — the screen says so.
+  const savedOtlpEndpoint = await site.siteSettingsStore
+    .get('observability.otlpEndpoint', SITE_SETTINGS_SITE_SCOPE)
+    .then((setting) =>
+      typeof setting?.value === 'string' && setting.value !== '' ? setting.value : undefined,
+    )
+    .catch(() => undefined)
+  const otlpEndpoint = loaded.config.observability.otlpEndpoint ?? savedOtlpEndpoint
   const observabilityRuntime: ObservabilityRuntime = createObservabilityRuntime({
     serviceName: loaded.config.observability.serviceName,
-    ...(loaded.config.observability.otlpEndpoint === undefined
+    ...(otlpEndpoint === undefined
       ? {}
       : {
           otlp: {
-            endpoint: loaded.config.observability.otlpEndpoint,
+            endpoint: otlpEndpoint,
             ...(loaded.config.observability.otlpHeaders === undefined
               ? {}
               : { headers: loaded.config.observability.otlpHeaders }),
@@ -8948,6 +9201,15 @@ export async function runServe(options: ServeOptions): Promise<number> {
     isEnabled: () => observabilityEnabled,
     getRecentTraces: () => observabilityRuntime.recentStore.recentTraces(),
     getRecentLogs: () => observabilityRuntime.recentStore.recentLogs(),
+    getExport: () => ({
+      endpoint: otlpEndpoint ?? null,
+      source:
+        loaded.config.observability.otlpEndpoint !== undefined
+          ? 'config'
+          : savedOtlpEndpoint !== undefined
+            ? 'setting'
+            : null,
+    }),
   })
 
   const toolRunner = createToolRunner({
@@ -8969,13 +9231,30 @@ export async function runServe(options: ServeOptions): Promise<number> {
       images: images?.processor ?? null,
       emailTransport,
       siteName: loaded.config.site.name,
+      isServedPath: createServedPathResolver({
+        collections,
+        resolveTermArchive: site.resolveTermArchive,
+        resolveAuthorArchive: site.resolveAuthorArchive,
+      }),
     }),
   })
   const healthRouter = createHealthRouter({
     // The literal function `cogenta doctor` calls — task 1's acceptance
     // criterion ("le diagnostic de l'admin est le même code") holds by
     // construction, not by convention.
-    getReport: () => runDoctor({ cwd: projectRoot, env, logger }),
+    getReport: () =>
+      runDoctor({
+        cwd: projectRoot,
+        env,
+        logger,
+        // Providers saved from the admin count: the agents run on them.
+        aiProviders: async () =>
+          (await providerStore.list()).map((provider) => ({
+            name: provider.provider,
+            model: provider.model,
+            enabled: provider.enabled,
+          })),
+      }),
     getMigrations: async () => {
       const status: MigrationStatus[] = await migrator.status()
       return {

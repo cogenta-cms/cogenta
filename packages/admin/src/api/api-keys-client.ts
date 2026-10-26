@@ -163,3 +163,15 @@ export function recoverApiKey(token: string, id: string): Promise<CreatedApiKey>
     headers: authHeader(token),
   })
 }
+
+/**
+ * The roles a key may be scoped to on this site — the closed list the server
+ * enforces on create and edit. `null` when the server enforces none (an
+ * older server), and the screen falls back to the schema's role names.
+ */
+export async function listApiKeyRoles(token: string): Promise<readonly string[] | null> {
+  const body: { readonly roles: readonly string[] | null } = await request('/api/api-keys/roles', {
+    headers: authHeader(token),
+  })
+  return body.roles
+}

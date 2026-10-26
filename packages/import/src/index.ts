@@ -69,6 +69,14 @@ export {
   preflightWordPressTarget,
 } from './wordpress/target-preflight.js'
 export type {
+  WordPressBodyTarget,
+  WordPressEntryTarget,
+  WordPressTarget,
+  WordPressTargetChoice,
+  WordPressTargetPlan,
+} from './wordpress/targets.js'
+export { planWordPressTargets } from './wordpress/targets.js'
+export type {
   ParsedWxr,
   WxrAuthor,
   WxrCategory,

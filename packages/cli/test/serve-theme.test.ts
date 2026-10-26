@@ -445,7 +445,56 @@ describe('POST /api/theme/preview', () => {
     await server.stop()
   }, 60_000)
 
-  it('refuses a preview candidate that fails contract D, the same way a save would', async () => {
+  it('renders the preview with the header of the theme that is really active, not the default one', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminSession(root, server.base)
+    await seedHomePage(root, server.base)
+
+    await fetch(`${server.base}/api/theme/activate`, {
+      method: 'POST',
+      headers: auth(token),
+      body: JSON.stringify({ theme: '@cogenta/theme-entreprise' }),
+    })
+    const live = await (await fetch(`${server.base}/`)).text()
+    const preview = await fetch(`${server.base}/api/theme/preview`, {
+      method: 'POST',
+      headers: auth(token),
+      body: JSON.stringify({ tokens: { color: { accent: '#7c3aed' } } }),
+    })
+    const html = ((await preview.json()) as { data: { html: string } }).data.html
+    // The entreprise header names its menu toggle differently from canonical's.
+    expect(live).toContain('cg-nav-toggle-input')
+    expect(html).toContain('cg-nav-toggle-input')
+    await server.stop()
+  }, 60_000)
+
+  it('still previews a palette whose text is unreadable, with that text recoloured, while a save refuses it', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminSession(root, server.base)
+    await seedHomePage(root, server.base)
+
+    const candidate = JSON.stringify({ tokens: { color: { fg: '#fefefe' } } })
+    const preview = await fetch(`${server.base}/api/theme/preview`, {
+      method: 'POST',
+      headers: auth(token),
+      body: candidate,
+    })
+    expect(preview.status).toBe(200)
+    const body = (await preview.json()) as { data: { html: string } }
+    expect(body.data.html).not.toContain('#fefefe')
+
+    const save = await fetch(`${server.base}/api/theme/overrides`, {
+      method: 'PUT',
+      headers: auth(token),
+      body: JSON.stringify({ tokenOverrides: { color: { fg: '#fefefe' } } }),
+    })
+    expect(save.status).toBe(422)
+    await server.stop()
+  }, 60_000)
+
+  it('refuses a preview candidate that is not a valid skin at all', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })
     const token = await adminSession(root, server.base)
@@ -453,7 +502,7 @@ describe('POST /api/theme/preview', () => {
     const response = await fetch(`${server.base}/api/theme/preview`, {
       method: 'POST',
       headers: auth(token),
-      body: JSON.stringify({ tokens: { color: { fg: '#fefefe' } } }),
+      body: JSON.stringify({ tokens: { color: { fg: 'not-a-colour' } } }),
     })
     expect(response.status).toBe(422)
     await server.stop()

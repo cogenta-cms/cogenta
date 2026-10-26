@@ -55,8 +55,9 @@ describe('the API key list', () => {
     expect(rows.getByText('CI pipeline')).toBeDefined()
     // Both seeded keys are scoped to "viewer" (fiche 62 added a second,
     // already-revoked key for the purge tests), so this is no longer unique
-    // to a single row — assert it appears on the row that matters.
-    expect(within(rowFor('CI pipeline')).getByText('viewer')).toBeDefined()
+    // to a single row — assert it appears on the row that matters. The role
+    // is shown under its French label.
+    expect(within(rowFor('CI pipeline')).getByText('Lecteur')).toBeDefined()
     expect(rows.queryByText(/cogenta_sk_mock/u)).toBeNull()
   })
 
@@ -72,7 +73,7 @@ describe('the API key list', () => {
     await goToApiKeys()
     await screen.findByText('CI pipeline')
 
-    const summary = within(rowFor('CI pipeline')).getByText('viewer')
+    const summary = within(rowFor('CI pipeline')).getByText('Lecteur')
     const details = summary.closest('details') as HTMLDetailsElement
     expect(details).not.toBeNull()
     expect(details.open).toBe(false)
@@ -83,7 +84,8 @@ describe('the API key list', () => {
     fireEvent.click(summary)
 
     expect(details.open).toBe(true)
-    expect(within(details).getByText(/Articles: read/u)).toBeDefined()
+    // The disclosure spells out what the role unlocks, in French.
+    expect(within(details).getByText(/Lecteur : Articles \(Lire/u)).toBeDefined()
   })
 
   it('tells a non-admin plainly instead of rendering controls that would be refused', async () => {
@@ -111,7 +113,8 @@ describe('creating an API key', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Créer une clé API' })
 
     fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'Analytics import' } })
-    fireEvent.change(screen.getByLabelText('Portée'), { target: { value: 'editor' } })
+    // The scope is a list of roles to tick, no longer a free-text field.
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Éditeur' }))
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
 
     expect(await screen.findByText(/^cogenta_sk_mock/u)).toBeDefined()
@@ -127,6 +130,7 @@ describe('creating an API key', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Nouvelle clé API' }))
     const dialog = await screen.findByRole('dialog', { name: 'Créer une clé API' })
     fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'Analytics import' } })
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Lecteur' }))
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
     const rawKey = (await screen.findByText(/^cogenta_sk_mock/u)).textContent
 
@@ -151,13 +155,15 @@ describe('editing an API key', () => {
     fireEvent.change(within(dialog).getByLabelText('Nom'), {
       target: { value: 'CI deploy pipeline' },
     })
-    fireEvent.change(within(dialog).getByLabelText('Portée'), { target: { value: 'editor' } })
+    // Swap the key's scope from "Lecteur" to "Éditeur".
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Lecteur' }))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Éditeur' }))
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
 
     await waitFor(() => {
       expect(within(table()).getByText('CI deploy pipeline')).toBeDefined()
     })
-    expect(within(rowFor('CI deploy pipeline')).getByText('editor')).toBeDefined()
+    expect(within(rowFor('CI deploy pipeline')).getByText('Éditeur')).toBeDefined()
     // Never reissues the secret — no "raw key" notice appears from an edit.
     expect(screen.queryByText(/^cogenta_sk_mock/u)).toBeNull()
   })
@@ -209,9 +215,9 @@ describe('rotating an API key (fiche 20 task 2)', () => {
     await goToApiKeys()
     await screen.findByText('CI pipeline')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Faire tourner CI pipeline' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Faire tourner CI pipeline' })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Faire tourner la clé' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Renouveler CI pipeline' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Renouveler CI pipeline' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Renouveler la clé' }))
 
     expect(await screen.findByText(/^cogenta_sk_mock-rotated/u)).toBeDefined()
     await waitFor(() => {
@@ -321,7 +327,7 @@ describe('purging a long-revoked key (fiche 62 task 2)', () => {
     })
 
     expect(screen.queryByRole('button', { name: 'Purger CI pipeline' })).toBeNull()
-    expect(within(rowFor('CI pipeline')).getByText('Purgeable dans 30 jour(s)')).toBeDefined()
+    expect(within(rowFor('CI pipeline')).getByText('Purge possible dans 30 jours')).toBeDefined()
   })
 })
 

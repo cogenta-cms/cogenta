@@ -80,6 +80,47 @@ function isAbsent(value: unknown): boolean {
   return value === undefined || value === null
 }
 
+/** A rich-text document: an array whose nodes are all typed `block` / `media` / `hr`. */
+function isRichTextDocument(value: unknown): value is readonly Record<string, unknown>[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (node) =>
+        isRecord(node) && (node._type === 'block' || node._type === 'media' || node._type === 'hr'),
+    )
+  )
+}
+
+/**
+ * The same value without the `_key` identifiers the editor mints for every
+ * node. They exist to follow a node while it is edited; a save that
+ * regenerates them has not changed what the document says.
+ */
+function withoutRichTextKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutRichTextKeys)
+  if (!isRecord(value)) return value
+  const out: Record<string, unknown> = {}
+  for (const [key, inner] of Object.entries(value)) {
+    if (key === '_key') continue
+    out[key] = withoutRichTextKeys(inner)
+  }
+  return out
+}
+
+/**
+ * Equal, or equal once the generated `_key`s of two rich-text documents are
+ * ignored — a body re-saved with fresh keys is not a change a reader can see.
+ */
+function sameFieldValue(from: unknown, to: unknown): boolean {
+  if (deepEqual(from, to)) return true
+  return (
+    isRichTextDocument(from) &&
+    isRichTextDocument(to) &&
+    deepEqual(withoutRichTextKeys(from), withoutRichTextKeys(to))
+  )
+}
+
 export function diffValues(before: ContentValues, after: ContentValues): FieldChange[] {
   const fields = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()
   const changes: FieldChange[] = []
@@ -87,7 +128,7 @@ export function diffValues(before: ContentValues, after: ContentValues): FieldCh
   for (const field of fields) {
     const from = before[field]
     const to = after[field]
-    if (deepEqual(from, to)) continue
+    if (sameFieldValue(from, to)) continue
 
     const change: ChangeKind = isAbsent(from) ? 'added' : isAbsent(to) ? 'removed' : 'changed'
     changes.push({ field, change, before: from ?? null, after: to ?? null })

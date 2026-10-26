@@ -140,9 +140,9 @@ describe('changing an account', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Changer les rôles de bob@example.com' }))
     const dialog = await screen.findByRole('dialog', { name: 'Rôles de bob@example.com' })
     // Bob starts with "viewer" (not a standard role, so it appears as its own
-    // checkbox, pre-checked). Uncheck it and add "reviewer" as a custom role,
+    // checkbox, pre-checked, under its French label "Lecteur"). Uncheck it and add "reviewer" as a custom role,
     // to land on exactly one role, same as the old free-text field did.
-    fireEvent.click(within(dialog).getByLabelText('viewer'))
+    fireEvent.click(within(dialog).getByLabelText('Lecteur'))
     fireEvent.change(within(dialog).getByLabelText('Rôle personnalisé (optionnel)'), {
       target: { value: 'reviewer' },
     })
@@ -159,6 +159,11 @@ describe('changing an account', () => {
     await within(await screen.findByRole('table')).findByText('bob@example.com')
 
     fireEvent.click(screen.getByRole('button', { name: 'Désactiver bob@example.com' }))
+    // Disabling shuts somebody out, so it is confirmed first and nothing
+    // changes until the confirmation button is pressed.
+    const dialog = await screen.findByRole('dialog', { name: 'Désactiver bob@example.com ?' })
+    expect(screen.queryByRole('button', { name: 'Réactiver bob@example.com' })).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Désactiver le compte' }))
 
     expect(await screen.findByRole('button', { name: 'Réactiver bob@example.com' })).toBeDefined()
     expect(within(table()).getByText('Désactivé')).toBeDefined()
@@ -285,6 +290,8 @@ describe('bulk actions', () => {
     expect(await screen.findByText('2 comptes sélectionnés')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Désactiver la sélection' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Désactiver 2 comptes ?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Désactiver le compte' }))
 
     await waitFor(() => {
       expect(within(table()).getAllByText('Désactivé').length).toBeGreaterThan(0)

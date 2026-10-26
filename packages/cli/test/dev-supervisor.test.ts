@@ -105,6 +105,24 @@ function startDev(root: string) {
   return { controller, done, listening, lines }
 }
 
+/**
+ * A fetch that waits out a restart still in flight. On a loaded CI runner the
+ * schema poll can see the file change twice (written, then its mtime settles),
+ * so the server can be between two restarts when the test asks; a refused
+ * connection there is the restart, not the answer.
+ */
+async function fetchSettled(url: string): Promise<Response> {
+  const deadline = Date.now() + 15_000
+  for (;;) {
+    try {
+      return await fetch(url)
+    } catch (error) {
+      if (Date.now() > deadline) throw error
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+  }
+}
+
 describe('cogenta dev restarts itself when the schema changes (L28 D7)', () => {
   it('serves a collection added to the schema file, on the same port, without a manual restart', async () => {
     const root = await project(`export default [${PAGE}]\n`)
@@ -118,7 +136,7 @@ describe('cogenta dev restarts itself when the schema changes (L28 D7)', () => {
     const second = await dev.listening(2)
 
     expect(second.port).toBe(first.port)
-    expect((await fetch(`${base}/api/content/note`)).status).toBe(200)
+    expect((await fetchSettled(`${base}/api/content/note`)).status).toBe(200)
     expect(dev.lines.join('')).toContain('restarting the development server')
 
     dev.controller.abort()

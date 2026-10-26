@@ -72,6 +72,12 @@ export interface DoctorReport {
     | undefined
   readonly checks: readonly DoctorCheck[]
   readonly notes: readonly string[]
+  /** The same notes, coded — absent from a server built before it existed. */
+  readonly noteItems?: readonly {
+    readonly code: string
+    readonly params: Readonly<Record<string, string | number>>
+    readonly text: string
+  }[]
   readonly problems: readonly string[]
 }
 

@@ -575,6 +575,11 @@ export type {
   ContentSchemaServiceLike,
 } from './tools/core/content-schema.js'
 export { createContentSchemaTool } from './tools/core/content-schema.js'
+export type {
+  ContentSearchHitLike,
+  ContentSearchServiceLike,
+} from './tools/core/content-search.js'
+export { createContentSearchTool } from './tools/core/content-search.js'
 export type { DepsScanOutput, DepsScanToolOptions } from './tools/core/deps-scan.js'
 export { createDepsScanTool } from './tools/core/deps-scan.js'
 export type {

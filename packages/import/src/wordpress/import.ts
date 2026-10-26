@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import type { CommentStatus, CommentStore } from '@cogenta/comments'
 import { createDatabaseMediaStore, type DatabaseHandle, type StorageDriver } from '@cogenta/core'
@@ -9,14 +10,7 @@ import {
   createSchemaTables,
 } from '@cogenta/schema'
 import type { ImportTrackingStore } from '../tracking.js'
-import {
-  WORDPRESS_IMPORT_COLLECTIONS,
-  wpCategory,
-  wpComment,
-  wpPage,
-  wpPost,
-  wpTag,
-} from './collections.js'
+import { WORDPRESS_IMPORT_COLLECTIONS, wpComment } from './collections.js'
 import {
   type ContentConversionNote,
   convertContent,
@@ -27,13 +21,21 @@ import {
 import { downloadAndStoreMedia } from './media.js'
 import { parseWxr } from './parse.js'
 import { type ConversionReport, emptyReport, type UnconvertedItem } from './report.js'
+import { blocksToRichText } from './rich-body.js'
 import { preflightWordPressTarget } from './target-preflight.js'
+import {
+  planWordPressTargets,
+  type WordPressEntryTarget,
+  type WordPressTargetChoice,
+} from './targets.js'
 import type { WxrComment, WxrItem } from './types.js'
 
 export interface ImportWordPressOptions {
   readonly db: DatabaseHandle
   readonly storage: StorageDriver
   readonly collections?: readonly CollectionDefinition[]
+  /** Which of the site's collections receives posts and pages; the ones named `post` and `page` when absent. */
+  readonly targets?: WordPressTargetChoice
   /** Injected for tests — real `fetch` by default. */
   readonly fetchImpl?: typeof fetch
   /**
@@ -85,16 +87,32 @@ function wpApprovedToStatus(approved: string): CommentStatus {
  * step of this importer already follows.
  */
 function stripHtmlToPlainText(html: string): string {
-  return html
-    .replace(/<[^>]*>/gu, '')
-    .replace(/&nbsp;/giu, ' ')
-    .replace(/&amp;/giu, '&')
-    .replace(/&lt;/giu, '<')
-    .replace(/&gt;/giu, '>')
-    .replace(/&quot;/giu, '"')
-    .replace(/&#0?39;/giu, "'")
+  // Repeated until stable, so `<<b>script>` cannot reassemble into a tag.
+  let text = html
+  for (let previous = ''; previous !== text; ) {
+    previous = text
+    text = text.replace(/<[^<>]*>/gu, '')
+  }
+  // One pass over the entities, so `&amp;lt;` decodes to `&lt;` and no
+  // further: decoding `&amp;` first and `&lt;` after would unescape twice.
+  // The result is plain text, which contract F escapes when it is rendered.
+  return text
+    .replace(
+      /&(nbsp|amp|lt|gt|quot|#0?39);/giu,
+      (_, name: string) => ENTITIES[name.toLowerCase()] ?? '',
+    )
     .replace(/\s+/gu, ' ')
     .trim()
+}
+
+const ENTITIES: Readonly<Record<string, string>> = {
+  nbsp: ' ',
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  '#39': "'",
+  '#039': "'",
 }
 
 const APPROVED = '1'
@@ -153,8 +171,19 @@ export async function importWordPress(
   const parsed = parseWxr(xml)
   const acc = emptyReport()
 
-  await preflightWordPressTarget(db, options.collections)
-  await createSchemaTables(db, WORDPRESS_IMPORT_COLLECTIONS)
+  const siteCollections = options.collections ?? []
+  await preflightWordPressTarget(db, siteCollections, options.targets)
+  const plan = planWordPressTargets(siteCollections, options.targets)
+  // Only what the importer itself defines needs tables made for it: a
+  // collection the site declared already has its own.
+  await createSchemaTables(
+    db,
+    plan.post.native
+      ? WORDPRESS_IMPORT_COLLECTIONS
+      : plan.page.native
+        ? [plan.page.collection]
+        : [],
+  )
   await ensureAuthTables(db)
 
   const users = createUserStore(db)
@@ -162,11 +191,14 @@ export async function importWordPress(
   await redirects.ensureTable()
   const mediaStore = createDatabaseMediaStore({ db })
 
-  const categoryStore = createContentStore({ db, collection: wpCategory })
-  const tagStore = createContentStore({ db, collection: wpTag })
-  const postStore = createContentStore({ db, collection: wpPost })
-  const pageStore = createContentStore({ db, collection: wpPage })
-  const commentStore = createContentStore({ db, collection: wpComment })
+  const categoryStore =
+    plan.category === null ? null : createContentStore({ db, collection: plan.category })
+  const tagStore = plan.tag === null ? null : createContentStore({ db, collection: plan.tag })
+  const postStore = createContentStore({ db, collection: plan.post.collection })
+  const pageStore = createContentStore({ db, collection: plan.page.collection })
+  // The legacy comment collection is a relation to the importer's own `post`
+  // collection, so it only exists next to a native one.
+  const commentStore = plan.post.native ? createContentStore({ db, collection: wpComment }) : null
 
   // ---- Authors -------------------------------------------------------
   const loginToUserId = new Map<string, string>()
@@ -200,39 +232,51 @@ export async function importWordPress(
   // and pages via the tracking table — categories/tags have no source id of
   // their own to track against, but their slug already is one.
   const categoryByNiceName = new Map<string, string>()
-  for (const category of parsed.categories) {
+  for (const category of categoryStore === null ? [] : parsed.categories) {
     const slug = category.niceName
-    const existing = await categoryStore.list({ where: { slug }, limit: 1 })
-    if (existing.items[0] !== undefined) {
+    const existing = await categoryStore?.list({ where: { slug }, limit: 1 })
+    if (existing?.items[0] !== undefined) {
       categoryByNiceName.set(category.niceName, existing.items[0].id)
       continue
     }
-    const entry = await categoryStore.create({
+    const entry = await categoryStore?.create({
       values: { name: category.name || category.niceName, slug },
       status: 'published',
     })
+    if (entry === undefined) continue
     categoryByNiceName.set(category.niceName, entry.id)
     acc.imported.categories += 1
   }
+  if (categoryStore === null && parsed.categories.length > 0) {
+    acc.warnings.push(
+      `${parsed.categories.length} WordPress categories were not imported: this site has no category collection to receive them.`,
+    )
+  }
 
   const tagByNiceName = new Map<string, string>()
-  for (const tag of parsed.tags) {
+  for (const tag of tagStore === null ? [] : parsed.tags) {
     const slug = tag.slug
-    const existing = await tagStore.list({ where: { slug }, limit: 1 })
-    if (existing.items[0] !== undefined) {
+    const existing = await tagStore?.list({ where: { slug }, limit: 1 })
+    if (existing?.items[0] !== undefined) {
       tagByNiceName.set(tag.slug, existing.items[0].id)
       continue
     }
-    const entry = await tagStore.create({
+    const entry = await tagStore?.create({
       values: { name: tag.name || tag.slug, slug },
       status: 'published',
     })
+    if (entry === undefined) continue
     tagByNiceName.set(tag.slug, entry.id)
     acc.imported.tags += 1
   }
+  if (tagStore === null && parsed.tags.length > 0) {
+    acc.warnings.push(
+      `${parsed.tags.length} WordPress tags were not imported: this site has no tag collection to receive them.`,
+    )
+  }
 
   // ---- Resume (task 3) -------------------------------------------------
-  // Entry ids are deterministic (`store.create({ id: item.postId, … })`
+  // Entry ids are deterministic (`store.create({ id: entryIdFor(item.postId), … })`
   // below), so a WordPress id already recorded for this run was already
   // written by an earlier, interrupted attempt. Filtering it out here — not
   // merely skipping the write — is what also keeps its comments from being
@@ -290,11 +334,22 @@ export async function importWordPress(
   }
 
   // ---- Posts & pages --------------------------------------------------
+  const authorNameByLogin = new Map(
+    parsed.authors.map((author) => [author.login, author.displayName || author.login] as const),
+  )
+
+  /** Trims a string to the `max` the target field declares, so a long WordPress title never fails the whole entry. */
+  function fit(target: WordPressEntryTarget, field: string, value: string): string {
+    const max = (target.collection.fields[field]?.options as { max?: unknown } | undefined)?.max
+    return typeof max === 'number' && value.length > max ? value.slice(0, max) : value
+  }
+
   async function writeEntry(
     item: WxrItem,
     store: typeof postStore | typeof pageStore,
     kind: 'post' | 'page',
   ): Promise<string | null> {
+    const target = kind === 'post' ? plan.post : plan.page
     if (item.status === 'trash') {
       acc.skipped.push({
         type: kind,
@@ -321,12 +376,6 @@ export async function importWordPress(
       mediaResult.urlToMediaId,
       notes,
     )
-    for (const note of notes) {
-      acc.unconvertedBlocks.push({
-        ...note,
-        postTitle: item.title || `(untitled ${kind} ${item.postId})`,
-      })
-    }
 
     const status = item.status === 'publish' ? 'published' : 'draft'
     const createdBy = loginToUserId.get(item.creator) ?? null
@@ -342,43 +391,98 @@ export async function importWordPress(
         .map((meta) => [meta.key, meta.value]),
     )
 
-    const values: Record<string, unknown> = {
-      title: item.title || `(untitled ${item.postId})`,
-      slug: item.postName || item.postId,
-      publishedAt: wpDateToIso(item.postDate),
-      customFields,
+    const title = item.title || `(untitled ${item.postId})`
+    const slug = item.postName || item.postId
+    const values: Record<string, unknown> = { [target.title]: fit(target, target.title, title) }
+    if (target.slug !== null) values[target.slug] = slug
+    for (const name of target.fillWithTitle) values[name] = fit(target, name, title)
+    if (target.publishedAt !== null) {
+      const iso = wpDateToIso(item.postDate)
+      if (iso !== null) {
+        values[target.publishedAt] =
+          target.collection.fields[target.publishedAt]?.kind === 'date' ? iso.slice(0, 10) : iso
+      }
+    }
+    if (target.customFields !== null) values[target.customFields] = customFields
+    if (target.author !== null && item.creator.length > 0) {
+      values[target.author] = fit(
+        target,
+        target.author,
+        authorNameByLogin.get(item.creator) ?? item.creator,
+      )
+    }
+    if (target.cover !== null && item.thumbnailId !== null) {
+      const url = attachmentUrlById.get(item.thumbnailId)
+      const mediaId = url === undefined ? undefined : mediaResult.urlToMediaId.get(url)
+      if (mediaId !== undefined) values[target.cover] = mediaId
     }
     if (kind === 'post') {
-      values['excerpt'] = item.excerptEncoded
-      const categoryRef = item.categories.find((ref) => ref.domain === 'category')
-      const category =
-        categoryRef === undefined ? null : (categoryByNiceName.get(categoryRef.niceName) ?? null)
-      if (category !== null) values['category'] = category
-      values['tags'] = item.categories
-        .filter((ref) => ref.domain === 'post_tag')
-        .map((ref) => tagByNiceName.get(ref.niceName))
-        .filter((id): id is string => id !== undefined)
+      if (target.excerpt !== null && item.excerptEncoded.trim().length > 0) {
+        values[target.excerpt] = fit(
+          target,
+          target.excerpt,
+          target.native ? item.excerptEncoded : stripHtmlToPlainText(item.excerptEncoded),
+        )
+      }
+      if (target.category !== null) {
+        const categoryRef = item.categories.find((ref) => ref.domain === 'category')
+        const category =
+          categoryRef === undefined ? null : (categoryByNiceName.get(categoryRef.niceName) ?? null)
+        if (category !== null) values[target.category] = category
+      }
+      if (target.tags !== null) {
+        values[target.tags] = item.categories
+          .filter((ref) => ref.domain === 'post_tag')
+          .map((ref) => tagByNiceName.get(ref.niceName))
+          .filter((id): id is string => id !== undefined)
+      }
+    }
+
+    let blocks: Record<string, readonly StoredBlock[]> | undefined
+    if (target.body === null) {
+      notes.push({
+        source: 'body',
+        reason: `The "${target.collection.name}" collection has no body field; the text was not imported.`,
+      })
+    } else if (target.body.kind === 'blocks') {
+      blocks = { [target.body.field]: toContentBlocks(resolvedBlocks) }
+    } else {
+      values[target.body.field] = blocksToRichText(resolvedBlocks, notes)
+    }
+
+    for (const note of notes) {
+      acc.unconvertedBlocks.push({
+        ...note,
+        postTitle: item.title || `(untitled ${kind} ${item.postId})`,
+      })
     }
 
     const entry = await store.create({
-      id: item.postId,
+      id: entryIdFor(item.postId),
       status,
       createdBy,
       values,
-      blocks: { body: toContentBlocks(resolvedBlocks) },
+      ...(blocks === undefined ? {} : { blocks }),
     })
 
-    const collection = kind === 'post' ? wpPost : wpPage
-    const to = buildPath(collection, { slug: values['slug'] as string })
-    const from = relativePathOf(item.link, parsed.baseUrl)
-    if (from !== null && from !== to) {
-      try {
-        await redirects.add({ from, to, reason: 'import', collection: kind, entryId: entry.id })
-        acc.redirectsCreated += 1
-      } catch (error) {
-        acc.warnings.push(
-          `Redirect ${from} → ${to} was not created: ${error instanceof Error ? error.message : String(error)}`,
-        )
+    if (target.collection.routing !== undefined && target.slug !== null) {
+      const to = buildPath(target.collection, { slug })
+      const from = relativePathOf(item.link, parsed.baseUrl)
+      if (from !== null && from !== to) {
+        try {
+          await redirects.add({
+            from,
+            to,
+            reason: 'import',
+            collection: target.collection.name,
+            entryId: entry.id,
+          })
+          acc.redirectsCreated += 1
+        } catch (error) {
+          acc.warnings.push(
+            `Redirect ${from} → ${to} was not created: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
       }
     }
 
@@ -399,7 +503,12 @@ export async function importWordPress(
     await options.tracking.recordItem({
       runId: options.runId,
       sourceId: kind === 'comment' ? `comment:${wpId}` : wpId,
-      collection: kind === 'comment' ? wpComment.name : kind === 'post' ? wpPost.name : wpPage.name,
+      collection:
+        kind === 'comment'
+          ? wpComment.name
+          : kind === 'post'
+            ? plan.post.collection.name
+            : plan.page.collection.name,
       entryId,
     })
   }
@@ -520,10 +629,18 @@ export async function importWordPress(
       await record('post', item.postId, id)
 
       if (options.comments !== undefined) {
-        await importCommentsForEntry(item.comments, wpPost.name, id, item.title)
+        await importCommentsForEntry(item.comments, plan.post.collection.name, id, item.title)
         continue
       }
 
+      if (commentStore === null) {
+        if (item.comments.length > 0) {
+          acc.warnings.push(
+            `"${item.title}" has ${item.comments.length} comment(s) that were not imported: no comment store is wired for this site.`,
+          )
+        }
+        continue
+      }
       for (const comment of item.comments) {
         if (comment.approved !== APPROVED) continue
         const createdComment = await commentStore.create({
@@ -560,7 +677,7 @@ export async function importWordPress(
       // the `comments` option instead of extending a model that was never
       // built to hold this.
       if (options.comments !== undefined) {
-        await importCommentsForEntry(item.comments, wpPage.name, id, item.title)
+        await importCommentsForEntry(item.comments, plan.page.collection.name, id, item.title)
       } else if (item.comments.length > 0) {
         acc.warnings.push(
           `"${item.title}" has ${item.comments.length} comment(s) that were not imported: the legacy comment model only supports comments on posts. Pass a \`comments\` store to import them.`,
@@ -583,4 +700,22 @@ export async function importWordPress(
     unconvertedBlocks: acc.unconvertedBlocks,
     warnings: acc.warnings,
   }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu
+
+/**
+ * The entry id a WordPress post or page is written under: the same for the
+ * same WordPress id, so an interrupted import resumes instead of duplicating.
+ * A WordPress id is a number, and Postgres stores entry ids as `uuid`, so
+ * writing `"1"` there was refused; it is hashed into a UUID (the version 5
+ * layout, SHA-1 under a fixed name) rather than used as is.
+ */
+export function entryIdFor(postId: string): string {
+  if (UUID.test(postId)) return postId.toLowerCase()
+  const hash = createHash('sha1').update(`cogenta:wordpress:${postId}`).digest()
+  hash[6] = ((hash[6] ?? 0) & 0x0f) | 0x50
+  hash[8] = ((hash[8] ?? 0) & 0x3f) | 0x80
+  const hex = hash.subarray(0, 16).toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }

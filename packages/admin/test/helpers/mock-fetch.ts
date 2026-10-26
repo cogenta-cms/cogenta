@@ -985,7 +985,15 @@ export function installMockFetch(
     readonly commercePaymentWebhookUrl?: string | null
     /** `POST /api/commerce/payment/drivers/{name}/test-connection`'s answer, keyed by driver name. Defaults to `{ ok: true, message: null }`. */
     readonly commercePaymentTestResults?: Readonly<
-      Record<string, { readonly ok: boolean; readonly message: string | null }>
+      Record<
+        string,
+        {
+          readonly ok: boolean
+          readonly message: string | null
+          /** The stable outcome the real router sends and the admin translates. */
+          readonly code?: 'ok' | 'not_configured' | 'unreachable' | 'error'
+        }
+      >
     >
     /** Overrides for `GET /api/shell-status` (fiche 35 task 3) — badges and feature flags, quiet-site defaults otherwise. */
     readonly shellStatus?: {
@@ -2434,10 +2442,44 @@ export function installMockFetch(
       email: 'shopper@example.com',
       name: 'Shopper One' as string | null,
       userId: null as string | null,
+      // Derived from the e-mail domain by the real store; flipped by the
+      // anonymise route below.
+      anonymized: false as boolean,
       createdAt: '2026-03-01T00:00:00.000Z',
       updatedAt: '2026-03-01T00:00:00.000Z',
     },
   ]
+
+  // Mirrors the real router's `describeSubscriptions`: the names of the people
+  // and products a subscription list or detail shows instead of identifiers.
+  function describeMockSubscriptions(list: readonly { customerId: string; variantId: string }[]): {
+    customers: Record<string, { id: string; email: string; name: string | null }>
+    variants: Record<string, Record<string, unknown>>
+  } {
+    const customers: Record<string, { id: string; email: string; name: string | null }> = {}
+    const variants: Record<string, Record<string, unknown>> = {}
+    for (const subscription of list) {
+      const customer = mockCustomers.find((candidate) => candidate.id === subscription.customerId)
+      if (customer !== undefined) {
+        customers[customer.id] = { id: customer.id, email: customer.email, name: customer.name }
+      }
+      const variant = mockVariants.find((candidate) => candidate.id === subscription.variantId)
+      const product = mockProducts.find((candidate) => candidate.id === variant?.productId)
+      if (variant !== undefined) {
+        variants[variant.id] = {
+          id: variant.id,
+          sku: variant.sku,
+          title: variant.title,
+          productId: variant.productId,
+          productTitle: product?.title ?? variant.title,
+          priceMinor: variant.priceMinor,
+          currency: variant.currency,
+          imageMediaId: variant.imageMediaId ?? product?.imageMediaIds[0] ?? null,
+        }
+      }
+    }
+    return { customers, variants }
+  }
 
   let accountCounter = 0
   const accounts: MockAccount[] = [
@@ -3260,6 +3302,32 @@ export function installMockFetch(
         }
       }
 
+      // `/api/mcp-info` — what the "MCP" screen prints client configurations from.
+      if (url.endsWith('/api/mcp-info') && method === 'GET') {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may do this.' },
+          })
+        }
+        return json(200, {
+          data: {
+            http: { enabled: true, path: '/api/mcp' },
+            stdio: {
+              command: '/usr/bin/node',
+              args: [
+                '/srv/site/node_modules/@cogenta/cli/dist/bin.js',
+                'mcp',
+                '--cwd',
+                '/srv/site',
+              ],
+              projectRoot: '/srv/site',
+              apiKeyEnv: 'COGENTA_MCP_API_KEY',
+            },
+            approvalsPath: '/admin/agents',
+          },
+        })
+      }
+
       // `/api/api-keys/*`. Admin-only, mirroring the real router: the raw
       // `key` is present only in the `POST`, `POST .../rotate` and
       // `POST .../recover` response bodies, never in the list — proving the
@@ -3276,6 +3344,12 @@ export function installMockFetch(
           error: { code: 'FORBIDDEN', message: 'Only the admin role may do this.' },
         })
         const [, rawId, actionSuffix] = apiKeysMatch
+
+        // The closed list a scope is chosen from (`GET /api/api-keys/roles`).
+        if (rawId === 'roles' && method === 'GET') {
+          if (!isAdmin) return forbidden
+          return json(200, { data: { roles: ['admin', 'editor', 'shopkeeper', 'viewer'] } })
+        }
 
         if (rawId === undefined && method === 'GET') {
           if (!isAdmin) return forbidden
@@ -4613,7 +4687,7 @@ export function installMockFetch(
           Object.assign(planDecisions, body.decisions ?? {})
           return json(200, { data: { id: 'draft-1', decisions: { ...planDecisions } } })
         }
-        if (/\/api\/site-plans\/[^/?]+$/u.test(url)) {
+        if (/\/api\/site-plans\/[^/?]+(?:\?.*)?$/u.test(url)) {
           return json(200, { data: detail })
         }
         return json(200, { data: [detail], plannerAvailable: true })
@@ -4678,14 +4752,48 @@ export function installMockFetch(
               error: { code: 'CONTENT_INVALID', message: 'This request names no file.' },
             })
           }
+          const wordpressTarget = (collection: string) => ({
+            collection,
+            mapped: true,
+            fields: { title: 'title' },
+            unmapped: [] as string[],
+          })
           const run: MockImportRun = {
             id: 'run-1',
             source: body.source ?? 'csv',
             status: 'analyzed',
             createdAt: '2026-01-01T00:00:00.000Z',
             updatedAt: '2026-01-01T00:00:00.000Z',
-            analysis: { totalRecords: 3 },
-            mapping: { targetCollection: 'page', fields: { title: 'title' } },
+            // The analysis has the shape of its source, as the real route returns it.
+            analysis:
+              body.source === 'wordpress'
+                ? {
+                    counts: {
+                      posts: 2,
+                      pages: 1,
+                      categories: 1,
+                      tags: 0,
+                      comments: 0,
+                      attachments: 0,
+                    },
+                    targets: {
+                      post: wordpressTarget('article'),
+                      page: wordpressTarget('page'),
+                      category: null,
+                      tag: null,
+                    },
+                    slugConflicts: [],
+                    ignored: [],
+                    warnings: [],
+                  }
+                : {
+                    totalRecords: 3,
+                    sourceFields: ['title'],
+                    proposedMapping: { targetCollection: 'article', fields: { title: 'title' } },
+                    sample: [{ title: 'a' }, { title: 'b' }, { title: 'c' }],
+                    warnings: [],
+                  },
+            mapping: { targetCollection: 'article', fields: { title: 'title' } },
             progress: { processed: 0, total: 3 },
             report: null,
             error: null,
@@ -4709,10 +4817,36 @@ export function installMockFetch(
           const updated = {
             ...run,
             status: 'done' as const,
-            report: {
-              imported: run.status === 'done' ? 0 : 3,
-              resumedSkips: run.status === 'done' ? 3 : 0,
-            },
+            report:
+              run.source === 'wordpress'
+                ? {
+                    imported: {
+                      posts: 2,
+                      pages: 1,
+                      categories: 1,
+                      tags: 0,
+                      media: 0,
+                      authors: 1,
+                      comments: 0,
+                    },
+                    redirectsCreated: 1,
+                    skipped: [
+                      {
+                        type: 'post',
+                        wpId: '42',
+                        title: 'Draft nobody finished',
+                        reason: 'Trashed in WordPress; not imported.',
+                      },
+                    ],
+                    unconvertedBlocks: [],
+                    warnings: [
+                      'Media "old-logo.png" was imported with a synthesised alt text; review it.',
+                    ],
+                  }
+                : {
+                    imported: run.status === 'done' ? 0 : 3,
+                    resumedSkips: run.status === 'done' ? 3 : 0,
+                  },
           }
           importPreviewRuns.set(run.id, updated)
           return json(200, { data: updated })
@@ -7344,6 +7478,20 @@ export function installMockFetch(
         }
 
         // ---- tax (fiche 34 task 1) --------------------------------------
+        // The categories a rule or a variant can name: the shop's defaults, plus
+        // whatever its rules and variants already use (what a picker offers).
+        if (segments[0] === 'tax' && segments[1] === 'categories' && segments.length === 2) {
+          if (method === 'GET') {
+            const refused = commerceRefused('commerce.read')
+            if (refused !== null) return refused
+            const found = new Set<string>(['standard', 'reduced', 'zero', 'shipping'])
+            for (const rule of mockTaxRules) found.add(rule.taxCategory)
+            for (const variant of mockVariants) found.add(variant.taxCategory)
+            return json(200, {
+              categories: [...found].sort((left, right) => left.localeCompare(right)),
+            })
+          }
+        }
         if (segments[0] === 'tax' && segments[1] === 'rules' && segments.length === 2) {
           if (method === 'GET') {
             const refused = commerceRefused('commerce.read')
@@ -7570,7 +7718,10 @@ export function installMockFetch(
                 error: { code: 'DRIVER_UNKNOWN', message: `No payment driver named "${name}".` },
               })
             }
-            return json(200, mockPaymentTestResults[name] ?? { ok: true, message: null })
+            return json(
+              200,
+              mockPaymentTestResults[name] ?? { ok: true, message: null, code: 'ok' },
+            )
           }
         }
 
@@ -7912,6 +8063,20 @@ export function installMockFetch(
           mockVariants.push(variant)
           return json(201, variant)
         }
+        // "Pick a product" by typing a name or a SKU — checked before the
+        // `variants/{id}` routes, "search" not being a variant id.
+        if (segments[0] === 'variants' && segments[1] === 'search' && method === 'GET') {
+          const refused = commerceRefused('commerce.read')
+          if (refused !== null) return refused
+          const q = parsed.searchParams.get('q')?.trim().toLowerCase() ?? ''
+          const hits = mockVariants.flatMap((variant) => {
+            const product = mockProducts.find((candidate) => candidate.id === variant.productId)
+            if (product === undefined) return []
+            const haystack = `${variant.sku} ${variant.title} ${product.title}`.toLowerCase()
+            return q !== '' && haystack.includes(q) ? [{ variant, product }] : []
+          })
+          return json(200, { hits })
+        }
         if (segments[0] === 'variants' && segments.length === 2 && method === 'PATCH') {
           const refused = commerceRefused('commerce.catalog.write')
           if (refused !== null) return refused
@@ -8112,10 +8277,41 @@ export function installMockFetch(
               error: { code: 'COMMERCE_ORDER_NOT_FOUND', message: 'This order does not exist.' },
             })
           }
+          const orderCustomer = mockCustomers.find((c) => c.id === order.customerId)
+          // Mirrors the real router: the customer, each line's product, the
+          // shipping method and the invoice state ride along with the order.
+          const products: Record<
+            string,
+            { productId: string; productTitle: string; imageMediaId: string | null }
+          > = {}
+          for (const line of order.lines) {
+            const variant = mockVariants.find((candidate) => candidate.id === line.variantId)
+            const product = mockProducts.find((candidate) => candidate.id === variant?.productId)
+            if (product !== undefined) {
+              products[line.variantId] = {
+                productId: product.id,
+                productTitle: product.title,
+                imageMediaId: product.imageMediaIds[0] ?? null,
+              }
+            }
+          }
           return json(200, {
             order,
             history: mockOrderHistory.filter((event) => event.orderId === order.id),
             payments: mockPayments.filter((payment) => payment.orderId === order.id),
+            customer:
+              orderCustomer === undefined
+                ? null
+                : {
+                    id: orderCustomer.id,
+                    name: orderCustomer.name,
+                    email: orderCustomer.email,
+                    anonymized: orderCustomer.anonymized,
+                  },
+            products,
+            shippingMethod: null,
+            invoice: null,
+            invoicing: { available: true, configured: false },
           })
         }
         if (segments[0] === 'orders' && segments.length === 2 && method === 'PATCH') {
@@ -8149,6 +8345,44 @@ export function installMockFetch(
             order.shippingPhone = (address.phone as string) ?? null
           }
           return json(200, order)
+        }
+        // Recording a payment taken outside the shop (a transfer, cash, a
+        // cheque): like the real router, it settles the order's pending
+        // payment and moves the order to `paid` in one step.
+        if (segments[0] === 'orders' && segments[2] === 'payments' && method === 'POST') {
+          const refused = commerceRefused('commerce.payment.settle')
+          if (refused !== null) return refused
+          const order = mockOrders.find((candidate) => candidate.id === segments[1])
+          if (order === undefined) {
+            return json(404, {
+              error: { code: 'COMMERCE_ORDER_NOT_FOUND', message: 'This order does not exist.' },
+            })
+          }
+          const payment = mockPayments.find(
+            (candidate) => candidate.orderId === order.id && candidate.status === 'pending',
+          )
+          if (payment === undefined) {
+            return json(409, {
+              error: {
+                code: 'COMMERCE_PAYMENT_NOT_FOUND',
+                message: 'This order has no payment waiting to be recorded.',
+              },
+            })
+          }
+          payment.status = 'paid'
+          const from = order.status
+          order.status = 'paid'
+          mockOrderHistory.push({
+            id: `event-${mockOrderHistory.length + 1}`,
+            orderId: order.id,
+            at: '2026-03-02T00:00:00.000Z',
+            kind: 'status_changed',
+            fromStatus: from,
+            toStatus: 'paid',
+            actorId: user.id,
+            note: typeof body.note === 'string' ? body.note : null,
+          })
+          return json(201, { payment, order })
         }
         if (segments[0] === 'orders' && segments[2] === 'status' && method === 'PUT') {
           const refused = commerceRefused('commerce.order.write')
@@ -8362,6 +8596,7 @@ export function installMockFetch(
           }
           customer.email = `anon-${customer.id}@deleted.invalid`
           customer.name = null
+          customer.anonymized = true
           return json(200, customer)
         }
 
@@ -8432,12 +8667,11 @@ export function installMockFetch(
           const refused = commerceRefused('commerce.read')
           if (refused !== null) return refused
           const status = parsed.searchParams.get('status')
-          return json(200, {
-            subscriptions:
-              status === null
-                ? mockSubscriptions
-                : mockSubscriptions.filter((s) => s.status === status),
-          })
+          const listed =
+            status === null
+              ? mockSubscriptions
+              : mockSubscriptions.filter((s) => s.status === status)
+          return json(200, { subscriptions: listed, ...describeMockSubscriptions(listed) })
         }
         if (segments[0] === 'subscriptions' && segments.length === 2 && method === 'GET') {
           const refused = commerceRefused('commerce.read')
@@ -8454,7 +8688,13 @@ export function installMockFetch(
           const cycles: MockSubscriptionCycle[] = mockSubscriptionCycles.filter(
             (c) => c.subscriptionId === subscription.id,
           )
-          return json(200, { subscription, cycles, dunning: null })
+          return json(200, {
+            subscription,
+            cycles,
+            dunning: null,
+            orders: {},
+            ...describeMockSubscriptions([subscription]),
+          })
         }
         if (segments[0] === 'subscriptions' && segments[2] === 'pause' && method === 'POST') {
           const refused = commerceRefused('commerce.order.write')
@@ -8830,6 +9070,8 @@ export function installMockFetch(
             reason: 'manual' as const,
             createdAt: Date.parse('2026-03-01T00:00:00.000Z'),
           }
+          // The real store keeps one rule per source path and replaces it.
+          redirects = redirects.filter((redirect) => redirect.from !== created.from)
           redirects.push(created)
           return json(201, { data: created })
         }

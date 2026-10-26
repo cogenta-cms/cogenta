@@ -60,6 +60,13 @@ export const SITE_SETTING_UI_TYPES = [
    * does) rather than a placeholder for a bespoke screen.
    */
   'linkList',
+  /**
+   * A comma-separated list of block type names (`content.newEntryDefaultBlocks`),
+   * rendered as a checklist of the blocks the site offers, under their labels
+   * rather than as technical names typed by hand. Stored exactly as before: the
+   * string the new-entry screen already reads.
+   */
+  'blockTypes',
 ] as const
 
 export type SiteSettingUiType = (typeof SITE_SETTING_UI_TYPES)[number]
@@ -452,7 +459,7 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     key: 'content.newEntryDefaultBlocks',
     group: 'general',
     order: 6,
-    uiType: 'string',
+    uiType: 'blockTypes',
     scope: 'site',
     schema: z
       .string()
@@ -791,10 +798,61 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     key: 'commerce.invoiceLanguage',
     group: 'commerce',
     order: 9,
+    uiType: 'select',
+    scope: 'site',
+    // The two languages the invoice labels are printed in; anything else
+    // would silently fall back to English.
+    schema: z.enum(['fr', 'en']),
+    defaultValue: 'fr',
+    options: [
+      { value: 'fr', label: 'Français' },
+      { value: 'en', label: 'English' },
+    ],
+    writeRoles: ADMIN_ONLY,
+  },
+  // The seller printed on invoices and credit notes. Read on every invoice, so
+  // a change applies to the very next one without a restart; when these are
+  // empty the legacy `billing` block of `cogenta.config.mjs` is used.
+  {
+    key: 'commerce.sellerLegalName',
+    group: 'commerce',
+    order: 10,
     uiType: 'string',
     scope: 'site',
-    schema: z.string().max(10),
-    defaultValue: 'en',
+    schema: z.string().max(200),
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.sellerAddress',
+    group: 'commerce',
+    order: 11,
+    uiType: 'text',
+    scope: 'site',
+    // One address line per line of text.
+    schema: z.string().max(1000),
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.sellerTaxId',
+    group: 'commerce',
+    order: 12,
+    uiType: 'string',
+    scope: 'site',
+    // VAT number, SIRET, company number: printed verbatim.
+    schema: z.string().max(200),
+    defaultValue: '',
+    writeRoles: ADMIN_ONLY,
+  },
+  {
+    key: 'commerce.sellerFooter',
+    group: 'commerce',
+    order: 13,
+    uiType: 'text',
+    scope: 'site',
+    schema: z.string().max(1000),
+    defaultValue: '',
     writeRoles: ADMIN_ONLY,
   },
 
@@ -841,7 +899,7 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
     // `%title% — %site%`-style, applied to every page with no per-collection
     // override below and no `seoTitle` field value of its own.
     schema: titleTemplateOrEmpty,
-    defaultValue: '',
+    defaultValue: '%title% — %site%',
     writeRoles: ADMIN_ONLY,
   },
   {
@@ -1092,6 +1150,42 @@ export const SITE_SETTINGS_REGISTRY: readonly SiteSettingDefinition[] = [
       { value: 'info', label: 'Info' },
       { value: 'debug', label: 'Debug' },
     ],
+    writeRoles: ADMIN_ONLY,
+  },
+  // Where traces are exported (OTLP/HTTP). Only the endpoint lives here: a URL
+  // with credentials is refused, and the authentication headers (the part that
+  // is a secret) stay in `COGENTA_OTLP_HEADERS` (rule R7). The exporter is
+  // built at startup, so a change applies at the next restart; the
+  // configuration file's `observability.otlpEndpoint` wins when both are set.
+  {
+    key: 'observability.otlpEndpoint',
+    group: 'observability',
+    order: 2,
+    uiType: 'string',
+    scope: 'site',
+    schema: z
+      .string()
+      .max(500)
+      .refine(
+        (value) => {
+          if (value === '') return true
+          try {
+            const url = new URL(value)
+            return (
+              (url.protocol === 'https:' || url.protocol === 'http:') &&
+              url.username === '' &&
+              url.password === ''
+            )
+          } catch {
+            return false
+          }
+        },
+        {
+          error:
+            'Must be empty or an absolute http(s) URL without a username or password (put credentials in COGENTA_OTLP_HEADERS).',
+        },
+      ),
+    defaultValue: '',
     writeRoles: ADMIN_ONLY,
   },
   // Assistant (L22 task 4) — which collections the writing assistant's

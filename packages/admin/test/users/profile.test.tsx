@@ -122,7 +122,11 @@ describe('my profile — second factor', () => {
     fireEvent.change(screen.getByLabelText('Code à 6 chiffres'), { target: { value: '000000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Confirmer' }))
 
-    expect(await screen.findByText('Incorrect verification code.')).toBeDefined()
+    expect(
+      await screen.findByText(
+        'Ce code ne correspond pas. Vérifiez l’heure de votre téléphone et réessayez.',
+      ),
+    ).toBeDefined()
     expect(screen.getByLabelText('Code à 6 chiffres')).toBeDefined()
   })
 
@@ -326,9 +330,7 @@ describe('my profile — sign out everywhere else', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Déconnecter toutes les autres sessions' }))
 
     expect(
-      await screen.findByText(
-        /1 autre\(s\) session\(s\) déconnectée\(s\)\. Celle-ci reste connectée\./u,
-      ),
+      await screen.findByText('1 autre session déconnectée. Celle-ci reste connectée.'),
     ).toBeDefined()
     await waitFor(() => {
       expect(screen.queryByText(/Appareil sans nom/u)).toBeNull()
@@ -372,7 +374,7 @@ describe('my profile — password policy', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Changer le mot de passe' }))
 
     fireEvent.change(screen.getByLabelText('Nouveau mot de passe'), { target: { value: 'short' } })
-    expect(await screen.findByText('Encore 7 caractère(s) nécessaire(s).')).toBeDefined()
+    expect(await screen.findByText('Encore 7 caractères nécessaires.')).toBeDefined()
 
     fireEvent.change(screen.getByLabelText('Nouveau mot de passe'), {
       target: { value: 'a much longer new passphrase' },

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
+import { describeApiError } from '../api/describe-error.js'
 import {
   editMedia,
   fetchMediaBlobUrl,
@@ -228,7 +228,7 @@ export function ImageEditor({
         }),
       )
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('imageEditor.applyError'))
+      setError(describeApiError(caught, t('imageEditor.applyError')).message)
     } finally {
       setBusy(false)
     }
@@ -240,7 +240,7 @@ export function ImageEditor({
     try {
       onDone(await restoreMedia(token, asset.id))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('imageEditor.restoreError'))
+      setError(describeApiError(caught, t('imageEditor.restoreError')).message)
     } finally {
       setBusy(false)
     }
@@ -314,8 +314,14 @@ export function ImageEditor({
       ) : (
         <div
           ref={frameRef}
-          className="relative w-full select-none"
-          style={{ aspectRatio: `${size.width} / ${size.height}`, maxWidth: '100%' }}
+          className="relative mx-auto select-none"
+          // Never taller than about half the screen, however upright the
+          // picture is: the buttons below must stay in reach without
+          // scrolling the dialog.
+          style={{
+            aspectRatio: `${size.width} / ${size.height}`,
+            width: `min(100%, calc(44vh * ${size.width / size.height}))`,
+          }}
           onPointerMove={onDrag}
           onPointerUp={() => {
             drag.current = null
@@ -398,7 +404,7 @@ export function ImageEditor({
         </p>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="sticky bottom-0 -mx-5 flex flex-wrap gap-2 border-t border-border bg-card px-5 py-3">
         <Button type="button" disabled={busy || size === null} onClick={() => void apply()}>
           {busy ? t('imageEditor.applying') : t('imageEditor.apply')}
         </Button>

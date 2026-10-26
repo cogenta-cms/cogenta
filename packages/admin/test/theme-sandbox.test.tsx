@@ -67,7 +67,7 @@ describe('the theme sandbox screen', () => {
 
     expect(await screen.findByText('existing-sandbox')).toBeDefined()
 
-    fireEvent.change(screen.getByLabelText('Identifiant du nouveau bac à sable'), {
+    fireEvent.change(screen.getByLabelText('Nom du nouveau brouillon'), {
       target: { value: 'brand-new-sandbox' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Créer' }))
@@ -105,12 +105,9 @@ describe('the theme sandbox screen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Déployer' }))
     const dialog = await screen.findByRole('dialog')
-    fireEvent.change(
-      screen.getByLabelText("Nom du thème (le dossier qu'il devient sous themes/)"),
-      {
-        target: { value: 'my-theme' },
-      },
-    )
+    fireEvent.change(screen.getByLabelText('Nom du thème une fois déployé'), {
+      target: { value: 'my-theme' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Vérifier' }))
 
     expect(await screen.findByText('nothing to deploy')).toBeDefined()
@@ -126,14 +123,11 @@ describe('the theme sandbox screen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Déployer' }))
     await screen.findByRole('dialog')
-    fireEvent.change(
-      screen.getByLabelText("Nom du thème (le dossier qu'il devient sous themes/)"),
-      {
-        target: { value: 'deployed-theme' },
-      },
-    )
+    fireEvent.change(screen.getByLabelText('Nom du thème une fois déployé'), {
+      target: { value: 'deployed-theme' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Vérifier' }))
-    await screen.findByText('Ce bac à sable est prêt à être déployé.')
+    await screen.findByText('Ce brouillon est prêt à être déployé.')
 
     const confirmButtons = screen.getAllByRole('button', { name: 'Déployer' })
     fireEvent.click(confirmButtons[confirmButtons.length - 1] as HTMLElement)
@@ -149,7 +143,7 @@ describe('the theme sandbox screen', () => {
       ],
     })
     await goToScreen()
-    const select = screen.getByLabelText('Cloner depuis')
+    const select = await screen.findByLabelText('Copier depuis')
     await waitFor(() => expect(select.querySelector('option[value="local-theme"]')).not.toBeNull())
     expect(select.querySelector('option[value="@cogenta/theme-canonical"]')).toBeNull()
   })
@@ -168,7 +162,9 @@ describe('the theme sandbox screen', () => {
     })
     await goToScreen()
 
-    fireEvent.change(screen.getByLabelText('Thème'), { target: { value: 'versioned-theme' } })
+    fireEvent.change(await screen.findByLabelText('Thème'), {
+      target: { value: 'versioned-theme' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Charger les versions' }))
 
     expect(await screen.findByText('2026-01-01T00-00-00-000Z')).toBeDefined()
@@ -200,7 +196,7 @@ describe('the theme sandbox screen', () => {
     })
     await goToScreen()
 
-    fireEvent.change(screen.getByLabelText('Thème à exporter'), {
+    fireEvent.change(await screen.findByLabelText('Thème à exporter'), {
       target: { value: 'exportable-theme' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Télécharger en zip' }))
@@ -212,16 +208,16 @@ describe('the theme sandbox screen', () => {
     signedIn(['admin'])
     await goToScreen()
 
-    fireEvent.change(screen.getByLabelText("Identifiant de bac à sable pour l'import"), {
+    fireEvent.change(screen.getByLabelText('Nom du brouillon qui recevra le thème'), {
       target: { value: 'freshly-imported' },
     })
     const file = new File(['zip bytes'], 'theme.zip', { type: 'application/zip' })
-    fireEvent.change(screen.getByLabelText('Fichier zip'), { target: { files: [file] } })
+    fireEvent.change(screen.getByLabelText('Fichier zip du thème'), { target: { files: [file] } })
     fireEvent.click(screen.getByRole('button', { name: 'Importer' }))
 
     expect(
       await screen.findByText(
-        "Importé dans le bac à sable « freshly-imported » — prévisualisez-le et déployez-le comme n'importe quel autre bac à sable.",
+        "Importé dans le brouillon « freshly-imported » : prévisualisez-le et déployez-le comme n'importe quel autre brouillon.",
       ),
     ).toBeDefined()
   })

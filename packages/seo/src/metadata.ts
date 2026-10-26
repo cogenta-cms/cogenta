@@ -110,7 +110,10 @@ function titleTemplateFor(
 
 /** `%title%` and `%site%`, the only two tokens the template understands. */
 function applyTitleTemplate(raw: string, site: SeoSite, template: string | undefined): string {
-  if (template === undefined) return raw
+  if (template === undefined || template === '') return raw
+  // A page titled exactly like the site (the home page of many sites) would
+  // read "Acme — Acme" under a "%title% — %site%" template.
+  if (raw === site.name) return raw
   return template.replaceAll('%title%', raw).replaceAll('%site%', site.name)
 }
 

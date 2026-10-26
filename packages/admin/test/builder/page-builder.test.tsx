@@ -172,7 +172,9 @@ describe('the page builder, driven the way an editor drives it', () => {
     expect(screen.queryByRole('button', { name: /^Citation/u })).toBeNull()
 
     fireEvent.change(screen.getByLabelText('Rechercher un bloc'), { target: { value: '' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Texte' }))
+    // A block is itself called « Texte »: the category button is told apart by its group.
+    const categories = screen.getByRole('group', { name: 'Catégories de blocs' })
+    fireEvent.click(within(categories).getByRole('button', { name: 'Texte' }))
     expect(screen.getByRole('button', { name: /^Citation/u })).not.toBeNull()
     expect(screen.queryByRole('button', { name: /^Galerie/u })).toBeNull()
   })

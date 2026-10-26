@@ -77,8 +77,13 @@ export {
   discountFor,
   normaliseCode,
 } from './coupon/store.js'
-export type { Customer, CustomerStore } from './customer/store.js'
-export { createCustomerStore, normaliseEmail } from './customer/store.js'
+export type { Customer, CustomerStats, CustomerStore } from './customer/store.js'
+export {
+  ANONYMIZED_EMAIL_DOMAIN,
+  assertUsableEmail,
+  createCustomerStore,
+  normaliseEmail,
+} from './customer/store.js'
 export type {
   CreditNote,
   CreditNoteStore,
@@ -94,10 +99,18 @@ export type {
   InvoiceDocument,
   InvoiceStore,
   InvoiceStoreDependencies,
+  InvoiceTemplate,
   IssueInvoiceInput,
   SellerDetails,
+  SellerSource,
+  TemplateSource,
 } from './invoice/store.js'
-export { createInvoiceStore, formatInvoiceNumber, pdfDocumentFor } from './invoice/store.js'
+export {
+  createInvoiceStore,
+  formatInvoiceNumber,
+  pdfDocumentFor,
+  resolveSeller,
+} from './invoice/store.js'
 export type { Money } from './money.js'
 export {
   applyBasisPoints,
@@ -158,8 +171,12 @@ export {
 } from './payment/manual.js'
 export type { PaymentRegistryOptions } from './payment/registry.js'
 export { createPaymentRegistry } from './payment/registry.js'
-export type { PaymentStore, PaymentStoreDependencies } from './payment/store.js'
-export { createPaymentStore } from './payment/store.js'
+export type {
+  ManualPaymentMethod,
+  PaymentStore,
+  PaymentStoreDependencies,
+} from './payment/store.js'
+export { createPaymentStore, MANUAL_PAYMENT_METHODS } from './payment/store.js'
 export { stripePaymentDriver } from './payment/stripe.js'
 export type {
   DriverRefundRequest,

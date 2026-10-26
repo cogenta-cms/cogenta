@@ -1,21 +1,22 @@
-import { type FormEvent, type JSX, useEffect, useMemo, useState } from 'react'
+import { type JSX, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router'
 import {
-  createManualOrder,
   exportOrdersCsv,
   listOrders,
   type Order,
+  type OrderCustomer,
   type OrderStatus,
 } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
 import { useAuth } from '../auth/auth-context.js'
+import { commerceErrorMessage } from '../commerce/commerce-errors.js'
 import { formatMinor } from '../commerce/money.js'
+import { NewOrderModal } from '../commerce/new-order-modal.js'
+import { OrderStatusBadge } from '../commerce/order-status.js'
 import {
   Button,
   Field,
   Input,
-  Modal,
   Notice,
   Select,
   Table,
@@ -37,13 +38,6 @@ const ORDER_STATUSES: readonly OrderStatus[] = [
   'refunded',
 ]
 
-interface ManualLine {
-  readonly variantId: string
-  readonly quantity: string
-}
-
-const EMPTY_LINE: ManualLine = { variantId: '', quantity: '1' }
-
 /**
  * The order list — contract E's back office (ADR-0024), from the admin.
  *
@@ -61,8 +55,10 @@ export function CommerceOrdersRoute(): JSX.Element {
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const canRead = roles.length > 0
   const canWrite = roles.includes('admin') || roles.includes('shopkeeper')
+  const canSettle = canWrite
 
   const [orders, setOrders] = useState<readonly Order[]>([])
+  const [customers, setCustomers] = useState<Readonly<Record<string, OrderCustomer>>>({})
   const [statusFilter, setStatusFilter] = useState<OrderStatus | ''>('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
@@ -103,10 +99,10 @@ export function CommerceOrdersRoute(): JSX.Element {
         )
         if (cancelled) return
         setOrders(response.orders)
+        setCustomers(response.customers ?? {})
         setNextCursor(response.page?.hasMore === true ? (response.page.nextCursor ?? null) : null)
       } catch (caught) {
-        if (!cancelled)
-          setError(caught instanceof ApiError ? caught.message : t('commerceOrders.loadError'))
+        if (!cancelled) setError(commerceErrorMessage(t, caught, 'commerceOrders.loadError'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -117,12 +113,23 @@ export function CommerceOrdersRoute(): JSX.Element {
     }
   }, [token, canRead, statusFilter, search, fromDate, toDate, cursor, t])
 
+  const filtered = statusFilter !== '' || fromDate !== '' || toDate !== '' || search.trim() !== ''
+  function clearFilters(): void {
+    setStatusFilter('')
+    setFromDate('')
+    setToDate('')
+    setSearch('')
+    resetPagination()
+  }
+
   // The total is explicitly for this page, grouped by currency (a shop
   // billing in more than one is never summed across them into a meaningless
   // single figure), currencies in first-seen order.
   const pageTotals = useMemo(() => {
     const byCurrency = new Map<string, number>()
     for (const order of orders) {
+      // A cancelled or refunded order is not revenue.
+      if (order.status === 'cancelled' || order.status === 'refunded') continue
       byCurrency.set(order.currency, (byCurrency.get(order.currency) ?? 0) + order.totalMinor)
     }
     return [...byCurrency.entries()]
@@ -137,6 +144,7 @@ export function CommerceOrdersRoute(): JSX.Element {
         ...(fromDate === '' ? {} : { from: fromDate }),
         ...(toDate === '' ? {} : { to: toDate }),
         ...(search.trim() === '' ? {} : { q: search.trim() }),
+        format: 'accounting',
       })
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
       const url = URL.createObjectURL(blob)
@@ -146,7 +154,7 @@ export function CommerceOrdersRoute(): JSX.Element {
       link.click()
       URL.revokeObjectURL(url)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceOrders.loadError'))
+      setError(commerceErrorMessage(t, caught, 'commerceOrders.exportError'))
     }
   }
 
@@ -169,19 +177,17 @@ export function CommerceOrdersRoute(): JSX.Element {
           {t('commerceOrders.heading')}
         </h1>
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => void exportCsv()}>
+          <Button variant="secondary" onClick={() => void exportCsv()}>
             {t('commerceOrders.exportCsv')}
           </Button>
           {canWrite && (
-            <Button size="sm" onClick={() => setCreating(true)}>
-              {t('commerceOrders.newOrder')}
-            </Button>
+            <Button onClick={() => setCreating(true)}>{t('commerceOrders.newOrder')}</Button>
           )}
         </div>
       </div>
 
       <div className="flex flex-wrap gap-4">
-        <div className="max-w-xs">
+        <div className="min-w-64 max-w-sm flex-1">
           <Field label={t('commerceOrders.searchLabel')}>
             {(control) => (
               <Input
@@ -258,42 +264,67 @@ export function CommerceOrdersRoute(): JSX.Element {
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && error === null && (
-        <TableRoot label={t('commerceOrders.tableLabel')}>
+        <TableRoot label={t('commerceOrders.tableLabel')} stacked>
           <Table>
             <TableHead>
               <TableRow>
                 <TableHeader>{t('commerceOrders.referenceColumn')}</TableHeader>
-                <TableHeader>{t('commerceOrders.emailColumn')}</TableHeader>
+                <TableHeader>{t('commerceOrders.customerColumn')}</TableHeader>
                 <TableHeader>{t('commerceOrders.statusColumn')}</TableHeader>
                 <TableHeader>{t('commerceOrders.totalColumn')}</TableHeader>
                 <TableHeader>{t('commerceOrders.placedAtColumn')}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
-              {orders.map((order) => (
-                <TableRow key={order.id}>
-                  <TableCell>
-                    <Link to={`/commerce/orders/${encodeURIComponent(order.id)}`}>
-                      {order.reference}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{order.email}</TableCell>
-                  <TableCell>{t(`commerceOrders.status.${order.status}`)}</TableCell>
-                  <TableCell>
-                    {formatMinor(order.totalMinor, order.currency, i18n.language)}
-                  </TableCell>
-                  <TableCell>{new Date(order.placedAt).toLocaleString(i18n.language)}</TableCell>
-                </TableRow>
-              ))}
+              {orders.map((order) => {
+                const customer = order.customerId === null ? undefined : customers[order.customerId]
+                return (
+                  <TableRow key={order.id}>
+                    <TableCell stack="heading">
+                      <Link to={`/commerce/orders/${encodeURIComponent(order.id)}`}>
+                        {order.reference}
+                      </Link>
+                    </TableCell>
+                    <TableCell label={t('commerceOrders.customerColumn')}>
+                      <span className="flex flex-col">
+                        {customer?.name != null && customer.name !== '' && (
+                          <span>{customer.name}</span>
+                        )}
+                        <span className="text-xs text-muted-foreground">{order.email}</span>
+                      </span>
+                    </TableCell>
+                    <TableCell label={t('commerceOrders.statusColumn')}>
+                      <OrderStatusBadge status={order.status} />
+                    </TableCell>
+                    <TableCell label={t('commerceOrders.totalColumn')}>
+                      {formatMinor(order.totalMinor, order.currency, i18n.language)}
+                    </TableCell>
+                    <TableCell label={t('commerceOrders.placedAtColumn')}>
+                      {new Date(order.placedAt).toLocaleString(i18n.language)}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
               {orders.length === 0 && (
-                <TableEmpty colSpan={5}>{t('commerceOrders.empty')}</TableEmpty>
+                <TableEmpty colSpan={5}>
+                  {filtered ? (
+                    <span className="flex flex-col items-center gap-2">
+                      {t('commerceOrders.noMatch')}
+                      <Button variant="secondary" size="sm" onClick={clearFilters}>
+                        {t('commerceOrders.clearFilters')}
+                      </Button>
+                    </span>
+                  ) : (
+                    t('commerceOrders.empty')
+                  )}
+                </TableEmpty>
               )}
             </TableBody>
           </Table>
         </TableRoot>
       )}
 
-      {!loading && error === null && orders.length > 0 && (
+      {!loading && error === null && orders.length > 0 && pageTotals.length > 0 && (
         <p className="text-sm">
           {t('commerceOrders.periodTotal')}{' '}
           {pageTotals
@@ -306,6 +337,7 @@ export function CommerceOrdersRoute(): JSX.Element {
         <NewOrderModal
           open={creating}
           token={token}
+          canSettle={canSettle}
           onClose={() => setCreating(false)}
           onCreated={(orderId) => {
             setCreating(false)
@@ -347,216 +379,5 @@ export function CommerceOrdersRoute(): JSX.Element {
         </nav>
       )}
     </section>
-  )
-}
-
-interface NewOrderModalProps {
-  readonly open: boolean
-  readonly token: string
-  readonly onClose: () => void
-  readonly onCreated: (orderId: string) => void
-}
-
-/** A shopkeeper-entered order (fiche 52 task 5) — a phone order, a trade-show sale, a correction. */
-function NewOrderModal(props: NewOrderModalProps): JSX.Element {
-  const { t } = useTranslation()
-  const [email, setEmail] = useState('')
-  const [customerName, setCustomerName] = useState('')
-  const [currency, setCurrency] = useState('EUR')
-  const [lines, setLines] = useState<readonly ManualLine[]>([EMPTY_LINE])
-  const [line1, setLine1] = useState('')
-  const [city, setCity] = useState('')
-  const [postalCode, setPostalCode] = useState('')
-  const [error, setError] = useState<string | null>(null)
-
-  function reset(): void {
-    setEmail('')
-    setCustomerName('')
-    setCurrency('EUR')
-    setLines([EMPTY_LINE])
-    setLine1('')
-    setCity('')
-    setPostalCode('')
-    setError(null)
-  }
-
-  async function submit(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    setError(null)
-    const parsedLines = lines
-      .filter((line) => line.variantId.trim() !== '')
-      .map((line) => ({ variantId: line.variantId.trim(), quantity: Number(line.quantity) }))
-    if (parsedLines.length === 0) {
-      setError(t('commerceManualOrder.empty'))
-      return
-    }
-    try {
-      const outcome = await createManualOrder(props.token, {
-        email,
-        currency,
-        lines: parsedLines,
-        ...(customerName.trim() === '' ? {} : { customerName: customerName.trim() }),
-        ...(line1.trim() === '' || city.trim() === '' || postalCode.trim() === ''
-          ? {}
-          : {
-              shippingAddress: {
-                line1: line1.trim(),
-                city: city.trim(),
-                postalCode: postalCode.trim(),
-              },
-            }),
-      })
-      if (outcome.kind === 'placed') {
-        reset()
-        props.onCreated(outcome.order.id)
-        return
-      }
-      if (outcome.kind === 'out_of_stock') {
-        setError(t('commerceManualOrder.outOfStock'))
-        return
-      }
-      if (outcome.kind === 'coupon_refused') {
-        setError(t('commerceManualOrder.couponRefused'))
-        return
-      }
-      setError(t('commerceManualOrder.empty'))
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceManualOrder.createError'))
-    }
-  }
-
-  return (
-    <Modal
-      open={props.open}
-      onOpenChange={(open) => {
-        if (!open) props.onClose()
-      }}
-      title={t('commerceManualOrder.heading')}
-      closeLabel={t('commerceProducts.close')}
-    >
-      <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
-        {error !== null && (
-          <Notice tone="danger" live="assertive">
-            <p>{error}</p>
-          </Notice>
-        )}
-        <Field label={t('commerceManualOrder.email')}>
-          {(control) => (
-            <Input
-              {...control}
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          )}
-        </Field>
-        <Field label={t('commerceManualOrder.customerName')}>
-          {(control) => (
-            <Input
-              {...control}
-              value={customerName}
-              onChange={(event) => setCustomerName(event.target.value)}
-            />
-          )}
-        </Field>
-        <Field label={t('commerceManualOrder.currency')}>
-          {(control) => (
-            <Input
-              {...control}
-              required
-              value={currency}
-              onChange={(event) => setCurrency(event.target.value.toUpperCase())}
-            />
-          )}
-        </Field>
-
-        <p className="mb-0 text-sm font-medium">{t('commerceManualOrder.lines')}</p>
-        {lines.map((line, index) => (
-          // Manual order lines have no stable id until submitted — position is
-          // the only key a fixed-length editable list like this one has.
-          <div key={index} className="flex items-end gap-2">
-            <Field label={t('commerceManualOrder.variantId')} className="flex-1">
-              {(control) => (
-                <Input
-                  {...control}
-                  value={line.variantId}
-                  onChange={(event) =>
-                    setLines((current) =>
-                      current.map((entry, i) =>
-                        i === index ? { ...entry, variantId: event.target.value } : entry,
-                      ),
-                    )
-                  }
-                />
-              )}
-            </Field>
-            <Field label={t('commerceManualOrder.quantity')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  type="number"
-                  min="1"
-                  value={line.quantity}
-                  onChange={(event) =>
-                    setLines((current) =>
-                      current.map((entry, i) =>
-                        i === index ? { ...entry, quantity: event.target.value } : entry,
-                      ),
-                    )
-                  }
-                />
-              )}
-            </Field>
-            {lines.length > 1 && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setLines((current) => current.filter((_, i) => i !== index))}
-              >
-                {t('commerceManualOrder.removeLine')}
-              </Button>
-            )}
-          </div>
-        ))}
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => setLines((current) => [...current, EMPTY_LINE])}
-        >
-          {t('commerceManualOrder.addLine')}
-        </Button>
-
-        <p className="mb-0 text-sm font-medium">{t('commerceOrderDetail.addressTitle')}</p>
-        <Field label={t('commerceOrderDetail.addressLine1')}>
-          {(control) => (
-            <Input {...control} value={line1} onChange={(event) => setLine1(event.target.value)} />
-          )}
-        </Field>
-        <Field label={t('commerceOrderDetail.addressCity')}>
-          {(control) => (
-            <Input {...control} value={city} onChange={(event) => setCity(event.target.value)} />
-          )}
-        </Field>
-        <Field label={t('commerceOrderDetail.addressPostalCode')}>
-          {(control) => (
-            <Input
-              {...control}
-              value={postalCode}
-              onChange={(event) => setPostalCode(event.target.value)}
-            />
-          )}
-        </Field>
-
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => props.onClose()}>
-            {t('common.cancel')}
-          </Button>
-          <Button type="submit">{t('commerceManualOrder.create')}</Button>
-        </div>
-      </form>
-    </Modal>
   )
 }

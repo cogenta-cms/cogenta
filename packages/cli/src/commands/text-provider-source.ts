@@ -58,7 +58,9 @@ export function createTextProviderSource(options: TextProviderSourceOptions): Te
     const store = options.providerStore
     if (store === undefined) return undefined
     const configured = await resolveProviderRegistryConfig(store)
-    const names = Object.keys(configured)
+    // Sorted, like `ProviderRegistry.names()`: every screen that says "the
+    // provider that will be used" must agree on which one that is.
+    const names = Object.keys(configured).sort()
     if (names.length === 0) return undefined
     const registry = createProviderRegistry(
       configured,

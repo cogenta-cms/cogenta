@@ -11,6 +11,7 @@ import {
   versionsTable,
 } from '@cogenta/schema'
 import { WORDPRESS_IMPORT_COLLECTIONS } from './collections.js'
+import { planWordPressTargets, type WordPressTargetChoice } from './targets.js'
 
 function incompatible(collection: string, reasons: readonly string[]): CogentaError {
   return new CogentaError({
@@ -63,9 +64,21 @@ async function columns(db: DatabaseHandle, table: string): Promise<readonly stri
 export async function preflightWordPressTarget(
   db: DatabaseHandle,
   collections: readonly CollectionDefinition[] = [],
+  targets: WordPressTargetChoice = {},
 ): Promise<void> {
-  assertWordPressCollectionsCompatible(collections)
+  // Throws, naming every reason, when a chosen collection cannot receive the
+  // import; a collection the site declared in its own shape is mapped, not refused.
+  const plan = planWordPressTargets(collections, targets)
+  const relevant = new Set<string>()
+  if (plan.post.native) {
+    relevant.add(plan.post.collection.name)
+    relevant.add('comment')
+  }
+  if (plan.page.native) relevant.add(plan.page.collection.name)
+  if (plan.category !== null) relevant.add(plan.category.name)
+  if (plan.tag !== null) relevant.add(plan.tag.name)
   for (const expected of WORDPRESS_IMPORT_COLLECTIONS) {
+    if (!relevant.has(expected.name)) continue
     const names = new Set(await columns(db, entriesTable(expected.name)))
     if (names.size === 0) continue
     const required = [

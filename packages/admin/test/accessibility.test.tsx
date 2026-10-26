@@ -138,7 +138,7 @@ describe('WCAG 2.2 AA — authenticated views', () => {
 
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     fireEvent.click(await screen.findByRole('link', { name: 'Paramètres' }))
-    await screen.findByRole('heading', { name: 'Réglages du site' })
+    await screen.findByRole('heading', { name: 'Paramètres' })
     await expectNoSeriousA11yViolations(document.body)
   })
 })

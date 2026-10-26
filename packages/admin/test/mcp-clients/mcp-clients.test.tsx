@@ -101,14 +101,14 @@ describe('MCP Clients', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tester la connexion' }))
     await screen.findByText('Joignable')
-    expect(screen.getByText('0 exposé(s) / 1 découvert(s)')).toBeDefined()
+    expect(screen.getByText('0 outil utilisé sur 1')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Gérer les outils' }))
     const manageDialog = await screen.findByRole('dialog')
     fireEvent.click(within(manageDialog).getByRole('checkbox', { name: /greet/ }))
     fireEvent.click(within(manageDialog).getByRole('button', { name: 'Enregistrer' }))
 
-    await screen.findByText('1 exposé(s) / 1 découvert(s)')
+    await screen.findByText('1 outil utilisé sur 1')
 
     fireEvent.click(screen.getByRole('button', { name: 'Désactiver' }))
     expect(await screen.findByText('Désactivée')).toBeDefined()

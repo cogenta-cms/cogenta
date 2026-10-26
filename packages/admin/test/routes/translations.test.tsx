@@ -29,7 +29,10 @@ describe('the translation dashboard', () => {
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     fireEvent.click(await screen.findByRole('link', { name: 'Traductions' }))
 
-    await screen.findByText("Ce site n'a qu'une seule langue ; il n'y a rien à comparer.")
+    await screen.findByText(/Ce site n'a qu'une seule langue : il n'y a rien à comparer\./u)
+    // …and says where a second language is added, rather than leaving a dead end.
+    const settingsLink = screen.getByRole('link', { name: 'les réglages du site.' })
+    expect(settingsLink.getAttribute('href')).toBe('/settings')
   })
 
   it('shows one row per root entry, a cell per locale, and the obsolete signal', async () => {

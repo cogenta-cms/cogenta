@@ -9,6 +9,14 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
+import { ConfirmAction } from '../ai/confirm-action.js'
+import { describeAiErrorLine } from '../ai/server-text.js'
+import {
+  readSkillFrontmatter,
+  skillDisplayDescription,
+  skillDisplayName,
+} from '../ai/skill-text.js'
+import { useFlash } from '../ai/use-flash.js'
 import {
   type AgentSkillResourceSummary,
   type AgentSkillSummary,
@@ -22,15 +30,15 @@ import {
   updateAgentSkill,
   uploadSkillResource,
 } from '../api/agent-skills-client.js'
-import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { shippedText } from '../i18n/shipped-text.js'
 import {
+  Badge,
   Button,
   Card,
   CardBody,
   CardHeader,
   CardTitle,
+  FileButton,
   Notice,
   Table,
   TableBody,
@@ -41,14 +49,6 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
-
-/** A built-in skill's key under `shippedText.skills`, from the name it ships with. */
-function skillKey(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-|-$/gu, '')
-}
 
 const NEW_SKILL_TEMPLATE = '---\nname: \ndescription: \n---\n\n'
 
@@ -108,6 +108,12 @@ export function AgentSkillsRoute(): JSX.Element {
     [searchParams, setSearchParams],
   )
 
+  const flash = useFlash()
+  const [pendingRemoval, setPendingRemoval] = useState<AgentSkillSummary | null>(null)
+  /** Set once a save was attempted, so an untouched form is not shown as wrong. */
+  const [showCreateErrors, setShowCreateErrors] = useState(false)
+  const [showEditErrors, setShowEditErrors] = useState(false)
+
   const [creating, setCreating] = useState(false)
   const [content, setContent] = useState(NEW_SKILL_TEMPLATE)
   const [enabledByDefault, setEnabledByDefault] = useState(true)
@@ -126,7 +132,7 @@ export function AgentSkillsRoute(): JSX.Element {
     try {
       setSkills(await listAgentSkills(token))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agentSkills.loadError'))
+      setError(describeAiErrorLine(caught, t, t('agentSkills.loadError')))
     } finally {
       setLoading(false)
     }
@@ -150,18 +156,33 @@ export function AgentSkillsRoute(): JSX.Element {
     reader.readAsText(file)
   }
 
+  /** A skill with no name or no description is a blank row nobody can tell apart: refuse it before it is sent. */
+  function skillProblem(text: string): string | null {
+    const { name, description } = readSkillFrontmatter(text)
+    if (name === '') return t('agentSkills.nameRequired')
+    if (description === '') return t('agentSkills.descriptionRequired')
+    return null
+  }
+
   async function submitCreate(): Promise<void> {
-    if (token === null || content.trim().length === 0) return
+    if (token === null) return
+    if (skillProblem(content) !== null) {
+      setShowCreateErrors(true)
+      return
+    }
     setBusy('create')
     setError(null)
     try {
+      const created = readSkillFrontmatter(content).name
       await createAgentSkill(token, { content, enabledByDefault })
       setContent(NEW_SKILL_TEMPLATE)
       setEnabledByDefault(true)
       setCreating(false)
+      setShowCreateErrors(false)
+      flash.show(t('agentSkills.created', { name: created }))
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agentSkills.saveError'))
+      setError(describeAiErrorLine(caught, t, t('agentSkills.saveError')))
     } finally {
       setBusy(null)
     }
@@ -192,6 +213,10 @@ export function AgentSkillsRoute(): JSX.Element {
 
   async function submitEdit(id: string): Promise<void> {
     if (token === null) return
+    if (skillProblem(editContent) !== null) {
+      setShowEditErrors(true)
+      return
+    }
     setBusy(id)
     setError(null)
     try {
@@ -200,9 +225,11 @@ export function AgentSkillsRoute(): JSX.Element {
         enabledByDefault: editEnabledByDefault,
       })
       setEditingId(null)
+      setShowEditErrors(false)
+      flash.show(t('agentSkills.updated', { name: readSkillFrontmatter(editContent).name }))
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agentSkills.saveError'))
+      setError(describeAiErrorLine(caught, t, t('agentSkills.saveError')))
     } finally {
       setBusy(null)
     }
@@ -214,11 +241,13 @@ export function AgentSkillsRoute(): JSX.Element {
     setError(null)
     try {
       await removeAgentSkill(token, skill.id)
+      flash.show(t('agentSkills.removed', { name: skillDisplayName(skill, t) }))
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agentSkills.saveError'))
+      setError(describeAiErrorLine(caught, t, t('agentSkills.saveError')))
     } finally {
       setBusy(null)
+      setPendingRemoval(null)
     }
   }
 
@@ -231,8 +260,12 @@ export function AgentSkillsRoute(): JSX.Element {
     )
   }
 
+  const editedSkill = skills.find((skill) => skill.id === editingId)
+  const createProblem = showCreateErrors ? skillProblem(content) : null
+  const editProblem = showEditErrors ? skillProblem(editContent) : null
+
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex min-w-0 flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1
           id="agent-skills-heading"
@@ -251,34 +284,61 @@ export function AgentSkillsRoute(): JSX.Element {
           <p>{error}</p>
         </Notice>
       )}
+      {flash.message !== null && (
+        <Notice
+          tone="success"
+          live="polite"
+          onDismiss={flash.clear}
+          dismissLabel={t('common.close')}
+        >
+          <p>{flash.message}</p>
+        </Notice>
+      )}
 
       {creating && (
-        <Card aria-labelledby="agent-skills-create-heading">
+        <Card aria-labelledby="agent-skills-create-heading" className="min-w-0">
           <CardHeader>
             <CardTitle>
               <h2 id="agent-skills-create-heading">{t('agentSkills.createSkill')}</h2>
             </CardTitle>
           </CardHeader>
           <CardBody>
-            <div className="flex flex-col gap-3">
-              <div>
-                <label htmlFor="agent-skill-create-import">{t('agentSkills.importLabel')}</label>
-                <input
+            <div className="flex min-w-0 flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="agent-skill-create-import" className="text-sm font-medium">
+                  {t('agentSkills.importLabel')}
+                </label>
+                <FileButton
                   id="agent-skill-create-import"
-                  type="file"
                   accept=".md,text/markdown,text/plain"
+                  label={t('agentSkills.chooseFile')}
+                  emptyLabel={t('agentSkills.noFileChosen')}
+                  size="sm"
                   onChange={(event) => readFileInto(event, setContent)}
                 />
               </div>
-              <label htmlFor="agent-skill-create-content">{t('agentSkills.content')}</label>
+              <label htmlFor="agent-skill-create-content" className="text-sm font-medium">
+                {t('agentSkills.content')}
+              </label>
               <textarea
                 id="agent-skill-create-content"
-                className="w-full rounded-md border border-input bg-card px-3 py-2 font-mono text-sm leading-5 text-card-foreground shadow-card"
+                className="w-full min-w-0 rounded-md border border-input bg-card px-3 py-2 font-mono text-sm leading-5 text-card-foreground shadow-card aria-invalid:border-destructive"
                 rows={14}
                 spellCheck={false}
                 value={content}
+                aria-invalid={createProblem !== null ? true : undefined}
+                aria-describedby={createProblem !== null ? 'agent-skill-create-problem' : undefined}
                 onChange={(event) => setContent(event.target.value)}
               />
+              {createProblem !== null && (
+                <p
+                  id="agent-skill-create-problem"
+                  role="alert"
+                  className="m-0 text-xs font-medium text-destructive"
+                >
+                  {createProblem}
+                </p>
+              )}
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -288,13 +348,16 @@ export function AgentSkillsRoute(): JSX.Element {
                 {t('agentSkills.enabledByDefault')}
               </label>
               <div className="flex gap-2">
-                <Button
-                  disabled={busy === 'create' || content.trim().length === 0}
-                  onClick={() => void submitCreate()}
-                >
+                <Button disabled={busy === 'create'} onClick={() => void submitCreate()}>
                   {t('common.save')}
                 </Button>
-                <Button variant="ghost" onClick={() => setCreating(false)}>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setCreating(false)
+                    setShowCreateErrors(false)
+                  }}
+                >
                   {t('common.cancel')}
                 </Button>
               </div>
@@ -305,20 +368,20 @@ export function AgentSkillsRoute(): JSX.Element {
 
       {loading && <p>{t('common.loading')}</p>}
 
-      {!loading && editingId !== null && !skills.some((skill) => skill.id === editingId) && (
+      {!loading && editingId !== null && editedSkill === undefined && (
         <Notice tone="warning" live="polite">
           <p>{t('agentSkills.editingNotFound')}</p>
         </Notice>
       )}
 
       {!loading && (
-        <TableRoot label={t('agentSkills.heading')}>
+        <TableRoot label={t('agentSkills.heading')} stacked>
           <Table>
             <TableHead>
               <TableRow>
                 <TableHeader>{t('agentSkills.name')}</TableHeader>
                 <TableHeader>{t('agentSkills.description')}</TableHeader>
-                <TableHeader>{t('agentSkills.enabledByDefault')}</TableHeader>
+                <TableHeader>{t('agentSkills.defaultColumn')}</TableHeader>
                 <TableHeader>{t('agents.actions')}</TableHeader>
               </TableRow>
             </TableHead>
@@ -326,24 +389,21 @@ export function AgentSkillsRoute(): JSX.Element {
               {skills.map((skill) => (
                 <Fragment key={skill.id}>
                   <TableRow key={skill.id}>
-                    <TableCell>
-                      {skill.builtin
-                        ? shippedText(`skills.${skillKey(skill.name)}.name`, skill.name, t)
-                        : skill.name}
+                    <TableCell stack="heading">
+                      {skillDisplayName(skill, t)}
+                      {skill.builtin && (
+                        <Badge tone="neutral" className="ml-2 align-middle">
+                          {t('agentSkills.builtin')}
+                        </Badge>
+                      )}
                     </TableCell>
-                    <TableCell>
-                      {skill.builtin
-                        ? shippedText(
-                            `skills.${skillKey(skill.name)}.description`,
-                            skill.description,
-                            t,
-                          )
-                        : skill.description}
+                    <TableCell label={t('agentSkills.description')}>
+                      {skillDisplayDescription(skill, t)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell label={t('agentSkills.defaultColumn')}>
                       {skill.enabledByDefault ? t('common.yes') : t('common.no')}
                     </TableCell>
-                    <TableCell>
+                    <TableCell stack="actions">
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => startEdit(skill)}>
                           {t('agents.edit')}
@@ -352,8 +412,10 @@ export function AgentSkillsRoute(): JSX.Element {
                           <Button
                             size="sm"
                             variant="ghost"
+                            className="text-destructive"
                             disabled={busy === skill.id}
-                            onClick={() => void submitRemove(skill)}
+                            aria-label={t('agentSkills.removeNamed', { name: skill.name })}
+                            onClick={() => setPendingRemoval(skill)}
                           >
                             {t('agents.remove')}
                           </Button>
@@ -363,30 +425,56 @@ export function AgentSkillsRoute(): JSX.Element {
                   </TableRow>
                   {editingId === skill.id && (
                     <TableRow key={`${skill.id}-edit`}>
-                      <TableCell colSpan={4}>
-                        <div className="flex flex-col gap-3 py-2">
-                          <div>
-                            <label htmlFor={`agent-skill-import-${skill.id}`}>
+                      <TableCell colSpan={4} className="min-w-0">
+                        <div className="flex min-w-0 flex-col gap-3 py-2">
+                          {skill.builtin && (
+                            <Notice tone="info">
+                              <p>{t('agentSkills.builtinNote')}</p>
+                            </Notice>
+                          )}
+                          <div className="flex flex-col gap-1.5">
+                            <label
+                              htmlFor={`agent-skill-import-${skill.id}`}
+                              className="text-sm font-medium"
+                            >
                               {t('agentSkills.importLabel')}
                             </label>
-                            <input
+                            <FileButton
                               id={`agent-skill-import-${skill.id}`}
-                              type="file"
                               accept=".md,text/markdown,text/plain"
+                              label={t('agentSkills.chooseFile')}
+                              emptyLabel={t('agentSkills.noFileChosen')}
+                              size="sm"
                               onChange={(event) => readFileInto(event, setEditContent)}
                             />
                           </div>
-                          <label htmlFor={`agent-skill-content-${skill.id}`}>
+                          <label
+                            htmlFor={`agent-skill-content-${skill.id}`}
+                            className="text-sm font-medium"
+                          >
                             {t('agentSkills.content')}
                           </label>
                           <textarea
                             id={`agent-skill-content-${skill.id}`}
-                            className="w-full rounded-md border border-input bg-card px-3 py-2 font-mono text-sm leading-5 text-card-foreground shadow-card"
+                            className="w-full min-w-0 rounded-md border border-input bg-card px-3 py-2 font-mono text-sm leading-5 text-card-foreground shadow-card aria-invalid:border-destructive"
                             rows={14}
                             spellCheck={false}
                             value={editContent}
+                            aria-invalid={editProblem !== null ? true : undefined}
+                            aria-describedby={
+                              editProblem !== null ? `agent-skill-problem-${skill.id}` : undefined
+                            }
                             onChange={(event) => setEditContent(event.target.value)}
                           />
+                          {editProblem !== null && (
+                            <p
+                              id={`agent-skill-problem-${skill.id}`}
+                              role="alert"
+                              className="m-0 text-xs font-medium text-destructive"
+                            >
+                              {editProblem}
+                            </p>
+                          )}
                           <label className="flex items-center gap-2 text-sm">
                             <input
                               type="checkbox"
@@ -401,12 +489,19 @@ export function AgentSkillsRoute(): JSX.Element {
                           <div className="flex gap-2">
                             <Button
                               size="sm"
-                              disabled={busy === skill.id || editContent.trim().length === 0}
+                              disabled={busy === skill.id}
                               onClick={() => void submitEdit(skill.id)}
                             >
                               {t('common.save')}
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingId(null)
+                                setShowEditErrors(false)
+                              }}
+                            >
                               {t('common.cancel')}
                             </Button>
                           </div>
@@ -423,6 +518,21 @@ export function AgentSkillsRoute(): JSX.Element {
           </Table>
         </TableRoot>
       )}
+
+      <ConfirmAction
+        open={pendingRemoval !== null}
+        title={t('agentSkills.removeTitle', {
+          name: pendingRemoval === null ? '' : skillDisplayName(pendingRemoval, t),
+        })}
+        confirmLabel={t('agentSkills.removeConfirm')}
+        busy={busy !== null}
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => {
+          if (pendingRemoval !== null) void submitRemove(pendingRemoval)
+        }}
+      >
+        <p className="m-0">{t('agentSkills.removeBody')}</p>
+      </ConfirmAction>
     </section>
   )
 }
@@ -447,7 +557,7 @@ function SkillResourcesPanel({ token, skillId }: { token: string; skillId: strin
     try {
       setResources(await listSkillResources(token, skillId))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agentSkills.resources.loadError'))
+      setError(describeAiErrorLine(caught, t, t('agentSkills.resources.loadError')))
     } finally {
       setLoading(false)
     }
@@ -470,7 +580,7 @@ function SkillResourcesPanel({ token, skillId }: { token: string; skillId: strin
       await uploadSkillResource(token, skillId, dir, file.name, file)
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agentSkills.resources.uploadError'))
+      setError(describeAiErrorLine(caught, t, t('agentSkills.resources.uploadError')))
     } finally {
       setBusy(null)
     }
@@ -483,14 +593,14 @@ function SkillResourcesPanel({ token, skillId }: { token: string; skillId: strin
       await removeSkillResource(token, skillId, path)
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('agentSkills.resources.removeError'))
+      setError(describeAiErrorLine(caught, t, t('agentSkills.resources.removeError')))
     } finally {
       setBusy(null)
     }
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-input p-3">
+    <div className="flex min-w-0 flex-col gap-3 rounded-md border border-input p-3">
       <div>
         <h2 className="m-0 text-sm font-semibold">{t('agentSkills.resources.heading')}</h2>
         <p className="m-0 text-xs opacity-80">{t('agentSkills.resources.intro')}</p>
@@ -503,7 +613,7 @@ function SkillResourcesPanel({ token, skillId }: { token: string; skillId: strin
       {loading ? (
         <p>{t('common.loading')}</p>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-3">
           {SKILL_RESOURCE_DIRS.map((dir) => (
             <div key={dir} className="flex flex-col gap-2">
               <div>
@@ -532,9 +642,11 @@ function SkillResourcesPanel({ token, skillId }: { token: string; skillId: strin
                 <label htmlFor={`skill-resource-upload-${skillId}-${dir}`} className="sr-only">
                   {t('agentSkills.resources.upload')}
                 </label>
-                <input
+                <FileButton
                   id={`skill-resource-upload-${skillId}-${dir}`}
-                  type="file"
+                  label={t('agentSkills.chooseFile')}
+                  emptyLabel={t('agentSkills.noFileChosen')}
+                  size="sm"
                   disabled={busy === `upload-${dir}`}
                   onChange={(event) => void onUpload(dir, event)}
                 />

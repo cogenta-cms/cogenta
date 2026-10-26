@@ -373,6 +373,21 @@ const appearanceSchema = z.strictObject({
   remoteWebFonts: z.boolean().default(false),
 })
 
+/**
+ * The MCP endpoint `cogenta serve` exposes at `/api/mcp` (Streamable HTTP),
+ * so Claude Code, Claude Desktop or any MCP client can drive a *deployed*
+ * site, not only one running on the same machine (`cogenta mcp`, stdio).
+ *
+ * On by default because it widens nothing: every request must carry an API
+ * key an administrator minted (`Authorization: Bearer cogenta_sk_…`), gets
+ * exactly that key's roles, and every non-reversible write still waits for a
+ * human decision in the administration. `http: false` removes the route
+ * entirely (it answers 404, like any path that does not exist).
+ */
+const mcpSchema = z.strictObject({
+  http: z.boolean().default(true),
+})
+
 // `prefault` rather than `default`: an omitted section is parsed as `{}` so the
 // per-field defaults inside it apply, instead of being replaced wholesale.
 export const configSchema = z.strictObject({
@@ -399,6 +414,7 @@ export const configSchema = z.strictObject({
   observability: observabilitySchema.prefault({}),
   searchConsole: searchConsoleSchema.prefault({}),
   appearance: appearanceSchema.prefault({}),
+  mcp: mcpSchema.prefault({}),
 })
 
 export type ParsedConfig = z.infer<typeof configSchema>

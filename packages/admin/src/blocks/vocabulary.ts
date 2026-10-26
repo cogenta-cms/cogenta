@@ -70,6 +70,8 @@ export interface ItemFieldDefinition {
    * comparable form builder).
    */
   readonly visibleWhen?: { readonly field: string; readonly equals: readonly unknown[] }
+  /** The value a freshly added item starts with, when the kind's own blank (`''`, `null`, `false`) is not a usable choice. */
+  readonly default?: unknown
 }
 
 function itemField(

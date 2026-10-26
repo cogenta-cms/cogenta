@@ -197,7 +197,7 @@ export function ReviewRoute(): JSX.Element {
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && (
-        <TableRoot label={t(`review.tab${labelSuffix(scope)}`)}>
+        <TableRoot label={t(`review.tab${labelSuffix(scope)}`)} stacked>
           <Table>
             <TableHead>
               <TableRow>
@@ -213,12 +213,17 @@ export function ReviewRoute(): JSX.Element {
             <TableBody>
               {items.map((item) => (
                 <TableRow key={`${item.collection}:${item.entry.id}`}>
-                  <TableCell>{titleOf(item)}</TableCell>
-                  <TableCell>{item.collection}</TableCell>
-                  <TableCell>{item.entry.createdBy ?? '—'}</TableCell>
-                  <TableCell>{ageOf(item.entry.updatedAt, t)}</TableCell>
-                  <TableCell>{t(`entryEdit.workflow.state.${item.entry.reviewState}`)}</TableCell>
-                  <TableCell>
+                  <TableCell stack="heading">{titleOf(item)}</TableCell>
+                  <TableCell label={t('review.collection')}>
+                    {schemaState.schema.collections.find((c) => c.name === item.collection)?.labels
+                      .singular ?? item.collection}
+                  </TableCell>
+                  <TableCell label={t('review.author')}>{item.entry.createdBy ?? '—'}</TableCell>
+                  <TableCell label={t('review.age')}>{ageOf(item.entry.updatedAt, t)}</TableCell>
+                  <TableCell label={t('review.state')}>
+                    {t(`entryEdit.workflow.state.${item.entry.reviewState}`)}
+                  </TableCell>
+                  <TableCell label={t('review.reviewer')}>
                     <Select
                       aria-label={t('review.reviewerSelectLabel', { title: titleOf(item) })}
                       value={item.entry.assignedReviewer ?? ''}
@@ -247,7 +252,7 @@ export function ReviewRoute(): JSX.Element {
                         )}
                     </Select>
                   </TableCell>
-                  <TableCell>
+                  <TableCell stack="actions">
                     <div className="flex flex-wrap gap-2">
                       <Link
                         to={`/collections/${encodeURIComponent(item.collection)}/${encodeURIComponent(item.entry.id)}`}
@@ -279,7 +284,14 @@ export function ReviewRoute(): JSX.Element {
                   </TableCell>
                 </TableRow>
               ))}
-              {items.length === 0 && <TableEmpty colSpan={6}>{t('review.empty')}</TableEmpty>}
+              {items.length === 0 && (
+                <TableEmpty colSpan={7}>
+                  <div className="mx-auto max-w-prose">
+                    <strong className="block text-foreground">{t('review.empty')}</strong>
+                    {t('review.emptyHelp')}
+                  </div>
+                </TableEmpty>
+              )}
             </TableBody>
           </Table>
         </TableRoot>

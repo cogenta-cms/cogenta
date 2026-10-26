@@ -44,6 +44,15 @@ export interface ObservabilityRouterOptions {
   readonly isEnabled: () => boolean
   readonly getRecentTraces: () => readonly ObservabilityTraceLike[]
   readonly getRecentLogs: () => readonly ObservabilityLogLike[]
+  /**
+   * Where traces are exported, as the running process resolved it at startup
+   * (`config` = the configuration file or an OTEL_* variable, `setting` = saved
+   * from the admin). Never carries the authentication headers (rule R7).
+   */
+  readonly getExport?: () => {
+    readonly endpoint: string | null
+    readonly source: 'config' | 'setting' | null
+  }
   /** Mount point. `/api/observability` by default. */
   readonly basePath?: string
 }
@@ -93,6 +102,19 @@ function normalise(path: string): string {
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 
+/** The destination without any query string or fragment: an endpoint URL is configuration, but a token pasted into its query is still a secret (rule R7). */
+function describeExport(
+  value: ReturnType<NonNullable<ObservabilityRouterOptions['getExport']>> | undefined,
+): { readonly endpoint: string | null; readonly source: 'config' | 'setting' | null } {
+  if (value === undefined || value.endpoint === null) return { endpoint: null, source: null }
+  try {
+    const url = new URL(value.endpoint)
+    return { endpoint: `${url.origin}${url.pathname}`, source: value.source }
+  } catch {
+    return { endpoint: null, source: null }
+  }
+}
+
 export function createObservabilityRouter(
   options: ObservabilityRouterOptions,
 ): ObservabilityRouter {
@@ -119,6 +141,7 @@ export function createObservabilityRouter(
         enabled: options.isEnabled(),
         traces: options.getRecentTraces(),
         logs: options.getRecentLogs(),
+        export: describeExport(options.getExport?.()),
       },
     })
   }

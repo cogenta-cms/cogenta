@@ -2,6 +2,7 @@ import { cp, lstat, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/prom
 import { dirname, join, resolve, sep } from 'node:path'
 import { CogentaError } from '@cogenta/core'
 import {
+  definePlugin,
   IMPLEMENTED_CAPABILITY_NAMES,
   isCapabilityImplemented,
   loadPlugin,
@@ -99,7 +100,9 @@ export interface PluginTemplate {
   /** What the plugin will do, in the words of someone who has not read the manifest format. */
   readonly capabilities: readonly string[]
   readonly provides: PluginManifest['provides']
+  /** The starting code, commented in English (the default) or in French. */
   readonly code: string
+  readonly codeFr: string
 }
 
 const TEMPLATE_CODE = {
@@ -145,20 +148,79 @@ const TEMPLATE_CODE = {
 `,
 } as const
 
+/** The same four starting points for a person who reads French. */
+const TEMPLATE_CODE_FR = {
+  blank: `// Le code du plugin. La valeur placée à la fin de ce fichier est l'ensemble
+// des fonctions qu'il propose ; le site en appelle une par son nom. \`sdk\` est
+// la seule variable globale, et elle ne contient que les permissions accordées :
+// une permission non accordée n'est pas refusée, elle est tout simplement absente.
+;({
+  onContentEvent: async (event) => ({ seen: event.event }),
+})
+`,
+  'on-publish': `// S'exécute chaque fois qu'un contenu est publié ou dépublié.
+// \`event.event\` est le nom de l'événement, \`event.collection\` et \`event.id\`
+// disent quel contenu a bougé.
+;({
+  onContentEvent: async (event) => {
+    if (event.event !== 'content.publish') return { skipped: event.event }
+
+    // Permission « content.read » accordée ? Alors le contenu lui-même est lisible.
+    const entry = await sdk.content.read({ collection: event.collection, id: event.id })
+    console.log('publié : ' + (entry?.values?.title ?? event.id))
+
+    return { handled: event.id }
+  },
+})
+`,
+  page: `// Sert une page à lui : /_cogenta/plugins/<nom du plugin>/hello.
+// Répondez avec un statut, un type de contenu et un corps — rien d'autre : un
+// plugin ne pose jamais d'en-tête sur l'origine du site.
+;({
+  onRequest: async (request) => ({
+    status: 200,
+    contentType: 'text/html',
+    body: '<h1>Bonjour depuis un plugin</h1><p>Vous avez demandé ' + request.path + '.</p>',
+  }),
+})
+`,
+  daily: `// S'exécute à son propre rythme — toutes les 24 heures, comme le dit le manifeste.
+// Renvoyez une courte phrase : c'est ce que l'écran Exploitation affiche comme
+// résultat de l'exécution.
+;({
+  onSchedule: async (task) => 'exécuté : ' + task.name,
+})
+`,
+} as const
+
 export const PLUGIN_TEMPLATES: readonly PluginTemplate[] = [
-  { id: 'blank', capabilities: [], provides: {}, code: TEMPLATE_CODE.blank },
+  {
+    id: 'blank',
+    capabilities: [],
+    provides: {},
+    code: TEMPLATE_CODE.blank,
+    codeFr: TEMPLATE_CODE_FR.blank,
+  },
   {
     id: 'on-publish',
     capabilities: ['content.read'],
     provides: { eventSubscriptions: ['content.publish', 'content.unpublish'] },
     code: TEMPLATE_CODE['on-publish'],
+    codeFr: TEMPLATE_CODE_FR['on-publish'],
   },
-  { id: 'page', capabilities: [], provides: { routes: ['/hello'] }, code: TEMPLATE_CODE.page },
+  {
+    id: 'page',
+    capabilities: [],
+    provides: { routes: ['/hello'] },
+    code: TEMPLATE_CODE.page,
+    codeFr: TEMPLATE_CODE_FR.page,
+  },
   {
     id: 'daily',
     capabilities: [],
     provides: { schedules: [{ name: 'daily', everyMinutes: 24 * 60 }] },
     code: TEMPLATE_CODE.daily,
+    codeFr: TEMPLATE_CODE_FR.daily,
   },
 ]
 
@@ -220,6 +282,8 @@ export async function createPluginSandbox(
     /** The human name, when it is not a package name — "Lettre d'information". */
     readonly title?: string
     readonly template?: string
+    /** The language the starting code's comments are written in (`fr…` → French, else English). */
+    readonly locale?: string
   } = {},
 ): Promise<string> {
   const dir = pluginSandboxDirectory(projectRoot, id)
@@ -231,7 +295,11 @@ export async function createPluginSandbox(
     STARTER_MANIFEST(name, options.title, template),
     'utf8',
   )
-  await writeFile(join(dir, 'plugin.js'), template.code, 'utf8')
+  await writeFile(
+    join(dir, 'plugin.js'),
+    options.locale?.toLowerCase().startsWith('fr') === true ? template.codeFr : template.code,
+    'utf8',
+  )
   return dir
 }
 
@@ -349,6 +417,60 @@ export async function deletePluginSandbox(projectRoot: string, id: string): Prom
   await rm(pluginSandboxDirectory(projectRoot, id), { recursive: true, force: true })
 }
 
+/** Names of the manifest file, the one a person edits by hand and a site reads as data. */
+const MANIFEST_FILE = 'plugin.manifest.json'
+
+/** Keeps the server's directory layout out of a message a browser will show. */
+function scrubServerPaths(message: string, projectRoot: string): string {
+  return message
+    .replaceAll(`${resolve(projectRoot)}${sep}`, '')
+    .replaceAll(resolve(projectRoot), '.')
+}
+
+/**
+ * Refuses a manifest that could not be read back, before it is written.
+ *
+ * A draft whose manifest does not parse is worse than one that does not
+ * validate: the list cannot even name it. The editor writes through this, so
+ * a person who types a stray character is told at once and keeps their text,
+ * instead of being told the file was saved and discovering the damage later.
+ */
+export function assertWritableManifest(relativePath: string, content: string): void {
+  if (relativePath !== MANIFEST_FILE) return
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(content)
+  } catch (error) {
+    throw new CogentaError({
+      code: 'PLUGIN_MANIFEST_INVALID',
+      message: `${MANIFEST_FILE} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      hint: 'Nothing was saved. Check commas, quotes and brackets, then save again.',
+      cause: error,
+    })
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new CogentaError({
+      code: 'PLUGIN_MANIFEST_INVALID',
+      message: `${MANIFEST_FILE} does not hold a manifest object.`,
+      hint: 'Nothing was saved. The file must be a single JSON object.',
+    })
+  }
+  try {
+    definePlugin(parsed as PluginManifest)
+  } catch (error) {
+    throw new CogentaError({
+      code: 'PLUGIN_MANIFEST_INVALID',
+      message: scrubMessage(error),
+      hint: 'Nothing was saved. Fix the manifest, then save again.',
+      cause: error,
+    })
+  }
+}
+
+function scrubMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 export interface PluginSandboxCheck {
   readonly ok: boolean
   /** Everything wrong with it, in the order a person would fix them. */
@@ -380,7 +502,9 @@ export async function checkPluginSandbox(
   } catch (error) {
     return {
       ok: false,
-      problems: [error instanceof Error ? error.message : String(error)],
+      problems: [
+        scrubServerPaths(error instanceof Error ? error.message : String(error), projectRoot),
+      ],
       manifest: null,
       handlers: [],
       unimplemented: [],
@@ -391,7 +515,9 @@ export async function checkPluginSandbox(
   try {
     code = await readPluginCode(resolved.packageRoot, resolved.manifest)
   } catch (error) {
-    problems.push(error instanceof Error ? error.message : String(error))
+    problems.push(
+      scrubServerPaths(error instanceof Error ? error.message : String(error), projectRoot),
+    )
   }
 
   const unimplemented = resolved.manifest.capabilities.filter(

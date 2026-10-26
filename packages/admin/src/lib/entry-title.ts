@@ -34,6 +34,19 @@ import type { CollectionSummary } from '../schema/types.js'
 
 const PRIORITY_FIELD_NAMES = ['title', 'name', 'label'] as const
 
+/**
+ * The name of the declared field an entry's title is read from, when the
+ * collection has one (see the priority rules above) — so a screen can avoid
+ * offering the title a second time as an optional column.
+ */
+export function titleFieldOf(collection: Pick<CollectionSummary, 'fields'>): string | undefined {
+  const textFields = collection.fields.filter((field) => field.kind === 'text')
+  for (const name of PRIORITY_FIELD_NAMES) {
+    if (textFields.some((candidate) => candidate.name === name)) return name
+  }
+  return textFields[0]?.name
+}
+
 export function titleOf(
   entry: Pick<Entry, 'id' | 'values'>,
   collection?: Pick<CollectionSummary, 'fields'>,

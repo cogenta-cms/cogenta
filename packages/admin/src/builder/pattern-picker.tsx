@@ -1,6 +1,7 @@
 import { type ChangeEvent, type JSX, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ContentBlock } from '../api/content-client.js'
+import { describeApiError } from '../api/describe-error.js'
 import { ApiError } from '../api/http.js'
 import { createPattern, deletePattern, listPatterns, type Pattern } from '../api/patterns-client.js'
 import { Button, Field, Input, Modal, Notice, Select } from '../ui/index.js'
@@ -72,7 +73,7 @@ export function PatternPicker({
         setAvailable(false)
         return
       }
-      setError(caught instanceof ApiError ? caught.message : t('builder.patterns.loadError'))
+      setError(describeApiError(caught, t('builder.patterns.loadError')).message)
     }
   }
 
@@ -105,7 +106,7 @@ export function PatternPicker({
       setSaveCategory('')
       await reload()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('builder.patterns.saveError'))
+      setError(describeApiError(caught, t('builder.patterns.saveError')).message)
     } finally {
       setSaving(false)
     }
@@ -117,7 +118,7 @@ export function PatternPicker({
       await deletePattern(token, id)
       await reload()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('builder.patterns.deleteError'))
+      setError(describeApiError(caught, t('builder.patterns.deleteError')).message)
     }
   }
 
@@ -163,7 +164,7 @@ export function PatternPicker({
       }
       await reload()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('builder.patterns.importInvalid'))
+      setError(describeApiError(caught, t('builder.patterns.importInvalid')).message)
     }
   }
 
@@ -306,6 +307,7 @@ export function PatternPicker({
         </p>
         <Button
           size="sm"
+          className="h-auto min-h-8 w-full whitespace-normal py-1.5 text-center leading-tight"
           disabled={
             disabled ||
             saving ||
@@ -318,7 +320,7 @@ export function PatternPicker({
         </Button>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="ghost" disabled={disabled} onClick={handleExport}>
           {t('builder.patterns.exportButton')}
         </Button>

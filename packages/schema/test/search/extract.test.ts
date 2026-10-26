@@ -97,6 +97,22 @@ describe('extractBlockText', () => {
     expect(text).toBe('Attention Chantier en cours')
   })
 
+  it('leaves out references to other records and presentation settings', () => {
+    const text = extractBlockText({
+      key: 'k1',
+      type: 'collectionList',
+      data: {
+        heading: 'Offres ouvertes',
+        form: 'fe780cf0-51dc-4047-879c-b4d194f42125',
+        emphasis: 'primary',
+        layout: 'list',
+        sort: { field: 'createdAt', direction: 'asc' },
+      },
+    })
+
+    expect(text).toBe('Offres ouvertes')
+  })
+
   it('reaches the text of a nested block', () => {
     const text = extractBlockText({
       key: 'k1',

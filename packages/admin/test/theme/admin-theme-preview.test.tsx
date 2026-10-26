@@ -57,10 +57,16 @@ const NIGHTOPS: AdminThemeTemplate = {
 }
 
 describe('AdminThemePreview', () => {
-  it('renders the template name and description as real, visible text', () => {
+  it('renders the template name and a localised sample line as real, visible text', () => {
     render(<AdminThemePreview template={NIGHTOPS} />)
     expect(screen.getByText('Nightops')).toBeDefined()
-    expect(screen.getByText('A near-black console.')).toBeDefined()
+    // The raw (English) template description is no longer echoed; a translated sample line is.
+    expect(
+      screen.getByText(
+        'Un aperçu des titres, du texte et des boutons de cet admin avec ce modèle.',
+      ),
+    ).toBeDefined()
+    expect(screen.queryByText('A near-black console.')).toBeNull()
   })
 
   it('is scoped to its own selector rather than `:root`, so it can never repaint the page', () => {

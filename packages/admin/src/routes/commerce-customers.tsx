@@ -1,9 +1,10 @@
 import { type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { type Customer, listCustomers } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
+import { type Customer, type CustomerStats, listCustomers } from '../api/commerce-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { commerceErrorMessage } from '../commerce/commerce-errors.js'
+import { formatMinor } from '../commerce/money.js'
 import {
   Button,
   Field,
@@ -26,13 +27,14 @@ import {
  * fiche and export/anonymise actions live on `CommerceCustomerRoute`.
  */
 export function CommerceCustomersRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const canRead = roles.length > 0
 
   const [customers, setCustomers] = useState<readonly Customer[]>([])
+  const [stats, setStats] = useState<Readonly<Record<string, CustomerStats>>>({})
   const [search, setSearch] = useState('')
   const [pagination, setPagination] = useState<{
     cursors: readonly (string | undefined)[]
@@ -60,10 +62,10 @@ export function CommerceCustomersRoute(): JSX.Element {
         })
         if (cancelled) return
         setCustomers(response.customers)
+        setStats(response.stats ?? {})
         setNextCursor(response.page?.hasMore === true ? (response.page.nextCursor ?? null) : null)
       } catch (caught) {
-        if (!cancelled)
-          setError(caught instanceof ApiError ? caught.message : t('commerceCustomers.loadError'))
+        if (!cancelled) setError(commerceErrorMessage(t, caught, 'commerceCustomers.loadError'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -92,11 +94,13 @@ export function CommerceCustomersRoute(): JSX.Element {
         {t('commerceCustomers.heading')}
       </h1>
 
-      <div className="max-w-xs">
+      <div className="max-w-sm">
         <Field label={t('commerceCustomers.search')}>
           {(control) => (
             <Input
               {...control}
+              type="search"
+              placeholder={t('commerceCustomers.searchPlaceholder')}
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value)
@@ -115,27 +119,52 @@ export function CommerceCustomersRoute(): JSX.Element {
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && error === null && (
-        <TableRoot label={t('commerceCustomers.tableLabel')}>
+        <TableRoot label={t('commerceCustomers.tableLabel')} stacked>
           <Table>
             <TableHead>
               <TableRow>
                 <TableHeader>{t('commerceCustomers.nameColumn')}</TableHeader>
                 <TableHeader>{t('commerceCustomers.emailColumn')}</TableHeader>
+                <TableHeader>{t('commerceCustomers.ordersColumn')}</TableHeader>
+                <TableHeader>{t('commerceCustomers.spentColumn')}</TableHeader>
+                <TableHeader>{t('commerceCustomers.lastOrderColumn')}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
-              {customers.map((customer) => (
-                <TableRow key={customer.id}>
-                  <TableCell>
-                    <Link to={`/commerce/customers/${encodeURIComponent(customer.id)}`}>
-                      {customer.name ?? customer.email}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{customer.email}</TableCell>
-                </TableRow>
-              ))}
+              {customers.map((customer) => {
+                const figures = stats[customer.id]
+                return (
+                  <TableRow key={customer.id}>
+                    <TableCell stack="heading">
+                      <Link to={`/commerce/customers/${encodeURIComponent(customer.id)}`}>
+                        {customer.anonymized === true
+                          ? t('commerceCustomers.anonymized')
+                          : (customer.name ?? customer.email)}
+                      </Link>
+                    </TableCell>
+                    <TableCell label={t('commerceCustomers.emailColumn')}>
+                      {customer.anonymized === true ? '—' : customer.email}
+                    </TableCell>
+                    <TableCell label={t('commerceCustomers.ordersColumn')}>
+                      {figures?.orderCount ?? 0}
+                    </TableCell>
+                    <TableCell label={t('commerceCustomers.spentColumn')}>
+                      {figures === undefined || figures.spentByCurrency.length === 0
+                        ? '—'
+                        : figures.spentByCurrency
+                            .map((row) => formatMinor(row.amountMinor, row.currency, i18n.language))
+                            .join(' + ')}
+                    </TableCell>
+                    <TableCell label={t('commerceCustomers.lastOrderColumn')}>
+                      {figures?.lastOrderAt == null
+                        ? '—'
+                        : new Date(figures.lastOrderAt).toLocaleDateString(i18n.language)}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
               {customers.length === 0 && (
-                <TableEmpty colSpan={2}>{t('commerceCustomers.empty')}</TableEmpty>
+                <TableEmpty colSpan={5}>{t('commerceCustomers.empty')}</TableEmpty>
               )}
             </TableBody>
           </Table>

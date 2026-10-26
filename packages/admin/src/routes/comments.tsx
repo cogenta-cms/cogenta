@@ -1,5 +1,6 @@
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import { ApiError } from '../api/client.js'
 import {
   bulkSetCommentStatus,
@@ -15,6 +16,9 @@ import {
 } from '../api/comments-client.js'
 import { ModerationCheck } from '../assist/moderation-check.js'
 import { useAuth } from '../auth/auth-context.js'
+import { entryRefKey, useEntryTitles } from '../lib/use-entry-titles.js'
+import { useSchema } from '../schema/schema-context.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import { cn } from '../ui/cn.js'
 import {
@@ -62,6 +66,8 @@ export function CommentsRoute(): JSX.Element {
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const refreshChromeStatus = useRefreshChromeStatus()
+  const formatDateTime = useDateTimeFormatter()
+  const schema = useSchema()
 
   const [tab, setTab] = useState<CommentStatus>('pending')
   const [search, setSearch] = useState('')
@@ -70,12 +76,14 @@ export function CommentsRoute(): JSX.Element {
   const [counts, setCounts] = useState<CommentCounts | null>(null)
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [replyTarget, setReplyTarget] = useState<string | null>(null)
   const [replyBody, setReplyBody] = useState('')
   const [loading, setLoading] = useState(true)
   const [paging, setPaging] = useState({ key: '', page: 0 })
   const requestGeneration = useRef(0)
+  const entryTitles = useEntryTitles(token, items)
   const filterKey = JSON.stringify([tab, search])
   const pageIndex = paging.key === filterKey ? paging.page : 0
   useEffect(() => {
@@ -147,8 +155,9 @@ export function CommentsRoute(): JSX.Element {
     }
   }, [load])
 
-  async function withBusy(fn: () => Promise<void>): Promise<void> {
+  async function withBusy(fn: () => Promise<void>, doneMessage?: string): Promise<void> {
     setBusy(true)
+    setDone(null)
     try {
       await fn()
       await latestLoad.current()
@@ -156,6 +165,7 @@ export function CommentsRoute(): JSX.Element {
       // per session — without this, approving/spamming/trashing here left
       // it showing a stale count until the next full reload.
       refreshChromeStatus()
+      if (doneMessage !== undefined) setDone(doneMessage)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('comments.actionError'))
     } finally {
@@ -190,12 +200,18 @@ export function CommentsRoute(): JSX.Element {
           <p>{error}</p>
         </Notice>
       )}
+      {done !== null && (
+        <Notice
+          tone="success"
+          live="polite"
+          onDismiss={() => setDone(null)}
+          dismissLabel={t('common.close')}
+        >
+          <p>{done}</p>
+        </Notice>
+      )}
 
-      <div
-        role="tablist"
-        aria-label={t('comments.heading')}
-        className="flex flex-wrap gap-1 border-b border-border"
-      >
+      <div role="tablist" aria-label={t('comments.heading')} className="flex flex-wrap gap-1">
         {TABS.map((status) => (
           <button
             key={status}
@@ -205,10 +221,10 @@ export function CommentsRoute(): JSX.Element {
             aria-selected={tab === status}
             aria-controls="comments-panel"
             className={cn(
-              'rounded-t-md px-3 py-2 font-sans text-sm font-medium transition-colors',
+              'cursor-pointer appearance-none rounded-md border px-3 py-1.5 font-sans text-sm',
               tab === status
-                ? 'border border-b-0 border-border bg-card text-card-foreground'
-                : 'text-muted-foreground hover:text-foreground',
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-card text-card-foreground hover:bg-accent',
             )}
             onClick={() => setTab(status)}
           >
@@ -249,9 +265,12 @@ export function CommentsRoute(): JSX.Element {
                   variant="secondary"
                   disabled={busy}
                   onClick={() =>
-                    void withBusy(async () => {
-                      await bulkSetCommentStatus(token, [...selected], status)
-                    })
+                    void withBusy(
+                      async () => {
+                        await bulkSetCommentStatus(token, [...selected], status)
+                      },
+                      t('comments.done.bulk', { count: selected.size }),
+                    )
                   }
                 >
                   {t(`comments.bulkAction.${status}`)}
@@ -266,11 +285,11 @@ export function CommentsRoute(): JSX.Element {
         {!loading && (
           <Card>
             <CardBody>
-              <TableRoot label={t('comments.heading')}>
-                <Table className="min-w-[64rem]">
+              <TableRoot label={t('comments.heading')} stacked>
+                <Table>
                   <TableHead>
                     <TableRow>
-                      <TableHeader>
+                      <TableHeader className="w-10">
                         <input
                           type="checkbox"
                           aria-label={t('comments.selectAll')}
@@ -295,7 +314,7 @@ export function CommentsRoute(): JSX.Element {
                     )}
                     {items.map((item, index) => (
                       <TableRow key={item.id}>
-                        <TableCell>
+                        <TableCell stack="select">
                           <input
                             type="checkbox"
                             aria-label={t('comments.selectOne', { author: item.authorName })}
@@ -303,7 +322,7 @@ export function CommentsRoute(): JSX.Element {
                             onChange={() => toggleSelected(item.id)}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell stack="heading">
                           <p className="m-0 max-w-md whitespace-pre-wrap">{excerpt(item.body)}</p>
                           {item.moderation.flagged === true && (
                             <p className="m-0 text-xs text-destructive" role="status">
@@ -321,22 +340,33 @@ export function CommentsRoute(): JSX.Element {
                             })}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell label={t('comments.column.author')}>
                           <span>{item.authorName}</span>
                           <br />
                           <span className="text-xs text-muted-foreground">{item.authorEmail}</span>
                         </TableCell>
-                        <TableCell>
-                          <span className="text-xs">
-                            {item.collection}/{item.entryId}
-                          </span>
+                        <TableCell label={t('comments.column.target')}>
+                          <Link
+                            className="text-sm font-medium text-primary [overflow-wrap:anywhere]"
+                            to={`/collections/${encodeURIComponent(item.collection)}/${encodeURIComponent(item.entryId)}`}
+                          >
+                            {entryTitles.get(
+                              entryRefKey({ collection: item.collection, id: item.entryId }),
+                            ) ??
+                              t('comments.targetFallback', {
+                                collection:
+                                  schema.status === 'ready'
+                                    ? (schema.schema.collections.find(
+                                        (candidate) => candidate.name === item.collection,
+                                      )?.labels.singular ?? item.collection)
+                                    : item.collection,
+                              })}
+                          </Link>
                         </TableCell>
-                        <TableCell>
-                          <time dateTime={item.createdAt}>
-                            {new Date(item.createdAt).toLocaleString()}
-                          </time>
+                        <TableCell className="whitespace-nowrap" label={t('comments.column.date')}>
+                          <time dateTime={item.createdAt}>{formatDateTime(item.createdAt)}</time>
                         </TableCell>
-                        <TableCell>
+                        <TableCell stack="actions">
                           <div className="flex flex-wrap gap-1">
                             {item.status !== 'approved' && (
                               <Button
@@ -347,7 +377,7 @@ export function CommentsRoute(): JSX.Element {
                                 onClick={() =>
                                   void withBusy(async () => {
                                     await setCommentStatus(token, item.id, 'approved')
-                                  })
+                                  }, t('comments.done.approved'))
                                 }
                               >
                                 {t('comments.action.approve')}
@@ -362,7 +392,7 @@ export function CommentsRoute(): JSX.Element {
                                 onClick={() =>
                                   void withBusy(async () => {
                                     await setCommentStatus(token, item.id, 'spam')
-                                  })
+                                  }, t('comments.done.spam'))
                                 }
                               >
                                 {t('comments.action.spam')}
@@ -377,7 +407,7 @@ export function CommentsRoute(): JSX.Element {
                                 onClick={() =>
                                   void withBusy(async () => {
                                     await setCommentStatus(token, item.id, 'trash')
-                                  })
+                                  }, t('comments.done.trash'))
                                 }
                               >
                                 {t('comments.action.trash')}
@@ -426,7 +456,7 @@ export function CommentsRoute(): JSX.Element {
                                   })
                                   setReplyBody('')
                                   setReplyTarget(null)
-                                })
+                                }, t('comments.done.reply'))
                               }}
                             >
                               <Field label={t('comments.replyLabel')}>

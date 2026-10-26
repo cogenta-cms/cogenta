@@ -9,7 +9,11 @@ import {
 } from '../api/commerce-client.js'
 import { ApiError } from '../api/http.js'
 import { useAuth } from '../auth/auth-context.js'
+import { commerceErrorMessage } from '../commerce/commerce-errors.js'
+import { ConfirmDialog } from '../commerce/confirm-dialog.js'
 import { formatMinor } from '../commerce/money.js'
+import { OrderStatusBadge } from '../commerce/order-status.js'
+import { SubscriptionStatusBadge } from '../commerce/subscription-status.js'
 import {
   Button,
   Card,
@@ -49,6 +53,9 @@ export function CommerceCustomerRoute(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [dialogError, setDialogError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (token === null || !canRead || id === '') return
@@ -60,9 +67,7 @@ export function CommerceCustomerRoute(): JSX.Element {
       setError(
         caught instanceof ApiError && caught.code === 'COMMERCE_CUSTOMER_NOT_FOUND'
           ? t('commerceCustomerDetail.notFound')
-          : caught instanceof ApiError
-            ? caught.message
-            : t('commerceCustomerDetail.loadError'),
+          : commerceErrorMessage(t, caught, 'commerceCustomerDetail.loadError'),
       )
     } finally {
       setLoading(false)
@@ -86,25 +91,23 @@ export function CommerceCustomerRoute(): JSX.Element {
       link.click()
       URL.revokeObjectURL(url)
     } catch (caught) {
-      setActionError(
-        caught instanceof ApiError ? caught.message : t('commerceCustomerDetail.exportError'),
-      )
+      setActionError(commerceErrorMessage(t, caught, 'commerceCustomerDetail.exportError'))
     }
   }
 
   async function doAnonymize(): Promise<void> {
     if (token === null) return
-    // A real, irreversible confirmation for GDPR erasure.
-    if (!window.confirm(t('commerceCustomerDetail.anonymizeConfirm'))) return
-    setActionError(null)
+    setBusy(true)
+    setDialogError(null)
     try {
       await anonymizeCustomer(token, id)
+      setConfirming(false)
       setNotice(t('commerceCustomerDetail.anonymized'))
       await load()
     } catch (caught) {
-      setActionError(
-        caught instanceof ApiError ? caught.message : t('commerceCustomerDetail.anonymizeError'),
-      )
+      setDialogError(commerceErrorMessage(t, caught, 'commerceCustomerDetail.anonymizeError'))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -138,18 +141,29 @@ export function CommerceCustomerRoute(): JSX.Element {
         <div>
           <Link to="/commerce/customers">{t('commerceCustomerDetail.back')}</Link>
           <h1 className="m-0 text-2xl leading-tight font-bold tracking-tight">
-            {customer.name ?? customer.email}
+            {customer.anonymized === true
+              ? t('commerceCustomers.anonymized')
+              : (customer.name ?? customer.email)}
           </h1>
-          <p className="text-sm">{customer.email}</p>
+          {customer.anonymized !== true && <p className="text-sm">{customer.email}</p>}
         </div>
         {canWrite && (
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm" onClick={() => void doExport()}>
+            <Button variant="secondary" onClick={() => void doExport()}>
               {t('commerceCustomerDetail.exportButton')}
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => void doAnonymize()}>
-              {t('commerceCustomerDetail.anonymizeButton')}
-            </Button>
+            {customer.anonymized !== true && (
+              <Button
+                variant="secondary"
+                className="text-destructive"
+                onClick={() => {
+                  setDialogError(null)
+                  setConfirming(true)
+                }}
+              >
+                {t('commerceCustomerDetail.anonymizeButton')}
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -173,10 +187,12 @@ export function CommerceCustomerRoute(): JSX.Element {
         </CardHeader>
         <CardBody>
           <p className="text-sm font-semibold">
-            {t('commerceCustomerDetail.totalSpent')}:{' '}
-            {currency === null ? '—' : formatMinor(totalSpentMinor, currency, i18n.language)}
+            {t('commerceCustomerDetail.totalSpentLine', {
+              amount:
+                currency === null ? '—' : formatMinor(totalSpentMinor, currency, i18n.language),
+            })}
           </p>
-          <TableRoot label={t('commerceCustomerDetail.ordersTitle')}>
+          <TableRoot label={t('commerceCustomerDetail.ordersTitle')} stacked>
             <Table>
               <TableHead>
                 <TableRow>
@@ -189,16 +205,20 @@ export function CommerceCustomerRoute(): JSX.Element {
               <TableBody>
                 {orders.map((order) => (
                   <TableRow key={order.id}>
-                    <TableCell>
+                    <TableCell stack="heading">
                       <Link to={`/commerce/orders/${encodeURIComponent(order.id)}`}>
                         {order.reference}
                       </Link>
                     </TableCell>
-                    <TableCell>{t(`commerceOrders.status.${order.status}`)}</TableCell>
-                    <TableCell>
+                    <TableCell label={t('commerceOrders.statusColumn')}>
+                      <OrderStatusBadge status={order.status} />
+                    </TableCell>
+                    <TableCell label={t('commerceOrders.totalColumn')}>
                       {formatMinor(order.totalMinor, order.currency, i18n.language)}
                     </TableCell>
-                    <TableCell>{new Date(order.placedAt).toLocaleString(i18n.language)}</TableCell>
+                    <TableCell label={t('commerceOrders.placedAtColumn')}>
+                      {new Date(order.placedAt).toLocaleString(i18n.language)}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {orders.length === 0 && (
@@ -220,15 +240,31 @@ export function CommerceCustomerRoute(): JSX.Element {
           <CardBody>
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {subscriptions.map((subscription) => (
-                <li key={subscription.id} className="text-sm">
-                  {formatMinor(subscription.priceMinor, subscription.currency, i18n.language)} /{' '}
-                  {subscription.intervalUnit} — {subscription.status}
+                <li key={subscription.id} className="flex flex-wrap items-center gap-2 text-sm">
+                  <Link to={`/commerce/subscriptions/${encodeURIComponent(subscription.id)}`}>
+                    {formatMinor(subscription.priceMinor, subscription.currency, i18n.language)} /{' '}
+                    {t(`commerceSubscriptions.interval.${subscription.intervalUnit}`, {
+                      count: subscription.intervalCount,
+                    })}
+                  </Link>
+                  <SubscriptionStatusBadge status={subscription.status} />
                 </li>
               ))}
             </ul>
           </CardBody>
         </Card>
       )}
+      <ConfirmDialog
+        open={confirming}
+        title={t('commerceCustomerDetail.anonymizeTitle')}
+        confirmLabel={t('commerceCustomerDetail.anonymizeButton')}
+        busy={busy}
+        error={dialogError}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => void doAnonymize()}
+      >
+        <p className="m-0">{t('commerceCustomerDetail.anonymizeConfirm')}</p>
+      </ConfirmDialog>
     </section>
   )
 }

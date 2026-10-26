@@ -31,6 +31,8 @@ export interface NoticeDismissalStore {
   ensureTable(): Promise<void>
   dismissed(userId: string): Promise<ReadonlySet<string>>
   dismiss(userId: string, noticeId: string): Promise<void>
+  /** Takes a dismissal back — the "Undo" of "Hide". Restoring a notice that was never hidden is a no-op. */
+  restore(userId: string, noticeId: string): Promise<void>
 }
 
 export function createNoticeDismissalStore(
@@ -78,6 +80,12 @@ export function createNoticeDismissalStore(
       await db.query(sql`
         insert into ${table} (id, user_id, notice_id, dismissed_at)
         values (${newId(now)}, ${userId}, ${noticeId}, ${new Date(now()).toISOString()})`)
+    },
+
+    restore: async (userId, noticeId) => {
+      await db.query(
+        sql`delete from ${table} where user_id = ${userId} and notice_id = ${noticeId}`,
+      )
     },
   }
 }

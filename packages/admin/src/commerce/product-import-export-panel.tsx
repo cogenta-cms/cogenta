@@ -3,13 +3,14 @@ import { useTranslation } from 'react-i18next'
 import {
   applyProductsImport,
   exportProductsCsv,
+  type ProductImportIssue,
   type ProductImportPreview,
   type ProductImportResult,
   previewProductsImport,
 } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
 import {
   Button,
+  FileButton,
   Notice,
   Table,
   TableBody,
@@ -20,6 +21,8 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
+import { commerceErrorMessage } from './commerce-errors.js'
+import { formatMinor } from './money.js'
 
 /**
  * CSV import/export for the catalogue (fiche 51 task 6) — the exact
@@ -36,6 +39,19 @@ const OUTCOME_KEY: Record<ProductImportPreview['rows'][number]['outcome'], strin
   duplicate: 'commerceProducts.importOutcomeDuplicate',
 }
 
+/** One import problem in the admin's language: its stable code, with the offending value where there is one. */
+function useIssueText(): (issue: ProductImportIssue) => string {
+  const { t } = useTranslation()
+  return (issue) => {
+    const key = `commerceCsv.issue.${issue.code ?? 'INTERNAL'}`
+    const translated = t(key, { value: issue.value ?? '', max: issue.max ?? 0 })
+    if (translated !== key) return translated
+    const errorKey = `commerceErrors.${issue.code ?? 'INTERNAL'}`
+    const fromErrors = t(errorKey)
+    return fromErrors === errorKey ? t('commerceCsv.issue.INTERNAL') : fromErrors
+  }
+}
+
 export function ProductImportExportPanel({
   token,
   onImported,
@@ -44,7 +60,8 @@ export function ProductImportExportPanel({
   /** Called once an apply really wrote something, so the product list behind this panel is never left showing a stale page after an import. */
   onImported(): Promise<void>
 }): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const issueText = useIssueText()
   const [csv, setCsv] = useState('')
   const [preview, setPreview] = useState<ProductImportPreview | null>(null)
   const [result, setResult] = useState<ProductImportResult | null>(null)
@@ -71,7 +88,7 @@ export function ProductImportExportPanel({
     try {
       setPreview(await previewProductsImport(token, csv))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.importError'))
+      setError(commerceErrorMessage(t, caught, 'commerceProducts.importError'))
     } finally {
       setBusy(false)
     }
@@ -86,16 +103,16 @@ export function ProductImportExportPanel({
       setCsv('')
       await onImported()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.importError'))
+      setError(commerceErrorMessage(t, caught, 'commerceProducts.importError'))
     } finally {
       setBusy(false)
     }
   }
 
-  async function doExport(): Promise<void> {
+  async function download(template: boolean): Promise<void> {
     setError(null)
     try {
-      const { csv: exported, filename } = await exportProductsCsv(token)
+      const { csv: exported, filename } = await exportProductsCsv(token, { template })
       const blob = new Blob([exported], { type: 'text/csv;charset=utf-8' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -106,9 +123,11 @@ export function ProductImportExportPanel({
       link.remove()
       URL.revokeObjectURL(url)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.exportError'))
+      setError(commerceErrorMessage(t, caught, 'commerceProducts.exportError'))
     }
   }
+
+  const applicable = (preview?.summary['create'] ?? 0) + (preview?.summary['update'] ?? 0)
 
   return (
     <section aria-labelledby="commerce-import-export-heading" className="flex flex-col gap-4">
@@ -127,9 +146,14 @@ export function ProductImportExportPanel({
         </Notice>
       )}
 
-      <Button variant="secondary" onClick={() => void doExport()} className="self-start">
-        {t('commerceProducts.exportButton')}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={() => void download(false)}>
+          {t('commerceProducts.exportButton')}
+        </Button>
+        <Button variant="secondary" onClick={() => void download(true)}>
+          {t('commerceProducts.templateButton')}
+        </Button>
+      </div>
 
       <div className="flex flex-col gap-2">
         <label
@@ -150,12 +174,15 @@ export function ProductImportExportPanel({
           }}
           placeholder="handle,title,status,sku,variant,price,currency,onhand,…"
         />
-        <input
-          type="file"
-          accept=".csv,text/csv"
-          aria-label={t('commerceProducts.importFileLabel')}
-          onChange={onFileChosen}
-        />
+        <div>
+          <FileButton
+            accept=".csv,text/csv"
+            label={t('commerceProducts.importFileLabel')}
+            emptyLabel={t('common.noFileChosen')}
+            aria-label={t('commerceProducts.importFileLabel')}
+            onChange={onFileChosen}
+          />
+        </div>
       </div>
 
       <div className="flex gap-2">
@@ -164,7 +191,7 @@ export function ProductImportExportPanel({
         </Button>
         {preview !== null && (
           <>
-            <Button onClick={() => void doApply()} disabled={busy}>
+            <Button onClick={() => void doApply()} disabled={busy || applicable === 0}>
               {t('commerceProducts.importApplyButton')}
             </Button>
             <Button variant="secondary" onClick={() => setPreview(null)}>
@@ -176,7 +203,7 @@ export function ProductImportExportPanel({
 
       {preview !== null && (
         <div className="flex flex-col gap-3">
-          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-sm text-muted-foreground">
             <li>
               {t('commerceProducts.importSummaryCreate', { count: preview.summary['create'] ?? 0 })}
             </li>
@@ -211,16 +238,33 @@ export function ProductImportExportPanel({
                     <TableCell className="font-mono text-sm">{row.sku}</TableCell>
                     <TableCell>
                       {t(OUTCOME_KEY[row.outcome])}
-                      {row.detail !== undefined && (
-                        <span className="text-muted-foreground"> — {row.detail}</span>
+                      {row.detailCode === 'duplicate_sku' && (
+                        <span className="text-muted-foreground">
+                          {' — '}
+                          {t('commerceCsv.duplicateSku')}
+                        </span>
                       )}
+                      {row.detailCode === 'current_price' &&
+                        row.currentPriceMinor !== undefined && (
+                          <span className="text-muted-foreground">
+                            {' — '}
+                            {t('commerceCsv.currentPrice', {
+                              amount: formatMinor(
+                                row.currentPriceMinor,
+                                row.currentCurrency ?? 'EUR',
+                                i18n.language,
+                              ),
+                            })}
+                          </span>
+                        )}
                     </TableCell>
                   </TableRow>
                 ))}
                 {preview.issues.map((issue) => (
                   <TableRow key={`issue-${issue.line}`}>
                     <TableCell colSpan={2}>
-                      {t('commerceProducts.importLineLabel', { line: issue.line })}: {issue.detail}
+                      {t('commerceProducts.importLineLabel', { line: issue.line })}{' '}
+                      {issueText(issue)}
                     </TableCell>
                     <TableCell />
                   </TableRow>
@@ -243,6 +287,17 @@ export function ProductImportExportPanel({
               failed: result.failed.length,
             })}
           </p>
+        </Notice>
+      )}
+      {result !== null && result.failed.length > 0 && (
+        <Notice tone="warning" live="polite">
+          <ul className="m-0 list-none p-0">
+            {result.failed.map((issue) => (
+              <li key={`failed-${issue.line}`}>
+                {t('commerceProducts.importLineLabel', { line: issue.line })} {issueText(issue)}
+              </li>
+            ))}
+          </ul>
         </Notice>
       )}
     </section>

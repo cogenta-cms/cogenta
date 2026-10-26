@@ -20,7 +20,9 @@ import {
   searchSubmissionsByEmail,
 } from '../api/forms-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { ConfirmDialog } from '../commerce/confirm-dialog.js'
 import { useLocalPagination } from '../lib/use-local-pagination.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import { useRefreshChromeStatus } from '../shell/shell-status-context.js'
 import {
   Button,
@@ -70,6 +72,8 @@ export function FormSubmissionsRoute(): JSX.Element {
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const isAdmin = auth.state.status === 'authenticated' && auth.state.user.roles.includes('admin')
   const refreshChromeStatus = useRefreshChromeStatus()
+  const formatDateTime = useDateTimeFormatter()
+  const [confirmErase, setConfirmErase] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const headingId = useId()
 
@@ -469,11 +473,11 @@ export function FormSubmissionsRoute(): JSX.Element {
       {submissions === null || loading ? (
         <p>{t('common.loading')}</p>
       ) : (
-        <TableRoot label={t('formSubmissions.tableLabel')}>
-          <Table className="min-w-[48rem]">
+        <TableRoot label={t('formSubmissions.tableLabel')} stacked>
+          <Table>
             <TableHead>
               <TableRow>
-                <TableHeader>
+                <TableHeader className="w-10">
                   <span className="sr-only">{t('formSubmissions.select')}</span>
                 </TableHeader>
                 <TableHeader>{t('formSubmissions.columnForm')}</TableHeader>
@@ -489,7 +493,7 @@ export function FormSubmissionsRoute(): JSX.Element {
               {submissions.map((submission) => (
                 <Fragment key={submission.id}>
                   <TableRow>
-                    <TableCell>
+                    <TableCell stack="select">
                       <input
                         type="checkbox"
                         aria-label={t('formSubmissions.selectOne', { id: submission.id })}
@@ -497,10 +501,19 @@ export function FormSubmissionsRoute(): JSX.Element {
                         onChange={() => toggleSelected(submission.id)}
                       />
                     </TableCell>
-                    <TableCell className="font-medium">{submission.formName}</TableCell>
-                    <TableCell>{t(`formSubmissions.status.${submission.status}`)}</TableCell>
-                    <TableCell>{new Date(submission.submittedAt).toLocaleString()}</TableCell>
-                    <TableCell className="flex flex-wrap gap-2">
+                    <TableCell className="font-medium" stack="heading">
+                      {formsById.get(submission.formId)?.label ?? submission.formName}
+                    </TableCell>
+                    <TableCell label={t('formSubmissions.columnStatus')}>
+                      {t(`formSubmissions.status.${submission.status}`)}
+                    </TableCell>
+                    <TableCell
+                      className="whitespace-nowrap"
+                      label={t('formSubmissions.columnSubmittedAt')}
+                    >
+                      {formatDateTime(submission.submittedAt)}
+                    </TableCell>
+                    <TableCell stack="actions" className="flex flex-wrap gap-2">
                       <Button
                         type="button"
                         size="sm"
@@ -568,7 +581,7 @@ export function FormSubmissionsRoute(): JSX.Element {
                             <div key={consent.fieldName} className="contents">
                               <dt className="font-medium">{t('formSubmissions.consent')}</dt>
                               <dd className="m-0">
-                                {consent.text} ({new Date(consent.agreedAt).toLocaleString()})
+                                {consent.text} ({formatDateTime(consent.agreedAt)})
                               </dd>
                             </div>
                           ))}
@@ -597,7 +610,7 @@ export function FormSubmissionsRoute(): JSX.Element {
                                 {' — '}
                                 {note.body}{' '}
                                 <span className="text-muted-foreground">
-                                  ({new Date(note.createdAt).toLocaleString()})
+                                  ({formatDateTime(note.createdAt)})
                                 </span>
                               </li>
                             ))}
@@ -656,10 +669,20 @@ export function FormSubmissionsRoute(): JSX.Element {
               />
             )}
           </Field>
-          <Button type="button" variant="secondary" onClick={() => void runGdprSearch()}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={emailQuery.trim() === ''}
+            onClick={() => void runGdprSearch()}
+          >
             {t('formSubmissions.gdprSearch')}
           </Button>
-          <Button type="button" variant="destructive" onClick={() => void runGdprErase()}>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={emailQuery.trim() === ''}
+            onClick={() => setConfirmErase(true)}
+          >
             {t('formSubmissions.gdprErase')}
           </Button>
         </div>
@@ -675,7 +698,7 @@ export function FormSubmissionsRoute(): JSX.Element {
               {gdprResults.length === 0 && <li>{t('formSubmissions.gdprNoResults')}</li>}
               {gdprPage.items.map((submission) => (
                 <li key={submission.id}>
-                  {submission.formName} — {new Date(submission.submittedAt).toLocaleString()}
+                  {submission.formName} — {formatDateTime(submission.submittedAt)}
                 </li>
               ))}
             </ul>
@@ -683,6 +706,19 @@ export function FormSubmissionsRoute(): JSX.Element {
           </>
         )}
       </section>
+
+      <ConfirmDialog
+        open={confirmErase}
+        title={t('formSubmissions.gdprEraseTitle')}
+        confirmLabel={t('formSubmissions.gdprErase')}
+        onCancel={() => setConfirmErase(false)}
+        onConfirm={() => {
+          setConfirmErase(false)
+          void runGdprErase()
+        }}
+      >
+        <p>{t('formSubmissions.gdprEraseBody', { email: emailQuery.trim() })}</p>
+      </ConfirmDialog>
     </section>
   )
 }

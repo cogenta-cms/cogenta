@@ -302,3 +302,39 @@ describe('createMcpStdioClient', () => {
     })
   })
 })
+
+describe('createMcpStdioClient against a process that exits at once', () => {
+  /**
+   * Admin audit, 2026-10-21: "Tester la connexion" on a stdio command that
+   * exits immediately (`/usr/bin/true`) wrote to a closed pipe; the EPIPE
+   * 'error' event had no listener, and Node stopped the whole site. The
+   * real `spawn` is used here on purpose — a PassThrough never raises EPIPE.
+   */
+  it('rejects the call and leaves the host process running', async () => {
+    const unhandled: unknown[] = []
+    const onUncaught = (error: unknown) => unhandled.push(error)
+    process.on('uncaughtException', onUncaught)
+    try {
+      const client = createMcpStdioClient({
+        command: process.execPath,
+        args: ['-e', 'process.exit(0)'],
+        cwd: CWD,
+        env: {},
+        callTimeoutMs: 5000,
+      })
+      // Give the child time to exit before writing to it, the exact order
+      // that produced the EPIPE.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      await expect(client.initialize()).rejects.toMatchObject({
+        code: expect.stringMatching(/^MCP_CLIENT_(PROCESS_EXITED|CLOSED)$/u),
+      })
+      // A second call on the dead connection fails the same way, never throws out of the loop.
+      await expect(client.listTools()).rejects.toBeInstanceOf(Error)
+      client.close()
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('uncaughtException', onUncaught)
+    }
+  })
+})

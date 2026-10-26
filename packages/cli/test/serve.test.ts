@@ -1346,7 +1346,8 @@ describe('a themed entry page whose title field is not named "title"', () => {
       // comment form's hidden `entryId` field) — it is specifically the
       // `<title>` and the entry header's `<h1>` that must never fall back to
       // it, which is what these two assertions check.
-      expect(html).toContain('<title>Workflow automation</title>')
+      // A site nobody configured titles its pages "%title% — %site%".
+      expect(html).toContain('<title>Workflow automation — Themed site</title>')
       expect(html).toContain('cg-entry-header__title">Workflow automation<')
     } finally {
       await server.stop()

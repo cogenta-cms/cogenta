@@ -234,41 +234,62 @@ describe('the live preview', () => {
     )
   })
 
-  it('shows the noindex warning the server reports, without asserting it itself', async () => {
+  const NOINDEX_PREVIEW = {
+    title: 'Draft',
+    titleLength: 5,
+    description: null,
+    descriptionLength: 0,
+    canonical: null,
+    robots: 'noindex',
+    image: null,
+    ogTitle: 'Draft',
+    ogDescription: null,
+  }
+
+  function renderWithNoindexPreview(status: string, values: Record<string, unknown>): void {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string | URL | Request) =>
         String(url).includes('/api/seo/preview')
-          ? jsonResponse({
-              title: 'Draft',
-              titleLength: 5,
-              description: null,
-              descriptionLength: 0,
-              canonical: null,
-              robots: 'noindex',
-              image: null,
-              ogTitle: 'Draft',
-              ogDescription: null,
-            })
+          ? jsonResponse(NOINDEX_PREVIEW)
           : jsonResponse(NO_PROVIDER),
       ),
     )
-
     render(
       <SeoPanel
         token="t"
         collection={SEO_COLLECTION}
         entryId="entry-1"
-        status="draft"
-        values={{}}
+        status={status}
+        values={values}
         entryText=""
         onChange={vi.fn()}
       />,
     )
+  }
+
+  it('shows the noindex warning the server reports for an unpublished entry, without asserting it itself', async () => {
+    renderWithNoindexPreview('draft', {})
 
     await screen.findByText(
-      'Cet aperçu montre une copie non enregistrée ou non publiée, donc il porte toujours noindex — la page réelle différera une fois publiée.',
+      "Cette page n'est pas encore publiée : les moteurs de recherche ne la verront qu'après sa publication.",
     )
+  })
+
+  it('says the box is ticked when that is why the preview is noindex', async () => {
+    renderWithNoindexPreview('published', { seoNoindex: true })
+
+    await screen.findByText(
+      'La case « ne pas afficher dans les moteurs de recherche » est cochée : cette page ne sera pas référencée.',
+    )
+  })
+
+  it('does not warn about noindex on a published entry whose box is not ticked', async () => {
+    renderWithNoindexPreview('published', {})
+
+    await screen.findByText('Draft')
+    expect(screen.queryByText(/pas encore publiée/u)).toBeNull()
+    expect(screen.queryByText(/est cochée/u)).toBeNull()
   })
 })
 

@@ -97,10 +97,34 @@ describe('the taxonomy screen', () => {
     fireEvent.change(within(dialog).getByLabelText('Libellé (en)'), {
       target: { value: 'Sweets' },
     })
-    fireEvent.change(within(dialog).getByLabelText('Slug'), { target: { value: 'desserts' } })
+    fireEvent.change(within(dialog).getByLabelText("Identifiant d'URL (slug)"), {
+      target: { value: 'desserts' },
+    })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
 
     expect(await screen.findByText('Desserts')).toBeDefined()
+  })
+
+  it('fills the slug from the first label until the editor types one of their own', async () => {
+    signedIn(['editor'])
+    render(<App />)
+    await goToTaxonomies()
+    await screen.findByText('Cuisine')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouveau terme' }))
+    const dialog = await screen.findByRole('dialog')
+    const slug = within(dialog).getByLabelText("Identifiant d'URL (slug)") as HTMLInputElement
+
+    fireEvent.change(within(dialog).getByLabelText('Libellé (fr)'), {
+      target: { value: 'Crème brûlée' },
+    })
+    expect(slug.value).toBe('creme-brulee')
+
+    fireEvent.change(slug, { target: { value: 'dessert-maison' } })
+    fireEvent.change(within(dialog).getByLabelText('Libellé (fr)'), {
+      target: { value: 'Autre libellé' },
+    })
+    expect(slug.value).toBe('dessert-maison')
   })
 
   it('reports the server’s refusal rather than guessing, on a duplicate slug', async () => {
@@ -112,7 +136,9 @@ describe('the taxonomy screen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Nouveau terme' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText('Libellé (fr)'), { target: { value: 'Autre' } })
-    fireEvent.change(within(dialog).getByLabelText('Slug'), { target: { value: 'cuisine' } })
+    fireEvent.change(within(dialog).getByLabelText("Identifiant d'URL (slug)"), {
+      target: { value: 'cuisine' },
+    })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
 
     const alert = await screen.findByRole('alert')

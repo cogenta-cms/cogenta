@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { type Product, updateProduct } from '../api/commerce-client.js'
 import { createEntry, type Entry, getEntry } from '../api/content-client.js'
-import { ApiError } from '../api/http.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
 import { useSchema } from '../schema/schema-context.js'
 import { Button, Notice, Select } from '../ui/index.js'
+import { commerceErrorMessage } from './commerce-errors.js'
 
 /**
  * A product's link to its editorial face (fiche 51 task 1, `contentRef`).
@@ -63,7 +63,7 @@ export function ProductContentLink({
       const updated = await updateProduct(token, product.id, { contentRef: null })
       onChange(updated)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.contentLinkError'))
+      setError(commerceErrorMessage(t, caught, 'commerceProducts.contentLinkError'))
     } finally {
       setBusy(false)
     }
@@ -86,7 +86,7 @@ export function ProductContentLink({
       })
       onChange(updated)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.contentLinkError'))
+      setError(commerceErrorMessage(t, caught, 'commerceProducts.contentLinkError'))
     } finally {
       setBusy(false)
     }

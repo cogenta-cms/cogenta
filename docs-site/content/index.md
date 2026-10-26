@@ -10,7 +10,7 @@ s'exploite lui-même — se surveille, se patche, s'optimise, et rend des
 comptes — sans jamais dépendre d'une clé API pour fonctionner (R2).
 
 Cette documentation est **déployée avec le code**, jamais consultée depuis un
-site séparé toujours-à-jour : la version affichée en bas de chaque page est
+site séparé qui serait toujours à jour : la version affichée en bas de chaque page est
 celle du `@cogenta/core` réellement installé. Un site qui tourne sur une
 ancienne version de Cogenta voit, depuis son propre `/admin/documentation`,
 la documentation de cette même ancienne version — parce que les deux sont le

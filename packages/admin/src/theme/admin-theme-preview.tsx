@@ -1,4 +1,5 @@
 import { type JSX, useId } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { AdminThemeOverrides, AdminThemeTemplate } from '../api/admin-theme-client.js'
 import { Button, Card, CardBody, CardHeader, CardTitle } from '../ui/index.js'
 import { buildAdminThemeCss } from './admin-theme-css.js'
@@ -37,6 +38,7 @@ export function AdminThemePreview({ template, overrides }: AdminThemePreviewProp
   const rawId = useId()
   const scope = `[data-admin-theme-preview="${rawId}"]`
   const { mode } = useTheme()
+  const { t } = useTranslation()
 
   const css = buildAdminThemeCss(
     {
@@ -74,7 +76,7 @@ export function AdminThemePreview({ template, overrides }: AdminThemePreviewProp
         </CardHeader>
         <CardBody className="gap-2 px-3 pt-0 pb-3">
           <p className="m-0 text-xs" style={{ color: 'var(--muted-foreground)' }}>
-            {template.description}
+            {t('adminAppearance.previewSample')}
           </p>
           <div className="flex gap-2">
             <Button variant="primary" size="sm" tabIndex={-1}>

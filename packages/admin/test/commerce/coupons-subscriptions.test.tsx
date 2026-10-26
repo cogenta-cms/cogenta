@@ -76,7 +76,7 @@ describe('coupons', () => {
     await waitFor(() => {
       expect(within(table()).getByText('SPRING25')).toBeDefined()
     })
-    expect(within(table()).getByText('25%')).toBeDefined()
+    expect(within(table()).getByText('25 %')).toBeDefined()
   })
 
   it('deactivates a coupon', async () => {
@@ -94,7 +94,10 @@ describe('coupons', () => {
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
     await screen.findByText('ONETIME')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Désactiver ONETIME' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Désactiver le coupon ONETIME' }))
+    // Deactivating cuts the code off at the till at once: it is confirmed first.
+    const confirm = await screen.findByRole('dialog', { name: /^Désactiver ce coupon/u })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Désactiver' }))
     await waitFor(() => {
       expect(within(table()).getByText('Désactivé')).toBeDefined()
     })
@@ -108,17 +111,21 @@ describe('subscriptions', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'Abonnements' }))
     await screen.findByRole('heading', { name: 'Abonnements' })
 
-    // The heading renders before the subscription list request resolves.
-    expect(await within(await screen.findByRole('table')).findByText('customer-1')).toBeDefined()
+    // The heading renders before the subscription list request resolves. The
+    // list names the person, never an internal customer id.
+    expect(await within(await screen.findByRole('table')).findByText('Shopper One')).toBeDefined()
     expect(within(table()).getByText('Actif')).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
+    // Ending a subscription is final: it is confirmed first.
+    fireEvent.click(screen.getByRole('button', { name: 'Résilier' }))
+    const confirm = await screen.findByRole('dialog', { name: /^Résilier cet abonnement/u })
+    fireEvent.click(within(confirm).getByRole('button', { name: "Résilier l'abonnement" }))
     await waitFor(() => {
       expect(within(table()).getByText('Annulé')).toBeDefined()
     })
   })
 
-  it('refuses to cancel without commerce.order.write', async () => {
+  it('offers no way to end a subscription without commerce.order.write', async () => {
     signedInAs(['viewer'])
     // The "Boutique" nav group only shows for an admin or once the shop has
     // sold something (fiche 35); a plain viewer on a fresh fixture sees no
@@ -128,13 +135,13 @@ describe('subscriptions', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Abonnements' })
 
-    // Unlike the previous test, nothing here first reads the table's own
-    // content before clicking — so this must wait for the async list fetch
-    // to resolve and the "Annuler" button to actually mount, rather than a
-    // bare `getByRole` racing the still-`loading` screen (a real, pre-existing
-    // flake, not something a synchronous query papers over).
-    fireEvent.click(await screen.findByRole('button', { name: 'Annuler' }))
-    expect(await screen.findByText(/allowed to do that/u)).toBeDefined()
+    // Wait for the list itself to be on screen: an absent button is only
+    // meaningful once the rows it would sit in have rendered. The server
+    // refusal behind this courtesy is proven in `@cogenta/commerce`'s router
+    // tests, role by role.
+    expect(await within(await screen.findByRole('table')).findByText('Shopper One')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Résilier' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Suspendre' })).toBeNull()
   })
 })
 
@@ -155,7 +162,7 @@ describe('subscription detail — a real route with its own URL (fiche 71)', () 
     window.history.pushState(null, '', '/commerce/subscriptions/subscription-1')
     render(<App />)
 
-    expect(await screen.findByText(/customer-1/)).toBeDefined()
+    expect(await screen.findByRole('heading', { name: 'Abonnement de Shopper One' })).toBeDefined()
     expect(screen.getByText('Historique de facturation')).toBeDefined()
   })
 
@@ -182,8 +189,11 @@ describe('subscription detail — a real route with its own URL (fiche 71)', () 
     await screen.findByText('Historique de facturation')
 
     fireEvent.click(screen.getByRole('button', { name: 'Suspendre' }))
+    // Pausing stops the billing: it is confirmed first.
+    const confirm = await screen.findByRole('dialog', { name: /^Suspendre cet abonnement/u })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Suspendre' }))
 
-    expect(await screen.findByText(/En pause/)).toBeDefined()
+    expect(await screen.findByText('En pause')).toBeDefined()
     // The action buttons follow the new status: "Suspendre" is gone, "Reprendre" is offered instead.
     expect(screen.queryByRole('button', { name: 'Suspendre' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Reprendre' })).toBeDefined()
@@ -241,25 +251,16 @@ describe('subscription detail — changing plan (audit T-COM-02)', () => {
     commerceVariants: [seededVariant],
   }
 
-  async function pickVariant(): Promise<void> {
-    fireEvent.click(screen.getByRole('button', { name: 'Changer de formule' }))
-    const productSelect = await screen.findByLabelText('Produit')
-    // The product list is its own async fetch (`listProducts`, opened by
-    // `openChangePlan`) — the select mounts disabled with only the
-    // placeholder option until it resolves.
-    const productOption = await waitFor(
-      () =>
-        within(productSelect).getByRole('option', { name: 'Grand format' }) as HTMLOptionElement,
-    )
-    fireEvent.change(productSelect, { target: { value: productOption.value } })
-
-    const variantSelect = await screen.findByLabelText('Variante')
-    const variantOption = await waitFor(() =>
-      within(variantSelect).getByRole('option', { name: /Édition XL —/ }),
-    )
-    fireEvent.change(variantSelect, {
-      target: { value: (variantOption as HTMLOptionElement).value },
+  /** Opens the change-plan dialog and picks the seeded variant by typing its name. */
+  async function pickVariant(): Promise<HTMLElement> {
+    fireEvent.click(await screen.findByRole('button', { name: 'Changer de formule' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Changer de formule' })
+    fireEvent.change(within(dialog).getByLabelText('Nouvelle formule (produit ou variante)'), {
+      target: { value: 'grand' },
     })
+    // The picker searches the catalogue after a short pause.
+    fireEvent.click(await within(dialog).findByRole('button', { name: /Grand format/u }))
+    return dialog
   }
 
   it('changes the plan and shows the settled result, only after an explicit confirmation', async () => {
@@ -277,26 +278,27 @@ describe('subscription detail — changing plan (audit T-COM-02)', () => {
     render(<App />)
     await screen.findByText('Historique de facturation')
 
-    await pickVariant()
+    const dialog = await pickVariant()
 
-    // First click only opens a confirmation — the fiche's own acceptance
+    // First click only previews the change — the fiche's own acceptance
     // criterion is that a plan change (it can charge money immediately) is
     // never applied on one click.
-    fireEvent.click(screen.getByRole('button', { name: 'Vérifier le changement' }))
-    expect(screen.getByText(/Ce changement s'applique immédiatement/)).toBeDefined()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Vérifier le changement' }))
+    expect(await within(dialog).findByText(/Si vous confirmez/u)).toBeDefined()
     expect(screen.queryByText('Formule changée.', { exact: false })).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmer le changement' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmer le changement' }))
 
     expect(
       await screen.findByText("Formule changée. Rien n'était dû pour le reste de cette période."),
     ).toBeDefined()
-    // The panel closes on success — its own heading is gone, only the
-    // "Changer de formule" toggle button (which reopens it) remains.
-    expect(screen.queryByRole('heading', { name: 'Changer de formule' })).toBeNull()
+    // The dialog closes on success.
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Changer de formule' })).toBeNull()
+    })
   })
 
-  it('refuses to change plan without commerce.order.write', async () => {
+  it('offers no way to change plan without commerce.order.write', async () => {
     localStorage.clear()
     localStorage.setItem('cogenta.session.token', VALID_TOKEN)
     installMockFetch({ roles: ['viewer'], ...seededCatalog })
@@ -304,10 +306,9 @@ describe('subscription detail — changing plan (audit T-COM-02)', () => {
     render(<App />)
     await screen.findByText('Historique de facturation')
 
-    await pickVariant()
-    fireEvent.click(screen.getByRole('button', { name: 'Vérifier le changement' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmer le changement' }))
-
-    expect(await screen.findByText(/allowed to do that/u)).toBeDefined()
+    // The subscription is readable, but nothing on it changes it.
+    expect(screen.queryByRole('button', { name: 'Changer de formule' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Suspendre' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Résilier' })).toBeNull()
   })
 })

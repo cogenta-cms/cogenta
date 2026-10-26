@@ -96,11 +96,13 @@ export function createSandbox(
   token: string,
   name: string,
   template: string,
+  /** The admin's language: the starting code is commented in it. */
+  locale?: string,
 ): Promise<{ id: string }> {
   return request('/api/plugins/sandbox', {
     method: 'POST',
     headers: { ...authHeader(token), ...JSON_HEADERS },
-    body: JSON.stringify({ name, template }),
+    body: JSON.stringify({ name, template, ...(locale === undefined ? {} : { locale }) }),
   })
 }
 

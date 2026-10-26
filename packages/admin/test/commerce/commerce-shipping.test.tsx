@@ -43,7 +43,7 @@ describe('the commerce shipping screen', () => {
 
     expect(
       await screen.findByText(
-        "Aucune méthode de livraison pour l'instant — rien ne peut être livré tant qu'une méthode n'est pas ajoutée.",
+        "Aucun mode de livraison pour l'instant : les clients ne pourront pas choisir de livraison tant qu'un mode n'est pas ajouté.",
       ),
     ).toBeDefined()
 
@@ -52,18 +52,21 @@ describe('the commerce shipping screen', () => {
     fireEvent.change(within(dialog).getByLabelText('Libellé'), {
       target: { value: 'Standard' },
     })
-    fireEvent.change(within(dialog).getByLabelText('Montant'), { target: { value: '4.90' } })
+    fireEvent.change(within(dialog).getByLabelText('Prix de base'), { target: { value: '4.90' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Créer la méthode' }))
 
     await waitFor(() => {
       expect(screen.getByText('Standard')).toBeDefined()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    // Deleting is irreversible: it is confirmed first.
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer Standard' }))
+    const confirm = await screen.findByRole('dialog', { name: /^Supprimer ce mode de livraison/u })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Supprimer le mode de livraison' }))
     await waitFor(() => {
       expect(
         screen.getByText(
-          "Aucune méthode de livraison pour l'instant — rien ne peut être livré tant qu'une méthode n'est pas ajoutée.",
+          "Aucun mode de livraison pour l'instant : les clients ne pourront pas choisir de livraison tant qu'un mode n'est pas ajouté.",
         ),
       ).toBeDefined()
     })
@@ -96,12 +99,12 @@ describe('the commerce shipping screen', () => {
     await goToShipping()
     await screen.findByText('Standard')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier Standard' }))
     const dialog = await screen.findByRole('dialog', { name: 'Modifier Standard' })
     fireEvent.change(within(dialog).getByLabelText('Libellé'), {
       target: { value: 'Standard corrected' },
     })
-    fireEvent.change(within(dialog).getByLabelText('Montant'), { target: { value: '7.50' } })
+    fireEvent.change(within(dialog).getByLabelText('Prix de base'), { target: { value: '7.50' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
@@ -109,7 +112,7 @@ describe('the commerce shipping screen', () => {
     })
     const row = screen.getByText('Standard corrected').closest('tr') as HTMLElement
     // Untouched fields (zone) survive the edit.
-    expect(within(row).getByText('FR')).toBeDefined()
+    expect(within(row).getByText('France')).toBeDefined()
     expect(within(row).getByText(/7[.,]50/u)).toBeDefined()
     expect(screen.queryByRole('dialog')).toBeNull()
   })
@@ -147,7 +150,7 @@ describe('the commerce shipping screen', () => {
       }),
     ).toBeDefined()
 
-    fireEvent.change(screen.getByLabelText('Sous-total de commande'), {
+    fireEvent.change(screen.getByLabelText('Montant du panier'), {
       target: { value: '20' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Simuler' }))
@@ -180,7 +183,7 @@ describe('the commerce shipping screen', () => {
     fireEvent.change(within(dialog).getByLabelText('Libellé'), {
       target: { value: 'Editor method' },
     })
-    fireEvent.change(within(dialog).getByLabelText('Montant'), { target: { value: '5' } })
+    fireEvent.change(within(dialog).getByLabelText('Prix de base'), { target: { value: '5' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Créer la méthode' }))
 
     await waitFor(() => {

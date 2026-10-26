@@ -1,7 +1,11 @@
 import type { CollectionDefinition } from '@cogenta/schema'
 import { convertContent, mediaUrlsOf } from './content-convert.js'
 import { parseWxr } from './parse.js'
-import { assertWordPressCollectionsCompatible } from './target-preflight.js'
+import {
+  planWordPressTargets,
+  type WordPressEntryTarget,
+  type WordPressTargetChoice,
+} from './targets.js'
 import type { WxrItem } from './types.js'
 
 /**
@@ -45,8 +49,10 @@ export interface WordPressPreviewIgnoredItem {
 
 export interface WordPressPreviewReport {
   readonly counts: WordPressPreviewCounts
-  /** Fixed target collections this importer writes to — see `wordpress/collections.ts`'s header note on why they are not the site's own. */
+  /** The collection each kind of WordPress item is written to (a site's own when it has one). */
   readonly collectionMapping: { readonly post: string; readonly page: string }
+  /** Field-by-field: where each WordPress datum goes in the target collections, and what has nowhere to go. */
+  readonly targets: WordPressTargetsSummary
   readonly authors: readonly { readonly login: string; readonly email: string }[]
   readonly mediaUrls: readonly string[]
   /** `content-length` is unknown before the apply phase actually fetches each URL — this counts distinct URLs, not bytes. */
@@ -54,6 +60,48 @@ export interface WordPressPreviewReport {
   readonly slugConflicts: readonly WordPressSlugConflict[]
   readonly ignored: readonly WordPressPreviewIgnoredItem[]
   readonly warnings: readonly string[]
+}
+
+export interface WordPressEntryTargetSummary {
+  readonly collection: string
+  /** `true` when the site's own model is used; `false` when the importer's built-in one is (the site had none, or the same shape). */
+  readonly mapped: boolean
+  /** WordPress datum → the target field that receives it. Absent keys have no counterpart and are not imported. */
+  readonly fields: Readonly<Record<string, string>>
+  /** The WordPress data this collection has no field for. */
+  readonly unmapped: readonly string[]
+}
+
+export interface WordPressTargetsSummary {
+  readonly post: WordPressEntryTargetSummary
+  readonly page: WordPressEntryTargetSummary
+  /** `null`: the site has no collection to receive them, so they are not imported. */
+  readonly category: string | null
+  readonly tag: string | null
+}
+
+function summariseTarget(
+  target: WordPressEntryTarget,
+  kind: 'post' | 'page',
+): WordPressEntryTargetSummary {
+  const fields: Record<string, string> = { title: target.title }
+  const unmapped: string[] = []
+  const note = (datum: string, field: string | null): void => {
+    if (field === null) unmapped.push(datum)
+    else fields[datum] = field
+  }
+  note('slug', target.slug)
+  note('body', target.body?.field ?? null)
+  note('publishedAt', target.publishedAt)
+  note('author', target.author)
+  note('cover', target.cover)
+  note('customFields', target.customFields)
+  if (kind === 'post') {
+    note('excerpt', target.excerpt)
+    note('category', target.category)
+    note('tags', target.tags)
+  }
+  return { collection: target.collection.name, mapped: !target.native, fields, unmapped }
 }
 
 function slugConflictsOf(
@@ -76,8 +124,9 @@ function slugConflictsOf(
 export function analyzeWordPress(
   xml: string,
   collections: readonly CollectionDefinition[] = [],
+  choice: WordPressTargetChoice = {},
 ): WordPressPreviewReport {
-  assertWordPressCollectionsCompatible(collections)
+  const plan = planWordPressTargets(collections, choice)
   const parsed = parseWxr(xml)
 
   const posts = parsed.items.filter((item) => item.postType === 'post')
@@ -160,7 +209,13 @@ export function analyzeWordPress(
       comments: commentCount,
       attachments: attachments.length,
     },
-    collectionMapping: { post: 'post', page: 'page' },
+    collectionMapping: { post: plan.post.collection.name, page: plan.page.collection.name },
+    targets: {
+      post: summariseTarget(plan.post, 'post'),
+      page: summariseTarget(plan.page, 'page'),
+      category: plan.category?.name ?? null,
+      tag: plan.tag?.name ?? null,
+    },
     authors: parsed.authors.map((author) => ({ login: author.login, email: author.email })),
     mediaUrls: [...allMediaUrls],
     mediaCount: allMediaUrls.size,

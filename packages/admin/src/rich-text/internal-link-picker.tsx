@@ -1,7 +1,7 @@
 import { type JSX, useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
 import { type Entry, listEntries } from '../api/content-client.js'
+import { describeApiError } from '../api/describe-error.js'
 import { type SearchHit, searchContent } from '../api/search-client.js'
 import { readableCollections } from '../schema/permissions.js'
 import type { CollectionSummary } from '../schema/types.js'
@@ -102,9 +102,7 @@ export function InternalLinkPicker({
       } catch (caught) {
         if (!cancelled) {
           setRows([])
-          setError(
-            caught instanceof ApiError ? caught.message : t('richText.linkInternalLoadError'),
-          )
+          setError(describeApiError(caught, t('richText.linkInternalLoadError')).message)
         }
       } finally {
         if (!cancelled) setLoading(false)

@@ -2,6 +2,7 @@ import {
   CogentaError,
   type DatabaseHandle,
   identifier,
+  limit,
   newId,
   type SqlExecutor,
   sql,
@@ -63,6 +64,8 @@ export interface Subscription {
   readonly createdAt: string
   readonly updatedAt: string
   readonly cancelledAt: string | null
+  /** The order whose payment opened this subscription (`createFromOrder`), or `null` for one created by hand. */
+  readonly originOrderId: string | null
 }
 
 export interface SubscriptionCycle {
@@ -76,7 +79,10 @@ export interface SubscriptionCycle {
 }
 
 export interface CreateSubscriptionInput {
-  readonly customerId: string
+  /** An existing customer. Give this *or* `customer`, never both. */
+  readonly customerId?: string
+  /** A customer to find-or-create by e-mail — created only once everything else has been validated, so a refused subscription leaves no customer behind. */
+  readonly customer?: { readonly email: string; readonly name?: string | null }
   readonly variantId: string
   readonly quantity?: number
   readonly intervalUnit: IntervalUnit
@@ -87,6 +93,14 @@ export interface CreateSubscriptionInput {
   readonly startAt?: string
   readonly shippingCountry?: string | null
   readonly shippingRegion?: string | null
+  /**
+   * When the first charge falls. Defaults to `startAt` (bill at once). A
+   * subscription opened by an order that was already paid passes the end of
+   * that first period instead, so the subscriber is not charged twice.
+   */
+  readonly firstBillingAt?: string
+  /** Set by `createFromOrder` only. */
+  readonly originOrderId?: string | null
 }
 
 /** What one billing run did. Nothing here is a surprise to the operator. */
@@ -120,6 +134,8 @@ export interface DunningRunResult {
 }
 
 export interface ChangePlanOptions {
+  /** Compute the proration and change nothing — what the screen shows before the person confirms. */
+  readonly dryRun?: boolean
   readonly quantity?: number
   /** Default `true`. A downgrade never produces a credit — this store has no credit-note mechanism — so a negative proration is reported, not applied. */
   readonly prorate?: boolean
@@ -130,6 +146,8 @@ export interface ChangePlanResult {
   /** Positive: charged immediately via `prorationOrderId`. Zero: nothing was due. Negative: a downgrade's credit that this store cannot issue — surfaced, not silently dropped. */
   readonly prorationMinor: number
   readonly prorationOrderId: string | null
+  /** `true` when nothing was written (`ChangePlanOptions.dryRun`). */
+  readonly dryRun: boolean
 }
 
 /** What a renewal-notice sender needs to know (fiche 53 task 5). Built on `@cogenta/channels` in `subscription/renewal-notifier.ts` — never required, see `SubscriptionStoreDependencies.notifyRenewal`. */
@@ -180,7 +198,32 @@ export interface SubscriptionStore {
     readonly status?: SubscriptionStatus
   }): Promise<readonly Subscription[]>
   pause(id: string): Promise<Subscription>
+  /**
+   * Puts a paused (or past-due) subscription back to `active`.
+   *
+   * The next billing date is **kept** when it is still ahead — pausing for a
+   * week and resuming must not bring the charge forward to today. Only when
+   * the date has already passed (paused longer than a period) does it become
+   * "now", and only one period is then billed: the paused months are never
+   * charged in a burst.
+   */
   resume(id: string): Promise<Subscription>
+  /** Moves the next charge to a later (or, for a lapsed one, any future) date. Refused for a cancelled subscription and for a date in the past. */
+  setNextBilling(id: string, nextBillingAt: string): Promise<Subscription>
+  /**
+   * Opens one subscription per recurring variant in a paid order, once
+   * (`origin_order_id` + variant make a second call a no-op). The first period
+   * is the one the order already paid for, so the next charge is one period
+   * after the order's paid date.
+   */
+  createFromOrder(orderId: string): Promise<readonly Subscription[]>
+  /**
+   * Sweeps the paid orders that contain a recurring variant and have no
+   * subscription for it yet, opening them. This is how an order paid online
+   * (the provider's webhook, which has no screen to react) still opens its
+   * subscription: the scheduler calls it before every billing run.
+   */
+  openFromPaidOrders(options?: { readonly limit?: number }): Promise<readonly Subscription[]>
   cancel(id: string): Promise<Subscription>
   cycles(id: string): Promise<readonly SubscriptionCycle[]>
   /**
@@ -242,6 +285,7 @@ interface SubscriptionRow {
   created_at: unknown
   updated_at: unknown
   cancelled_at: unknown
+  origin_order_id: unknown
 }
 
 interface CycleRow {
@@ -318,6 +362,7 @@ function decode(row: SubscriptionRow): Subscription {
     createdAt: toText(row.created_at, 'subscription.created_at'),
     updatedAt: toText(row.updated_at, 'subscription.updated_at'),
     cancelledAt: toNullableText(row.cancelled_at),
+    originOrderId: toNullableText(row.origin_order_id),
   }
 }
 
@@ -576,46 +621,143 @@ export function createSubscriptionStore(
     }
   }
 
-  return {
-    create: async (input) => {
-      const variant = await dependencies.catalog.readVariant(input.variantId)
-      if (variant === null) {
+  function invalid(message: string, hint: string, field: string): CogentaError {
+    return new CogentaError({
+      code: 'COMMERCE_SUBSCRIPTION_INVALID',
+      message,
+      hint,
+      details: { field },
+    })
+  }
+
+  /**
+   * Everything a new subscription needs to be true, checked *before* any row is
+   * written — including before a new customer is created, so a refusal leaves
+   * nothing behind.
+   */
+  async function createSubscription(
+    input: CreateSubscriptionInput,
+    checks: { readonly activeProductOnly: boolean } = { activeProductOnly: true },
+  ): Promise<Subscription> {
+    if ((input.customerId === undefined) === (input.customer === undefined)) {
+      throw invalid(
+        'A subscription needs exactly one customer: an existing one, or an e-mail to create one.',
+        'Send either customerId or customer { email, name }.',
+        'customer',
+      )
+    }
+    const variant = await dependencies.catalog.readVariant(input.variantId)
+    if (variant === null) {
+      throw new CogentaError({
+        code: 'COMMERCE_VARIANT_NOT_FOUND',
+        message: 'This product variant does not exist.',
+        hint: 'A subscription needs something to deliver.',
+      })
+    }
+    const product = await dependencies.catalog.readProduct(variant.productId)
+    if (product === null || (checks.activeProductOnly && product.status !== 'active')) {
+      throw invalid(
+        'This product is archived, so it cannot be subscribed to.',
+        'Pick an active product, or reactivate this one first.',
+        'variant',
+      )
+    }
+    const quantity = input.quantity ?? 1
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10_000) {
+      throw invalid(
+        `A subscription quantity must be between 1 and 10000, got ${String(quantity)}.`,
+        'Send a whole number of units per period.',
+        'quantity',
+      )
+    }
+    if (!(INTERVAL_UNITS as readonly string[]).includes(input.intervalUnit)) {
+      throw invalid(
+        `"${String(input.intervalUnit)}" is not a billing unit.`,
+        `Use one of: ${INTERVAL_UNITS.join(', ')}.`,
+        'intervalUnit',
+      )
+    }
+    const count = input.intervalCount ?? 1
+    if (!Number.isInteger(count) || count < 1 || count > 36) {
+      throw invalid(
+        `A billing interval must be between 1 and 36, got ${String(count)}.`,
+        'Every three months is intervalUnit "month", intervalCount 3.',
+        'intervalCount',
+      )
+    }
+    const currency = assertCurrency(input.currency ?? variant.currency)
+    if (currency !== variant.currency) {
+      throw new CogentaError({
+        code: 'COMMERCE_CURRENCY_MISMATCH',
+        message: `"${variant.title}" is priced in ${variant.currency}, not ${currency}.`,
+        hint: 'A subscription is billed in the currency of the variant it delivers.',
+      })
+    }
+    const priceMinor = assertMinor(input.priceMinor ?? variant.priceMinor, 'A subscription price')
+
+    const at = stamp()
+    const start = input.startAt ?? at
+    if (Number.isNaN(Date.parse(start))) {
+      throw invalid(
+        `"${start}" is not a date the subscription can start on.`,
+        'Use an ISO 8601 date, such as 2026-11-01.',
+        'startAt',
+      )
+    }
+    const firstBillingAt = input.firstBillingAt ?? start
+    if (Number.isNaN(Date.parse(firstBillingAt))) {
+      throw invalid(
+        `"${firstBillingAt}" is not a usable billing date.`,
+        'Use an ISO 8601 date.',
+        'startAt',
+      )
+    }
+
+    let customerId: string
+    if (input.customerId !== undefined) {
+      const existing = await dependencies.customers.read(input.customerId)
+      if (existing === null) {
         throw new CogentaError({
-          code: 'COMMERCE_VARIANT_NOT_FOUND',
-          message: 'This product variant does not exist.',
-          hint: 'A subscription needs something to deliver.',
+          code: 'COMMERCE_CUSTOMER_NOT_FOUND',
+          message: 'This customer does not exist.',
+          hint: 'Pick a customer from the list, or give an e-mail address to create one.',
         })
       }
-      const count = input.intervalCount ?? 1
-      if (!Number.isInteger(count) || count < 1 || count > 36) {
-        throw new CogentaError({
-          code: 'COMMERCE_SUBSCRIPTION_INVALID',
-          message: `A billing interval must be between 1 and 36, got ${String(count)}.`,
-          hint: 'Every three months is intervalUnit "month", intervalCount 3.',
-        })
+      customerId = existing.id
+    } else {
+      const wanted = input.customer
+      const email = wanted?.email.trim() ?? ''
+      if (!email.includes('@') || email.length > 254) {
+        throw invalid(
+          'That is not a usable e-mail address.',
+          "Give the subscriber's e-mail, or pick an existing customer.",
+          'customer',
+        )
       }
+      // Only now — every other check has passed.
+      const ensured = await dependencies.customers.ensure(wanted?.email ?? '', wanted?.name)
+      customerId = ensured.id
+    }
 
-      const id = newId(now)
-      const at = stamp()
-      const start = input.startAt ?? at
-      const end = advancePeriod(start, input.intervalUnit, count)
+    const id = newId(now)
+    const end = advancePeriod(start, input.intervalUnit, count)
+    await db.query(sql`
+      insert into ${subscriptions} (id, customer_id, variant_id, quantity, status,
+                                    interval_unit, interval_count, price_minor, currency,
+                                    payment_driver, current_period_start, current_period_end,
+                                    next_billing_at, shipping_country, shipping_region,
+                                    created_at, updated_at, cancelled_at, origin_order_id)
+      values (${id}, ${customerId}, ${input.variantId}, ${quantity}, ${'active'},
+              ${input.intervalUnit}, ${count}, ${priceMinor}, ${currency},
+              ${input.paymentDriver ?? 'manual'}, ${start}, ${end}, ${firstBillingAt},
+              ${input.shippingCountry?.trim().toUpperCase() || null}, ${input.shippingRegion ?? null},
+              ${at}, ${at}, ${null}, ${input.originOrderId ?? null})`)
 
-      await db.query(sql`
-        insert into ${subscriptions} (id, customer_id, variant_id, quantity, status,
-                                      interval_unit, interval_count, price_minor, currency,
-                                      payment_driver, current_period_start, current_period_end,
-                                      next_billing_at, shipping_country, shipping_region,
-                                      created_at, updated_at, cancelled_at)
-        values (${id}, ${input.customerId}, ${input.variantId}, ${input.quantity ?? 1}, ${'active'},
-                ${input.intervalUnit}, ${count},
-                ${assertMinor(input.priceMinor ?? variant.priceMinor, 'A subscription price')},
-                ${assertCurrency(input.currency ?? variant.currency)},
-                ${input.paymentDriver ?? 'manual'}, ${start}, ${end}, ${start},
-                ${input.shippingCountry ?? null}, ${input.shippingRegion ?? null},
-                ${at}, ${at}, ${null})`)
+    return load(id)
+  }
 
-      return load(id)
-    },
+  const store: SubscriptionStore = {
+    create: (input) => createSubscription(input),
 
     read,
 
@@ -656,17 +798,154 @@ export function createSubscriptionStore(
           hint: 'Create a new subscription instead — the old one is a closed record.',
         })
       }
-      // Billing resumes from now, not from where it was paused. Charging a
-      // subscriber for the months they were paused is exactly what pausing was
-      // supposed to prevent. A dunning cycle in progress is dropped for the
-      // same reason: a resumed subscription starts a fresh period, not a
-      // retry of the one that failed.
+      // The next charge date is kept when it is still ahead: pausing for a
+      // week and resuming must not bring the charge forward to today. When it
+      // has already passed (paused for longer than a period) it becomes "now" —
+      // and `billOne` then bills exactly one period from there, never the
+      // months that were paused. A dunning cycle in progress is dropped: a
+      // resumed subscription is not a retry of the payment that failed.
       const at = stamp()
+      const nextBillingAt =
+        Date.parse(subscription.nextBillingAt) > now() ? subscription.nextBillingAt : at
       await db.query(sql`
-        update ${subscriptions} set status = ${'active'}, next_billing_at = ${at}, updated_at = ${at}
+        update ${subscriptions}
+        set status = ${'active'}, next_billing_at = ${nextBillingAt}, updated_at = ${at}
         where id = ${id}`)
       await db.query(sql`delete from ${dunningTable} where subscription_id = ${id}`)
       return load(id)
+    },
+
+    setNextBilling: async (id, nextBillingAt) => {
+      const subscription = await load(id)
+      if (subscription.status === 'cancelled') {
+        throw invalid(
+          'A cancelled subscription has no next charge.',
+          'Create a new subscription instead.',
+          'nextBillingAt',
+        )
+      }
+      if (subscription.status === 'past_due') {
+        throw invalid(
+          'This subscription is waiting for a failed payment to be collected.',
+          'Resolve the unpaid renewal first, or pause the subscription.',
+          'nextBillingAt',
+        )
+      }
+      const parsed = Date.parse(nextBillingAt)
+      if (Number.isNaN(parsed)) {
+        throw invalid(
+          `"${nextBillingAt}" is not a usable date.`,
+          'Use an ISO 8601 date, such as 2026-12-01.',
+          'nextBillingAt',
+        )
+      }
+      if (parsed <= now()) {
+        throw invalid(
+          'The next charge must be in the future.',
+          'A date in the past would bill the subscriber at once.',
+          'nextBillingAt',
+        )
+      }
+      await db.query(sql`
+        update ${subscriptions}
+        set next_billing_at = ${new Date(parsed).toISOString()}, updated_at = ${stamp()}
+        where id = ${id}`)
+      return load(id)
+    },
+
+    createFromOrder: async (orderId) => {
+      const order = await dependencies.orders.read(orderId)
+      if (order === null) {
+        throw new CogentaError({
+          code: 'COMMERCE_ORDER_NOT_FOUND',
+          message: 'This order does not exist.',
+          hint: 'Check the order reference.',
+        })
+      }
+      if (
+        order.status === 'pending' ||
+        order.status === 'cancelled' ||
+        order.status === 'refunded'
+      ) {
+        throw new CogentaError({
+          code: 'COMMERCE_SUBSCRIPTION_INVALID',
+          message: `This order is ${order.status}: only a paid order opens subscriptions.`,
+          hint: 'Collect the payment first.',
+          details: { field: 'order' },
+        })
+      }
+
+      const history = await dependencies.orders.history(order.id)
+      const paidAt =
+        [...history].reverse().find((event) => event.toStatus === 'paid')?.at ?? order.placedAt
+
+      const existing = await db.query<SubscriptionRow>(
+        sql`select * from ${subscriptions} where origin_order_id = ${order.id}`,
+      )
+      const already = new Set(existing.rows.map((row) => decode(row).variantId))
+      const opened: Subscription[] = existing.rows.map(decode)
+
+      for (const line of order.lines) {
+        if (already.has(line.variantId)) continue
+        const variant = await dependencies.catalog.readVariant(line.variantId)
+        if (variant?.recurring == null) continue
+
+        const customer =
+          order.customerId === null
+            ? { customer: { email: order.email } }
+            : { customerId: order.customerId }
+        const subscription = await createSubscription(
+          {
+            ...customer,
+            variantId: variant.id,
+            quantity: line.quantity,
+            intervalUnit: variant.recurring.unit,
+            intervalCount: variant.recurring.count,
+            priceMinor: line.unitPriceMinor,
+            currency: order.currency,
+            startAt: paidAt,
+            firstBillingAt: advancePeriod(paidAt, variant.recurring.unit, variant.recurring.count),
+            originOrderId: order.id,
+            shippingCountry: order.shippingCountry,
+            shippingRegion: order.shippingRegion,
+          },
+          { activeProductOnly: false },
+        )
+        // The first period is the one this order already paid for: recorded as
+        // a billed cycle so the subscription's history starts with it.
+        await db.query(sql`
+          insert into ${cycles} (id, subscription_id, period_start, period_end, period_key, order_id, status, created_at)
+          values (${newId(now)}, ${subscription.id}, ${paidAt}, ${subscription.currentPeriodEnd},
+                  ${`${subscription.id}:${paidAt}`}, ${order.id}, ${'billed'}, ${stamp()})`)
+        opened.push(subscription)
+      }
+      return opened
+    },
+
+    openFromPaidOrders: async (options) => {
+      const variantsTable = identifier(TABLES.variants, d)
+      const candidates = await db.query<{ id: unknown }>(sql`
+        select distinct o.id as id, o.placed_at as placed_at
+        from ${orders} o
+        inner join ${orderLines} l on l.order_id = o.id
+        inner join ${variantsTable} v on v.id = l.variant_id
+        where o.status in (${'paid'}, ${'shipped'}, ${'delivered'})
+          and v.billing_interval_unit is not null
+          and not exists (
+            select 1 from ${subscriptions} s
+            where s.origin_order_id = o.id and s.variant_id = l.variant_id)
+        order by o.placed_at asc
+        limit ${limit(options?.limit ?? 50)}`)
+      const opened: Subscription[] = []
+      for (const row of candidates.rows) {
+        try {
+          opened.push(...(await store.createFromOrder(toText(row.id, 'order.id'))))
+        } catch {
+          // One order that cannot open (a variant removed since) must not stop
+          // the others; it is retried on the next tick.
+        }
+      }
+      return opened
     },
 
     cancel: async (id) => {
@@ -828,6 +1107,13 @@ export function createSubscriptionStore(
       }
 
       const quantity = changeOptions?.quantity ?? subscription.quantity
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10_000) {
+        throw invalid(
+          `A subscription quantity must be between 1 and 10000, got ${String(quantity)}.`,
+          'Send a whole number of units per period.',
+          'quantity',
+        )
+      }
       const prorate = changeOptions?.prorate ?? true
 
       let prorationMinor = 0
@@ -840,6 +1126,10 @@ export function createSubscriptionStore(
           const newValue = variant.priceMinor * quantity
           prorationMinor = Math.round(((newValue - oldValue) * remainingMs) / periodLengthMs)
         }
+      }
+
+      if (changeOptions?.dryRun === true) {
+        return { subscription, prorationMinor, prorationOrderId: null, dryRun: true }
       }
 
       let prorationOrderId: string | null = null
@@ -889,7 +1179,7 @@ export function createSubscriptionStore(
             currency = ${variant.currency}, updated_at = ${stamp()}
         where id = ${id}`)
 
-      return { subscription: await load(id), prorationMinor, prorationOrderId }
+      return { subscription: await load(id), prorationMinor, prorationOrderId, dryRun: false }
     },
 
     sendRenewalNotices: async (renewalOptions) => {
@@ -980,6 +1270,7 @@ export function createSubscriptionStore(
       }
     },
   }
+  return store
 }
 
 /** A subscription's price normalised to a monthly cadence, for MRR. */

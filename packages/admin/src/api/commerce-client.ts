@@ -55,8 +55,16 @@ export interface Variant {
   readonly depthMm: number | null
   /** A single media library id, or `null` — one photo per variant. */
   readonly imageMediaId: string | null
+  /** "Billed every N units": a paid order containing this variant opens a subscription. `null` for a one-off product. */
+  readonly recurring: VariantRecurrence | null
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+export type RecurrenceUnit = 'day' | 'week' | 'month' | 'year'
+export interface VariantRecurrence {
+  readonly unit: RecurrenceUnit
+  readonly count: number
 }
 
 /** A product's classification against a taxonomy the site declares (ADR-0022, fiche 51 task 3). */
@@ -93,6 +101,7 @@ export interface OrderLine {
   readonly subtotalMinor: number
   readonly discountMinor: number
   readonly taxMinor: number
+  readonly taxRateBp?: number
   readonly totalMinor: number
   readonly position: number
 }
@@ -105,6 +114,8 @@ export interface ShippingAddress {
   readonly postalCode: string
   readonly recipient?: string | null
   readonly phone?: string | null
+  /** ISO 3166-1 alpha-2 — also the tax and delivery zone. */
+  readonly country?: string | null
 }
 
 export interface Order {
@@ -120,6 +131,10 @@ export interface Order {
   readonly taxMinor: number
   readonly totalMinor: number
   readonly couponCode: string | null
+  readonly shippingCountry?: string | null
+  readonly shippingRegion?: string | null
+  readonly shippingMethodId?: string | null
+  readonly shippingMethodLabel?: string | null
   readonly shippingAddressLine1: string | null
   readonly shippingAddressLine2: string | null
   readonly shippingCity: string | null
@@ -200,8 +215,32 @@ export interface Subscription {
   readonly priceMinor: number
   readonly currency: string
   readonly nextBillingAt: string
+  readonly currentPeriodStart?: string
+  readonly currentPeriodEnd?: string
+  readonly paymentDriver?: string
   readonly createdAt: string
   readonly cancelledAt: string | null
+  /** The order whose payment opened this subscription, or `null` for one created by hand. */
+  readonly originOrderId?: string | null
+}
+
+/** The person behind a subscription, as the screens show them. */
+export interface SubscriptionCustomer {
+  readonly id: string
+  readonly email: string
+  readonly name: string | null
+}
+
+/** The product behind a subscription's variant, so no screen shows an id. */
+export interface SubscriptionVariantSummary {
+  readonly id: string
+  readonly sku: string
+  readonly title: string
+  readonly productId: string
+  readonly productTitle: string
+  readonly priceMinor: number
+  readonly currency: string
+  readonly imageMediaId: string | null
 }
 
 export interface SubscriptionCycle {
@@ -322,8 +361,17 @@ export interface Customer {
   readonly email: string
   readonly name: string | null
   readonly userId: string | null
+  readonly anonymized?: boolean
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+/** What a customer bought, for the list. */
+export interface CustomerStats {
+  readonly customerId: string
+  readonly orderCount: number
+  readonly spentByCurrency: readonly { readonly currency: string; readonly amountMinor: number }[]
+  readonly lastOrderAt: string | null
 }
 
 export interface CustomerDetail {
@@ -408,6 +456,26 @@ export function listLowStockVariants(
   return requestBody('/api/commerce/variants/low-stock', { headers: authHeader(token) })
 }
 
+/** A variant and its product, as returned by a "pick a product" search. */
+export interface VariantSearchHit {
+  readonly variant: Variant
+  readonly product: Product
+}
+
+/** Finds sellable variants by SKU or name — so nobody has to paste an internal id. */
+export function searchVariants(
+  token: string,
+  query: string,
+  options?: { readonly limit?: number; readonly signal?: AbortSignal },
+): Promise<{ readonly hits: readonly VariantSearchHit[] }> {
+  const params = new URLSearchParams({ q: query })
+  if (options?.limit !== undefined) params.set('limit', String(options.limit))
+  return requestBody(`/api/commerce/variants/search?${params.toString()}`, {
+    headers: authHeader(token),
+    ...(options?.signal === undefined ? {} : { signal: options.signal }),
+  })
+}
+
 export function listStockMovements(
   token: string,
   variantId: string,
@@ -419,13 +487,22 @@ export function listStockMovements(
 
 export function exportProductsCsv(
   token: string,
+  options?: { readonly template?: boolean },
 ): Promise<{ readonly csv: string; readonly filename: string }> {
-  return requestBody('/api/commerce/products/export', { headers: authHeader(token) })
+  return requestBody(
+    `/api/commerce/products/export${options?.template === true ? '?template=1' : ''}`,
+    { headers: authHeader(token) },
+  )
 }
 
 export interface ProductImportIssue {
   readonly line: number
   readonly detail: string
+  /** The stable, translatable form of `detail`. */
+  readonly code?: string
+  readonly column?: string
+  readonly value?: string
+  readonly max?: number
 }
 
 export type ProductImportOutcomeKind = 'create' | 'update' | 'duplicate'
@@ -436,6 +513,9 @@ export interface ProductImportRowOutcome {
   readonly sku: string
   readonly outcome: ProductImportOutcomeKind
   readonly detail?: string
+  readonly detailCode?: string
+  readonly currentPriceMinor?: number
+  readonly currentCurrency?: string
 }
 
 export interface ProductImportPreview {
@@ -517,6 +597,8 @@ export interface VariantExtraFields {
   readonly heightMm?: number | null
   readonly depthMm?: number | null
   readonly imageMediaId?: string | null
+  /** `null` clears the recurring plan. */
+  readonly recurring?: VariantRecurrence | null
 }
 
 export function createVariant(
@@ -588,7 +670,11 @@ export function listCustomers(
   token: string,
   search: string,
   options?: CommerceListOptions,
-): Promise<{ readonly customers: readonly Customer[]; readonly page?: CommerceListPage }> {
+): Promise<{
+  readonly customers: readonly Customer[]
+  readonly stats?: Readonly<Record<string, CustomerStats>>
+  readonly page?: CommerceListPage
+}> {
   const params = new URLSearchParams()
   if (search.trim() !== '') params.set('q', search.trim())
   if (options?.cursor !== undefined) params.set('cursor', options.cursor)
@@ -634,7 +720,12 @@ export function listOrders(
   q?: string,
   range?: { readonly from?: string; readonly to?: string },
   options?: CommerceListOptions,
-): Promise<{ readonly orders: readonly Order[]; readonly page?: CommerceListPage }> {
+): Promise<{
+  readonly orders: readonly Order[]
+  /** Who each order belongs to, by customer id. */
+  readonly customers?: Readonly<Record<string, OrderCustomer>>
+  readonly page?: CommerceListPage
+}> {
   const params = new URLSearchParams()
   if (status !== undefined) params.set('status', status)
   if (q !== undefined && q.trim() !== '') params.set('q', q)
@@ -649,12 +740,36 @@ export function listOrders(
   })
 }
 
+/** The few fields of a customer a list or a header shows. */
+export interface OrderCustomer {
+  readonly id: string
+  readonly name: string | null
+  readonly email: string
+  readonly anonymized: boolean
+}
+
+/** A stock shortfall: which variant, how many were wanted and how many are left. */
+export interface StockShortfall {
+  readonly variantId: string
+  readonly requested: number
+  readonly available: number
+}
+
 /** A shopkeeper-entered order (fiche 52 task 5) — a phone order, a trade-show sale, a correction. */
 export type PlaceOrderOutcome =
   | { readonly kind: 'placed'; readonly order: Order }
-  | { readonly kind: 'out_of_stock'; readonly shortfalls: readonly unknown[] }
-  | { readonly kind: 'coupon_refused'; readonly reason: string }
+  | { readonly kind: 'out_of_stock'; readonly shortfalls: readonly StockShortfall[] }
+  | { readonly kind: 'coupon_refused'; readonly reason: string; readonly code?: string }
   | { readonly kind: 'empty' }
+
+export type ManualPaymentMethod = 'bank_transfer' | 'cash' | 'cheque' | 'card_terminal' | 'other'
+export const MANUAL_PAYMENT_METHODS: readonly ManualPaymentMethod[] = [
+  'bank_transfer',
+  'cash',
+  'cheque',
+  'card_terminal',
+  'other',
+]
 
 export function createManualOrder(
   token: string,
@@ -664,9 +779,27 @@ export function createManualOrder(
     readonly currency: string
     readonly lines: readonly { readonly variantId: string; readonly quantity: number }[]
     readonly shippingAddress?: ShippingAddress
+    readonly shippingCountry?: string
+    readonly shippingMethodId?: string
+    readonly couponCode?: string
+    /** The money is already in: records a payment and moves the order to "paid". */
+    readonly paid?: { readonly method: ManualPaymentMethod; readonly note?: string }
   },
 ): Promise<PlaceOrderOutcome> {
   return requestBody('/api/commerce/orders', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+/** "The money arrived" by a means the shop cannot see (transfer, cash, cheque, terminal). */
+export function recordManualPayment(
+  token: string,
+  orderId: string,
+  input: { readonly method: ManualPaymentMethod; readonly note?: string },
+): Promise<{ readonly payment: Payment; readonly order: Order | null }> {
+  return requestBody(`/api/commerce/orders/${encodeURIComponent(orderId)}/payments`, {
     method: 'POST',
     headers: authHeader(token),
     body: JSON.stringify(input),
@@ -734,9 +867,12 @@ export async function exportOrdersCsv(
     readonly from?: string
     readonly to?: string
     readonly q?: string
+    /** `accounting`: the French spreadsheet layout (decimal amounts, French statuses). */
+    readonly format?: 'accounting'
   } = {},
 ): Promise<string> {
   const params = new URLSearchParams()
+  if (filter.format !== undefined) params.set('format', filter.format)
   if (filter.status !== undefined) params.set('status', filter.status)
   if (filter.from !== undefined && filter.from !== '') params.set('from', filter.from)
   if (filter.to !== undefined && filter.to !== '') params.set('to', filter.to)
@@ -752,14 +888,30 @@ export async function exportOrdersCsv(
   return response.text()
 }
 
-export function readOrder(
-  token: string,
-  id: string,
-): Promise<{
+/** An order with everything the detail screen shows next to it. */
+export interface OrderDetail {
   readonly order: Order
   readonly history: readonly OrderEvent[]
   readonly payments: readonly Payment[]
-}> {
+  readonly customer: OrderCustomer | null
+  /** Each line's product, keyed by the line's variant id. */
+  readonly products: Readonly<
+    Record<
+      string,
+      {
+        readonly productId: string
+        readonly productTitle: string
+        readonly imageMediaId: string | null
+      }
+    >
+  >
+  readonly shippingMethod: { readonly id: string; readonly label: string } | null
+  /** The invoice already issued for this order, if any (so opening an order needs no second call). */
+  readonly invoice: Invoice | null
+  readonly invoicing: { readonly available: boolean; readonly configured: boolean }
+}
+
+export function readOrder(token: string, id: string): Promise<OrderDetail> {
   return requestBody(`/api/commerce/orders/${encodeURIComponent(id)}`, {
     headers: authHeader(token),
   })
@@ -851,6 +1003,44 @@ export async function deactivateCoupon(token: string, code: string): Promise<voi
   })
 }
 
+export async function activateCoupon(token: string, code: string): Promise<void> {
+  await requestBody(`/api/commerce/coupons/${encodeURIComponent(code)}/activate`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+/** Edits a coupon in place. The code never changes; `null` clears a nullable field. */
+export function updateCoupon(
+  token: string,
+  code: string,
+  patch: {
+    readonly kind?: CouponKind
+    readonly value?: number
+    readonly currency?: string | null
+    readonly minSubtotalMinor?: number
+    readonly startsAt?: string | null
+    readonly endsAt?: string | null
+    readonly maxRedemptions?: number | null
+    readonly maxRedemptionsPerCustomer?: number | null
+    readonly restrictedProductIds?: readonly string[]
+  },
+): Promise<Coupon> {
+  return requestBody(`/api/commerce/coupons/${encodeURIComponent(code)}`, {
+    method: 'PATCH',
+    headers: authHeader(token),
+    body: JSON.stringify(patch),
+  })
+}
+
+/** Deletes a coupon that was never redeemed; a used one is deactivated instead. */
+export async function deleteCoupon(token: string, code: string): Promise<void> {
+  await requestBody(`/api/commerce/coupons/${encodeURIComponent(code)}`, {
+    method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
 export function getCouponMetrics(token: string): Promise<CouponMetrics> {
   return requestBody('/api/commerce/coupons/metrics', { headers: authHeader(token) })
 }
@@ -860,7 +1050,12 @@ export function getCouponMetrics(token: string): Promise<CouponMetrics> {
 export function listSubscriptions(
   token: string,
   status?: SubscriptionStatus,
-): Promise<{ readonly subscriptions: readonly Subscription[] }> {
+): Promise<{
+  readonly subscriptions: readonly Subscription[]
+  /** The people and products behind these subscriptions, by id. */
+  readonly customers?: Readonly<Record<string, SubscriptionCustomer>>
+  readonly variants?: Readonly<Record<string, SubscriptionVariantSummary>>
+}> {
   const query = status === undefined ? '' : `?status=${encodeURIComponent(status)}`
   return requestBody(`/api/commerce/subscriptions${query}`, { headers: authHeader(token) })
 }
@@ -872,6 +1067,10 @@ export function readSubscription(
   readonly subscription: Subscription
   readonly cycles: readonly SubscriptionCycle[]
   readonly dunning: SubscriptionDunning | null
+  /** Orders referenced by the origin and the cycles, by order id. */
+  readonly orders?: Readonly<Record<string, { readonly id: string; readonly reference: string }>>
+  readonly customers?: Readonly<Record<string, SubscriptionCustomer>>
+  readonly variants?: Readonly<Record<string, SubscriptionVariantSummary>>
 }> {
   return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}`, {
     headers: authHeader(token),
@@ -887,6 +1086,52 @@ export function pauseSubscription(token: string, id: string): Promise<Subscripti
 
 export function resumeSubscription(token: string, id: string): Promise<Subscription> {
   return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}/resume`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}
+
+/** Creates a subscription by hand — a customer found or created by e-mail, a variant, a cadence. */
+export function createSubscription(
+  token: string,
+  input: {
+    readonly customerId?: string
+    readonly customer?: { readonly email: string; readonly name?: string | null }
+    readonly variantId: string
+    readonly intervalUnit: IntervalUnit
+    readonly intervalCount?: number
+    readonly quantity?: number
+    readonly priceMinor?: number
+    readonly startAt?: string
+    readonly shippingCountry?: string
+  },
+): Promise<Subscription> {
+  return requestBody('/api/commerce/subscriptions', {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  })
+}
+
+/** Moves the next charge to a later date (`YYYY-MM-DD`). */
+export function setSubscriptionNextBilling(
+  token: string,
+  id: string,
+  nextBillingAt: string,
+): Promise<Subscription> {
+  return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}/next-billing`, {
+    method: 'POST',
+    headers: authHeader(token),
+    body: JSON.stringify({ nextBillingAt }),
+  })
+}
+
+/** Opens the subscriptions a paid order's recurring lines call for (idempotent). */
+export function createSubscriptionsFromOrder(
+  token: string,
+  orderId: string,
+): Promise<{ readonly subscriptions: readonly Subscription[] }> {
+  return requestBody(`/api/commerce/orders/${encodeURIComponent(orderId)}/subscriptions`, {
     method: 'POST',
     headers: authHeader(token),
   })
@@ -909,12 +1154,20 @@ export interface ChangePlanResult {
   /** Positive: charged immediately via `prorationOrderId`. Zero: nothing was due. Negative: a downgrade's credit — this package has no credit-note mechanism, so it is reported, never silently applied. */
   readonly prorationMinor: number
   readonly prorationOrderId: string | null
+  /** `true` when nothing was written (a preview). */
+  readonly dryRun?: boolean
 }
 
 export function changeSubscriptionPlan(
   token: string,
   id: string,
-  input: { readonly variantId: string; readonly quantity?: number; readonly prorate?: boolean },
+  input: {
+    readonly variantId: string
+    readonly quantity?: number
+    readonly prorate?: boolean
+    /** Compute the proration and change nothing. */
+    readonly dryRun?: boolean
+  },
 ): Promise<ChangePlanResult> {
   return requestBody(`/api/commerce/subscriptions/${encodeURIComponent(id)}/change-plan`, {
     method: 'POST',
@@ -1057,6 +1310,13 @@ export function updateTaxRule(
     headers: authHeader(token),
     body: JSON.stringify(patch),
   })
+}
+
+/** Every tax category in use plus the defaults — what a picker offers instead of free text. */
+export function listTaxCategories(
+  token: string,
+): Promise<{ readonly categories: readonly string[] }> {
+  return requestBody('/api/commerce/tax/categories', { headers: authHeader(token) })
 }
 
 export async function deleteTaxRule(token: string, id: string): Promise<void> {
@@ -1214,7 +1474,12 @@ export function listPaymentDrivers(token: string): Promise<{
 export function testPaymentConnection(
   token: string,
   driver: string,
-): Promise<{ readonly ok: boolean; readonly message: string | null }> {
+): Promise<{
+  readonly ok: boolean
+  readonly message: string | null
+  /** Stable outcome the screen translates: `ok`, `not_configured`, `unreachable` or `error`. */
+  readonly code?: 'ok' | 'not_configured' | 'unreachable' | 'error'
+}> {
   return requestBody(
     `/api/commerce/payment/drivers/${encodeURIComponent(driver)}/test-connection`,
     {

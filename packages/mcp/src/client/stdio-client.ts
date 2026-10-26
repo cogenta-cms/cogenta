@@ -158,6 +158,29 @@ export function createMcpStdioClient(options: McpStdioClientOptions): McpClient 
     rejectAllPending(error)
   }
 
+  // A pipe to a process that already exited fails asynchronously: the write
+  // returns, then the stream emits 'error' (EPIPE, or ERR_STREAM_DESTROYED).
+  // Unhandled, that event throws out of the event loop and takes the whole
+  // server down — one "Tester la connexion" on a command that exits at once
+  // (`/usr/bin/true`) stopped the site (admin audit, 2026-10-21). Every
+  // stream of the child is a failure of *this* connection, never of the host.
+  const streamFailed = (error: unknown): void => {
+    if (closed) return
+    killAndRejectAll(
+      new CogentaError({
+        code: 'MCP_CLIENT_PROCESS_EXITED',
+        message: `The MCP server process is no longer reachable: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        hint: "Check this connection's command and its captured stderr for why it exited.",
+        cause: error,
+      }),
+    )
+  }
+  child.stdin.on('error', streamFailed)
+  child.stdout.on('error', streamFailed)
+  child.stderr?.on('error', streamFailed)
+
   // stderr is always captured, never left to `inherit` — logged through the
   // structured logger (which owns secret redaction), capped so a flood
   // cannot exhaust memory or log storage.
@@ -315,8 +338,26 @@ export function createMcpStdioClient(options: McpStdioClientOptions): McpClient 
         },
       })
 
+      if (closed) {
+        pending.get(id)?.reject(
+          new CogentaError({
+            code: 'MCP_CLIENT_CLOSED',
+            message: 'This MCP connection was closed.',
+            hint: 'Reconnect if you still need this server.',
+          }),
+        )
+        pending.delete(id)
+        return
+      }
+      if (child.stdin.destroyed || child.stdin.writableEnded) {
+        streamFailed(new Error('its standard input is closed'))
+        return
+      }
       child.stdin.write(
         `${JSON.stringify({ jsonrpc: '2.0', id, method, ...(params === undefined ? {} : { params }) })}\n`,
+        (error) => {
+          if (error !== null && error !== undefined) streamFailed(error)
+        },
       )
     })
   }

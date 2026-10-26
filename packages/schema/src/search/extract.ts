@@ -41,7 +41,17 @@ const STRUCTURAL_KEYS = new Set([
   'variant',
   'theme',
   'icon',
+  // Contract B presentation options: a button's `emphasis` ("primary"), a
+  // list's `layout` ("grid") and `sort` ({ field, direction }) are settings,
+  // not words a reader will search for — and, quoted in an assistant answer's
+  // source, they read as noise ("createdAt asc list").
+  'emphasis',
+  'layout',
+  'sort',
 ])
+
+/** A reference to another record (a form, a collection entry): never prose. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -58,7 +68,7 @@ function collectStrings(value: unknown, into: string[], depth = 0): void {
   if (depth > 8) return
 
   if (typeof value === 'string') {
-    if (value.length > 0) into.push(value)
+    if (value.length > 0 && !UUID_PATTERN.test(value)) into.push(value)
     return
   }
 

@@ -1,0 +1,57 @@
+{
+  "assistant": {
+    "offStepConfig": "Le plus simple : ajoutez une clé dans « Fournisseurs d’IA » (menu IA).",
+    "offStepEnv": "Ou, pour un site configuré par fichier, définissez COGENTA_LLM_API_KEY (avec COGENTA_LLM_PROVIDER et COGENTA_LLM_MODEL) dans l’environnement.",
+    "vectorDriver": "Stockage de l’index : {{driver}}",
+    "vectorDrivers": {
+      "file": "fichier local",
+      "memory": "mémoire (perdu au redémarrage)",
+      "pgvector": "base PostgreSQL (pgvector)",
+      "none": "aucun"
+    },
+    "vectorIndexedBeforeStart": "Dernière indexation : avant le dernier démarrage du site.",
+    "usageRow_one": "{{count}} appel, {{tokens}} jetons",
+    "usageRow_other": "{{count}} appels, {{tokens}} jetons",
+    "usageNoLimit": "{{tokens}} jetons utilisés ce mois-ci. Aucun plafond configuré.",
+    "usageWithLimit": "{{tokens}} sur {{limit}} jetons utilisés ce mois-ci ({{percent}} %).",
+    "vectorCount_one": "{{count}} fiche indexée",
+    "vectorCount_other": "{{count}} fiches indexées"
+  },
+  "assistantIndex": {
+    "uploaded": "Document « {{name}} » ajouté à l’index.",
+    "removed": "Document retiré de l’index.",
+    "reindexed_one": "Index reconstruit : {{count}} contenu lu.",
+    "reindexed_other": "Index reconstruit : {{count}} contenus lus.",
+    "reindexError": "L’index n’a pas pu être reconstruit.",
+    "reindexButton": "Réindexer le contenu",
+    "reindexing": "Réindexation…",
+    "emptyIndex": "L’index est vide : l’assistant ne trouve rien et la détection de doublons ne voit aucune ressemblance. Lancez « Réindexer le contenu » pour l’alimenter avec le contenu déjà publié.",
+    "chooseFile": "Choisir un fichier",
+    "noFileChosen": "Aucun fichier choisi",
+    "removeNamed": "Retirer le document {{name}}",
+    "removeTitle": "Retirer « {{name}} » ?",
+    "removeBody": "Le document sort de l’index : l’assistant ne pourra plus s’en servir ni le citer. Pour l’y remettre, il faudra le téléverser de nouveau.",
+    "removeConfirm": "Retirer le document",
+    "statusIndexed_one": "Indexé ({{count}} passage)",
+    "statusIndexed_other": "Indexé ({{count}} passages)",
+    "reindexHint": "Désactiver une collection l’exclut des prochains enregistrements. Ce qui était déjà indexé reste en place jusqu’à la prochaine réindexation : « Réindexer le contenu » remet l’index d’aplomb d’un coup, contenu publié et collections incluses ou exclues.",
+    "heading": "Index de connaissances"
+  },
+  "assistChat": {
+    "placeholder": "Ex. : Que propose le site pour les entreprises ?",
+    "noSources": "Aucune source n’a été trouvée pour cette question.",
+    "checkIndex": "Vérifier l’index de connaissances",
+    "copyAnswer": "Copier la réponse",
+    "copied": "Réponse copiée",
+    "clear": "Effacer la conversation",
+    "composerHint": "Entrée pour envoyer, Maj+Entrée pour passer à la ligne.",
+    "empty": "Posez votre première question ci-dessous.",
+    "you": "Vous :",
+    "assistant": "Assistant :",
+    "scopeContent": "Périmètre : {{collections}} (contenus publiés que vous pouvez lire), langue {{locale}}.",
+    "asking": "Recherche en cours…"
+  },
+  "duplicates": {
+    "heading": "Détection de doublons"
+  }
+}

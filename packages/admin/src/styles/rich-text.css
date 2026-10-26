@@ -9,8 +9,13 @@
  * those two properties here beats them without editing `toolbar.tsx`.
  */
 
+/*
+ * A rounded bar, not a pill: the buttons wrap onto a second or third line on
+ * a narrow screen (and in the page builder's side panel), and a fully
+ * rounded box turns into an oval as soon as it does.
+ */
 .rich-text-toolbar {
-  border-radius: 999px;
+  border-radius: var(--radius-lg, 0.75rem);
   padding: 0.375rem;
   box-shadow: var(--shadow-card);
 }
@@ -106,4 +111,52 @@
   /* biome-ignore lint/complexity/noImportantStyles: Slate supplies inline placeholder opacity that fails text contrast. */
   opacity: 1 !important;
   color: var(--muted-foreground);
+}
+
+/*
+ * List items. The editor keeps a list as flat `list-item` elements carrying a
+ * `data-list-type` / `data-list-level` (the shape the stored Portable Text
+ * has), so the marker is drawn here: a bullet, or a counter that restarts at
+ * the first item of every run of numbered items.
+ */
+.rich-text-editor [data-list-type] {
+  position: relative;
+  padding-left: 1.75rem;
+  margin: 0.25rem 0;
+}
+
+.rich-text-editor [data-list-type]::before {
+  position: absolute;
+  left: 0.5rem;
+  color: var(--muted-foreground);
+  content: "\2022";
+}
+
+.rich-text-editor [data-list-type="number"] {
+  counter-increment: rt-number;
+}
+
+.rich-text-editor :not([data-list-type="number"]) + [data-list-type="number"],
+.rich-text-editor [data-slate-editor] > [data-list-type="number"]:first-child {
+  counter-reset: rt-number;
+  counter-increment: rt-number;
+}
+
+.rich-text-editor [data-list-type="number"]::before {
+  content: counter(rt-number) ".";
+  left: 0;
+  width: 1.5rem;
+  text-align: right;
+}
+
+.rich-text-editor [data-list-level="2"] {
+  margin-left: 1.5rem;
+}
+
+.rich-text-editor [data-list-level="3"] {
+  margin-left: 3rem;
+}
+
+.rich-text-editor [data-list-level="4"] {
+  margin-left: 4.5rem;
 }

@@ -1,0 +1,352 @@
+{
+  "aiErrors": {
+    "ASSIST_RESPONSE_INVALID": {
+      "message": "Le modèle a répondu, mais sa réponse n’a pas pu être utilisée.",
+      "hint": "Relancez la demande. Si cela se répète, essayez un autre modèle dans Fournisseurs d’IA."
+    },
+    "ASSIST_UNAVAILABLE": {
+      "message": "L’assistant n’est pas disponible.",
+      "hint": "Ajoutez et activez un fournisseur d’IA dans Fournisseurs d’IA."
+    },
+    "ASSIST_BUDGET_EXCEEDED": {
+      "message": "Le budget d’IA de ce mois est atteint.",
+      "hint": "Relevez le budget dans les réglages de l’agent ou attendez le mois prochain."
+    },
+    "ASSIST_DOCUMENT_NOT_FOUND": {
+      "message": "Ce document de référence n’existe plus.",
+      "hint": "Actualisez la liste."
+    },
+    "SITE_BRIEF_GENERATION_FAILED": {
+      "message": "Le document n’a pas pu être transformé en plan de site.",
+      "hint": "Vérifiez que le document décrit bien un site web et que le fournisseur d’IA répond (bouton « Tester » dans Fournisseurs d’IA), puis réessayez."
+    },
+    "SITE_BRIEF_RESPONSE_INVALID": {
+      "message": "Le modèle n’a pas rendu une analyse exploitable du document.",
+      "hint": "Réessayez, ou choisissez un modèle plus capable dans Fournisseurs d’IA."
+    },
+    "SITE_PLAN_NO_PROVIDER": {
+      "message": "Aucun fournisseur d’IA actif : le document ne peut pas être analysé.",
+      "hint": "Activez un fournisseur dans Fournisseurs d’IA."
+    },
+    "SITE_PLAN_DRAFT_NOT_FOUND": {
+      "message": "Cette proposition n’existe plus.",
+      "hint": "Actualisez la liste des propositions."
+    },
+    "SITE_PLAN_DECISION_MISSING": {
+      "message": "Il reste des éléments sans décision.",
+      "hint": "Gardez ou retirez chaque élément avant d’appliquer le plan."
+    },
+    "SITE_PLAN_DECISION_UNKNOWN_ITEM": {
+      "message": "Votre choix ne correspond à rien dans ce plan.",
+      "hint": "Rouvrez la proposition et recommencez."
+    },
+    "SITE_PLAN_CONSTRAINT_VIOLATED": {
+      "message": "Le plan contredit une contrainte du document.",
+      "hint": "Retirez l’élément concerné."
+    },
+    "DOCUMENT_FORMAT_UNSUPPORTED": {
+      "message": "Ce format de fichier n’est pas pris en charge.",
+      "hint": "Utilisez un PDF, un DOCX, un fichier Markdown ou un texte brut."
+    },
+    "DOCUMENT_TOO_LARGE": {
+      "message": "Ce document est trop volumineux.",
+      "hint": "Découpez-le ou réduisez sa taille."
+    },
+    "DOCUMENT_EXTRACTION_FAILED": {
+      "message": "Le texte de ce document n’a pas pu être lu.",
+      "hint": "Vérifiez que le fichier n’est pas abîmé, ou exportez-le dans un autre format."
+    },
+    "DOCUMENT_NO_TEXT_LAYER": {
+      "message": "Ce document ne contient pas de texte lisible (c’est probablement un scan).",
+      "hint": "Exportez-le en PDF texte, ou collez son contenu dans un fichier Markdown."
+    },
+    "AGENT_NO_PROVIDER": {
+      "message": "Aucun fournisseur d’IA actif : cet agent ne peut pas répondre.",
+      "hint": "Activez un fournisseur dans Fournisseurs d’IA."
+    },
+    "AGENT_DISABLED": {
+      "message": "Cet agent est désactivé.",
+      "hint": "Activez-le d’abord."
+    },
+    "AGENT_UNKNOWN": {
+      "message": "Cet agent n’existe pas ou plus.",
+      "hint": "Actualisez la liste des agents."
+    },
+    "AGENT_DUPLICATE": {
+      "message": "Un agent porte déjà ce nom.",
+      "hint": "Choisissez un autre nom."
+    },
+    "AGENT_DEFINITION_INVALID": {
+      "message": "Les réglages de cet agent ne sont pas valides.",
+      "hint": "Vérifiez le nom, le budget (zéro ou plus) et les outils."
+    },
+    "AGENT_BUILTIN_UNDELETABLE": {
+      "message": "Un agent fourni avec Cogenta ne peut pas être supprimé.",
+      "hint": "Désactivez-le si vous ne voulez pas l’utiliser."
+    },
+    "AGENT_LOOP_RECURSION_LIMIT": {
+      "message": "L’agent a tourné en rond et s’est arrêté.",
+      "hint": "Reformulez la demande plus simplement."
+    },
+    "AGENT_RUNTIME_UNAVAILABLE": {
+      "message": "Les agents ne sont pas disponibles sur ce site.",
+      "hint": "Redémarrez le site ou consultez Exploitation."
+    },
+    "AGENT_SKILL_UNKNOWN": {
+      "message": "Cette compétence n’existe pas ou plus.",
+      "hint": "Actualisez la liste."
+    },
+    "AGENT_SKILL_DUPLICATE": {
+      "message": "Une compétence porte déjà ce nom.",
+      "hint": "Choisissez un autre nom."
+    },
+    "AGENT_SKILL_BUILTIN_UNDELETABLE": {
+      "message": "Une compétence fournie avec Cogenta ne peut pas être supprimée.",
+      "hint": "Vous pouvez la modifier ou la retirer des compétences par défaut."
+    },
+    "SKILL_DEFINITION_INVALID": {
+      "message": "Cette compétence n’est pas valide.",
+      "hint": "Elle doit commencer par un en-tête « name » et « description »."
+    },
+    "AGENT_SKILL_RESOURCE_INVALID": {
+      "message": "Ce fichier ne peut pas être joint à la compétence.",
+      "hint": "Vérifiez son nom et son type."
+    },
+    "PROVIDER_UNKNOWN": {
+      "message": "Ce fournisseur n’est pas enregistré.",
+      "hint": "Ajoutez-le dans Fournisseurs d’IA."
+    },
+    "PROVIDER_NOT_CONFIGURED": {
+      "message": "Ce fournisseur n’est pas configuré.",
+      "hint": "Ajoutez sa clé dans Fournisseurs d’IA."
+    },
+    "PROVIDER_ID_INVALID": {
+      "message": "Cet identifiant de fournisseur n’est pas valide.",
+      "hint": "Utilisez des minuscules, des chiffres et des tirets, sans espace (« auto » est réservé)."
+    },
+    "PROVIDER_CUSTOM_BASE_URL_REQUIRED": {
+      "message": "Un fournisseur personnalisé a besoin d’une adresse.",
+      "hint": "Renseignez l’adresse du point d’accès compatible OpenAI."
+    },
+    "PROVIDER_KEY_REQUIRED": {
+      "message": "Changer l’adresse d’un fournisseur demande de ressaisir sa clé API.",
+      "hint": "La clé enregistrée n’est jamais envoyée seule vers une autre adresse."
+    },
+    "PROVIDER_TUNING_INVALID": {
+      "message": "Une des valeurs de réglage est hors des limites autorisées.",
+      "hint": "Utilisez un nombre entier positif raisonnable ou laissez le champ vide."
+    },
+    "PROVIDER_REQUEST_FAILED": {
+      "message": "Le fournisseur d’IA a refusé la requête.",
+      "hint": "Vérifiez la clé et le modèle, avec le bouton « Tester » de Fournisseurs d’IA."
+    },
+    "PROVIDER_RATE_LIMITED": {
+      "message": "Le fournisseur d’IA limite le nombre de requêtes.",
+      "hint": "Patientez un instant avant de réessayer."
+    },
+    "PROVIDER_TIMEOUT": {
+      "message": "Le fournisseur d’IA a mis trop de temps à répondre.",
+      "hint": "Réessayez, ou augmentez le temps d’attente maximal dans Fournisseurs d’IA."
+    },
+    "PROVIDER_RESPONSE_INVALID": {
+      "message": "Le fournisseur d’IA a renvoyé une réponse incompréhensible.",
+      "hint": "Réessayez, ou vérifiez l’adresse du fournisseur."
+    },
+    "TOOL_CALL_REJECTED": {
+      "message": "Cette action n’est pas autorisée pour cet agent.",
+      "hint": "Ajustez ses permissions dans ses réglages."
+    },
+    "TOOL_INPUT_INVALID": {
+      "message": "L’agent a demandé un outil avec des paramètres invalides.",
+      "hint": "Réessayez ; l’agent corrige généralement tout seul."
+    },
+    "THEME_NO_PROVIDER": {
+      "message": "Aucun fournisseur d’IA actif : le thème ne peut pas être généré.",
+      "hint": "Activez un fournisseur dans Fournisseurs d’IA."
+    },
+    "PROMPT_TEMPLATE_UNKNOWN": {
+      "message": "Ce modèle de consigne n’existe pas ou plus.",
+      "hint": "Actualisez la liste."
+    },
+    "PROMPT_TEMPLATE_DUPLICATE": {
+      "message": "Un modèle de consigne porte déjà ce nom.",
+      "hint": "Choisissez un autre nom."
+    },
+    "PROMPT_TEMPLATE_BUILTIN_UNDELETABLE": {
+      "message": "Un modèle fourni avec Cogenta ne peut pas être supprimé.",
+      "hint": "Vous pouvez le modifier."
+    },
+    "PROMPT_TEMPLATE_INVALID": {
+      "message": "Ce modèle de consigne n’est pas valide.",
+      "hint": "Vérifiez son nom, sa catégorie et son texte."
+    },
+    "PROMPT_TEMPLATE_PLACEHOLDER_UNRESOLVED": {
+      "message": "Ce modèle utilise une variable inconnue.",
+      "hint": "Utilisez uniquement les variables proposées sous le champ."
+    },
+    "CHANNEL_PROVIDER_NOT_CONFIGURED": {
+      "message": "Ce canal n’est pas configuré.",
+      "hint": "Renseignez ses accès côté serveur, puis réessayez."
+    },
+    "CHANNEL_LINK_CODE_INVALID": {
+      "message": "Ce code de liaison n’est plus valable.",
+      "hint": "Générez-en un nouveau."
+    },
+    "CONTENT_READ_ONLY": {
+      "message": "Cette modification est désactivée sur un site en production.",
+      "hint": "Faites-la depuis le mode développement (« cogenta dev »)."
+    },
+    "AUTH_FORBIDDEN": {
+      "message": "Votre rôle ne permet pas cette action.",
+      "hint": "Demandez à un administrateur."
+    },
+    "INTERNAL": {
+      "message": "Une erreur inattendue est survenue.",
+      "hint": "Réessayez ; si elle persiste, consultez Exploitation."
+    }
+  },
+  "aiProgress": {
+    "classify": "Analyse de la demande : faut-il une mise en page sur mesure ?",
+    "classifyFailed": "La demande n’a pas pu être classée : on se limite aux couleurs et aux polices.",
+    "layoutNeeded": "Mise en page sur mesure nécessaire : {{reason}}",
+    "tokensEnough": "Les couleurs et les polices suffisent : {{reason}}",
+    "chooseBase": "Choix du thème de départ…",
+    "baseChosen": "Thème de départ choisi : {{theme}}",
+    "writeLayout": "Écriture d’une mise en page sur mesure dans l’espace de travail « {{id}} »…",
+    "generating": "Création de la proposition « {{label}} »…",
+    "directionDone": "Proposition « {{label}} » prête.",
+    "directionFailed": "Proposition « {{label}} » abandonnée : {{reason}}",
+    "thinking": "Réflexion…",
+    "thinkingStep": "Réflexion… (étape {{step}})",
+    "callingTool": "Utilisation de l’outil « {{tool}} »…",
+    "toolFinished": "Outil « {{tool}} » terminé.",
+    "toolFailed": "Outil « {{tool}} » en échec : {{reason}}",
+    "retrying": "Nouvel essai après une erreur du fournisseur (essai {{attempt}} sur {{max}}) : {{reason}}"
+  },
+  "aiPlanNotes": {
+    "removedSection": "Le document exclut « {{topic}} » (« {{quote}} »). La proposition « {{name}} » a donc été retirée du plan.",
+    "removedPage": "Le document exclut « {{topic}} » (« {{quote}} »). La page « {{name}} » a donc été retirée du plan.",
+    "removedLocales": "Le document limite le site à {{locales}} (« {{quote}} »). {{dropped}} ont été retirées du plan.",
+    "designNotOffered": "Le design « {{label}} » n’a pas pu être proposé.",
+    "collectionNotProposed": "La collection « {{name}} » n’a pas pu être proposée.",
+    "demoDropped": "Une entrée de démonstration pour « {{collection}} » a été écartée.",
+    "noDemo": "Aucun contenu de démonstration n’a pu être proposé."
+  },
+  "aiAssistNotes": {
+    "translation": "Traduction suggérée vers « {{locale}} ».",
+    "altText": "Rédigé à partir du texte autour de l’image, pas de l’image elle-même : vérifiez-le avant de l’utiliser."
+  },
+  "aiAgentNames": {
+    "cogenta-agent": "Agent Cogenta",
+    "security-scanner": "Analyseur de sécurité",
+    "content-watch": "Veille éditoriale",
+    "site-monitor": "Surveillance du site",
+    "cogenta-theme-creator": "Créateur de thèmes",
+    "cogenta-plugin-builder": "Créateur d’extensions",
+    "media-librarian": "Médiathécaire",
+    "translation-watch": "Veille des traductions",
+    "comment-moderator": "Modérateur de commentaires",
+    "audience-reader": "Lecteur d’audience",
+    "migration-finisher": "Finisseur de migration",
+    "accessibility-auditor": "Auditeur d’accessibilité",
+    "compliance-checker": "Contrôleur de conformité"
+  },
+  "aiDesignDirections": {
+    "warm-editorial": {
+      "label": "Éditorial chaleureux",
+      "description": "Une échelle typographique généreuse, un fond papier, un seul accent mesuré, une densité confortable."
+    },
+    "clean-and-clinical": {
+      "label": "Net et clinique",
+      "description": "Une palette quasi neutre, une échelle resserrée, une densité compacte, un accent froid, des angles vifs."
+    },
+    "bold-and-graphic": {
+      "label": "Audacieux et graphique",
+      "description": "Un accent très saturé, de grands écarts de taille, des rayons généreux, un contraste élevé."
+    },
+    "quiet-and-minimal": {
+      "label": "Calme et minimal",
+      "description": "Presque monochrome, des espacements larges, une petite échelle, presque aucun arrondi."
+    },
+    "classic-and-formal": {
+      "label": "Classique et sobre",
+      "description": "Des tons neutres profonds, une échelle prudente, des titres à empattement, un accent discret."
+    }
+  },
+  "sitePlanReport": {
+    "followUp": {
+      "schemaRewritten": "Le fichier de schéma a été réécrit : versionnez-le (git). Le serveur de développement redémarre tout seul pour charger les nouvelles collections ; si le site a été lancé autrement, redémarrez-le.",
+      "demoDrafts_one": "{{count}} entrée de démonstration attend en brouillon. Relisez-la avant de la publier.",
+      "demoDrafts_other": "{{count}} entrées de démonstration attendent en brouillon. Relisez-les avant de les publier.",
+      "pageDrafts_one": "{{count}} page attend en brouillon : elle a un titre et un but, pas encore son contenu.",
+      "pageDrafts_other": "{{count}} pages attendent en brouillon : elles ont un titre et un but, pas encore leur contenu.",
+      "paletteLive": "La nouvelle palette est déjà en ligne, sans redémarrage.",
+      "restartForDesign": "Redémarrez le site pour afficher le nouveau design."
+    },
+    "skipped": {
+      "collectionExists": "le site a déjà une collection de ce nom : en remplacer une existante est une migration, pas une simple modification",
+      "taxonomyExists": "le site a déjà un classement de ce nom : en remplacer un existant est une migration, pas une simple modification",
+      "schemaDevOnly": "ajouter cet élément réécrit le schéma, ce que seul le mode développement (« cogenta dev ») peut faire ; tout le contenu de ce plan a été appliqué quand même",
+      "noPageCollection": "le site n’a aucune collection capable d’accueillir une page (un titre, un identifiant d’URL, une adresse publique)"
+    }
+  },
+  "aiCron": {
+    "hourly": "Toutes les heures",
+    "daily": "Tous les jours à {{time}}",
+    "weekly": "Chaque {{day}} à {{time}}",
+    "monthly": "Chaque mois, le {{dayOfMonth}}, à {{time}}",
+    "custom": "Planification « {{cron}} »"
+  },
+  "aiTools": {
+    "analytics_summary": "Consulter les statistiques",
+    "assist_alt_text": "Rédiger un texte alternatif",
+    "assist_chat": "Interroger le contenu du site",
+    "assist_classify": "Classer un contenu",
+    "assist_faq_draft": "Rédiger une FAQ",
+    "assist_find_duplicates": "Chercher des doublons",
+    "assist_generate_agent_identity": "Rédiger l’identité d’un agent",
+    "assist_generate_image": "Générer une image",
+    "assist_meta_description": "Rédiger une méta-description",
+    "assist_moderate": "Modérer un texte",
+    "assist_proofread": "Corriger un texte",
+    "assist_rewrite": "Réécrire un texte",
+    "assist_schema_org_draft": "Rédiger des données structurées",
+    "assist_summarise": "Résumer un texte",
+    "assist_tags": "Proposer des étiquettes",
+    "assist_titles": "Proposer des titres",
+    "assist_translate": "Traduire un texte",
+    "code_propose_patch": "Proposer un correctif de code",
+    "comments_decide": "Trancher un commentaire",
+    "comments_list": "Lister les commentaires",
+    "content_collections": "Lister les types de contenu",
+    "content_delete": "Mettre un contenu à la corbeille",
+    "content_list": "Lister les contenus",
+    "content_publish": "Publier un contenu",
+    "content_read": "Lire un contenu",
+    "content_schema": "Lire la structure d’un type de contenu",
+    "content_search": "Chercher dans les contenus",
+    "content_write_draft": "Écrire un brouillon",
+    "deps_patch": "Mettre à jour une dépendance",
+    "deps_scan": "Analyser les dépendances",
+    "document_extract_text": "Lire un document",
+    "http_fetch": "Consulter une page web",
+    "logs_read_not_found": "Lire les pages introuvables",
+    "media_list": "Lister les médias",
+    "media_read": "Lire un média",
+    "media_store_generated_image": "Enregistrer une image générée",
+    "media_write": "Ajouter un média",
+    "plugin_check_sandbox": "Vérifier une extension en chantier",
+    "plugin_read_sandbox_file": "Lire un fichier d’extension",
+    "plugin_write_sandbox_file": "Écrire un fichier d’extension",
+    "redirects_create": "Créer une redirection",
+    "site_config_read": "Lire la configuration du site",
+    "schema_read": "Lire la structure du site",
+    "theme_list_sandbox_files": "Lister les fichiers d’un thème en chantier",
+    "theme_preview_sandbox": "Prévisualiser un thème en chantier",
+    "theme_propose_theme": "Proposer un thème",
+    "theme_read_sandbox_file": "Lire un fichier de thème",
+    "theme_write_sandbox_file": "Écrire un fichier de thème",
+    "redirects_write": "Gérer les redirections",
+    "logs_read": "Lire les journaux"
+  }
+}

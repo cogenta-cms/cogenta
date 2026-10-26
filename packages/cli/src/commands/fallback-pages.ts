@@ -191,25 +191,27 @@ function stringsFor(locale: string): Readonly<Record<string, string>> {
  * gets a readable, centred page in its own colours and typefaces.
  */
 export const FALLBACK_PAGE_FLOOR_CSS = `:where(.cg-fallback){box-sizing:border-box;inline-size:min(100% - 2.5rem, 40rem);margin-inline:auto;padding-block:clamp(3rem, 10vw, 7rem)}
-:where(.cg-fallback__eyebrow){margin:0 0 1rem;color:var(--cogenta-color-muted-fg);font-family:var(--cogenta-font-sans);font-size:.8125rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+:where(.cg-fallback__eyebrow){margin:0 0 1rem;color:color-mix(in srgb, currentColor 72%, transparent);font-family:var(--cogenta-font-sans);font-size:.8125rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
 :where(.cg-fallback__title){margin:0 0 1rem;font-size:clamp(2rem, 5vw, 3rem);line-height:1.1;text-wrap:balance}
-:where(.cg-fallback__body){margin:0 0 2rem;color:var(--cogenta-color-muted-fg);font-size:1.0625rem;line-height:1.6;text-wrap:pretty}
+:where(.cg-fallback__body){margin:0 0 2rem;color:color-mix(in srgb, currentColor 78%, transparent);font-size:1.0625rem;line-height:1.6;text-wrap:pretty}
 :where(.cg-fallback__actions){display:flex;flex-wrap:wrap;align-items:center;gap:.75rem 1.5rem;margin:0 0 2.5rem}
 :where(.cg-fallback__primary){display:inline-flex;align-items:center;min-block-size:2.75rem;padding-inline:1.25rem;border-radius:var(--cogenta-radius-sm, 4px);background:var(--cogenta-color-accent);color:var(--cogenta-color-accent-fg);font-family:var(--cogenta-font-sans);font-weight:600;text-decoration:none}
 :where(.cg-fallback__primary):hover{filter:brightness(1.08)}
-:where(.cg-fallback__search){display:flex;flex-wrap:wrap;gap:.5rem;margin:0;padding-block-start:2rem;border-block-start:1px solid var(--cogenta-color-border)}
-:where(.cg-fallback__search) label{flex-basis:100%;font-family:var(--cogenta-font-sans);font-size:.875rem;font-weight:600}
-:where(.cg-fallback__search) input{flex:1 1 14rem;min-block-size:2.75rem;padding-inline:.875rem;border:1px solid var(--cogenta-color-border);border-radius:var(--cogenta-radius-sm, 4px);background:var(--cogenta-color-bg);color:var(--cogenta-color-fg);font:inherit}
-:where(.cg-fallback__search) button{min-block-size:2.75rem;padding-inline:1.125rem;border:1px solid var(--cogenta-color-fg);border-radius:var(--cogenta-radius-sm, 4px);background:transparent;color:var(--cogenta-color-fg);font-family:var(--cogenta-font-sans);font-weight:600;cursor:pointer}
-:where(.cg-fallback__steps){margin:0 0 2.5rem;padding:0;list-style:none;counter-reset:cg-step;border-block-start:1px solid var(--cogenta-color-border)}
-:where(.cg-fallback__steps) li{counter-increment:cg-step;display:grid;grid-template-columns:2.5rem 1fr;gap:.75rem;padding-block:1rem;border-block-end:1px solid var(--cogenta-color-border);line-height:1.5}
-:where(.cg-fallback__steps) li::before{content:counter(cg-step, decimal-leading-zero);color:var(--cogenta-color-accent);font-family:var(--cogenta-font-sans);font-weight:600;font-variant-numeric:tabular-nums}`
+.cg-fallback .cg-search__form{max-inline-size:none;margin-block:0;padding-inline:0;padding-block-start:2rem;border-block-start:1px solid color-mix(in srgb, currentColor 22%, transparent)}
+:where(.cg-fallback .cg-search__form){display:flex;flex-wrap:wrap;gap:.5rem}
+:where(.cg-fallback .cg-search__form) label{flex-basis:100%;font-family:var(--cogenta-font-sans);font-size:.875rem;font-weight:600}
+:where(.cg-fallback .cg-search__form) input{flex:1 1 14rem;min-block-size:2.75rem;padding-inline:.875rem;border:1px solid color-mix(in srgb, currentColor 45%, transparent);border-radius:var(--cogenta-radius-sm, 4px);background:transparent;color:inherit;font:inherit}
+:where(.cg-fallback .cg-search__form) input::placeholder{color:color-mix(in srgb, currentColor 65%, transparent);opacity:1}
+:where(.cg-fallback .cg-search__form) button{min-block-size:2.75rem;padding-inline:1.125rem;border:1px solid transparent;border-radius:var(--cogenta-radius-sm, 4px);background:var(--cogenta-color-accent);color:var(--cogenta-color-accent-fg);font-family:var(--cogenta-font-sans);font-weight:600;cursor:pointer}
+:where(.cg-fallback__steps){margin:0 0 2.5rem;padding:0;list-style:none;counter-reset:cg-step;border-block-start:1px solid color-mix(in srgb, currentColor 22%, transparent)}
+:where(.cg-fallback__steps) li{counter-increment:cg-step;display:grid;grid-template-columns:2.5rem 1fr;gap:.75rem;padding-block:1rem;border-block-end:1px solid color-mix(in srgb, currentColor 22%, transparent);line-height:1.5}
+:where(.cg-fallback__steps) li::before{content:counter(cg-step, decimal-leading-zero);color:color-mix(in srgb, currentColor 72%, transparent);font-family:var(--cogenta-font-sans);font-weight:600;font-variant-numeric:tabular-nums}`
 
 /** Everything the site chrome needs, minus what this module writes itself. */
 export type FallbackPageOptions = Omit<PageChromeOptions, 'headHtml' | 'bodyHtml'>
 
 function searchForm(s: Readonly<Record<string, string>>): string {
-  return `<form class="cg-fallback__search" action="/search" method="get" role="search">
+  return `<form class="cg-search__form cg-fallback__search" action="/search" method="get" role="search">
 <label for="cg-fallback-q">${escapeHtmlText(s['searchLabel'] ?? '')}</label>
 <input id="cg-fallback-q" type="search" name="q" placeholder="${escapeHtmlAttribute(s['searchPlaceholder'] ?? '')}" required>
 <button type="submit">${escapeHtmlText(s['searchButton'] ?? '')}</button>
@@ -250,7 +252,7 @@ export function renderFallbackNotFoundPage(
 <p class="cg-fallback__eyebrow">${escapeHtmlText(s['notFoundEyebrow'] ?? '')}</p>
 <h1 class="cg-fallback__title" id="cg-fallback-title">${escapeHtmlText(s['notFoundTitle'] ?? '')}</h1>
 <p class="cg-fallback__body">${escapeHtmlText(s['notFoundBody'] ?? '')}</p>
-<p class="cg-fallback__actions"><a class="cg-fallback__primary" href="/">${escapeHtmlText(s['home'] ?? '')}</a></p>
+<p class="cg-fallback__actions"><a class="cg-action cg-fallback__primary" data-emphasis="primary" href="/">${escapeHtmlText(s['home'] ?? '')}</a></p>
 ${searchForm(s)}
 </section>`,
   )
@@ -276,7 +278,7 @@ export function renderWelcomePage(
 <ol class="cg-fallback__steps" aria-label="${escapeHtmlAttribute(s['welcomeStepsLabel'] ?? '')}">
 ${steps}
 </ol>
-<p class="cg-fallback__actions"><a class="cg-fallback__primary" href="/admin">${escapeHtmlText(s['admin'] ?? '')}</a></p>
+<p class="cg-fallback__actions"><a class="cg-action cg-fallback__primary" data-emphasis="primary" href="/admin">${escapeHtmlText(s['admin'] ?? '')}</a></p>
 </section>`,
   )
 }

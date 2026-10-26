@@ -38,12 +38,26 @@ function table(): HTMLElement {
   return within(screen.getByRole('region', { name: 'Liste des produits' })).getByRole('table')
 }
 
+// Both the header "X" and the footer button of a dialog are named "Fermer";
+// the footer one is the last in document order.
+function closeDialog(dialog: HTMLElement): void {
+  const buttons = within(dialog).getAllByRole('button', { name: 'Fermer' })
+  fireEvent.click(buttons[buttons.length - 1] as HTMLElement)
+}
+
 async function createProduct(title: string, handle: string): Promise<void> {
   fireEvent.click(screen.getByRole('button', { name: 'Nouveau produit' }))
   const dialog = await screen.findByRole('dialog', { name: 'Créer un produit' })
   fireEvent.change(within(dialog).getByLabelText('Titre'), { target: { value: title } })
-  fireEvent.change(within(dialog).getByLabelText('Identifiant'), { target: { value: handle } })
+  fireEvent.change(within(dialog).getByLabelText(/^Identifiant/u), { target: { value: handle } })
   fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+  // Creating a product opens its variants dialog straight away: a product with
+  // no variant cannot be sold, so the next step is always adding one.
+  const variants = await screen.findByRole('dialog', { name: `Variantes de ${title}` })
+  closeDialog(variants)
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog', { name: `Variantes de ${title}` })).toBeNull(),
+  )
   await waitFor(() => expect(within(table()).getByText(title)).toBeDefined())
 }
 
@@ -52,29 +66,30 @@ async function addVariant(
   fields: { sku: string; price: string; currency?: string; stock?: string },
 ): Promise<void> {
   const row = within(table()).getByText(productTitle).closest('tr') as HTMLElement
-  fireEvent.click(within(row).getByRole('button', { name: 'Gérer les variantes' }))
+  fireEvent.click(
+    within(row).getByRole('button', { name: `Gérer les variantes de ${productTitle}` }),
+  )
   const dialog = await screen.findByRole('dialog', { name: `Variantes de ${productTitle}` })
-  fireEvent.change(within(dialog).getByLabelText('SKU'), { target: { value: fields.sku } })
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Ajouter une variante' }))
+  const form = await screen.findByRole('dialog', { name: 'Nouvelle variante' })
+  fireEvent.change(within(form).getByLabelText(/^SKU/u), { target: { value: fields.sku } })
   // Deliberately not `fields.sku` again: the SKU and title columns would
   // then both show the same text, and `getByText` below could not tell them
   // apart.
-  fireEvent.change(within(dialog).getByLabelText('Variante'), {
+  fireEvent.change(within(form).getByLabelText(/^Variante/u), {
     target: { value: `${fields.sku} variant` },
   })
-  fireEvent.change(within(dialog).getByLabelText('Prix'), { target: { value: fields.price } })
-  fireEvent.change(within(dialog).getByLabelText('Devise'), {
+  fireEvent.change(within(form).getByLabelText('Prix'), { target: { value: fields.price } })
+  fireEvent.change(within(form).getByLabelText('Devise'), {
     target: { value: fields.currency ?? 'EUR' },
   })
-  fireEvent.change(within(dialog).getByLabelText('Stock'), {
+  fireEvent.change(within(form).getByLabelText('Stock'), {
     target: { value: fields.stock ?? '0' },
   })
-  fireEvent.submit(
-    within(dialog)
-      .getByRole('button', { name: 'Ajouter une variante' })
-      .closest('form') as HTMLFormElement,
-  )
-  await waitFor(() => expect(within(dialog).getByText(fields.sku)).toBeDefined())
-  fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
+  fireEvent.submit(form.querySelector('form') as HTMLFormElement)
+  const list = await screen.findByRole('dialog', { name: `Variantes de ${productTitle}` })
+  await waitFor(() => expect(within(list).getByText(fields.sku)).toBeDefined())
+  closeDialog(list)
   await waitFor(() =>
     expect(screen.queryByRole('dialog', { name: `Variantes de ${productTitle}` })).toBeNull(),
   )
@@ -149,7 +164,7 @@ describe('bulk actions on selected products', () => {
     // Reopen the variant to see the price the bulk action really wrote.
     fireEvent.click(
       within(within(table()).getByText('Lampe').closest('tr') as HTMLElement).getByRole('button', {
-        name: 'Gérer les variantes',
+        name: 'Gérer les variantes de Lampe',
       }),
     )
     const variantsDialog = await screen.findByRole('dialog', { name: 'Variantes de Lampe' })
@@ -218,12 +233,12 @@ describe('a product’s editorial content link and category', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Modifier Bougie' }))
     const editDialog = await screen.findByRole('dialog', { name: 'Modifier Bougie' })
 
-    const termSelect = await within(editDialog).findByLabelText('Termes')
-    fireEvent.change(termSelect, { target: { value: 'term-existing' } })
-    fireEvent.click(within(editDialog).getByRole('button', { name: 'Enregistrer la catégorie' }))
+    // Each tick is saved at once: there is no separate "save" step any more.
+    const termList = await within(editDialog).findByRole('list', { name: 'Termes' })
+    fireEvent.click(await within(termList).findByRole('checkbox', { name: 'Cuisine' }))
 
     await waitFor(() => {
-      expect(within(editDialog).getByText('Catégorie enregistrée.')).toBeDefined()
+      expect(within(editDialog).getByText('Catégories enregistrées.')).toBeDefined()
     })
   })
 })
@@ -259,7 +274,10 @@ describe('a product’s own images and a variant’s own photo', () => {
     fireEvent.click(within(browseDialog).getByRole('button', { name: 'Annuler' }))
     // ...and the save round-tripped: closing and reopening the edit dialog
     // still shows it, proving it was persisted, not just held in local state.
-    fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
+    closeDialog(editDialog)
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Modifier Écharpe' })).toBeNull(),
+    )
     fireEvent.click(within(row).getByRole('button', { name: 'Modifier Écharpe' }))
     const reopened = await screen.findByRole('dialog', { name: 'Modifier Écharpe' })
     // The reopened dialog loads the product's images after it opens.
@@ -277,7 +295,7 @@ describe('a product’s own images and a variant’s own photo', () => {
     await addVariant('Bonnet', { sku: 'BONNET-1', price: '19.90' })
 
     const row = within(table()).getByText('Bonnet').closest('tr') as HTMLElement
-    fireEvent.click(within(row).getByRole('button', { name: 'Gérer les variantes' }))
+    fireEvent.click(within(row).getByRole('button', { name: `Gérer les variantes de Bonnet` }))
     const variantsDialog = await screen.findByRole('dialog', { name: 'Variantes de Bonnet' })
     fireEvent.click(
       within(variantsDialog).getByRole('button', { name: 'Modifier BONNET-1 variant' }),
@@ -305,25 +323,25 @@ describe('the low-stock alert', () => {
     // Set a threshold at or above the current stock — the row-level edit
     // form, opened straight from "Gérer les variantes".
     const productRow = within(table()).getByText('Bougie parfumée').closest('tr') as HTMLElement
-    fireEvent.click(within(productRow).getByRole('button', { name: 'Gérer les variantes' }))
+    fireEvent.click(
+      within(productRow).getByRole('button', { name: `Gérer les variantes de Bougie parfumée` }),
+    )
     const variantsDialog = await screen.findByRole('dialog', {
       name: 'Variantes de Bougie parfumée',
     })
     fireEvent.click(
       within(variantsDialog).getByRole('button', { name: 'Modifier CANDLE-1 variant' }),
     )
-    // Scoped to the row's own edit form: the still-visible "add a variant"
-    // form at the bottom of this same dialog carries the same-labelled
-    // field, and a bare `within(variantsDialog)` cannot tell the two apart.
-    const editForm = within(variantsDialog)
-      .getByRole('button', { name: 'Enregistrer' })
-      .closest('form') as HTMLFormElement
-    fireEvent.change(within(editForm).getByLabelText("Seuil d'alerte"), {
+    // The edit form replaces the variant list inside the same dialog; its
+    // submit button lives in the footer and points at the form by id.
+    const editForm = variantsDialog.querySelector('form') as HTMLFormElement
+    fireEvent.change(within(editForm).getByLabelText('Seuil de stock bas'), {
       target: { value: '5' },
     })
     fireEvent.submit(editForm)
     await waitFor(() => expect(within(variantsDialog).getByText('Stock bas')).toBeDefined())
-    fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
+    closeDialog(variantsDialog)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Variantes de/u })).toBeNull())
 
     fireEvent.click(screen.getByLabelText('Stock bas uniquement'))
     await waitFor(() => {

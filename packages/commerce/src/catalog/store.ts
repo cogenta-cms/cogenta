@@ -12,6 +12,7 @@ import {
 import { assertCurrency, assertMinor } from '../money.js'
 import { fromBool, toBool, toInt, toNullableInt, toNullableText, toText } from '../rows.js'
 import { TABLES } from '../tables.js'
+import { isUniqueViolation } from '../unique.js'
 import type {
   ContentRef,
   CreateProductInput,
@@ -19,6 +20,7 @@ import type {
   Product,
   ProductStatus,
   ProductTerm,
+  RecurrenceUnit,
   StockMovement,
   StockMovementOptions,
   StockMovementReason,
@@ -27,7 +29,15 @@ import type {
   UpdateProductInput,
   UpdateVariantInput,
   Variant,
+  VariantRecurrence,
 } from './types.js'
+import { RECURRENCE_UNITS } from './types.js'
+
+/** A variant together with the product it belongs to — one row of a "pick a product" search. */
+export interface VariantSearchHit {
+  readonly variant: Variant
+  readonly product: Product
+}
 
 export interface ProductListOptions {
   readonly status?: ProductStatus
@@ -70,6 +80,16 @@ export interface CatalogStore {
    * it, lowest stock first (fiche 51 task 4). A variant with no threshold is
    * never in this list, however low its stock. */
   listLowStock(): Promise<readonly Variant[]>
+  /**
+   * Finds sellable variants by a fragment of the SKU, the variant's title or
+   * its product's title / handle — what a person types into a "pick a product"
+   * box. Only variants of an *active* product, best matches first (SKU prefix,
+   * then title), capped so a one-letter query cannot return the catalogue.
+   */
+  searchVariants(
+    query: string,
+    options?: { readonly limit?: number; readonly includeArchived?: boolean },
+  ): Promise<readonly VariantSearchHit[]>
 
   /** Sets absolute stock. For a stock take, never for a sale. */
   setStock(variantId: string, onHand: number, options?: StockMovementOptions): Promise<Variant>
@@ -145,6 +165,8 @@ interface VariantRow {
   height_mm: unknown
   depth_mm: unknown
   image_media_id: unknown
+  billing_interval_unit: unknown
+  billing_interval_count: unknown
   created_at: unknown
   updated_at: unknown
 }
@@ -218,6 +240,36 @@ function decodeProduct(row: ProductRow): Product {
   }
 }
 
+/** Both columns set and sane, or "not recurring" — a half-written pair never decodes to a plan. */
+function decodeRecurrence(unit: unknown, count: unknown): VariantRecurrence | null {
+  if (unit === null || unit === undefined || count === null || count === undefined) return null
+  const text = String(unit)
+  const n = Number(count)
+  if (!(RECURRENCE_UNITS as readonly string[]).includes(text) || !Number.isInteger(n) || n < 1) {
+    return null
+  }
+  return { unit: text as RecurrenceUnit, count: n }
+}
+
+/** Validates a recurring plan sent by a caller: `null` clears it, anything else must be a unit and a count of 1-36. */
+function assertRecurrence(value: VariantRecurrence | null | undefined): VariantRecurrence | null {
+  if (value === null || value === undefined) return null
+  if (
+    !(RECURRENCE_UNITS as readonly string[]).includes(value.unit) ||
+    !Number.isInteger(value.count) ||
+    value.count < 1 ||
+    value.count > 36
+  ) {
+    throw new CogentaError({
+      code: 'COMMERCE_PRODUCT_INVALID',
+      message:
+        'A recurring plan needs a unit (day, week, month, year) and a count between 1 and 36.',
+      hint: 'Every three months is { unit: "month", count: 3 }. Send null for a one-off product.',
+    })
+  }
+  return { unit: value.unit, count: value.count }
+}
+
 function decodeVariant(row: VariantRow): Variant {
   return {
     id: toText(row.id, 'variant.id'),
@@ -242,6 +294,7 @@ function decodeVariant(row: VariantRow): Variant {
     heightMm: toNullableInt(row.height_mm, 'variant.height_mm'),
     depthMm: toNullableInt(row.depth_mm, 'variant.depth_mm'),
     imageMediaId: toNullableText(row.image_media_id),
+    recurring: decodeRecurrence(row.billing_interval_unit, row.billing_interval_count),
     createdAt: toText(row.created_at, 'variant.created_at'),
     updatedAt: toText(row.updated_at, 'variant.updated_at'),
   }
@@ -323,6 +376,71 @@ function assertQuantity(quantity: number, what: string): number {
   return quantity
 }
 
+function handleTaken(): CogentaError {
+  return new CogentaError({
+    code: 'COMMERCE_PRODUCT_HANDLE_TAKEN',
+    // The handle itself is left out of the message, as in `assertHandle`.
+    message: 'That product handle is already used by another product.',
+    hint: 'A handle identifies one product in URLs and in the admin. Pick another, or edit the existing product.',
+  })
+}
+
+/**
+ * Runs a variant write and turns the race the `skuTaken` pre-check cannot
+ * close — two writers passing it at the same instant, the UNIQUE column
+ * deciding — into the same refusal as a plain duplicate.
+ */
+async function guardSku<T>(sku: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    if (isUniqueViolation(error)) throw skuTakenError(sku)
+    throw error
+  }
+}
+
+function skuTakenError(sku: string): CogentaError {
+  return new CogentaError({
+    code: 'COMMERCE_SKU_TAKEN',
+    message: `The SKU "${sku}" is already used by another variant.`,
+    hint: 'A SKU identifies one sellable thing. Pick another, or edit the existing variant.',
+  })
+}
+
+/**
+ * A "was" price only means something above the selling price, and a sale
+ * window has to end after it starts. Refused here (not just in the admin form)
+ * so an API client or a CSV import cannot store a promotion that displays a
+ * discount which is not one.
+ */
+function assertPromotion(
+  priceMinor: number,
+  compareAtPriceMinor: number | null,
+  saleStartsAt: string | null,
+  saleEndsAt: string | null,
+): void {
+  if (compareAtPriceMinor !== null && compareAtPriceMinor <= priceMinor) {
+    throw new CogentaError({
+      code: 'COMMERCE_PRODUCT_INVALID',
+      message: 'The compare-at price must be higher than the selling price.',
+      hint: 'The compare-at ("was") price is shown struck through next to the price. Clear it if there is no promotion.',
+      details: { field: 'compareAtPriceMinor', priceMinor, compareAtPriceMinor },
+    })
+  }
+  if (
+    saleStartsAt !== null &&
+    saleEndsAt !== null &&
+    new Date(saleEndsAt).getTime() <= new Date(saleStartsAt).getTime()
+  ) {
+    throw new CogentaError({
+      code: 'COMMERCE_PRODUCT_INVALID',
+      message: 'The sale must end after it starts.',
+      hint: 'Pick an end date later than the start date, or leave one of them empty.',
+      details: { field: 'saleEndsAt' },
+    })
+  }
+}
+
 /**
  * Merges repeated variants in one request.
  *
@@ -389,6 +507,14 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
               ${stamp()})`)
   }
 
+  async function readProductByHandle(handle: string): Promise<Product | null> {
+    const result = await db.query<ProductRow>(
+      sql`select * from ${products} where handle = ${handle.trim().toLowerCase()}`,
+    )
+    const row = result.rows[0]
+    return row === undefined ? null : decodeProduct(row)
+  }
+
   async function readProductTerms(productId: string): Promise<readonly ProductTerm[]> {
     const result = await db.query<ProductTermRow>(
       sql`select taxonomy, term_id from ${productTerms}
@@ -411,6 +537,14 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
       })
     }
     return decodeVariant(row)
+  }
+
+  async function writeRecurrence(id: string, recurring: VariantRecurrence | null): Promise<void> {
+    await db.query(sql`
+      update ${variants}
+      set billing_interval_unit = ${recurring?.unit ?? null},
+          billing_interval_count = ${recurring?.count ?? null}
+      where id = ${id}`)
   }
 
   async function skuTaken(sku: string, exceptId?: string): Promise<boolean> {
@@ -511,47 +645,73 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
       const id = newId(now)
       const at = stamp()
       const handle = assertHandle(input.handle)
+      if (input.title.trim() === '') {
+        throw new CogentaError({
+          code: 'COMMERCE_PRODUCT_INVALID',
+          message: 'A product needs a title.',
+          hint: 'Give the product a name — it is what the admin lists and what an order line falls back on.',
+        })
+      }
+      if ((await readProductByHandle(handle)) !== null) throw handleTaken()
 
       const imageMediaIds = normalizeImageIds(input.imageMediaIds ?? [])
 
-      await db.query(sql`
-        insert into ${products} (id, handle, title, status, content_collection, content_entry_id, image_media_ids, created_at, updated_at)
-        values (${id}, ${handle}, ${input.title}, ${input.status ?? 'active'},
-                ${input.contentRef?.collection ?? null}, ${input.contentRef?.entryId ?? null},
-                ${JSON.stringify(imageMediaIds)}, ${at}, ${at})`)
+      try {
+        await db.query(sql`
+          insert into ${products} (id, handle, title, status, content_collection, content_entry_id, image_media_ids, created_at, updated_at)
+          values (${id}, ${handle}, ${input.title.trim()}, ${input.status ?? 'active'},
+                  ${input.contentRef?.collection ?? null}, ${input.contentRef?.entryId ?? null},
+                  ${JSON.stringify(imageMediaIds)}, ${at}, ${at})`)
+      } catch (error) {
+        // Two admins creating the same handle at the same instant both pass
+        // the check above; the UNIQUE column decides, and the loser gets the
+        // same refusal as a plain duplicate — never the raw database message.
+        if (isUniqueViolation(error)) throw handleTaken()
+        throw error
+      }
 
       return loadProduct(id)
     },
 
     readProduct,
 
-    readProductByHandle: async (handle) => {
-      const result = await db.query<ProductRow>(
-        sql`select * from ${products} where handle = ${handle.trim().toLowerCase()}`,
-      )
-      const row = result.rows[0]
-      return row === undefined ? null : decodeProduct(row)
-    },
+    readProductByHandle,
 
     updateProduct: async (id, input) => {
       const current = await loadProduct(id)
       const handle = input.handle === undefined ? current.handle : assertHandle(input.handle)
+      if (input.title !== undefined && input.title.trim() === '') {
+        throw new CogentaError({
+          code: 'COMMERCE_PRODUCT_INVALID',
+          message: 'A product needs a title.',
+          hint: 'Give the product a name.',
+        })
+      }
+      if (handle !== current.handle) {
+        const holder = await readProductByHandle(handle)
+        if (holder !== null && holder.id !== id) throw handleTaken()
+      }
       const ref = input.contentRef === undefined ? current.contentRef : input.contentRef
       const imageMediaIds =
         input.imageMediaIds === undefined
           ? current.imageMediaIds
           : normalizeImageIds(input.imageMediaIds)
 
-      await db.query(sql`
-        update ${products}
-        set handle = ${handle},
-            title = ${input.title ?? current.title},
-            status = ${input.status ?? current.status},
-            content_collection = ${ref?.collection ?? null},
-            content_entry_id = ${ref?.entryId ?? null},
-            image_media_ids = ${JSON.stringify(imageMediaIds)},
-            updated_at = ${stamp()}
-        where id = ${id}`)
+      try {
+        await db.query(sql`
+          update ${products}
+          set handle = ${handle},
+              title = ${input.title === undefined ? current.title : input.title.trim()},
+              status = ${input.status ?? current.status},
+              content_collection = ${ref?.collection ?? null},
+              content_entry_id = ${ref?.entryId ?? null},
+              image_media_ids = ${JSON.stringify(imageMediaIds)},
+              updated_at = ${stamp()}
+          where id = ${id}`)
+      } catch (error) {
+        if (isUniqueViolation(error)) throw handleTaken()
+        throw error
+      }
 
       return loadProduct(id)
     },
@@ -606,53 +766,54 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
       return result.rows.map(decodeProduct)
     },
 
-    createVariant: async (input) => {
-      await loadProduct(input.productId)
-      const sku = input.sku.trim()
-      if (sku === '') {
-        throw new CogentaError({
-          code: 'COMMERCE_SKU_TAKEN',
-          message: 'A variant needs a SKU.',
-          hint: 'The SKU is what an order line keeps after the product is gone. It cannot be empty.',
-        })
-      }
-      if (await skuTaken(sku)) {
-        throw new CogentaError({
-          code: 'COMMERCE_SKU_TAKEN',
-          message: `The SKU "${sku}" is already used by another variant.`,
-          hint: 'A SKU identifies one sellable thing. Pick another, or edit the existing variant.',
-        })
-      }
+    createVariant: async (input) =>
+      guardSku(input.sku.trim(), async () => {
+        await loadProduct(input.productId)
+        const sku = input.sku.trim()
+        if (sku === '') {
+          throw new CogentaError({
+            code: 'COMMERCE_SKU_TAKEN',
+            message: 'A variant needs a SKU.',
+            hint: 'The SKU is what an order line keeps after the product is gone. It cannot be empty.',
+          })
+        }
+        if (await skuTaken(sku)) throw skuTakenError(sku)
 
-      const id = newId(now)
-      const at = stamp()
-      const onHand = input.onHand ?? 0
-      if (!Number.isInteger(onHand) || onHand < 0) {
-        throw new CogentaError({
-          code: 'COMMERCE_QUANTITY_INVALID',
-          message: `Stock must be a whole number of units, got ${String(onHand)}.`,
-          hint: 'Use allowBackorder if this variant should sell past zero.',
-        })
-      }
-      const lowStockThreshold = assertNullableNonNegativeInt(
-        input.lowStockThreshold ?? null,
-        'A low-stock threshold',
-      )
-      const compareAtPriceMinor =
-        input.compareAtPriceMinor === undefined || input.compareAtPriceMinor === null
-          ? null
-          : assertMinor(input.compareAtPriceMinor, 'A compare-at price')
-      const saleStartsAt = assertNullableIsoDate(input.saleStartsAt ?? null, 'A sale start date')
-      const saleEndsAt = assertNullableIsoDate(input.saleEndsAt ?? null, 'A sale end date')
-      const widthMm = assertNullableNonNegativeInt(input.widthMm ?? null, 'A width')
-      const heightMm = assertNullableNonNegativeInt(input.heightMm ?? null, 'A height')
-      const depthMm = assertNullableNonNegativeInt(input.depthMm ?? null, 'A depth')
-      const imageMediaId =
-        input.imageMediaId === undefined || input.imageMediaId === null
-          ? null
-          : input.imageMediaId.trim() || null
+        const id = newId(now)
+        const at = stamp()
+        const onHand = input.onHand ?? 0
+        if (!Number.isInteger(onHand) || onHand < 0) {
+          throw new CogentaError({
+            code: 'COMMERCE_QUANTITY_INVALID',
+            message: `Stock must be a whole number of units, got ${String(onHand)}.`,
+            hint: 'Use allowBackorder if this variant should sell past zero.',
+          })
+        }
+        const lowStockThreshold = assertNullableNonNegativeInt(
+          input.lowStockThreshold ?? null,
+          'A low-stock threshold',
+        )
+        const compareAtPriceMinor =
+          input.compareAtPriceMinor === undefined || input.compareAtPriceMinor === null
+            ? null
+            : assertMinor(input.compareAtPriceMinor, 'A compare-at price')
+        const saleStartsAt = assertNullableIsoDate(input.saleStartsAt ?? null, 'A sale start date')
+        const saleEndsAt = assertNullableIsoDate(input.saleEndsAt ?? null, 'A sale end date')
+        assertPromotion(
+          assertMinor(input.priceMinor, 'A variant price'),
+          compareAtPriceMinor,
+          saleStartsAt ?? null,
+          saleEndsAt ?? null,
+        )
+        const widthMm = assertNullableNonNegativeInt(input.widthMm ?? null, 'A width')
+        const heightMm = assertNullableNonNegativeInt(input.heightMm ?? null, 'A height')
+        const depthMm = assertNullableNonNegativeInt(input.depthMm ?? null, 'A depth')
+        const imageMediaId =
+          input.imageMediaId === undefined || input.imageMediaId === null
+            ? null
+            : input.imageMediaId.trim() || null
 
-      await db.query(sql`
+        await db.query(sql`
         insert into ${variants} (id, product_id, sku, title, price_minor, currency, on_hand,
                                  allow_backorder, weight_grams, tax_category, position,
                                  low_stock_threshold, compare_at_price_minor, sale_starts_at, sale_ends_at,
@@ -666,8 +827,13 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
                 ${widthMm ?? null}, ${heightMm ?? null}, ${depthMm ?? null}, ${imageMediaId},
                 ${at}, ${at})`)
 
-      return loadVariant(id)
-    },
+        // The recurring plan is written on its own so the long statement above
+        // stays the one every other variant field goes through.
+        const recurring = assertRecurrence(input.recurring)
+        if (recurring !== null) await writeRecurrence(id, recurring)
+
+        return loadVariant(id)
+      }),
 
     readVariant: async (id) => {
       const result = await db.query<VariantRow>(sql`select * from ${variants} where id = ${id}`)
@@ -684,55 +850,64 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
     updateVariant: async (id, input) => {
       const current = await loadVariant(id)
       const sku = input.sku === undefined ? current.sku : input.sku.trim()
-      if (sku !== current.sku && (await skuTaken(sku, id))) {
-        throw new CogentaError({
-          code: 'COMMERCE_SKU_TAKEN',
-          message: `The SKU "${sku}" is already used by another variant.`,
-          hint: 'A SKU identifies one sellable thing. Pick another.',
-        })
-      }
+      return guardSku(sku, async () => {
+        if (sku === '') {
+          throw new CogentaError({
+            code: 'COMMERCE_SKU_TAKEN',
+            message: 'A variant needs a SKU.',
+            hint: 'The SKU is what an order line keeps after the product is gone. It cannot be empty.',
+          })
+        }
+        if (sku !== current.sku && (await skuTaken(sku, id))) throw skuTakenError(sku)
 
-      const lowStockThreshold =
-        input.lowStockThreshold === undefined
-          ? current.lowStockThreshold
-          : assertNullableNonNegativeInt(input.lowStockThreshold, 'A low-stock threshold')
-      const compareAtPriceMinor =
-        input.compareAtPriceMinor === undefined
-          ? current.compareAtPriceMinor
-          : input.compareAtPriceMinor === null
-            ? null
-            : assertMinor(input.compareAtPriceMinor, 'A compare-at price')
-      const saleStartsAt =
-        input.saleStartsAt === undefined
-          ? current.saleStartsAt
-          : assertNullableIsoDate(input.saleStartsAt, 'A sale start date')
-      const saleEndsAt =
-        input.saleEndsAt === undefined
-          ? current.saleEndsAt
-          : assertNullableIsoDate(input.saleEndsAt, 'A sale end date')
-      const widthMm =
-        input.widthMm === undefined
-          ? current.widthMm
-          : assertNullableNonNegativeInt(input.widthMm, 'A width')
-      const heightMm =
-        input.heightMm === undefined
-          ? current.heightMm
-          : assertNullableNonNegativeInt(input.heightMm, 'A height')
-      const depthMm =
-        input.depthMm === undefined
-          ? current.depthMm
-          : assertNullableNonNegativeInt(input.depthMm, 'A depth')
-      const imageMediaId =
-        input.imageMediaId === undefined
-          ? current.imageMediaId
-          : input.imageMediaId === null
-            ? null
-            : input.imageMediaId.trim() || null
+        const lowStockThreshold =
+          input.lowStockThreshold === undefined
+            ? current.lowStockThreshold
+            : assertNullableNonNegativeInt(input.lowStockThreshold, 'A low-stock threshold')
+        const compareAtPriceMinor =
+          input.compareAtPriceMinor === undefined
+            ? current.compareAtPriceMinor
+            : input.compareAtPriceMinor === null
+              ? null
+              : assertMinor(input.compareAtPriceMinor, 'A compare-at price')
+        const saleStartsAt =
+          input.saleStartsAt === undefined
+            ? current.saleStartsAt
+            : assertNullableIsoDate(input.saleStartsAt, 'A sale start date')
+        const saleEndsAt =
+          input.saleEndsAt === undefined
+            ? current.saleEndsAt
+            : assertNullableIsoDate(input.saleEndsAt, 'A sale end date')
+        const widthMm =
+          input.widthMm === undefined
+            ? current.widthMm
+            : assertNullableNonNegativeInt(input.widthMm, 'A width')
+        const heightMm =
+          input.heightMm === undefined
+            ? current.heightMm
+            : assertNullableNonNegativeInt(input.heightMm, 'A height')
+        const depthMm =
+          input.depthMm === undefined
+            ? current.depthMm
+            : assertNullableNonNegativeInt(input.depthMm, 'A depth')
+        const imageMediaId =
+          input.imageMediaId === undefined
+            ? current.imageMediaId
+            : input.imageMediaId === null
+              ? null
+              : input.imageMediaId.trim() || null
 
-      // Stock is deliberately absent from this method. Setting it as one field
-      // among many is how a concurrent sale gets overwritten by a form that
-      // was rendered a minute ago; setStock/restock/takeStock say what they do.
-      await db.query(sql`
+        assertPromotion(
+          assertMinor(input.priceMinor ?? current.priceMinor, 'A variant price'),
+          compareAtPriceMinor ?? null,
+          saleStartsAt ?? null,
+          saleEndsAt ?? null,
+        )
+
+        // Stock is deliberately absent from this method. Setting it as one field
+        // among many is how a concurrent sale gets overwritten by a form that
+        // was rendered a minute ago; setStock/restock/takeStock say what they do.
+        await db.query(sql`
         update ${variants}
         set sku = ${sku},
             title = ${input.title ?? current.title},
@@ -753,7 +928,12 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
             updated_at = ${stamp()}
         where id = ${id}`)
 
-      return loadVariant(id)
+        if (input.recurring !== undefined) {
+          await writeRecurrence(id, assertRecurrence(input.recurring))
+        }
+
+        return loadVariant(id)
+      })
     },
 
     deleteVariant: async (id) => {
@@ -774,6 +954,45 @@ export function createCatalogStore(db: DatabaseHandle, now: () => number = Date.
         where ${thresholdColumn} is not null and on_hand <= ${thresholdColumn}
         order by on_hand asc, id asc`)
       return result.rows.map(decodeVariant)
+    },
+
+    searchVariants: async (query, options) => {
+      const needle = query.trim().toLowerCase()
+      const cap = Math.min(Math.max(options?.limit ?? 10, 1), 50)
+      // `like` wildcards are not searchable characters in a SKU or a title;
+      // dropping them is dialect-proof, where an `escape` clause is not.
+      const escaped = needle.replace(/[\\%_]/gu, '')
+      if (escaped === '') return []
+      const contains = `%${escaped}%`
+      const prefix = `${escaped}%`
+      const statusFilter =
+        options?.includeArchived === true ? sql`` : sql` and p.status = ${'active'}`
+      const result = await db.query<VariantRow>(sql`
+        select v.* from ${variants} v
+        inner join ${products} p on p.id = v.product_id
+        where (lower(v.sku) like ${contains}
+               or lower(v.title) like ${contains}
+               or lower(p.title) like ${contains}
+               or lower(p.handle) like ${contains})${statusFilter}
+        order by case when lower(v.sku) like ${prefix} then 0
+                      when lower(p.title) like ${prefix} then 1
+                      else 2 end asc,
+                 p.title asc, v.position asc, v.id asc
+        limit ${limit(cap)}`)
+      const hits: VariantSearchHit[] = []
+      const productsById = new Map<string, Product>()
+      for (const row of result.rows) {
+        const variant = decodeVariant(row)
+        let product = productsById.get(variant.productId)
+        if (product === undefined) {
+          const found = await readProduct(variant.productId)
+          if (found === null) continue
+          product = found
+          productsById.set(product.id, product)
+        }
+        hits.push({ variant, product })
+      }
+      return hits
     },
 
     setStock: async (variantId, onHand, options) => {

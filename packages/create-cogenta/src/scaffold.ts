@@ -221,6 +221,25 @@ function schemaFileContents(
 }
 
 /**
+ * The database client the chosen driver loads at runtime. `@cogenta/core`
+ * declares `mysql2` and `postgres` as *optional* peers so a SQLite site
+ * installs neither, which also means nothing installs them for a site that
+ * needs one: a MySQL site generated without this started, then refused
+ * every query with `DRIVER_UNAVAILABLE`.
+ */
+function databaseClientDependency(
+  driver: ScaffoldAnswers['databaseDriver'],
+): Record<string, string> {
+  if (driver === 'mysql') return { mysql2: MYSQL2_RANGE }
+  if (driver === 'postgres') return { postgres: POSTGRES_RANGE }
+  return {}
+}
+
+/** Same ranges as `@cogenta/core`'s peer declarations. */
+const MYSQL2_RANGE = '^3.23.3'
+const POSTGRES_RANGE = '^3.4.9'
+
+/**
  * `defaultTheme` (L25 task A0b, D4): the blueprint's own theme package,
  * added next to `@cogenta/theme-canonical` at the same version spec
  * (`latest`) — never *instead* of it, since the canonical theme stays the
@@ -232,8 +251,9 @@ function packageJsonContents(answers: ScaffoldAnswers, defaultTheme?: string): s
     name:
       answers.siteName
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '') || 'cogenta-site',
+        .split(/[^a-z0-9]+/u)
+        .filter((part) => part !== '')
+        .join('-') || 'cogenta-site',
     version: '0.0.0',
     private: true,
     type: 'module',
@@ -266,6 +286,7 @@ function packageJsonContents(answers: ScaffoldAnswers, defaultTheme?: string): s
       // is unusable until this is a direct dependency of the site itself.
       '@cogenta/theme-kit': 'latest',
       ...(defaultTheme === undefined ? {} : { [defaultTheme]: 'latest' }),
+      ...databaseClientDependency(answers.databaseDriver),
     },
   }
   return `${JSON.stringify(pkg, null, 2)}\n`

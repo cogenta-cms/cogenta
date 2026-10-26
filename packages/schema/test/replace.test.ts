@@ -184,6 +184,26 @@ describe('planning a replacement', () => {
     expect(plan.hits.some((hit) => hit.path.startsWith('blocks.body'))).toBe(true)
   })
 
+  it('names the type of the block a match sits in, so a preview can say which block it is', () => {
+    const plan = planEntryReplacement(
+      article,
+      entry({
+        blocks: {
+          body: [
+            { key: 'p1', type: 'prose', data: { body: [] } },
+            { key: 'h1', type: 'hero', data: { title: 'Cogenta' } },
+          ],
+        } as never,
+      }),
+      { find: 'Cogenta', replace: 'Kogenta' },
+    )
+
+    expect(plan.hits.map((hit) => [hit.path, hit.blockType])).toEqual([
+      ['title', undefined],
+      ['blocks.body[1].data.title', 'hero'],
+    ])
+  })
+
   it('is case-sensitive by default, and says so by finding nothing', () => {
     expect(planEntryReplacement(article, entry(), { find: 'cogenta', replace: 'x' }).hits).toEqual(
       [],

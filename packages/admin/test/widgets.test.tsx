@@ -92,7 +92,7 @@ describe('Widgets screen', () => {
     expect(mockWidgets.find((widget) => widget.title === 'Chercher')?.area).toBe('footer-2')
   })
 
-  it("keeps the editor open and shows the server's refusal in its own words", async () => {
+  it("keeps the editor open and says in the screen's own words what is missing, before any write", async () => {
     open(['admin'])
     await screen.findByRole('region', { name: 'Barre latérale' })
 
@@ -101,7 +101,14 @@ describe('Widgets screen', () => {
     fireEvent.change(within(dialog).getByLabelText('Citation'), { target: { value: '' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
 
-    expect(await within(dialog).findByText(/Write the quotation\./u)).toBeDefined()
+    // Said by the screen itself, not by the server's package-vocabulary message.
+    expect(
+      await within(dialog).findByText(
+        /Renseignez « Citation » avant d'enregistrer : ce widget serait vide\./u,
+      ),
+    ).toBeDefined()
+    expect(within(dialog).queryByText(/Write the quotation\./u)).toBeNull()
+    expect(widgetWrites).toEqual([])
     expect(mockWidgets).toHaveLength(2)
   })
 
@@ -132,9 +139,11 @@ describe('Widgets screen', () => {
       ).toEqual([expect.stringContaining('À propos'), expect.stringContaining('Newsletter')]),
     )
 
-    fireEvent.change(screen.getByLabelText('Déplacer À propos vers une autre zone'), {
-      target: { value: 'footer-1' },
-    })
+    // Moving to another zone lives in the widget's « Plus » menu.
+    const aboutRow = within(area('Barre latérale'))
+      .getAllByRole('listitem')
+      .find((item) => item.textContent?.includes('À propos')) as HTMLElement
+    fireEvent.click(within(aboutRow).getByRole('button', { name: 'Pied de page, colonne 1' }))
     await waitFor(() =>
       expect(within(area('Pied de page, colonne 1')).getByText('À propos')).toBeDefined(),
     )
@@ -214,6 +223,10 @@ describe('Widgets screen', () => {
       expect(within(area('Barre latérale')).getAllByRole('listitem')).toHaveLength(3),
     )
 
+    await waitFor(() =>
+      expect(mockWidgets.some((widget) => widget.title === 'Newsletter (copie)')).toBe(true),
+    )
+
     const target = within(area('Barre latérale')).getAllByRole('listitem')[0] as HTMLElement
     fireEvent.click(within(target).getByRole('button', { name: 'Supprimer' }))
     const dialog = await screen.findByRole('dialog')
@@ -221,7 +234,8 @@ describe('Widgets screen', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Supprimer' }))
 
     await waitFor(() => expect(mockWidgets).toHaveLength(2))
-    expect(widgetWrites.map((write) => write.method)).toEqual(['DUPLICATE', 'DELETE'])
+    // The copy is renamed right after it is made, so two rows never read alike.
+    expect(widgetWrites.map((write) => write.method)).toEqual(['DUPLICATE', 'PATCH', 'DELETE'])
   })
 
   it('previews the site itself and reloads it after a change', async () => {

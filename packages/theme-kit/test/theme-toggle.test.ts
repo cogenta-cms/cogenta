@@ -46,47 +46,122 @@ describe('THEME_TOGGLE_SCRIPT', () => {
     expect(() => new Function(THEME_TOGGLE_SCRIPT)).not.toThrow()
   })
 
-  it('cycles system, light, dark in that order and guards every storage access', () => {
+  it('guards every storage access and reads the system appearance', () => {
     const script = THEME_TOGGLE_SCRIPT
-    expect(script).toContain("current==='light'?'dark':current==='dark'?null:'light'")
+    expect(script).toContain('(prefers-color-scheme: dark)')
     expect(script.match(/try\{/g)?.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('actually cycles a real DOM element through the documented order, restores from storage, and never throws when storage is unavailable', () => {
-    const root: { attrs: Record<string, string> } = { attrs: {} }
+  /** Runs the real script against a fake page and returns a way to click its button. */
+  function mount(systemDark: boolean, saved?: string) {
+    const attrs: Record<string, string> = {}
     const store = new Map<string, string>()
+    if (saved !== undefined) store.set('cg-theme', saved)
+    const listeners: Record<string, (event: unknown) => void> = {}
+    const labels: Record<string, string> = {
+      'data-label-light': 'to-light',
+      'data-label-dark': 'to-dark',
+      'data-label-system': 'to-system',
+    }
+    const button = {
+      aria: '',
+      getAttribute: (name: string) => labels[name] ?? null,
+      setAttribute(name: string, value: string) {
+        if (name === 'aria-label') this.aria = value
+      },
+      closest: () => button,
+    }
     const fakeDocument = {
       documentElement: {
         setAttribute: (name: string, value: string) => {
-          root.attrs[name] = value
+          attrs[name] = value
         },
-        removeAttribute: (name: string) => {
-          delete root.attrs[name]
-        },
-        getAttribute: (name: string) => root.attrs[name] ?? null,
+        removeAttribute: (name: string) => void delete attrs[name],
+        getAttribute: (name: string) => attrs[name] ?? null,
       },
-      addEventListener: (_type: string, _listener: unknown) => undefined,
-      querySelectorAll: () => [],
+      addEventListener: (type: string, listener: (event: unknown) => void) => {
+        listeners[type] = listener
+      },
+      querySelectorAll: () => [button],
     }
     const fakeLocalStorage = {
       getItem: (key: string) => store.get(key) ?? null,
       setItem: (key: string, value: string) => void store.set(key, value),
       removeItem: (key: string) => void store.delete(key),
     }
-    const run = new Function('document', 'localStorage', THEME_TOGGLE_SCRIPT)
-    run(fakeDocument, fakeLocalStorage)
-    expect(root.attrs['data-theme']).toBeUndefined()
+    const fakeWindow = { matchMedia: () => ({ matches: systemDark }) }
+    new Function('document', 'localStorage', 'window', THEME_TOGGLE_SCRIPT)(
+      fakeDocument,
+      fakeLocalStorage,
+      fakeWindow,
+    )
+    listeners['DOMContentLoaded']?.({})
+    return {
+      attrs,
+      store,
+      button,
+      click: () => {
+        listeners['click']?.({ target: button })
+      },
+    }
+  }
 
-    // Simulate the click handler in isolation: re-derive `next` the same way
-    // the script does, since the IIFE does not expose its internals.
-    const cycle = (current: string | undefined): string | undefined =>
-      current === 'light' ? 'dark' : current === 'dark' ? undefined : 'light'
-    let state = root.attrs['data-theme']
-    state = cycle(state)
-    expect(state).toBe('light')
-    state = cycle(state)
-    expect(state).toBe('dark')
-    state = cycle(state)
-    expect(state).toBeUndefined()
+  it('makes the first click visible: a light system goes to dark, then back to the system', () => {
+    const page = mount(false)
+    expect(page.button.aria).toBe('to-dark')
+    page.click()
+    expect(page.attrs['data-theme']).toBe('dark')
+    expect(page.store.get('cg-theme')).toBe('dark')
+    expect(page.button.aria).toBe('to-system')
+    page.click()
+    expect(page.attrs['data-theme']).toBeUndefined()
+    expect(page.store.has('cg-theme')).toBe(false)
+    expect(page.button.aria).toBe('to-dark')
+  })
+
+  it('makes the first click visible on a dark system too: it goes to light', () => {
+    const page = mount(true)
+    expect(page.button.aria).toBe('to-light')
+    page.click()
+    expect(page.attrs['data-theme']).toBe('light')
+    page.click()
+    expect(page.attrs['data-theme']).toBeUndefined()
+  })
+
+  it('never leaves a saved choice that equals the system setting looking dead', () => {
+    const page = mount(false, 'light')
+    expect(page.attrs['data-theme']).toBe('light')
+    page.click()
+    expect(page.attrs['data-theme']).toBe('dark')
+  })
+
+  it('restores a saved choice and does not throw when storage is unavailable', () => {
+    const throwing = {
+      getItem: () => {
+        throw new Error('blocked')
+      },
+      setItem: () => {
+        throw new Error('blocked')
+      },
+      removeItem: () => {
+        throw new Error('blocked')
+      },
+    }
+    const fakeDocument = {
+      documentElement: {
+        setAttribute: () => undefined,
+        removeAttribute: () => undefined,
+        getAttribute: () => null,
+      },
+      addEventListener: () => undefined,
+      querySelectorAll: () => [],
+    }
+    expect(() =>
+      new Function('document', 'localStorage', 'window', THEME_TOGGLE_SCRIPT)(
+        fakeDocument,
+        throwing,
+        {},
+      ),
+    ).not.toThrow()
   })
 })

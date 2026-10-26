@@ -24,7 +24,7 @@ function signIn(roles: readonly string[]): void {
 async function goToImport(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Import' }))
-  await screen.findByRole('heading', { name: 'Importer depuis WordPress' })
+  await screen.findByRole('heading', { name: 'Importer du contenu', level: 1 })
 }
 
 describe('the WordPress import screen', () => {
@@ -43,20 +43,29 @@ describe('the WordPress import screen', () => {
     )
   })
 
-  it('uploads a file and shows the real import report', async () => {
+  it('analyses a WordPress export, previews it, then imports it and shows the real report', async () => {
     signIn(['admin'])
 
     render(<App />)
     await goToImport()
 
+    // WordPress is the source the screen opens on.
+    expect((screen.getByLabelText('Type de fichier') as HTMLSelectElement).value).toBe('wordpress')
+
     const file = new File(['<rss></rss>'], 'export.xml', { type: 'text/xml' })
-    const input = screen.getByLabelText("Fichier d'export (.xml)") as HTMLInputElement
+    const input = screen.getByLabelText('Fichier à importer') as HTMLInputElement
     fireEvent.change(input, { target: { files: [file] } })
 
-    await screen.findByRole('heading', { name: "Rapport d'import" })
+    // Nothing is written yet: what the file holds and where it will go.
+    await screen.findByRole('heading', { name: 'Ce que contient ce fichier' })
+    expect(screen.getByText('Où ira chaque élément')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Importer maintenant' }))
+
+    await screen.findByRole('heading', { name: "Résultat de l'import" })
     expect(
       screen.getByText(
-        'Importé : 2 articles, 1 pages, 1 catégories, 0 étiquettes, 0 médias, 1 auteurs, 0 commentaires, 1 redirections.',
+        'Importé : 2 articles, 1 pages, 1 catégories, 0 étiquettes, 0 fichiers médias, 1 auteurs, 0 commentaires, 1 redirections.',
       ),
     ).toBeDefined()
     expect(screen.getByText(/Draft nobody finished/)).toBeDefined()

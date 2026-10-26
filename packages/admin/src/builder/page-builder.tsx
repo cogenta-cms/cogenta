@@ -1,9 +1,9 @@
 import type { BlockVariant } from '@cogenta/blocks'
-import { type JSX, type KeyboardEvent, useEffect, useRef, useState } from 'react'
+import { type JSX, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { renderDraft } from '../api/builder-client.js'
-import { ApiError } from '../api/client.js'
 import type { ContentBlock } from '../api/content-client.js'
+import { describeApiError } from '../api/describe-error.js'
 import type { Pattern } from '../api/patterns-client.js'
 import { BlockForm } from '../blocks/block-form.js'
 import { blockDefinition } from '../blocks/vocabulary.js'
@@ -187,7 +187,7 @@ export function PageBuilder({
         })
         .catch((caught: unknown) => {
           if (abandoned) return
-          setError(caught instanceof ApiError ? caught.message : t('builder.previewError'))
+          setError(describeApiError(caught, t('builder.previewError')).message)
         })
         .finally(() => {
           if (!abandoned) setRendering(false)
@@ -498,11 +498,11 @@ export function PageBuilder({
           // label wrapped one word per line and the rich-text toolbar
           // folded into three rows.
           showDetailPanel
-            ? 'lg:grid-cols-[15rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[16rem_minmax(0,1fr)_26rem]'
+            ? 'lg:grid-cols-[22rem_minmax(0,1fr)] 2xl:grid-cols-[24rem_minmax(0,1fr)]'
             : 'lg:grid-cols-[15rem_minmax(0,1fr)] 2xl:grid-cols-[16rem_minmax(0,1fr)]',
         )}
       >
-        <div className="flex flex-col gap-4">
+        <div className="order-2 flex min-w-0 flex-col gap-4 lg:order-1">
           <Card>
             <CardHeader>
               <CardTitle>
@@ -527,85 +527,106 @@ export function PageBuilder({
             </CardBody>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <h3>{t('builder.pickerHeading')}</h3>
-              </CardTitle>
-            </CardHeader>
-            <CardBody>
-              <BlockPicker
-                disabled={disabled}
-                onAdd={(type) => handleInsert(type, present.length)}
-              />
-            </CardBody>
-          </Card>
+          {showDetailPanel && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <h3>{t('builder.detailHeading')}</h3>
+                </CardTitle>
+              </CardHeader>
+              <CardBody>
+                {selectedKeys.size > 1 ? (
+                  <p className="text-sm text-muted-foreground">{t('builder.detailMultiple')}</p>
+                ) : selected === null || selectedDefinition === undefined ? (
+                  <p className="text-sm text-muted-foreground">{t('builder.detailEmpty')}</p>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <BlockForm
+                      idPrefix={`builder-${selected.key}`}
+                      definition={selectedDefinition}
+                      data={selected.data}
+                      disabled={disabled}
+                      onChange={(data) => commit(updateBlockData(present, selected.key, data))}
+                    />
+                    <BlockVariantControl
+                      variant={selected.data.variant as BlockVariant | undefined}
+                      disabled={disabled}
+                      onChange={(variant) => handleVariantChange(selected.key, selected, variant)}
+                    />
+                  </div>
+                )}
+              </CardBody>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <h3>{t('builder.patterns.heading')}</h3>
-              </CardTitle>
-            </CardHeader>
-            <CardBody>
-              <PatternPicker
-                token={token}
-                disabled={disabled}
-                blocks={present}
-                selectedKeys={selectedKeys}
-                onInsertPattern={handleInsertPattern}
-                onApplyTemplate={handleApplyTemplate}
-              />
-            </CardBody>
-          </Card>
+          <CollapsibleCard title={t('builder.pickerHeading')} collapsed={showDetailPanel}>
+            <BlockPicker disabled={disabled} onAdd={(type) => handleInsert(type, present.length)} />
+          </CollapsibleCard>
+
+          <CollapsibleCard title={t('builder.patterns.heading')} collapsed={showDetailPanel}>
+            <PatternPicker
+              token={token}
+              disabled={disabled}
+              blocks={present}
+              selectedKeys={selectedKeys}
+              onInsertPattern={handleInsertPattern}
+              onApplyTemplate={handleApplyTemplate}
+            />
+          </CollapsibleCard>
         </div>
 
-        <PreviewFrame
-          html={html}
-          viewport={viewport}
-          selectedKey={singleSelected}
-          chromeVisible={chromeVisible && !disabled}
-          title={t('builder.previewTitle')}
-          handlers={{
-            onSelect: handlePreviewSelect,
-            onMove: handleMove,
-            onInsert: handleInsert,
-            onInlineEdit: handleInlineEdit,
-          }}
-        />
-
-        {showDetailPanel && (
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <h3>{t('builder.detailHeading')}</h3>
-              </CardTitle>
-            </CardHeader>
-            <CardBody>
-              {selectedKeys.size > 1 ? (
-                <p className="text-sm text-muted-foreground">{t('builder.detailMultiple')}</p>
-              ) : selected === null || selectedDefinition === undefined ? (
-                <p className="text-sm text-muted-foreground">{t('builder.detailEmpty')}</p>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  <BlockForm
-                    idPrefix={`builder-${selected.key}`}
-                    definition={selectedDefinition}
-                    data={selected.data}
-                    disabled={disabled}
-                    onChange={(data) => commit(updateBlockData(present, selected.key, data))}
-                  />
-                  <BlockVariantControl
-                    variant={selected.data.variant as BlockVariant | undefined}
-                    disabled={disabled}
-                    onChange={(variant) => handleVariantChange(selected.key, selected, variant)}
-                  />
-                </div>
-              )}
-            </CardBody>
-          </Card>
-        )}
+        <div className="order-1 min-w-0 lg:order-2">
+          <PreviewFrame
+            html={html}
+            viewport={viewport}
+            selectedKey={singleSelected}
+            chromeVisible={chromeVisible && !disabled}
+            title={t('builder.previewTitle')}
+            handlers={{
+              onSelect: handlePreviewSelect,
+              onMove: handleMove,
+              onInsert: handleInsert,
+              onInlineEdit: handleInlineEdit,
+            }}
+          />
+        </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * A side-panel card that folds to its title while the block settings are open:
+ * the settings take the room the pickers had, and the pickers are one click
+ * away rather than gone.
+ */
+function CollapsibleCard({
+  title,
+  collapsed,
+  children,
+}: {
+  readonly title: string
+  readonly collapsed: boolean
+  readonly children: ReactNode
+}): JSX.Element {
+  if (collapsed) {
+    return (
+      <details className="rounded-xl border border-border bg-card shadow-card">
+        <summary className="cursor-pointer px-4 py-3 font-sans text-sm font-semibold">
+          {title}
+        </summary>
+        <div className="px-4 pb-4">{children}</div>
+      </details>
+    )
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <h3>{title}</h3>
+        </CardTitle>
+      </CardHeader>
+      <CardBody>{children}</CardBody>
+    </Card>
   )
 }

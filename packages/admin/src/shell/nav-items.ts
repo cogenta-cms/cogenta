@@ -196,6 +196,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
     visibleWhen: { kind: 'role', role: 'admin' },
   },
   {
+    to: '/theme-sandbox',
+    labelKey: 'nav.themeSandbox',
+    group: 'appearance',
+    visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
     to: '/widgets',
     labelKey: 'nav.widgets',
     group: 'appearance',
@@ -206,6 +212,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'nav.plugins',
     group: 'appearance',
     visibleWhen: { kind: 'role', role: 'admin' },
+  },
+  {
+    to: '/marketplace',
+    labelKey: 'nav.marketplace',
+    group: 'appearance',
+    visibleWhen: { kind: 'role', role: 'admin' },
+    badge: 'marketplaceUpdates',
   },
   {
     to: '/admin-appearance',
@@ -441,13 +454,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'nav.import',
     group: 'ops',
     visibleWhen: { kind: 'role', role: 'admin' },
-  },
-  {
-    to: '/marketplace',
-    labelKey: 'nav.marketplace',
-    group: 'ops',
-    visibleWhen: { kind: 'role', role: 'admin' },
-    badge: 'marketplaceUpdates',
   },
   {
     to: '/ops-settings',

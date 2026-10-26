@@ -1,6 +1,7 @@
 import { type DragEvent, type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { MenuItem } from '../api/menu-client.js'
+import { DeleteIcon, EditIcon } from '../ui/icons.js'
 import { Button, cn } from '../ui/index.js'
 import {
   dropBeforeOrAfter,
@@ -125,6 +126,7 @@ function ItemRow({
               variant="ghost"
               disabled={index <= 0}
               aria-label={t('menus.itemAction', { action: t('menus.moveUp'), label: item.label })}
+              title={t('menus.moveUp')}
               onClick={() => {
                 const next = moveUp(items, item.id)
                 if (next !== items) onReorder(next)
@@ -137,6 +139,7 @@ function ItemRow({
               variant="ghost"
               disabled={index === -1 || index >= siblings.length - 1}
               aria-label={t('menus.itemAction', { action: t('menus.moveDown'), label: item.label })}
+              title={t('menus.moveDown')}
               onClick={() => {
                 const next = moveDown(items, item.id)
                 if (next !== items) onReorder(next)
@@ -149,6 +152,7 @@ function ItemRow({
               variant="ghost"
               disabled={index <= 0}
               aria-label={t('menus.itemAction', { action: t('menus.indent'), label: item.label })}
+              title={t('menus.indent')}
               onClick={() => {
                 const next = indent(items, item.id)
                 if (next !== items) onReorder(next)
@@ -161,6 +165,7 @@ function ItemRow({
               variant="ghost"
               disabled={item.parent === null}
               aria-label={t('menus.itemAction', { action: t('menus.outdent'), label: item.label })}
+              title={t('menus.outdent')}
               onClick={() => {
                 const next = outdent(items, item.id)
                 if (next !== items) onReorder(next)
@@ -169,20 +174,23 @@ function ItemRow({
               ←
             </Button>
             <Button
-              size="sm"
-              variant="secondary"
+              size="icon"
+              variant="ghost"
               aria-label={t('menus.itemAction', { action: t('menus.editItem'), label: item.label })}
+              title={t('menus.editItem')}
               onClick={() => onEdit(item)}
             >
-              {t('menus.editItem')}
+              <EditIcon />
             </Button>
             <Button
-              size="sm"
-              variant="destructive"
+              size="icon"
+              variant="ghost"
+              className="text-destructive hover:bg-destructive-surface hover:text-destructive"
               aria-label={t('menus.itemAction', { action: t('menus.delete'), label: item.label })}
+              title={t('menus.delete')}
               onClick={() => onDelete(item)}
             >
-              {t('menus.delete')}
+              <DeleteIcon />
             </Button>
           </div>
         )}

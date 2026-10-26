@@ -41,7 +41,7 @@ async function goToChannels(): Promise<void> {
   // The page heading renders before either of the screen's two requests has
   // answered: the channel cards wait for the linked-account list, and the
   // bot name fields (and the guide's wording) for the site settings.
-  await screen.findByRole('heading', { name: 'Discord', level: 2 })
+  await screen.findByRole('heading', { name: /^Discord/u, level: 2 })
   await screen.findByLabelText('Nom du bot Discord')
 }
 
@@ -96,7 +96,9 @@ describe('the Canaux screen', () => {
     expect(screen.getByText(/Lié depuis le/u)).toBeDefined()
     expect(screen.getAllByText('Non lié.')).toHaveLength(2)
 
+    // Unlinking asks for confirmation first.
     fireEvent.click(screen.getByRole('button', { name: 'Délier' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Délier le compte' }))
 
     await waitFor(() => {
       expect(screen.getAllByText('Non lié.')).toHaveLength(3)

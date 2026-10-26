@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { CogentaError } from '@cogenta/core'
 import type { AuditLogLike } from '../audit/types.js'
 import { withAuditForManifest } from '../audit/with-audit.js'
@@ -15,6 +16,7 @@ import { createAgentDelegateTool } from '../tools/core/agent-delegate.js'
 import { buildManifest } from '../tools/manifest.js'
 import { createToolRegistry, type ToolRegistry } from '../tools/registry.js'
 import type { ToolContext } from '../tools/types.js'
+import type { TraceStore } from '../trace/types.js'
 import type { AgentDeclarationStore, StoredAgent } from './store.js'
 
 /**
@@ -105,6 +107,12 @@ export interface AgentRunnerOptions {
   readonly approvalQueue: ApprovalQueue
   readonly site: RunnerSite
   readonly killSwitchFor: (name: string) => KillSwitch
+  /**
+   * Where each finished run is kept, so the agent's page can list its recent
+   * runs. Optional: a site without one runs agents exactly the same, it just
+   * has no run list (R2 — a missing ingredient degrades a view, never a run).
+   */
+  readonly traceStore?: TraceStore
   readonly now?: () => number
   /** Injectable for tests — defaults to a real `Date.now`-bucketed tracker per agent, cached for the runner's lifetime. */
   readonly budgetTrackerFor?: (agent: StoredAgent) => BudgetTracker
@@ -211,9 +219,12 @@ function resolveProvider(
   if (anyConfigured !== undefined) return providers.get(anyConfigured)
   throw new CogentaError({
     code: 'AGENT_NO_PROVIDER',
-    message: `"${agentName}" has no configured LLM provider (wants "${model.preferred}"${
-      model.fallback === undefined ? '' : ` or "${model.fallback}"`
-    }).`,
+    message:
+      model.preferred === 'auto'
+        ? `"${agentName}" has no enabled LLM provider to run on.`
+        : `"${agentName}" has no configured LLM provider (wants "${model.preferred}"${
+            model.fallback === undefined ? '' : ` or "${model.fallback}"`
+          }).`,
     hint: 'Configure a provider from the admin\'s "Providers" screen before running this agent.',
   })
 }
@@ -392,6 +403,7 @@ export function createAgentRunner(options: AgentRunnerOptions): AgentRunner {
         throw error
       }
 
+      await saveTrace(options.traceStore, agent.name, startedAt, now(), result)
       await recordRun(options.auditLog, agent.name, runOptions.trigger, {
         ok: true,
         stopReason: result.stopReason,
@@ -421,6 +433,31 @@ const silentLogger: ToolContext['logger'] = {
   info: () => undefined,
   warn: () => undefined,
   error: () => undefined,
+}
+
+/** A trace that cannot be written is a missing log line, never a failed run. */
+async function saveTrace(
+  store: TraceStore | undefined,
+  agentName: string,
+  startedAtMs: number,
+  finishedAtMs: number,
+  result: RunResult,
+): Promise<void> {
+  if (store === undefined) return
+  try {
+    await store.save({
+      id: randomUUID(),
+      agentName,
+      startedAt: new Date(startedAtMs).toISOString(),
+      finishedAt: new Date(finishedAtMs).toISOString(),
+      stopReason: result.stopReason,
+      usage: result.usage,
+      steps: result.steps,
+      messages: result.messages,
+    })
+  } catch {
+    // Same rule as the audit entry below.
+  }
 }
 
 async function recordRun(

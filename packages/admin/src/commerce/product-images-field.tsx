@@ -1,9 +1,9 @@
 import { type JSX, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { type Product, updateProduct } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
 import { MediaPicker } from '../fields/media-picker.js'
 import { Notice } from '../ui/index.js'
+import { commerceErrorMessage } from './commerce-errors.js'
 
 /**
  * A product's own photos, direct on the commercial record rather than only
@@ -38,7 +38,7 @@ export function ProductImagesField({
       const updated = await updateProduct(token, product.id, { imageMediaIds: ids })
       onChange(updated)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.imagesError'))
+      setError(commerceErrorMessage(t, caught, 'commerceProducts.imagesError'))
     } finally {
       setSaving(false)
     }

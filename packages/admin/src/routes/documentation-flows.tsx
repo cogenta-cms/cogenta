@@ -53,9 +53,50 @@ interface FlowNodeProps {
   readonly label: string
   readonly labelAbove?: boolean
   readonly delay: string
+  /** The step number shown in the circle, matching the ordered list beside the diagram. */
+  readonly step?: number
+  /** A small drawing instead of a number, for a side branch (drawn around the node's centre). */
+  readonly glyph?: 'loop' | 'clock' | 'pause'
 }
 
-function FlowNode({ cx, cy, label, labelAbove = true, delay }: FlowNodeProps): JSX.Element {
+/** Side-branch pictograms, drawn in a 20 x 20 box centred on the node. */
+function glyphFor(kind: NonNullable<FlowNodeProps['glyph']>, cx: number, cy: number): JSX.Element {
+  const common = {
+    className: 'doc-flow__glyph',
+    transform: `translate(${cx - 10} ${cy - 10})`,
+  }
+  if (kind === 'clock') {
+    return (
+      <g {...common}>
+        <circle cx={10} cy={10} r={7.5} />
+        <path d="M10 5.5V10l3 2" />
+      </g>
+    )
+  }
+  if (kind === 'pause') {
+    return (
+      <g {...common}>
+        <path d="M7 5v10M13 5v10" />
+      </g>
+    )
+  }
+  return (
+    <g {...common}>
+      <path d="M15.5 7A6.5 6.5 0 1 0 16 11" />
+      <path d="M16 3.5V7h-3.5" />
+    </g>
+  )
+}
+
+function FlowNode({
+  cx,
+  cy,
+  label,
+  labelAbove = true,
+  delay,
+  step,
+  glyph,
+}: FlowNodeProps): JSX.Element {
   const labelY = labelAbove ? cy - 34 : cy + 40
   return (
     <g>
@@ -66,6 +107,12 @@ function FlowNode({ cx, cy, label, labelAbove = true, delay }: FlowNodeProps): J
         r={22}
         style={{ animationDelay: delay }}
       />
+      {step !== undefined && (
+        <text className="doc-flow__node-step" x={cx} y={cy + 4} textAnchor="middle">
+          {step}
+        </text>
+      )}
+      {glyph !== undefined && glyphFor(glyph, cx, cy)}
       <text className="doc-flow__node-label" x={cx} y={labelY} textAnchor="middle">
         {label}
       </text>
@@ -112,14 +159,33 @@ export function EditorialFlowDiagram({ t }: { readonly t: TFunction }): JSX.Elem
       />
       {arrowhead({ x: 510, y: 68 }, -72, 'branch')}
 
-      <FlowNode cx={54} cy={54} label={t('documentation.flows.editorial.draft')} delay="0s" />
-      <FlowNode cx={210} cy={54} label={t('documentation.flows.editorial.pending')} delay="0.9s" />
-      <FlowNode cx={366} cy={54} label={t('documentation.flows.editorial.approved')} delay="1.8s" />
+      <FlowNode
+        cx={54}
+        cy={54}
+        label={t('documentation.flows.editorial.draft')}
+        delay="0s"
+        step={1}
+      />
+      <FlowNode
+        cx={210}
+        cy={54}
+        label={t('documentation.flows.editorial.pending')}
+        delay="0.9s"
+        step={2}
+      />
+      <FlowNode
+        cx={366}
+        cy={54}
+        label={t('documentation.flows.editorial.approved')}
+        delay="1.8s"
+        step={3}
+      />
       <FlowNode
         cx={522}
         cy={54}
         label={t('documentation.flows.editorial.published')}
         delay="2.7s"
+        step={4}
       />
       <FlowNode
         cx={210}
@@ -127,6 +193,7 @@ export function EditorialFlowDiagram({ t }: { readonly t: TFunction }): JSX.Elem
         label={t('documentation.flows.editorial.changes')}
         labelAbove={false}
         delay="1.2s"
+        glyph="loop"
       />
       <FlowNode
         cx={308}
@@ -134,6 +201,7 @@ export function EditorialFlowDiagram({ t }: { readonly t: TFunction }): JSX.Elem
         label={t('documentation.flows.editorial.scheduled')}
         labelAbove={false}
         delay="0.4s"
+        glyph="clock"
       />
     </svg>
   )
@@ -166,16 +234,41 @@ export function PluginPermissionFlowDiagram({ t }: { readonly t: TFunction }): J
       />
       {arrowhead({ x: 378, y: 72 }, -90, 'branch')}
 
-      <FlowNode cx={54} cy={54} label={t('documentation.flows.plugin.manifest')} delay="0s" />
-      <FlowNode cx={210} cy={54} label={t('documentation.flows.plugin.install')} delay="0.9s" />
-      <FlowNode cx={366} cy={54} label={t('documentation.flows.plugin.scoped')} delay="1.8s" />
-      <FlowNode cx={522} cy={54} label={t('documentation.flows.plugin.revoke')} delay="2.7s" />
+      <FlowNode
+        cx={54}
+        cy={54}
+        label={t('documentation.flows.plugin.manifest')}
+        delay="0s"
+        step={1}
+      />
+      <FlowNode
+        cx={210}
+        cy={54}
+        label={t('documentation.flows.plugin.install')}
+        delay="0.9s"
+        step={2}
+      />
+      <FlowNode
+        cx={366}
+        cy={54}
+        label={t('documentation.flows.plugin.scoped')}
+        delay="1.8s"
+        step={3}
+      />
+      <FlowNode
+        cx={522}
+        cy={54}
+        label={t('documentation.flows.plugin.revoke')}
+        delay="2.7s"
+        step={4}
+      />
       <FlowNode
         cx={366}
         cy={150}
         label={t('documentation.flows.plugin.disabled')}
         labelAbove={false}
         delay="1.2s"
+        glyph="pause"
       />
     </svg>
   )

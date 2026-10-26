@@ -12,8 +12,10 @@ import {
   type UpdatePackageStatus,
 } from '../api/updates-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { auditActionLabel } from '../lib/audit-actions.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import { SiteSettingsField } from '../settings/site-settings-field.js'
-import { Button, Card, CardBody, Modal, Notice } from '../ui/index.js'
+import { Badge, Button, Card, CardBody, Modal, Notice } from '../ui/index.js'
 
 /**
  * "Mises à jour" (L22 task 9) — its own screen (fiche 66). This card used to
@@ -37,6 +39,8 @@ export function UpdatesRoute(): JSX.Element {
   const [applying, setApplying] = useState(false)
   const [applyMessage, setApplyMessage] = useState<string | null>(null)
   const [risky, setRisky] = useState<readonly UpdatePackageStatus[] | null>(null)
+  const [checkMessage, setCheckMessage] = useState<string | null>(null)
+  const formatWhen = useDateTimeFormatter()
 
   const loadUpdates = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -63,6 +67,30 @@ export function UpdatesRoute(): JSX.Element {
   useEffect(() => {
     void loadUpdates()
   }, [loadUpdates])
+
+  /** The button's own answer: what the check found, said right under it rather than silently reloading the list. */
+  async function checkNow(): Promise<void> {
+    if (token === null) return
+    setApplyMessage(null)
+    setCheckMessage(null)
+    setUpdatesLoading(true)
+    setUpdatesError(null)
+    try {
+      const status = await readUpdateStatus(token)
+      setUpdateStatus(status)
+      setCheckMessage(
+        status.packages.some((pkg) => pkg.checkError !== undefined)
+          ? t('updates.checkIncomplete')
+          : status.updateAvailable
+            ? t('updates.checkFoundUpdate')
+            : t('updates.checkUpToDate'),
+      )
+    } catch (caught) {
+      setUpdatesError(caught instanceof ApiError ? caught.message : t('updates.loadError'))
+    } finally {
+      setUpdatesLoading(false)
+    }
+  }
 
   async function saveAutoUpdatePolicy(value: unknown): Promise<void> {
     if (token === null) return
@@ -126,6 +154,11 @@ export function UpdatesRoute(): JSX.Element {
           <p>{applyMessage}</p>
         </Notice>
       )}
+      {checkMessage !== null && (
+        <Notice tone="info" live="polite">
+          <p>{checkMessage}</p>
+        </Notice>
+      )}
       {updatesLoading && updateStatus === null && <p>{t('common.loading')}</p>}
 
       {updateStatus !== null && (
@@ -134,7 +167,7 @@ export function UpdatesRoute(): JSX.Element {
             <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
               {updateStatus.packages.map((pkg) => (
                 <Fragment key={pkg.name}>
-                  <dt className="font-mono font-medium">{pkg.name}</dt>
+                  <dt className="font-mono font-medium normal-case tracking-normal">{pkg.name}</dt>
                   <dd className="m-0">
                     {pkg.checkError !== undefined
                       ? t('updates.checkError', { error: pkg.checkError })
@@ -142,7 +175,7 @@ export function UpdatesRoute(): JSX.Element {
                         ? t('updates.available', {
                             installed: pkg.installed,
                             latest: pkg.latest,
-                            bump: pkg.bump,
+                            bump: t(`updates.bump.${pkg.bump}`),
                           })
                         : t('updates.upToDateOne', { installed: pkg.installed })}
                   </dd>
@@ -150,13 +183,13 @@ export function UpdatesRoute(): JSX.Element {
               ))}
             </dl>
 
+            <p className="m-0 text-sm text-muted-foreground">
+              {t('updates.lastChecked', { when: formatWhen(updateStatus.checkedAt) })}
+            </p>
+
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => void loadUpdates()}
-                disabled={updatesLoading}
-              >
-                {t('updates.checkNow')}
+              <Button variant="secondary" onClick={() => void checkNow()} disabled={updatesLoading}>
+                {updatesLoading ? t('updates.checking') : t('updates.checkNow')}
               </Button>
               <Button
                 onClick={() => void runApply(false)}
@@ -167,7 +200,7 @@ export function UpdatesRoute(): JSX.Element {
             </div>
 
             {autoUpdateSetting !== null && (
-              <div className="max-w-sm">
+              <div className="max-w-xl">
                 <SiteSettingsField
                   setting={autoUpdateSetting}
                   canEdit
@@ -186,14 +219,20 @@ export function UpdatesRoute(): JSX.Element {
                 ) : (
                   <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
                     {updateHistory.entries.map((entry) => (
-                      <li key={entry.id} className="font-mono">
-                        {entry.at} — {entry.action}
+                      <li key={entry.id}>
+                        <span className="text-muted-foreground">{formatWhen(entry.at)}</span>
+                        {' — '}
+                        {auditActionLabel(t, entry.action)}
                       </li>
                     ))}
                     {updateHistory.restorePoints.map((point) => (
-                      <li key={point.path} className="font-mono text-muted-foreground">
-                        {point.createdAt} — {point.path}
-                        {point.triggeredByUpdate ? ` (${t('updates.autoRestorePoint')})` : ''}
+                      <li key={point.path} className="text-muted-foreground">
+                        {formatWhen(point.createdAt)} —{' '}
+                        {t('updates.restorePoint', { tables: point.tables, rows: point.rows })}
+                        {point.triggeredByUpdate ? ` (${t('updates.autoRestorePoint')})` : ''}{' '}
+                        <Badge tone="neutral" className="ml-1 align-middle">
+                          {point.path.split(/[\\/]/u).pop()}
+                        </Badge>
                       </li>
                     ))}
                   </ul>

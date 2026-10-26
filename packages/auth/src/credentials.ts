@@ -36,7 +36,36 @@ export interface CredentialStore {
   /** A secret exists but has not completed the "scan and confirm one code" step. */
   totpSecret(userId: string): Promise<{ secret: string; verified: boolean } | null>
   confirmTotp(userId: string): Promise<void>
+  /** Removes the active factor *and* any pending re-enrolment: nothing TOTP-shaped is left. */
   removeTotp(userId: string): Promise<void>
+
+  /**
+   * Stores a freshly generated secret as a *pending* enrolment, valid until
+   * `expiresAtMs`, **without touching the active factor** (pentest 2026-10-26,
+   * F-01). One pending secret per account: asking again replaces the previous
+   * pending one, never the active one.
+   */
+  setPendingTotp(userId: string, secret: string, expiresAtMs: number): Promise<void>
+  /** The pending secret, or `null` when there is none or it has expired. */
+  pendingTotp(userId: string): Promise<{ secret: string; expiresAt: number } | null>
+  /** Drops the pending enrolment, if any. The active factor is left alone. */
+  removePendingTotp(userId: string): Promise<void>
+  /**
+   * Makes the pending secret the active one — the only way a pending secret
+   * becomes real. In one transaction: the pending row is claimed (a guarded
+   * delete, so two concurrent confirmations cannot both win), the active row is
+   * replaced by `{ secret, verified: true, lastStep: step }`. Returns `false`,
+   * having changed nothing, when the pending secret is gone, expired, or is no
+   * longer `expectedSecret` (a newer enrolment replaced it meanwhile).
+   */
+  promotePendingTotp(userId: string, expectedSecret: string, step: number): Promise<boolean>
+  /**
+   * Records that the TOTP time step `step` was accepted for this account's
+   * active factor — and refuses a step that was already accepted, or an older
+   * one (pentest 2026-10-26, F-03). Returns `true` for exactly one of any
+   * number of simultaneous callers presenting the same step.
+   */
+  claimTotpStep(userId: string, step: number): Promise<boolean>
 
   addWebAuthnCredential(userId: string, data: WebAuthnCredentialData): Promise<void>
   webAuthnCredentials(userId: string): Promise<readonly WebAuthnCredentialData[]>
@@ -130,7 +159,8 @@ export function createCredentialStore(
     totpSecret: async (userId) => {
       const row = await findOne(userId, 'totp')
       if (row === undefined) return null
-      return JSON.parse(row.data) as { secret: string; verified: boolean }
+      const parsed = JSON.parse(row.data) as { secret: string; verified: boolean }
+      return { secret: parsed.secret, verified: parsed.verified }
     },
 
     confirmTotp: async (userId) => {
@@ -149,7 +179,85 @@ export function createCredentialStore(
     },
 
     removeTotp: async (userId) => {
-      await db.query(sql`delete from ${table} where user_id = ${userId} and kind = ${'totp'}`)
+      await db.query(
+        sql`delete from ${table} where user_id = ${userId} and kind in (${'totp'}, ${'totp_pending'})`,
+      )
+    },
+
+    setPendingTotp: async (userId, secret, expiresAtMs) => {
+      await upsert(userId, 'totp_pending', { secret, expiresAt: expiresAtMs })
+    },
+
+    pendingTotp: async (userId) => {
+      const row = await findOne(userId, 'totp_pending')
+      if (row === undefined) return null
+      const parsed = JSON.parse(row.data) as { secret: string; expiresAt: number }
+      if (parsed.expiresAt <= now()) return null
+      return { secret: parsed.secret, expiresAt: parsed.expiresAt }
+    },
+
+    removePendingTotp: async (userId) => {
+      await db.query(
+        sql`delete from ${table} where user_id = ${userId} and kind = ${'totp_pending'}`,
+      )
+    },
+
+    promotePendingTotp: async (userId, expectedSecret, step) => {
+      // Read outside the transaction on purpose: the claim below must be the
+      // transaction's *first* statement. MariaDB 11 raises ER_CHECKREAD ("record
+      // has changed since last read") when a row read earlier in the same
+      // transaction is changed by a concurrent commit before it is written, so
+      // a read-then-delete inside one transaction turns a lost race into an
+      // error instead of a clean "zero rows".
+      const row = await findOne(userId, 'totp_pending')
+      if (row === undefined) return false
+      const parsed = JSON.parse(row.data) as { secret: string; expiresAt: number }
+      if (parsed.secret !== expectedSecret || parsed.expiresAt <= now()) return false
+
+      return db.transaction(
+        async (tx) => {
+          // The claim: whoever deletes the pending row owns the swap. A second
+          // confirmation racing this one finds zero rows to delete.
+          const claimed = await tx.query(
+            sql`delete from ${table} where id = ${row.id} and data = ${row.data}`,
+          )
+          if (claimed.rowsAffected === 0) return false
+
+          const payload = JSON.stringify({ secret: expectedSecret, verified: true, lastStep: step })
+          const active = await tx.query<CredentialRow>(
+            sql`select * from ${table} where user_id = ${userId} and kind = ${'totp'} limit ${sqlLimit(1)}`,
+          )
+          const existing = active.rows[0]
+          if (existing === undefined) {
+            await tx.query(sql`
+              insert into ${table} (id, user_id, kind, data, created_at)
+              values (${newId(now)}, ${userId}, ${'totp'}, ${payload}, ${new Date(now()).toISOString()})`)
+          } else {
+            await tx.query(sql`update ${table} set data = ${payload} where id = ${existing.id}`)
+          }
+          return true
+        },
+        { immediate: true },
+      )
+    },
+
+    claimTotpStep: async (userId, step) => {
+      // Compare-and-set on the bytes just read, retried against the fresher row
+      // when another caller wrote first (the `consumeRecoveryCode` shape). A
+      // retry that finds the step already recorded is the replay being refused.
+      for (let attempt = 0; attempt < CONSUME_ATTEMPTS; attempt += 1) {
+        const row = await findOne(userId, 'totp')
+        if (row === undefined) return false
+        const parsed = JSON.parse(row.data) as { lastStep?: number }
+        if (parsed.lastStep !== undefined && step <= parsed.lastStep) return false
+
+        const updated = JSON.stringify({ ...parsed, lastStep: step })
+        const result = await db.query(
+          sql`update ${table} set data = ${updated} where id = ${row.id} and data = ${row.data}`,
+        )
+        if (result.rowsAffected > 0) return true
+      }
+      return false
     },
 
     addWebAuthnCredential: async (userId, data) => {
@@ -196,7 +304,7 @@ export function createCredentialStore(
 
     kinds: async (userId) => {
       const result = await db.query<{ kind: string }>(
-        sql`select distinct kind from ${table} where user_id = ${userId}`,
+        sql`select distinct kind from ${table} where user_id = ${userId} and kind != ${'totp_pending'}`,
       )
       return result.rows.map((row) => row.kind as CredentialKind)
     },

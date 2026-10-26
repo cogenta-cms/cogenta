@@ -32,6 +32,13 @@ export const TABLES = {
    * believed broken. Owned by `createAuditIntegrityStore` (`audit-integrity.ts`).
    */
   auditIntegrity: 'cogenta_audit_integrity',
+  /**
+   * Pentest 2026-10-26 F-03: one row per second-factor login ticket handed
+   * out, so completing the sign-in can *consume* it. The signed ticket alone
+   * proves the password step happened; this row is what says it has not been
+   * spent yet. Owned by `login.ts`.
+   */
+  loginTickets: 'cogenta_login_tickets',
 } as const
 
 /** `varchar` on Postgres/MySQL, `text` on SQLite — encapsulated once, here. */
@@ -62,6 +69,7 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
   const apiKeyUsage = identifier(TABLES.apiKeyUsage, d)
   const auditGenesis = identifier(TABLES.auditGenesis, d)
   const auditIntegrity = identifier(TABLES.auditIntegrity, d)
+  const loginTickets = identifier(TABLES.loginTickets, d)
   const t512 = textColumn(d, 512)
   const t255 = textColumn(d, 255)
   const t64 = textColumn(d, 64)
@@ -97,7 +105,8 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
       kind ${t64} not null,
       -- Kind-specific, never interpreted at this layer:
       --   password: { hash }
-      --   totp:     { secret, verified }
+      --   totp:     { secret, verified, lastStep? }  (the active factor)
+      --   totp_pending: { secret, expiresAt }       (a re-enrolment awaiting its first code)
       --   webauthn: { credentialId, publicKey, counter, transports, label }
       data text not null,
       created_at ${t64} not null
@@ -257,6 +266,21 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
       broken_message text
     )`)
 
+  // Pentest 2026-10-26 F-03: the single-use ledger for MFA login tickets.
+  // `used_at` null means still spendable; stamping it (a guarded UPDATE, the
+  // same idiom as `cogenta_password_resets`) is what makes a ticket work once.
+  // `user_id` lets a change of the second factor revoke every outstanding
+  // ticket of that account in one statement. Additive: a fresh install and an
+  // upgrade take the same path, and rolling back is `drop table`.
+  await db.query(sql`
+    create table if not exists ${loginTickets} (
+      id ${t64} not null primary key,
+      user_id ${t64} not null,
+      expires_at ${t64} not null,
+      used_at ${t64}
+    )`)
+  await createIndexIfMissing(db, 'cogenta_login_tickets_user', loginTickets, sql`(user_id)`)
+
   // Session device metadata (fiche 18 task 2): additive for a database that
   // already had this table before this fiche — there is no portable "add
   // column if not exists", so the failure this swallows is exactly "already
@@ -265,6 +289,10 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
   // distillation is ever written to either column.
   await addColumnIfMissing(db, sessions, 'browser', t64)
   await addColumnIfMissing(db, sessions, 'device', t64)
+  // Pentest 2026-10-26 F-01: when this session last re-proved the current
+  // password or an authenticator code ("step-up"). Null for every session that
+  // never did. Additive; rolling back is `alter table … drop column`.
+  await addColumnIfMissing(db, sessions, 'step_up_until', t64)
 
   await createIndexIfMissing(db, 'cogenta_credentials_user', credentials, sql`(user_id)`)
   await createIndexIfMissing(db, 'cogenta_sessions_user', sessions, sql`(user_id)`)

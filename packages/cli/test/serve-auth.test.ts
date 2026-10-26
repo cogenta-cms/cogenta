@@ -179,6 +179,23 @@ describe('cogenta serve — recovery codes (fiche 18 task 1)', () => {
       const status = await fetch(`${server.base}/api/auth/totp/recovery-codes`, { headers: auth })
       expect(await status.json()).toEqual({ data: { total: 10, remaining: 10 } })
 
+      // A session alone cannot replace the codes of a confirmed factor: the
+      // refusal is stable and changes nothing, the password lifts it.
+      const refused = await fetch(`${server.base}/api/auth/totp/recovery-codes/regenerate`, {
+        method: 'POST',
+        headers: auth,
+      })
+      expect(refused.status).toBe(403)
+      expect(((await refused.json()) as { error: { code: string } }).error.code).toBe(
+        'AUTH_STEP_UP_REQUIRED',
+      )
+      const stepUp = await fetch(`${server.base}/api/auth/step-up`, {
+        method: 'POST',
+        headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ password: 'correct horse battery staple' }),
+      })
+      expect(stepUp.status).toBe(200)
+
       const regenerate = await fetch(`${server.base}/api/auth/totp/recovery-codes/regenerate`, {
         method: 'POST',
         headers: auth,
@@ -191,6 +208,89 @@ describe('cogenta serve — recovery codes (fiche 18 task 1)', () => {
       await server.stop()
     }
   })
+})
+
+describe('cogenta serve — second factor hardening (pentest 2026-10-26, F-01 and F-03)', () => {
+  it('keeps the factor through an abandoned re-enrolment, refuses a bare session, and spends a ticket once', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'ed@example.com', 'correct horse battery staple', ['editor'])
+      const login = await passwordLogin(
+        server.base,
+        'ed@example.com',
+        'correct horse battery staple',
+      )
+      const token = login.data.session?.token
+      if (token === undefined) throw new Error('expected a session')
+      const auth = { authorization: `Bearer ${token}` }
+      const json = { ...auth, 'content-type': 'application/json' }
+
+      const first = await fetch(`${server.base}/api/auth/totp/enrol`, {
+        method: 'POST',
+        headers: auth,
+      })
+      const { secret } = ((await first.json()) as { data: { secret: string } }).data
+      await fetch(`${server.base}/api/auth/totp/enrol/confirm`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ token: codeFor(secret, Date.now() / 1000) }),
+      })
+
+      // A bare session can neither restart the enrolment nor remove the factor.
+      const bareEnrol = await fetch(`${server.base}/api/auth/totp/enrol`, {
+        method: 'POST',
+        headers: auth,
+      })
+      const bareDelete = await fetch(`${server.base}/api/auth/totp`, {
+        method: 'DELETE',
+        headers: auth,
+      })
+      expect([bareEnrol.status, bareDelete.status]).toEqual([403, 403])
+
+      // After a step-up, a re-enrolment is begun and abandoned: still protected.
+      await fetch(`${server.base}/api/auth/step-up`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ password: 'correct horse battery staple' }),
+      })
+      const begun = await fetch(`${server.base}/api/auth/totp/enrol`, {
+        method: 'POST',
+        headers: auth,
+      })
+      expect(begun.status).toBe(200)
+      const stillProtected = await passwordLogin(
+        server.base,
+        'ed@example.com',
+        'correct horse battery staple',
+      )
+      expect(stillProtected.data.status).toBe('mfa_required')
+
+      // The ticket and the code open exactly one session, then are dead.
+      const ticket = stillProtected.data.ticket
+      if (ticket === undefined) throw new Error('expected an mfa ticket')
+      const code = codeFor(secret, Date.now() / 1000 + 30)
+      const complete = (): Promise<Response> =>
+        fetch(`${server.base}/api/auth/totp`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ticket, token: code }),
+        })
+      const outcomes = await Promise.all([complete(), complete()])
+      expect(outcomes.map((response) => response.status).sort()).toEqual([200, 401])
+      expect((await complete()).status).toBe(401)
+
+      // The changes to the factor are in the person's own activity log.
+      const activity = await fetch(`${server.base}/api/audit/me`, { headers: auth })
+      const actions = ((await activity.json()) as { data: readonly { action: string }[] }).data.map(
+        (entry) => entry.action,
+      )
+      expect(actions).toContain('auth.totp_enabled')
+      expect(actions).toContain('auth.step_up')
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
 })
 
 describe('cogenta serve — sign out everywhere else (fiche 18 task 2)', () => {

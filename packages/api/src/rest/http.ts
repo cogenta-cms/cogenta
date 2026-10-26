@@ -196,6 +196,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // for), not a malformed request.
   AUTH_RECOVERY_CODE_INVALID: 401,
   AUTH_RECOVERY_CODES_UNAVAILABLE: 409,
+  // Step-up (pentest 2026-10-26, F-01). 403, not 401: the session is valid and
+  // the caller is who they say they are — they only have to prove it again for
+  // this one action — and a client that signs the user out on every 401 must
+  // not do so here.
+  AUTH_STEP_UP_REQUIRED: 403,
 
   // Account lifecycle (fiche 17: invitations and anonymization). Both invite
   // codes describe a conflict with the account's *current* state, not a

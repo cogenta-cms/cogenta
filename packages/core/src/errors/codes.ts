@@ -157,6 +157,10 @@ export const ERROR_CODES = [
   // is unusable.
   'AUTH_RECOVERY_CODE_INVALID',
   'AUTH_RECOVERY_CODES_UNAVAILABLE',
+  // Auth — step-up (pentest 2026-10-26, F-01): a session alone no longer
+  // changes or removes a second factor; the caller must have just proved the
+  // current password or a current authenticator code.
+  'AUTH_STEP_UP_REQUIRED',
 
   // Auth — account lifecycle (fiche 17: invitations and anonymization)
   // The invitation reuses AUTH_RESET_TOKEN_INVALID for the token itself

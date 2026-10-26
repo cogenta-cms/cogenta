@@ -1,5 +1,5 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
-import { CogentaError, type DatabaseHandle } from '@cogenta/core'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { CogentaError, type DatabaseHandle, identifier, sql } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
 import type {
   AuthenticationResponseJSON,
@@ -12,8 +12,9 @@ import { hashPassword, verifyPassword } from './password.js'
 import { createRateLimiter } from './rate-limit.js'
 import { generateRecoveryCodes, hashRecoveryCode } from './recovery-codes.js'
 import { createSessionStore } from './sessions.js'
-import { generateTotpSecret, totpUri, verifyTotp } from './totp.js'
-import type { IssuedSession, User } from './types.js'
+import { TABLES } from './tables.js'
+import { generateTotpSecret, matchTotpStep, totpUri } from './totp.js'
+import type { IssuedSession, Session, User } from './types.js'
 import { createUserStore } from './users.js'
 import {
   beginWebAuthnAuthentication,
@@ -24,6 +25,12 @@ import {
 } from './webauthn.js'
 
 const TICKET_TTL_MS = 5 * 60 * 1000
+
+/** How long a started TOTP enrolment waits for its first code before it is discarded. */
+const PENDING_TOTP_TTL_MS = 10 * 60 * 1000
+
+/** How long a successful step-up lets a session change or remove a second factor. */
+export const STEP_UP_TTL_MS = 5 * 60 * 1000
 
 type TicketPurpose = 'login' | 'webauthn_register' | 'webauthn_login'
 
@@ -40,12 +47,20 @@ interface TicketPayload {
    * only thing both steps share, since no session exists yet to hold it in.
    */
   readonly ttlMs?: number
+  /**
+   * Random id of a *login* ticket (pentest 2026-10-26, F-03). The signature
+   * says the password step happened; the row this id names in
+   * `cogenta_login_tickets` says it has not been spent yet. Absent on the
+   * WebAuthn tickets, whose challenge is single-use by other means.
+   */
+  readonly jti?: string
 }
 
 interface VerifiedTicket {
   readonly userId: string | null
   readonly challenge: string | undefined
   readonly ttlMs: number | undefined
+  readonly jti: string | undefined
 }
 
 /**
@@ -95,13 +110,20 @@ function verifyTicket(
       challenge: unknown
       expiresAt: unknown
       ttlMs: unknown
+      jti: unknown
     }
     if (parsed.purpose !== purpose) return null
     if (parsed.userId !== null && typeof parsed.userId !== 'string') return null
     if (typeof parsed.expiresAt !== 'number' || parsed.expiresAt <= now) return null
     if (parsed.challenge !== undefined && typeof parsed.challenge !== 'string') return null
     if (parsed.ttlMs !== undefined && typeof parsed.ttlMs !== 'number') return null
-    return { userId: parsed.userId, challenge: parsed.challenge, ttlMs: parsed.ttlMs }
+    if (parsed.jti !== undefined && typeof parsed.jti !== 'string') return null
+    return {
+      userId: parsed.userId,
+      challenge: parsed.challenge,
+      ttlMs: parsed.ttlMs,
+      jti: parsed.jti,
+    }
   } catch {
     return null
   }
@@ -247,6 +269,28 @@ export interface AuthService {
    */
   beginTotpEnrolment(userId: string): Promise<TotpSetup>
   /**
+   * The second factors this account has finished setting up — what a sign-in
+   * would challenge for, and therefore what a step-up must protect.
+   */
+  enrolledFactors(userId: string): Promise<readonly ('totp' | 'webauthn')[]>
+  /**
+   * Re-authentication for a sensitive change (pentest 2026-10-26, F-01): proves
+   * the current `password` **or** a current authenticator `code`, and marks
+   * `session` as freshly re-authenticated for `STEP_UP_TTL_MS`. Nothing is
+   * changed on a wrong proof, which is rate-limited like any password guess.
+   * Returns when the mark expires (ISO 8601).
+   */
+  stepUp(
+    userId: string,
+    session: Pick<Session, 'id'>,
+    proof: { readonly password?: string; readonly code?: string },
+  ): Promise<{ readonly expiresAt: string }>
+  /**
+   * Throws `AUTH_STEP_UP_REQUIRED` unless `session` re-authenticated within
+   * the last `STEP_UP_TTL_MS`. `session` must be freshly resolved, not cached.
+   */
+  assertSteppedUp(session: Pick<Session, 'stepUpUntil'>): void
+  /**
    * Confirms the code from the authenticator app, which is what makes the
    * factor real — and, in the same step, issues ten recovery codes (fiche 18
    * task 1). TOTP without recovery codes is a lock with one key: losing the
@@ -255,11 +299,13 @@ export interface AuthService {
    */
   confirmTotpEnrolment(userId: string, token: string): Promise<RecoveryCodesIssued>
   /**
-   * Turns TOTP back off. No second proof is asked for: the caller already
-   * holds a live session for this account, which — if TOTP was on — they could
-   * only have obtained by passing it. Recovery codes go with it: they exist
-   * to be a spare key for TOTP, and there is nothing left for them to unlock
-   * once it is off.
+   * Turns TOTP back off. Recovery codes go with it: they exist to be a spare
+   * key for TOTP, and there is nothing left for them to unlock once it is off.
+   * Outstanding sign-in tickets are revoked with it.
+   *
+   * This method does not ask for a second proof — the HTTP route does, through
+   * `stepUp` / `assertSteppedUp`, because a session alone is not enough to
+   * remove a factor (pentest 2026-10-26, F-01).
    */
   disableTotp(userId: string): Promise<void>
   /**
@@ -317,6 +363,53 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
   const credentials = createCredentialStore(db, now)
   const sessions = createSessionStore(db, now)
   const rateLimit = createRateLimiter(db, now)
+  const tickets = identifier(TABLES.loginTickets, db.dialect)
+
+  /**
+   * Registers a login ticket as spendable. Expired rows are swept here, on the
+   * path that creates them, so the table stays as small as the number of
+   * sign-ins in the last five minutes: no scheduled job to forget.
+   */
+  async function registerLoginTicket(
+    id: string,
+    userId: string,
+    expiresAtMs: number,
+  ): Promise<void> {
+    const at = new Date(now()).toISOString()
+    await db.query(sql`delete from ${tickets} where expires_at <= ${at}`)
+    await db.query(sql`
+      insert into ${tickets} (id, user_id, expires_at, used_at)
+      values (${id}, ${userId}, ${new Date(expiresAtMs).toISOString()}, ${null})`)
+  }
+
+  /** True while the ticket is registered for this account, unspent and unexpired. */
+  async function loginTicketIsLive(id: string, userId: string): Promise<boolean> {
+    const at = new Date(now()).toISOString()
+    const result = await db.query<{ id: string }>(
+      sql`select id from ${tickets}
+          where id = ${id} and user_id = ${userId} and used_at is null and expires_at > ${at}`,
+    )
+    return result.rows.length > 0
+  }
+
+  /**
+   * Spends the ticket. The `used_at is null` guard is what makes single use
+   * real (the `resets.ts` idiom): of any number of simultaneous callers, one
+   * UPDATE matches.
+   */
+  async function spendLoginTicket(id: string, userId: string): Promise<boolean> {
+    const at = new Date(now()).toISOString()
+    const result = await db.query(
+      sql`update ${tickets} set used_at = ${at}
+          where id = ${id} and user_id = ${userId} and used_at is null and expires_at > ${at}`,
+    )
+    return result.rowsAffected > 0
+  }
+
+  /** A change of second factor voids every sign-in step already in flight. */
+  async function revokeLoginTickets(userId: string): Promise<void> {
+    await db.query(sql`delete from ${tickets} where user_id = ${userId}`)
+  }
 
   async function issueSession(
     user: User,
@@ -346,6 +439,11 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     }
   }
 
+  async function confirmLegacyTotp(userId: string, step: number): Promise<boolean> {
+    await credentials.confirmTotp(userId)
+    return credentials.claimTotpStep(userId, step)
+  }
+
   /** Ten fresh codes, hashed and stored, replacing any still outstanding. */
   async function issueRecoveryCodes(userId: string): Promise<RecoveryCodesIssued> {
     const codes = generateRecoveryCodes()
@@ -370,21 +468,55 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     return available
   }
 
-  function mfaChallenge(
+  async function mfaChallenge(
     user: User,
     available: readonly ('totp' | 'webauthn')[],
     ttlMs: number | undefined,
-  ): LoginResult {
+  ): Promise<LoginResult> {
+    const jti = randomBytes(18).toString('base64url')
+    const expiresAt = now() + TICKET_TTL_MS
+    await registerLoginTicket(jti, user.id, expiresAt)
     return {
       status: 'mfa_required',
       ticket: signTicket(signingKey, {
         purpose: 'login',
         userId: user.id,
-        expiresAt: now() + TICKET_TTL_MS,
+        expiresAt,
+        jti,
         ...(ttlMs === undefined ? {} : { ttlMs }),
       }),
       availableFactors: available,
     }
+  }
+
+  function accountGone(): CogentaError {
+    return new CogentaError({
+      code: 'AUTH_USER_NOT_FOUND',
+      message: 'This account no longer exists or is disabled.',
+      hint: 'It may have been removed between the password step and this one. Sign in again.',
+    })
+  }
+
+  function stepUpRequired(): CogentaError {
+    return new CogentaError({
+      code: 'AUTH_STEP_UP_REQUIRED',
+      message: 'This change needs you to confirm it is you.',
+      hint: 'Send your current password or a current authenticator code to POST /api/auth/step-up, then repeat the request within five minutes.',
+    })
+  }
+
+  /** The ticket step shared by both second-factor completions: signed, registered, unspent. */
+  async function liveLoginTicket(ticket: string): Promise<{
+    readonly userId: string
+    readonly jti: string
+    readonly ttlMs: number | undefined
+  }> {
+    const verified = verifyTicket(signingKey, 'login', ticket, now())
+    if (verified === null || verified.userId === null || verified.jti === undefined) {
+      throw invalidTicket()
+    }
+    if (!(await loginTicketIsLive(verified.jti, verified.userId))) throw invalidTicket()
+    return { userId: verified.userId, jti: verified.jti, ttlMs: verified.ttlMs }
   }
 
   return {
@@ -419,22 +551,20 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       const factors = await enrolledFactors(user.id)
       return factors.length === 0
         ? issueSession(user, context)
-        : mfaChallenge(user, factors, context?.ttlMs)
+        : await mfaChallenge(user, factors, context?.ttlMs)
     },
 
     totpLogin: async (ticket, token, context) => {
-      const verified = verifyTicket(signingKey, 'login', ticket, now())
-      if (verified === null || verified.userId === null) throw invalidTicket()
-      const userId = verified.userId
+      const { userId, jti, ttlMs } = await liveLoginTicket(ticket)
 
       await rateLimit.reserve(`mfa:${userId}`)
       const stored = await credentials.totpSecret(userId)
-      const ok =
-        stored !== null &&
-        stored.verified &&
-        verifyTotp(token, stored.secret, { now: Math.floor(now() / 1000) })
+      const step =
+        stored !== null && stored.verified
+          ? matchTotpStep(token, stored.secret, { now: Math.floor(now() / 1000) })
+          : null
 
-      if (!ok) {
+      if (step === null) {
         throw new CogentaError({
           code: 'AUTH_INVALID_CREDENTIALS',
           message: 'Incorrect verification code.',
@@ -442,30 +572,39 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
         })
       }
 
+      // Re-checked at the last step, not only at the password step: the account
+      // may have been disabled or removed in the minutes between the two.
       const user = await users.byId(userId)
-      if (user === null) {
+      if (user === null || user.status !== 'active') throw accountGone()
+
+      // A time step is accepted once per account (pentest 2026-10-26, F-03).
+      // Claimed before the ticket so a code reused inside its window does not
+      // also burn a ticket the person could still finish with the next code.
+      if (!(await credentials.claimTotpStep(userId, step))) {
         throw new CogentaError({
-          code: 'AUTH_USER_NOT_FOUND',
-          message: 'This account no longer exists.',
-          hint: 'It may have been deleted between the password step and this one. Sign in again.',
+          code: 'AUTH_INVALID_CREDENTIALS',
+          message: 'This verification code was already used.',
+          hint: 'Wait for your authenticator app to show the next code, then try again.',
         })
       }
+      if (!(await spendLoginTicket(jti, userId))) throw invalidTicket()
+
       await rateLimit.clear(`mfa:${userId}`)
-      return issueSession(user, sessionContextFrom(context, verified.ttlMs))
+      return issueSession(user, sessionContextFrom(context, ttlMs))
     },
 
     recoveryCodeLogin: async (ticket, code, context) => {
-      const verified = verifyTicket(signingKey, 'login', ticket, now())
-      if (verified === null || verified.userId === null) throw invalidTicket()
-      const userId = verified.userId
+      const { userId, jti, ttlMs } = await liveLoginTicket(ticket)
 
       // Its own rate-limit subject, independent of `mfa:` (the TOTP guess
       // counter) and `totp-setup:` — a wrong code here is a different event
       // from a wrong 6-digit code, and neither should give the other a free
       // pass on attempts.
       await rateLimit.reserve(`recovery:${userId}`)
-      const consumed = await credentials.consumeRecoveryCode(userId, code)
+      const user = await users.byId(userId)
+      if (user === null || user.status !== 'active') throw accountGone()
 
+      const consumed = await credentials.consumeRecoveryCode(userId, code)
       if (!consumed) {
         throw new CogentaError({
           code: 'AUTH_RECOVERY_CODE_INVALID',
@@ -473,17 +612,10 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
           hint: 'Check you typed it exactly as it was shown, dashes included. Each code works once.',
         })
       }
+      if (!(await spendLoginTicket(jti, userId))) throw invalidTicket()
 
-      const user = await users.byId(userId)
-      if (user === null) {
-        throw new CogentaError({
-          code: 'AUTH_USER_NOT_FOUND',
-          message: 'This account no longer exists.',
-          hint: 'It may have been deleted between the password step and this one. Sign in again.',
-        })
-      }
       await rateLimit.clear(`recovery:${userId}`)
-      return issueSession(user, sessionContextFrom(context, verified.ttlMs))
+      return issueSession(user, sessionContextFrom(context, ttlMs))
     },
 
     sessionForVerifiedUser: async (userId) => {
@@ -510,27 +642,100 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       // A fresh secret on every call: asking for the QR code again (a slow
       // scan, the wrong app) must not leave two different secrets both
       // plausibly "current" — only the last one requested can be confirmed.
+      //
+      // Stored as a *pending* enrolment beside the active factor, never over
+      // it (pentest 2026-10-26, F-01): starting, abandoning, letting expire or
+      // failing a re-enrolment leaves the account exactly as protected as it
+      // was. The pending secret becomes the factor only in `confirmTotpEnrolment`.
       const secret = generateTotpSecret()
-      await credentials.setTotpSecret(user.id, secret)
+      await credentials.setPendingTotp(user.id, secret, now() + PENDING_TOTP_TTL_MS)
       return { secret, uri: totpUri(secret, issuer, user.email) }
+    },
+
+    enrolledFactors,
+
+    stepUp: async (userId, session, proof) => {
+      const hasPassword = proof.password !== undefined && proof.password !== ''
+      const hasCode = proof.code !== undefined && proof.code !== ''
+      if (!hasPassword && !hasCode) {
+        throw new CogentaError({
+          code: 'AUTH_INVALID_CREDENTIALS',
+          message: 'Send your current password or a current authenticator code.',
+          hint: 'The body takes { "password": "…" } or { "code": "123456" }.',
+        })
+      }
+
+      await rateLimit.reserve(`step-up:${userId}`)
+      let proven = false
+      if (hasPassword && proof.password !== undefined) {
+        proven = await credentials.verifyPassword(userId, proof.password)
+      } else if (hasCode && proof.code !== undefined) {
+        const stored = await credentials.totpSecret(userId)
+        const step =
+          stored !== null && stored.verified
+            ? matchTotpStep(proof.code, stored.secret, { now: Math.floor(now() / 1000) })
+            : null
+        // The same once-per-step rule as signing in: a code that has just
+        // been spent cannot be spent again as a proof.
+        proven = step !== null && (await credentials.claimTotpStep(userId, step))
+      }
+      if (!proven) {
+        throw new CogentaError({
+          code: 'AUTH_INVALID_CREDENTIALS',
+          message: hasPassword ? 'Incorrect password.' : 'Incorrect verification code.',
+          hint: 'Check it and try again. Repeated failures are rate-limited.',
+        })
+      }
+
+      await rateLimit.clear(`step-up:${userId}`)
+      const until = now() + STEP_UP_TTL_MS
+      await sessions.markSteppedUp(session.id, until)
+      return { expiresAt: new Date(until).toISOString() }
+    },
+
+    assertSteppedUp: (session) => {
+      if (session.stepUpUntil === undefined || new Date(session.stepUpUntil).getTime() <= now()) {
+        throw stepUpRequired()
+      }
     },
 
     confirmTotpEnrolment: async (userId, token) => {
       await rateLimit.reserve(`totp-setup:${userId}`)
-      const stored = await credentials.totpSecret(userId)
-      const ok =
-        stored !== null && verifyTotp(token, stored.secret, { now: Math.floor(now() / 1000) })
+      const pending = await credentials.pendingTotp(userId)
+      // A secret stored unconfirmed in the active slot is what versions before
+      // this fix wrote on `enrol`; honour it so an enrolment started before an
+      // upgrade can still be finished.
+      const legacy = pending === null ? await credentials.totpSecret(userId) : null
+      const secret = pending?.secret ?? (legacy !== null && !legacy.verified ? legacy.secret : null)
+      const step =
+        secret === null ? null : matchTotpStep(token, secret, { now: Math.floor(now() / 1000) })
 
-      if (!ok) {
+      if (secret === null || step === null) {
         throw new CogentaError({
           code: 'AUTH_INVALID_CREDENTIALS',
           message: 'Incorrect verification code.',
-          hint: 'Check the code from your authenticator app. Codes are valid for 30 seconds.',
+          hint: 'Check the code from your authenticator app. Codes are valid for 30 seconds. A setup left open for more than ten minutes has to be started again.',
+        })
+      }
+
+      // The swap: pending becomes the factor in one transaction, and only one of
+      // two simultaneous confirmations can claim it.
+      const swapped =
+        pending !== null
+          ? await credentials.promotePendingTotp(userId, secret, step)
+          : await confirmLegacyTotp(userId, step)
+      if (!swapped) {
+        throw new CogentaError({
+          code: 'AUTH_INVALID_CREDENTIALS',
+          message: 'This setup was replaced or has already been confirmed.',
+          hint: 'Start the setup again from the profile screen.',
         })
       }
 
       await rateLimit.clear(`totp-setup:${userId}`)
-      await credentials.confirmTotp(userId)
+      // The secret behind two-step sign-in just changed: any sign-in begun
+      // against the old one is void.
+      await revokeLoginTickets(userId)
       // Minted in the same step, not a follow-up the person could skip: TOTP
       // with no recovery codes is a lock with exactly one key, and losing the
       // authenticator would be a permanent lockout the moment this returns.
@@ -541,6 +746,7 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       await credentials.removeTotp(userId)
       // Nothing left for them to be a spare key for once TOTP itself is off.
       await credentials.removeRecoveryCodes(userId)
+      await revokeLoginTickets(userId)
     },
 
     regenerateRecoveryCodes: async (userId) => {

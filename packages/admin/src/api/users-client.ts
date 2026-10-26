@@ -43,6 +43,8 @@ export interface AdminUser {
   readonly createdAt: string
   readonly updatedAt: string
   readonly mfa: MfaSummary
+  /** Whether the account has a password (a passkey-only account has none and re-confirms by signing in again). */
+  readonly hasPassword: boolean
   /** A sensitive role (ADR-0021) with no second factor enrolled. Never a gate — see `packages/auth/src/mfa.ts`. */
   readonly mfaRecommended: boolean
   readonly lastSignInAt: string | null

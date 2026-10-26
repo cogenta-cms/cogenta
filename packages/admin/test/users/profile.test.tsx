@@ -371,6 +371,22 @@ describe('my profile — re-confirming before changing the second factor', () =>
   })
 })
 
+describe('my profile — an account with no password', () => {
+  it('asks the person to sign in again rather than for a password they do not have', async () => {
+    installMockFetch({ passkeyOnlyAccount: true })
+    startRegistration.mockResolvedValue({ id: 'mock-new-credential-id' })
+    render(<App />)
+    await goToProfile()
+
+    fireEvent.click(screen.getByRole('button', { name: "Ajouter une clé d'accès" }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Confirmez que c’est bien vous' })
+    expect(within(dialog).getByText(/Reconnectez-vous avec votre clé d.accès/u)).toBeDefined()
+    expect(within(dialog).queryByLabelText('Mot de passe actuel')).toBeNull()
+    expect(within(dialog).getByRole('button', { name: 'Me reconnecter' })).toBeDefined()
+  })
+})
+
 describe('my profile — sessions', () => {
   it('lists this account’s own active sessions', async () => {
     render(<App />)

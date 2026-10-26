@@ -34,9 +34,18 @@ const REQUEST_QUOTA_WINDOW_MS = 60_000
  * a token the client carries, so there is nothing extra to send or to leak and
  * it ends with the session. Sensitive means: turning TOTP off, starting a TOTP
  * (re)enrolment, regenerating recovery codes, and starting a passkey
- * registration — each only when the account already has a confirmed factor, so
- * the very first enrolment (nothing to protect yet) needs the session alone.
- * MFA itself stays optional (ADR-0021).
+ * registration. The first two of those and the passkey are guarded whenever the
+ * account has a confirmed factor *or a password* — the first factor of a
+ * password account is a new way in (a passkey outlives a password reset) or a
+ * lock-out (someone else's authenticator), so a stolen session alone must not
+ * add it. Only an account with neither a factor nor a password needs the
+ * session alone. MFA itself stays optional (ADR-0021): this confirms identity,
+ * it never forces enrolment.
+ *
+ * A session created within the last five minutes counts as stepped-up: signing
+ * in is a re-authentication, and for a passkey-only account (no password, no
+ * authenticator code to type) it is the only one available — such a person
+ * signs in again with the passkey and then acts.
  *
  * Same shape as the REST router: a plain request in, a plain response out,
  * nothing that listens on a port. `resolveActor` is exported separately
@@ -550,10 +559,10 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
     if (segments.length === 2 && segments[1] === 'enrol') {
       if (method !== 'POST') return methodNotAllowed(['POST'])
       const { userId, session } = await callerSession(request, 'setting up two-step verification')
-      // Replacing a factor that already protects the account is the sensitive
-      // case; the very first enrolment has nothing to protect and needs only
-      // the session.
-      if ((await auth.login.enrolledFactors(userId)).length > 0) auth.login.assertSteppedUp(session)
+      // Replacing a factor that already protects the account is sensitive, and
+      // so is the first one on an account with a password: an authenticator
+      // enrolled with a stolen session would lock the owner out.
+      if (await auth.login.requiresStepUp(userId)) auth.login.assertSteppedUp(session)
       return jsonResponse(200, { data: await auth.login.beginTotpEnrolment(userId) })
     }
 
@@ -643,9 +652,10 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
 
     if (resource === 'register' && step === 'begin') {
       const { userId, session } = await callerSession(request, 'registering a passkey')
-      // Adding a passkey to an account that already has a confirmed factor is
-      // adding a way in; it needs the same fresh proof as replacing TOTP.
-      if ((await auth.login.enrolledFactors(userId)).length > 0) auth.login.assertSteppedUp(session)
+      // A passkey is a way in that needs no password and survives a password
+      // reset, so adding even the first one needs the same fresh proof as
+      // replacing TOTP.
+      if (await auth.login.requiresStepUp(userId)) auth.login.assertSteppedUp(session)
       const challenge = await auth.login.beginWebAuthnRegistration(userId)
       return jsonResponse(200, { data: challenge })
     }

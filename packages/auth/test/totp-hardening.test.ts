@@ -43,6 +43,17 @@ async function fixture() {
     advance: (ms: number) => {
       time += ms
     },
+    /**
+     * A session whose sign-in is already older than the five-minute window in
+     * which a fresh sign-in counts as a re-authentication.
+     */
+    agedSession: async () => {
+      const kept = time
+      time = T0 - 6 * 60 * 1000
+      const aged = await sessions.create(user.id)
+      time = kept
+      return aged
+    },
     /** An account that already has a confirmed TOTP factor. */
     withTotp: async () => {
       await credentials.setTotpSecret(user.id, FIXTURE_SECRET)
@@ -225,7 +236,7 @@ describe('step-up (F-01)', () => {
   async function withSession() {
     const f = await fixture()
     await f.withTotp()
-    const session = await f.sessions.create(f.user.id)
+    const session = await f.agedSession()
     return { ...f, session }
   }
 
@@ -284,7 +295,7 @@ describe('step-up (F-01)', () => {
 
   it("a step-up on one session does not carry over to the account's other sessions", async () => {
     const f = await withSession()
-    const other = await f.sessions.create(f.user.id)
+    const other = await f.agedSession()
     await f.auth.stepUp(f.user.id, f.session, { password: PASSWORD })
 
     const untouched = await f.sessions.resolve(other.token)
@@ -446,5 +457,164 @@ describe('two simultaneous identical sign-ins (F-03)', () => {
 
     expect(outcomes.filter((o) => o.status === 'fulfilled')).toHaveLength(1)
     expect(await createSessionStore(file.db, now).list(user.id)).toHaveLength(1)
+  })
+})
+
+describe('a fresh sign-in counts as a re-authentication', () => {
+  it('lets a session created under five minutes ago act, and not one a moment older', async () => {
+    const f = await fixture()
+    await f.withTotp()
+    const session = await f.sessions.create(f.user.id)
+
+    const fresh = await f.sessions.resolve(session.token)
+    if (fresh === null) throw new Error('unreachable')
+    expect(() => f.auth.assertSteppedUp(fresh)).not.toThrow()
+
+    f.advance(5 * 60 * 1000 + 1)
+    const aged = await f.sessions.resolve(session.token)
+    if (aged === null) throw new Error('unreachable')
+    expect(() => f.auth.assertSteppedUp(aged)).toThrowError(
+      expect.objectContaining({ code: 'AUTH_STEP_UP_REQUIRED' }),
+    )
+    await f.db.close()
+  })
+})
+
+describe('which accounts a step-up guards (first factor included)', () => {
+  const passkey = {
+    credentialId: 'cred-1',
+    publicKey: 'key',
+    counter: 0,
+    transports: [],
+    label: undefined,
+  }
+
+  it('guards an account that has a password but no factor yet', async () => {
+    const f = await fixture()
+    expect(await f.auth.requiresStepUp(f.user.id)).toBe(true)
+    await f.db.close()
+  })
+
+  it('guards an account that has a factor', async () => {
+    const f = await fixture()
+    await f.withTotp()
+    expect(await f.auth.requiresStepUp(f.user.id)).toBe(true)
+    await f.db.close()
+  })
+
+  it('guards a passkey-only account, which can only pass by signing in again', async () => {
+    const db = await testDb()
+    const users = createUserStore(db, () => T0)
+    const credentials = createCredentialStore(db, () => T0)
+    const auth = createAuthService({ db, signingKey: SIGNING_KEY, collections: [], now: () => T0 })
+    const user = await users.create({ email: 'key@example.com', roles: ['admin'] })
+    await credentials.addWebAuthnCredential(user.id, passkey)
+    expect(await auth.requiresStepUp(user.id)).toBe(true)
+    await db.close()
+  })
+
+  it('leaves an account with neither a password nor a factor to the session alone', async () => {
+    const db = await testDb()
+    const users = createUserStore(db, () => T0)
+    const auth = createAuthService({ db, signingKey: SIGNING_KEY, collections: [], now: () => T0 })
+    const user = await users.create({ email: 'nobody@example.com', roles: ['editor'] })
+    expect(await auth.requiresStepUp(user.id)).toBe(false)
+    await db.close()
+  })
+})
+
+describe('passkey tickets are accepted once (F-03)', () => {
+  const WEBAUTHN = {
+    relyingPartyName: 'Cogenta Test',
+    relyingPartyId: 'example.com',
+    origin: 'https://example.com',
+  }
+  // Not a real assertion: it fails verification, which is the point — the
+  // ticket must be gone after the *first* attempt, whatever its outcome.
+  const GARBAGE_ASSERTION = {
+    id: 'unknown-credential',
+    rawId: 'unknown-credential',
+    type: 'public-key',
+    response: { clientDataJSON: 'e30', authenticatorData: 'AA', signature: 'AA' },
+    clientExtensionResults: {},
+  } as const
+  const GARBAGE_ATTESTATION = {
+    id: 'new-credential',
+    rawId: 'new-credential',
+    type: 'public-key',
+    response: { clientDataJSON: 'e30', attestationObject: 'AA' },
+    clientExtensionResults: {},
+  } as const
+
+  async function webauthnFixture() {
+    const f = await fixture()
+    const auth = createAuthService({
+      db: f.db,
+      signingKey: SIGNING_KEY,
+      collections: [],
+      now: f.now,
+      webauthn: WEBAUTHN,
+    })
+    return { ...f, auth }
+  }
+
+  it('spends a passkey sign-in ticket on its first use, successful or not', async () => {
+    const f = await webauthnFixture()
+    const { ticket } = await f.auth.beginWebAuthnLogin()
+
+    expect(await failureCode(f.auth.completeWebAuthnLogin(ticket, GARBAGE_ASSERTION))).toBe(
+      'AUTH_WEBAUTHN_FAILED',
+    )
+    expect(await failureCode(f.auth.completeWebAuthnLogin(ticket, GARBAGE_ASSERTION))).toBe(
+      'AUTH_SESSION_INVALID',
+    )
+    await f.db.close()
+  })
+
+  it('spends a passkey registration ticket on its first use, successful or not', async () => {
+    const f = await webauthnFixture()
+    const { ticket } = await f.auth.beginWebAuthnRegistration(f.user.id)
+
+    const first = await failureCode(
+      f.auth.completeWebAuthnRegistration(ticket, GARBAGE_ATTESTATION),
+    )
+    expect(first).not.toBe('AUTH_SESSION_INVALID')
+    expect(
+      await failureCode(f.auth.completeWebAuthnRegistration(ticket, GARBAGE_ATTESTATION)),
+    ).toBe('AUTH_SESSION_INVALID')
+    await f.db.close()
+  })
+
+  it('refuses to finish a registration for an account disabled since it began', async () => {
+    const f = await webauthnFixture()
+    const { ticket } = await f.auth.beginWebAuthnRegistration(f.user.id)
+    await f.users.setStatus(f.user.id, 'disabled')
+
+    expect(
+      await failureCode(f.auth.completeWebAuthnRegistration(ticket, GARBAGE_ATTESTATION)),
+    ).toBe('AUTH_USER_NOT_FOUND')
+    expect(await f.credentials.webAuthnCredentials(f.user.id)).toHaveLength(0)
+    await f.db.close()
+  })
+
+  it('does not let a sign-in ticket stand in for a registration ticket', async () => {
+    const f = await webauthnFixture()
+    const { ticket } = await f.auth.beginWebAuthnLogin()
+    expect(
+      await failureCode(f.auth.completeWebAuthnRegistration(ticket, GARBAGE_ATTESTATION)),
+    ).toBe('AUTH_SESSION_INVALID')
+    await f.db.close()
+  })
+
+  it('voids a registration ticket when the factors of that account change', async () => {
+    const f = await webauthnFixture()
+    await f.withTotp()
+    const { ticket } = await f.auth.beginWebAuthnRegistration(f.user.id)
+    await f.auth.disableTotp(f.user.id)
+
+    expect(
+      await failureCode(f.auth.completeWebAuthnRegistration(ticket, GARBAGE_ATTESTATION)),
+    ).toBe('AUTH_SESSION_INVALID')
+    await f.db.close()
   })
 })

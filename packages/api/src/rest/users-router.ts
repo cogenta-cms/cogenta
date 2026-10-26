@@ -340,6 +340,8 @@ interface InvitationView {
 
 interface UserViewContext {
   readonly mfa: MfaSummary
+  /** Whether the account has a password to re-confirm with (the admin's step-up dialog asks). */
+  readonly hasPassword: boolean
   readonly lastSignInAt: string | null
   readonly mfaRecommended: boolean
   readonly invitation: InvitationView | null
@@ -375,6 +377,7 @@ function publicUser(user: User, context: UserViewContext, now: number): unknown 
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
     mfa: context.mfa,
+    hasPassword: context.hasPassword,
     mfaRecommended: context.mfaRecommended,
     lastSignInAt: context.lastSignInAt,
     dormant: isDormant(user, context.lastSignInAt, now),
@@ -561,13 +564,15 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     user: User,
     lastSeen?: ReadonlyMap<string, string>,
   ): Promise<UserViewContext> {
-    const [mfa, resolvedLastSeen, invitation] = await Promise.all([
+    const [mfa, hasPassword, resolvedLastSeen, invitation] = await Promise.all([
       mfaOf(user.id),
+      auth.credentials.hasPassword(user.id),
       lastSeen === undefined ? auth.sessions.lastSeenByUser() : Promise.resolve(lastSeen),
       invitationFor(user),
     ])
     return {
       mfa,
+      hasPassword,
       lastSignInAt: resolvedLastSeen.get(user.id) ?? null,
       mfaRecommended: mfaRecommendedFor(user, mfa),
       invitation,

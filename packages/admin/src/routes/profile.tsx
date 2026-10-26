@@ -1288,6 +1288,12 @@ export function ProfileRoute(): JSX.Element {
       <StepUpDialog
         open={stepUpRetry !== null}
         canUseCode={profile?.mfa.totp === true}
+        canUsePassword={profile?.hasPassword !== false}
+        onSignInAgain={() => {
+          setStepUpRetry(null)
+          setStepUpError(null)
+          void auth.logout()
+        }}
         busy={stepUpBusy}
         error={stepUpError}
         onSubmit={(proof) => void submitStepUp(proof)}

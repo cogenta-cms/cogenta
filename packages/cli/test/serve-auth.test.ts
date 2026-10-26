@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { codeFor, createUser, startServer } from './helpers/serve-harness.js'
+import { ageSessions, codeFor, createUser, startServer } from './helpers/serve-harness.js'
 
 /**
  * Fiche 18 — profile and authentication. End to end, against a real server
@@ -180,7 +180,9 @@ describe('cogenta serve — recovery codes (fiche 18 task 1)', () => {
       expect(await status.json()).toEqual({ data: { total: 10, remaining: 10 } })
 
       // A session alone cannot replace the codes of a confirmed factor: the
-      // refusal is stable and changes nothing, the password lifts it.
+      // refusal is stable and changes nothing, the password lifts it. (A
+      // sign-in under five minutes old counts as a confirmation, so let it age.)
+      await ageSessions(root)
       const refused = await fetch(`${server.base}/api/auth/totp/recovery-codes/regenerate`, {
         method: 'POST',
         headers: auth,
@@ -226,16 +228,42 @@ describe('cogenta serve — second factor hardening (pentest 2026-10-26, F-01 an
       const auth = { authorization: `Bearer ${token}` }
       const json = { ...auth, 'content-type': 'application/json' }
 
+      // The first authenticator of a password account is a new way in too: a
+      // session that has not re-confirmed cannot add it, and a wrong password
+      // is a recorded failure, not a confirmation.
+      await ageSessions(root)
+      const bareFirst = await fetch(`${server.base}/api/auth/totp/enrol`, {
+        method: 'POST',
+        headers: auth,
+      })
+      expect(bareFirst.status).toBe(403)
+      expect(((await bareFirst.json()) as { error: { code: string } }).error.code).toBe(
+        'AUTH_STEP_UP_REQUIRED',
+      )
+      const wrong = await fetch(`${server.base}/api/auth/step-up`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ password: 'definitely not the password' }),
+      })
+      expect(wrong.status).toBe(401)
+      await fetch(`${server.base}/api/auth/step-up`, {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ password: 'correct horse battery staple' }),
+      })
+
       const first = await fetch(`${server.base}/api/auth/totp/enrol`, {
         method: 'POST',
         headers: auth,
       })
+      expect(first.status).toBe(200)
       const { secret } = ((await first.json()) as { data: { secret: string } }).data
       await fetch(`${server.base}/api/auth/totp/enrol/confirm`, {
         method: 'POST',
         headers: json,
         body: JSON.stringify({ token: codeFor(secret, Date.now() / 1000) }),
       })
+      await ageSessions(root)
 
       // A bare session can neither restart the enrolment nor remove the factor.
       const bareEnrol = await fetch(`${server.base}/api/auth/totp/enrol`, {
@@ -287,6 +315,8 @@ describe('cogenta serve — second factor hardening (pentest 2026-10-26, F-01 an
       )
       expect(actions).toContain('auth.totp_enabled')
       expect(actions).toContain('auth.step_up')
+      expect(actions).toContain('auth.step_up_failed')
+      expect(JSON.stringify(actions)).not.toContain('definitely not the password')
     } finally {
       await server.stop()
     }

@@ -34,6 +34,14 @@ export const STEP_UP_TTL_MS = 5 * 60 * 1000
 
 type TicketPurpose = 'login' | 'webauthn_register' | 'webauthn_login'
 
+/**
+ * Owner recorded in `cogenta_login_tickets` for a `webauthn_login` ticket: the
+ * account is not known until the assertion arrives, and the column is not
+ * nullable. Not a valid user id, so a change of any account's factors never
+ * sweeps it away.
+ */
+const WEBAUTHN_LOGIN_TICKET_OWNER = 'webauthn-login:anonymous'
+
 interface TicketPayload {
   readonly purpose: TicketPurpose
   /** `null` for `webauthn_login`: which account this is has not been decided yet — the assertion decides it. */
@@ -48,10 +56,11 @@ interface TicketPayload {
    */
   readonly ttlMs?: number
   /**
-   * Random id of a *login* ticket (pentest 2026-10-26, F-03). The signature
-   * says the password step happened; the row this id names in
-   * `cogenta_login_tickets` says it has not been spent yet. Absent on the
-   * WebAuthn tickets, whose challenge is single-use by other means.
+   * Random id of a ticket (pentest 2026-10-26, F-03). The signature says the
+   * earlier step happened; the row this id names in `cogenta_login_tickets`
+   * says it has not been spent yet. Carried by the login ticket and by both
+   * WebAuthn tickets, so a captured registration or assertion cannot be
+   * replayed against the same challenge.
    */
   readonly jti?: string
 }
@@ -288,8 +297,22 @@ export interface AuthService {
   /**
    * Throws `AUTH_STEP_UP_REQUIRED` unless `session` re-authenticated within
    * the last `STEP_UP_TTL_MS`. `session` must be freshly resolved, not cached.
+   *
+   * A session *created* within that window counts too: signing in is itself a
+   * recent re-authentication. That is the only way a passkey-only account
+   * (no password to type, no authenticator code) can ever step up — it signs
+   * in again with the passkey and then acts.
    */
-  assertSteppedUp(session: Pick<Session, 'stepUpUntil'>): void
+  assertSteppedUp(session: Pick<Session, 'stepUpUntil' | 'createdAt'>): void
+  /**
+   * Whether adding or changing a second factor on this account must be
+   * preceded by a step-up: true when it already has a confirmed factor, **or**
+   * a password. The first passkey or authenticator on a password account is a
+   * new way in (or a lock-out), and a stolen session alone must not be able to
+   * add it. False only for an account with neither — nothing there to confirm
+   * against.
+   */
+  requiresStepUp(userId: string): Promise<boolean>
   /**
    * Confirms the code from the authenticator app, which is what makes the
    * factor real — and, in the same step, issues ten recovery codes (fiche 18
@@ -694,10 +717,17 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     },
 
     assertSteppedUp: (session) => {
-      if (session.stepUpUntil === undefined || new Date(session.stepUpUntil).getTime() <= now()) {
-        throw stepUpRequired()
-      }
+      const at = now()
+      const proven =
+        session.stepUpUntil !== undefined && new Date(session.stepUpUntil).getTime() > at
+      // Signing in is a re-authentication too — and the only kind a passkey-only
+      // account has to offer.
+      const justSignedIn = new Date(session.createdAt).getTime() + STEP_UP_TTL_MS > at
+      if (!proven && !justSignedIn) throw stepUpRequired()
     },
+
+    requiresStepUp: async (userId) =>
+      (await enrolledFactors(userId)).length > 0 || (await credentials.hasPassword(userId)),
 
     confirmTotpEnrolment: async (userId, token) => {
       await rateLimit.reserve(`totp-setup:${userId}`)
@@ -783,13 +813,17 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
         user.email,
         existing,
       )
+      const expiresAt = now() + TICKET_TTL_MS
+      const jti = randomBytes(18).toString('base64url')
+      await registerLoginTicket(jti, userId, expiresAt)
       return {
         options,
         ticket: signTicket(signingKey, {
           purpose: 'webauthn_register',
           userId,
           challenge,
-          expiresAt: now() + TICKET_TTL_MS,
+          expiresAt,
+          jti,
         }),
       }
     },
@@ -797,9 +831,20 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     completeWebAuthnRegistration: async (ticket, response, label) => {
       if (webauthnConfig === undefined) throw webauthnNotConfigured()
       const verified = verifyTicket(signingKey, 'webauthn_register', ticket, now())
-      if (verified === null || verified.userId === null || verified.challenge === undefined) {
+      if (
+        verified === null ||
+        verified.userId === null ||
+        verified.challenge === undefined ||
+        verified.jti === undefined
+      ) {
         throw invalidTicket()
       }
+      // Spent before anything is verified or stored: of two simultaneous
+      // completions of the same ceremony, one UPDATE matches.
+      if (!(await spendLoginTicket(verified.jti, verified.userId))) throw invalidTicket()
+      // The account may have been disabled or removed since the ceremony began.
+      const owner = await users.byId(verified.userId)
+      if (owner === null || owner.status !== 'active') throw accountGone()
 
       const credential = await completeWebAuthnRegistration(
         webauthnConfig,
@@ -817,13 +862,17 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       // this site, and the assertion's own credential id says which account
       // it is, rather than the server naming one up front.
       const { options, challenge } = await beginWebAuthnAuthentication(webauthnConfig, [])
+      const expiresAt = now() + TICKET_TTL_MS
+      const jti = randomBytes(18).toString('base64url')
+      await registerLoginTicket(jti, WEBAUTHN_LOGIN_TICKET_OWNER, expiresAt)
       return {
         options,
         ticket: signTicket(signingKey, {
           purpose: 'webauthn_login',
           userId: null,
           challenge,
-          expiresAt: now() + TICKET_TTL_MS,
+          expiresAt,
+          jti,
         }),
       }
     },
@@ -831,7 +880,14 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     completeWebAuthnLogin: async (ticket, response, context) => {
       if (webauthnConfig === undefined) throw webauthnNotConfigured()
       const verified = verifyTicket(signingKey, 'webauthn_login', ticket, now())
-      if (verified === null || verified.challenge === undefined) throw invalidTicket()
+      if (verified === null || verified.challenge === undefined || verified.jti === undefined) {
+        throw invalidTicket()
+      }
+      // Spent before the assertion is checked or a session issued: a captured
+      // assertion replayed against the same challenge finds the ticket gone.
+      if (!(await spendLoginTicket(verified.jti, WEBAUTHN_LOGIN_TICKET_OWNER))) {
+        throw invalidTicket()
+      }
 
       const found = await credentials.webAuthnCredentialByExternalId(response.id)
       if (found === null) {

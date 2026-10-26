@@ -1,0 +1,25 @@
+{
+  "sitePlan": {
+    "noProvider": "No active AI provider: a new document cannot be analysed here. Proposals already made can still be read and applied. Everything else in this administration works without a provider.",
+    "chooseFiles": "Choose one or more files",
+    "noFileChosen": "No file chosen",
+    "filesChosen_other": "{{count}} files chosen: {{names}}",
+    "filesChosen_one": "{{count}} file chosen: {{names}}",
+    "analyse": "Analyse the document",
+    "analysing": "Analysing…",
+    "analyseNeedsFile": "Choose a file first.",
+    "analysingHint": "This can take a minute: the model reads the document, then proposes the site’s structure.",
+    "review": "Review",
+    "progressSaved": "Progress saved: your decisions are kept.",
+    "discarded": "Proposal discarded.",
+    "appliedTitle": "Plan applied",
+    "undecided": "Not decided yet",
+    "discardTitle": "Discard this proposal?",
+    "discardBody": "“{{name}}” and the decisions already made will be deleted. The original document is untouched: you can analyse it again.",
+    "discardConfirm": "Discard the proposal",
+    "enlargePreview": "Enlarge the preview of the {{label}} design",
+    "enlargedTitle": "Preview of the “{{label}}” design",
+    "uploadHelp": "PDF, DOCX, Markdown or plain text: a brief, a project description, a specification.",
+    "heading": "Generate the site"
+  }
+}

@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import { type FormEvent, type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -14,11 +15,14 @@ import {
 } from '../api/api-keys-client.js'
 import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
-import { canPerform } from '../schema/permissions.js'
+import { roleLabel } from '../lib/role-label.js'
+import { canPerform, grantsForRole, knownRoleNames } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
-import type { CollectionSummary } from '../schema/types.js'
+import type { CollectionSummary, SchemaDocument } from '../schema/types.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import {
   Button,
+  CopyButton,
   Field,
   Input,
   Modal,
@@ -34,6 +38,8 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
+import { ACTION_KEY } from './roles.js'
+import { RoleCheckboxList, RoleGrantsSummary } from './users.js'
 
 /**
  * L13 task 8 — machine-to-machine bearer credentials, managed from the admin
@@ -92,15 +98,22 @@ function writeGrantingRoles(
   )
 }
 
-/** What one role actually unlocks on this site, in plain language — for the hover detail. */
-function roleDetail(role: string, collections: readonly CollectionSummary[]): string {
-  const grants = collections
-    .map((collection) => {
-      const actions = ALL_ACTIONS.filter((action) => canPerform(action, collection, [role]))
-      return actions.length === 0 ? null : `${collection.labels.plural}: ${actions.join(', ')}`
-    })
-    .filter((line): line is string => line !== null)
-  return grants.length === 0 ? `${role}: no permission on this site` : grants.join(' — ')
+/** What one role actually unlocks on this site, in plain language — for the scope disclosure. */
+function roleDetail(
+  t: TFunction,
+  role: string,
+  schema: SchemaDocument | null,
+  locale: string,
+): string {
+  if (schema === null) return roleLabel(t, role)
+  const grants = grantsForRole(role, schema, locale)
+  if (grants.length === 0) return `${roleLabel(t, role)} : ${t('users.roleGrantsNone')}`
+  return `${roleLabel(t, role)} : ${grants
+    .map(
+      (grant) =>
+        `${grant.label} (${grant.actions.map((action) => t(ACTION_KEY[action])).join(', ')})`,
+    )
+    .join(' — ')}`
 }
 
 function daysUntil(iso: string): number {
@@ -122,12 +135,14 @@ function canRecover(key: AdminApiKey): boolean {
 }
 
 export function ApiKeysRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const formatWhen = useDateTimeFormatter()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
   const isAdmin = roles.includes('admin')
   const schemaState = useSchema()
+  const schema = schemaState.status === 'ready' ? schemaState.schema : null
   const collections = useMemo(
     () => (schemaState.status === 'ready' ? schemaState.schema.collections : []),
     [schemaState],
@@ -142,7 +157,11 @@ export function ApiKeysRoute(): JSX.Element {
 
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newScope, setNewScope] = useState('viewer')
+  const [newScope, setNewScope] = useState<ReadonlySet<string>>(() => new Set())
+  const [newNameError, setNewNameError] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [actionNotice, setActionNotice] = useState<string | null>(null)
   const [newExpiry, setNewExpiry] = useState<ExpiryChoice>('90d')
   const [newRateLimit, setNewRateLimit] = useState('')
   const [created, setCreated] = useState<CreatedApiKey | null>(null)
@@ -151,6 +170,7 @@ export function ApiKeysRoute(): JSX.Element {
   const [rotating, setRotating] = useState<AdminApiKey | null>(null)
   const [graceHours, setGraceHours] = useState<GraceHours>(24)
   const [rotated, setRotated] = useState<RotatedApiKey | null>(null)
+  const [rotatedGraceHours, setRotatedGraceHours] = useState<GraceHours>(24)
 
   const [purging, setPurging] = useState<AdminApiKey | null>(null)
   const [recovering, setRecovering] = useState<AdminApiKey | null>(null)
@@ -158,7 +178,7 @@ export function ApiKeysRoute(): JSX.Element {
 
   const [editing, setEditing] = useState<AdminApiKey | null>(null)
   const [editName, setEditName] = useState('')
-  const [editScope, setEditScope] = useState('')
+  const [editScope, setEditScope] = useState<ReadonlySet<string>>(() => new Set())
   const [editRateLimit, setEditRateLimit] = useState('')
 
   const load = useCallback(async () => {
@@ -194,42 +214,80 @@ export function ApiKeysRoute(): JSX.Element {
     }
   }
 
-  function parseScope(raw: string): string[] {
-    return raw
-      .split(',')
-      .map((role) => role.trim())
-      .filter((role) => role.length > 0)
+  /**
+   * The roles a key can be scoped to: those this site's schema names, plus any
+   * a key already holds (so editing a key never silently drops a role the list
+   * would not offer). `admin` comes last — a key with it can do anything.
+   */
+  const offeredRoles = useMemo(() => {
+    const names = new Set<string>([
+      ...(schema === null ? [] : knownRoleNames(schema)),
+      ...keys.flatMap((key) => key.scope),
+    ])
+    names.delete('admin')
+    return [...[...names].sort(), 'admin']
+  }, [schema, keys])
+
+  function toggleScope(set: ReadonlySet<string>, role: string): Set<string> {
+    const next = new Set(set)
+    if (next.has(role)) next.delete(role)
+    else next.add(role)
+    return next
+  }
+
+  function parseRateLimit(raw: string): number | null | 'invalid' {
+    if (raw.trim() === '') return null
+    const value = Number(raw)
+    return Number.isInteger(value) && value > 0 ? value : 'invalid'
   }
 
   async function submitCreate(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null) return
-    setActionError(null)
+    setCreateError(null)
+    setNewNameError(null)
+    const name = newName.trim()
+    if (name === '') {
+      setNewNameError(t('apiKeys.nameRequired'))
+      return
+    }
+    if (keys.some((key) => key.revokedAt === null && key.name.trim() === name)) {
+      setNewNameError(t('apiKeys.nameDuplicate'))
+      return
+    }
+    if (newScope.size === 0) {
+      setCreateError(t('apiKeys.scopeNone'))
+      return
+    }
+    const rateLimitPerMinute = parseRateLimit(newRateLimit)
+    if (rateLimitPerMinute === 'invalid') {
+      setCreateError(t('apiKeys.rateLimitInvalid'))
+      return
+    }
     try {
-      const rateLimitPerMinute =
-        newRateLimit.trim() === '' ? undefined : Number.parseInt(newRateLimit, 10)
       const result = await createApiKey(token, {
-        name: newName,
-        scope: parseScope(newScope),
+        name,
+        scope: [...newScope],
         ...expiryFieldsFor(newExpiry),
-        ...(rateLimitPerMinute === undefined ? {} : { rateLimitPerMinute }),
+        ...(rateLimitPerMinute === null ? {} : { rateLimitPerMinute }),
       })
       setCreated(result)
       setCreating(false)
       setNewName('')
-      setNewScope('viewer')
+      setNewScope(new Set())
       setNewExpiry('90d')
       setNewRateLimit('')
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('apiKeys.createError'))
+      setCreateError(caught instanceof ApiError ? caught.message : t('apiKeys.createError'))
     }
   }
 
   function startEdit(key: AdminApiKey): void {
     setEditing(key)
     setEditName(key.name)
-    setEditScope(key.scope.join(', '))
+    setEditScope(new Set(key.scope))
+    setEditError(null)
     setEditRateLimit(
       key.rateLimitPerMinute === DEFAULT_RATE_LIMIT_PER_MINUTE
         ? ''
@@ -240,19 +298,32 @@ export function ApiKeysRoute(): JSX.Element {
   async function submitEdit(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null || editing === null) return
-    setActionError(null)
+    setEditError(null)
+    const name = editName.trim()
+    if (name === '') {
+      setEditError(t('apiKeys.nameRequired'))
+      return
+    }
+    if (editScope.size === 0) {
+      setEditError(t('apiKeys.scopeNone'))
+      return
+    }
+    const rateLimitPerMinute = parseRateLimit(editRateLimit)
+    if (rateLimitPerMinute === 'invalid') {
+      setEditError(t('apiKeys.rateLimitInvalid'))
+      return
+    }
     try {
-      const rateLimitPerMinute =
-        editRateLimit.trim() === '' ? null : Number.parseInt(editRateLimit, 10)
       await updateApiKey(token, editing.id, {
-        name: editName,
-        scope: parseScope(editScope),
+        name,
+        scope: [...editScope],
         rateLimitPerMinute,
       })
+      setActionNotice(t('apiKeys.savedDone', { name }))
       setEditing(null)
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('apiKeys.editError'))
+      setEditError(caught instanceof ApiError ? caught.message : t('apiKeys.editError'))
     }
   }
 
@@ -261,6 +332,7 @@ export function ApiKeysRoute(): JSX.Element {
     setActionError(null)
     try {
       await revokeApiKey(token, revoking.id)
+      setActionNotice(t('apiKeys.revokedDone', { name: revoking.name }))
       setRevoking(null)
       await load()
     } catch (caught) {
@@ -274,6 +346,7 @@ export function ApiKeysRoute(): JSX.Element {
     try {
       const result = await rotateApiKey(token, rotating.id, graceHours)
       setRotated(result)
+      setRotatedGraceHours(graceHours)
       setRotating(null)
       setGraceHours(24)
       await load()
@@ -287,6 +360,7 @@ export function ApiKeysRoute(): JSX.Element {
     setActionError(null)
     try {
       await purgeApiKey(token, purging.id)
+      setActionNotice(t('apiKeys.purgedDone', { name: purging.name }))
       setPurging(null)
       await load()
     } catch (caught) {
@@ -317,12 +391,13 @@ export function ApiKeysRoute(): JSX.Element {
   }
 
   function expiryLabel(key: AdminApiKey): string {
+    if (key.revokedAt !== null) return '—'
     if (key.expiresAt === null) return t('apiKeys.neverExpires')
     const days = daysUntil(key.expiresAt)
     if (days <= 0) return t('apiKeys.expired')
     return key.supersededBy !== null
-      ? t('apiKeys.gracePeriodUntil', { days })
-      : t('apiKeys.expiresInDays', { days })
+      ? t('apiKeys.gracePeriodUntil', { count: days })
+      : t('apiKeys.expiresInDays', { count: days })
   }
 
   function hygieneNote(key: AdminApiKey): string | null {
@@ -363,7 +438,11 @@ export function ApiKeysRoute(): JSX.Element {
           dismissLabel={t('apiKeys.createdDismiss')}
         >
           <p>{t('apiKeys.createdBody')}</p>
-          <p className="font-mono text-sm break-all">{created.key}</p>
+          <SecretLine
+            value={created.key}
+            copyLabel={t('apiKeys.copyKey')}
+            copiedLabel={t('apiKeys.copied')}
+          />
           <p className="mt-2 font-semibold">{t('apiKeys.createdWarning')}</p>
         </Notice>
       )}
@@ -376,8 +455,12 @@ export function ApiKeysRoute(): JSX.Element {
           onDismiss={() => setRotated(null)}
           dismissLabel={t('apiKeys.createdDismiss')}
         >
-          <p>{t('apiKeys.rotatedBody', { hours: graceHours })}</p>
-          <p className="font-mono text-sm break-all">{rotated.issued.key}</p>
+          <p>{t('apiKeys.rotatedBody', { count: rotatedGraceHours })}</p>
+          <SecretLine
+            value={rotated.issued.key}
+            copyLabel={t('apiKeys.copyKey')}
+            copiedLabel={t('apiKeys.copied')}
+          />
           <p className="mt-2 font-semibold">{t('apiKeys.createdWarning')}</p>
         </Notice>
       )}
@@ -391,8 +474,23 @@ export function ApiKeysRoute(): JSX.Element {
           dismissLabel={t('apiKeys.createdDismiss')}
         >
           <p>{t('apiKeys.recoveredBody')}</p>
-          <p className="font-mono text-sm break-all">{recovered.key}</p>
+          <SecretLine
+            value={recovered.key}
+            copyLabel={t('apiKeys.copyKey')}
+            copiedLabel={t('apiKeys.copied')}
+          />
           <p className="mt-2 font-semibold">{t('apiKeys.createdWarning')}</p>
+        </Notice>
+      )}
+
+      {actionNotice !== null && (
+        <Notice
+          tone="success"
+          live="polite"
+          onDismiss={() => setActionNotice(null)}
+          dismissLabel={t('apiKeys.close')}
+        >
+          <p>{actionNotice}</p>
         </Notice>
       )}
 
@@ -410,7 +508,7 @@ export function ApiKeysRoute(): JSX.Element {
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && error === null && (
-        <TableRoot label={t('apiKeys.tableLabel')}>
+        <TableRoot label={t('apiKeys.tableLabel')} stacked>
           <Table>
             <TableHead>
               <TableRow>
@@ -432,9 +530,11 @@ export function ApiKeysRoute(): JSX.Element {
                 const canManage = key.revokedAt === null && key.supersededBy === null
                 return (
                   <TableRow key={key.id}>
-                    <TableCell>{key.name}</TableCell>
-                    <TableCell className="font-mono text-sm">{key.prefix}…</TableCell>
-                    <TableCell>
+                    <TableCell stack="heading">{key.name}</TableCell>
+                    <TableCell className="font-mono text-sm" label={t('apiKeys.prefixColumn')}>
+                      {key.prefix}…
+                    </TableCell>
+                    <TableCell label={t('apiKeys.scopeColumn')}>
                       {/* T09-03 — the scope detail used to live only in a
                           `title=` hover, unreachable by keyboard or on a
                           touch screen. A native `<details>` disclosure, the
@@ -446,73 +546,92 @@ export function ApiKeysRoute(): JSX.Element {
                           a single use (R9). `roleDetail` itself is
                           unchanged — only its presentation moved. */}
                       <details>
-                        <summary className="cursor-pointer text-sm">{key.scope.join(', ')}</summary>
+                        <summary className="cursor-pointer text-sm">
+                          {key.scope.map((role) => roleLabel(t, role)).join(', ')}
+                        </summary>
                         <ul className="m-0 mt-1 list-none p-0 text-xs text-muted-foreground">
                           {key.scope.map((role) => (
-                            <li key={role}>{roleDetail(role, collections)}</li>
+                            <li key={role}>{roleDetail(t, role, schema, i18n.language)}</li>
                           ))}
                         </ul>
                       </details>
                       {writeRoles.length > 0 && (
                         <p className="mt-1 text-xs text-warning">
-                          {t('apiKeys.scopeWriteWarning', { roles: writeRoles.join(', ') })}
+                          {t('apiKeys.scopeWriteWarning', {
+                            roles: writeRoles.map((role) => roleLabel(t, role)).join(', '),
+                          })}
                         </p>
                       )}
                     </TableCell>
-                    <TableCell>{key.createdAt}</TableCell>
-                    <TableCell>{expiryLabel(key)}</TableCell>
-                    <TableCell>
+                    <TableCell label={t('apiKeys.createdColumn')}>
+                      {formatWhen(key.createdAt)}
+                    </TableCell>
+                    <TableCell label={t('apiKeys.expiresColumn')}>{expiryLabel(key)}</TableCell>
+                    <TableCell label={t('apiKeys.usageColumn')}>
                       {t('apiKeys.usageSummary', {
                         last7: key.usage.last7Days,
                         last30: key.usage.last30Days,
                       })}
                     </TableCell>
-                    <TableCell>
-                      {key.lastUsedAt ?? t('apiKeys.never')}
+                    <TableCell label={t('apiKeys.lastUsedColumn')}>
+                      {key.lastUsedAt === null ? t('apiKeys.never') : formatWhen(key.lastUsedAt)}
                       {hygiene !== null && (
                         <p className="mt-1 text-xs text-muted-foreground">{hygiene}</p>
                       )}
                     </TableCell>
-                    <TableCell>{statusOf(key)}</TableCell>
-                    <TableCell>
+                    <TableCell label={t('apiKeys.statusColumn')}>{statusOf(key)}</TableCell>
+                    <TableCell stack="actions">
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="secondary"
                           size="sm"
                           disabled={!canManage}
+                          aria-label={t('apiKeys.editKey', { name: key.name })}
                           onClick={() => startEdit(key)}
                         >
-                          {t('apiKeys.editKey', { name: key.name })}
+                          {t('apiKeys.editShort')}
                         </Button>
                         <Button
                           variant="secondary"
                           size="sm"
                           disabled={!canManage}
+                          aria-label={t('apiKeys.rotateKey', { name: key.name })}
                           onClick={() => setRotating(key)}
                         >
-                          {t('apiKeys.rotateKey', { name: key.name })}
+                          {t('apiKeys.rotateShort')}
                         </Button>
                         <Button
                           variant="destructive"
                           size="sm"
                           disabled={key.revokedAt !== null}
+                          aria-label={t('apiKeys.revokeKey', { name: key.name })}
                           onClick={() => setRevoking(key)}
                         >
-                          {t('apiKeys.revokeKey', { name: key.name })}
+                          {t('apiKeys.revokeShort')}
                         </Button>
                         {key.revokedAt !== null && canRecover(key) && (
-                          <Button variant="secondary" size="sm" onClick={() => setRecovering(key)}>
-                            {t('apiKeys.recoverKey', { name: key.name })}
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            aria-label={t('apiKeys.recoverKey', { name: key.name })}
+                            onClick={() => setRecovering(key)}
+                          >
+                            {t('apiKeys.recoverShort')}
                           </Button>
                         )}
                         {key.revokedAt !== null &&
                           (purgeEligibleInDays(key) === 0 ? (
-                            <Button variant="destructive" size="sm" onClick={() => setPurging(key)}>
-                              {t('apiKeys.purgeKey', { name: key.name })}
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              aria-label={t('apiKeys.purgeKey', { name: key.name })}
+                              onClick={() => setPurging(key)}
+                            >
+                              {t('apiKeys.purgeShort')}
                             </Button>
                           ) : (
                             <p className="text-xs text-muted-foreground">
-                              {t('apiKeys.purgeIn', { days: purgeEligibleInDays(key) })}
+                              {t('apiKeys.purgeIn', { count: purgeEligibleInDays(key) ?? 0 })}
                             </p>
                           ))}
                       </div>
@@ -539,13 +658,43 @@ export function ApiKeysRoute(): JSX.Element {
 
       <Modal
         open={creating}
-        onOpenChange={setCreating}
+        onOpenChange={(open) => {
+          setCreating(open)
+          if (!open) {
+            setCreateError(null)
+            setNewNameError(null)
+          }
+        }}
         title={t('apiKeys.newHeading')}
         description={t('apiKeys.newDescription')}
         closeLabel={t('apiKeys.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCreating(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" form="create-api-key-form">
+              {t('apiKeys.createButton')}
+            </Button>
+          </>
+        }
       >
-        <form onSubmit={submitCreate} className="flex flex-col gap-4">
-          <Field label={t('apiKeys.nameLabel')} description={t('apiKeys.nameHint')}>
+        <form
+          id="create-api-key-form"
+          noValidate
+          onSubmit={submitCreate}
+          className="flex flex-col gap-4"
+        >
+          {createError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{createError}</p>
+            </Notice>
+          )}
+          <Field
+            label={t('apiKeys.nameLabel')}
+            description={t('apiKeys.nameHint')}
+            error={newNameError}
+          >
             {(control) => (
               <Input
                 {...control}
@@ -555,16 +704,15 @@ export function ApiKeysRoute(): JSX.Element {
               />
             )}
           </Field>
-          <Field label={t('apiKeys.scopeLabel')} description={t('apiKeys.scopeHint')}>
-            {(control) => (
-              <Input
-                {...control}
-                required
-                value={newScope}
-                onChange={(event) => setNewScope(event.target.value)}
-              />
-            )}
-          </Field>
+          <RoleCheckboxList
+            idPrefix="new-key-scope"
+            legend={t('apiKeys.scopeLabel')}
+            description={t('apiKeys.scopeHint')}
+            roles={offeredRoles}
+            selected={newScope}
+            onToggle={(role) => setNewScope((current) => toggleScope(current, role))}
+          />
+          <RoleGrantsSummary roles={[...newScope]} schema={schema} locale={i18n.language} />
           <Field
             label={t('apiKeys.expiryLabel')}
             description={
@@ -596,12 +744,6 @@ export function ApiKeysRoute(): JSX.Element {
               />
             )}
           </Field>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setCreating(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit">{t('apiKeys.createButton')}</Button>
-          </div>
         </form>
       </Modal>
 
@@ -613,8 +755,28 @@ export function ApiKeysRoute(): JSX.Element {
         title={t('apiKeys.editHeading', { name: editing?.name ?? '' })}
         description={t('apiKeys.editDescription')}
         closeLabel={t('apiKeys.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" form="edit-api-key-form">
+              {t('common.save')}
+            </Button>
+          </>
+        }
       >
-        <form onSubmit={submitEdit} className="flex flex-col gap-4">
+        <form
+          id="edit-api-key-form"
+          noValidate
+          onSubmit={submitEdit}
+          className="flex flex-col gap-4"
+        >
+          {editError !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{editError}</p>
+            </Notice>
+          )}
           <Field label={t('apiKeys.nameLabel')} description={t('apiKeys.nameHint')}>
             {(control) => (
               <Input
@@ -625,16 +787,15 @@ export function ApiKeysRoute(): JSX.Element {
               />
             )}
           </Field>
-          <Field label={t('apiKeys.scopeLabel')} description={t('apiKeys.scopeHint')}>
-            {(control) => (
-              <Input
-                {...control}
-                required
-                value={editScope}
-                onChange={(event) => setEditScope(event.target.value)}
-              />
-            )}
-          </Field>
+          <RoleCheckboxList
+            idPrefix="edit-key-scope"
+            legend={t('apiKeys.scopeLabel')}
+            description={t('apiKeys.scopeHint')}
+            roles={offeredRoles}
+            selected={editScope}
+            onToggle={(role) => setEditScope((current) => toggleScope(current, role))}
+          />
+          <RoleGrantsSummary roles={[...editScope]} schema={schema} locale={i18n.language} />
           <Field label={t('apiKeys.rateLimitLabel')} description={t('apiKeys.rateLimitHint')}>
             {(control) => (
               <Input
@@ -647,12 +808,6 @@ export function ApiKeysRoute(): JSX.Element {
               />
             )}
           </Field>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setEditing(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit">{t('common.save')}</Button>
-          </div>
         </form>
       </Modal>
 
@@ -750,5 +905,25 @@ export function ApiKeysRoute(): JSX.Element {
         <p>{t('apiKeys.confirmPurge')}</p>
       </Modal>
     </section>
+  )
+}
+
+/** A secret shown once: monospaced, selectable in one click, with a copy button. */
+function SecretLine({
+  value,
+  copyLabel,
+  copiedLabel,
+}: {
+  readonly value: string
+  readonly copyLabel: string
+  readonly copiedLabel: string
+}): JSX.Element {
+  return (
+    <div className="my-2 flex flex-wrap items-center gap-3">
+      <code className="min-w-0 rounded-md border border-border bg-card px-3 py-1.5 font-mono text-sm break-all select-all">
+        {value}
+      </code>
+      <CopyButton value={value} label={copyLabel} copiedLabel={copiedLabel} />
+    </div>
   )
 }

@@ -26,7 +26,12 @@ describe('createMcpServer', () => {
   it('answers initialize with server info and tools capability', async () => {
     const server = createMcpServer({ name: 'cogenta', version: '1.0.0', tools: [] })
 
-    const response = await server.handle({ jsonrpc: '2.0', id: 1, method: 'initialize' })
+    const response = await server.handle({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: { protocolVersion: '2025-06-18' },
+    })
 
     expect(response).toEqual({
       jsonrpc: '2.0',
@@ -34,7 +39,7 @@ describe('createMcpServer', () => {
       result: {
         protocolVersion: '2025-06-18',
         serverInfo: { name: 'cogenta', version: '1.0.0' },
-        capabilities: { tools: {} },
+        capabilities: { tools: { listChanged: false } },
       },
     })
   })
@@ -72,7 +77,13 @@ describe('createMcpServer', () => {
   })
 
   it('reports a tool failure as isError: true inside a successful result, not a JSON-RPC error', async () => {
-    const server = createMcpServer({ name: 'cogenta', version: '1.0.0', tools: [failingTool()] })
+    const internal: unknown[] = []
+    const server = createMcpServer({
+      name: 'cogenta',
+      version: '1.0.0',
+      tools: [failingTool()],
+      onInternalError: (error) => internal.push(error),
+    })
 
     const response = await server.handle({
       jsonrpc: '2.0',
@@ -84,9 +95,15 @@ describe('createMcpServer', () => {
     expect(response).toEqual({
       jsonrpc: '2.0',
       id: 4,
-      result: { content: [{ type: 'text', text: 'kaboom' }], isError: true },
+      result: {
+        // Not a CogentaError: its message (possibly naming an internal host)
+        // stays in the server's log, the caller reads a plain sentence.
+        content: [{ type: 'text', text: expect.stringMatching(/internal error/u) }],
+        isError: true,
+      },
     })
     expect('error' in (response as { error?: unknown })).toBe(false)
+    expect(internal).toHaveLength(1)
   })
 
   it('returns a JSON-RPC error for a call to an unknown tool', async () => {
@@ -132,6 +149,50 @@ describe('createMcpServer', () => {
       params: { name: 'boom' },
     })
 
-    expect(response).toMatchObject({ error: { code: -32601 } })
+    // -32602 (invalid params), what the specification names for an unknown tool.
+    expect(response).toMatchObject({ error: { code: -32602 } })
+  })
+
+  it('answers ping, and never answers a notification', async () => {
+    const server = createMcpServer({ name: 'cogenta', version: '1.0.0', tools: [] })
+
+    expect(await server.handle({ jsonrpc: '2.0', id: 9, method: 'ping' })).toEqual({
+      jsonrpc: '2.0',
+      id: 9,
+      result: {},
+    })
+    expect(await server.handle({ jsonrpc: '2.0', method: 'notifications/initialized' })).toBeNull()
+    expect(await server.handle({ jsonrpc: '2.0', method: 'notifications/unknown' })).toBeNull()
+  })
+
+  it('aborts a running call on notifications/cancelled and sends no reply for it', async () => {
+    let seen: AbortSignal | undefined
+    const slow: ExecutableTool = {
+      spec: { name: 'slow', description: 'Waits to be cancelled.', inputSchema: {} },
+      execute: (_input, context) =>
+        new Promise((_resolve, reject) => {
+          seen = context.signal
+          context.signal.addEventListener('abort', () => reject(new Error('aborted')))
+        }),
+    }
+    const server = createMcpServer({ name: 'cogenta', version: '1.0.0', tools: [slow] })
+
+    const pending = server.handle({
+      jsonrpc: '2.0',
+      id: 'call-1',
+      method: 'tools/call',
+      params: { name: 'slow' },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(
+      await server.handle({
+        jsonrpc: '2.0',
+        method: 'notifications/cancelled',
+        params: { requestId: 'call-1', reason: 'timeout' },
+      }),
+    ).toBeNull()
+
+    expect(await pending).toBeNull()
+    expect(seen?.aborted).toBe(true)
   })
 })

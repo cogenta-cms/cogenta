@@ -43,7 +43,7 @@ describe('the review queue screen', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Toutes en attente' }))
     expect(await screen.findByText('Workflow draft')).toBeDefined()
-    expect(screen.getByText('wf-article')).toBeDefined()
+    expect(screen.getByText('Workflow article')).toBeDefined()
   })
 
   it('approves a pending entry through the real route, and it leaves the queue', async () => {
@@ -54,7 +54,7 @@ describe('the review queue screen', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Toutes en attente' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Approuver' }))
 
-    expect(await screen.findByText('Rien ici.')).toBeDefined()
+    expect(await screen.findByText('Aucune entrée à relire ici.')).toBeDefined()
   })
 
   it('sends changes back through the real route, same reload discipline', async () => {
@@ -65,7 +65,7 @@ describe('the review queue screen', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Toutes en attente' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Demander des modifications' }))
 
-    expect(await screen.findByText('Rien ici.')).toBeDefined()
+    expect(await screen.findByText('Aucune entrée à relire ici.')).toBeDefined()
   })
 
   it('shows nothing on "assigned to me" for a role with no reviewable collection', async () => {
@@ -73,7 +73,7 @@ describe('the review queue screen', () => {
     render(<App />)
     await goToReview()
 
-    expect(await screen.findByText('Rien ici.')).toBeDefined()
+    expect(await screen.findByText('Aucune entrée à relire ici.')).toBeDefined()
   })
 
   it('meets the accessibility bar on every tab', async () => {
@@ -113,7 +113,7 @@ describe('review transitions refresh the sidebar status', () => {
     expect(before).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Approuver' }))
-    await screen.findByText('Rien ici.')
+    await screen.findByText('Aucune entrée à relire ici.')
 
     expect(shellStatusCallCount()).toBeGreaterThan(before)
   })
@@ -129,7 +129,7 @@ describe('review transitions refresh the sidebar status', () => {
     expect(before).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: 'Demander des modifications' }))
-    await screen.findByText('Rien ici.')
+    await screen.findByText('Aucune entrée à relire ici.')
 
     expect(shellStatusCallCount()).toBeGreaterThan(before)
   })

@@ -1,0 +1,57 @@
+{
+  "assistant": {
+    "offStepConfig": "The easiest: add a key in “AI providers” (AI menu).",
+    "offStepEnv": "Or, for a site configured by file, set COGENTA_LLM_API_KEY (with COGENTA_LLM_PROVIDER and COGENTA_LLM_MODEL) in the environment.",
+    "vectorDriver": "Index storage: {{driver}}",
+    "vectorDrivers": {
+      "file": "local file",
+      "memory": "memory (lost on restart)",
+      "pgvector": "PostgreSQL database (pgvector)",
+      "none": "none"
+    },
+    "vectorIndexedBeforeStart": "Last indexed: before the site last started.",
+    "usageRow_one": "{{count}} call, {{tokens}} tokens",
+    "usageRow_other": "{{count}} calls, {{tokens}} tokens",
+    "usageNoLimit": "{{tokens}} tokens used this month. No cap configured.",
+    "usageWithLimit": "{{tokens}} of {{limit}} tokens used this month ({{percent}}%).",
+    "vectorCount_one": "{{count}} entry indexed",
+    "vectorCount_other": "{{count}} entries indexed"
+  },
+  "assistantIndex": {
+    "uploaded": "Document “{{name}}” added to the index.",
+    "removed": "Document removed from the index.",
+    "reindexed_one": "Index rebuilt: {{count}} entry read.",
+    "reindexed_other": "Index rebuilt: {{count}} entries read.",
+    "reindexError": "The index could not be rebuilt.",
+    "reindexButton": "Reindex the content",
+    "reindexing": "Reindexing…",
+    "emptyIndex": "The index is empty: the assistant finds nothing and duplicate detection sees no resemblance. Run “Reindex the content” to fill it with what is already published.",
+    "chooseFile": "Choose a file",
+    "noFileChosen": "No file chosen",
+    "removeNamed": "Remove the document {{name}}",
+    "removeTitle": "Remove “{{name}}”?",
+    "removeBody": "The document leaves the index: the assistant can no longer use or cite it. To put it back, upload it again.",
+    "removeConfirm": "Remove the document",
+    "statusIndexed_one": "Indexed ({{count}} passage)",
+    "statusIndexed_other": "Indexed ({{count}} passages)",
+    "reindexHint": "Turning a collection off leaves it out of future saves. What was already indexed stays until the next reindex: “Reindex the content” puts the index right in one go, published content and included or excluded collections alike.",
+    "heading": "Knowledge index"
+  },
+  "assistChat": {
+    "placeholder": "E.g. What does the site offer to companies?",
+    "noSources": "No source was found for this question.",
+    "checkIndex": "Check the knowledge index",
+    "copyAnswer": "Copy the answer",
+    "copied": "Answer copied",
+    "clear": "Clear the conversation",
+    "composerHint": "Enter to send, Shift+Enter for a new line.",
+    "empty": "Ask your first question below.",
+    "you": "You:",
+    "assistant": "Assistant:",
+    "scopeContent": "Scope: {{collections}} (published content you can read), language {{locale}}.",
+    "asking": "Searching…"
+  },
+  "duplicates": {
+    "heading": "Duplicate detection"
+  }
+}

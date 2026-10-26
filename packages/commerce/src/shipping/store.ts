@@ -158,6 +158,38 @@ function shippingMethodNotFound(id: string): CogentaError {
   })
 }
 
+function invalidMethod(message: string, hint: string): CogentaError {
+  return new CogentaError({ code: 'COMMERCE_SHIPPING_METHOD_UNKNOWN', message, hint })
+}
+
+function assertLabel(label: string): string {
+  if (label.trim() === '') {
+    throw invalidMethod(
+      'A shipping method needs a label.',
+      'Something a customer recognises, like "Colissimo".',
+    )
+  }
+  return label.trim()
+}
+
+/** A country is the two-letter ISO code, or nothing ("everywhere"). */
+function assertCountry(country: string | null | undefined): string | null {
+  if (country === undefined || country === null || country.trim() === '') return null
+  const code = country.trim().toUpperCase()
+  if (!/^[A-Z]{2}$/u.test(code)) {
+    throw invalidMethod(
+      `"${country}" is not a country code.`,
+      'Use the two-letter ISO code, such as FR or BE, or leave it empty for "everywhere".',
+    )
+  }
+  return code
+}
+
+function assertFreeOver(value: number | null | undefined): number | null {
+  if (value === undefined || value === null) return null
+  return assertMinor(value, 'A free-shipping threshold')
+}
+
 function serves(method: ShippingMethod, zone: TaxZone | null): boolean {
   if (method.country !== null) {
     if (zone === null || method.country !== zone.country) return false
@@ -233,11 +265,11 @@ export function createShippingStore(
       await db.query(sql`
         insert into ${table} (id, label, country, region, kind, currency, amount_minor,
                               per_kg_minor, free_over_minor, carrier, position, active, created_at)
-        values (${id}, ${input.label}, ${input.country?.toUpperCase() ?? null}, ${input.region ?? null},
+        values (${id}, ${assertLabel(input.label)}, ${assertCountry(input.country)}, ${input.region?.trim() || null},
                 ${input.kind ?? 'flat'}, ${assertCurrency(input.currency)},
                 ${assertMinor(input.amountMinor ?? 0, 'A shipping amount')},
                 ${assertMinor(input.perKgMinor ?? 0, 'A per-kilogram shipping amount')},
-                ${input.freeOverMinor ?? null}, ${input.carrier ?? null},
+                ${assertFreeOver(input.freeOverMinor)}, ${input.carrier?.trim() || null},
                 ${input.position ?? 0}, ${fromBool(input.active ?? true, d)},
                 ${new Date(now()).toISOString()})`)
 
@@ -267,10 +299,9 @@ export function createShippingStore(
         })
       }
 
-      const label = patch.label ?? current.label
-      const country =
-        patch.country === undefined ? current.country : (patch.country?.toUpperCase() ?? null)
-      const region = patch.region === undefined ? current.region : (patch.region ?? null)
+      const label = patch.label === undefined ? current.label : assertLabel(patch.label)
+      const country = patch.country === undefined ? current.country : assertCountry(patch.country)
+      const region = patch.region === undefined ? current.region : patch.region?.trim() || null
       const kind = patch.kind ?? current.kind
       const currency =
         patch.currency === undefined ? current.currency : assertCurrency(patch.currency)
@@ -283,8 +314,10 @@ export function createShippingStore(
           ? current.perKgMinor
           : assertMinor(patch.perKgMinor, 'A per-kilogram shipping amount')
       const freeOverMinor =
-        patch.freeOverMinor === undefined ? current.freeOverMinor : (patch.freeOverMinor ?? null)
-      const carrier = patch.carrier === undefined ? current.carrier : (patch.carrier ?? null)
+        patch.freeOverMinor === undefined
+          ? current.freeOverMinor
+          : assertFreeOver(patch.freeOverMinor)
+      const carrier = patch.carrier === undefined ? current.carrier : patch.carrier?.trim() || null
       const position = patch.position ?? current.position
       const active = patch.active ?? current.active
 

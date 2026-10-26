@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app.js'
 import { installMockFetch, VALID_TOKEN } from '../helpers/mock-fetch.js'
@@ -66,36 +66,37 @@ describe('customer detail — GDPR export and anonymisation (audit A1 P1)', () =
   })
 
   it('anonymises the customer only after a real confirmation, then shows the anonymised record', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-
     render(<App />)
     await goToCustomerDetail()
 
+    // Erasure is irreversible: the button only opens a confirmation.
     fireEvent.click(screen.getByRole('button', { name: 'Anonymiser' }))
+    const dialog = await screen.findByRole('dialog', { name: /^Anonymiser ce client/u })
+    expect(screen.queryByText('La fiche de ce client a été anonymisée.')).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Anonymiser' }))
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1)
     await screen.findByText('La fiche de ce client a été anonymisée.')
-    // `getAllByText`, not `getByText`: the anonymised e-mail now shows in
-    // both the heading (name is null, so it falls back to the e-mail) and
-    // the subtitle below it — a real, expected duplication, not a bug.
-    expect(screen.getAllByText(/anon-customer-1@deleted\.invalid/u).length).toBeGreaterThan(0)
-
-    confirmSpy.mockRestore()
+    // The erased e-mail is no longer shown anywhere: the record reads
+    // "Client anonymisé", and there is nothing left to anonymise again.
+    expect(await screen.findByRole('heading', { name: 'Client anonymisé' })).toBeDefined()
+    expect(screen.queryByText(/anon-customer-1@deleted\.invalid/u)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Anonymiser' })).toBeNull()
   })
 
   it('does nothing when the irreversible confirmation is declined', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
-
     render(<App />)
     await goToCustomerDetail()
 
     fireEvent.click(screen.getByRole('button', { name: 'Anonymiser' }))
+    const dialog = await screen.findByRole('dialog', { name: /^Anonymiser ce client/u })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Annuler' }))
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /^Anonymiser ce client/u })).toBeNull()
+    })
     expect(screen.queryByText('La fiche de ce client a été anonymisée.')).toBeNull()
-    expect(screen.queryByText(/anon-customer-1@deleted\.invalid/u)).toBeNull()
-
-    confirmSpy.mockRestore()
+    expect(screen.queryByRole('heading', { name: 'Client anonymisé' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Shopper One' })).toBeDefined()
   })
 
   it('offers no export or anonymise action to a role without commerce write (courtesy gate, R4 enforced server-side)', async () => {

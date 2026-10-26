@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { describeAiErrorLine, describeAiFailure } from '../ai/server-text.js'
 import {
   type AgentConversationTurn,
   type AgentRunSummary,
@@ -7,7 +9,6 @@ import {
   getAgentMessageJob,
   startAgentMessageJob,
 } from '../api/agents-client.js'
-import { ApiError } from '../api/client.js'
 
 /** How often the conversation job is polled while a turn is in flight — frequent enough to feel live, far below anything that would look like hammering the server. */
 const JOB_POLL_INTERVAL_MS = 500
@@ -44,6 +45,7 @@ export function useAgentConversation(
   agentName: string,
   errorFallback: string,
 ): UseAgentConversation {
+  const { t } = useTranslation()
   const [turns, setTurns] = useState<readonly AgentConversationTurn[]>([])
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
@@ -64,7 +66,7 @@ export function useAgentConversation(
         if (!cancelled) setTurns(loaded)
       })
       .catch((caught: unknown) => {
-        if (!cancelled) setError(caught instanceof ApiError ? caught.message : errorFallback)
+        if (!cancelled) setError(describeAiErrorLine(caught, t, errorFallback))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -72,7 +74,7 @@ export function useAgentConversation(
     return () => {
       cancelled = true
     }
-  }, [token, agentName, errorFallback])
+  }, [token, agentName, errorFallback, t])
 
   const send = useCallback(
     async (message: string): Promise<AgentRunSummary | null> => {
@@ -80,6 +82,12 @@ export function useAgentConversation(
       setSending(true)
       setError(null)
       setProgress([])
+      // The question stays on screen while the agent works, instead of
+      // vanishing from the composer and reappearing with the answer.
+      setTurns((current) => [
+        ...current,
+        { role: 'user', content: message.trim(), createdAt: new Date().toISOString() },
+      ])
       try {
         const { jobId } = await startAgentMessageJob(token, agentName, message.trim())
         for (;;) {
@@ -90,7 +98,14 @@ export function useAgentConversation(
             continue
           }
           if (job.status === 'failed') {
-            setError(job.error?.message ?? errorFallback)
+            const failure = describeAiFailure(
+              job.error ?? { message: errorFallback },
+              t,
+              job.error?.code === undefined ? errorFallback : undefined,
+            )
+            setError(
+              failure.hint === undefined ? failure.message : `${failure.message} ${failure.hint}`,
+            )
             return null
           }
           if (job.result === undefined) return null
@@ -98,14 +113,14 @@ export function useAgentConversation(
           return job.result.run
         }
       } catch (caught) {
-        setError(caught instanceof ApiError ? caught.message : errorFallback)
+        setError(describeAiErrorLine(caught, t, errorFallback))
         return null
       } finally {
         setSending(false)
         setProgress([])
       }
     },
-    [token, agentName, errorFallback],
+    [token, agentName, errorFallback, t],
   )
 
   const clear = useCallback(async (): Promise<void> => {
@@ -115,9 +130,9 @@ export function useAgentConversation(
       await clearAgentConversation(token, agentName)
       setTurns([])
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : errorFallback)
+      setError(describeAiErrorLine(caught, t, errorFallback))
     }
-  }, [token, agentName, errorFallback])
+  }, [token, agentName, errorFallback, t])
 
   return {
     turns,

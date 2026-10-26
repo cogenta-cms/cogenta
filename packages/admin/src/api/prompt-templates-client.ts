@@ -15,6 +15,8 @@ export interface PromptTemplateSummary {
   readonly category: string
   readonly template: string
   readonly builtin: boolean
+  /** For a template Cogenta ships: the text it shipped with. */
+  readonly originalTemplate?: string
   readonly createdAt: string
   readonly updatedAt: string
 }
@@ -59,6 +61,14 @@ export function updatePromptTemplate(
 export function removePromptTemplate(token: string, id: string): Promise<{ readonly id: string }> {
   return request(`/api/prompt-templates/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+    headers: authHeader(token),
+  })
+}
+
+/** Puts a built-in prompt back to what Cogenta shipped. */
+export function resetPromptTemplate(token: string, id: string): Promise<PromptTemplateSummary> {
+  return request(`/api/prompt-templates/${encodeURIComponent(id)}/reset`, {
+    method: 'POST',
     headers: authHeader(token),
   })
 }

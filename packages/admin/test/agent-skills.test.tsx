@@ -50,7 +50,9 @@ describe('agent skills', () => {
 
     expect(await screen.findByText('Style guide')).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    // Removing a skill now asks for confirmation before anything is deleted.
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer la compétence Style guide' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Supprimer la compétence' }))
 
     expect(await screen.findByText(/Aucune compétence configurée/)).toBeDefined()
   })
@@ -82,10 +84,12 @@ describe('agent skills', () => {
     const file = new File(['# Style'], 'style.md', { type: 'text/markdown' })
     fireEvent.change(uploadInputs[0] as HTMLInputElement, { target: { files: [file] } })
 
-    expect(await screen.findByText('style.md')).toBeDefined()
+    // The file picker also echoes the chosen name, so look at the file list only.
+    const inList = { selector: 'li span' }
+    expect(await screen.findByText('style.md', inList)).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Retirer' }))
-    await waitFor(() => expect(screen.queryByText('style.md')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('style.md', inList)).toBeNull())
   })
 })
 

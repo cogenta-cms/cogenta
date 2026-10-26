@@ -1,5 +1,6 @@
 import { type FormEvent, type JSX, type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { localizeProgress, toolName } from '../ai/server-text.js'
 import type { AgentConversationTurn } from '../api/agents-client.js'
 import { Badge, Button, Notice } from '../ui/index.js'
 import type { UseAgentConversation } from './use-agent-conversation.js'
@@ -29,9 +30,14 @@ export function AgentChatFeed({
   const [draft, setDraft] = useState('')
   const logRef = useRef<HTMLDivElement>(null)
 
+  // Pinned to the newest message: on open, when a turn arrives, and when the
+  // "thinking" line appears (the question just sent would otherwise sit cut
+  // off at the bottom with the reply out of view).
+  const turnCount = turns.length
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the counters are the triggers, the body only reads the ref.
   useEffect(() => {
     if (logRef.current !== null) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [])
+  }, [turnCount, sending, loading])
 
   // Fiche feedback — "je ne sais pas si le traitement est en cours ou pas".
   // Keeps the feed pinned to the bottom as `progress` grows, the same way a
@@ -93,7 +99,9 @@ export function AgentChatFeed({
             aria-live="polite"
             data-testid="agent-chat-progress"
           >
-            {progress.at(-1) ?? t('agentChat.thinking')}
+            {progress.length === 0
+              ? t('agentChat.thinking')
+              : localizeProgress(progress.at(-1) ?? '', t)}
           </p>
         )}
       </div>
@@ -119,8 +127,8 @@ export function AgentChatFeed({
           placeholder={t('agentChat.placeholder')}
           className={
             dense
-              ? 'h-16 flex-1 resize-none rounded-md border border-input bg-card p-2 text-sm shadow-card'
-              : 'h-20 flex-1 resize-none rounded-md border border-input bg-card p-3 text-sm shadow-card'
+              ? 'h-16 flex-1 resize-none rounded-md border border-input bg-card p-2 font-sans text-sm shadow-card'
+              : 'h-20 flex-1 resize-none rounded-md border border-input bg-card p-3 font-sans text-sm shadow-card'
           }
           value={draft}
           disabled={sending || disabled}
@@ -131,6 +139,7 @@ export function AgentChatFeed({
           {t('agentChat.send')}
         </Button>
       </form>
+      <p className="m-0 text-[0.7rem] text-muted-foreground">{t('agentChat.composerHint')}</p>
     </div>
   )
 }
@@ -162,8 +171,8 @@ function ChatBubble({
             <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
               {turn.toolCalls.map((call, index) => (
                 <li key={`${call.name}-${index}`}>
-                  <Badge tone="neutral" className="font-mono text-[0.7rem]">
-                    {call.name}
+                  <Badge tone="neutral" className="text-[0.7rem]" title={call.name}>
+                    {toolName(call.name, t)}
                   </Badge>
                 </li>
               ))}

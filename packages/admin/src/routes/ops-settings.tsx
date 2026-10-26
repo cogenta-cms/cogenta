@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import type { JSX } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -10,8 +11,25 @@ import {
   type SecurityStatus,
   type WebhooksStatus,
 } from '../api/ops-status-client.js'
+import { listProviders, type ProviderSummary } from '../api/providers-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
+
+/** One label column for every card, so the values line up from one card to the next. */
+const DL_CLASSES =
+  'm-0 grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-[15rem_minmax(0,1fr)] ' +
+  '[&_dd]:m-0 [&_dd]:min-w-0 [&_dd]:break-words [&_dt]:font-medium'
+
+/** The drivers' technical names, said the way the rest of the admin says them. */
+const DRIVER_LABELS: Readonly<Record<string, string>> = {
+  sqlite: 'SQLite',
+  postgres: 'PostgreSQL',
+  mysql: 'MySQL',
+  mariadb: 'MariaDB',
+  redis: 'Redis',
+  s3: 'S3',
+  pgvector: 'pgvector',
+}
 
 /**
  * `GET /api/security-status` and `GET /api/webhooks-status` — read-only
@@ -28,6 +46,31 @@ import { Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
  * process is actually enforcing on every request matches what the file says
  * — which is worth seeing without opening a terminal.
  */
+function driverLabel(driver: string, t: TFunction): string {
+  if (driver === 'auto') return t('opsSettings.driverAuto')
+  return DRIVER_LABELS[driver] ?? driver
+}
+
+/** Providers saved in the admin first (the agents use them), the configuration file's `llm` as the fallback. */
+function describeLlm(
+  config: ConfigStatus,
+  providers: readonly ProviderSummary[],
+  t: TFunction,
+): string {
+  const active = providers.filter((provider) => provider.enabled)
+  if (active.length > 0) {
+    return t('opsSettings.llmRegistered', {
+      count: active.length,
+      list: active.map((provider) => `${provider.provider} (${provider.model})`).join(', '),
+    })
+  }
+  if (providers.length > 0) {
+    return t('opsSettings.llmRegisteredDisabled', { count: providers.length })
+  }
+  if (config.llm !== undefined) return `${config.llm.provider} (${config.llm.model})`
+  return t('opsSettings.llmNone')
+}
+
 export function OpsSettingsRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
@@ -38,6 +81,7 @@ export function OpsSettingsRoute(): JSX.Element {
   const [security, setSecurity] = useState<SecurityStatus | null>(null)
   const [webhooks, setWebhooks] = useState<WebhooksStatus | null>(null)
   const [config, setConfig] = useState<ConfigStatus | null>(null)
+  const [providers, setProviders] = useState<readonly ProviderSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -46,12 +90,20 @@ export function OpsSettingsRoute(): JSX.Element {
     let cancelled = false
     setLoading(true)
     setError(null)
-    Promise.all([readSecurityStatus(token), readWebhooksStatus(token), readConfigStatus(token)])
-      .then(([securityStatus, webhooksStatus, configStatus]) => {
+    Promise.all([
+      readSecurityStatus(token),
+      readWebhooksStatus(token),
+      readConfigStatus(token),
+      // Agents run on the providers saved from the admin as well as on the
+      // configuration file's `llm` section: this screen must count both.
+      listProviders(token).catch((): readonly ProviderSummary[] => []),
+    ])
+      .then(([securityStatus, webhooksStatus, configStatus, savedProviders]) => {
         if (cancelled) return
         setSecurity(securityStatus)
         setWebhooks(webhooksStatus)
         setConfig(configStatus)
+        setProviders(savedProviders)
       })
       .catch((caught: unknown) => {
         if (cancelled) return
@@ -83,7 +135,7 @@ export function OpsSettingsRoute(): JSX.Element {
         >
           {t('opsSettings.heading')}
         </h1>
-        <p className="text-muted-foreground text-sm">{t('opsSettings.description')}</p>
+        <p className="text-muted-foreground max-w-3xl text-sm">{t('opsSettings.description')}</p>
       </div>
 
       {error !== null && (
@@ -101,30 +153,30 @@ export function OpsSettingsRoute(): JSX.Element {
             </CardTitle>
           </CardHeader>
           <CardBody className="flex flex-col gap-3">
-            <dl className="m-0 grid grid-cols-1 sm:grid-cols-[max-content_minmax(0,1fr)] [&_dd]:min-w-0 [&_dd]:break-words gap-x-4 gap-y-2 text-sm">
-              <dt className="font-medium">{t('opsSettings.corsLabel')}</dt>
-              <dd className="m-0">
+            <dl className={DL_CLASSES}>
+              <dt>{t('opsSettings.corsLabel')}</dt>
+              <dd>
                 {security.cors.enabled
                   ? t('opsSettings.corsEnabled', { origins: security.cors.origins.join(', ') })
                   : t('opsSettings.corsDisabled')}
               </dd>
 
-              <dt className="font-medium">{t('opsSettings.cspLabel')}</dt>
-              <dd className="m-0 font-mono break-all">
+              <dt>{t('opsSettings.cspLabel')}</dt>
+              <dd className="font-mono break-all">
                 {security.csp === null || security.csp === false
                   ? t('opsSettings.cspNone')
                   : security.csp}
               </dd>
 
-              <dt className="font-medium">{t('opsSettings.hstsLabel')}</dt>
-              <dd className="m-0">
+              <dt>{t('opsSettings.hstsLabel')}</dt>
+              <dd>
                 {security.hsts.enabled
                   ? t('opsSettings.hstsEnabled', { maxAge: security.hsts.maxAge })
                   : t('opsSettings.hstsDisabled')}
               </dd>
 
-              <dt className="font-medium">{t('opsSettings.pageCacheLabel')}</dt>
-              <dd className="m-0">
+              <dt>{t('opsSettings.pageCacheLabel')}</dt>
+              <dd>
                 {security.pageMaxAge === 0
                   ? t('opsSettings.pageCacheNone')
                   : t('opsSettings.pageCacheSeconds', { seconds: security.pageMaxAge })}
@@ -178,50 +230,53 @@ export function OpsSettingsRoute(): JSX.Element {
             </CardTitle>
           </CardHeader>
           <CardBody className="flex flex-col gap-4">
-            <dl className="m-0 grid grid-cols-1 sm:grid-cols-[max-content_minmax(0,1fr)] [&_dd]:min-w-0 [&_dd]:break-words gap-x-4 gap-y-2 text-sm">
-              <dt className="font-medium">{t('opsSettings.databaseLabel')}</dt>
-              <dd className="m-0">{config.database.driver}</dd>
+            <dl className={DL_CLASSES}>
+              <dt>{t('opsSettings.databaseLabel')}</dt>
+              <dd>{driverLabel(config.database.driver, t)}</dd>
 
-              <dt className="font-medium">{t('opsSettings.cacheLabel')}</dt>
-              <dd className="m-0">{config.cache.driver}</dd>
+              <dt>{t('opsSettings.cacheLabel')}</dt>
+              <dd>{driverLabel(config.cache.driver, t)}</dd>
 
-              <dt className="font-medium">{t('opsSettings.queueLabel')}</dt>
-              <dd className="m-0">{config.queue.driver}</dd>
+              <dt>{t('opsSettings.queueLabel')}</dt>
+              <dd>{driverLabel(config.queue.driver, t)}</dd>
 
-              <dt className="font-medium">{t('opsSettings.storageLabel')}</dt>
-              <dd className="m-0">{config.storage.driver}</dd>
+              <dt>{t('opsSettings.storageLabel')}</dt>
+              <dd>{driverLabel(config.storage.driver, t)}</dd>
 
-              <dt className="font-medium">{t('opsSettings.llmLabel')}</dt>
-              <dd className="m-0">
-                {config.llm === undefined
-                  ? t('opsSettings.llmNone')
-                  : `${config.llm.provider} (${config.llm.model})`}
+              <dt>{t('opsSettings.llmLabel')}</dt>
+              <dd>{describeLlm(config, providers, t)}</dd>
+
+              <dt>{t('opsSettings.embeddingsLabel')}</dt>
+              <dd>
+                {config.embeddings.provider === 'local'
+                  ? t('opsSettings.embeddingsLocal', { model: config.embeddings.model })
+                  : `${config.embeddings.provider} (${config.embeddings.model})`}
               </dd>
 
-              <dt className="font-medium">{t('opsSettings.embeddingsLabel')}</dt>
-              <dd className="m-0">
-                {config.embeddings.provider} ({config.embeddings.model})
+              <dt>{t('opsSettings.imageGenerationLabel')}</dt>
+              <dd>
+                {providers.some((provider) => provider.enabled && provider.imageModel !== undefined)
+                  ? providers
+                      .filter((provider) => provider.enabled && provider.imageModel !== undefined)
+                      .map((provider) => `${provider.provider} (${provider.imageModel})`)
+                      .join(', ')
+                  : config.imageGeneration === undefined
+                    ? t('opsSettings.imageGenerationNone')
+                    : `${config.imageGeneration.provider} (${config.imageGeneration.model})`}
               </dd>
 
-              <dt className="font-medium">{t('opsSettings.imageGenerationLabel')}</dt>
-              <dd className="m-0">
-                {config.imageGeneration === undefined
-                  ? t('opsSettings.imageGenerationNone')
-                  : `${config.imageGeneration.provider} (${config.imageGeneration.model})`}
-              </dd>
+              <dt>{t('opsSettings.vectorLabel')}</dt>
+              <dd>{driverLabel(config.vector.driver, t)}</dd>
 
-              <dt className="font-medium">{t('opsSettings.vectorLabel')}</dt>
-              <dd className="m-0">{config.vector.driver}</dd>
-
-              <dt className="font-medium">{t('opsSettings.billingLabel')}</dt>
-              <dd className="m-0">
+              <dt>{t('opsSettings.billingLabel')}</dt>
+              <dd>
                 {config.billingConfigured
                   ? t('opsSettings.billingConfigured')
                   : t('opsSettings.billingNotConfigured')}
               </dd>
 
-              <dt className="font-medium">{t('opsSettings.notFoundPathLabel')}</dt>
-              <dd className="m-0 font-mono">{config.site.notFoundPath}</dd>
+              <dt>{t('opsSettings.notFoundPathLabel')}</dt>
+              <dd className="font-mono">{config.site.notFoundPath}</dd>
             </dl>
 
             {/* Secret hygiene (fiche 23 task 5's second literal ask):
@@ -266,8 +321,6 @@ export function OpsSettingsRoute(): JSX.Element {
           </CardBody>
         </Card>
       )}
-
-      <p className="text-muted-foreground text-sm">{t('opsSettings.readOnlyNote')}</p>
     </section>
   )
 }

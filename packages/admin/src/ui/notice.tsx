@@ -101,7 +101,7 @@ export function Notice({
           type="button"
           onClick={onDismiss}
           aria-label={dismissLabel}
-          className="inline-flex size-6 shrink-0 cursor-pointer appearance-none items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="inline-flex size-6 shrink-0 cursor-pointer appearance-none max-sm:-m-2.5 max-sm:size-11 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <svg
             aria-hidden="true"

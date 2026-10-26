@@ -1,5 +1,6 @@
 import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link, useLocation } from 'react-router'
 import { type AuditEntry, listMyActivity } from '../api/audit-client.js'
 import {
   ApiError,
@@ -14,7 +15,7 @@ import {
   registerPasskey,
   type TotpSetup,
 } from '../api/client.js'
-import { getMedia, listMedia, type MediaAsset } from '../api/media-client.js'
+import { getMedia, type MediaAsset } from '../api/media-client.js'
 import {
   type ChannelGrouping,
   type ChannelMinSeverity,
@@ -37,9 +38,12 @@ import {
 } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { SUPPORTED_LANGUAGES, setLanguage } from '../i18n/index.js'
+import { auditActionLabel } from '../lib/audit-actions.js'
+import { roleLabels } from '../lib/role-label.js'
+import { AvatarPicker } from '../media/avatar-picker.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
+import { QrCode } from '../profile/qr-code.js'
 import { useDateTimeFormatter } from '../settings/site-settings-context.js'
-import '../styles/media.css'
 import {
   Button,
   Card,
@@ -208,6 +212,18 @@ function ChannelPreferencesEditor({
   )
 }
 
+/** The page's sections, in order — the contents list's entries and the anchors a link can point at. */
+const PROFILE_SECTIONS = [
+  { id: 'public-profile', labelKey: 'profile.sections.profile' },
+  { id: 'password', labelKey: 'profile.sections.password' },
+  { id: 'security', labelKey: 'profile.sections.security' },
+  { id: 'recovery-codes', labelKey: 'profile.sections.recovery' },
+  { id: 'sessions', labelKey: 'profile.sections.sessions' },
+  { id: 'notifications', labelKey: 'profile.sections.notifications' },
+  { id: 'activity', labelKey: 'profile.sections.activity' },
+  { id: 'personal-data', labelKey: 'profile.sections.data' },
+] as const
+
 /**
  * "My profile" — L11 task 3.
  *
@@ -229,6 +245,7 @@ export function ProfileRoute(): JSX.Element {
   const { t } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
+  const { hash } = useLocation()
 
   const [profile, setProfile] = useState<AdminUser | null>(null)
   const [sessions, setSessions] = useState<readonly UserSession[]>([])
@@ -238,6 +255,7 @@ export function ProfileRoute(): JSX.Element {
   const [newPassword, setNewPassword] = useState('')
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordChanged, setPasswordChanged] = useState(false)
+  const [currentPasswordError, setCurrentPasswordError] = useState<string | null>(null)
   // Kept closed by default: the fields were previously always open on the
   // page, which the user flagged directly — a password form left expanded
   // is one more thing visible over someone's shoulder for no reason, when
@@ -260,7 +278,6 @@ export function ProfileRoute(): JSX.Element {
   const [locale, setLocale] = useState('')
   const [avatarMediaId, setAvatarMediaId] = useState<string | null>(null)
   const [avatarAsset, setAvatarAsset] = useState<MediaAsset | null>(null)
-  const [avatarChoices, setAvatarChoices] = useState<readonly MediaAsset[]>([])
   const [pickingAvatar, setPickingAvatar] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
   const [profileSaved, setProfileSaved] = useState(false)
@@ -365,6 +382,16 @@ export function ProfileRoute(): JSX.Element {
       .catch(() => undefined)
   }, [load, loadActivity, loadNotificationPreferences])
 
+  // A link such as « Configurer maintenant » points at a section, not at the
+  // page: scroll to it once the sections have rendered (the page loads its
+  // data first, so the target sits lower than it will once loaded).
+  const profileLoaded = profile !== null
+  useEffect(() => {
+    if (hash === '' || !profileLoaded) return
+    const target = document.getElementById(decodeURIComponent(hash.slice(1)))
+    target?.scrollIntoView?.({ block: 'start' })
+  }, [hash, profileLoaded])
+
   /** Fiche 38 task 4 — writes one channel's preferences, and only that channel's local state, on success. */
   async function saveChannelPreferences(
     channelName: string,
@@ -413,18 +440,6 @@ export function ProfileRoute(): JSX.Element {
     }
   }, [token, avatarMediaId])
 
-  async function openAvatarPicker(): Promise<void> {
-    if (token === null) return
-    setProfileError(null)
-    try {
-      const page = await listMedia(token, { kind: 'image' })
-      setAvatarChoices(page.items)
-      setPickingAvatar(true)
-    } catch (caught) {
-      setProfileError(caught instanceof ApiError ? caught.message : t('profile.avatarLoadError'))
-    }
-  }
-
   async function submitProfile(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null) return
@@ -456,7 +471,15 @@ export function ProfileRoute(): JSX.Element {
     event.preventDefault()
     if (token === null) return
     setPasswordError(null)
+    setCurrentPasswordError(null)
     setPasswordChanged(false)
+    // Checked here rather than left to the browser's own bubbles, which speak
+    // the browser's language and not the admin's.
+    if (currentPassword === '' || newPassword === '') {
+      if (currentPassword === '') setCurrentPasswordError(t('common.fieldRequired'))
+      if (newPassword === '') setPasswordError(t('common.fieldRequired'))
+      return
+    }
     try {
       await changeOwnPassword(token, currentPassword, newPassword)
       setPasswordChanged(true)
@@ -484,8 +507,12 @@ export function ProfileRoute(): JSX.Element {
     if (token === null) return
     setSecurityError(null)
     setRecoveryError(null)
+    if (!/^[0-9]{6}$/u.test(totpCode.trim())) {
+      setSecurityError(t('profile.totpCodeFormat'))
+      return
+    }
     try {
-      const issued = await confirmTotpEnrolment(token, totpCode)
+      const issued = await confirmTotpEnrolment(token, totpCode.trim())
       setEnrolment(null)
       setTotpCode('')
       setSecurityDone(t('profile.totpEnabled'))
@@ -494,7 +521,14 @@ export function ProfileRoute(): JSX.Element {
       setRecoveryCodes(issued.recoveryCodes)
       await load()
     } catch (caught) {
-      setSecurityError(caught instanceof ApiError ? caught.message : t('profile.totpCodeError'))
+      // The server's own wording is English and generic ("invalid
+      // credentials"); what the person needs to know is that this code did
+      // not match, next to the field they typed it in.
+      setSecurityError(
+        caught instanceof ApiError && caught.code === 'RATE_LIMITED'
+          ? caught.message
+          : t('profile.totpCodeError'),
+      )
     }
   }
 
@@ -610,7 +644,7 @@ export function ProfileRoute(): JSX.Element {
   }
 
   return (
-    <section aria-labelledby="profile-heading" className="flex max-w-3xl flex-col gap-6">
+    <section aria-labelledby="profile-heading" className="flex flex-col gap-6">
       <h1 id="profile-heading" className="m-0 text-2xl leading-tight font-bold tracking-tight">
         {t('profile.heading')}
       </h1>
@@ -621,538 +655,554 @@ export function ProfileRoute(): JSX.Element {
         </Notice>
       )}
 
-      {profile !== null && (
-        <p>{t('profile.signedInAs', { email: profile.email, roles: profile.roles.join(', ') })}</p>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>{t('profile.publicProfileHeading')}</h2>
-          </CardTitle>
-          <CardDescription>{t('profile.publicProfileIntro')}</CardDescription>
-        </CardHeader>
-        <CardBody>
-          <Notice tone="info">
-            <p>{t('profile.publicProfileVisibility')}</p>
-          </Notice>
-
-          {profileError !== null && (
-            <Notice tone="danger" live="assertive">
-              <p>{profileError}</p>
-            </Notice>
+      <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,48rem)] lg:items-start lg:gap-10">
+        {/* A contents list: this page is long, and a section such as the
+            two-step verification should be one click away, not 1 000 px down. */}
+        <nav
+          aria-label={t('profile.sectionsLabel')}
+          className="max-lg:-mx-1 max-lg:overflow-x-auto lg:sticky lg:top-[calc(var(--app-shell-topbar-h,72px)+1.5rem)]"
+        >
+          <ul className="m-0 flex list-none gap-1 p-1 lg:flex-col lg:p-0">
+            {PROFILE_SECTIONS.map((section) => (
+              <li key={section.id} className="shrink-0">
+                <Link
+                  to={{ hash: `#${section.id}` }}
+                  replace
+                  className={`block rounded-md px-3 py-1.5 text-sm whitespace-nowrap no-underline hover:bg-muted hover:text-foreground ${
+                    hash === `#${section.id}`
+                      ? 'bg-accent font-medium text-foreground'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {t(section.labelKey)}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <div className="flex min-w-0 flex-col gap-6 [&_h2]:scroll-mt-28 [&>div]:scroll-mt-28">
+          {profile !== null && (
+            <p className="m-0">
+              {t('profile.signedInAs', {
+                email: profile.email,
+                roles: roleLabels(t, profile.roles),
+              })}
+            </p>
           )}
-          {profileSaved && (
-            <Notice tone="success" live="assertive">
-              <p>{t('profile.profileSaved')}</p>
-            </Notice>
-          )}
 
-          {profile === null ? (
-            <p>{t('common.loading')}</p>
-          ) : (
-            <form onSubmit={submitProfile} className="flex flex-col gap-4">
-              <Field
-                label={t('profile.displayNameLabel')}
-                description={t('profile.displayNameHint')}
-              >
-                {(control) => (
-                  <Input
-                    {...control}
-                    maxLength={120}
-                    value={displayName}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                  />
-                )}
-              </Field>
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2 id="public-profile">{t('profile.publicProfileHeading')}</h2>
+              </CardTitle>
+              <CardDescription>{t('profile.publicProfileIntro')}</CardDescription>
+            </CardHeader>
+            <CardBody>
+              <Notice tone="info">
+                <p>{t('profile.publicProfileVisibility')}</p>
+              </Notice>
 
-              <Field label={t('profile.bioLabel')} description={t('profile.bioHint')}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    maxLength={500}
-                    value={bio}
-                    onChange={(event) => setBio(event.target.value)}
-                  />
-                )}
-              </Field>
+              {profileError !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{profileError}</p>
+                </Notice>
+              )}
+              {profileSaved && (
+                <Notice tone="success" live="assertive">
+                  <p>{t('profile.profileSaved')}</p>
+                </Notice>
+              )}
 
-              <Field label={t('profile.localeLabel')} description={t('profile.localeHint')}>
-                {(control) => (
-                  <Select
-                    {...control}
-                    value={locale}
-                    onChange={(event) => setLocale(event.target.value)}
+              {profile === null ? (
+                <p>{t('common.loading')}</p>
+              ) : (
+                <form onSubmit={submitProfile} className="flex flex-col gap-4">
+                  <Field
+                    label={t('profile.displayNameLabel')}
+                    description={t('profile.displayNameHint')}
                   >
-                    <option value="">{t('profile.localeUnset')}</option>
-                    {SUPPORTED_LANGUAGES.map((language) => (
-                      <option key={language} value={language}>
-                        {t(`profile.localeOption.${language}`)}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
-
-              <fieldset className="flex flex-col gap-2 border-0 p-0 m-0">
-                <legend className="font-sans text-sm leading-5 font-medium text-foreground p-0">
-                  {t('profile.avatarLabel')}
-                </legend>
-                <div className="flex items-center gap-3">
-                  {avatarMediaId !== null && avatarAsset !== null && token !== null && (
-                    <MediaThumbnail
-                      token={token}
-                      id={avatarAsset.id}
-                      alt={avatarAsset.alt}
-                      previewable
-                    />
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void openAvatarPicker()}
-                    >
-                      {avatarMediaId === null
-                        ? t('profile.avatarChoose')
-                        : t('profile.avatarChange')}
-                    </Button>
-                    {avatarMediaId !== null && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setAvatarMediaId(null)}
-                      >
-                        {t('profile.avatarRemove')}
-                      </Button>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        maxLength={120}
+                        value={displayName}
+                        onChange={(event) => setDisplayName(event.target.value)}
+                      />
                     )}
-                  </div>
-                </div>
+                  </Field>
 
-                {pickingAvatar && token !== null && (
-                  <ul className="media-field__picker">
-                    {avatarChoices.map((choice) => (
-                      <li key={choice.id}>
-                        <button
+                  <Field label={t('profile.bioLabel')} description={t('profile.bioHint')}>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        maxLength={500}
+                        value={bio}
+                        onChange={(event) => setBio(event.target.value)}
+                      />
+                    )}
+                  </Field>
+
+                  <Field label={t('profile.localeLabel')} description={t('profile.localeHint')}>
+                    {(control) => (
+                      <Select
+                        {...control}
+                        value={locale}
+                        onChange={(event) => setLocale(event.target.value)}
+                      >
+                        <option value="">{t('profile.localeUnset')}</option>
+                        {SUPPORTED_LANGUAGES.map((language) => (
+                          <option key={language} value={language}>
+                            {t(`profile.localeOption.${language}`)}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </Field>
+
+                  <fieldset className="flex flex-col gap-2 border-0 p-0 m-0">
+                    <legend className="font-sans text-sm leading-5 font-medium text-foreground p-0">
+                      {t('profile.avatarLabel')}
+                    </legend>
+                    <div className="flex items-center gap-3">
+                      {avatarMediaId !== null && avatarAsset !== null && token !== null && (
+                        <MediaThumbnail
+                          token={token}
+                          id={avatarAsset.id}
+                          alt={avatarAsset.alt}
+                          previewable
+                        />
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
                           type="button"
-                          onClick={() => {
-                            setAvatarMediaId(choice.id)
-                            setAvatarAsset(choice)
-                            setPickingAvatar(false)
-                          }}
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setPickingAvatar(true)}
                         >
-                          <MediaThumbnail
-                            token={token}
-                            id={choice.id}
-                            alt={choice.alt}
-                            previewable
-                          />
-                          <span>{choice.filename}</span>
-                        </button>
-                      </li>
-                    ))}
-                    {avatarChoices.length === 0 && <li>{t('fields.mediaNoImages')}</li>}
-                    <li>
-                      <button type="button" onClick={() => setPickingAvatar(false)}>
-                        {t('common.cancel')}
-                      </button>
-                    </li>
-                  </ul>
-                )}
-              </fieldset>
+                          {avatarMediaId === null
+                            ? t('profile.avatarChoose')
+                            : t('profile.avatarChange')}
+                        </Button>
+                        {avatarMediaId !== null && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setAvatarMediaId(null)}
+                          >
+                            {t('profile.avatarRemove')}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
 
-              <div>
-                <Button type="submit">{t('profile.saveProfile')}</Button>
-              </div>
-            </form>
-          )}
-        </CardBody>
-      </Card>
+                    {token !== null && (
+                      <AvatarPicker
+                        open={pickingAvatar}
+                        token={token}
+                        selectedId={avatarMediaId}
+                        onOpenChange={setPickingAvatar}
+                        onPick={(choice) => {
+                          setAvatarMediaId(choice.id)
+                          setAvatarAsset(choice)
+                          setPickingAvatar(false)
+                        }}
+                      />
+                    )}
+                  </fieldset>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2>{t('profile.passwordHeading')}</h2>
-          </CardTitle>
-          <CardDescription>{t('profile.passwordIntro')}</CardDescription>
-        </CardHeader>
-        <CardBody className="flex flex-col gap-4">
-          {/* Fiche 18 task 3: the policy announced before the form can
+                  <div>
+                    <Button type="submit">{t('profile.saveProfile')}</Button>
+                  </div>
+                </form>
+              )}
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2 id="password">{t('profile.passwordHeading')}</h2>
+              </CardTitle>
+              <CardDescription>{t('profile.passwordIntro')}</CardDescription>
+            </CardHeader>
+            <CardBody className="flex flex-col gap-4">
+              {/* Fiche 18 task 3: the policy announced before the form can
               refuse anything — fetched from the same route the server
               enforces, never a second, hand-copied number. Kept visible
               regardless of whether the form itself is open, so it is the
               first thing read even before "Changer le mot de passe" is
               clicked. */}
-          {passwordPolicy !== null && (
-            <p className="m-0 text-sm text-muted-foreground">
-              {t('profile.passwordPolicyAnnounce', { minLength: passwordPolicy.minLength })}
-            </p>
-          )}
-          {passwordChanged && (
-            <Notice tone="success" live="assertive">
-              <p>{t('profile.passwordChanged')}</p>
-            </Notice>
-          )}
-          {!passwordFormOpen ? (
-            <div>
-              <Button type="button" onClick={() => setPasswordFormOpen(true)}>
-                {t('profile.changePassword')}
-              </Button>
-            </div>
-          ) : (
-            <form onSubmit={submitPassword} className="flex flex-col gap-4">
-              <Field label={t('profile.currentPassword')}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    value={currentPassword}
-                    onChange={(event) => setCurrentPassword(event.target.value)}
-                  />
-                )}
-              </Field>
-              <Field
-                label={t('profile.newPassword')}
-                description={t('profile.newPasswordHint')}
-                error={passwordError}
-              >
-                {(control) => (
-                  <Input
-                    {...control}
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    value={newPassword}
-                    onChange={(event) => setNewPassword(event.target.value)}
-                  />
-                )}
-              </Field>
-              {passwordPolicy !== null && newPassword.length > 0 && (
-                <p
-                  className={
-                    newPassword.length >= passwordPolicy.minLength
-                      ? 'm-0 text-sm text-success'
-                      : 'm-0 text-sm text-destructive'
-                  }
-                  role="status"
-                >
-                  {newPassword.length >= passwordPolicy.minLength
-                    ? t('profile.passwordStrengthOk')
-                    : t('profile.passwordStrengthShort', {
-                        remaining: passwordPolicy.minLength - newPassword.length,
-                      })}
+              {passwordPolicy !== null && (
+                <p className="m-0 text-sm text-muted-foreground">
+                  {t('profile.passwordPolicyAnnounce', { minLength: passwordPolicy.minLength })}
                 </p>
               )}
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="submit"
-                  className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
-                >
-                  {t('profile.confirmChangePassword')}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setPasswordFormOpen(false)
-                    setCurrentPassword('')
-                    setNewPassword('')
-                    setPasswordError(null)
-                  }}
-                >
-                  {t('common.cancel')}
-                </Button>
-              </div>
-            </form>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2 id="security">{t('profile.securityHeading')}</h2>
-          </CardTitle>
-          <CardDescription>{t('profile.securityIntro')}</CardDescription>
-        </CardHeader>
-        <CardBody>
-          {securityError !== null && (
-            <Notice tone="danger" live="assertive">
-              <p>{securityError}</p>
-            </Notice>
-          )}
-          {securityDone !== null && (
-            <Notice tone="success" live="assertive">
-              <p>{securityDone}</p>
-            </Notice>
-          )}
-
-          <p>
-            {profile?.mfa.totp === true ? t('profile.totpOn') : t('profile.totpOff')}
-            {profile !== null && ` ${t('profile.passkeyCount', { count: profile.mfa.passkeys })}`}
-          </p>
-
-          {profile?.mfa.totp === true ? (
-            <div>
-              <Button variant="destructive" onClick={() => void turnOffTotp()}>
-                {t('profile.disableTotp')}
-              </Button>
-            </div>
-          ) : enrolment === null ? (
-            <div>
-              <Button
-                className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
-                onClick={() => void startTotp()}
-              >
-                {t('profile.enableTotp')}
-              </Button>
-            </div>
-          ) : (
-            <form onSubmit={confirmTotp} className="flex flex-col gap-4">
-              <p>{t('profile.totpScan')}</p>
-              <p>
-                <strong>{t('profile.totpKeyLabel')}</strong>{' '}
-                <code className="font-mono">{enrolment.secret}</code>
-              </p>
-              <Field label={t('profile.totpCode')}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    pattern="[0-9]{6}"
-                    maxLength={6}
-                    required
-                    value={totpCode}
-                    onChange={(event) => setTotpCode(event.target.value)}
-                  />
-                )}
-              </Field>
-              <div>
-                <Button type="submit">{t('profile.totpConfirm')}</Button>
-              </div>
-            </form>
-          )}
-
-          <form onSubmit={addPasskey} className="flex flex-col gap-4">
-            <Field label={t('profile.passkeyLabelField')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  placeholder={t('profile.passkeyLabelPlaceholder')}
-                  value={passkeyLabel}
-                  onChange={(event) => setPasskeyLabel(event.target.value)}
-                />
+              {passwordChanged && (
+                <Notice tone="success" live="assertive">
+                  <p>{t('profile.passwordChanged')}</p>
+                </Notice>
               )}
-            </Field>
-            <div>
-              <Button type="submit" variant="secondary">
-                {t('profile.addPasskey')}
-              </Button>
-            </div>
-          </form>
-        </CardBody>
-      </Card>
+              {!passwordFormOpen ? (
+                <div>
+                  <Button type="button" onClick={() => setPasswordFormOpen(true)}>
+                    {t('profile.changePassword')}
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={submitPassword} noValidate className="flex flex-col gap-4">
+                  <Field label={t('profile.currentPassword')} error={currentPasswordError}>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        type="password"
+                        autoComplete="current-password"
+                        value={currentPassword}
+                        onChange={(event) => setCurrentPassword(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                  <Field
+                    label={t('profile.newPassword')}
+                    description={t('profile.newPasswordHint')}
+                    error={passwordError}
+                  >
+                    {(control) => (
+                      <Input
+                        {...control}
+                        type="password"
+                        autoComplete="new-password"
+                        value={newPassword}
+                        onChange={(event) => setNewPassword(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                  {passwordPolicy !== null && newPassword.length > 0 && (
+                    <p
+                      className={
+                        newPassword.length >= passwordPolicy.minLength
+                          ? 'm-0 text-sm text-success'
+                          : 'm-0 text-sm text-destructive'
+                      }
+                      role="status"
+                    >
+                      {newPassword.length >= passwordPolicy.minLength
+                        ? t('profile.passwordStrengthOk')
+                        : t('profile.passwordStrengthShort', {
+                            count: passwordPolicy.minLength - newPassword.length,
+                          })}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="submit"
+                      className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
+                    >
+                      {t('profile.confirmChangePassword')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setPasswordFormOpen(false)
+                        setCurrentPassword('')
+                        setNewPassword('')
+                        setPasswordError(null)
+                        setCurrentPasswordError(null)
+                      }}
+                    >
+                      {t('common.cancel')}
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </CardBody>
+          </Card>
 
-      {/*
-       * Fiche 18 task 1 — recovery codes. A section of its own rather than
-       * folded into "Two-step verification" above: it has its own state
-       * (a freshly issued batch, shown once) and its own action
-       * (regenerate), and it needs to stay legible whether or not TOTP is
-       * currently on.
-       */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2 id="recovery-codes">{t('profile.recoveryHeading')}</h2>
-          </CardTitle>
-          <CardDescription>{t('profile.recoveryIntro')}</CardDescription>
-        </CardHeader>
-        <CardBody>
-          {recoveryError !== null && (
-            <Notice tone="danger" live="assertive">
-              <p>{recoveryError}</p>
-            </Notice>
-          )}
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2 id="security">{t('profile.securityHeading')}</h2>
+              </CardTitle>
+              <CardDescription>{t('profile.securityIntro')}</CardDescription>
+            </CardHeader>
+            <CardBody>
+              {securityError !== null && enrolment === null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{securityError}</p>
+                </Notice>
+              )}
+              {securityDone !== null && (
+                <Notice tone="success" live="assertive">
+                  <p>{securityDone}</p>
+                </Notice>
+              )}
 
-          {recoveryCodes !== null ? (
-            <Notice
-              tone="warning"
-              live="assertive"
-              title={t('profile.recoveryCodesIssuedTitle')}
-              actions={
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => downloadRecoveryCodes(recoveryCodes)}
+              <p>
+                {profile?.mfa.totp === true ? t('profile.totpOn') : t('profile.totpOff')}
+                {profile !== null &&
+                  ` ${t('profile.passkeyCount', { count: profile.mfa.passkeys })}`}
+              </p>
+
+              {profile?.mfa.totp === true ? (
+                <div>
+                  <Button variant="destructive" onClick={() => void turnOffTotp()}>
+                    {t('profile.disableTotp')}
+                  </Button>
+                </div>
+              ) : enrolment === null ? (
+                <div>
+                  <Button
+                    className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
+                    onClick={() => void startTotp()}
+                  >
+                    {t('profile.enableTotp')}
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={confirmTotp} noValidate className="flex flex-col gap-4">
+                  <p>{t('profile.totpScan')}</p>
+                  <QrCode value={enrolment.uri} label={t('profile.totpQrLabel')} />
+                  <p>
+                    <strong>{t('profile.totpKeyLabel')}</strong>{' '}
+                    <code className="font-mono break-all">{enrolment.secret}</code>
+                  </p>
+                  <Field label={t('profile.totpCode')} error={securityError}>
+                    {(control) => (
+                      <Input
+                        {...control}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={totpCode}
+                        onChange={(event) => setTotpCode(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                  <div>
+                    <Button type="submit">{t('profile.totpConfirm')}</Button>
+                  </div>
+                </form>
+              )}
+
+              <form onSubmit={addPasskey} className="flex flex-col gap-4">
+                <Field label={t('profile.passkeyLabelField')}>
+                  {(control) => (
+                    <Input
+                      {...control}
+                      placeholder={t('profile.passkeyLabelPlaceholder')}
+                      value={passkeyLabel}
+                      onChange={(event) => setPasskeyLabel(event.target.value)}
+                    />
+                  )}
+                </Field>
+                <div>
+                  <Button type="submit" variant="secondary">
+                    {t('profile.addPasskey')}
+                  </Button>
+                </div>
+              </form>
+            </CardBody>
+          </Card>
+
+          {/*
+           * Fiche 18 task 1 — recovery codes. A section of its own rather than
+           * folded into "Two-step verification" above: it has its own state
+           * (a freshly issued batch, shown once) and its own action
+           * (regenerate), and it needs to stay legible whether or not TOTP is
+           * currently on.
+           */}
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2 id="recovery-codes">{t('profile.recoveryHeading')}</h2>
+              </CardTitle>
+              <CardDescription>{t('profile.recoveryIntro')}</CardDescription>
+            </CardHeader>
+            <CardBody>
+              {recoveryError !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{recoveryError}</p>
+                </Notice>
+              )}
+
+              {recoveryCodes !== null ? (
+                <Notice
+                  tone="warning"
+                  live="assertive"
+                  title={t('profile.recoveryCodesIssuedTitle')}
+                  actions={
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => downloadRecoveryCodes(recoveryCodes)}
+                    >
+                      {t('profile.recoveryCodesDownload')}
+                    </Button>
+                  }
+                  onDismiss={() => setRecoveryCodes(null)}
+                  dismissLabel={t('profile.recoveryCodesDismiss')}
                 >
-                  {t('profile.recoveryCodesDownload')}
-                </Button>
-              }
-              onDismiss={() => setRecoveryCodes(null)}
-              dismissLabel={t('profile.recoveryCodesDismiss')}
-            >
-              <p>{t('profile.recoveryCodesIssuedBody')}</p>
-              <ul className="m-0 grid grid-cols-2 gap-1 font-mono text-sm">
-                {recoveryCodes.map((code) => (
-                  <li key={code}>{code}</li>
-                ))}
-              </ul>
-            </Notice>
-          ) : profile?.mfa.totp === true ? (
-            <p>
-              {recoveryStatus !== null
-                ? t('profile.recoveryRemaining', {
-                    remaining: recoveryStatus.remaining,
-                    total: recoveryStatus.total,
-                  })
-                : t('profile.loadError')}
-            </p>
-          ) : (
-            <p>{t('profile.recoveryNeedsTotp')}</p>
-          )}
+                  <p>{t('profile.recoveryCodesIssuedBody')}</p>
+                  <ul className="m-0 grid grid-cols-2 gap-1 font-mono text-sm">
+                    {recoveryCodes.map((code) => (
+                      <li key={code}>{code}</li>
+                    ))}
+                  </ul>
+                </Notice>
+              ) : profile?.mfa.totp === true ? (
+                <p>
+                  {recoveryStatus !== null
+                    ? t('profile.recoveryRemaining', {
+                        remaining: recoveryStatus.remaining,
+                        total: recoveryStatus.total,
+                      })
+                    : t('profile.loadError')}
+                </p>
+              ) : (
+                <p>{t('profile.recoveryNeedsTotp')}</p>
+              )}
 
-          {profile?.mfa.totp === true && recoveryCodes === null && (
-            <div>
-              <Button
-                variant="secondary"
-                className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
-                onClick={() => void regenerateCodes()}
-              >
-                {t('profile.recoveryRegenerate')}
-              </Button>
-            </div>
-          )}
-        </CardBody>
-      </Card>
+              {profile?.mfa.totp === true && recoveryCodes === null && (
+                <div>
+                  <Button
+                    variant="secondary"
+                    className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
+                    onClick={() => void regenerateCodes()}
+                  >
+                    {t('profile.recoveryRegenerate')}
+                  </Button>
+                </div>
+              )}
+            </CardBody>
+          </Card>
 
-      <div id="sessions">
-        <SessionList sessions={sessions} onRevoke={(id) => void revoke(id)}>
-          <p className="m-0 text-sm text-muted-foreground">{t('profile.sessionsIntro')}</p>
-          {sessionsActionError !== null && (
-            <Notice tone="danger" live="assertive">
-              <p>{sessionsActionError}</p>
-            </Notice>
-          )}
-          {sessionsActionDone !== null && (
-            <Notice tone="success" live="assertive">
-              <p>{sessionsActionDone}</p>
-            </Notice>
-          )}
-          {/* Explicitly spares the session making this very request — the
+          <div id="sessions">
+            <SessionList sessions={sessions} onRevoke={(id) => void revoke(id)}>
+              <p className="m-0 text-sm text-muted-foreground">{t('profile.sessionsIntro')}</p>
+              {sessionsActionError !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{sessionsActionError}</p>
+                </Notice>
+              )}
+              {sessionsActionDone !== null && (
+                <Notice tone="success" live="assertive">
+                  <p>{sessionsActionDone}</p>
+                </Notice>
+              )}
+              {/* Explicitly spares the session making this very request — the
               server enforces that, this button just names it (fiche 18
               task 2). */}
-          <div>
-            <Button
-              variant="destructive"
-              className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
-              disabled={sessions.length <= 1}
-              onClick={() => void revokeOthers()}
-            >
-              {t('profile.revokeOtherSessions')}
-            </Button>
+              <div>
+                <Button
+                  variant="destructive"
+                  className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
+                  disabled={sessions.length <= 1}
+                  onClick={() => void revokeOthers()}
+                >
+                  {t('profile.revokeOtherSessions')}
+                </Button>
+              </div>
+            </SessionList>
           </div>
-        </SessionList>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2 id="notifications">{t('profile.notificationsHeading')}</h2>
+              </CardTitle>
+              <CardDescription>{t('profile.notificationsIntro')}</CardDescription>
+            </CardHeader>
+            <CardBody className="flex flex-col gap-6">
+              {notificationsError !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{notificationsError}</p>
+                </Notice>
+              )}
+              {notificationsSaveError !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{notificationsSaveError}</p>
+                </Notice>
+              )}
+              {linkedChannels.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t('profile.notificationsNoChannels')}
+                </p>
+              ) : (
+                linkedChannels.map((channel) => {
+                  const prefs = channelPrefs[channel.channelName]
+                  if (prefs === undefined) return null
+                  return (
+                    <ChannelPreferencesEditor
+                      key={channel.channelName}
+                      channel={channel}
+                      prefs={prefs}
+                      busy={notificationsBusyChannel === channel.channelName}
+                      saved={notificationsSavedChannel === channel.channelName}
+                      onSave={(next) => void saveChannelPreferences(channel.channelName, next)}
+                    />
+                  )
+                })
+              )}
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2 id="activity">{t('profile.activityHeading')}</h2>
+              </CardTitle>
+              <CardDescription>{t('profile.activityIntro')}</CardDescription>
+            </CardHeader>
+            <CardBody>
+              {activityError !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{activityError}</p>
+                </Notice>
+              )}
+              {activity.length === 0 ? (
+                <p>{t('profile.activityEmpty')}</p>
+              ) : (
+                <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+                  {activity.map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="flex flex-wrap items-center justify-between gap-3"
+                    >
+                      <span>{auditActionLabel(t, entry.action)}</span>
+                      <span className="text-muted-foreground">{formatDateTime(entry.at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <h2 id="personal-data">{t('profile.personalDataHeading')}</h2>
+              </CardTitle>
+              <CardDescription>{t('profile.personalDataIntro')}</CardDescription>
+            </CardHeader>
+            <CardBody>
+              {exportError !== null && (
+                <Notice tone="danger" live="assertive">
+                  <p>{exportError}</p>
+                </Notice>
+              )}
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={exporting || profile === null}
+                onClick={() => void exportOwnData()}
+              >
+                {exporting ? t('profile.exportDataPending') : t('profile.exportData')}
+              </Button>
+            </CardBody>
+          </Card>
+        </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2 id="notifications">{t('profile.notificationsHeading')}</h2>
-          </CardTitle>
-          <CardDescription>{t('profile.notificationsIntro')}</CardDescription>
-        </CardHeader>
-        <CardBody className="flex flex-col gap-6">
-          {notificationsError !== null && (
-            <Notice tone="danger" live="assertive">
-              <p>{notificationsError}</p>
-            </Notice>
-          )}
-          {notificationsSaveError !== null && (
-            <Notice tone="danger" live="assertive">
-              <p>{notificationsSaveError}</p>
-            </Notice>
-          )}
-          {linkedChannels.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t('profile.notificationsNoChannels')}</p>
-          ) : (
-            linkedChannels.map((channel) => {
-              const prefs = channelPrefs[channel.channelName]
-              if (prefs === undefined) return null
-              return (
-                <ChannelPreferencesEditor
-                  key={channel.channelName}
-                  channel={channel}
-                  prefs={prefs}
-                  busy={notificationsBusyChannel === channel.channelName}
-                  saved={notificationsSavedChannel === channel.channelName}
-                  onSave={(next) => void saveChannelPreferences(channel.channelName, next)}
-                />
-              )
-            })
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2 id="activity">{t('profile.activityHeading')}</h2>
-          </CardTitle>
-          <CardDescription>{t('profile.activityIntro')}</CardDescription>
-        </CardHeader>
-        <CardBody>
-          {activityError !== null && (
-            <Notice tone="danger" live="assertive">
-              <p>{activityError}</p>
-            </Notice>
-          )}
-          {activity.length === 0 ? (
-            <p>{t('profile.activityEmpty')}</p>
-          ) : (
-            <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
-              {activity.map((entry) => (
-                <li key={entry.id} className="flex flex-wrap items-center justify-between gap-3">
-                  <span>
-                    {t(`audit.actionLabel.${entry.action}`, {
-                      defaultValue: t('audit.actionOther'),
-                    })}
-                  </span>
-                  <span className="text-muted-foreground">{formatDateTime(entry.at)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <h2 id="personal-data">{t('profile.personalDataHeading')}</h2>
-          </CardTitle>
-          <CardDescription>{t('profile.personalDataIntro')}</CardDescription>
-        </CardHeader>
-        <CardBody>
-          {exportError !== null && (
-            <Notice tone="danger" live="assertive">
-              <p>{exportError}</p>
-            </Notice>
-          )}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={exporting || profile === null}
-            onClick={() => void exportOwnData()}
-          >
-            {exporting ? t('profile.exportDataPending') : t('profile.exportData')}
-          </Button>
-        </CardBody>
-      </Card>
     </section>
   )
 }

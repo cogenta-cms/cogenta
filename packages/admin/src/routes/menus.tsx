@@ -1,6 +1,6 @@
 import { type FormEvent, type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
+import { describeApiError } from '../api/describe-error.js'
 import {
   createMenu,
   createMenuItem,
@@ -15,6 +15,7 @@ import {
   updateMenu,
 } from '../api/menu-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { ConfirmDialog } from '../commerce/confirm-dialog.js'
 import { ItemEditModal } from '../menus/item-edit-modal.js'
 import { MenuEntryPicker } from '../menus/menu-entry-picker.js'
 import { MenuTermPicker } from '../menus/menu-term-picker.js'
@@ -63,6 +64,32 @@ function modeForLocation(location: string | null): LocationMode {
   return 'custom'
 }
 
+/** Same policy as the server's `isSafeMenuUrl`: http(s), mailto, tel or a relative path, nothing ambiguous. */
+function isSafeMenuUrl(value: string): boolean {
+  if (value.length === 0 || /[\s\p{Cc}\\]/u.test(value)) return false
+  try {
+    return ['http:', 'https:', 'mailto:', 'tel:'].includes(
+      new URL(value, 'https://menu.invalid/').protocol,
+    )
+  } catch {
+    return false
+  }
+}
+
+/** "Menu principal — en-tête", plus the language only when the site has several. */
+function menuOptionLabel(menu: Menu, multilingual: boolean, t: (key: string) => string): string {
+  const place =
+    menu.location === null || menu.location === ''
+      ? null
+      : menu.location === 'primary'
+        ? t('menus.locationPrimary')
+        : menu.location === 'footer'
+          ? t('menus.locationFooter')
+          : menu.location
+  const parts = [...(multilingual ? [menu.locale] : []), ...(place === null ? [] : [place])]
+  return parts.length === 0 ? menu.label : `${menu.label} — ${parts.join(' · ')}`
+}
+
 export function MenusRoute(): JSX.Element {
   const { t, i18n } = useTranslation()
   const auth = useAuth()
@@ -85,6 +112,10 @@ export function MenusRoute(): JSX.Element {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [itemError, setItemError] = useState<string | null>(null)
+  const [menuToDelete, setMenuToDelete] = useState<Menu | null>(null)
+  const [showNewMenu, setShowNewMenu] = useState(false)
 
   // New menu form.
   const [newName, setNewName] = useState('')
@@ -121,7 +152,7 @@ export function MenusRoute(): JSX.Element {
     try {
       setMenus(await listMenus(token))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('menus.loadError'))
+      setError(describeApiError(caught, t('menus.loadError')).message)
     }
   }, [token, t])
 
@@ -199,7 +230,7 @@ export function MenusRoute(): JSX.Element {
       const menu = await getMenu(token, selectedId)
       setItems(menu.items)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('menus.loadError'))
+      setError(describeApiError(caught, t('menus.loadError')).message)
     } finally {
       setLoading(false)
     }
@@ -222,14 +253,17 @@ export function MenusRoute(): JSX.Element {
     if (token === null) return
     setCreatingMenu(true)
     setError(null)
+    setNotice(null)
     try {
       const menu = await createMenu(token, { name: newName, locale: newLocale, label: newLabel })
       setNewName('')
       setNewLabel('')
       await loadMenus()
       setSelectedId(menu.id)
+      setShowNewMenu(false)
+      setNotice(t('menus.created', { name: menu.label }))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('menus.createMenuError'))
+      setError(describeApiError(caught, t('menus.createMenuError')).message)
     } finally {
       setCreatingMenu(false)
     }
@@ -242,8 +276,9 @@ export function MenusRoute(): JSX.Element {
       await deleteMenu(token, menu.id, { cascade: true })
       setSelectedId(null)
       await loadMenus()
+      setNotice(t('menus.deleted', { name: menu.label }))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('menus.deleteMenuError'))
+      setError(describeApiError(caught, t('menus.deleteMenuError')).message)
     }
   }
 
@@ -263,8 +298,9 @@ export function MenusRoute(): JSX.Element {
     try {
       await updateMenu(token, selected.id, { location })
       await loadMenus()
+      setNotice(t('menus.locationSaved'))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('menus.locationError'))
+      setError(describeApiError(caught, t('menus.locationError')).message)
     } finally {
       setSavingLocation(false)
     }
@@ -273,6 +309,20 @@ export function MenusRoute(): JSX.Element {
   async function submitNewItem(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null || selectedId === null) return
+    setItemError(null)
+    setNotice(null)
+    if (itemKind === 'url' && !isSafeMenuUrl(itemUrl)) {
+      setItemError(t('menus.urlInvalid'))
+      return
+    }
+    if (itemKind === 'entry' && itemEntryId === null) {
+      setItemError(t('menus.entryRequired'))
+      return
+    }
+    if (itemKind === 'taxonomy' && itemTermId === null) {
+      setItemError(t('menus.termRequired'))
+      return
+    }
     setCreatingItem(true)
     setError(null)
     try {
@@ -293,8 +343,9 @@ export function MenusRoute(): JSX.Element {
       setItemEntryId(null)
       setItemTermId(null)
       await loadItems()
+      setNotice(t('menus.itemAdded'))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('menus.createItemError'))
+      setItemError(describeApiError(caught, t('menus.createItemError')).message)
     } finally {
       setCreatingItem(false)
     }
@@ -307,7 +358,7 @@ export function MenusRoute(): JSX.Element {
       await deleteMenuItem(token, selectedId, item.id, { cascade: true })
       await loadItems()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('menus.deleteItemError'))
+      setError(describeApiError(caught, t('menus.deleteItemError')).message)
     }
   }
 
@@ -330,7 +381,7 @@ export function MenusRoute(): JSX.Element {
       await reorderMenuItems(token, selectedId, buildReorderPayload(next))
     } catch (caught) {
       setItems(previous)
-      setError(caught instanceof ApiError ? caught.message : t('menus.reorderError'))
+      setError(describeApiError(caught, t('menus.reorderError')).message)
     } finally {
       setSaving(false)
     }
@@ -370,7 +421,7 @@ export function MenusRoute(): JSX.Element {
       await loadMenus()
       setSelectedId(twin.id)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('menus.duplicateError'))
+      setError(describeApiError(caught, t('menus.duplicateError')).message)
     } finally {
       setDuplicating(false)
     }
@@ -424,7 +475,21 @@ export function MenusRoute(): JSX.Element {
   return (
     <section aria-labelledby="menus-heading" className="flex flex-col gap-4">
       <h1 id="menus-heading">{t('menus.heading')}</h1>
-      {error !== null && <p role="alert">{error}</p>}
+      {error !== null && (
+        <Notice tone="danger" live="assertive">
+          <p>{error}</p>
+        </Notice>
+      )}
+      {notice !== null && (
+        <Notice
+          tone="success"
+          live="polite"
+          onDismiss={() => setNotice(null)}
+          dismissLabel={t('common.close')}
+        >
+          <p>{notice}</p>
+        </Notice>
+      )}
 
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex w-full min-w-0 max-w-full flex-col gap-1.5 sm:w-auto sm:flex-1">
@@ -440,20 +505,24 @@ export function MenusRoute(): JSX.Element {
             <option value="">{t('menus.none')}</option>
             {menus.map((menu) => (
               <option key={menu.id} value={menu.id}>
-                {menu.label} ({menu.locale}
-                {menu.location !== null ? `, ${menu.location}` : ''})
+                {menuOptionLabel(menu, locales.length > 1, t)}
               </option>
             ))}
           </Select>
         </div>
-        {mayWrite && selected !== null && (
-          <Button type="button" variant="destructive" onClick={() => void removeMenu(selected)}>
-            {t('menus.deleteMenu')}
+        {mayWrite && (
+          <Button
+            type="button"
+            variant="secondary"
+            aria-expanded={showNewMenu || menus.length === 0}
+            onClick={() => setShowNewMenu((current) => !current)}
+          >
+            {t('menus.newMenu')}
           </Button>
         )}
       </div>
 
-      {mayWrite && (
+      {mayWrite && (showNewMenu || menus.length === 0) && (
         <Card aria-labelledby="new-menu-heading">
           <CardHeader>
             <CardTitle>
@@ -563,29 +632,41 @@ export function MenusRoute(): JSX.Element {
                     {t('menus.saveLocation')}
                   </Button>
                 </form>
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="flex min-w-0 max-w-full flex-col gap-1.5">
-                    <Label htmlFor="duplicate-locale">{t('menus.duplicateTo')}</Label>
-                    <Select
-                      className="min-w-0 max-w-full"
-                      id="duplicate-locale"
-                      value={duplicateLocale}
-                      onChange={(event) => setDuplicateLocale(event.target.value)}
+                {locales.length > 1 && (
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="flex min-w-0 max-w-full flex-col gap-1.5">
+                      <Label htmlFor="duplicate-locale">{t('menus.duplicateTo')}</Label>
+                      <Select
+                        className="min-w-0 max-w-full"
+                        id="duplicate-locale"
+                        value={duplicateLocale}
+                        onChange={(event) => setDuplicateLocale(event.target.value)}
+                      >
+                        {locales.map((locale) => (
+                          <option key={locale} value={locale}>
+                            {locale}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={duplicating}
+                      onClick={() => void duplicateToLocale()}
                     >
-                      {locales.map((locale) => (
-                        <option key={locale} value={locale}>
-                          {locale}
-                        </option>
-                      ))}
-                    </Select>
+                      {t('menus.duplicate')}
+                    </Button>
                   </div>
+                )}
+                <div className="mt-4 border-t border-border pt-4">
                   <Button
                     type="button"
-                    variant="secondary"
-                    disabled={duplicating}
-                    onClick={() => void duplicateToLocale()}
+                    variant="ghost"
+                    className="text-destructive hover:bg-destructive-surface hover:text-destructive"
+                    onClick={() => setMenuToDelete(selected)}
                   >
-                    {t('menus.duplicate')}
+                    {t('menus.deleteMenu')}
                   </Button>
                 </div>
               </CardBody>
@@ -645,7 +726,13 @@ export function MenusRoute(): JSX.Element {
                 <form
                   onSubmit={(event) => void submitNewItem(event)}
                   className="flex min-w-0 flex-col gap-3"
+                  noValidate
                 >
+                  {itemError !== null && (
+                    <Notice tone="danger" live="assertive">
+                      <p>{itemError}</p>
+                    </Notice>
+                  )}
                   <Field className="min-w-0" label={t('menus.label')}>
                     {(control) => (
                       <Input
@@ -774,6 +861,20 @@ export function MenusRoute(): JSX.Element {
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={menuToDelete !== null}
+        title={t('menus.deleteMenuTitle', { name: menuToDelete?.label ?? '' })}
+        confirmLabel={t('menus.deleteMenu')}
+        onCancel={() => setMenuToDelete(null)}
+        onConfirm={() => {
+          const target = menuToDelete
+          setMenuToDelete(null)
+          if (target !== null) void removeMenu(target)
+        }}
+      >
+        <p>{t('menus.deleteMenuBody')}</p>
+      </ConfirmDialog>
 
       {token !== null && (
         <ItemEditModal

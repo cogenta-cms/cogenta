@@ -150,8 +150,9 @@ describe('media library — real upload transport (fiche 05 task 1)', () => {
 
     // `GET /api/media/-/limits` — fetched once, rendered before a file is
     // even chosen, so a rejection is never a surprise.
-    await screen.findByText(/250 MB/)
-    expect(screen.getByText(/image\/png/)).toBeDefined()
+    // Sizes and formats are written the way a person says them: « 250 Mo », « PNG ».
+    await screen.findByText(/250 Mo/)
+    expect(screen.getByText(/Images acceptées : .*PNG/u)).toBeDefined()
   })
 
   it('uploading a file shows a real progress entry that clears once done', async () => {

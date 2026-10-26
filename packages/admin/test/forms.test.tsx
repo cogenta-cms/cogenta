@@ -78,7 +78,7 @@ describe('the forms builder', () => {
     await goToForms()
 
     expect(await screen.findByText('Contact us')).toBeDefined()
-    expect(screen.getByText('contact')).toBeDefined()
+    expect(screen.getByText('/forms/contact')).toBeDefined()
   })
 
   it('pages the complete list, resets a filter and keeps the last page reachable after deletion', async () => {
@@ -134,13 +134,11 @@ describe('the forms builder', () => {
 
     // The repeater (fiche 03) adds one row per field.
     fireEvent.click(screen.getByRole('button', { name: 'Ajouter un élément' }))
-    const nameInputs = screen.getAllByRole('textbox')
-    // Fill the freshly added row's own "name"/"label" inputs — the repeater
-    // renders one `FieldInput` per declared item property, in order.
-    const nameField = nameInputs.find((el) => (el as HTMLInputElement).name === 'name')
-    const labelField = nameInputs.find((el) => (el as HTMLInputElement).name === 'label')
-    if (nameField !== undefined) fireEvent.change(nameField, { target: { value: 'email' } })
-    if (labelField !== undefined) fireEvent.change(labelField, { target: { value: 'E-mail' } })
+    // The new row's own inputs. Its technical name is optional: it is derived
+    // from the label when left empty.
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Libellé du champ' }), {
+      target: { value: 'E-mail' },
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
@@ -148,9 +146,36 @@ describe('the forms builder', () => {
       const response = await fetch('/api/forms', {
         headers: { authorization: `Bearer ${VALID_TOKEN}` },
       })
-      const listBody = (await response.json()) as { data: { name: string }[] }
-      expect(listBody.data.some((f) => f.name === 'contact')).toBe(true)
+      const listBody = (await response.json()) as {
+        data: { name: string; fields: { name: string; label: string; kind: string }[] }[]
+      }
+      const created = listBody.data.find((f) => f.name === 'contact')
+      expect(created?.fields).toEqual([
+        expect.objectContaining({ name: 'e-mail', label: 'E-mail', kind: 'text' }),
+      ])
     })
+  })
+
+  it('refuses to save a field with no label, and says which field it is', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToForms()
+    await screen.findByText('Aucun formulaire.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouveau formulaire' }))
+    await screen.findByRole('heading', { name: 'Nouveau formulaire' })
+    fireEvent.change(screen.getByLabelText('Libellé'), { target: { value: 'Contact us' } })
+    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'contact' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter un élément' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText(/Le champ n° 1 n'a pas de libellé/u)).toBeDefined()
+    const response = await fetch('/api/forms', {
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    })
+    const listBody = (await response.json()) as { data: { name: string }[] }
+    expect(listBody.data.some((f) => f.name === 'contact')).toBe(false)
   })
 
   it('translates the field editor controls and choices without rewriting the author label', async () => {
@@ -169,10 +194,10 @@ describe('the forms builder', () => {
       (screen.getByRole('option', { name: 'Adresse e-mail' }) as HTMLOptionElement).value,
     ).toBe('email')
     expect(screen.getByLabelText('Aide du champ')).toBeDefined()
-    expect(screen.getByLabelText('Étape')).toBeDefined()
-    expect(screen.getByLabelText('Champ de la condition')).toBeDefined()
-    expect(screen.getByLabelText('Opérateur de la condition')).toBeDefined()
-    expect(screen.getByLabelText('Valeur de la condition')).toBeDefined()
+    expect(screen.getByLabelText('Étape (laisser vide pour une seule page)')).toBeDefined()
+    expect(screen.getByLabelText('Afficher seulement si le champ…')).toBeDefined()
+    expect(screen.getByLabelText('Condition')).toBeDefined()
+    expect(screen.getByLabelText('Valeur attendue')).toBeDefined()
     expect((screen.getByRole('option', { name: 'Est égal à' }) as HTMLOptionElement).value).toBe(
       'equals',
     )

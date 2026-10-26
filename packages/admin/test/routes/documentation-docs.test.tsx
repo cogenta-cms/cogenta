@@ -34,7 +34,11 @@ describe('the full documentation browser', () => {
 
     fireEvent.click(await screen.findByRole('link', { name: 'Ouvrir la documentation complète' }))
 
-    await screen.findByRole('heading', { name: 'Documentation complète', level: 1 })
+    // The section's name is a label now; the page's own title is the one level-one heading.
+    await screen.findByText('Documentation complète')
+    expect(
+      await screen.findByRole('heading', { name: 'Documentation fonctionnelle', level: 1 }),
+    ).toBeDefined()
   })
 
   it('opens on the functional tree, rendering the real content of functional/index.md', async () => {
@@ -42,7 +46,7 @@ describe('the full documentation browser', () => {
     window.history.pushState(null, '', '/documentation/docs')
     render(<App />)
 
-    await screen.findByRole('heading', { name: 'Documentation complète', level: 1 })
+    await screen.findByText('Documentation complète')
     const functionalTab = screen.getByRole('tab', { name: 'Fonctionnelle' })
     expect(functionalTab.getAttribute('aria-selected')).toBe('true')
 
@@ -61,7 +65,7 @@ describe('the full documentation browser', () => {
     signedIn()
     window.history.pushState(null, '', '/documentation/docs')
     render(<App />)
-    await screen.findByRole('heading', { name: 'Documentation complète', level: 1 })
+    await screen.findByText('Documentation complète')
 
     fireEvent.click(screen.getByRole('tab', { name: 'Technique' }))
 
@@ -103,7 +107,7 @@ describe('the full documentation browser', () => {
     window.history.pushState(null, '', '/documentation/docs/functional/does-not-exist')
     render(<App />)
 
-    await screen.findByRole('heading', { name: 'Documentation complète', level: 1 })
+    await screen.findByText('Documentation complète')
     expect(screen.getByText('Page introuvable')).toBeDefined()
   })
 
@@ -141,7 +145,7 @@ describe('the full documentation browser', () => {
     window.history.pushState(null, '', '/documentation/docs')
     render(<App />)
 
-    await screen.findByRole('heading', { name: 'Documentation complète', level: 1 })
+    await screen.findByText('Documentation complète')
     expect(
       screen.getByText(/^Documentation correcte pour Cogenta v\d+\.\d+\.\d+\.$/u),
     ).toBeDefined()
@@ -151,7 +155,7 @@ describe('the full documentation browser', () => {
     signedIn()
     window.history.pushState(null, '', '/documentation/docs')
     render(<App />)
-    await screen.findByRole('heading', { name: 'Documentation complète', level: 1 })
+    await screen.findByText('Documentation complète')
     await expectNoSeriousA11yViolations(document.body)
   })
 })

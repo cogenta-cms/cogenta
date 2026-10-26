@@ -464,9 +464,11 @@ describe('the shop, end to end', () => {
       method: 'POST',
       headers: { authorization: `Bearer ${token}` },
     })
-    expect(issue.status).toBe(404)
+    // Refused as a conflict with a code that names the missing configuration,
+    // rather than a 404 that reads as "no such order".
+    expect(issue.status).toBe(409)
     const body = (await issue.json()) as { error: { code: string } }
-    expect(body.error.code).toBe('COMMERCE_INVOICE_NOT_FOUND')
+    expect(body.error.code).toBe('COMMERCE_INVOICE_NOT_CONFIGURED')
   })
 
   it('lists a subscription seeded like checkout would and cancels it through the admin', async () => {

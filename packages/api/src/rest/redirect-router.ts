@@ -248,9 +248,25 @@ interface ParsedImportRow {
   readonly status: RedirectStatus
 }
 
+/**
+ * `code` is the stable part: the admin shows its own wording for it (in the
+ * language of the interface) and falls back to `detail` — an English
+ * sentence for API callers — only for a code it does not know.
+ */
+type ImportIssueCode =
+  | 'empty-file'
+  | 'missing-columns'
+  | 'missing-from'
+  | 'invalid-status'
+  | 'missing-to'
+  | 'truncated'
+
 interface ImportIssue {
   readonly line: number
+  readonly code: ImportIssueCode
   readonly detail: string
+  /** The offending value (`invalid-status`) or the row cap (`truncated`). */
+  readonly value?: string | number
 }
 
 type RowOutcomeKind = 'create' | 'update' | 'unchanged' | 'duplicate' | 'loop'
@@ -258,6 +274,8 @@ type RowOutcomeKind = 'create' | 'update' | 'unchanged' | 'duplicate' | 'loop'
 interface ImportRowOutcome extends ParsedImportRow {
   readonly outcome: RowOutcomeKind
   readonly detail?: string
+  /** For an `update`: where the rule leaves to today. */
+  readonly current?: { readonly to: string; readonly status: RedirectStatus }
 }
 
 /**
@@ -271,7 +289,7 @@ function parseImportCsv(
 ): { readonly rows: readonly ParsedImportRow[]; readonly issues: readonly ImportIssue[] } {
   const table = parseCsv(csv)
   if (table.length === 0) {
-    return { rows: [], issues: [{ line: 0, detail: 'The file is empty.' }] }
+    return { rows: [], issues: [{ line: 0, code: 'empty-file', detail: 'The file is empty.' }] }
   }
 
   const header = (table[0] ?? []).map((cell) => cell.trim().toLowerCase())
@@ -282,7 +300,13 @@ function parseImportCsv(
   if (fromIndex === -1 || toIndex === -1) {
     return {
       rows: [],
-      issues: [{ line: 1, detail: 'The header row must include "from" and "to" columns.' }],
+      issues: [
+        {
+          line: 1,
+          code: 'missing-columns',
+          detail: 'The header row must include "from" and "to" columns.',
+        },
+      ],
     }
   }
 
@@ -300,18 +324,24 @@ function parseImportCsv(
     const status = rawStatus === '' ? 301 : Number(rawStatus)
 
     if (from === '') {
-      issues.push({ line, detail: 'Missing "from".' })
+      issues.push({ line, code: 'missing-from', detail: 'Missing "from".' })
       continue
     }
     if (!isRedirectStatus(status)) {
       issues.push({
         line,
+        code: 'invalid-status',
+        value: rawStatus,
         detail: `"${rawStatus}" is not a valid status (301, 302, 307, 308, 410).`,
       })
       continue
     }
     if (status !== 410 && to === '') {
-      issues.push({ line, detail: 'Missing "to" (required unless status is 410).' })
+      issues.push({
+        line,
+        code: 'missing-to',
+        detail: 'Missing "to" (required unless status is 410).',
+      })
       continue
     }
 
@@ -326,6 +356,8 @@ function parseImportCsv(
   if (table.length - 1 > maxRows) {
     issues.push({
       line: maxRows + 2,
+      code: 'truncated',
+      value: maxRows,
       detail: `Only the first ${maxRows} data rows were read; the rest of the file was not.`,
     })
   }
@@ -369,6 +401,7 @@ function classifyImportRows(
     return {
       ...row,
       outcome: 'update',
+      current: { to: current.to, status: current.status },
       detail: `Currently redirects to "${current.to}" (${current.status}).`,
     }
   })

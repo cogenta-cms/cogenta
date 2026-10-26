@@ -48,13 +48,20 @@ export function describeProvides(
     readonly routes?: readonly string[]
     readonly schedules?: readonly { readonly name: string; readonly everyMinutes: number }[]
   },
+  /** The plugin's name: a page it serves lives under its own prefix, and the line gives the real address. */
+  pluginName?: string,
 ): readonly string[] {
   const lines: string[] = []
   const events = provides.eventSubscriptions ?? []
   const routes = provides.routes ?? []
   const schedules = provides.schedules ?? []
   if (events.length > 0) lines.push(t('plugins.does.events', { events: events.join(', ') }))
-  if (routes.length > 0) lines.push(t('plugins.does.routes', { routes: routes.join(', ') }))
+  if (routes.length > 0) {
+    const addresses = routes.map((route) =>
+      pluginName === undefined ? route : `/_cogenta/plugins/${pluginName}${route}`,
+    )
+    lines.push(t('plugins.does.routes', { routes: addresses.join(', ') }))
+  }
   for (const schedule of schedules) {
     lines.push(
       t('plugins.does.schedule', {

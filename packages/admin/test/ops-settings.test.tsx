@@ -112,8 +112,8 @@ describe('the security & webhooks screen', () => {
       await goToOpsSettings()
 
       expect(await screen.findByText('Infrastructure')).toBeDefined()
-      expect(screen.getByText('sqlite')).toBeDefined()
-      expect(screen.getByText('local (all-MiniLM-L6-v2)')).toBeDefined()
+      expect(screen.getByText('SQLite')).toBeDefined()
+      expect(screen.getByText('Calculé sur ce serveur (all-MiniLM-L6-v2)')).toBeDefined()
       expect(screen.queryByRole('textbox')).toBeNull()
     })
 

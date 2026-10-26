@@ -1,0 +1,18 @@
+{
+  "channels": {
+    "runnerUp": "The channels process is running",
+    "runnerUpDetail": "Connected to: {{channels}}. Link codes will be read.",
+    "runnerUpNone": "It is running, but no channel is configured: set a bot’s credentials in the server environment.",
+    "runnerDown": "The channels process is stopped",
+    "runnerDownDetail": "Start “cogenta channels” on the server: until it runs, nobody reads a link code and no message is received.",
+    "copyCode": "Copy the code",
+    "codeCopied": "Code copied",
+    "codeBodyNamed": "Send this code in a private message to {{botName}} on {{channel}} to finish linking your account.",
+    "stateLinked": "Linked",
+    "stateNotLinked": "Not linked",
+    "unlinked": "Your {{channel}} account is unlinked.",
+    "unlinkTitle": "Unlink your {{channel}} account?",
+    "unlinkBody": "You will no longer receive the site’s notices on this channel or chat with an agent there. You can link it again with a new code.",
+    "unlinkConfirm": "Unlink the account"
+  }
+}

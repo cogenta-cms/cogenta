@@ -195,6 +195,17 @@ export function createRedirectStore(options: RedirectStoreOptions): RedirectStor
   }
 
   function checkPath(path: string, field: 'from' | 'to'): string {
+    // "javascript:alert(1)" and "https://elsewhere.example" are not paths of
+    // this site. Normalising would quietly turn them into "/javascript:…",
+    // a rule nobody asked for, so a scheme-looking value is refused instead.
+    if (/^[a-z][a-z0-9+.-]*:/iu.test(path.trim())) {
+      throw new CogentaError({
+        code: 'CONTENT_ROUTE_INVALID',
+        message: `A redirect ${field === 'from' ? 'source' : 'target'} must be a path of this site, not an address with a scheme.`,
+        hint: 'Write a path starting with "/", such as /new-page.',
+        details: { field },
+      })
+    }
     const normalised = normalisePath(path)
 
     if (normalised === '/' && field === 'from') {

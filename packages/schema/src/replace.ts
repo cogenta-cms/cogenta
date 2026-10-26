@@ -57,6 +57,12 @@ export interface ReplacementHit {
   /** The same text, as it would be. */
   readonly after: string
   readonly occurrences: number
+  /**
+   * For a match inside a block, the type of that block (`prose`, `hero`…), so a
+   * preview can say "Block 2 · Text" without opening the entry. Absent for a
+   * match in one of the collection's own fields.
+   */
+  readonly blockType?: string
 }
 
 export interface EntryReplacementPlan {
@@ -285,7 +291,14 @@ export function planEntryReplacement(
   const zones: Record<string, unknown> = {}
   for (const [zone, blocks] of Object.entries(entry.blocks)) {
     const walked = walk(blocks, matcher, options.replace, `blocks.${zone}`)
-    hits.push(...walked.hits)
+    const prefix = `blocks.${zone}[`
+    for (const hit of walked.hits) {
+      const index = hit.path.startsWith(prefix)
+        ? Number.parseInt(hit.path.slice(prefix.length), 10)
+        : Number.NaN
+      const type = Number.isNaN(index) ? undefined : blocks[index]?.type
+      hits.push(type === undefined ? hit : { ...hit, blockType: type })
+    }
     zones[zone] = walked.value
   }
 

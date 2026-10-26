@@ -34,7 +34,9 @@ function signIn(roles: readonly string[]): void {
 }
 
 async function openTheDraft(): Promise<void> {
-  fireEvent.click(await screen.findByRole('button', { name: 'A neighbourhood restaurant.' }))
+  // The proposal's name is plain text now; the row has its own "Relire" button.
+  await screen.findByText('A neighbourhood restaurant.')
+  fireEvent.click(await screen.findByRole('button', { name: 'Relire' }))
   await screen.findByRole('heading', { name: 'Relecture, élément par élément' })
 }
 
@@ -73,7 +75,8 @@ describe('the site plan screen', () => {
     render(<App />)
     await goToSitePlan()
 
-    expect(await screen.findByRole('button', { name: 'A neighbourhood restaurant.' })).toBeDefined()
+    expect(await screen.findByText('A neighbourhood restaurant.')).toBeDefined()
+    expect(await screen.findByRole('button', { name: 'Relire' })).toBeDefined()
     expect(screen.getByText(/brief\.md/)).toBeDefined()
   })
 
@@ -129,7 +132,7 @@ describe('there is no way to accept everything at once', () => {
     expect(apply).toHaveProperty('disabled', true)
 
     // …then the design, whose two alternatives are settled by one choice.
-    fireEvent.click(screen.getByRole('radio', { name: 'Clean and clinical' }))
+    fireEvent.click(screen.getByRole('radio', { name: /^Net et clinique/u }))
 
     await waitFor(() => {
       expect(screen.getByText(/Tous les éléments sont tranchés/)).toBeDefined()
@@ -144,13 +147,13 @@ describe('there is no way to accept everything at once', () => {
     await goToSitePlan()
     await openTheDraft()
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Clean and clinical' }))
+    fireEvent.click(screen.getByRole('radio', { name: /^Net et clinique/u }))
 
-    expect(screen.getByRole('radio', { name: 'Clean and clinical' })).toHaveProperty(
+    expect(screen.getByRole('radio', { name: /^Net et clinique/u })).toHaveProperty('checked', true)
+    expect(screen.getByRole('radio', { name: /^Éditorial chaleureux/u })).toHaveProperty(
       'checked',
-      true,
+      false,
     )
-    expect(screen.getByRole('radio', { name: 'Warm editorial' })).toHaveProperty('checked', false)
     // Both are counted as decided: choosing one is a decision about both.
     expect(screen.getByText(/2 éléments restent à trancher/)).toBeDefined()
   })
@@ -167,7 +170,7 @@ describe('applying a fully reviewed plan', () => {
     for (const button of screen.getAllByRole('button', { name: 'Garder' })) {
       fireEvent.click(button)
     }
-    fireEvent.click(screen.getByRole('radio', { name: 'Clean and clinical' }))
+    fireEvent.click(screen.getByRole('radio', { name: /^Net et clinique/u }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: "Appliquer ce que j'ai accepté" })).toHaveProperty(
         'disabled',
@@ -193,7 +196,7 @@ describe('applying a fully reviewed plan', () => {
     for (const button of screen.getAllByRole('button', { name: 'Garder' })) {
       fireEvent.click(button)
     }
-    fireEvent.click(screen.getByRole('radio', { name: 'Clean and clinical' }))
+    fireEvent.click(screen.getByRole('radio', { name: /^Net et clinique/u }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: "Appliquer ce que j'ai accepté" })).toHaveProperty(
         'disabled',
@@ -220,7 +223,7 @@ describe('applying a fully reviewed plan', () => {
     for (const button of screen.getAllByRole('button', { name: 'Garder' })) {
       fireEvent.click(button)
     }
-    fireEvent.click(screen.getByRole('radio', { name: 'Clean and clinical' }))
+    fireEvent.click(screen.getByRole('radio', { name: /^Net et clinique/u }))
     await waitFor(() => {
       expect(screen.getByRole('button', { name: "Appliquer ce que j'ai accepté" })).toHaveProperty(
         'disabled',

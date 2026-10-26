@@ -2,6 +2,7 @@ import { type JSX, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/client.js'
 import { previewThemeGallery } from '../api/theme-client.js'
+import { withoutScripts } from './appearance-preview.js'
 
 /**
  * One theme's visual preview in the appearance screen's theme gallery (fiche
@@ -30,13 +31,23 @@ export function ThemeGalleryPreview({
   token,
   themeName,
   label,
+  size = 'thumbnail',
+  onOpen,
 }: {
   readonly token: string
   /** The theme *package* name — what `POST /api/theme/gallery-preview` is called with. */
   readonly themeName: string
   /** The human-readable name shown to a screen reader — e.g. "Portfolio" rather than "@cogenta/theme-portfolio". */
   readonly label: string
+  /**
+   * `thumbnail` is the inert card picture; `large` is the enlarged view in a
+   * dialog, where the frame scrolls so a person can read the whole page.
+   */
+  readonly size?: 'thumbnail' | 'large'
+  /** Makes the thumbnail a button that opens the enlarged view. */
+  onOpen?(): void
 }): JSX.Element {
+  const large = size === 'large'
   const { t } = useTranslation()
   const [html, setHtml] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -87,10 +98,12 @@ export function ThemeGalleryPreview({
     }
   }, [])
 
-  return (
+  const frame = (
     <div
       ref={container}
-      className="relative h-40 w-full overflow-hidden rounded-md border border-border bg-white"
+      className={`relative w-full overflow-hidden rounded-md border border-border bg-white ${
+        large ? 'h-[65vh]' : 'h-40'
+      }`}
     >
       {error !== null && (
         <p className="flex h-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
@@ -105,7 +118,7 @@ export function ThemeGalleryPreview({
       {error === null && html !== null && (
         <iframe
           title={t('appearance.themePreviewTitle', { theme: label })}
-          srcDoc={html}
+          srcDoc={withoutScripts(html)}
           // No script at all: this HTML comes from theme code an agent or a
           // ZIP may have written, and an iframe without `sandbox` ran it on
           // the admin's origin, next to its session token (security review
@@ -115,10 +128,11 @@ export function ThemeGalleryPreview({
           // Decorative in this context — the picker's own button, not this
           // frame, is what an admin uses to act on a theme. A screen reader
           // user gets the theme's name and description from the card's own
-          // text, not from tabbing into a thumbnail of it.
-          tabIndex={-1}
-          aria-hidden="true"
-          className="pointer-events-none border-0"
+          // text, not from tabbing into a thumbnail of it. The enlarged view
+          // is the opposite: it is there to be read, so it is reachable.
+          tabIndex={large ? 0 : -1}
+          aria-hidden={large ? undefined : 'true'}
+          className={`border-0 ${large ? '' : 'pointer-events-none'}`}
           style={{
             width: GALLERY_PREVIEW_VIEWPORT_WIDTH,
             height: unscaledHeight,
@@ -128,5 +142,20 @@ export function ThemeGalleryPreview({
         />
       )}
     </div>
+  )
+
+  if (onOpen === undefined) return frame
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={t('appearance.themePreviewOpen', { theme: label })}
+      className="group relative block w-full cursor-zoom-in appearance-none rounded-md border-0 bg-transparent p-0 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      {frame}
+      <span className="pointer-events-none absolute right-2 bottom-2 rounded-md bg-foreground/80 px-2 py-1 text-xs font-medium text-background opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        {t('appearance.themePreviewOpenHint')}
+      </span>
+    </button>
   )
 }

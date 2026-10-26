@@ -178,7 +178,14 @@ export function createSemanticSearch(options: SemanticSearchOptions): SemanticSe
 
         const collection = key.slice(0, key.indexOf(':'))
         const entryId = key.slice(key.indexOf(':') + 1)
-        const title = textHit?.title ?? match?.record.chunk.text.slice(0, 80) ?? entryId
+        // An indexed chunk opens with its entry's title on a line of its own;
+        // the first eighty characters of the whole text ran the title into the
+        // body ("Carrières Carrières Rendre les réseaux plus fiables, avec d").
+        const firstLine = match?.record.chunk.text.split('\n', 1)[0]?.trim()
+        const title =
+          textHit?.title ??
+          (firstLine === undefined || firstLine === '' ? undefined : firstLine.slice(0, 80)) ??
+          entryId
 
         hits.push({
           id: entryId,

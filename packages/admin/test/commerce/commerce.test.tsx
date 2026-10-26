@@ -52,25 +52,23 @@ describe('the product catalogue', () => {
     fireEvent.change(within(createDialog).getByLabelText('Titre'), {
       target: { value: 'Wool jumper' },
     })
-    fireEvent.change(within(createDialog).getByLabelText('Identifiant'), {
+    fireEvent.change(within(createDialog).getByLabelText(/^Identifiant/u), {
       target: { value: 'wool-jumper' },
     })
     fireEvent.submit(createDialog.querySelector('form') as HTMLFormElement)
 
-    await waitFor(() => {
-      expect(within(table()).getByText('Wool jumper')).toBeDefined()
-    })
-    expect(within(table()).getByText('0 variante')).toBeDefined()
-
-    fireEvent.click(within(table()).getByRole('button', { name: 'Gérer les variantes' }))
+    // Creating a product opens its variants dialog straight away: a product
+    // with no variant cannot be sold, so adding one is always the next step.
     const variantsDialog = await screen.findByRole('dialog', {
       name: 'Variantes de Wool jumper',
     })
+    fireEvent.click(within(variantsDialog).getByRole('button', { name: 'Ajouter une variante' }))
+    await screen.findByRole('dialog', { name: 'Nouvelle variante' })
 
-    fireEvent.change(within(variantsDialog).getByLabelText('SKU'), {
+    fireEvent.change(within(variantsDialog).getByLabelText(/^SKU/u), {
       target: { value: 'WOOL-JUMPER-M' },
     })
-    fireEvent.change(within(variantsDialog).getByLabelText('Variante'), {
+    fireEvent.change(within(variantsDialog).getByLabelText(/^Variante/u), {
       target: { value: 'Medium' },
     })
     fireEvent.change(within(variantsDialog).getByLabelText('Prix'), {
@@ -80,11 +78,7 @@ describe('the product catalogue', () => {
       target: { value: 'EUR' },
     })
     fireEvent.change(within(variantsDialog).getByLabelText('Stock'), { target: { value: '12' } })
-    fireEvent.submit(
-      within(variantsDialog)
-        .getByRole('button', { name: 'Ajouter une variante' })
-        .closest('form') as HTMLFormElement,
-    )
+    fireEvent.submit(variantsDialog.querySelector('form') as HTMLFormElement)
 
     await waitFor(() => {
       expect(within(variantsDialog).getByText('WOOL-JUMPER-M')).toBeDefined()
@@ -94,8 +88,10 @@ describe('the product catalogue', () => {
     // e2e test in @cogenta/cli's serve-commerce.test.ts).
     expect(within(variantsDialog).getByText(/45,00/u)).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
+    const footerButtons = within(variantsDialog).getAllByRole('button', { name: 'Fermer' })
+    fireEvent.click(footerButtons[footerButtons.length - 1] as HTMLElement)
     await waitFor(() => {
+      expect(within(table()).getByText('Wool jumper')).toBeDefined()
       expect(within(table()).getByText('1 variante')).toBeDefined()
     })
     expect(within(table()).getByText('12')).toBeDefined()
@@ -115,12 +111,41 @@ describe('the product catalogue', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Nouveau produit' }))
     const dialog = await screen.findByRole('dialog', { name: 'Créer un produit' })
     fireEvent.change(within(dialog).getByLabelText('Titre'), { target: { value: 'X' } })
-    fireEvent.change(within(dialog).getByLabelText('Identifiant'), { target: { value: 'x' } })
+    fireEvent.change(within(dialog).getByLabelText(/^Identifiant/u), { target: { value: 'x' } })
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
 
-    expect(await screen.findByText(/allowed to do that/u)).toBeDefined()
+    // The server's English refusal is shown in the admin's language.
+    expect(
+      await screen.findByText('Vous n’avez pas le droit d’effectuer cette action.'),
+    ).toBeDefined()
   })
 })
+
+/** The status badge sits next to the order's heading. */
+function statusBadge(reference: string): HTMLElement {
+  const heading = screen.getByRole('heading', { name: `Commande ${reference}` })
+  return heading.parentElement as HTMLElement
+}
+
+/** A dialog's footer "close"/confirm buttons share a name with its header "X". */
+async function openOrder(): Promise<void> {
+  await goToOrders()
+  fireEvent.click(await screen.findByRole('link', { name: 'ORD-0001' }))
+  await screen.findByRole('heading', { name: 'Commande ORD-0001' })
+}
+
+async function recordPayment(): Promise<void> {
+  // The action is offered twice (page header and payments card).
+  fireEvent.click(
+    (await screen.findAllByRole('button', { name: 'Enregistrer le paiement' }))[0] as HTMLElement,
+  )
+  const dialog = await screen.findByRole('dialog', { name: 'Enregistrer le paiement' })
+  fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+  await screen.findByText('Le paiement a été enregistré : la commande est payée.')
+  await waitFor(() => {
+    expect(within(statusBadge('ORD-0001')).getByText('Payée')).toBeDefined()
+  })
+}
 
 describe('the order list and detail', () => {
   it('lists the seeded order and opens its detail with lines, payment and history', async () => {
@@ -130,65 +155,70 @@ describe('the order list and detail', () => {
     expect(within(table()).getByText('ORD-0001')).toBeDefined()
     fireEvent.click(await screen.findByRole('link', { name: 'ORD-0001' }))
 
-    await screen.findByText('shopper@example.com', { exact: false })
-    expect(screen.getByText('WOOL-JUMPER-M')).toBeDefined()
-    expect(screen.getByText(/Marquer reçu/u)).toBeDefined()
+    // The customer's e-mail is shown more than once (header link, customer card).
+    expect(
+      (await screen.findAllByText('shopper@example.com', { exact: false })).length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByText(/WOOL-JUMPER-M/u)).toBeDefined()
+    expect(
+      screen.getAllByRole('button', { name: 'Enregistrer le paiement' }).length,
+    ).toBeGreaterThan(0)
   })
 
-  it('marks the payment received and moves the order along', async () => {
+  it('records the payment received and moves the order along', async () => {
     render(<App />)
-    await goToOrders()
-    fireEvent.click(await screen.findByRole('link', { name: 'ORD-0001' }))
-    await screen.findByRole('button', { name: 'Marquer reçu' })
+    await openOrder()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Marquer reçu' }))
+    await recordPayment()
+    // Recording the payment is what makes the order payable-for-shipping: the
+    // action to record it is gone and the next step is offered.
+    expect(screen.queryByRole('button', { name: 'Enregistrer le paiement' })).toBeNull()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Marquer comme expédiée' }))
+    const confirm = await screen.findByRole('dialog', { name: /^Marquer comme expédiée/u })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Marquer comme expédiée' }))
+    await screen.findByText('La commande est marquée comme expédiée.')
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Marquer reçu' })).toBeNull()
+      expect(within(statusBadge('ORD-0001')).getByText('Expédiée')).toBeDefined()
     })
-
-    // The button disappears as soon as the order starts reloading, which is
-    // before the reloaded detail (and its transition buttons) comes back.
-    fireEvent.click(await screen.findByRole('button', { name: 'Marquer Payée' }))
-    await screen.findByText(/Statut modifié/u)
   })
 
   it('ships an order with tracking, then refunds it partially with a mandatory reason (fiche 52)', async () => {
     render(<App />)
-    await goToOrders()
-    fireEvent.click(await screen.findByRole('link', { name: 'ORD-0001' }))
-    await screen.findByRole('button', { name: 'Marquer reçu' })
-    fireEvent.click(screen.getByRole('button', { name: 'Marquer reçu' }))
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Marquer reçu' })).toBeNull()
-    })
-    fireEvent.click(await screen.findByRole('button', { name: 'Marquer Payée' }))
-    // Not just any "Payée": the button that was just clicked says it too,
-    // before the order has moved. The order's own status line only changes
-    // once the reloaded order is back.
-    await screen.findByText('shopper@example.com — Payée')
+    await openOrder()
+    await recordPayment()
 
     // Shipment tracking (task 4): the form appears once the order is paid,
     // and submitting it both records the tracking and ships the order.
-    const trackingForm = (
-      await screen.findByRole('heading', { name: 'Suivi de l’expédition' })
-    ).closest('section') as HTMLElement
-    fireEvent.change(within(trackingForm).getByLabelText('Transporteur'), {
+    await screen.findByRole('heading', { name: 'Suivi de l’expédition' })
+    fireEvent.change(screen.getByLabelText('Transporteur'), {
       target: { value: 'DHL' },
     })
-    fireEvent.change(within(trackingForm).getByLabelText('Numéro de suivi'), {
+    fireEvent.change(screen.getByLabelText('Numéro de suivi'), {
       target: { value: 'DHL123456' },
     })
-    fireEvent.click(within(trackingForm).getByRole('button', { name: 'Expédier, avec suivi' }))
-    await screen.findByText('shopper@example.com — Expédiée')
+    fireEvent.click(screen.getByRole('button', { name: 'Expédier avec ce suivi' }))
+    await waitFor(() => {
+      expect(within(statusBadge('ORD-0001')).getByText('Expédiée')).toBeDefined()
+    })
 
     // Partial refund (task 6): the amount defaults to what remains, and a
-    // reason is mandatory — the button is only enabled with one filled in.
+    // reason is mandatory — it is refused without one.
     fireEvent.click(await screen.findByRole('button', { name: 'Rembourser' }))
-    const reasonInput = await screen.findByLabelText('Motif (obligatoire)')
-    fireEvent.change(reasonInput, { target: { value: 'Un article manquant dans le colis.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Confirmer le remboursement' }))
+    const refundDialog = await screen.findByRole('dialog', { name: 'Rembourser' })
+    fireEvent.click(within(refundDialog).getByRole('button', { name: 'Rembourser' }))
+    expect(
+      await within(refundDialog).findByText(
+        'Indiquez le motif : il est obligatoire pour un remboursement.',
+      ),
+    ).toBeDefined()
 
-    await screen.findByText(/refunded so far|remboursé/u)
+    fireEvent.change(within(refundDialog).getByLabelText('Motif du remboursement'), {
+      target: { value: 'Un article manquant dans le colis.' },
+    })
+    fireEvent.click(within(refundDialog).getByRole('button', { name: 'Rembourser' }))
+
+    await screen.findByText(/ont été remboursés/u)
   })
 
   // Audit T-COM-03: `listOrders`'s search parameter (`q`) already had a real
@@ -196,22 +226,72 @@ describe('the order list and detail', () => {
   // never read anything into it, so a search that should have found one
   // order among many always showed every order instead.
   it('filters the order list by a search term, and shows the total for what is shown', async () => {
+    const timestamp = '2026-03-01T00:00:00.000Z'
+    installMockFetch({
+      roles: ['admin'],
+      commerceProducts: [
+        {
+          id: 'product-seed',
+          handle: 'wool-jumper',
+          title: 'Wool jumper',
+          status: 'active',
+          contentRef: null,
+          imageMediaIds: [],
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+      ],
+      commerceVariants: [
+        {
+          id: 'variant-seed',
+          productId: 'product-seed',
+          sku: 'WOOL-JUMPER-M',
+          title: 'Medium',
+          priceMinor: 4500,
+          currency: 'EUR',
+          onHand: 10,
+          allowBackorder: false,
+          weightGrams: 0,
+          taxCategory: 'standard',
+          position: 0,
+          lowStockThreshold: null,
+          compareAtPriceMinor: null,
+          saleStartsAt: null,
+          saleEndsAt: null,
+          widthMm: null,
+          heightMm: null,
+          depthMm: null,
+          imageMediaId: null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+      ],
+    })
     render(<App />)
     await goToOrders()
     expect(within(table()).getByText('ORD-0001')).toBeDefined()
-    expect(screen.getByText('Total des commandes de cette page :', { exact: false })).toBeDefined()
+    expect(
+      screen.getByText('Total de cette page (hors commandes annulées et remboursées) :', {
+        exact: false,
+      }),
+    ).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Nouvelle commande' }))
     const dialog = await screen.findByRole('dialog', { name: 'Nouvelle commande' })
     fireEvent.change(within(dialog).getByLabelText('E-mail du client'), {
       target: { value: 'second-buyer@example.com' },
     })
-    fireEvent.change(within(dialog).getByLabelText('ID de la variante'), {
-      target: { value: 'variant-seed' },
+    // Products are found by typing a name or a SKU, never by an internal id.
+    fireEvent.change(within(dialog).getByLabelText('Produit'), {
+      target: { value: 'wool' },
     })
+    fireEvent.click(await within(dialog).findByRole('button', { name: /Wool jumper/u }))
     fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
     // Creating navigates straight to the new order's own detail screen.
-    await screen.findByText('second-buyer@example.com', { exact: false })
+    await screen.findByRole('heading', { name: /^Commande ORD-MANUAL-/u })
+    expect(
+      screen.getAllByText('second-buyer@example.com', { exact: false }).length,
+    ).toBeGreaterThan(0)
 
     fireEvent.click(await screen.findByRole('link', { name: 'Commandes' }))
     await screen.findByRole('heading', { name: 'Commandes' })

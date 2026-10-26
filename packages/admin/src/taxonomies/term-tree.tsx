@@ -66,6 +66,8 @@ export interface TermTreeProps {
   readonly locale: string
   readonly mayUpdate: boolean
   readonly mayDelete: boolean
+  /** A flat taxonomy has no nesting: no indent buttons, no "with sub-terms" tally, no depth note. */
+  readonly hierarchical?: boolean
   onEdit(term: Term): void
   onDelete(term: Term): void
   onReorder(plan: ReorderPlan): void
@@ -78,6 +80,7 @@ export function TermTree({
   locale,
   mayUpdate,
   mayDelete,
+  hierarchical = true,
   onEdit,
   onDelete,
   onReorder,
@@ -162,31 +165,33 @@ export function TermTree({
                 }
                 style={{ marginLeft: `${term.depth * 1.5}rem` }}
               >
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  disabled={!hasChildren}
-                  aria-label={
-                    hasChildren
-                      ? isCollapsed
-                        ? t('taxonomies.expand', { term: labelOf(term) })
-                        : t('taxonomies.collapse', { term: labelOf(term) })
-                      : t('taxonomies.noChildren')
-                  }
-                  onClick={() => toggle(term.id)}
-                  className={hasChildren ? undefined : 'invisible'}
-                >
-                  {isCollapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
-                </Button>
+                {hierarchical && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    disabled={!hasChildren}
+                    aria-label={
+                      hasChildren
+                        ? isCollapsed
+                          ? t('taxonomies.expand', { term: labelOf(term) })
+                          : t('taxonomies.collapse', { term: labelOf(term) })
+                        : t('taxonomies.noChildren')
+                    }
+                    onClick={() => toggle(term.id)}
+                    className={hasChildren ? undefined : 'invisible'}
+                  >
+                    {isCollapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
+                  </Button>
+                )}
 
-                <span className="flex-1 text-sm">
+                <span className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">
                   <span className="font-medium" title={term.slug}>
                     {labelOf(term)}
                   </span>
                   {term.entryCount !== undefined && (
                     <span className="text-muted-foreground">
                       {' — '}
-                      {t('taxonomies.entryCount', {
+                      {t(hierarchical ? 'taxonomies.entryCount' : 'taxonomies.entryCountFlat', {
                         // i18next pluralises on `count` and on nothing else,
                         // which is why the term's own tally carries that name.
                         count: term.entryCount.own,
@@ -203,6 +208,7 @@ export function TermTree({
                       variant="ghost"
                       disabled={disabled || !canMoveUp(terms, term)}
                       aria-label={t('taxonomies.moveUp', { term: labelOf(term) })}
+                      title={t('taxonomies.moveUp', { term: labelOf(term) })}
                       onClick={() => attempt(planMoveUp(terms, term))}
                     >
                       ↑
@@ -212,33 +218,41 @@ export function TermTree({
                       variant="ghost"
                       disabled={disabled || !canMoveDown(terms, term)}
                       aria-label={t('taxonomies.moveDown', { term: labelOf(term) })}
+                      title={t('taxonomies.moveDown', { term: labelOf(term) })}
                       onClick={() => attempt(planMoveDown(terms, term))}
                     >
                       ↓
                     </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={disabled || !canIndent(terms, term)}
-                      aria-label={t('taxonomies.indent', { term: labelOf(term) })}
-                      onClick={() => attempt(planIndent(terms, term))}
-                    >
-                      →
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={disabled || !canDedent(terms, term)}
-                      aria-label={t('taxonomies.dedent', { term: labelOf(term) })}
-                      onClick={() => attempt(planDedent(terms, term))}
-                    >
-                      ←
-                    </Button>
+                    {hierarchical && (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={disabled || !canIndent(terms, term)}
+                          aria-label={t('taxonomies.indent', { term: labelOf(term) })}
+                          title={t('taxonomies.indent', { term: labelOf(term) })}
+                          onClick={() => attempt(planIndent(terms, term))}
+                        >
+                          →
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          disabled={disabled || !canDedent(terms, term)}
+                          aria-label={t('taxonomies.dedent', { term: labelOf(term) })}
+                          title={t('taxonomies.dedent', { term: labelOf(term) })}
+                          onClick={() => attempt(planDedent(terms, term))}
+                        >
+                          ←
+                        </Button>
+                      </>
+                    )}
                     <Button
                       size="icon"
                       variant="ghost"
                       disabled={disabled}
                       aria-label={t('taxonomies.edit', { term: labelOf(term) })}
+                      title={t('taxonomies.edit', { term: labelOf(term) })}
                       onClick={() => onEdit(term)}
                     >
                       <EditIcon />
@@ -251,6 +265,7 @@ export function TermTree({
                     variant="ghost"
                     disabled={disabled}
                     aria-label={t('taxonomies.delete', { term: labelOf(term) })}
+                    title={t('taxonomies.delete', { term: labelOf(term) })}
                     onClick={() => onDelete(term)}
                   >
                     <DeleteIcon />
@@ -268,9 +283,11 @@ export function TermTree({
 
   return (
     <div>
-      <p className="mb-2 text-xs text-muted-foreground">
-        {t('taxonomies.depthLimit', { max: MAX_TAXONOMY_DEPTH })}
-      </p>
+      {hierarchical && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {t('taxonomies.depthLimit', { max: MAX_TAXONOMY_DEPTH })}
+        </p>
+      )}
       {renderLevel(null)}
     </div>
   )

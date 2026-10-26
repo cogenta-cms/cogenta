@@ -38,6 +38,17 @@ export interface DoctorCheck {
   }[]
 }
 
+/**
+ * A note as a stable code plus its parameters, next to the English sentence
+ * `notes` carries. A translated UI (the admin's "Santé" screen) looks the code
+ * up instead of showing English prose; the terminal keeps printing `text`.
+ */
+export interface DoctorNote {
+  readonly code: string
+  readonly params: Readonly<Record<string, string | number>>
+  readonly text: string
+}
+
 export interface DoctorReport {
   readonly node: string
   readonly platform: string
@@ -46,13 +57,28 @@ export interface DoctorReport {
   readonly site: { name: string; url: string; locales: readonly string[] } | undefined
   readonly checks: readonly DoctorCheck[]
   readonly notes: readonly string[]
+  /** The same notes, coded — additive, so a consumer of `notes` is unaffected. */
+  readonly noteItems: readonly DoctorNote[]
   readonly problems: readonly string[]
+}
+
+/** One AI provider saved from the admin (`/admin/providers`), as far as the diagnostic needs to know it. */
+export interface DoctorAiProvider {
+  readonly name: string
+  readonly model: string
+  readonly enabled: boolean
 }
 
 export interface DoctorOptions {
   readonly cwd?: string
   readonly env?: Record<string, string | undefined>
   readonly logger?: Logger
+  /**
+   * The providers registered in the admin. Agents run on those as well as on
+   * the `llm` section of the configuration file, so a diagnostic that looked at
+   * the file alone said "no provider" on a site whose agents were running.
+   */
+  readonly aiProviders?: () => Promise<readonly DoctorAiProvider[]>
 }
 
 function describe(error: unknown): string {
@@ -74,7 +100,16 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
   const env = options.env ?? process.env
   const checks: DoctorCheck[] = []
   const notes: string[] = []
+  const noteItems: DoctorNote[] = []
   const problems: string[] = []
+  const note = (
+    code: string,
+    text: string,
+    params: Readonly<Record<string, string | number>> = {},
+  ): void => {
+    notes.push(text)
+    noteItems.push({ code, params, text })
+  }
 
   const base = {
     node: process.versions.node,
@@ -99,12 +134,16 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
       site: undefined,
       checks: [],
       notes: [],
+      noteItems: [],
       problems: [describe(error)],
     }
   }
 
   if (configPath === null) {
-    notes.push('No cogenta.config file found. The configuration came from the environment.')
+    note(
+      'config-from-environment',
+      'No cogenta.config file found. The configuration came from the environment.',
+    )
   }
 
   // Silent unless the caller asks otherwise. A human report on stdout must not
@@ -189,16 +228,46 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
   await check('rateLimit', () => createRateLimitRegistry(registryOptions).select(config.rateLimit))
 
   // Rule R2, stated out loud rather than left to be discovered: no provider is a
-  // supported configuration, not a broken one.
-  notes.push(
-    config.llm === undefined
-      ? 'No LLM provider configured. Everything works except the agents.'
-      : `LLM provider: ${config.llm.provider} (${config.llm.model}).${
-          config.llm.apiKey === undefined
-            ? ' No API key in the environment, so the agents will not run.'
-            : ''
-        }`,
-  )
+  // supported configuration, not a broken one. Providers saved from the admin
+  // count as much as the `llm` section of the file — the agents use both.
+  let registered: readonly DoctorAiProvider[] = []
+  try {
+    registered = (await options.aiProviders?.()) ?? []
+  } catch {
+    // A provider store that cannot be read is not a reason to fail a diagnostic.
+  }
+  const activeProviders = registered.filter((provider) => provider.enabled)
+  if (activeProviders.length > 0) {
+    note(
+      'llm-registered',
+      `AI providers registered in the admin: ${activeProviders
+        .map((provider) => `${provider.name} (${provider.model})`)
+        .join(', ')}.`,
+      {
+        count: activeProviders.length,
+        names: activeProviders.map((provider) => provider.name).join(', '),
+      },
+    )
+  } else if (registered.length > 0 && config.llm === undefined) {
+    note(
+      'llm-registered-disabled',
+      `AI providers are registered in the admin but all disabled (${registered.length}). Everything works except the agents.`,
+      { count: registered.length },
+    )
+  } else if (config.llm === undefined) {
+    note('llm-none', 'No LLM provider configured. Everything works except the agents.')
+  } else if (config.llm.apiKey === undefined) {
+    note(
+      'llm-config-no-key',
+      `LLM provider: ${config.llm.provider} (${config.llm.model}). No API key in the environment, so the agents will not run.`,
+      { provider: config.llm.provider, model: config.llm.model },
+    )
+  } else {
+    note('llm-config', `LLM provider: ${config.llm.provider} (${config.llm.model}).`, {
+      provider: config.llm.provider,
+      model: config.llm.model,
+    })
+  }
 
   // Audit fiche 15, T05: image generation (L18 task 4) is a *note*, not a
   // `check()` — `createImageProviderRegistry` (`@cogenta/agents`) has no
@@ -208,20 +277,26 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
   // note above, this only reports what is configured rather than treating
   // its absence as a problem `cogenta doctor` should ever flag.
   if (config.imageGeneration !== undefined) {
-    notes.push(
+    note(
+      config.imageGeneration.apiKey === undefined ? 'image-generation-no-key' : 'image-generation',
       `Image-generation provider: ${config.imageGeneration.provider} (${config.imageGeneration.model}).` +
         (config.imageGeneration.apiKey === undefined
           ? ' No API key in the environment, so image generation will not run.'
           : ''),
+      { provider: config.imageGeneration.provider, model: config.imageGeneration.model },
     )
   }
 
   if (config.database.driver === 'sqlite') {
-    notes.push('SQLite: one machine, no vector index. Fine for a single site, not for a fleet.')
+    note(
+      'sqlite-single-machine',
+      'SQLite: one machine, no vector index. Fine for a single site, not for a fleet.',
+    )
   }
 
   if (config.storage.driver !== 's3' && env['COGENTA_STORAGE_SIGNING_KEY'] === undefined) {
-    notes.push(
+    note(
+      'storage-signing-key-missing',
       'COGENTA_STORAGE_SIGNING_KEY is not set, so signed media URLs stop working after a restart.',
     )
   }
@@ -239,9 +314,11 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
     previewSigningKey === undefined ||
     previewSigningKey.length < PREVIEW_SIGNING_KEY_MINIMUM_LENGTH
   ) {
-    notes.push(
+    note(
+      'preview-signing-key-missing',
       `${PREVIEW_SIGNING_KEY_ENV} is missing or shorter than ${PREVIEW_SIGNING_KEY_MINIMUM_LENGTH} characters, so previewing an unpublished draft will fail. ` +
         `Set it in the environment — for example \`openssl rand -hex 32\`. Never put it in a configuration file.`,
+      { variable: PREVIEW_SIGNING_KEY_ENV, minimum: PREVIEW_SIGNING_KEY_MINIMUM_LENGTH },
     )
   }
 
@@ -258,6 +335,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
     site: { name: config.site.name, url: config.site.url, locales: config.site.locales },
     checks,
     notes,
+    noteItems,
     problems,
   }
 }

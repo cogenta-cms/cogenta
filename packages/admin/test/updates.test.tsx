@@ -85,7 +85,7 @@ describe('the Updates screen', () => {
     await goToUpdates()
 
     expect(screen.getByText('@cogenta/core')).toBeDefined()
-    expect(screen.getByText('0.4.0 → 0.5.0 (minor)', { exact: false })).toBeDefined()
+    expect(screen.getByText('0.4.0 → 0.5.0 (mise à jour mineure)', { exact: false })).toBeDefined()
     expect(screen.getByText('@cogenta/cli')).toBeDefined()
   })
 

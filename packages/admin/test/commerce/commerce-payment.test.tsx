@@ -67,6 +67,8 @@ describe('the commerce payment screen', () => {
     const { container } = render(<App />)
     await goToPayment()
     await screen.findAllByText('Identifiants configurés sur ce serveur ✓')
+    // A driver that needs no key says so, rather than claiming one is present.
+    expect(screen.getByText('Aucun identifiant nécessaire')).toBeDefined()
 
     expect(container.innerHTML).not.toContain(LEAKED_SECRET)
     expect(document.body.textContent ?? '').not.toContain(LEAKED_SECRET)
@@ -95,14 +97,14 @@ describe('the commerce payment screen', () => {
     signedInAs(['admin'], {
       commercePaymentDrivers: [
         {
-          name: 'manual',
-          tier: 'degraded',
-          settlesOffline: true,
+          name: 'stripe',
+          tier: 'optimal',
+          settlesOffline: false,
           configured: true,
           selected: true,
         },
       ],
-      commercePaymentTestResults: { manual: { ok: true, message: null } },
+      commercePaymentTestResults: { stripe: { ok: true, message: null, code: 'ok' } },
     })
     render(<App />)
     await goToPayment()
@@ -111,11 +113,32 @@ describe('the commerce payment screen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tester la connexion' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Connecté.')).toBeDefined()
+      expect(screen.getByText(/^Connexion réussie/u)).toBeDefined()
     })
   })
 
-  it('runs the test-connection button and surfaces the real failure message', async () => {
+  it('offers no connection test for a driver that needs no credentials', async () => {
+    signedInAs(['admin'], {
+      commercePaymentDrivers: [
+        {
+          name: 'manual',
+          tier: 'degraded',
+          settlesOffline: true,
+          configured: true,
+          selected: true,
+        },
+      ],
+    })
+    render(<App />)
+    await goToPayment()
+    await screen.findByText('Aucun identifiant nécessaire')
+
+    // Nothing to probe: the customer pays outside the site and the shopkeeper
+    // records the payment on the order.
+    expect(screen.queryByRole('button', { name: 'Tester la connexion' })).toBeNull()
+  })
+
+  it('runs the test-connection button and surfaces the failure in the admin’s language', async () => {
     signedInAs(['admin'], {
       commercePaymentDrivers: [
         {
@@ -127,7 +150,7 @@ describe('the commerce payment screen', () => {
         },
       ],
       commercePaymentTestResults: {
-        stripe: { ok: false, message: 'No API key configured for stripe.' },
+        stripe: { ok: false, message: 'No API key configured for stripe.', code: 'not_configured' },
       },
     })
     render(<App />)
@@ -136,9 +159,12 @@ describe('the commerce payment screen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tester la connexion' }))
 
+    // The server's English message is for logs and API clients; the screen
+    // shows the translation of the stable outcome code instead.
     await waitFor(() => {
-      expect(screen.getByText('No API key configured for stripe.')).toBeDefined()
+      expect(screen.getByText(/^Aucun identifiant n'est configuré pour ce moyen/u)).toBeDefined()
     })
+    expect(screen.queryByText('No API key configured for stripe.')).toBeNull()
   })
 
   it('lists a third, independently registered provider — the screen is an open-ended roster, not a fixed pair', async () => {
@@ -171,9 +197,11 @@ describe('the commerce payment screen', () => {
     await goToPayment()
 
     expect(await screen.findByRole('heading', { name: /^PayPal/u, level: 3 })).toBeDefined()
-    // Three rows, three "Tester la connexion" buttons — nothing about the
-    // markup is specific to a pair of gateways.
-    expect(screen.getAllByRole('button', { name: 'Tester la connexion' })).toHaveLength(3)
+    // Three rows — nothing about the markup is specific to a pair of
+    // gateways. The two online gateways can be probed; the offline one has no
+    // credentials to test.
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(3)
+    expect(screen.getAllByRole('button', { name: 'Tester la connexion' })).toHaveLength(2)
   })
 
   it('refuses the screen to a non-admin', async () => {
@@ -191,7 +219,7 @@ describe('the commerce payment screen', () => {
     signedInAs(['admin'])
     const { container } = render(<App />)
     await goToPayment()
-    await screen.findByText('Identifiants configurés sur ce serveur ✓')
+    await screen.findByText('Aucun identifiant nécessaire')
 
     await expectNoSeriousA11yViolations(container)
   })

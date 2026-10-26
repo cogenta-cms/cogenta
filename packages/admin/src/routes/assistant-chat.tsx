@@ -1,12 +1,22 @@
-import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
+import {
+  type FormEvent,
+  type JSX,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { describeAiErrorLine } from '../ai/server-text.js'
+import { shorten } from '../ai/shorten.js'
 import type { ChatAnswer, ChatSource } from '../api/assist-client.js'
 import { getAssistCapabilities, runChat } from '../api/assist-client.js'
-import { ApiError } from '../api/client.js'
 import { useAuth } from '../auth/auth-context.js'
 import { readableCollections } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import { Button, Card, CardBody, CopyButton, Notice } from '../ui/index.js'
 
 /**
  * L18 task 6's chat/RAG tool, given a real screen.
@@ -37,14 +47,21 @@ import { useSchema } from '../schema/schema-context.js'
  * actor could read (R8 — the excerpt is shown as data to read, never run).
  */
 
+/** One question and what became of it: an answer, or the reason there is none. */
 interface Turn {
   readonly question: string
-  readonly answer: string
-  readonly sources: readonly ChatSource[]
-  readonly answeredFromSources: boolean
+  readonly answer?: string
+  readonly sources?: readonly ChatSource[]
+  readonly answeredFromSources?: boolean
+  readonly error?: string
 }
 
-export function AssistantChatRoute(): JSX.Element | null {
+export function AssistantChatRoute({
+  onOpenIndex,
+}: {
+  /** Goes to the Index tab, where a stale or empty index is fixed. Absent when the index is not shown. */
+  readonly onOpenIndex?: () => void
+} = {}): JSX.Element | null {
   const { t } = useTranslation()
   const auth = useAuth()
   const schemaState = useSchema()
@@ -54,12 +71,9 @@ export function AssistantChatRoute(): JSX.Element | null {
   const isAdmin = roles.includes('admin')
   const locale =
     schemaState.status === 'ready' ? (schemaState.schema.site?.defaultLocale ?? 'en') : 'en'
-  const collections =
-    schemaState.status === 'ready'
-      ? readableCollections(schemaState.schema.collections, roles).map(
-          (collection) => collection.name,
-        )
-      : []
+  const readable =
+    schemaState.status === 'ready' ? readableCollections(schemaState.schema.collections, roles) : []
+  const collections = readable.map((collection) => collection.name)
 
   const [referenceCollection, setReferenceCollection] = useState<string | null>(null)
   const searchCollections = [
@@ -71,7 +85,7 @@ export function AssistantChatRoute(): JSX.Element | null {
   const [question, setQuestion] = useState('')
   const [turns, setTurns] = useState<readonly Turn[]>([])
   const [asking, setAsking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const endRef = useRef<HTMLDivElement | null>(null)
 
   const load = useCallback(async () => {
     if (token === null) return
@@ -91,12 +105,21 @@ export function AssistantChatRoute(): JSX.Element | null {
     void load()
   }, [load])
 
+  // The newest exchange stays in view, like any chat.
+  const turnCount = turns.length
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new turn or the "asking" state is the trigger.
+  useEffect(() => {
+    endRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  }, [turnCount, asking])
+
   if (token === null) return null
 
   if (available === null) {
     return (
       <section aria-labelledby="assistant-chat-heading">
-        <h1 id="assistant-chat-heading">{t('assistChat.heading')}</h1>
+        <h2 id="assistant-chat-heading" className="m-0 text-lg font-semibold">
+          {t('assistChat.heading')}
+        </h2>
         <p>{t('common.loading')}</p>
       </section>
     )
@@ -105,7 +128,9 @@ export function AssistantChatRoute(): JSX.Element | null {
   if (available === false) {
     return (
       <section aria-labelledby="assistant-chat-heading">
-        <h1 id="assistant-chat-heading">{t('assistChat.heading')}</h1>
+        <h2 id="assistant-chat-heading" className="m-0 text-lg font-semibold">
+          {t('assistChat.heading')}
+        </h2>
         <p role="status">{t('assistChat.unavailable')}</p>
       </section>
     )
@@ -117,13 +142,11 @@ export function AssistantChatRoute(): JSX.Element | null {
     if (asked === '' || token === null || searchCollections.length === 0 || asking) return
 
     setAsking(true)
-    setError(null)
+    setQuestion('')
     try {
-      // The admin's own origin is the site's own origin — `cogenta serve`
-      // hosts both under one process — which is the site id the underlying
-      // tool scopes retrieval by (`site.url` server-side). A documented
-      // stand-in rather than a guess: there is no other place today that
-      // exposes the configured `site.url` to this browser bundle.
+      // The server states which site this is (its own configured address) and
+      // replaces this value: a browser only knows the origin it was served
+      // from, which differs behind a proxy or on a second host name.
       const answer: ChatAnswer = await runChat(token, {
         question: asked,
         locale,
@@ -139,78 +162,165 @@ export function AssistantChatRoute(): JSX.Element | null {
           answeredFromSources: answer.answeredFromSources,
         },
       ])
-      setQuestion('')
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('assistChat.error'))
+      // A failed question stays on screen with its reason, instead of vanishing.
+      setTurns((current) => [
+        ...current,
+        { question: asked, error: describeAiErrorLine(caught, t, t('assistChat.error')) },
+      ])
     } finally {
       setAsking(false)
     }
   }
 
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      void ask(event)
+    }
+  }
+
+  // The scope in the words the admin uses everywhere else, not identifiers.
+  const scopeLabels = readable.map((collection) => collection.labels.plural).join(', ')
+
   return (
-    <section aria-labelledby="assistant-chat-heading">
-      <h1 id="assistant-chat-heading">{t('assistChat.heading')}</h1>
-      <p>{t('assistChat.intro')}</p>
-      <p>{t('assistChat.scopeContent', { collections: collections.join(', '), locale })}</p>
-      {referenceCollection !== null && <p>{t('assistChat.scopeReferences')}</p>}
+    <section aria-labelledby="assistant-chat-heading" className="flex min-w-0 flex-col gap-4">
+      <div>
+        <h2 id="assistant-chat-heading" className="m-0 text-lg font-semibold">
+          {t('assistChat.heading')}
+        </h2>
+        <p className="m-0 mt-1 text-sm text-muted-foreground">{t('assistChat.intro')}</p>
+        <p className="m-0 mt-1 text-sm text-muted-foreground">
+          {t('assistChat.scopeContent', { collections: scopeLabels, locale })}
+        </p>
+        {referenceCollection !== null && (
+          <p className="m-0 mt-1 text-sm text-muted-foreground">
+            {t('assistChat.scopeReferences')}
+          </p>
+        )}
+      </div>
 
-      <ol
-        aria-label={t('assistChat.historyLabel')}
-        className="m-0 flex list-none flex-col gap-4 p-0"
-      >
-        {turns.length === 0 && <li>{t('assistChat.empty')}</li>}
-        {turns.map((turn, index) => (
-          <li key={`${index}-${turn.question}`}>
-            <p>
-              <strong>{t('assistChat.you')}</strong> {turn.question}
-            </p>
-            <p>
-              <strong>{t('assistChat.assistant')}</strong> {turn.answer}
-            </p>
-            {turn.answeredFromSources && turn.sources.length > 0 && (
-              <div>
-                <p>{t('assistChat.sourcesHeading')}</p>
-                <ul>
-                  {turn.sources.map((source) => (
-                    <li key={`${source.collection}/${source.entryId}`}>
-                      {source.collection === referenceCollection ? (
-                        <span>{source.title}</span>
-                      ) : (
-                        <Link
-                          to={`/collections/${encodeURIComponent(source.collection)}/${encodeURIComponent(source.entryId)}`}
-                        >
-                          {source.title}
-                        </Link>
-                      )}
-                      {/* The excerpt is data quoted from the site's own content,
-                          shown for a human to check the answer against — never
-                          re-interpreted as anything but text (R8). */}
-                      <p>“{source.excerpt}”</p>
-                    </li>
-                  ))}
-                </ul>
+      {turns.length > 0 && (
+        <ol
+          aria-label={t('assistChat.historyLabel')}
+          className="m-0 flex list-none flex-col gap-4 p-0"
+        >
+          {turns.map((turn, index) => (
+            <li key={`${index}-${turn.question}`} className="flex min-w-0 flex-col gap-2">
+              <div className="flex justify-end">
+                <p className="m-0 max-w-[85%] rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground shadow-card">
+                  <span className="sr-only">{t('assistChat.you')} </span>
+                  {turn.question}
+                </p>
               </div>
-            )}
-          </li>
-        ))}
-      </ol>
+              {turn.error !== undefined ? (
+                <Notice tone="danger" live="polite">
+                  <p>{turn.error}</p>
+                </Notice>
+              ) : (
+                <Card>
+                  <CardBody className="flex flex-col gap-3">
+                    <p className="m-0 whitespace-pre-wrap text-sm leading-6">
+                      <span className="sr-only">{t('assistChat.assistant')} </span>
+                      {turn.answer}
+                    </p>
+                    {turn.answeredFromSources === true && (turn.sources?.length ?? 0) > 0 ? (
+                      <div>
+                        <p className="m-0 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                          {t('assistChat.sourcesHeading')}
+                        </p>
+                        <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
+                          {(turn.sources ?? []).map((source) => (
+                            <li
+                              key={`${source.collection}/${source.entryId}`}
+                              className="min-w-0 rounded-md border border-border p-3 text-sm"
+                            >
+                              {source.collection === referenceCollection ? (
+                                <span className="font-medium">{source.title}</span>
+                              ) : (
+                                <Link
+                                  className="font-medium"
+                                  to={`/collections/${encodeURIComponent(source.collection)}/${encodeURIComponent(source.entryId)}`}
+                                >
+                                  {source.title}
+                                </Link>
+                              )}
+                              {/* The excerpt is data quoted from the site's own content,
+                                  shown for a human to check the answer against — never
+                                  re-interpreted as anything but text (R8). */}
+                              <p className="m-0 mt-1 text-xs text-muted-foreground">
+                                “{shorten(source.excerpt, 320)}”
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <p className="m-0 text-xs text-muted-foreground">
+                        {t('assistChat.noSources')}{' '}
+                        {onOpenIndex !== undefined && (
+                          <button
+                            type="button"
+                            className="cursor-pointer appearance-none border-0 bg-transparent p-0 text-xs text-primary underline"
+                            onClick={onOpenIndex}
+                          >
+                            {t('assistChat.checkIndex')}
+                          </button>
+                        )}
+                      </p>
+                    )}
+                    {turn.answer !== undefined && (
+                      <div>
+                        <CopyButton
+                          value={turn.answer}
+                          label={t('assistChat.copyAnswer')}
+                          copiedLabel={t('assistChat.copied')}
+                        />
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              )}
+            </li>
+          ))}
+          {asking && (
+            <li className="text-sm text-muted-foreground italic" aria-live="polite">
+              {t('assistChat.asking')}
+            </li>
+          )}
+        </ol>
+      )}
+      {turns.length === 0 && !asking && (
+        <p className="m-0 text-sm text-muted-foreground">{t('assistChat.empty')}</p>
+      )}
 
-      {error !== null && <p role="alert">{error}</p>}
-
-      <form onSubmit={(event) => void ask(event)}>
-        <label htmlFor="assistant-chat-question">{t('assistChat.questionLabel')}</label>
-        <br />
-        <input
+      <form onSubmit={(event) => void ask(event)} className="flex flex-col gap-2">
+        <label htmlFor="assistant-chat-question" className="text-sm font-medium">
+          {t('assistChat.questionLabel')}
+        </label>
+        <textarea
           id="assistant-chat-question"
-          type="text"
+          rows={3}
+          className="w-full min-w-0 resize-y rounded-md border border-input bg-card px-3 py-2 font-sans text-sm leading-5 text-card-foreground shadow-card"
           value={question}
           disabled={asking}
+          placeholder={t('assistChat.placeholder')}
           onChange={(event) => setQuestion(event.target.value)}
-        />{' '}
-        <button type="submit" disabled={asking || question.trim() === ''}>
-          {asking ? t('assistChat.asking') : t('assistChat.ask')}
-        </button>
+          onKeyDown={onKeyDown}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" disabled={asking || question.trim() === ''}>
+            {asking ? t('assistChat.asking') : t('assistChat.ask')}
+          </Button>
+          {turns.length > 0 && (
+            <Button type="button" variant="ghost" disabled={asking} onClick={() => setTurns([])}>
+              {t('assistChat.clear')}
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground">{t('assistChat.composerHint')}</span>
+        </div>
       </form>
+      <div ref={endRef} />
     </section>
   )
 }

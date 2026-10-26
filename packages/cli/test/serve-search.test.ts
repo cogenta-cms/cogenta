@@ -262,6 +262,36 @@ describe('cogenta serve — GET /api/search (L10 task 3)', () => {
     }
   })
 
+  it('tells a visitor when the query is too short for the index instead of claiming nothing matched', async () => {
+    const root = await project('fr')
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const html = await (await fetch(`${server.base}/search?q=a`)).text()
+      expect(html).toContain('Saisissez un mot d’au moins 3 lettres.')
+      expect(html).not.toContain('Aucun résultat pour cette recherche.')
+      expect(html).not.toContain('class="cg-search__count"')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('gives the 404 page the same search form and primary action classes as the theme styles elsewhere', async () => {
+    const root = await project('fr')
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const response = await fetch(`${server.base}/no-such-page-at-all`)
+      expect(response.status).toBe(404)
+      const html = await response.text()
+      expect(html).toContain('class="cg-search__form cg-fallback__search"')
+      expect(html).toContain('class="cg-action cg-fallback__primary" data-emphasis="primary"')
+      // Dark mode: nothing on this page may be coloured by a light-only token.
+      expect(html).not.toContain('--cogenta-color-muted-fg')
+      expect(html).not.toContain('var(--cogenta-color-fg)')
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('serves a public search page with a working form and real links', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })

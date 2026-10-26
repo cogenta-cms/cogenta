@@ -120,8 +120,15 @@ function fallbackImageFor(
   return { url: url.startsWith('http') ? url : absoluteUrl(site, url) }
 }
 
+/**
+ * What a page title looks like on a site nobody configured: the page's name
+ * and the site's, as on every other CMS. An editor who saves an empty template
+ * opts out of the suffix; only a key nobody ever wrote falls back to this.
+ */
+export const DEFAULT_TITLE_TEMPLATE = '%title% — %site%'
+
 const EMPTY_SEO_DEFAULTS: SeoRenderDefaults = {
-  titleTemplate: '',
+  titleTemplate: DEFAULT_TITLE_TEMPLATE,
   collectionTitleTemplates: {},
   defaultMetaDescription: '',
   twitterHandle: '',

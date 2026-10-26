@@ -156,7 +156,7 @@ function createPlanner(
         ? { ok: true, draft: result.draft }
         : { ok: false, stage: result.stage, reason: result.reason }
     },
-    sections: (draft) => summarisePlan(draft as SitePlanDraft),
+    sections: (draft, locale) => summarisePlan(draft as SitePlanDraft, locale),
   }
 }
 
@@ -235,11 +235,12 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
 
       const taken = new Set(options.collections.map((collection) => collection.name))
       const added: CollectionDefinition[] = []
-      const skipped: { name: string; reason: string }[] = []
+      const skipped: { name: string; reason: string; reasonKey: string }[] = []
       for (const collection of approved.collections) {
         if (taken.has(collection.name)) {
           skipped.push({
             name: collection.name,
+            reasonKey: 'collectionExists',
             reason:
               'this site already has a collection with that name, and replacing a live one is a migration, not an edit',
           })
@@ -251,6 +252,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
           // because pages and entries are rows, not schema.
           skipped.push({
             name: collection.name,
+            reasonKey: 'schemaDevOnly',
             reason:
               'adding a collection rewrites the schema, which only `cogenta dev` may do (ADR-0010) — everything in this plan that is content was applied anyway',
           })
@@ -267,6 +269,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         if (takenTaxonomies.has(taxonomy.name)) {
           skipped.push({
             name: taxonomy.name,
+            reasonKey: 'taxonomyExists',
             reason:
               'this site already has a taxonomy with that name, and replacing a live one is a migration, not an edit',
           })
@@ -275,6 +278,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         if (schemaPath === undefined) {
           skipped.push({
             name: taxonomy.name,
+            reasonKey: 'schemaDevOnly',
             reason:
               'declaring a taxonomy rewrites the schema, which only `cogenta dev` may do (ADR-0010) — everything in this plan that is content was applied anyway',
           })
@@ -285,6 +289,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
       }
 
       const followUp: string[] = []
+      const followUpKeys: { key: string; count?: number }[] = []
 
       if ((added.length > 0 || addedTaxonomies.length > 0) && schemaPath !== undefined) {
         const all = [...options.collections, ...added]
@@ -301,6 +306,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         // Taxonomies first: a collection whose field names one needs that
         // table to exist before its foreign key can be created.
         await createSchemaTables(options.db, added, addedTaxonomies)
+        followUpKeys.push({ key: 'schemaRewritten' })
         followUp.push(
           `${schemaPath} was rewritten — commit it (ADR-0010: the schema lives in git), the development server restarts on its own to load the new collections (a process started any other way must be restarted by hand).`,
         )
@@ -345,6 +351,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
           })
           entriesSeeded++
         }
+        followUpKeys.push({ key: 'demoDrafts', count: entriesSeeded })
         followUp.push(
           `${entriesSeeded} demonstration entr${entriesSeeded === 1 ? 'y is' : 'ies are'} waiting as drafts. Read them before publishing.`,
         )
@@ -357,7 +364,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
       // entry, so the only real question is which collection can hold one —
       // answered from the site's own schema rather than assumed, and
       // answered out loud when nothing can.
-      const pagesSkipped: { title: string; reason: string }[] = []
+      const pagesSkipped: { title: string; reason: string; reasonKey?: string }[] = []
       let pagesCreated = 0
       if (approved.pages.length > 0) {
         const everyCollection = [...options.collections, ...added]
@@ -376,6 +383,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
           for (const page of approved.pages) {
             pagesSkipped.push({
               title: page.title,
+              reasonKey: 'noPageCollection',
               reason:
                 'this site has no collection that can hold a page — one with a title and a slug, routed to a public URL',
             })
@@ -417,6 +425,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
             }
           }
           if (pagesCreated > 0) {
+            followUpKeys.push({ key: 'pageDrafts', count: pagesCreated })
             followUp.push(
               `${pagesCreated} page${pagesCreated === 1 ? ' is' : 's are'} waiting as draft${pagesCreated === 1 ? '' : 's'} in "${target.name}" — they carry a title and a purpose, not their content yet.`,
             )
@@ -442,6 +451,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
             tokenOverrides: approved.skin as unknown as Record<string, unknown>,
             updatedBy: input.actorId,
           })
+          followUpKeys.push({ key: 'paletteLive' })
           followUp.push('The new palette is live — no restart needed.')
         } else {
           await writeFile(
@@ -449,6 +459,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
             `${JSON.stringify(approved.skin, null, 2)}\n`,
             'utf8',
           )
+          followUpKeys.push({ key: 'restartForDesign' })
           followUp.push('Restart `cogenta serve` to serve the new design.')
         }
         skinApplied = true
@@ -472,6 +483,7 @@ export function createSitePlanApplier(options: SitePlanApplierOptions): SitePlan
         pagesSkipped,
         skinApplied,
         followUp,
+        followUpKeys,
       }
     },
   }

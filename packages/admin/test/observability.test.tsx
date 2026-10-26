@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { expectNoSeriousA11yViolations } from './helpers/axe.js'
@@ -54,7 +54,7 @@ describe('the observability screen', () => {
     render(<App />)
     await goToObservability()
 
-    expect(screen.getByText(/pas un remplacement d'un vrai APM/u)).toBeDefined()
+    expect(screen.getByText(/pas un remplacement d'un vrai outil de suivi/u)).toBeDefined()
   })
 
   it('saves a setting change and reports it saved', async () => {
@@ -125,8 +125,11 @@ describe('the observability screen', () => {
     render(<App />)
     await goToObservability()
 
-    expect(await screen.findByText('scheduled task failed')).toBeDefined()
-    expect(screen.getByText('error')).toBeDefined()
+    const message = await screen.findByText('scheduled task failed')
+    // The level is shown in French, in the log's own row (the level filter
+    // above also lists "Erreur" as an option).
+    const row = message.closest('tr') as HTMLElement
+    expect(within(row).getByText('Erreur')).toBeDefined()
   })
 
   it('paginates traces client-side once there are more than one page holds (fiche 67 task 4)', async () => {

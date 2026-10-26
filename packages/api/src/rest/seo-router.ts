@@ -1,5 +1,6 @@
 import { CogentaError, isCogentaError } from '@cogenta/core'
 import type { CollectionDefinition, ContentEntry } from '@cogenta/schema'
+import { titleOf } from '@cogenta/schema'
 import {
   analyseInternalLinks,
   buildMetaTags,
@@ -163,6 +164,24 @@ function tagCanonical(tags: readonly MetaTag[]): string | null {
   return link !== undefined && link.kind === 'link' ? link.href : null
 }
 
+function entryRef(resource: SeoResource, tags: readonly MetaTag[]): EntryRef {
+  const canonical = tagCanonical(tags)
+  let path: string | null = null
+  if (canonical !== null) {
+    try {
+      path = new URL(canonical, 'http://site.invalid').pathname
+    } catch {
+      path = null
+    }
+  }
+  return {
+    collection: resource.collection.name,
+    id: resource.entry.id,
+    title: titleOf(resource.collection, resource.entry),
+    path,
+  }
+}
+
 interface SeoPreviewBody {
   readonly title: string
   readonly titleLength: number
@@ -184,9 +203,23 @@ interface CollectionSitemapReport {
   readonly urlCount: number
 }
 
+/**
+ * An entry a diagnostic names. `title` is the editor's own name for it (the
+ * same one the collection list shows) so a report says "Contact", not an
+ * identifier; `label` is the singular name of its collection ("Page"), and
+ * `path` is where it lives on the public site. Both are additive: a client
+ * that only reads `collection` and `id` keeps working.
+ */
+interface EntryRef {
+  readonly collection: string
+  readonly id: string
+  readonly title: string
+  readonly path: string | null
+}
+
 interface DuplicateTitleReport {
   readonly title: string
-  readonly entries: readonly { readonly collection: string; readonly id: string }[]
+  readonly entries: readonly EntryRef[]
 }
 
 interface SeoAnomaly {
@@ -208,11 +241,8 @@ export interface SeoDiagnostics {
   readonly content: {
     readonly publishedCount: number
     readonly noindexCount: number
-    readonly missingDescriptionCount: readonly {
-      readonly collection: string
-      readonly id: string
-    }[]
-    readonly tooLongTitleCount: readonly { readonly collection: string; readonly id: string }[]
+    readonly missingDescriptionCount: readonly EntryRef[]
+    readonly tooLongTitleCount: readonly EntryRef[]
     readonly duplicateTitles: readonly DuplicateTitleReport[]
   }
   readonly anomalies: readonly SeoAnomaly[]
@@ -231,6 +261,8 @@ export interface SeoLinkSuggestions {
   readonly orphans: readonly OrphanEntry[]
   /** Keyed by entry id (already scoped to `collection` above, so the collection half of `LinkAssistantReport`'s own `"collection/id"` key would be redundant here). */
   readonly suggestionsByEntry: Readonly<Record<string, readonly LinkSuggestion[]>>
+  /** The editor's own name for each entry of `suggestionsByEntry`, so a report never shows a bare identifier. */
+  readonly entryTitles: Readonly<Record<string, string>>
 }
 
 export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
@@ -494,15 +526,15 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
     const publishedResources = allResources.filter((resource) => isPublishedEntry(resource.entry))
     const noindexCount = publishedResources.filter((resource) => isSeoNoindexed(resource)).length
 
-    const missingDescriptionCount: { collection: string; id: string }[] = []
-    const tooLongTitleCount: { collection: string; id: string }[] = []
-    const titleGroups = new Map<string, { collection: string; id: string }[]>()
+    const missingDescriptionCount: EntryRef[] = []
+    const tooLongTitleCount: EntryRef[] = []
+    const titleGroups = new Map<string, EntryRef[]>()
 
     for (const resource of publishedResources) {
       const tags = buildMetaTags(options.site, resource, metaOptions)
       const title = tagTitle(tags)
       const description = tagContent(tags, 'description')
-      const ref = { collection: resource.collection.name, id: resource.entry.id }
+      const ref = entryRef(resource, tags)
 
       if (description === undefined) missingDescriptionCount.push(ref)
       if (title.length > RECOMMENDED_MAX_TITLE) tooLongTitleCount.push(ref)
@@ -623,13 +655,21 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
 
     const orphans = report.orphans.filter((orphan) => orphan.collection === collectionName)
     const suggestionsByEntry: Record<string, readonly LinkSuggestion[]> = {}
+    const entryTitles: Record<string, string> = {}
     for (const resource of allResources) {
       if (resource.collection.name !== collectionName) continue
       const found = report.suggestionsByEntry.get(`${collectionName}/${resource.entry.id}`)
-      if (found !== undefined) suggestionsByEntry[resource.entry.id] = found
+      if (found === undefined) continue
+      suggestionsByEntry[resource.entry.id] = found
+      entryTitles[resource.entry.id] = titleOf(resource.collection, resource.entry)
     }
 
-    const data: SeoLinkSuggestions = { collection: collectionName, orphans, suggestionsByEntry }
+    const data: SeoLinkSuggestions = {
+      collection: collectionName,
+      orphans,
+      suggestionsByEntry,
+      entryTitles,
+    }
     return jsonResponse(200, { data })
   }
 

@@ -243,7 +243,7 @@
   --ca-footer-ink: var(--cogenta-color-accent-fg);
   --ca-footer-muted: color-mix(
     in oklab,
-    var(--cogenta-color-accent-fg) 78%,
+    var(--cogenta-color-accent-fg) 88%,
     var(--cogenta-color-accent)
   );
   --ca-footer-line: color-mix(
@@ -355,7 +355,7 @@
       oklch(from var(--cogenta-color-bg) 0.94 c h)
     );
     --ca-footer-muted: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent-fg) 78%, var(--cogenta-color-accent)),
+      color-mix(in oklab, var(--cogenta-color-accent-fg) 88%, var(--cogenta-color-accent)),
       oklch(from var(--cogenta-color-muted) 0.76 c h)
     );
     --ca-footer-line: light-dark(

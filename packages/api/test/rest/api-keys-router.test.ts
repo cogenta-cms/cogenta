@@ -930,3 +930,90 @@ describe('security: the raw key is never returned outside creation and rotation'
     expect(JSON.stringify(rotated.previous)).not.toContain(created.key)
   })
 })
+
+describe('scope from a closed list of roles', () => {
+  function closedRouter() {
+    return createApiKeysRouter({
+      auth,
+      now: () => clock,
+      allowedRoles: () => ['viewer', 'admin', 'editor'],
+    })
+  }
+
+  it('refuses a role this site does not have, naming the ones it does', async () => {
+    const response = await closedRouter().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['superadmin'] }),
+      admin,
+    )
+    expect(response.status).toBe(400)
+    expect(errorCodeOf(response)).toBe('QUERY_INVALID')
+    expect(JSON.stringify(response.body)).toContain('superadmin')
+    expect(await auth.apiKeys.list()).toHaveLength(0)
+  })
+
+  it('accepts a scope made only of known roles', async () => {
+    const response = await closedRouter().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['editor'] }),
+      admin,
+    )
+    expect(response.status).toBe(201)
+  })
+
+  it('refuses an unknown role on an edit too', async () => {
+    const created = await closedRouter().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['viewer'] }),
+      admin,
+    )
+    const id = dataOf<{ id: string }>(created).id
+    const response = await closedRouter().handle(
+      request('PATCH', `/api/api-keys/${id}`, { scope: ['nimportequoi'] }),
+      admin,
+    )
+    expect(response.status).toBe(400)
+    expect((await auth.apiKeys.getById(id))?.scope).toEqual(['viewer'])
+  })
+
+  it('lists the roles to choose from, to an admin only', async () => {
+    const listed = await closedRouter().handle(request('GET', '/api/api-keys/roles'), admin)
+    expect(listed.status).toBe(200)
+    expect(dataOf<{ roles: string[] }>(listed).roles).toEqual(['admin', 'editor', 'viewer'])
+
+    const refused = await closedRouter().handle(
+      request('GET', '/api/api-keys/roles'),
+      actorFor('e-1', ['editor']),
+    )
+    expect(refused.status).toBe(403)
+  })
+
+  it('says the list is open when the host gives none', async () => {
+    const listed = await router().handle(request('GET', '/api/api-keys/roles'), admin)
+    expect(dataOf<{ roles: string[] | null }>(listed).roles).toBeNull()
+  })
+})
+
+describe('machine identities never manage keys', () => {
+  it('refuses an admin-scoped API key creating, editing, rotating or revoking a key', async () => {
+    const created = await router().handle(
+      request('POST', '/api/api-keys', { name: 'seed', scope: ['viewer'] }),
+      admin,
+    )
+    const id = dataOf<{ id: string }>(created).id
+    const machine = actorFor('apikey:01-machine', ['admin'])
+
+    for (const [method, path, body] of [
+      ['POST', '/api/api-keys', { name: 'x', scope: ['admin'], neverExpires: true }],
+      ['PATCH', `/api/api-keys/${id}`, { scope: ['admin'] }],
+      ['POST', `/api/api-keys/${id}/rotate`, {}],
+      ['DELETE', `/api/api-keys/${id}`, undefined],
+    ] as const) {
+      const response = await router().handle(request(method, path, body), machine)
+      expect(response.status, `${method} ${path}`).toBe(403)
+    }
+    expect(await auth.apiKeys.list()).toHaveLength(1)
+  })
+
+  it('still lets an admin-scoped key list keys and roles', async () => {
+    const machine = actorFor('apikey:01-machine', ['admin'])
+    expect((await router().handle(request('GET', '/api/api-keys'), machine)).status).toBe(200)
+  })
+})

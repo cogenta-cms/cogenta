@@ -142,10 +142,12 @@
 }
 
 .auth-layout__glow--c {
-  top: 35%;
-  right: 8%;
-  width: 16rem;
-  height: 16rem;
+  /* Kept clear of the tagline and the three chips (left half of the rail): a
+     ring running through text lowers its contrast. */
+  top: 58%;
+  right: -7rem;
+  width: 18rem;
+  height: 18rem;
   border: 2px solid var(--rail-glow);
   opacity: 0.5;
   animation: auth-drift-c 15s ease-in-out infinite alternate;

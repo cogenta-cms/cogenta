@@ -2,7 +2,7 @@ import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AssistCapability, AssistSuggestion } from '../api/assist-client.js'
 import { getAssistCapabilities, runAssistTool } from '../api/assist-client.js'
-import { ApiError } from '../api/client.js'
+import { describeApiError } from '../api/describe-error.js'
 import { Button, Card, CardBody, CardHeader, CardTitle, Input, Label, Notice } from '../ui/index.js'
 import { toolDescription, toolLabel } from './tool-text.js'
 
@@ -114,7 +114,7 @@ export function AssistantPanel({
       }
       setResult({ tool: tool.tool, suggestion: await runAssistTool(token, tool.tool, input) })
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('assist.runError'))
+      setError(describeApiError(caught, t('assist.runError')).message)
     } finally {
       setRunning(null)
     }

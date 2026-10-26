@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { ApiError, getPasswordPolicy, resetPassword } from '../api/client.js'
 import { AuthLayout } from '../auth/auth-layout.js'
-import { Button, Card, CardBody, Field, Input, Notice } from '../ui/index.js'
+import { PasswordInput } from '../auth/password-input.js'
+import { useDocumentTitle } from '../shell/use-document-title.js'
+import { Button, Card, CardBody, Field, Notice } from '../ui/index.js'
 
 /** The floor this screen falls back to before `getPasswordPolicy()` answers — matches the server's own default (`password-policy.ts`), never a guess that could be wrong. */
 const DEFAULT_MIN_LENGTH = 12
@@ -19,6 +21,7 @@ const DEFAULT_MIN_LENGTH = 12
  */
 export function ResetPasswordRoute(): JSX.Element {
   const { t } = useTranslation()
+  useDocumentTitle(t('resetPassword.pageTitle'))
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
@@ -26,6 +29,10 @@ export function ResetPasswordRoute(): JSX.Element {
   const [newPassword, setNewPassword] = useState('')
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // A link that no longer works is not a typo in the password: the person has
+  // to ask for a new one, so the notice carries the way to do it.
+  const [linkRejected, setLinkRejected] = useState(false)
+  const [fieldError, setFieldError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   // Fiche 18 task 3: fetched rather than recopied by hand, so the floor
   // announced here can never drift from what the server actually enforces.
@@ -40,12 +47,29 @@ export function ResetPasswordRoute(): JSX.Element {
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
     setError(null)
+    setLinkRejected(false)
+    if (newPassword === '') {
+      setFieldError(t('auth.passwordRequired'))
+      return
+    }
+    if (newPassword.length < minLength) {
+      setFieldError(t('resetPassword.tooShort', { count: minLength }))
+      return
+    }
+    setFieldError(null)
     setSubmitting(true)
     try {
       await resetPassword(token, newPassword)
       setDone(true)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('resetPassword.error'))
+      if (caught instanceof ApiError && caught.code === 'AUTH_RESET_TOKEN_INVALID') {
+        // The server's wording is English and technical; the screen's own
+        // sentence says what to do about it.
+        setLinkRejected(true)
+        setError(t('resetPassword.linkInvalid'))
+      } else {
+        setError(caught instanceof ApiError ? caught.message : t('resetPassword.error'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -56,13 +80,21 @@ export function ResetPasswordRoute(): JSX.Element {
       <AuthLayout>
         <Card className="reveal w-full max-w-sm rounded-xl shadow-raised">
           <CardBody>
-            <h1>{t('resetPassword.heading')}</h1>
+            <h1 className="m-0 text-xl leading-7 font-semibold tracking-tight">
+              {t('resetPassword.heading')}
+            </h1>
             <Notice tone="danger" live="assertive">
               <p>{t('resetPassword.missingToken')}</p>
             </Notice>
+            <Link
+              to="/forgot-password"
+              className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground no-underline hover:opacity-90"
+            >
+              {t('resetPassword.requestNewLink')}
+            </Link>
             <p className="m-0 text-center text-sm">
-              <Link to="/forgot-password" className="text-primary hover:underline">
-                {t('forgotPassword.heading')}
+              <Link to="/login" className="text-primary hover:underline">
+                {t('forgotPassword.backToLogin')}
               </Link>
             </p>
           </CardBody>
@@ -96,21 +128,21 @@ export function ResetPasswordRoute(): JSX.Element {
           ) : (
             <form
               onSubmit={submit}
+              noValidate
               aria-labelledby="reset-password-heading"
               className="flex flex-col gap-4"
             >
               <Field
                 label={t('resetPassword.newPassword')}
                 description={t('resetPassword.hint', { minLength })}
+                error={fieldError}
               >
                 {(control) => (
-                  <Input
+                  <PasswordInput
                     {...control}
                     name="new-password"
-                    type="password"
                     autoComplete="new-password"
                     required
-                    minLength={minLength}
                     value={newPassword}
                     onChange={(event) => setNewPassword(event.target.value)}
                     className="h-11"
@@ -129,7 +161,7 @@ export function ResetPasswordRoute(): JSX.Element {
                   {newPassword.length >= minLength
                     ? t('resetPassword.strengthOk')
                     : t('resetPassword.strengthShort', {
-                        remaining: minLength - newPassword.length,
+                        count: minLength - newPassword.length,
                       })}
                 </p>
               )}
@@ -138,11 +170,24 @@ export function ResetPasswordRoute(): JSX.Element {
                   <p>{error}</p>
                 </Notice>
               )}
+              {linkRejected && (
+                <Link
+                  to="/forgot-password"
+                  className="text-center text-sm text-primary hover:underline"
+                >
+                  {t('resetPassword.requestNewLink')}
+                </Link>
+              )}
               <Button type="submit" disabled={submitting} className="h-11 rounded-full">
                 {t('resetPassword.submit')}
               </Button>
             </form>
           )}
+          <p className="m-0 text-center text-sm">
+            <Link to="/login" className="text-primary hover:underline">
+              {t('forgotPassword.backToLogin')}
+            </Link>
+          </p>
         </CardBody>
       </Card>
     </AuthLayout>

@@ -1,13 +1,28 @@
 import { type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { ApiError } from '../api/client.js'
 import type { Entry, TranslationMatrixEntry } from '../api/content-client.js'
 import { getTranslationMatrix } from '../api/content-client.js'
+import { describeApiError } from '../api/describe-error.js'
 import { useAuth } from '../auth/auth-context.js'
 import { readableCollections } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
 import type { CollectionSummary } from '../schema/types.js'
+import { languageName } from '../search/result-labels.js'
+import {
+  Button,
+  Card,
+  CardBody,
+  Field,
+  Notice,
+  PageHeader,
+  Select,
+  Table,
+  TableHead,
+  TableHeader,
+  TableRoot,
+  TableRow,
+} from '../ui/index.js'
 
 /**
  * The translation dashboard (fiche 10 task 1): one screen answering "what is
@@ -23,7 +38,7 @@ import type { CollectionSummary } from '../schema/types.js'
  * that way, or an editor learns to ignore it.
  */
 export function TranslationsRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const schemaState = useSchema()
 
@@ -59,7 +74,7 @@ export function TranslationsRoute(): JSX.Element {
         setCursor(page.nextCursor)
         setHasMore(page.hasMore)
       } catch (caught) {
-        setError(caught instanceof ApiError ? caught.message : t('translationDashboard.loadError'))
+        setError(describeApiError(caught, t('translationDashboard.loadError')).message)
       } finally {
         setLoading(false)
       }
@@ -80,68 +95,86 @@ export function TranslationsRoute(): JSX.Element {
   }, [token, current])
 
   return (
-    <section aria-labelledby="translations-dashboard-heading">
-      <h1 id="translations-dashboard-heading">{t('translationDashboard.heading')}</h1>
-      <p>{t('translationDashboard.intro')}</p>
+    <section aria-labelledby="translations-dashboard-heading" className="flex flex-col gap-6">
+      <PageHeader
+        id="translations-dashboard-heading"
+        title={t('translationDashboard.heading')}
+        description={t('translationDashboard.intro')}
+      />
 
       {collections.length === 0 ? (
         <p>{t('translationDashboard.noCollections')}</p>
       ) : locales.length < 2 ? (
-        <p>{t('translationDashboard.singleLocaleNote')}</p>
+        <Notice tone="info">
+          <p>
+            {t('translationDashboard.singleLocaleNote')}{' '}
+            <Link to="/settings">{t('translationDashboard.singleLocaleLink')}</Link>
+          </p>
+        </Notice>
       ) : (
         <>
-          <label htmlFor="translations-collection">
-            {t('translationDashboard.collectionLabel')}
-          </label>{' '}
-          <select
-            id="translations-collection"
-            value={current ?? ''}
-            onChange={(event) => setSelected(event.target.value)}
-          >
-            {collections.map((collection) => (
-              <option key={collection.name} value={collection.name}>
-                {collection.labels.plural}
-              </option>
-            ))}
-          </select>
-          {error !== null && <p role="alert">{error}</p>}
-          {currentCollection !== undefined && (
-            <table>
-              <caption className="sr-only">{currentCollection.labels.plural}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t('translationDashboard.entry')}</th>
-                  {locales.map((locale) => (
-                    <th scope="col" key={locale}>
-                      {locale}
-                    </th>
+          <div className="max-w-xs">
+            <Field label={t('translationDashboard.collectionLabel')}>
+              {(control) => (
+                <Select
+                  {...control}
+                  value={current ?? ''}
+                  onChange={(event) => setSelected(event.target.value)}
+                >
+                  {collections.map((collection) => (
+                    <option key={collection.name} value={collection.name}>
+                      {collection.labels.plural}
+                    </option>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.root.id}>
-                    <th scope="row">{titleOf(row.root)}</th>
+                </Select>
+              )}
+            </Field>
+          </div>
+          {error !== null && (
+            <Notice tone="danger" live="assertive">
+              <p>{error}</p>
+            </Notice>
+          )}
+          {currentCollection !== undefined && (
+            <TableRoot label={currentCollection.labels.plural}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>{t('translationDashboard.entry')}</TableHeader>
                     {locales.map((locale) => (
-                      <td key={locale}>
-                        <MatrixCell
-                          collection={current as string}
-                          locale={locale}
-                          root={row.root}
-                          cell={row.cells[locale] ?? null}
-                        />
-                      </td>
+                      <TableHeader key={locale}>{languageName(locale, i18n.language)}</TableHeader>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  </TableRow>
+                </TableHead>
+                <tbody>
+                  {rows.map((row) => (
+                    <TableRow key={row.root.id}>
+                      <th scope="row" className="px-4 py-3 text-left font-medium">
+                        {titleOf(row.root)}
+                      </th>
+                      {locales.map((locale) => (
+                        <td key={locale} className="px-4 py-3">
+                          <MatrixCell
+                            collection={current as string}
+                            locale={locale}
+                            root={row.root}
+                            cell={row.cells[locale] ?? null}
+                          />
+                        </td>
+                      ))}
+                    </TableRow>
+                  ))}
+                </tbody>
+              </Table>
+            </TableRoot>
           )}
           {loading && <p>{t('common.loading')}</p>}
           {hasMore && !loading && (
-            <button type="button" onClick={() => void load(true)}>
-              {t('translationDashboard.loadMore')}
-            </button>
+            <div>
+              <Button type="button" variant="secondary" onClick={() => void load(true)}>
+                {t('translationDashboard.loadMore')}
+              </Button>
+            </div>
           )}
         </>
       )}

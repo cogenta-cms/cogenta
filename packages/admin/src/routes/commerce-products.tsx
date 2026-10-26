@@ -3,32 +3,28 @@ import { useTranslation } from 'react-i18next'
 import {
   archiveProduct,
   createProduct,
-  createVariant,
-  deleteVariant,
   listProducts,
-  listStockMovements,
   type Product,
   type ProductTerm,
   readProduct,
-  type StockMovement,
-  setStock,
   updateProduct,
-  updateVariant,
   type Variant,
 } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
 import { useAuth } from '../auth/auth-context.js'
 import { BulkPriceModal } from '../commerce/bulk-price-modal.js'
+import { commerceErrorMessage } from '../commerce/commerce-errors.js'
+import { ConfirmDialog } from '../commerce/confirm-dialog.js'
+import { DialogError } from '../commerce/dialog-error.js'
 import { LowStockPanel } from '../commerce/low-stock-panel.js'
-import { formatMinor, majorTextToMinor, minorToMajorText } from '../commerce/money.js'
 import { ProductCategoryPicker } from '../commerce/product-category-picker.js'
 import { ProductContentLink } from '../commerce/product-content-link.js'
 import { ProductImagesField } from '../commerce/product-images-field.js'
 import { ProductImportExportPanel } from '../commerce/product-import-export-panel.js'
-import { VariantImageField } from '../commerce/variant-image-field.js'
+import { VariantsManager } from '../commerce/variants-manager.js'
 import { slugify } from '../lib/slugify.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
 import {
+  Badge,
   Button,
   Field,
   Input,
@@ -47,6 +43,7 @@ import {
 } from '../ui/index.js'
 
 const PAGE_SIZE = 25
+const HANDLE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 
 type SortOption =
   | 'createdAt_desc'
@@ -139,7 +136,15 @@ export function CommerceProductsRoute(): JSX.Element {
 
   const [editing, setEditing] = useState<Product | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [editHandle, setEditHandle] = useState('')
   const [editStatus, setEditStatus] = useState<'active' | 'archived'>('active')
+
+  // Every refusal is shown in the dialog that raised it (a banner on the page
+  // would sit behind the dialog's backdrop and never be seen).
+  const [fieldErrors, setFieldErrors] = useState<Readonly<Record<string, string>>>({})
+  const [dialogError, setDialogError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [toArchive, setToArchive] = useState<Product | null>(null)
 
   const [managing, setManaging] = useState<Product | null>(null)
 
@@ -177,7 +182,7 @@ export function CommerceProductsRoute(): JSX.Element {
           ...Object.fromEntries(entries.map(([id, , terms]) => [id, terms])),
         }))
       } catch (caught) {
-        setError(caught instanceof ApiError ? caught.message : t('commerceProducts.loadError'))
+        setError(commerceErrorMessage(t, caught, 'commerceProducts.loadError'))
       } finally {
         setLoading(false)
         setLoadingMore(false)
@@ -197,64 +202,135 @@ export function CommerceProductsRoute(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, canRead, statusFilter, search, sortOption])
 
+  function validateHandle(handle: string): string | null {
+    if (handle.trim() === '') return t('commerceProducts.handleRequired')
+    return HANDLE_PATTERN.test(handle.trim()) ? null : t('commerceProducts.handleInvalid')
+  }
+
+  function openCreate(): void {
+    setCreating(true)
+    setNewHandle('')
+    setNewTitle('')
+    setHandleTouched(false)
+    setFieldErrors({})
+    setDialogError(null)
+  }
+
   async function submitCreate(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null) return
-    setActionError(null)
+    const found: Record<string, string> = {}
+    if (newTitle.trim() === '') found['title'] = t('commerceProducts.titleRequired')
+    const handleProblem = validateHandle(newHandle)
+    if (handleProblem !== null) found['handle'] = handleProblem
+    setFieldErrors(found)
+    if (Object.keys(found).length > 0) {
+      setDialogError(t('commerceProducts.fixErrors'))
+      return
+    }
+    setBusy(true)
+    setDialogError(null)
     setActionNotice(null)
     try {
-      const product = await createProduct(token, { handle: newHandle, title: newTitle })
+      const product = await createProduct(token, {
+        handle: newHandle.trim(),
+        title: newTitle.trim(),
+      })
       setCreating(false)
-      setNewHandle('')
-      setNewTitle('')
-      setHandleTouched(false)
       setActionNotice(t('commerceProducts.createSuccess', { title: product.title }))
       await load(false)
+      // The next step is always the variants: a product with none cannot be sold.
+      setManaging(product)
     } catch (caught) {
-      setActionError(
-        caught instanceof ApiError ? caught.message : t('commerceProducts.createError'),
-      )
+      const message = commerceErrorMessage(t, caught, 'commerceProducts.createError')
+      setDialogError(message)
+      if (
+        caught instanceof Error &&
+        'code' in caught &&
+        caught.code === 'COMMERCE_PRODUCT_HANDLE_TAKEN'
+      ) {
+        setFieldErrors({ handle: message })
+      }
+    } finally {
+      setBusy(false)
     }
   }
 
   function openEdit(product: Product): void {
     setEditing(product)
     setEditTitle(product.title)
+    setEditHandle(product.handle)
     setEditStatus(product.status)
+    setFieldErrors({})
+    setDialogError(null)
   }
 
   async function submitEdit(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null || editing === null) return
-    setActionError(null)
+    const found: Record<string, string> = {}
+    if (editTitle.trim() === '') found['title'] = t('commerceProducts.titleRequired')
+    const handleProblem = validateHandle(editHandle)
+    if (handleProblem !== null) found['handle'] = handleProblem
+    setFieldErrors(found)
+    if (Object.keys(found).length > 0) {
+      setDialogError(t('commerceProducts.fixErrors'))
+      return
+    }
+    setBusy(true)
+    setDialogError(null)
     setActionNotice(null)
     try {
       const product = await updateProduct(token, editing.id, {
-        title: editTitle,
+        title: editTitle.trim(),
+        handle: editHandle.trim(),
         status: editStatus,
       })
       setEditing(null)
       setActionNotice(t('commerceProducts.updateSuccess', { title: product.title }))
       await load(false)
     } catch (caught) {
-      setActionError(
-        caught instanceof ApiError ? caught.message : t('commerceProducts.updateError'),
-      )
+      const message = commerceErrorMessage(t, caught, 'commerceProducts.updateError')
+      setDialogError(message)
+      if (
+        caught instanceof Error &&
+        'code' in caught &&
+        caught.code === 'COMMERCE_PRODUCT_HANDLE_TAKEN'
+      ) {
+        setFieldErrors({ handle: message })
+      }
+    } finally {
+      setBusy(false)
     }
   }
 
-  async function archive(product: Product): Promise<void> {
+  async function confirmArchive(): Promise<void> {
+    if (token === null || toArchive === null) return
+    setBusy(true)
+    setDialogError(null)
+    setActionNotice(null)
+    try {
+      await archiveProduct(token, toArchive.id)
+      setActionNotice(t('commerceProducts.archiveSuccess', { title: toArchive.title }))
+      setToArchive(null)
+      await load(false)
+    } catch (caught) {
+      setDialogError(commerceErrorMessage(t, caught, 'commerceProducts.updateError'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function reactivate(product: Product): Promise<void> {
     if (token === null) return
     setActionError(null)
     setActionNotice(null)
     try {
-      await archiveProduct(token, product.id)
-      setActionNotice(t('commerceProducts.archiveSuccess', { title: product.title }))
+      await updateProduct(token, product.id, { status: 'active' })
+      setActionNotice(t('commerceProducts.reactivateSuccess', { title: product.title }))
       await load(false)
     } catch (caught) {
-      setActionError(
-        caught instanceof ApiError ? caught.message : t('commerceProducts.updateError'),
-      )
+      setActionError(commerceErrorMessage(t, caught, 'commerceProducts.updateError'))
     }
   }
 
@@ -294,9 +370,7 @@ export function CommerceProductsRoute(): JSX.Element {
       setActionNotice(t('commerceProducts.bulkArchiveSuccess', { count: selectedLines.length }))
       await load(false)
     } catch (caught) {
-      setActionError(
-        caught instanceof ApiError ? caught.message : t('commerceProducts.updateError'),
-      )
+      setActionError(commerceErrorMessage(t, caught, 'commerceProducts.updateError'))
     } finally {
       setBulkBusy(false)
     }
@@ -327,7 +401,7 @@ export function CommerceProductsRoute(): JSX.Element {
           <Button variant="secondary" onClick={() => setShowImportExport((current) => !current)}>
             {t('commerceProducts.importExportToggle')}
           </Button>
-          <Button onClick={() => setCreating(true)}>{t('commerceProducts.newButton')}</Button>
+          <Button onClick={openCreate}>{t('commerceProducts.newButton')}</Button>
         </div>
       </div>
 
@@ -428,7 +502,7 @@ export function CommerceProductsRoute(): JSX.Element {
           {loading && <p>{t('common.loading')}</p>}
 
           {!loading && error === null && (
-            <TableRoot label={t('commerceProducts.tableLabel')}>
+            <TableRoot label={t('commerceProducts.tableLabel')} stacked>
               <Table>
                 <TableHead>
                   <TableRow>
@@ -443,7 +517,6 @@ export function CommerceProductsRoute(): JSX.Element {
                     <TableHeader>{t('commerceProducts.imageColumn')}</TableHeader>
                     <TableHeader>{t('commerceProducts.titleColumn')}</TableHeader>
                     <TableHeader>{t('commerceProducts.handleColumn')}</TableHeader>
-                    <TableHeader>{t('commerceProducts.contentColumn')}</TableHeader>
                     <TableHeader>{t('commerceProducts.variantsColumn')}</TableHeader>
                     <TableHeader>{t('commerceProducts.stockColumn')}</TableHeader>
                     <TableHeader>{t('commerceProducts.statusColumn')}</TableHeader>
@@ -456,7 +529,7 @@ export function CommerceProductsRoute(): JSX.Element {
                     const totalStock = variants.reduce((sum, variant) => sum + variant.onHand, 0)
                     return (
                       <TableRow key={product.id}>
-                        <TableCell>
+                        <TableCell stack="select">
                           <input
                             type="checkbox"
                             aria-label={t('commerceProducts.bulkSelectOne', {
@@ -466,7 +539,7 @@ export function CommerceProductsRoute(): JSX.Element {
                             onChange={() => toggleSelected(product.id)}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell label={t('commerceProducts.imageColumn')}>
                           {product.imageMediaIds[0] === undefined || token === null ? (
                             <span
                               className="media-thumbnail media-thumbnail--placeholder"
@@ -481,41 +554,69 @@ export function CommerceProductsRoute(): JSX.Element {
                             />
                           )}
                         </TableCell>
-                        <TableCell>{product.title}</TableCell>
-                        <TableCell>{product.handle}</TableCell>
-                        <TableCell>
-                          {product.contentRef === null
-                            ? t('commerceProducts.contentUnlinkedShort')
-                            : t('commerceProducts.contentLinkedShort')}
+                        <TableCell stack="heading">{product.title}</TableCell>
+                        <TableCell label={t('commerceProducts.handleColumn')}>
+                          <span className="text-muted-foreground">{product.handle}</span>
                         </TableCell>
-                        <TableCell>
-                          {t('commerceProducts.variantCount', { count: variants.length })}
+                        <TableCell label={t('commerceProducts.variantsColumn')}>
+                          {variants.length === 0 ? (
+                            <Badge tone="warning">{t('commerceProducts.noVariantBadge')}</Badge>
+                          ) : (
+                            t('commerceProducts.variantCount', { count: variants.length })
+                          )}
                         </TableCell>
-                        <TableCell>{totalStock}</TableCell>
-                        <TableCell>
-                          {product.status === 'active'
-                            ? t('commerceProducts.active')
-                            : t('commerceProducts.archived')}
+                        <TableCell label={t('commerceProducts.stockColumn')}>
+                          {totalStock}
                         </TableCell>
-                        <TableCell>
+                        <TableCell label={t('commerceProducts.statusColumn')}>
+                          <Badge tone={product.status === 'active' ? 'success' : 'neutral'}>
+                            {product.status === 'active'
+                              ? t('commerceProducts.active')
+                              : t('commerceProducts.archived')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell stack="actions">
                           <div className="flex flex-wrap gap-2">
                             <Button
                               variant="secondary"
                               size="sm"
+                              aria-label={t('commerceProducts.manageVariantsOf', {
+                                title: product.title,
+                              })}
                               onClick={() => setManaging(product)}
                             >
                               {t('commerceProducts.manageVariants')}
                             </Button>
-                            <Button variant="secondary" size="sm" onClick={() => openEdit(product)}>
-                              {t('commerceProducts.edit', { title: product.title })}
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              aria-label={t('commerceProducts.edit', { title: product.title })}
+                              onClick={() => openEdit(product)}
+                            >
+                              {t('commerceProducts.editShort')}
                             </Button>
-                            {product.status === 'active' && (
+                            {product.status === 'active' ? (
                               <Button
-                                variant="destructive"
+                                variant="ghost"
                                 size="sm"
-                                onClick={() => void archive(product)}
+                                aria-label={t('commerceProducts.archive', { title: product.title })}
+                                onClick={() => {
+                                  setDialogError(null)
+                                  setToArchive(product)
+                                }}
                               >
-                                {t('commerceProducts.archive', { title: product.title })}
+                                {t('commerceProducts.archiveShort')}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                aria-label={t('commerceProducts.reactivate', {
+                                  title: product.title,
+                                })}
+                                onClick={() => void reactivate(product)}
+                              >
+                                {t('commerceProducts.reactivateShort')}
                               </Button>
                             )}
                           </div>
@@ -524,7 +625,7 @@ export function CommerceProductsRoute(): JSX.Element {
                     )
                   })}
                   {products.length === 0 && (
-                    <TableEmpty colSpan={9}>{t('commerceProducts.empty')}</TableEmpty>
+                    <TableEmpty colSpan={8}>{t('commerceProducts.empty')}</TableEmpty>
                   )}
                 </TableBody>
               </Table>
@@ -548,14 +649,29 @@ export function CommerceProductsRoute(): JSX.Element {
         open={creating}
         onOpenChange={setCreating}
         title={t('commerceProducts.newHeading')}
-        closeLabel={t('commerceProducts.close')}
+        description={t('commerceProducts.newIntro')}
+        closeLabel={t('common.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCreating(false)} disabled={busy}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" form="product-create-form" disabled={busy}>
+              {t('commerceProducts.createButton')}
+            </Button>
+          </>
+        }
       >
-        <form onSubmit={submitCreate} className="flex flex-col gap-4">
-          <Field label={t('commerceProducts.titleColumn')}>
+        <form
+          id="product-create-form"
+          noValidate
+          onSubmit={(event) => void submitCreate(event)}
+          className="flex flex-col gap-4"
+        >
+          <Field label={t('commerceProducts.titleColumn')} error={fieldErrors['title'] ?? null}>
             {(control) => (
               <Input
                 {...control}
-                required
                 value={newTitle}
                 onChange={(event) => {
                   const value = event.target.value
@@ -568,11 +684,11 @@ export function CommerceProductsRoute(): JSX.Element {
           <Field
             label={t('commerceProducts.handleColumn')}
             description={t('commerceProducts.handleHint')}
+            error={fieldErrors['handle'] ?? null}
           >
             {(control) => (
               <Input
                 {...control}
-                required
                 value={newHandle}
                 onChange={(event) => {
                   setHandleTouched(true)
@@ -581,13 +697,10 @@ export function CommerceProductsRoute(): JSX.Element {
               />
             )}
           </Field>
-          <p className="text-sm">{t('commerceProducts.variantsAfterCreate')}</p>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setCreating(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit">{t('commerceProducts.createButton')}</Button>
-          </div>
+          <p className="m-0 text-sm text-muted-foreground">
+            {t('commerceProducts.variantsAfterCreate')}
+          </p>
+          <DialogError message={dialogError} />
         </form>
       </Modal>
 
@@ -597,17 +710,46 @@ export function CommerceProductsRoute(): JSX.Element {
           if (!open) setEditing(null)
         }}
         title={t('commerceProducts.editHeading', { title: editing?.title ?? '' })}
-        closeLabel={t('commerceProducts.close')}
+        description={t('commerceProducts.editIntro')}
+        closeLabel={t('common.close')}
+        className="w-[min(36rem,calc(100vw-2rem))]"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)} disabled={busy}>
+              {t('commerceProducts.closeEdit')}
+            </Button>
+            <Button type="submit" form="product-edit-form" disabled={busy}>
+              {t('commerceProducts.saveButton')}
+            </Button>
+          </>
+        }
       >
         <div className="flex flex-col gap-6">
-          <form onSubmit={submitEdit} className="flex flex-col gap-4">
-            <Field label={t('commerceProducts.titleColumn')}>
+          <form
+            id="product-edit-form"
+            noValidate
+            onSubmit={(event) => void submitEdit(event)}
+            className="flex flex-col gap-4"
+          >
+            <Field label={t('commerceProducts.titleColumn')} error={fieldErrors['title'] ?? null}>
               {(control) => (
                 <Input
                   {...control}
-                  required
                   value={editTitle}
                   onChange={(event) => setEditTitle(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field
+              label={t('commerceProducts.handleColumn')}
+              description={t('commerceProducts.handleEditHint')}
+              error={fieldErrors['handle'] ?? null}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  value={editHandle}
+                  onChange={(event) => setEditHandle(event.target.value)}
                 />
               )}
             </Field>
@@ -623,16 +765,11 @@ export function CommerceProductsRoute(): JSX.Element {
                 </Select>
               )}
             </Field>
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setEditing(null)}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit">{t('commerceProducts.saveButton')}</Button>
-            </div>
+            <DialogError message={dialogError} />
           </form>
 
           {editing !== null && token !== null && (
-            <div className="flex flex-col gap-2 border-t pt-4">
+            <div className="flex flex-col gap-2 border-t border-border pt-4">
               <h3 className="m-0 text-sm font-semibold">{t('commerceProducts.imagesHeading')}</h3>
               <ProductImagesField
                 token={token}
@@ -646,7 +783,7 @@ export function CommerceProductsRoute(): JSX.Element {
           )}
 
           {editing !== null && token !== null && (
-            <div className="flex flex-col gap-2 border-t pt-4">
+            <div className="flex flex-col gap-2 border-t border-border pt-4">
               <h3 className="m-0 text-sm font-semibold">{t('commerceProducts.contentHeading')}</h3>
               <ProductContentLink
                 token={token}
@@ -660,7 +797,7 @@ export function CommerceProductsRoute(): JSX.Element {
           )}
 
           {editing !== null && token !== null && (
-            <div className="flex flex-col gap-2 border-t pt-4">
+            <div className="flex flex-col gap-2 border-t border-border pt-4">
               <h3 className="m-0 text-sm font-semibold">{t('commerceProducts.categoryHeading')}</h3>
               <ProductCategoryPicker
                 token={token}
@@ -675,8 +812,23 @@ export function CommerceProductsRoute(): JSX.Element {
         </div>
       </Modal>
 
+      <ConfirmDialog
+        open={toArchive !== null}
+        title={t('commerceProducts.archiveTitle')}
+        confirmLabel={t('commerceProducts.archiveConfirm')}
+        destructive={false}
+        busy={busy}
+        error={dialogError}
+        onCancel={() => setToArchive(null)}
+        onConfirm={() => void confirmArchive()}
+      >
+        <p className="m-0">
+          {t('commerceProducts.archiveBody', { title: toArchive?.title ?? '' })}
+        </p>
+      </ConfirmDialog>
+
       {managing !== null && token !== null && (
-        <VariantsModal
+        <VariantsManager
           product={managing}
           token={token}
           variants={variantsByProduct[managing.id] ?? []}
@@ -702,7 +854,7 @@ export function CommerceProductsRoute(): JSX.Element {
         open={bulkArchiveOpen}
         onOpenChange={setBulkArchiveOpen}
         title={t('commerceProducts.bulkArchiveHeading')}
-        closeLabel={t('commerceProducts.close')}
+        closeLabel={t('common.close')}
       >
         <div className="flex flex-col gap-4">
           <p>{t('commerceProducts.bulkArchiveConfirm', { count: selected.size })}</p>
@@ -721,662 +873,5 @@ export function CommerceProductsRoute(): JSX.Element {
         </div>
       </Modal>
     </section>
-  )
-}
-
-interface VariantsModalProps {
-  readonly product: Product
-  readonly token: string
-  readonly variants: readonly Variant[]
-  readonly onClose: () => void
-  readonly onChanged: () => Promise<void>
-}
-
-/** Blank means "leave as is" on edit, "not set" on add — the input never carries a literal `0` or `null` the admin did not type. */
-interface VariantFormState {
-  sku: string
-  title: string
-  price: string
-  currency: string
-  stock: string
-  allowBackorder: boolean
-  weightGrams: string
-  taxCategory: string
-  lowStockThreshold: string
-  comparePrice: string
-  saleStartsAt: string
-  saleEndsAt: string
-  widthMm: string
-  heightMm: string
-  depthMm: string
-}
-
-const EMPTY_VARIANT_FORM: VariantFormState = {
-  sku: '',
-  title: '',
-  price: '',
-  currency: 'EUR',
-  stock: '0',
-  allowBackorder: false,
-  weightGrams: '',
-  taxCategory: '',
-  lowStockThreshold: '',
-  comparePrice: '',
-  saleStartsAt: '',
-  saleEndsAt: '',
-  widthMm: '',
-  heightMm: '',
-  depthMm: '',
-}
-
-function variantFormFrom(variant: Variant): VariantFormState {
-  return {
-    sku: variant.sku,
-    title: variant.title,
-    price: minorToMajorText(variant.priceMinor, variant.currency),
-    currency: variant.currency,
-    stock: String(variant.onHand),
-    allowBackorder: variant.allowBackorder,
-    weightGrams: String(variant.weightGrams),
-    taxCategory: variant.taxCategory,
-    lowStockThreshold: variant.lowStockThreshold === null ? '' : String(variant.lowStockThreshold),
-    comparePrice:
-      variant.compareAtPriceMinor === null
-        ? ''
-        : minorToMajorText(variant.compareAtPriceMinor, variant.currency),
-    saleStartsAt: variant.saleStartsAt ?? '',
-    saleEndsAt: variant.saleEndsAt ?? '',
-    widthMm: variant.widthMm === null ? '' : String(variant.widthMm),
-    heightMm: variant.heightMm === null ? '' : String(variant.heightMm),
-    depthMm: variant.depthMm === null ? '' : String(variant.depthMm),
-  }
-}
-
-/** `''` → `null` (cleared), a number string → that integer, anything unparsable → `undefined` (refused, caller shows an error). */
-function parseNullableInt(text: string): number | null | undefined {
-  if (text.trim() === '') return null
-  const value = Number(text)
-  return Number.isInteger(value) && value >= 0 ? value : undefined
-}
-
-/**
- * A product's real model: a whole list of variants, each its own SKU, price,
- * stock and backorder flag, plus the fiche 51 extras (low-stock threshold,
- * a promo price and window, and dimensions). Stock always goes through its
- * own route (never a field on the edit form) — the same rule the
- * single-variant screen already followed, now applied per row instead of once.
- */
-function VariantsModal(props: VariantsModalProps): JSX.Element {
-  const { t, i18n } = useTranslation()
-  const [error, setError] = useState<string | null>(null)
-
-  const [adding, setAdding] = useState<VariantFormState>(EMPTY_VARIANT_FORM)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<VariantFormState>(EMPTY_VARIANT_FORM)
-  const [historyFor, setHistoryFor] = useState<Variant | null>(null)
-  const [history, setHistory] = useState<readonly StockMovement[]>([])
-
-  async function openHistory(variant: Variant): Promise<void> {
-    setHistoryFor(variant)
-    try {
-      const { movements } = await listStockMovements(props.token, variant.id)
-      setHistory(movements)
-    } catch {
-      setHistory([])
-    }
-  }
-
-  async function submitAdd(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    setError(null)
-    const priceMinor = majorTextToMinor(adding.price, adding.currency)
-    if (priceMinor === null) {
-      setError(t('commerceProducts.priceInvalid'))
-      return
-    }
-    const onHand = Number.parseInt(adding.stock, 10)
-    if (!Number.isFinite(onHand) || onHand < 0) {
-      setError(t('commerceProducts.stockInvalid'))
-      return
-    }
-    const lowStockThreshold = parseNullableInt(adding.lowStockThreshold)
-    const widthMm = parseNullableInt(adding.widthMm)
-    const heightMm = parseNullableInt(adding.heightMm)
-    const depthMm = parseNullableInt(adding.depthMm)
-    if (
-      lowStockThreshold === undefined ||
-      widthMm === undefined ||
-      heightMm === undefined ||
-      depthMm === undefined
-    ) {
-      setError(t('commerceProducts.dimensionInvalid'))
-      return
-    }
-    const compareAtPriceMinor =
-      adding.comparePrice.trim() === ''
-        ? null
-        : majorTextToMinor(adding.comparePrice, adding.currency)
-    if (adding.comparePrice.trim() !== '' && compareAtPriceMinor === null) {
-      setError(t('commerceProducts.priceInvalid'))
-      return
-    }
-    try {
-      await createVariant(props.token, props.product.id, {
-        sku: adding.sku,
-        title: adding.title,
-        priceMinor,
-        currency: adding.currency,
-        onHand,
-        allowBackorder: adding.allowBackorder,
-        ...(adding.weightGrams.trim() === '' ? {} : { weightGrams: Number(adding.weightGrams) }),
-        ...(adding.taxCategory.trim() === '' ? {} : { taxCategory: adding.taxCategory }),
-        lowStockThreshold,
-        compareAtPriceMinor,
-        saleStartsAt:
-          adding.saleStartsAt === '' ? null : new Date(adding.saleStartsAt).toISOString(),
-        saleEndsAt: adding.saleEndsAt === '' ? null : new Date(adding.saleEndsAt).toISOString(),
-        widthMm,
-        heightMm,
-        depthMm,
-      })
-      setAdding(EMPTY_VARIANT_FORM)
-      await props.onChanged()
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.createError'))
-    }
-  }
-
-  function openVariantEdit(variant: Variant): void {
-    setEditingId(variant.id)
-    setEditForm(variantFormFrom(variant))
-  }
-
-  async function submitVariantEdit(event: FormEvent, variant: Variant): Promise<void> {
-    event.preventDefault()
-    setError(null)
-    const priceMinor = majorTextToMinor(editForm.price, variant.currency)
-    if (priceMinor === null) {
-      setError(t('commerceProducts.priceInvalid'))
-      return
-    }
-    const onHand = Number.parseInt(editForm.stock, 10)
-    if (!Number.isFinite(onHand) || onHand < 0) {
-      setError(t('commerceProducts.stockInvalid'))
-      return
-    }
-    const lowStockThreshold = parseNullableInt(editForm.lowStockThreshold)
-    const widthMm = parseNullableInt(editForm.widthMm)
-    const heightMm = parseNullableInt(editForm.heightMm)
-    const depthMm = parseNullableInt(editForm.depthMm)
-    if (
-      lowStockThreshold === undefined ||
-      widthMm === undefined ||
-      heightMm === undefined ||
-      depthMm === undefined
-    ) {
-      setError(t('commerceProducts.dimensionInvalid'))
-      return
-    }
-    const compareAtPriceMinor =
-      editForm.comparePrice.trim() === ''
-        ? null
-        : majorTextToMinor(editForm.comparePrice, variant.currency)
-    if (editForm.comparePrice.trim() !== '' && compareAtPriceMinor === null) {
-      setError(t('commerceProducts.priceInvalid'))
-      return
-    }
-    try {
-      await updateVariant(props.token, variant.id, {
-        sku: editForm.sku,
-        title: editForm.title,
-        priceMinor,
-        allowBackorder: editForm.allowBackorder,
-        ...(editForm.weightGrams.trim() === ''
-          ? {}
-          : { weightGrams: Number(editForm.weightGrams) }),
-        ...(editForm.taxCategory.trim() === '' ? {} : { taxCategory: editForm.taxCategory }),
-        lowStockThreshold,
-        compareAtPriceMinor,
-        saleStartsAt:
-          editForm.saleStartsAt === '' ? null : new Date(editForm.saleStartsAt).toISOString(),
-        saleEndsAt: editForm.saleEndsAt === '' ? null : new Date(editForm.saleEndsAt).toISOString(),
-        widthMm,
-        heightMm,
-        depthMm,
-      })
-      if (onHand !== variant.onHand) {
-        await setStock(props.token, variant.id, onHand)
-      }
-      setEditingId(null)
-      await props.onChanged()
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.updateError'))
-    }
-  }
-
-  async function removeVariant(variant: Variant): Promise<void> {
-    setError(null)
-    try {
-      await deleteVariant(props.token, variant.id)
-      await props.onChanged()
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceProducts.updateError'))
-    }
-  }
-
-  function extraFields(
-    form: VariantFormState,
-    setForm: (updater: (current: VariantFormState) => VariantFormState) => void,
-  ): JSX.Element {
-    return (
-      <details className="flex w-full flex-col gap-3">
-        <summary className="cursor-pointer text-sm font-medium">
-          {t('commerceProducts.moreFields')}
-        </summary>
-        <div className="flex flex-wrap items-end gap-3 pt-2">
-          <Field label={t('commerceProducts.lowStockThresholdColumn')}>
-            {(control) => (
-              <Input
-                {...control}
-                type="number"
-                min={0}
-                value={form.lowStockThreshold}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, lowStockThreshold: event.target.value }))
-                }
-              />
-            )}
-          </Field>
-          <Field label={t('commerceProducts.comparePriceColumn')}>
-            {(control) => (
-              <Input
-                {...control}
-                type="text"
-                inputMode="decimal"
-                value={form.comparePrice}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, comparePrice: event.target.value }))
-                }
-              />
-            )}
-          </Field>
-          <Field label={t('commerceProducts.saleStartsColumn')}>
-            {(control) => (
-              <Input
-                {...control}
-                type="date"
-                value={form.saleStartsAt.slice(0, 10)}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, saleStartsAt: event.target.value }))
-                }
-              />
-            )}
-          </Field>
-          <Field label={t('commerceProducts.saleEndsColumn')}>
-            {(control) => (
-              <Input
-                {...control}
-                type="date"
-                value={form.saleEndsAt.slice(0, 10)}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, saleEndsAt: event.target.value }))
-                }
-              />
-            )}
-          </Field>
-          <Field label={t('commerceProducts.widthColumn')}>
-            {(control) => (
-              <Input
-                {...control}
-                type="number"
-                min={0}
-                value={form.widthMm}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, widthMm: event.target.value }))
-                }
-              />
-            )}
-          </Field>
-          <Field label={t('commerceProducts.heightColumn')}>
-            {(control) => (
-              <Input
-                {...control}
-                type="number"
-                min={0}
-                value={form.heightMm}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, heightMm: event.target.value }))
-                }
-              />
-            )}
-          </Field>
-          <Field label={t('commerceProducts.depthColumn')}>
-            {(control) => (
-              <Input
-                {...control}
-                type="number"
-                min={0}
-                value={form.depthMm}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, depthMm: event.target.value }))
-                }
-              />
-            )}
-          </Field>
-        </div>
-      </details>
-    )
-  }
-
-  return (
-    <Modal
-      open
-      onOpenChange={(open) => {
-        if (!open) props.onClose()
-      }}
-      title={t('commerceProducts.variantsHeading', { title: props.product.title })}
-      closeLabel={t('commerceProducts.close')}
-    >
-      <div className="flex flex-col gap-4">
-        {error !== null && (
-          <Notice tone="danger" live="assertive">
-            <p>{error}</p>
-          </Notice>
-        )}
-
-        <TableRoot label={t('commerceProducts.variantsHeading', { title: props.product.title })}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeader>{t('commerceProducts.imageColumn')}</TableHeader>
-                <TableHeader>{t('commerceProducts.skuColumn')}</TableHeader>
-                <TableHeader>{t('commerceProducts.variantTitleColumn')}</TableHeader>
-                <TableHeader>{t('commerceProducts.priceColumn')}</TableHeader>
-                <TableHeader>{t('commerceProducts.stockColumn')}</TableHeader>
-                <TableHeader>{t('commerceProducts.actionsColumn')}</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {props.variants.map((variant) =>
-                editingId === variant.id ? (
-                  <TableRow key={variant.id}>
-                    <TableCell colSpan={6}>
-                      <div className="mb-3 max-w-xs">
-                        <VariantImageField
-                          token={props.token}
-                          variant={variant}
-                          onChanged={props.onChanged}
-                        />
-                      </div>
-                      <form
-                        onSubmit={(event) => void submitVariantEdit(event, variant)}
-                        className="flex flex-wrap items-end gap-3"
-                      >
-                        <Field label={t('commerceProducts.skuColumn')}>
-                          {(control) => (
-                            <Input
-                              {...control}
-                              required
-                              value={editForm.sku}
-                              onChange={(event) =>
-                                setEditForm((current) => ({ ...current, sku: event.target.value }))
-                              }
-                            />
-                          )}
-                        </Field>
-                        <Field label={t('commerceProducts.variantTitleColumn')}>
-                          {(control) => (
-                            <Input
-                              {...control}
-                              required
-                              value={editForm.title}
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  title: event.target.value,
-                                }))
-                              }
-                            />
-                          )}
-                        </Field>
-                        <Field label={t('commerceProducts.priceColumn')}>
-                          {(control) => (
-                            <Input
-                              {...control}
-                              type="text"
-                              inputMode="decimal"
-                              value={editForm.price}
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  price: event.target.value,
-                                }))
-                              }
-                            />
-                          )}
-                        </Field>
-                        <Field label={t('commerceProducts.stockColumn')}>
-                          {(control) => (
-                            <Input
-                              {...control}
-                              type="number"
-                              min={0}
-                              value={editForm.stock}
-                              onChange={(event) =>
-                                setEditForm((current) => ({
-                                  ...current,
-                                  stock: event.target.value,
-                                }))
-                              }
-                            />
-                          )}
-                        </Field>
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={editForm.allowBackorder}
-                            onChange={(event) =>
-                              setEditForm((current) => ({
-                                ...current,
-                                allowBackorder: event.target.checked,
-                              }))
-                            }
-                          />
-                          {t('commerceProducts.allowBackorder')}
-                        </label>
-                        {extraFields(editForm, setEditForm)}
-                        <div className="flex gap-2">
-                          <Button variant="secondary" size="sm" onClick={() => setEditingId(null)}>
-                            {t('common.cancel')}
-                          </Button>
-                          <Button type="submit" size="sm">
-                            {t('commerceProducts.saveButton')}
-                          </Button>
-                        </div>
-                      </form>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  <TableRow key={variant.id}>
-                    <TableCell>
-                      {variant.imageMediaId === null ? (
-                        <span
-                          className="media-thumbnail media-thumbnail--placeholder"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <MediaThumbnail
-                          token={props.token}
-                          id={variant.imageMediaId}
-                          alt=""
-                          previewable
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell>{variant.sku}</TableCell>
-                    <TableCell>{variant.title}</TableCell>
-                    <TableCell>
-                      {formatMinor(variant.priceMinor, variant.currency, i18n.language)}
-                      {variant.compareAtPriceMinor !== null && (
-                        <span className="ml-1 text-muted-foreground line-through">
-                          {formatMinor(
-                            variant.compareAtPriceMinor,
-                            variant.currency,
-                            i18n.language,
-                          )}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {variant.onHand}
-                      {variant.lowStockThreshold !== null &&
-                        variant.onHand <= variant.lowStockThreshold && (
-                          <span className="ml-1 text-destructive">
-                            {t('commerceProducts.lowStockBadge')}
-                          </span>
-                        )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => openVariantEdit(variant)}
-                        >
-                          {t('commerceProducts.edit', { title: variant.title })}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void openHistory(variant)}
-                        >
-                          {t('commerceProducts.stockHistory')}
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => void removeVariant(variant)}
-                        >
-                          {t('commerceProducts.removeVariant', { title: variant.title })}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ),
-              )}
-              {props.variants.length === 0 && (
-                <TableEmpty colSpan={6}>{t('commerceProducts.noVariant')}</TableEmpty>
-              )}
-            </TableBody>
-          </Table>
-        </TableRoot>
-
-        {historyFor !== null && (
-          <div className="flex flex-col gap-2 border-t pt-4">
-            <h3 className="m-0 text-sm font-semibold">
-              {t('commerceProducts.stockHistoryHeading', { title: historyFor.title })}
-            </h3>
-            <ul className="m-0 flex flex-col gap-1 p-0 text-sm">
-              {history.map((movement) => (
-                <li key={movement.id} className="list-none">
-                  {new Date(movement.createdAt).toLocaleString(i18n.language)} —{' '}
-                  {t(`commerceProducts.movementReason.${movement.reason}`)} (
-                  {movement.delta > 0 ? '+' : ''}
-                  {movement.delta}) → {movement.balanceAfter}
-                </li>
-              ))}
-              {history.length === 0 && <li>{t('commerceProducts.stockHistoryEmpty')}</li>}
-            </ul>
-          </div>
-        )}
-
-        <form onSubmit={submitAdd} className="flex flex-col gap-3 border-t pt-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label={t('commerceProducts.skuColumn')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  required
-                  value={adding.sku}
-                  onChange={(event) =>
-                    setAdding((current) => ({ ...current, sku: event.target.value }))
-                  }
-                />
-              )}
-            </Field>
-            <Field label={t('commerceProducts.variantTitleColumn')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  required
-                  value={adding.title}
-                  onChange={(event) =>
-                    setAdding((current) => ({ ...current, title: event.target.value }))
-                  }
-                />
-              )}
-            </Field>
-            <Field label={t('commerceProducts.priceColumn')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  type="text"
-                  inputMode="decimal"
-                  required
-                  value={adding.price}
-                  onChange={(event) =>
-                    setAdding((current) => ({ ...current, price: event.target.value }))
-                  }
-                />
-              )}
-            </Field>
-            <Field label={t('commerceProducts.currencyColumn')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  required
-                  maxLength={3}
-                  value={adding.currency}
-                  onChange={(event) =>
-                    setAdding((current) => ({
-                      ...current,
-                      currency: event.target.value.toUpperCase(),
-                    }))
-                  }
-                />
-              )}
-            </Field>
-            <Field label={t('commerceProducts.stockColumn')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  type="number"
-                  min={0}
-                  required
-                  value={adding.stock}
-                  onChange={(event) =>
-                    setAdding((current) => ({ ...current, stock: event.target.value }))
-                  }
-                />
-              )}
-            </Field>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={adding.allowBackorder}
-                onChange={(event) =>
-                  setAdding((current) => ({ ...current, allowBackorder: event.target.checked }))
-                }
-              />
-              {t('commerceProducts.allowBackorder')}
-            </label>
-            <Button type="submit" size="sm">
-              {t('commerceProducts.addVariant')}
-            </Button>
-          </div>
-          {extraFields(adding, setAdding)}
-        </form>
-      </div>
-    </Modal>
   )
 }

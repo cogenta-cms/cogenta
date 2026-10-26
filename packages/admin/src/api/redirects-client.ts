@@ -143,10 +143,21 @@ export interface ImportRowOutcome {
   readonly status: number
   readonly outcome: 'create' | 'update' | 'unchanged' | 'duplicate' | 'loop'
   readonly detail?: string
+  /** For an `update`: where the rule leaves to today. */
+  readonly current?: { readonly to: string; readonly status: number }
 }
 
 export interface ImportIssue {
   readonly line: number
+  /** Stable code the admin words itself; absent from a server that predates it. */
+  readonly code?:
+    | 'empty-file'
+    | 'missing-columns'
+    | 'missing-from'
+    | 'invalid-status'
+    | 'missing-to'
+    | 'truncated'
+  readonly value?: string | number
   readonly detail: string
 }
 

@@ -100,9 +100,61 @@ export interface ImportRun {
   readonly error: string | null
 }
 
+/** What `analyzeWordPress` (`@cogenta/import`) returns, hand-mirrored — the preview of a WordPress run. */
+export interface WordPressTargetSummary {
+  readonly collection: string
+  readonly mapped: boolean
+  readonly fields: Readonly<Record<string, string>>
+  readonly unmapped: readonly string[]
+}
+
+export interface WordPressAnalysis {
+  readonly counts: {
+    readonly posts: number
+    readonly pages: number
+    readonly categories: number
+    readonly tags: number
+    readonly comments: number
+    readonly attachments: number
+  }
+  readonly targets: {
+    readonly post: WordPressTargetSummary
+    readonly page: WordPressTargetSummary
+    readonly category: string | null
+    readonly tag: string | null
+  }
+  readonly slugConflicts: readonly { readonly kind: string; readonly slug: string }[]
+  readonly ignored: readonly { readonly type: string; readonly wpId: string }[]
+  readonly warnings: readonly string[]
+}
+
+/** `analyzeGeneric` — the preview of a CSV or RSS run. */
+export interface GenericAnalysis {
+  readonly totalRecords: number
+  readonly sourceFields: readonly string[]
+  readonly proposedMapping: ImportFieldMapping
+  readonly sample: readonly Readonly<Record<string, string>>[]
+  readonly warnings: readonly string[]
+}
+
+/** `analyzeJson` — the preview of a JSON run. */
+export interface JsonAnalysis {
+  readonly totalRecords: number
+  readonly byCollection: Readonly<Record<string, number>>
+  readonly unknownCollections: readonly string[]
+  readonly warnings: readonly string[]
+}
+
 export async function analyzeImport(
   token: string,
-  input: { readonly source: ImportSource; readonly file: File; readonly targetCollection?: string },
+  input: {
+    readonly source: ImportSource
+    readonly file: File
+    /** CSV/RSS: the collection to map columns onto. WordPress: the collection that receives posts. */
+    readonly targetCollection?: string
+    /** WordPress only: the collection that receives pages. */
+    readonly pageCollection?: string
+  },
 ): Promise<ImportRun> {
   const data = await toBase64(input.file)
   return request('/api/import/analyze', {
@@ -113,6 +165,7 @@ export async function analyzeImport(
       filename: input.file.name,
       data,
       ...(input.targetCollection === undefined ? {} : { targetCollection: input.targetCollection }),
+      ...(input.pageCollection === undefined ? {} : { pageCollection: input.pageCollection }),
     }),
   })
 }

@@ -47,6 +47,7 @@ export function ImageInsertModal({
       onOpenChange={onOpenChange}
       title={t('richText.imageDialogTitle')}
       closeLabel={t('common.cancel')}
+      className="w-[min(46rem,calc(100vw-2rem))]"
     >
       {initialFile === undefined && (
         <div className="flex gap-2" role="tablist" aria-label={t('richText.imageModeLabel')}>

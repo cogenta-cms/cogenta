@@ -77,7 +77,7 @@ function ToolbarButton({
   Icon,
 }: {
   readonly label: string
-  readonly pressed?: boolean
+  readonly pressed?: boolean | undefined
   readonly disabled: boolean
   onClick(): void
   readonly Icon: (props: { readonly className?: string }) => JSX.Element
@@ -193,7 +193,7 @@ export function RichTextToolbar({
             key={mark}
             label={t(labelKey)}
             disabled={formattingDisabled}
-            pressed={isMarkActive(editor, mark)}
+            pressed={formattingDisabled ? undefined : isMarkActive(editor, mark)}
             onClick={() => toggleMark(editor, mark)}
             Icon={Icon}
           />
@@ -206,7 +206,7 @@ export function RichTextToolbar({
             key={kind}
             label={t(labelKey)}
             disabled={formattingDisabled}
-            pressed={activeBlock === kind}
+            pressed={formattingDisabled ? undefined : activeBlock === kind}
             onClick={() => toggleBlock(editor, kind)}
             Icon={Icon}
           />
@@ -217,7 +217,7 @@ export function RichTextToolbar({
         <ToolbarButton
           label={t('richText.linkButton')}
           disabled={formattingDisabled}
-          pressed={linkOpen}
+          pressed={formattingDisabled ? undefined : linkOpen}
           onClick={() => setLinkOpen((open) => !open)}
           Icon={LinkIcon}
         />

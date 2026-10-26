@@ -21,7 +21,7 @@ describe('missing detail records retain a named page and a way back', () => {
     [
       '/commerce/orders/does-not-exist',
       'Commandes',
-      "Cette commande n'existe pas.",
+      'Cette commande n’existe pas.',
       '/commerce/orders',
     ],
     [

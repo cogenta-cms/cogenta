@@ -34,7 +34,7 @@ describe('a bounded active session list', () => {
     expect(within(list()).getAllByRole('listitem')).toHaveLength(10)
     expect(
       screen.getByRole('button', {
-        name: /Révoquer la session vue le .* — Appareil 11 \(Firefox, desktop\)/u,
+        name: /Révoquer la session vue le .* — Appareil 11 \(Firefox sur ordinateur\)/u,
       }),
     ).toBeDefined()
     expect(screen.queryByText(/Appareil 1 —/u)).toBeNull()

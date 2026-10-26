@@ -75,7 +75,7 @@ describe('the admin notice board', () => {
     // the notice itself rather than on the whole first render.
     await screen.findByRole('heading', { name: 'Tableau de bord' })
     const action = await screen.findByRole('link', { name: 'Configurer maintenant' })
-    expect(action.getAttribute('href')).toBe('/settings')
+    expect(action.getAttribute('href')).toBe('/settings#security')
   })
 
   it('renders nothing at all when there is nothing to recommend', async () => {
@@ -150,6 +150,6 @@ it('explains recovery-code consumption and links to the account security control
   expect(await screen.findByText('Un code de secours a été utilisé')).toBeDefined()
   expect(
     screen.getByRole('link', { name: 'Vérifier mes codes de secours' }).getAttribute('href'),
-  ).toBe('/profile')
+  ).toBe('/profile#recovery-codes')
   expect(screen.getByText(/Chaque code ne fonctionne qu’une fois/u)).toBeDefined()
 })

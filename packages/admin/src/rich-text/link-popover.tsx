@@ -79,7 +79,16 @@ export function LinkPopover({
   }
 
   return (
-    <div className="rich-text-toolbar__link-panel flex flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-card">
+    // biome-ignore lint/a11y/noStaticElementInteractions: the panel only listens for Escape bubbling up from the controls inside it, so the key closes it wherever focus is.
+    <div
+      className="rich-text-toolbar__link-panel flex flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-card"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return
+        // Closing the panel must not also leave full-screen mode.
+        event.stopPropagation()
+        onClose()
+      }}
+    >
       {isLinkActive(editor) && (
         <div className="flex flex-wrap items-center gap-2">
           {targetStatus?.trashed && (

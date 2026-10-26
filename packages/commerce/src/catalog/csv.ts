@@ -22,6 +22,8 @@ import type { Product, ProductStatus, Variant } from './types.js'
  * row already decided.
  */
 
+const HANDLE_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
+
 const HEADER = [
   'handle',
   'title',
@@ -124,13 +126,40 @@ function formatMajor(amountMinor: number, currency: string): string {
   return (amountMinor / 10 ** exponent).toFixed(exponent)
 }
 
+/**
+ * A decimal number as a person types it: `12.50` or the French `12,50` (a
+ * spreadsheet saved in a French locale writes the comma), optionally with
+ * thousands separators — `1 234,50`, `1.234,50`, `1,234.50`. With both marks
+ * present the last one is the decimal mark; a lone comma is a decimal mark.
+ * `null` for anything else.
+ */
+function parseDecimalText(text: string): number | null {
+  const compact = text.replace(/[\s\u00a0\u202f]/gu, '')
+  if (compact === '' || !/^[+-]?[\d.,]+$/u.test(compact)) return null
+  const lastComma = compact.lastIndexOf(',')
+  const lastDot = compact.lastIndexOf('.')
+  let normalised: string
+  if (lastComma !== -1 && lastDot !== -1) {
+    const decimalMark = lastComma > lastDot ? ',' : '.'
+    const thousands = decimalMark === ',' ? '.' : ','
+    normalised = compact.split(thousands).join('').replace(decimalMark, '.')
+  } else if (lastComma !== -1) {
+    normalised =
+      compact.indexOf(',') === lastComma ? compact.replace(',', '.') : compact.split(',').join('')
+  } else {
+    if (compact.indexOf('.') !== lastDot) return null
+    normalised = compact
+  }
+  if (!/^[+-]?\d*\.?\d+$|^[+-]?\d+\.$/u.test(normalised)) return null
+  const value = Number(normalised)
+  return Number.isFinite(value) ? value : null
+}
+
 /** Rounds to the nearest minor unit rather than truncating. `null` for anything not a plain, non-negative number. */
 function parseMajor(text: string, currency: string): number | null {
-  const trimmed = text.trim()
-  if (trimmed === '' || Number.isNaN(Number(trimmed))) return null
-  const major = Number(trimmed)
-  if (!Number.isFinite(major) || major < 0) return null
-  return Math.round(major * 10 ** minorUnitExponent(currency))
+  const major = parseDecimalText(text)
+  if (major === null || major < 0) return null
+  return Math.round(Number((major * 10 ** minorUnitExponent(currency)).toFixed(6)))
 }
 
 function parseNullableInt(text: string): number | null | undefined {
@@ -144,6 +173,37 @@ function parseNullableDate(text: string): string | null | undefined {
   const trimmed = text.trim()
   if (trimmed === '') return null
   return Number.isNaN(new Date(trimmed).getTime()) ? undefined : trimmed
+}
+
+/**
+ * A file to start from: the header row and one worked example. The column
+ * names stay the machine names the importer matches on — a spreadsheet's
+ * header is the one thing a person must not translate.
+ */
+export function productsCsvTemplate(): string {
+  return stringifyCsv([
+    [...HEADER],
+    [
+      'echarpe-laine',
+      'Écharpe en laine',
+      'active',
+      'ECH-LAINE-ROUGE',
+      'Rouge',
+      '29.90',
+      'EUR',
+      '12',
+      'false',
+      '180',
+      'standard',
+      '3',
+      '39.90',
+      '',
+      '',
+      '',
+      '',
+      '',
+    ],
+  ])
 }
 
 export function exportProductsCsv(
@@ -203,9 +263,20 @@ interface ParsedRow {
   readonly depthMm: number | null
 }
 
+/**
+ * A problem on one line of the file. `detail` is the English sentence an API
+ * client can show; `code` (+ `column`/`value`/`max`) is the stable, machine
+ * form the admin translates — a French admin never shows `detail`. Codes that
+ * come from the catalogue itself while applying (a taken SKU…) carry the
+ * `CogentaError` code, so the admin's error table covers them too.
+ */
 export interface ProductImportIssue {
   readonly line: number
   readonly detail: string
+  readonly code?: string
+  readonly column?: string
+  readonly value?: string
+  readonly max?: number
 }
 
 export type ProductImportOutcomeKind = 'create' | 'update' | 'duplicate'
@@ -216,6 +287,11 @@ export interface ProductImportRowOutcome {
   readonly sku: string
   readonly outcome: ProductImportOutcomeKind
   readonly detail?: string
+  /** Stable form of `detail`, for translation: `price_will_change` or `duplicate_sku`. */
+  readonly detailCode?: string
+  /** For an update: what the variant costs today, in minor units. */
+  readonly currentPriceMinor?: number
+  readonly currentCurrency?: string
 }
 
 export interface ProductImportPreview {
@@ -237,7 +313,7 @@ function parseImportCsv(
 ): { readonly rows: readonly ParsedRow[]; readonly issues: readonly ProductImportIssue[] } {
   const table = parseCsv(csv)
   if (table.length === 0) {
-    return { rows: [], issues: [{ line: 0, detail: 'The file is empty.' }] }
+    return { rows: [], issues: [{ line: 0, detail: 'The file is empty.', code: 'EMPTY_FILE' }] }
   }
 
   const header = (table[0] ?? []).map((cell) => cell.trim().toLowerCase())
@@ -247,7 +323,14 @@ function parseImportCsv(
   if (missing.length > 0) {
     return {
       rows: [],
-      issues: [{ line: 1, detail: `The header row is missing: ${missing.join(', ')}.` }],
+      issues: [
+        {
+          line: 1,
+          detail: `The header row is missing: ${missing.join(', ')}.`,
+          code: 'HEADER_MISSING',
+          value: missing.join(', '),
+        },
+      ],
     }
   }
 
@@ -269,23 +352,55 @@ function parseImportCsv(
     const currency = normaliseCurrency(cell(cells, 'currency') || 'EUR')
 
     if (handle === '' || title === '' || sku === '' || variantTitle === '') {
-      issues.push({ line, detail: 'Missing "handle", "title", "sku" or "variant".' })
+      issues.push({
+        line,
+        detail: 'Missing "handle", "title", "sku" or "variant".',
+        code: 'MISSING_FIELD',
+      })
+      continue
+    }
+    if (!HANDLE_PATTERN.test(handle)) {
+      issues.push({
+        line,
+        detail: `"${handle}" is not a usable product handle.`,
+        code: 'COMMERCE_PRODUCT_INVALID',
+        column: 'handle',
+        value: handle,
+      })
       continue
     }
     if (rawStatus !== '' && rawStatus !== 'active' && rawStatus !== 'archived') {
-      issues.push({ line, detail: `"${rawStatus}" is not "active" or "archived".` })
+      issues.push({
+        line,
+        detail: `"${rawStatus}" is not "active" or "archived".`,
+        code: 'STATUS_INVALID',
+        column: 'status',
+        value: rawStatus,
+      })
       continue
     }
     const priceMinor = parseMajor(cell(cells, 'price'), currency)
     if (priceMinor === null) {
-      issues.push({ line, detail: `"${cell(cells, 'price')}" is not a usable price.` })
+      issues.push({
+        line,
+        detail: `"${cell(cells, 'price')}" is not a usable price.`,
+        code: 'PRICE_INVALID',
+        column: 'price',
+        value: cell(cells, 'price'),
+      })
       continue
     }
 
     const onHandRaw = cell(cells, 'onhand')
     const onHand = onHandRaw === '' ? 0 : Number(onHandRaw)
     if (!Number.isInteger(onHand) || onHand < 0) {
-      issues.push({ line, detail: `"${onHandRaw}" is not a usable stock count.` })
+      issues.push({
+        line,
+        detail: `"${onHandRaw}" is not a usable stock count.`,
+        code: 'STOCK_INVALID',
+        column: 'onhand',
+        value: onHandRaw,
+      })
       continue
     }
 
@@ -299,20 +414,56 @@ function parseImportCsv(
       heightMm === undefined ||
       depthMm === undefined
     ) {
-      issues.push({ line, detail: 'A threshold or dimension column is not a whole number.' })
+      issues.push({
+        line,
+        detail: 'A threshold or dimension column is not a whole number.',
+        code: 'NUMBER_INVALID',
+      })
       continue
     }
     const comparePriceText = cell(cells, 'compareprice')
     const compareAtPriceMinor =
       comparePriceText === '' ? null : parseMajor(comparePriceText, currency)
     if (comparePriceText !== '' && compareAtPriceMinor === null) {
-      issues.push({ line, detail: `"${comparePriceText}" is not a usable compare-at price.` })
+      issues.push({
+        line,
+        detail: `"${comparePriceText}" is not a usable compare-at price.`,
+        code: 'COMPARE_PRICE_INVALID',
+        column: 'compareprice',
+        value: comparePriceText,
+      })
+      continue
+    }
+    if (compareAtPriceMinor !== null && compareAtPriceMinor <= priceMinor) {
+      issues.push({
+        line,
+        detail: 'The compare-at price must be higher than the price.',
+        code: 'COMPARE_PRICE_TOO_LOW',
+        column: 'compareprice',
+        value: comparePriceText,
+      })
       continue
     }
     const saleStartsAt = parseNullableDate(cell(cells, 'salestartsat'))
     const saleEndsAt = parseNullableDate(cell(cells, 'saleendsat'))
     if (saleStartsAt === undefined || saleEndsAt === undefined) {
-      issues.push({ line, detail: 'A sale date column is not a usable date.' })
+      issues.push({
+        line,
+        detail: 'A sale date column is not a usable date.',
+        code: 'DATE_INVALID',
+      })
+      continue
+    }
+    if (
+      saleStartsAt !== null &&
+      saleEndsAt !== null &&
+      new Date(saleEndsAt).getTime() <= new Date(saleStartsAt).getTime()
+    ) {
+      issues.push({
+        line,
+        detail: 'The sale must end after it starts.',
+        code: 'SALE_DATES_ORDER',
+      })
       continue
     }
 
@@ -343,6 +494,8 @@ function parseImportCsv(
     issues.push({
       line: maxRows + 2,
       detail: `Only the first ${maxRows} data rows were read; the rest of the file was not.`,
+      code: 'ROW_LIMIT',
+      max: maxRows,
     })
   }
 
@@ -369,6 +522,7 @@ export async function previewProductsImport(
         sku: row.sku,
         outcome: 'duplicate',
         detail: 'A later row in this file uses the same SKU; only that one will be applied.',
+        detailCode: 'duplicate_sku',
       })
       continue
     }
@@ -383,7 +537,12 @@ export async function previewProductsImport(
       outcome: existing === null ? 'create' : 'update',
       ...(existing === null
         ? {}
-        : { detail: `Currently priced at ${existing.priceMinor} ${existing.currency}.` }),
+        : {
+            detail: `Currently priced at ${existing.priceMinor} ${existing.currency}.`,
+            detailCode: 'current_price',
+            currentPriceMinor: existing.priceMinor,
+            currentCurrency: existing.currency,
+          }),
     })
   }
 
@@ -481,7 +640,12 @@ export async function applyProductsImport(
     } catch (error) {
       failed.push({
         line: row.line,
-        detail: isCogentaError(error) ? error.message : String(error),
+        // A raw database error is never shown: the generic sentence stands in.
+        detail:
+          isCogentaError(error) && !error.code.startsWith('DB_')
+            ? error.message
+            : 'This row could not be saved.',
+        code: isCogentaError(error) && !error.code.startsWith('DB_') ? error.code : 'INTERNAL',
       })
     }
   }

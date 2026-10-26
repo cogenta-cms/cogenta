@@ -1,4 +1,4 @@
-import { type JSX, useCallback, useEffect, useState } from 'react'
+import { type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { ApiError } from '../api/client.js'
@@ -12,8 +12,10 @@ import {
   type SchedulerMode,
 } from '../api/scheduled-tasks-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { describeInterval, translateTaskSummary } from '../lib/scheduled-summary.js'
 import { useLocalPagination } from '../lib/use-local-pagination.js'
 import {
+  Badge,
   Button,
   Card,
   CardBody,
@@ -22,7 +24,13 @@ import {
   Modal,
   Notice,
   Pagination,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
   TableRoot,
+  TableRow,
 } from '../ui/index.js'
 
 /**
@@ -64,6 +72,12 @@ export function ScheduledRoute(): JSX.Element | null {
     readonly summary: string | null
     readonly error: string | null
   } | null>(null)
+
+  // The result appears above the table: bring it into view after "Exécuter maintenant".
+  const resultRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (lastResult !== null) resultRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [lastResult])
 
   const dateFormatter = useCallback(
     (ms: number): string =>
@@ -109,13 +123,21 @@ export function ScheduledRoute(): JSX.Element | null {
     )
   }
 
+  function taskLabel(task: ScheduledTaskState): string {
+    return t(`scheduled.taskName.${task.name}`, { defaultValue: task.description })
+  }
+
   async function runTask(task: ScheduledTaskState): Promise<void> {
     if (token === null) return
     setError(null)
     setRunning(task.name)
     try {
       const run = await runScheduledTaskNow(token, task.name)
-      setLastResult({ name: task.name, summary: run.summary, error: run.error })
+      setLastResult({
+        name: taskLabel(task),
+        summary: translateTaskSummary(task.name, run.summary, t),
+        error: run.error === null ? null : t('scheduled.runFailed'),
+      })
       await load()
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : t('scheduled.runError'))
@@ -143,6 +165,12 @@ export function ScheduledRoute(): JSX.Element | null {
     }
   }
 
+  function jobLabel(job: QueueJob): string {
+    const runAt = typeof job.runAt === 'number' ? ` · ${dateFormatter(job.runAt)}` : ''
+    const name = typeof job.name === 'string' ? job.name : ''
+    return `${t(`scheduled.jobName.${name.replaceAll('.', '_')}`, { defaultValue: t('scheduled.jobUnknown') })}${runAt}`
+  }
+
   const visibleActiveJobs = queuePagination.items.filter(
     (job) => job.status === 'pending' || job.status === 'running',
   )
@@ -164,13 +192,15 @@ export function ScheduledRoute(): JSX.Element | null {
       )}
 
       {lastResult !== null && (
-        <Notice
-          tone={lastResult.error === null ? 'success' : 'danger'}
-          live="polite"
-          title={t('scheduled.lastResultTitle', { name: lastResult.name })}
-        >
-          {lastResult.error ?? lastResult.summary ?? t('scheduled.noSummary')}
-        </Notice>
+        <div ref={resultRef}>
+          <Notice
+            tone={lastResult.error === null ? 'success' : 'danger'}
+            live="polite"
+            title={t('scheduled.lastResultTitle', { name: lastResult.name })}
+          >
+            {lastResult.error ?? lastResult.summary ?? t('scheduled.noSummary')}
+          </Notice>
+        </div>
       )}
 
       <Card>
@@ -180,76 +210,89 @@ export function ScheduledRoute(): JSX.Element | null {
           </CardTitle>
         </CardHeader>
         <CardBody>
-          <TableRoot
-            label={t('scheduled.tasksHeading')}
-            className="min-w-0 max-w-full overflow-x-auto"
-          >
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr>
-                  <th scope="col">{t('scheduled.columnTask')}</th>
-                  <th scope="col">{t('scheduled.columnLastRun')}</th>
-                  <th scope="col">{t('scheduled.columnDuration')}</th>
-                  <th scope="col">{t('scheduled.columnResult')}</th>
-                  <th scope="col">{t('scheduled.columnNextRun')}</th>
-                  <th scope="col">{t('scheduled.columnActions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {taskPagination.items.map((task) => (
-                  <tr key={task.name}>
-                    <th scope="row" className="font-sans font-normal normal-case tracking-normal">
-                      <span className="font-medium">
-                        {t(`scheduled.taskName.${task.name}`, { defaultValue: task.description })}
-                      </span>
-                      {task.overdue && (
-                        <span
-                          role="status"
-                          className="ml-2 rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive"
-                        >
-                          {t('scheduled.overdue')}
+          <TableRoot label={t('scheduled.tasksHeading')} stacked>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeader>{t('scheduled.columnTask')}</TableHeader>
+                  <TableHeader>{t('scheduled.columnFrequency')}</TableHeader>
+                  <TableHeader>{t('scheduled.columnLastRun')}</TableHeader>
+                  <TableHeader>{t('scheduled.columnDuration')}</TableHeader>
+                  <TableHeader>{t('scheduled.columnResult')}</TableHeader>
+                  <TableHeader>{t('scheduled.columnNextRun')}</TableHeader>
+                  <TableHeader>{t('scheduled.columnActions')}</TableHeader>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {taskPagination.items.map((task) => {
+                  const name = taskLabel(task)
+                  return (
+                    <TableRow key={task.name}>
+                      <TableCell stack="heading" className="min-w-56">
+                        <span className="font-medium">{name}</span>
+                        {task.overdue && (
+                          <Badge tone="danger" role="status" className="ml-2">
+                            {t('scheduled.overdue')}
+                          </Badge>
+                        )}
+                        {task.destructive && (
+                          <Badge tone="warning" className="ml-2">
+                            {t('scheduled.destructiveBadge')}
+                          </Badge>
+                        )}
+                        <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                          {t(`scheduled.taskHelp.${task.name}`, { defaultValue: '' })}
                         </span>
-                      )}
-                    </th>
-                    <td>
-                      {task.lastRun === null
-                        ? t('scheduled.never')
-                        : dateFormatter(task.lastRun.startedAt)}
-                    </td>
-                    <td>{task.lastRun === null ? '—' : formatDuration(task.lastRun.durationMs)}</td>
-                    <td>
-                      {task.lastRun === null
-                        ? '—'
-                        : t(
-                            task.lastRun.outcome === 'success'
-                              ? 'scheduled.outcomeSuccess'
-                              : 'scheduled.outcomeError',
-                          )}
-                    </td>
-                    <td>{dateFormatter(task.nextRunAt)}</td>
-                    <td>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={running === task.name}
-                        aria-label={
-                          running === task.name
-                            ? `${t('scheduled.running')} : ${t(`scheduled.taskName.${task.name}`, { defaultValue: task.description })}`
-                            : t('scheduled.runTaskAction', {
-                                name: t(`scheduled.taskName.${task.name}`, {
-                                  defaultValue: task.description,
-                                }),
-                              })
-                        }
-                        onClick={() => requestRun(task)}
-                      >
-                        {running === task.name ? t('scheduled.running') : t('scheduled.runButton')}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </TableCell>
+                      <TableCell label={t('scheduled.columnFrequency')}>
+                        {describeInterval(task.intervalMs, t)}
+                      </TableCell>
+                      <TableCell label={t('scheduled.columnLastRun')}>
+                        {task.lastRun === null
+                          ? t('scheduled.never')
+                          : dateFormatter(task.lastRun.startedAt)}
+                      </TableCell>
+                      <TableCell label={t('scheduled.columnDuration')}>
+                        {task.lastRun === null ? '—' : formatDuration(task.lastRun.durationMs)}
+                      </TableCell>
+                      <TableCell label={t('scheduled.columnResult')}>
+                        {task.lastRun === null ? (
+                          '—'
+                        ) : (
+                          <Badge tone={task.lastRun.outcome === 'success' ? 'success' : 'danger'}>
+                            {t(
+                              task.lastRun.outcome === 'success'
+                                ? 'scheduled.outcomeSuccess'
+                                : 'scheduled.outcomeError',
+                            )}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell label={t('scheduled.columnNextRun')}>
+                        {dateFormatter(task.nextRunAt)}
+                      </TableCell>
+                      <TableCell stack="actions">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={running === task.name}
+                          aria-label={
+                            running === task.name
+                              ? `${t('scheduled.running')} : ${name}`
+                              : t('scheduled.runTaskAction', { name })
+                          }
+                          onClick={() => requestRun(task)}
+                        >
+                          {running === task.name
+                            ? t('scheduled.running')
+                            : t('scheduled.runButton')}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
           </TableRoot>
           {taskPagination.pageCount > 1 && (
             <nav aria-label={t('scheduled.taskPagination')}>
@@ -290,18 +333,18 @@ export function ScheduledRoute(): JSX.Element | null {
               <ul className="m-0 flex flex-col gap-1 pl-0 list-none text-sm">
                 {visibleActiveJobs.map((job) => (
                   <li key={job.id} className="break-words [overflow-wrap:anywhere]">
-                    {job.id} — {t(`scheduled.jobStatus.${job.status}`)}
+                    {jobLabel(job)} — {t(`scheduled.jobStatus.${job.status}`)}
                   </li>
                 ))}
                 {visibleFailedJobs.map((job) => (
                   <li key={job.id} className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="min-w-0 break-words [overflow-wrap:anywhere]">
-                      {job.id} — {t('scheduled.jobStatus.failed')}
+                      {jobLabel(job)} — {t('scheduled.jobStatus.failed')}
                     </span>
                     <Button
                       variant="ghost"
                       size="sm"
-                      aria-label={t('scheduled.retryJobAction', { id: job.id })}
+                      aria-label={t('scheduled.retryJobAction', { id: jobLabel(job) })}
                       onClick={() => void retryJob(job.id)}
                     >
                       {t('scheduled.retryButton')}
@@ -354,9 +397,7 @@ export function ScheduledRoute(): JSX.Element | null {
             if (!open) setConfirmTarget(null)
           }}
           title={t('scheduled.confirmTitle', {
-            name: t(`scheduled.taskName.${confirmTarget.name}`, {
-              defaultValue: confirmTarget.description,
-            }),
+            name: taskLabel(confirmTarget),
           })}
           closeLabel={t('common.cancel')}
           footer={

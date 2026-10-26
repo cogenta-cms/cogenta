@@ -2,7 +2,8 @@ import { type JSX, useCallback, useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ModerationVerdict } from '../api/assist-client.js'
 import { getAssistCapabilities, runModerate } from '../api/assist-client.js'
-import { ApiError } from '../api/client.js'
+import { describeApiError } from '../api/describe-error.js'
+import { Button, Card, CardBody, CardHeader, CardTitle, Notice } from '../ui/index.js'
 
 /**
  * `assist.moderate` given a screen — a signal, never an action.
@@ -60,27 +61,43 @@ export function ModerationCheck({
     try {
       setVerdict(await runModerate(token, { text }))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('assist.moderateError'))
+      setError(describeApiError(caught, t('assist.moderateError')).message)
     } finally {
       setRunning(false)
     }
   }
 
-  return (
-    <section
-      aria-labelledby={contextLabel === undefined ? headingId : undefined}
-      aria-label={contextLabel}
-    >
-      <h2 id={headingId}>{t('assist.moderateHeading')}</h2>
-      <button type="button" disabled={!hasText || running} onClick={() => void check()}>
-        {running ? t('assist.running') : t('assist.moderateButton')}
-      </button>
+  const result = (
+    <>
+      <div>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={!hasText || running}
+          onClick={() => void check()}
+        >
+          {running
+            ? t('assist.running')
+            : t(
+                contextLabel === undefined
+                  ? 'assist.moderateButton'
+                  : 'assist.moderateInlineButton',
+              )}
+        </Button>
+      </div>
 
-      {error !== null && <p role="alert">{error}</p>}
+      {error !== null && (
+        <Notice tone="danger" live="assertive">
+          <p>{error}</p>
+        </Notice>
+      )}
 
-      {verdict !== null && !verdict.flagged && <p>{t('assist.moderateClear')}</p>}
+      {verdict !== null && !verdict.flagged && (
+        <p className="m-0 text-sm">{t('assist.moderateClear')}</p>
+      )}
       {verdict?.flagged === true && (
-        <p role="status">
+        <p role="status" className="m-0 text-sm">
           {/* A badge, in words rather than colour alone, so the signal survives
               without relying on sight (a11y). */}
           <strong>
@@ -91,6 +108,28 @@ export function ModerationCheck({
           {verdict.categories.length > 0 && ` (${verdict.categories.join(', ')})`}
         </p>
       )}
-    </section>
+    </>
+  )
+
+  // Inside a list row (the comments queue) the check is a small button with
+  // its outcome beside it; on an entry it is a card of its own, like the other
+  // assistant panels.
+  if (contextLabel !== undefined) {
+    return (
+      <section aria-label={contextLabel} className="flex flex-col gap-2 pt-2">
+        {result}
+      </section>
+    )
+  }
+
+  return (
+    <Card aria-labelledby={headingId}>
+      <CardHeader>
+        <CardTitle>
+          <h2 id={headingId}>{t('assist.moderateHeading')}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-3">{result}</CardBody>
+    </Card>
   )
 }

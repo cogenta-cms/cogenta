@@ -24,7 +24,7 @@ function signIn(roles: readonly string[]): void {
 async function goToImport(): Promise<void> {
   await screen.findByRole('heading', { name: 'Tableau de bord' })
   fireEvent.click(await screen.findByRole('link', { name: 'Import' }))
-  await screen.findByRole('heading', { name: 'Importer depuis un fichier' })
+  await screen.findByRole('heading', { name: 'Importer du contenu', level: 1 })
 }
 
 describe('the preview/apply/undo import screen', () => {
@@ -33,16 +33,20 @@ describe('the preview/apply/undo import screen', () => {
     render(<App />)
     await goToImport()
 
+    fireEvent.change(screen.getByLabelText('Type de fichier'), { target: { value: 'csv' } })
+
     const file = new File(['title\na\nb\nc\n'], 'pages.csv', { type: 'text/csv' })
-    fireEvent.change(screen.getByLabelText('Fichier'), { target: { files: [file] } })
+    fireEvent.change(screen.getByLabelText('Fichier à importer'), { target: { files: [file] } })
 
-    await screen.findByText('3 éléments trouvés.')
+    await screen.findByText('3 lignes trouvées.')
+    // The column-to-field mapping is shown, and editable, before anything is written.
+    expect(screen.getByLabelText('Champ de la collection — title')).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Appliquer cet import' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Importer maintenant' }))
     await screen.findByText('3 entrées créées.')
 
     fireEvent.click(screen.getByRole('button', { name: 'Annuler cet import' }))
-    await screen.findByText(/tout ce que cet import a créé a été mis à la corbeille/)
+    await screen.findByText(/tout ce qu'il avait créé est dans la corbeille/)
   })
 
   it('does not show the preview import card to a role below admin', async () => {
@@ -54,6 +58,7 @@ describe('the preview/apply/undo import screen', () => {
     render(<App />)
 
     expect(await screen.findByRole('alert')).toBeDefined()
-    expect(screen.queryByRole('heading', { name: 'Importer depuis un fichier' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Que voulez-vous importer ?' })).toBeNull()
+    expect(screen.queryByLabelText('Fichier à importer')).toBeNull()
   })
 })

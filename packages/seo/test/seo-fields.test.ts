@@ -80,6 +80,18 @@ describe('title templates (Task 3)', () => {
     expect(titleOf(tags)).toBe('Hello world | Blog')
   })
 
+  it('leaves a title that already is the site name alone instead of repeating it', () => {
+    const tags = buildMetaTags(site, makeArticle({ values: { title: site.name } }), {
+      titleTemplate: '%title% — %site%',
+    })
+    expect(titleOf(tags)).toBe(site.name)
+  })
+
+  it('treats an empty template as no template at all, not as an empty title', () => {
+    const tags = buildMetaTags(site, makeArticle(), { titleTemplate: '' })
+    expect(titleOf(tags)).toBe('Hello world')
+  })
+
   it('never applies to an explicit options.title', () => {
     const tags = buildMetaTags(site, makeArticle(), {
       title: 'Exact title',

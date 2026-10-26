@@ -192,6 +192,24 @@ describe('checkLinks', () => {
     expect(report.broken[0]?.reason).toBe('unroutable_path')
   })
 
+  it('does not report a path the host serves outside any collection route (a taxonomy archive)', async () => {
+    await publish('source', {
+      body: [
+        textBlock('a', { href: '/sector/energy' }),
+        textBlock('b', { href: '/deep/nested/nowhere' }),
+      ],
+    })
+
+    const report = await checkLinks({
+      ...options(),
+      isServedPath: (pathname) => pathname === '/sector/energy',
+    })
+
+    expect(report.broken.map((broken) => broken.link)).toEqual([
+      { kind: 'url', href: '/deep/nested/nowhere', at: 'blocks.body[1].data.href' },
+    ])
+  })
+
   it('tells a deleted target apart from one that is merely unpublished', async () => {
     const draft = await store.create({ values: { title: 'Not yet', slug: 'not-yet' } })
     await publish('source', {

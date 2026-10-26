@@ -134,7 +134,7 @@ describe('the trash screen', () => {
     // `createdBy`/`updatedBy` — the raw id is what this column showed before
     // the fix.
     expect(await within(rowFor('A note nobody kept')).findByText('alice@example.com')).toBeDefined()
-    expect(within(rowFor('Thrown away')).getByText('—')).toBeDefined()
+    expect(within(rowFor('Thrown away')).getByText('Non renseigné')).toBeDefined()
   })
 
   it('restores an entry through the real untrash route, leaving the rest of the trash alone', async () => {

@@ -117,9 +117,7 @@ describe('Plugins screen', () => {
     )
     // Created, and opened: a person lands on the code, not on a list.
     expect(await screen.findByText('Prêt à installer')).toBeDefined()
-    expect(
-      screen.getByText(/Une fois installé, il demandera : Lire le contenu du site/u),
-    ).toBeDefined()
+    expect(screen.getByText(/Il demandera à pouvoir : Lire le contenu du site/u)).toBeDefined()
   })
 
   it('installs a draft on demand, and says installing grants nothing', async () => {
@@ -130,13 +128,17 @@ describe('Plugins screen', () => {
     expect(await screen.findByText('Prêt à installer')).toBeDefined()
     expect(screen.getByText(/Installer n'accorde aucune permission/u)).toBeDefined()
 
+    // Installing goes through a screen that says what the plugin will be able to do.
     fireEvent.click(screen.getByRole('button', { name: 'Installer' }))
+    const dialog = await screen.findByRole('dialog', { name: /Installer « .+ » \?/u })
+    expect(within(dialog).getByText(/Installer n'accorde rien/u)).toBeDefined()
+    expect(mockPluginsInstalled.map((plugin) => plugin.name)).not.toContain('atelier')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Installer' }))
     expect(
       await screen.findByText('Extension installée. Redémarrez le serveur pour la charger.'),
     ).toBeDefined()
-    expect(
-      screen.getByText(/Les routes, tâches et événements sont chargés au démarrage/u),
-    ).toBeDefined()
+    // The "restart" explanation is only on screen when a plugin really awaits a restart.
+    expect(screen.queryByText(/Un plugin installé n'est pas encore chargé/u)).toBeNull()
     await waitFor(() =>
       expect(mockPluginsInstalled.map((plugin) => plugin.name)).toContain('atelier'),
     )

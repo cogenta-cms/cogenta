@@ -1,0 +1,104 @@
+{
+  "auth": {
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "emailRequired": "Enter your email address.",
+    "passwordRequired": "Enter your password.",
+    "codeRequired": "Enter the code."
+  },
+  "login": {
+    "signedOut": "You have been signed out.",
+    "pageTitle": "Sign in",
+    "projectLink": "The Cogenta project (opens in a new tab)"
+  },
+  "forgotPassword": {
+    "pageTitle": "Forgot password"
+  },
+  "resetPassword": {
+    "pageTitle": "New password",
+    "linkInvalid": "This reset link is no longer valid: it has expired, was already used or is incorrect.",
+    "requestNewLink": "Request a new link",
+    "tooShort_one": "The password must be at least {{count}} character long.",
+    "tooShort_other": "The password must be at least {{count}} characters long.",
+    "strengthShort_one": "{{count}} more character needed.",
+    "strengthShort_other": "{{count}} more characters needed."
+  },
+  "breadcrumb": {
+    "notFound": "Page not found",
+    "search": "Search",
+    "themeSandbox": "Theme workshop"
+  },
+  "searchResults": {
+    "mediaKind": {
+      "image": "Image",
+      "video": "Video",
+      "audio": "Audio",
+      "file": "File"
+    },
+    "extensionKind": {
+      "plugin": "Plugin",
+      "theme": "Theme",
+      "skin": "Palette",
+      "skill": "Skill"
+    }
+  },
+  "searchPage": {
+    "filtersToggle": "Filters",
+    "tooShort": "Content is searched from three letters up. Media, accounts, menus and orders answer from the first one."
+  },
+  "globalSearch": {
+    "placeholder": "Search the admin…"
+  },
+  "shell": {
+    "versionLink": "See updates"
+  },
+  "notFound": {
+    "searchLabel": "Search the admin",
+    "searchPlaceholder": "Look for a screen or content…",
+    "searchSubmit": "Search"
+  },
+  "review": {
+    "empty": "Nothing to review here.",
+    "emptyHelp": "When an author submits an entry of a collection that has review turned on, it lands in this queue and you can approve it or ask for changes."
+  },
+  "documentation": {
+    "docs": {
+      "technicalInEnglish": "The technical documentation (architecture, contracts, themes and plugins) is written for developers, in English, like the code.",
+      "pagesToggle": "Pages"
+    },
+    "sections": {
+      "ops": {
+        "summary": "Watch the site, keep a record of what happens on it, automate its chores and keep it up to date: audit log, statistics, import, security, updates, health, observability, tools and scheduled tasks.",
+        "quickstart": {
+          "step1": "Open “Health” to check that the database, storage and queues are answering.",
+          "step2": "Read the “Audit log” to see who changed what, and “Statistics” for traffic.",
+          "step3": "In “Scheduled tasks”, check that scheduled publications and the trash purge are running.",
+          "step4": "Before updating the site, open “Updates”: a restore point is created first."
+        }
+      }
+    }
+  },
+  "notices": {
+    "details": "Why this recommendation?",
+    "hidden": "Recommendation hidden.",
+    "undo": "Undo"
+  },
+  "sessionLabels": {
+    "browser": {
+      "bot": "Bot",
+      "other": "Unknown browser",
+      "unknown": "Unknown browser"
+    },
+    "device": {
+      "desktop": "desktop",
+      "mobile": "mobile",
+      "tablet": "tablet",
+      "bot": "bot",
+      "unknown": "unknown device"
+    }
+  },
+  "profile": {
+    "sessionsRevokedOthers_one": "Signed out of {{count}} other session. This one stays signed in.",
+    "sessionsRevokedOthers_other": "Signed out of {{count}} other sessions. This one stays signed in."
+  }
+}

@@ -197,6 +197,15 @@ export interface TraceStoreLike {
   list(query?: { agentName?: string; limit?: number }): Promise<readonly unknown[]>
 }
 
+function traceSummary(trace: unknown): unknown {
+  if (typeof trace !== 'object' || trace === null) return trace
+  const { id, agentName, startedAt, finishedAt, stopReason, usage } = trace as Record<
+    string,
+    unknown
+  >
+  return { id, agentName, startedAt, finishedAt, stopReason, usage }
+}
+
 export interface AuditLogLike {
   list(filter?: { actorId?: string; limit?: number }): Promise<readonly unknown[]>
 }
@@ -661,7 +670,9 @@ export function createAgentsRouter(options: AgentsRouterOptions): AgentsRouter {
                   agentName: name,
                   ...(limit === undefined ? {} : { limit }),
                 })
-          return jsonResponse(200, { data })
+          // A summary, not the trace: the steps and messages of a run can be
+          // very large, and the run list only needs when, how long and why it stopped.
+          return jsonResponse(200, { data: data.map(traceSummary) })
         }
 
         // GET /api/agents/:name/history

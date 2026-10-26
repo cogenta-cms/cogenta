@@ -50,7 +50,18 @@ export function breadcrumbFor(
   }
 
   const item = matchNavItem(parts)
-  return item === undefined ? [] : [{ labelKey: item.labelKey }]
+  if (item !== undefined) return [{ labelKey: item.labelKey }]
+  // Screens the sidebar does not list: reached from the top bar's search box
+  // or from inside another screen, they still need a name in the tab and the
+  // trail. Anything else is a path nothing answers.
+  const unlisted = UNLISTED_ROUTES[parts[0] ?? '']
+  return [{ labelKey: unlisted ?? 'breadcrumb.notFound' }]
+}
+
+/** Routes that exist without a sidebar entry, by first path segment. */
+const UNLISTED_ROUTES: Readonly<Record<string, string>> = {
+  search: 'breadcrumb.search',
+  'theme-sandbox': 'breadcrumb.themeSandbox',
 }
 
 /** Longest-prefix match against every declared route, so `/commerce/orders/abc` still resolves to "Commandes" rather than nothing. */

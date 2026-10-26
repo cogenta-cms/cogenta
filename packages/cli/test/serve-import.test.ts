@@ -84,6 +84,10 @@ const INCOMPATIBLE_PAGE: readonly CollectionDefinition[] = [
     fields: {
       title: { kind: 'text', required: true, options: { max: 200 } },
       slug: { kind: 'slug', required: true, options: { from: 'title' } },
+      // The importer maps a site's own page shape onto WordPress pages, so
+      // what makes this collection impossible to fill is a required value
+      // that has no WordPress counterpart.
+      rank: { kind: 'number', required: true, options: {} },
     },
     permissions: { read: ['public'], create: ['editor'], update: ['editor'], delete: ['admin'] },
   },

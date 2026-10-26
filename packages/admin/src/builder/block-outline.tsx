@@ -168,7 +168,7 @@ export function BlockOutline({
               <div
                 className={cn(
                   // Wraps under a long name rather than squeezing it (L36 audit).
-                  'ml-auto shrink-0 items-center gap-1',
+                  'ml-auto w-full shrink-0 items-center justify-end gap-1 lg:w-auto',
                   selected ? 'flex' : 'hidden group-hover:flex group-focus-within:flex',
                 )}
               >
@@ -184,7 +184,7 @@ export function BlockOutline({
                   }
                   onClick={() => onToggleLock(block.key)}
                 >
-                  {locked ? '🔒' : '🔓'}
+                  <LockGlyph locked={locked} />
                 </Button>
                 <Button
                   size="icon"
@@ -219,5 +219,25 @@ export function BlockOutline({
         })}
       </ol>
     </div>
+  )
+}
+
+/** A padlock drawn like the rest of the admin's line icons, closed or open. */
+function LockGlyph({ locked }: { readonly locked: boolean }): JSX.Element {
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      viewBox="0 0 20 20"
+      className="size-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="4.5" y="9" width="11" height="8" rx="1.5" />
+      <path d={locked ? 'M7 9V6.5a3 3 0 0 1 6 0V9' : 'M7 9V6.5a3 3 0 0 1 5.6-1.5'} />
+    </svg>
   )
 }

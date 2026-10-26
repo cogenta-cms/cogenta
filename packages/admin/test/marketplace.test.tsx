@@ -315,14 +315,23 @@ describe('fiche 29 — the installed extensions screen (task 1)', () => {
     expect(scoped.getByLabelText(/Supprimer aussi ses données/u)).toBeDefined()
     fireEvent.click(scoped.getByRole('button', { name: 'Désinstaller' }))
 
-    await screen.findByText("Aucune extension n'est installée pour l'instant.")
+    const empty = (
+      await screen.findByText(/Aucune extension n'a été installée depuis un catalogue\./u)
+    ).closest('td') as HTMLElement
+    // …and points to where themes and one's own plugins are managed instead.
+    expect(within(empty).getByRole('link', { name: 'Thèmes (Apparence)' })).toBeDefined()
+    expect(within(empty).getByRole('link', { name: 'Plugins' })).toBeDefined()
   })
 
   it('shows the plugin author guide and starter template links', async () => {
     render(<App />)
     await goToMarketplace()
 
-    expect(screen.getByRole('link', { name: 'Guide pour les auteurs de plugins' })).toBeDefined()
-    expect(screen.getByRole('link', { name: 'Modèle de démarrage de plugin' })).toBeDefined()
+    expect(
+      screen.getByRole('link', { name: 'Guide pour les auteurs de plugins (en anglais)' }),
+    ).toBeDefined()
+    expect(
+      screen.getByRole('link', { name: 'Modèle de démarrage de plugin (en anglais)' }),
+    ).toBeDefined()
   })
 })

@@ -11,6 +11,18 @@ import { i18next as i18n } from '../src/i18n/index.js'
 // broken expectation fails quickly.
 configure({ asyncUtilTimeout: 15_000 })
 
+// jsdom has no ResizeObserver; the shell measures its top bar with one.
+if (!('ResizeObserver' in globalThis)) {
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  })
+}
+
 beforeEach(async () => {
   // Every existing test asserts French strings — jsdom's default
   // `navigator.language` ('en-US') would otherwise pick English on the very

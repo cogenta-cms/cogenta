@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../src/app.js'
 import { expectNoSeriousA11yViolations } from '../helpers/axe.js'
@@ -40,7 +40,7 @@ describe('the commerce settings screen', () => {
     render(<App />)
     await goToCommerceSettings()
 
-    const currency = (await screen.findByLabelText('Devise par défaut')) as HTMLInputElement
+    const currency = (await screen.findByLabelText('Devise de la boutique')) as HTMLSelectElement
     expect(currency.value).toBe('EUR')
     const display = screen.getByLabelText('Affichage des prix') as HTMLSelectElement
     expect(display.value).toBe('ttc')
@@ -57,9 +57,16 @@ describe('the commerce settings screen', () => {
 
     const prefix = await screen.findByLabelText('Préfixe de série de facture')
     fireEvent.change(prefix, { target: { value: 'AC' } })
+    // Nothing is saved by leaving a field: each card has its own save button.
     fireEvent.blur(prefix)
+    expect(screen.queryByText('Enregistré.')).toBeNull()
 
-    await screen.findByText('Enregistré.')
+    const invoiceCard = screen
+      .getByRole('heading', { name: 'Modèle de facture' })
+      .closest('[aria-labelledby="commerce-settings-invoice-heading"]') as HTMLElement
+    fireEvent.click(within(invoiceCard).getByRole('button', { name: 'Enregistrer' }))
+
+    await within(invoiceCard).findByText('Enregistré.')
     expect((prefix as HTMLInputElement).value).toBe('AC')
   })
 
@@ -74,8 +81,11 @@ describe('the commerce settings screen', () => {
     render(<App />)
     await goToCommerceSettings()
 
-    const orderIdField = await screen.findByLabelText('Identifiant de commande')
-    fireEvent.change(orderIdField, { target: { value: 'order-123' } })
+    // The order to preview is picked from the shop's own orders, never typed
+    // as an internal id.
+    const orderField = await screen.findByLabelText('Commande à utiliser')
+    await within(orderField).findByRole('option', { name: /ORD-0001/u })
+    fireEvent.change(orderField, { target: { value: 'order-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Prévisualiser la facture' }))
 
     await vi.waitFor(() => {
@@ -107,15 +117,15 @@ describe('the commerce settings screen', () => {
     render(<App />)
     await goToCommerceSettings()
 
-    const orderIdField = await screen.findByLabelText('Identifiant de commande')
-    fireEvent.change(orderIdField, { target: { value: 'order-missing' } })
+    const orderField = await screen.findByLabelText('Commande à utiliser')
+    await within(orderField).findByRole('option', { name: /ORD-0001/u })
+    fireEvent.change(orderField, { target: { value: 'order-1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Prévisualiser la facture' }))
 
     // `fetchInvoicePreviewPdf` turns a non-ok response into a typed
-    // `ApiError`, and the screen shows that error's own message rather than
-    // its generic fallback — the same discipline the payment screen's own
-    // failure test proves for `testPaymentConnection`.
-    await screen.findByText('This order does not exist.')
+    // `ApiError`, and the screen shows that error in the admin's language
+    // rather than staying silent or showing the server's English message.
+    await screen.findByText('Cette commande n’existe pas.')
   })
 
   it('refuses a write from a role with no admin permission, at the API', async () => {
@@ -153,7 +163,7 @@ describe('the commerce settings screen', () => {
     signedInAs(['admin'])
     const { container } = render(<App />)
     await goToCommerceSettings()
-    await screen.findByLabelText('Devise par défaut')
+    await screen.findByLabelText('Devise de la boutique')
 
     await expectNoSeriousA11yViolations(container)
   })

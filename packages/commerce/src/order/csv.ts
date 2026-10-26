@@ -1,4 +1,5 @@
-import type { Order } from './types.js'
+import { minorUnitExponent } from '../money.js'
+import type { Order, OrderStatus } from './types.js'
 
 /**
  * The accounting export (fiche 52 task 7). "Décisions à trancher — Format de
@@ -19,6 +20,8 @@ export interface OrderExportRow {
   readonly order: Order
   /** The invoice number for this order, or null when none was issued. */
   readonly invoiceNumber: string | null
+  /** The customer's name, for the French accounting export. */
+  readonly customerName?: string | null
 }
 
 const COLUMNS = [
@@ -63,4 +66,73 @@ function rowToCsvLine(row: OrderExportRow): string {
 export function ordersToCsv(rows: readonly OrderExportRow[]): string {
   const lines = [COLUMNS.join(','), ...rows.map(rowToCsvLine)]
   return `${lines.join('\r\n')}\r\n`
+}
+
+const STATUS_LABELS_FR: Readonly<Record<OrderStatus, string>> = {
+  pending: 'En attente',
+  paid: 'Payée',
+  shipped: 'Expédiée',
+  delivered: 'Livrée',
+  cancelled: 'Annulée',
+  refunded: 'Remboursée',
+}
+
+const ACCOUNTING_COLUMNS_FR = [
+  'Référence',
+  'Date',
+  'Statut',
+  'Client',
+  'E-mail',
+  'Devise',
+  'Sous-total',
+  'Remise',
+  'Livraison',
+  'Taxes',
+  'Total',
+  'Facture',
+] as const
+
+/** `1250` → `12,50`: major units with the decimal comma, the currency living in its own column. */
+function decimalComma(amountMinor: number, currency: string): string {
+  const exponent = minorUnitExponent(currency)
+  const sign = amountMinor < 0 ? '-' : ''
+  const absolute = Math.abs(amountMinor)
+  if (exponent === 0) return `${sign}${String(absolute)}`
+  const text = String(absolute).padStart(exponent + 1, '0')
+  return `${sign}${text.slice(0, -exponent)},${text.slice(-exponent)}`
+}
+
+function escapeSemicolonField(value: string): string {
+  if (/[";\n\r]/u.test(value)) return `"${value.replace(/"/gu, '""')}"`
+  return value
+}
+
+/**
+ * The same export, written for the person who opens it in a French
+ * spreadsheet: French headers, `;` as the separator, amounts in major units
+ * with a decimal comma (the currency has its own column), statuses in French,
+ * ISO 8601 dates, and a UTF-8 byte-order mark so Excel reads the accents.
+ * `ordersToCsv` stays the stable machine format (minor units, English).
+ */
+export function ordersToAccountingCsv(rows: readonly OrderExportRow[]): string {
+  const lines = rows.map((row) => {
+    const { order } = row
+    return [
+      order.reference,
+      order.placedAt,
+      STATUS_LABELS_FR[order.status],
+      row.customerName ?? '',
+      order.email,
+      order.currency,
+      decimalComma(order.subtotalMinor, order.currency),
+      decimalComma(order.discountMinor, order.currency),
+      decimalComma(order.shippingMinor, order.currency),
+      decimalComma(order.taxMinor, order.currency),
+      decimalComma(order.totalMinor, order.currency),
+      row.invoiceNumber ?? '',
+    ]
+      .map(escapeSemicolonField)
+      .join(';')
+  })
+  return `\uFEFF${[ACCOUNTING_COLUMNS_FR.join(';'), ...lines].join('\r\n')}\r\n`
 }

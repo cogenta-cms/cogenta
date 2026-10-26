@@ -1,18 +1,30 @@
-import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
+import { type FormEvent, type JSX, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   createTaxRule,
   deleteTaxRule,
+  listTaxCategories,
   listTaxRules,
   simulateTax,
   type TaxOutcome,
   type TaxRule,
   updateTaxRule,
 } from '../api/commerce-client.js'
-import { ApiError } from '../api/http.js'
 import { useAuth } from '../auth/auth-context.js'
-import { minorToMajorText } from '../commerce/money.js'
+import { commerceErrorMessage } from '../commerce/commerce-errors.js'
+import { ConfirmDialog } from '../commerce/confirm-dialog.js'
+import { countryName, countryOptions } from '../commerce/countries.js'
+import { DialogError } from '../commerce/dialog-error.js'
 import {
+  basisPointsToPercentText,
+  formatBasisPoints,
+  formatMinor,
+  majorTextToMinor,
+  percentTextToBasisPoints,
+} from '../commerce/money.js'
+import { useShopCurrency } from '../commerce/use-shop-currency.js'
+import {
+  Badge,
   Button,
   Card,
   CardBody,
@@ -22,6 +34,7 @@ import {
   Input,
   Modal,
   Notice,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -32,53 +45,64 @@ import {
   TableRow,
 } from '../ui/index.js'
 
+const NEW_CATEGORY = '__new__'
+
+interface RuleForm {
+  readonly name: string
+  readonly country: string
+  readonly region: string
+  readonly category: string
+  readonly newCategory: string
+  readonly rate: string
+  readonly includedInPrice: boolean
+  readonly priority: string
+}
+
+const EMPTY_RULE: RuleForm = {
+  name: '',
+  country: '',
+  region: '',
+  category: 'standard',
+  newCategory: '',
+  rate: '',
+  includedInPrice: true,
+  priority: '0',
+}
+
 /**
- * Taxes — fiche 34 task 1. `@cogenta/commerce`'s `TaxStore` already resolved
- * rules by specificity, tested; this screen adds the two things it lacked:
- * a way to declare rules from the admin, and a simulator that calls the
- * **exact same resolver** the checkout uses (never a second implementation —
- * fiche 34 § pièges), so the screen can never show an answer an order would
- * not also get.
+ * Taxes — fiche 34 task 1. `@cogenta/commerce`'s `TaxStore` resolves rules by
+ * specificity; this screen declares them and simulates the **exact same
+ * resolver** the checkout uses (never a second implementation), so it can
+ * never show an answer an order would not also get.
+ *
+ * A country is always *picked* from a list (the explicit choice "tous les pays"
+ * included), a category is picked from the ones in use, and a rate keeps its
+ * decimals (`20,5` is 20.5 %, never 20 %).
  */
 export function CommerceTaxRoute(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
-  // fiche feedback: this screen used to be gated admin-only in the client,
-  // but the server only ever asserted `commerce.catalog.write`
-  // (`packages/commerce/src/admin/router.ts`), a permission `editor` and
-  // `shopkeeper` also hold (`DEFAULT_COMMERCE_ROLES`) — its own doc comment
-  // explicitly lists "tax and shipping rules" as part of what it covers.
-  // Matches every other commerce screen's own "signedInOnly" pattern
-  // (`commerce-products.tsx`, `commerce-orders.tsx`): any signed-in commerce
-  // role can view and use this screen, the server enforces catalog.write on
-  // the actual mutation (already tested: `packages/commerce/test/
-  // admin-router-store-settings.test.ts`'s "refuses a non-write role").
+  // Any signed-in commerce role can view this screen; the server enforces
+  // `commerce.catalog.write` on the mutations themselves.
   const canRead = roles.length > 0
+  const canWrite =
+    roles.includes('admin') || roles.includes('shopkeeper') || roles.includes('editor')
+  const currency = useShopCurrency(token)
 
   const [rules, setRules] = useState<readonly TaxRule[]>([])
+  const [categories, setCategories] = useState<readonly string[]>(['standard'])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
-  const [creating, setCreating] = useState(false)
-  const [name, setName] = useState('')
-  const [country, setCountry] = useState('')
-  const [region, setRegion] = useState('')
-  const [taxCategory, setTaxCategory] = useState('standard')
-  const [ratePercent, setRatePercent] = useState('')
-  const [includedInPrice, setIncludedInPrice] = useState(true)
-  const [priority, setPriority] = useState('0')
-
-  const [editing, setEditing] = useState<TaxRule | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editCountry, setEditCountry] = useState('')
-  const [editRegion, setEditRegion] = useState('')
-  const [editTaxCategory, setEditTaxCategory] = useState('standard')
-  const [editRatePercent, setEditRatePercent] = useState('')
-  const [editIncludedInPrice, setEditIncludedInPrice] = useState(true)
-  const [editPriority, setEditPriority] = useState('0')
+  const [editing, setEditing] = useState<{ readonly rule: TaxRule | null } | null>(null)
+  const [form, setForm] = useState<RuleForm>(EMPTY_RULE)
+  const [errors, setErrors] = useState<Readonly<Record<string, string>>>({})
+  const [dialogError, setDialogError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [toDelete, setToDelete] = useState<TaxRule | null>(null)
 
   const [simCountry, setSimCountry] = useState('')
   const [simRegion, setSimRegion] = useState('')
@@ -88,17 +112,22 @@ export function CommerceTaxRoute(): JSX.Element {
     readonly rule: TaxRule | null
     readonly outcome: TaxOutcome
   } | null>(null)
+  const [simErrors, setSimErrors] = useState<Readonly<Record<string, string>>>({})
   const [simError, setSimError] = useState<string | null>(null)
+
+  const countries = useMemo(() => countryOptions(i18n.language), [i18n.language])
 
   const load = useCallback(async () => {
     if (token === null || !canRead) return
-    setLoading(true)
     setError(null)
     try {
       const { rules: list } = await listTaxRules(token)
       setRules(list)
+      await listTaxCategories(token)
+        .then((response) => setCategories(response.categories))
+        .catch(() => undefined)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('commerceTax.loadError'))
+      setError(commerceErrorMessage(t, caught, 'commerceTax.loadError'))
     } finally {
       setLoading(false)
     }
@@ -108,82 +137,94 @@ export function CommerceTaxRoute(): JSX.Element {
     void load()
   }, [load])
 
-  async function submitCreate(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    if (token === null) return
-    setActionError(null)
-    const percent = Number.parseFloat(ratePercent)
-    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
-      setActionError(t('commerceTax.rateInvalid'))
-      return
-    }
-    try {
-      await createTaxRule(token, {
-        name,
-        rateBp: Math.round(percent * 100),
-        taxCategory,
-        includedInPrice,
-        priority: Number.parseInt(priority, 10) || 0,
-        ...(country.trim() === '' ? {} : { country: country.trim().toUpperCase() }),
-        ...(region.trim() === '' ? {} : { region: region.trim() }),
-      })
-      setCreating(false)
-      setName('')
-      setCountry('')
-      setRegion('')
-      setRatePercent('')
-      setPriority('0')
-      await load()
-    } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('commerceTax.createError'))
-    }
+  function set<K extends keyof RuleForm>(key: K, value: RuleForm[K]): void {
+    setForm((current) => ({ ...current, [key]: value }))
   }
 
-  function startEdit(rule: TaxRule): void {
-    setEditing(rule)
-    setEditName(rule.name)
-    setEditCountry(rule.country ?? '')
-    setEditRegion(rule.region ?? '')
-    setEditTaxCategory(rule.taxCategory)
-    setEditRatePercent((rule.rateBp / 100).toString())
-    setEditIncludedInPrice(rule.includedInPrice)
-    setEditPriority(rule.priority.toString())
+  function openDialog(rule: TaxRule | null): void {
+    setEditing({ rule })
+    setErrors({})
+    setDialogError(null)
+    setForm(
+      rule === null
+        ? EMPTY_RULE
+        : {
+            name: rule.name,
+            country: rule.country ?? '',
+            region: rule.region ?? '',
+            category: rule.taxCategory,
+            newCategory: '',
+            rate: basisPointsToPercentText(rule.rateBp),
+            includedInPrice: rule.includedInPrice,
+            priority: String(rule.priority),
+          },
+    )
   }
 
-  async function submitEdit(event: FormEvent): Promise<void> {
+  async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
     if (token === null || editing === null) return
-    setActionError(null)
-    const percent = Number.parseFloat(editRatePercent)
-    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
-      setActionError(t('commerceTax.rateInvalid'))
+    const found: Record<string, string> = {}
+    if (form.name.trim() === '') found['name'] = t('commerceTax.nameRequired')
+    const rateBp = percentTextToBasisPoints(form.rate)
+    if (rateBp === null) found['rate'] = t('commerceTax.rateInvalid')
+    const category = form.category === NEW_CATEGORY ? form.newCategory.trim() : form.category
+    if (category === '') found['category'] = t('commerceTax.categoryRequired')
+    const priority = Number(form.priority.trim() === '' ? '0' : form.priority.trim())
+    if (!Number.isInteger(priority)) found['priority'] = t('commerceTax.priorityInvalid')
+    setErrors(found)
+    if (Object.keys(found).length > 0 || rateBp === null) {
+      setDialogError(t('commerceTax.fixErrors'))
       return
     }
+    setBusy(true)
+    setDialogError(null)
     try {
-      await updateTaxRule(token, editing.id, {
-        name: editName,
-        rateBp: Math.round(percent * 100),
-        taxCategory: editTaxCategory,
-        includedInPrice: editIncludedInPrice,
-        priority: Number.parseInt(editPriority, 10) || 0,
-        country: editCountry.trim() === '' ? null : editCountry.trim().toUpperCase(),
-        region: editRegion.trim() === '' ? null : editRegion.trim(),
-      })
+      if (editing.rule === null) {
+        await createTaxRule(token, {
+          name: form.name.trim(),
+          rateBp,
+          taxCategory: category,
+          includedInPrice: form.includedInPrice,
+          priority,
+          ...(form.country === '' ? {} : { country: form.country }),
+          ...(form.region.trim() === '' ? {} : { region: form.region.trim() }),
+        })
+        setSuccess(t('commerceTax.createdDone', { name: form.name.trim() }))
+      } else {
+        await updateTaxRule(token, editing.rule.id, {
+          name: form.name.trim(),
+          rateBp,
+          taxCategory: category,
+          includedInPrice: form.includedInPrice,
+          priority,
+          country: form.country === '' ? null : form.country,
+          region: form.region.trim() === '' ? null : form.region.trim(),
+        })
+        setSuccess(t('commerceTax.updatedDone', { name: form.name.trim() }))
+      }
       setEditing(null)
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('commerceTax.editError'))
+      setDialogError(commerceErrorMessage(t, caught, 'commerceTax.saveError'))
+    } finally {
+      setBusy(false)
     }
   }
 
-  async function remove(rule: TaxRule): Promise<void> {
-    if (token === null) return
-    setActionError(null)
+  async function confirmDelete(): Promise<void> {
+    if (token === null || toDelete === null) return
+    setBusy(true)
+    setDialogError(null)
     try {
-      await deleteTaxRule(token, rule.id)
+      await deleteTaxRule(token, toDelete.id)
+      setSuccess(t('commerceTax.deletedDone', { name: toDelete.name }))
+      setToDelete(null)
       await load()
     } catch (caught) {
-      setActionError(caught instanceof ApiError ? caught.message : t('commerceTax.deleteError'))
+      setDialogError(commerceErrorMessage(t, caught, 'commerceTax.deleteError'))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -192,32 +233,29 @@ export function CommerceTaxRoute(): JSX.Element {
     if (token === null) return
     setSimError(null)
     setSimResult(null)
-    const amountMajor = Number.parseFloat(simAmount)
-    if (!Number.isFinite(amountMajor) || amountMajor < 0) {
-      setSimError(t('commerceTax.amountInvalid'))
+    const amountMinor = majorTextToMinor(simAmount, currency)
+    if (amountMinor === null) {
+      setSimErrors({ amount: t('commerceTax.amountInvalid') })
       return
     }
+    setSimErrors({})
     try {
       const result = await simulateTax(token, {
-        amountMinor: Math.round(amountMajor * 100),
+        amountMinor,
         taxCategory: simCategory,
-        ...(simCountry.trim() === '' ? {} : { country: simCountry.trim().toUpperCase() }),
+        ...(simCountry === '' ? {} : { country: simCountry }),
         ...(simRegion.trim() === '' ? {} : { region: simRegion.trim() }),
       })
       setSimResult(result)
     } catch (caught) {
-      setSimError(caught instanceof ApiError ? caught.message : t('commerceTax.simulateError'))
+      setSimError(commerceErrorMessage(t, caught, 'commerceTax.simulateError'))
     }
   }
 
-  function describeRule(rule: TaxRule): string {
-    const zone =
-      rule.country === null
-        ? t('commerceTax.everywhere')
-        : rule.region === null
-          ? rule.country
-          : `${rule.country} / ${rule.region}`
-    return `${zone} — ${rule.taxCategory}`
+  function zoneOf(rule: TaxRule): string {
+    const place =
+      rule.country === null ? t('commerceTax.everywhere') : countryName(rule.country, i18n.language)
+    return rule.region === null ? place : `${place} / ${rule.region}`
   }
 
   if (!canRead) {
@@ -228,6 +266,11 @@ export function CommerceTaxRoute(): JSX.Element {
       </section>
     )
   }
+
+  const categoryChoices =
+    categories.includes(form.category) || form.category === NEW_CATEGORY
+      ? categories
+      : [...categories, form.category]
 
   return (
     <section aria-labelledby="commerce-tax-heading" className="flex flex-col gap-6">
@@ -241,12 +284,12 @@ export function CommerceTaxRoute(): JSX.Element {
           </h1>
           <p className="text-muted-foreground text-sm">{t('commerceTax.description')}</p>
         </div>
-        <Button onClick={() => setCreating(true)}>{t('commerceTax.newButton')}</Button>
+        {canWrite && <Button onClick={() => openDialog(null)}>{t('commerceTax.newButton')}</Button>}
       </div>
 
-      {actionError !== null && (
-        <Notice tone="danger" live="assertive">
-          <p>{actionError}</p>
+      {success !== null && (
+        <Notice tone="success" live="polite">
+          <p>{success}</p>
         </Notice>
       )}
       {error !== null && (
@@ -257,12 +300,13 @@ export function CommerceTaxRoute(): JSX.Element {
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && error === null && (
-        <TableRoot label={t('commerceTax.tableLabel')}>
+        <TableRoot label={t('commerceTax.tableLabel')} stacked>
           <Table>
             <TableHead>
               <TableRow>
                 <TableHeader>{t('commerceTax.nameColumn')}</TableHeader>
                 <TableHeader>{t('commerceTax.zoneColumn')}</TableHeader>
+                <TableHeader>{t('commerceTax.categoryColumn')}</TableHeader>
                 <TableHeader>{t('commerceTax.rateColumn')}</TableHeader>
                 <TableHeader>{t('commerceTax.priorityColumn')}</TableHeader>
                 <TableHeader>{t('commerceTax.actionsColumn')}</TableHeader>
@@ -271,26 +315,47 @@ export function CommerceTaxRoute(): JSX.Element {
             <TableBody>
               {rules.map((rule) => (
                 <TableRow key={rule.id}>
-                  <TableCell>{rule.name}</TableCell>
-                  <TableCell>{describeRule(rule)}</TableCell>
-                  <TableCell>
-                    {(rule.rateBp / 100).toString()}%{' '}
-                    {rule.includedInPrice ? t('commerceTax.ttc') : t('commerceTax.ht')}
+                  <TableCell stack="heading">{rule.name}</TableCell>
+                  <TableCell label={t('commerceTax.zoneColumn')}>{zoneOf(rule)}</TableCell>
+                  <TableCell label={t('commerceTax.categoryColumn')}>
+                    <Badge tone="neutral">{rule.taxCategory}</Badge>
                   </TableCell>
-                  <TableCell>{rule.priority}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="secondary" size="sm" onClick={() => startEdit(rule)}>
-                        {t('commerceTax.edit')}
-                      </Button>
-                      <Button variant="destructive" size="sm" onClick={() => void remove(rule)}>
-                        {t('commerceTax.delete')}
-                      </Button>
-                    </div>
+                  <TableCell label={t('commerceTax.rateColumn')}>
+                    {formatBasisPoints(rule.rateBp, i18n.language)}{' '}
+                    <span className="text-xs text-muted-foreground">
+                      {rule.includedInPrice ? t('commerceTax.ttc') : t('commerceTax.ht')}
+                    </span>
+                  </TableCell>
+                  <TableCell label={t('commerceTax.priorityColumn')}>{rule.priority}</TableCell>
+                  <TableCell stack="actions">
+                    {canWrite && (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          aria-label={t('commerceTax.editLabel', { name: rule.name })}
+                          onClick={() => openDialog(rule)}
+                        >
+                          {t('commerceTax.edit')}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          aria-label={t('commerceTax.deleteLabel', { name: rule.name })}
+                          onClick={() => {
+                            setDialogError(null)
+                            setToDelete(rule)
+                          }}
+                        >
+                          {t('commerceTax.delete')}
+                        </Button>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
-              {rules.length === 0 && <TableEmpty colSpan={5}>{t('commerceTax.empty')}</TableEmpty>}
+              {rules.length === 0 && <TableEmpty colSpan={6}>{t('commerceTax.empty')}</TableEmpty>}
             </TableBody>
           </Table>
         </TableRoot>
@@ -306,16 +371,25 @@ export function CommerceTaxRoute(): JSX.Element {
           <p className="mt-0 mb-4 text-sm text-muted-foreground">
             {t('commerceTax.simulatorHint')}
           </p>
-          <form onSubmit={runSimulation} className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <form
+            noValidate
+            onSubmit={(event) => void runSimulation(event)}
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
             <Field label={t('commerceTax.simCountry')}>
               {(control) => (
-                <Input
+                <Select
                   {...control}
-                  maxLength={2}
-                  placeholder="FR"
                   value={simCountry}
                   onChange={(event) => setSimCountry(event.target.value)}
-                />
+                >
+                  <option value="">{t('commerceTax.simNoCountry')}</option>
+                  {countries.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.name}
+                    </option>
+                  ))}
+                </Select>
               )}
             </Field>
             <Field label={t('commerceTax.simRegion')}>
@@ -329,21 +403,26 @@ export function CommerceTaxRoute(): JSX.Element {
             </Field>
             <Field label={t('commerceTax.simCategory')}>
               {(control) => (
-                <Input
+                <Select
                   {...control}
                   value={simCategory}
                   onChange={(event) => setSimCategory(event.target.value)}
-                />
+                >
+                  {categories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </Select>
               )}
             </Field>
-            <Field label={t('commerceTax.simAmount')}>
+            <Field label={t('commerceTax.simAmount')} error={simErrors['amount'] ?? null}>
               {(control) => (
                 <Input
                   {...control}
-                  type="text"
                   inputMode="decimal"
-                  required
                   value={simAmount}
+                  placeholder={t('commerceTax.simAmountPlaceholder')}
                   onChange={(event) => setSimAmount(event.target.value)}
                 />
               )}
@@ -365,12 +444,14 @@ export function CommerceTaxRoute(): JSX.Element {
               <dd className="m-0">
                 {simResult.rule === null
                   ? t('commerceTax.noRuleApplied')
-                  : `${simResult.rule.name} (${describeRule(simResult.rule)}) — ${t('commerceTax.wonBecause')}`}
+                  : `${simResult.rule.name} (${zoneOf(simResult.rule)} — ${simResult.rule.taxCategory}) — ${t('commerceTax.wonBecause')}`}
               </dd>
               <dt className="font-medium">{t('commerceTax.rateApplied')}</dt>
-              <dd className="m-0">{(simResult.outcome.rateBp / 100).toString()}%</dd>
+              <dd className="m-0">{formatBasisPoints(simResult.outcome.rateBp, i18n.language)}</dd>
               <dt className="font-medium">{t('commerceTax.taxAmount')}</dt>
-              <dd className="m-0">{minorToMajorText(simResult.outcome.taxMinor, 'EUR')}</dd>
+              <dd className="m-0">
+                {formatMinor(simResult.outcome.taxMinor, currency, i18n.language)}
+              </dd>
             </dl>
           )}
         </CardBody>
@@ -381,188 +462,154 @@ export function CommerceTaxRoute(): JSX.Element {
         onOpenChange={(open) => {
           if (!open) setEditing(null)
         }}
-        title={t('commerceTax.editHeading', { name: editing?.name ?? '' })}
-        closeLabel={t('commerceTax.close')}
+        title={
+          editing?.rule == null
+            ? t('commerceTax.newHeading')
+            : t('commerceTax.editHeading', { name: editing.rule.name })
+        }
+        closeLabel={t('common.close')}
+        className="w-[min(36rem,calc(100vw-2rem))]"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)} disabled={busy}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" form="tax-rule-form" disabled={busy}>
+              {editing?.rule == null ? t('commerceTax.createButton') : t('common.save')}
+            </Button>
+          </>
+        }
       >
-        <form onSubmit={submitEdit} className="flex flex-col gap-4">
-          <Field label={t('commerceTax.nameColumn')}>
+        <form
+          id="tax-rule-form"
+          noValidate
+          onSubmit={(event) => void submit(event)}
+          className="flex flex-col gap-4"
+        >
+          <Field label={t('commerceTax.nameColumn')} error={errors['name'] ?? null}>
             {(control) => (
               <Input
                 {...control}
-                required
-                value={editName}
-                onChange={(event) => setEditName(event.target.value)}
+                value={form.name}
+                placeholder={t('commerceTax.namePlaceholder')}
+                onChange={(event) => set('name', event.target.value)}
               />
             )}
           </Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t('commerceTax.simCountry')} description={t('commerceTax.countryHint')}>
               {(control) => (
-                <Input
+                <Select
                   {...control}
-                  maxLength={2}
-                  placeholder="FR"
-                  value={editCountry}
-                  onChange={(event) => setEditCountry(event.target.value)}
-                />
+                  value={form.country}
+                  onChange={(event) => set('country', event.target.value)}
+                >
+                  <option value="">{t('commerceTax.everywhere')}</option>
+                  {countries.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.name}
+                    </option>
+                  ))}
+                </Select>
               )}
             </Field>
-            <Field label={t('commerceTax.simRegion')}>
+            <Field label={t('commerceTax.simRegion')} description={t('commerceTax.regionHint')}>
               {(control) => (
                 <Input
                   {...control}
-                  value={editRegion}
-                  onChange={(event) => setEditRegion(event.target.value)}
+                  value={form.region}
+                  onChange={(event) => set('region', event.target.value)}
                 />
               )}
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label={t('commerceTax.simCategory')}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={t('commerceTax.categoryColumn')}
+              description={t('commerceTax.categoryHint')}
+              error={errors['category'] ?? null}
+            >
               {(control) => (
-                <Input
+                <Select
                   {...control}
-                  required
-                  value={editTaxCategory}
-                  onChange={(event) => setEditTaxCategory(event.target.value)}
-                />
+                  value={form.category}
+                  onChange={(event) => set('category', event.target.value)}
+                >
+                  {categoryChoices.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                  <option value={NEW_CATEGORY}>{t('commerceTax.newCategory')}</option>
+                </Select>
               )}
             </Field>
-            <Field label={t('commerceTax.ratePercent')}>
+            <Field
+              label={t('commerceTax.ratePercent')}
+              description={t('commerceTax.rateHint')}
+              error={errors['rate'] ?? null}
+            >
               {(control) => (
                 <Input
                   {...control}
-                  type="text"
                   inputMode="decimal"
-                  required
-                  value={editRatePercent}
-                  onChange={(event) => setEditRatePercent(event.target.value)}
+                  value={form.rate}
+                  onChange={(event) => set('rate', event.target.value)}
                 />
               )}
             </Field>
           </div>
+          {form.category === NEW_CATEGORY && (
+            <Field
+              label={t('commerceTax.newCategoryName')}
+              description={t('commerceTax.newCategoryHint')}
+            >
+              {(control) => (
+                <Input
+                  {...control}
+                  value={form.newCategory}
+                  onChange={(event) => set('newCategory', event.target.value)}
+                />
+              )}
+            </Field>
+          )}
           <Field
             label={t('commerceTax.priorityColumn')}
             description={t('commerceTax.priorityHint')}
+            error={errors['priority'] ?? null}
           >
             {(control) => (
               <Input
                 {...control}
-                type="number"
-                value={editPriority}
-                onChange={(event) => setEditPriority(event.target.value)}
+                inputMode="numeric"
+                value={form.priority}
+                onChange={(event) => set('priority', event.target.value)}
               />
             )}
           </Field>
           <label className="flex items-center gap-2 font-sans text-sm font-medium text-foreground">
             <input
               type="checkbox"
-              checked={editIncludedInPrice}
-              onChange={(event) => setEditIncludedInPrice(event.target.checked)}
+              checked={form.includedInPrice}
+              onChange={(event) => set('includedInPrice', event.target.checked)}
             />
             {t('commerceTax.includedInPrice')}
           </label>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setEditing(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit">{t('common.save')}</Button>
-          </div>
+          <DialogError message={dialogError} />
         </form>
       </Modal>
 
-      <Modal
-        open={creating}
-        onOpenChange={setCreating}
-        title={t('commerceTax.newHeading')}
-        closeLabel={t('commerceTax.close')}
+      <ConfirmDialog
+        open={toDelete !== null}
+        title={t('commerceTax.deleteTitle')}
+        confirmLabel={t('commerceTax.deleteConfirm')}
+        busy={busy}
+        error={dialogError}
+        onCancel={() => setToDelete(null)}
+        onConfirm={() => void confirmDelete()}
       >
-        <form onSubmit={submitCreate} className="flex flex-col gap-4">
-          <Field label={t('commerceTax.nameColumn')}>
-            {(control) => (
-              <Input
-                {...control}
-                required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            )}
-          </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label={t('commerceTax.simCountry')} description={t('commerceTax.countryHint')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  maxLength={2}
-                  placeholder="FR"
-                  value={country}
-                  onChange={(event) => setCountry(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field label={t('commerceTax.simRegion')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  value={region}
-                  onChange={(event) => setRegion(event.target.value)}
-                />
-              )}
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label={t('commerceTax.simCategory')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  required
-                  value={taxCategory}
-                  onChange={(event) => setTaxCategory(event.target.value)}
-                />
-              )}
-            </Field>
-            <Field label={t('commerceTax.ratePercent')}>
-              {(control) => (
-                <Input
-                  {...control}
-                  type="text"
-                  inputMode="decimal"
-                  required
-                  value={ratePercent}
-                  onChange={(event) => setRatePercent(event.target.value)}
-                />
-              )}
-            </Field>
-          </div>
-          <Field
-            label={t('commerceTax.priorityColumn')}
-            description={t('commerceTax.priorityHint')}
-          >
-            {(control) => (
-              <Input
-                {...control}
-                type="number"
-                value={priority}
-                onChange={(event) => setPriority(event.target.value)}
-              />
-            )}
-          </Field>
-          <label className="flex items-center gap-2 font-sans text-sm font-medium text-foreground">
-            <input
-              type="checkbox"
-              checked={includedInPrice}
-              onChange={(event) => setIncludedInPrice(event.target.checked)}
-            />
-            {t('commerceTax.includedInPrice')}
-          </label>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setCreating(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit">{t('commerceTax.createButton')}</Button>
-          </div>
-        </form>
-      </Modal>
+        <p className="m-0">{t('commerceTax.deleteBody', { name: toDelete?.name ?? '' })}</p>
+      </ConfirmDialog>
     </section>
   )
 }

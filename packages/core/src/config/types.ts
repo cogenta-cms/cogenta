@@ -154,6 +154,14 @@ export interface CogentaConfigInput {
   readonly appearance?: {
     readonly remoteWebFonts?: boolean
   }
+  /**
+   * The MCP endpoint of `cogenta serve` (`/api/mcp`). On by default; every
+   * request needs an API key, and writes still need a human approval.
+   * `http: false` turns the route off.
+   */
+  readonly mcp?: {
+    readonly http?: boolean
+  }
   readonly llm?: {
     readonly provider?: string
     readonly model?: string
@@ -349,6 +357,10 @@ export interface CogentaConfig {
   /** Whether a skin may load web fonts from a third party. Resolved, default `false` (no request to a font provider). */
   readonly appearance: {
     readonly remoteWebFonts: boolean
+  }
+  /** Whether `cogenta serve` answers MCP over HTTP at `/api/mcp`. Resolved, default `true`. */
+  readonly mcp: {
+    readonly http: boolean
   }
   /** Absent when no provider is configured. The CMS works without AI (rule R2). */
   readonly llm:

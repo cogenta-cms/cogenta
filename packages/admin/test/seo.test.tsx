@@ -68,19 +68,13 @@ describe('the merged SEO screen', () => {
     expect(screen.queryByRole('link', { name: 'Redirections' })).toBeNull()
   })
 
-  it('opens on the Général tab by default, with the other four reachable', async () => {
+  it('opens on the Fonctionnalités tab by default, with the other five reachable', async () => {
     signedIn(['admin'])
     render(<App />)
     await goToSeo()
 
-    expect(screen.getByRole('tab', { name: 'Général', selected: true })).toBeDefined()
-    for (const label of [
-      'Fonctionnalités',
-      'Sitemap',
-      'Réseaux sociaux',
-      'Redirections',
-      'Diagnostic',
-    ]) {
+    expect(screen.getByRole('tab', { name: 'Fonctionnalités', selected: true })).toBeDefined()
+    for (const label of ['Général', 'Sitemap', 'Réseaux sociaux', 'Redirections', 'Diagnostic']) {
       expect(screen.getByRole('tab', { name: label })).toBeDefined()
     }
   })
@@ -138,9 +132,10 @@ describe('Fonctionnalités — feature activation grid (fiche 70 task 3)', () =>
     fireEvent.click(screen.getByRole('tab', { name: 'Fonctionnalités' }))
 
     await screen.findByRole('heading', { name: 'Fonctionnalités SEO' })
+    // Said as a to-do ("À compléter :"), not as a greyed-out dead end.
     expect(
       screen.getByText(
-        "Aucune collection n'a encore de route publique, il n'y a donc rien à analyser.",
+        "À compléter : Aucune collection n'a encore de route publique, il n'y a donc rien à analyser.",
       ),
     ).toBeDefined()
   })
@@ -151,6 +146,7 @@ describe('Général — title and description templates (fiche 21 task 3)', () =
     signedIn(['admin'])
     render(<App />)
     await goToSeo()
+    fireEvent.click(screen.getByRole('tab', { name: 'Général' }))
 
     const field = await screen.findByLabelText('Gabarit de titre général')
     fireEvent.blur(field, { target: { value: '%title% — Mon site' } })
@@ -162,6 +158,7 @@ describe('Général — title and description templates (fiche 21 task 3)', () =
     signedIn(['admin'])
     render(<App />)
     await goToSeo()
+    fireEvent.click(screen.getByRole('tab', { name: 'Général' }))
 
     // The default test schema declares no `routing` on any collection —
     // `@cogenta/seo` itself has nothing to put in a sitemap for one either,
@@ -293,7 +290,9 @@ describe('Diagnostic — read-only reports (fiche 13 task 2)', () => {
     render(<App />)
     await goToDiagnostics()
 
-    const link = await screen.findByRole('link', { name: /page — Ouvrir/ })
+    // An entry is named by its title (here it has none) and never by its
+    // technical collection name or identifier.
+    const link = await screen.findByRole('link', { name: 'Sans titre' })
     expect(link.getAttribute('href')).toBe('/collections/page/entry-1')
   })
 })

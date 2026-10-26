@@ -6,6 +6,7 @@ import { useAuth } from '../auth/auth-context.js'
 import { COMBINING_MARKS, slugify } from '../lib/slugify.js'
 import { canPerformOnTerms } from '../schema/permissions.js'
 import { useSchema } from '../schema/schema-context.js'
+import { Button, Input } from '../ui/index.js'
 import { FieldWrapper } from './field-wrapper.js'
 import type { FieldProps } from './types.js'
 
@@ -210,28 +211,32 @@ export function TaxonomyField({
               {t('fields.taxonomyCreateUnderParent', { parent: labelOf(parentContext) })}
             </p>
           )}
-          <input
-            type="text"
-            aria-label={t('fields.taxonomyNewTermLabel')}
-            placeholder={t('fields.taxonomyNewTermLabel')}
-            value={newLabel}
-            disabled={disabled || creating}
-            onChange={(event) => setNewLabel(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') return
-              // Never let it reach the entry form, which would save the whole
-              // entry instead of adding a term.
-              event.preventDefault()
-              void createQuickTerm()
-            }}
-          />
-          <button
-            type="button"
-            disabled={disabled || creating || newLabel.trim() === ''}
-            onClick={() => void createQuickTerm()}
-          >
-            {t('fields.taxonomyCreate')}
-          </button>
+          <div className="flex items-center gap-2">
+            <Input
+              type="text"
+              aria-label={t('fields.taxonomyNewTermLabel')}
+              placeholder={t('fields.taxonomyNewTermPlaceholder')}
+              value={newLabel}
+              disabled={disabled || creating}
+              onChange={(event) => setNewLabel(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return
+                // Never let it reach the entry form, which would save the whole
+                // entry instead of adding a term.
+                event.preventDefault()
+                void createQuickTerm()
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={disabled || creating || newLabel.trim() === ''}
+              onClick={() => void createQuickTerm()}
+            >
+              {t('fields.taxonomyCreate')}
+            </Button>
+          </div>
           {createError !== null && (
             <p role="alert" className="field__error">
               {createError}

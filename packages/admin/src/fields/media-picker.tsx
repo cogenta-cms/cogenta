@@ -1,6 +1,5 @@
 import { type DragEvent, type JSX, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
 import {
   getMedia,
   listMedia,
@@ -15,6 +14,7 @@ import { UploadForm } from '../media/upload-form.js'
 import { useUploadQueue } from '../media/upload-queue.js'
 import '../styles/entry-picker.css'
 import '../styles/media.css'
+import { describeApiError } from '../api/describe-error.js'
 import { cn } from '../ui/cn.js'
 import { Button, Input, Label, Modal, Select } from '../ui/index.js'
 
@@ -316,6 +316,7 @@ export function MediaPicker({
         onOpenChange={setBrowsing}
         title={t('fields.mediaDialogTitle')}
         closeLabel={t('common.cancel')}
+        className="w-[min(46rem,calc(100vw-2rem))]"
       >
         {browsing && <BrowsePanel token={token} accept={accept} selected={value} onPick={pick} />}
       </Modal>
@@ -389,7 +390,7 @@ function BrowsePanel({
         setHasMore(page.hasMore)
         setCursor(page.nextCursor ?? undefined)
       } catch (caught) {
-        setError(caught instanceof ApiError ? caught.message : t('media.loadError'))
+        setError(describeApiError(caught, t('media.loadError')).message)
       } finally {
         setLoading(false)
       }
@@ -445,7 +446,14 @@ function BrowsePanel({
         </div>
       </form>
 
-      <Button type="button" variant="ghost" size="sm" onClick={() => setUploading((v) => !v)}>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="self-start"
+        aria-expanded={uploading}
+        onClick={() => setUploading((v) => !v)}
+      >
         {t('fields.mediaUploadToggle')}
       </Button>
       {uploading && (
@@ -480,6 +488,11 @@ function BrowsePanel({
                   type="button"
                   disabled={already}
                   onClick={() => onPick(asset)}
+                  title={
+                    asset.width !== null && asset.height !== null
+                      ? `${asset.filename} — ${asset.width} × ${asset.height}${asset.alt === '' ? '' : ` — ${asset.alt}`}`
+                      : asset.filename
+                  }
                   className={cn('media-grid__item', already && 'media-picker__result--picked')}
                 >
                   <MediaThumbnail

@@ -21,7 +21,17 @@ export interface ToolRun {
   readonly startedAt: string
   readonly finishedAt: string | undefined
   readonly log: readonly string[]
+  /** The same lines as a stable code plus parameters, so the screen can say them in its own language. */
+  readonly items?: readonly ToolRunItem[]
   readonly error: string | undefined
+  /** The failure's error code, when it had one. */
+  readonly errorCode?: string
+}
+
+export interface ToolRunItem {
+  readonly code: string
+  readonly params: Readonly<Record<string, string | number>>
+  readonly text: string
 }
 
 export function listTools(token: string): Promise<{ readonly tools: readonly ToolDefinition[] }> {

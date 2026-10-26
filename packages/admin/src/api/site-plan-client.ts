@@ -57,6 +57,13 @@ export interface SitePlanDetail extends SitePlanSummary {
     }
     readonly violations: readonly { readonly explanation: string }[]
     readonly warnings: readonly string[]
+    /** The proposed designs, with the tokens each would apply — what a preview renders. */
+    readonly skins?: readonly {
+      readonly id: string
+      readonly label: string
+      readonly rationale: string
+      readonly tokens: Record<string, unknown>
+    }[]
   }
   readonly sections: readonly PlanSection[]
   readonly decisions: Readonly<Record<string, PlanItemDecision>>
@@ -70,14 +77,25 @@ export interface SitePlanList {
 
 export interface AppliedPlanReport {
   readonly added: readonly string[]
-  readonly skipped: readonly { readonly name: string; readonly reason: string }[]
+  readonly skipped: readonly {
+    readonly name: string
+    readonly reason: string
+    /** Stable code of `reason`, so the screen can word it in its own language. */
+    readonly reasonKey?: string
+  }[]
   readonly entriesSeeded: number
   /** Pages actually created as drafts — approving them used to change nothing at all. */
   readonly pagesCreated: number
   /** Pages that could not be created, and why. Absent from an older server's response. */
-  readonly pagesSkipped?: readonly { readonly title: string; readonly reason: string }[]
+  readonly pagesSkipped?: readonly {
+    readonly title: string
+    readonly reason: string
+    readonly reasonKey?: string
+  }[]
   readonly skinApplied: boolean
   readonly followUp: readonly string[]
+  /** Stable codes of the `followUp` lines (same order), with the number they mention when they do. */
+  readonly followUpKeys?: readonly { readonly key: string; readonly count?: number }[]
 }
 
 export interface UploadedDocument {
@@ -90,16 +108,24 @@ export function listSitePlans(token: string): Promise<SitePlanList> {
   return requestBody('/api/site-plans', { headers: authHeader(token) })
 }
 
-export function getSitePlan(token: string, id: string): Promise<SitePlanDetail> {
-  return request(`/api/site-plans/${encodeURIComponent(id)}`, { headers: authHeader(token) })
+/** `?locale=` asks the server to word the review screen in the admin's language. */
+function localeQuery(locale: string | undefined): string {
+  return locale === undefined ? '' : `?locale=${encodeURIComponent(locale)}`
+}
+
+export function getSitePlan(token: string, id: string, locale?: string): Promise<SitePlanDetail> {
+  return request(`/api/site-plans/${encodeURIComponent(id)}${localeQuery(locale)}`, {
+    headers: authHeader(token),
+  })
 }
 
 export function proposeSitePlan(
   token: string,
   documents: readonly UploadedDocument[],
   siteName?: string,
+  locale?: string,
 ): Promise<SitePlanDetail> {
-  return request('/api/site-plans', {
+  return request(`/api/site-plans${localeQuery(locale)}`, {
     method: 'POST',
     headers: { ...authHeader(token), 'content-type': 'application/json' },
     body: JSON.stringify({ documents, ...(siteName === undefined ? {} : { siteName }) }),

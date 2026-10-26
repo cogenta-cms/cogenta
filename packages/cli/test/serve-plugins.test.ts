@@ -737,6 +737,54 @@ describe('the plugin workshop over HTTP', () => {
     }
   }, 120_000)
 
+  it('refuses to save a manifest that is not valid JSON, without leaking a server path', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      await fetch(`${server.base}/api/plugins/sandbox`, {
+        method: 'POST',
+        headers: auth(token),
+        body: JSON.stringify({ id: 'typo', locale: 'fr' }),
+      })
+      const before = await fetch(
+        `${server.base}/api/plugins/sandbox/typo/file?path=plugin.manifest.json`,
+        { headers: auth(token) },
+      )
+      const original = ((await before.json()) as { data: { content: string } }).data.content
+
+      const saved = await fetch(
+        `${server.base}/api/plugins/sandbox/typo/file?path=plugin.manifest.json`,
+        {
+          method: 'PUT',
+          headers: auth(token),
+          body: JSON.stringify({ content: 'bonjour, ceci n’est pas du JSON' }),
+        },
+      )
+
+      expect(saved.status).toBe(422)
+      const body = (await saved.json()) as { error: { code: string; message: string } }
+      expect(body.error.code).toBe('PLUGIN_MANIFEST_INVALID')
+      expect(body.error.message).not.toContain(root)
+      // Nothing was written: the draft still reads, and still checks out.
+      const after = await fetch(
+        `${server.base}/api/plugins/sandbox/typo/file?path=plugin.manifest.json`,
+        { headers: auth(token) },
+      )
+      expect(((await after.json()) as { data: { content: string } }).data.content).toBe(original)
+      const code = await fetch(`${server.base}/api/plugins/sandbox/typo/file?path=plugin.js`, {
+        headers: auth(token),
+      })
+      // A French-speaking admin gets starting code commented in French.
+      expect(((await code.json()) as { data: { content: string } }).data.content).toContain(
+        'Le code du plugin',
+      )
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
   it('creates from a name and a purpose, then switches off, uninstalls, and drops a draft', async () => {
     const root = await project()
     await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])

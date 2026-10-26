@@ -1,6 +1,7 @@
 import { type FormEvent, type JSX, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { listApiKeysPage } from '../api/api-keys-client.js'
 import {
   type AuditActorKind,
   type AuditEntry,
@@ -15,6 +16,10 @@ import {
 import { ApiError } from '../api/client.js'
 import { listUsers } from '../api/users-client.js'
 import { useAuth } from '../auth/auth-context.js'
+import { auditActionLabel, auditActorLabel, KNOWN_AUDIT_ACTIONS } from '../lib/audit-actions.js'
+import { roleLabels } from '../lib/role-label.js'
+import { useSchema } from '../schema/schema-context.js'
+import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import {
   Button,
   Field,
@@ -45,15 +50,10 @@ function isoStartOfDay(daysAgo: number): string {
 }
 
 /** L2 task 14 / fiche 21: a consultable, filterable view over `@cogenta/auth`'s hash-chained audit log — read-only, `admin` only (the API refuses everyone else with 403). */
-/** Same local pattern `collection-list.tsx` already uses: `Intl.DateTimeFormat` in the admin's own language, falling back to the raw string on an unparseable date rather than throwing. */
-function formatDateTime(iso: string, locale: string): string {
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return iso
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(parsed)
-}
-
 export function AuditRoute(): JSX.Element {
   const { t, i18n } = useTranslation()
+  const formatWhen = useDateTimeFormatter()
+  const schemaState = useSchema()
   const auth = useAuth()
   const token = auth.state.status === 'authenticated' ? auth.state.token : null
   const roles = auth.state.status === 'authenticated' ? auth.state.user.roles : []
@@ -90,6 +90,7 @@ export function AuditRoute(): JSX.Element {
 
   /** Actor ids resolved to an email, same best-effort pattern `version-history.tsx` and `trash.tsx` already use — a 403 (impossible here, this route is already admin-only) or a deleted account just leaves the id showing. */
   const [actorNames, setActorNames] = useState<ReadonlyMap<string, string>>(new Map())
+  const [verifiedNow, setVerifiedNow] = useState(false)
 
   const filterKey = JSON.stringify([actorId, action, collection, since, until, actorKind])
   const cursors = paging.key === filterKey ? paging.cursors : [undefined]
@@ -173,11 +174,21 @@ export function AuditRoute(): JSX.Element {
       return
     }
     let cancelled = false
-    listUsers(token)
-      .then((users) => {
-        if (!cancelled) setActorNames(new Map(users.map((user) => [user.id, user.email])))
-      })
-      .catch(() => undefined)
+    void Promise.all([
+      listUsers(token).catch(() => []),
+      listApiKeysPage(token, { limit: 100 }).then(
+        (page) => page.keys,
+        () => [],
+      ),
+    ]).then(([users, keys]) => {
+      if (cancelled) return
+      setActorNames(
+        new Map<string, string>([
+          ...users.map((user): [string, string] => [user.id, user.email]),
+          ...keys.map((key): [string, string] => [`apikey:${key.id}`, key.name]),
+        ]),
+      )
+    })
     return () => {
       cancelled = true
     }
@@ -198,8 +209,10 @@ export function AuditRoute(): JSX.Element {
     if (token === null) return
     setIntegrityChecking(true)
     setIntegrityError(null)
+    setVerifiedNow(false)
     try {
       setIntegrity(await runAuditIntegrityCheck(token))
+      setVerifiedNow(true)
     } catch (caught) {
       setIntegrityError(caught instanceof ApiError ? caught.message : t('audit.verifyError'))
     } finally {
@@ -242,6 +255,27 @@ export function AuditRoute(): JSX.Element {
     }
   }
 
+  const actionOptions = [
+    ...new Set([...KNOWN_AUDIT_ACTIONS, ...entries.map((entry) => entry.action), action]),
+  ]
+    .filter((id) => id !== '')
+    .sort((a, b) => auditActionLabel(t, a).localeCompare(auditActionLabel(t, b), i18n.language))
+  const collectionOptions = [
+    ...new Map(
+      [
+        ...(schemaState.status === 'ready'
+          ? schemaState.schema.collections.map((c): [string, string] => [c.name, c.labels.plural])
+          : []),
+        ...entries.flatMap((entry): [string, string][] =>
+          entry.collection === null ? [] : [[entry.collection, entry.collection]],
+        ),
+        ...(collection === '' ? [] : ([[collection, collection]] as [string, string][])),
+      ].reverse(),
+    ),
+  ]
+    .reverse()
+    .map(([name, label]) => ({ name, label }))
+
   if (!isAdmin) {
     return (
       <section aria-labelledby="audit-heading">
@@ -261,44 +295,67 @@ export function AuditRoute(): JSX.Element {
         status={integrity}
         checking={integrityChecking}
         error={integrityError}
+        justVerified={verifiedNow}
         onRunNow={() => void runIntegrityCheck()}
       />
 
-      <form onSubmit={submitFilters} className="flex flex-wrap items-end gap-3">
-        <div className="max-w-xs">
+      <form
+        onSubmit={submitFilters}
+        aria-label={t('audit.filtersLabel')}
+        className="flex flex-col gap-3"
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Field label={t('audit.actor')}>
             {(control) => (
-              <Input
+              <Select
                 {...control}
                 value={actorId}
                 onChange={(event) => setActorId(event.target.value)}
-              />
+              >
+                <option value="">{t('audit.actorFilterAll')}</option>
+                {[...actorNames]
+                  .filter(([id]) => !id.startsWith('apikey:'))
+                  .sort((a, b) => a[1].localeCompare(b[1]))
+                  .map(([id, email]) => (
+                    <option key={id} value={id}>
+                      {email}
+                    </option>
+                  ))}
+              </Select>
             )}
           </Field>
-        </div>
-        <div className="max-w-xs">
           <Field label={t('audit.action')}>
             {(control) => (
-              <Input
+              <Select
                 {...control}
                 value={action}
                 onChange={(event) => setAction(event.target.value)}
-              />
+              >
+                <option value="">{t('audit.actionFilterAll')}</option>
+                {actionOptions.map((id) => (
+                  <option key={id} value={id}>
+                    {auditActionLabel(t, id)}
+                  </option>
+                ))}
+              </Select>
             )}
           </Field>
-        </div>
-        <div className="max-w-xs">
           <Field label={t('audit.collection')}>
             {(control) => (
-              <Input
+              <Select
                 {...control}
                 value={collection}
                 onChange={(event) => setCollection(event.target.value)}
-              />
+              >
+                <option value="">{t('audit.collectionFilterAll')}</option>
+                {collectionOptions.map((option) => (
+                  <option key={option.name} value={option.name}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
             )}
           </Field>
-        </div>
-        <div className="max-w-xs">
           <Field label={t('audit.actorKindLabel')}>
             {(control) => (
               <Select
@@ -315,8 +372,6 @@ export function AuditRoute(): JSX.Element {
               </Select>
             )}
           </Field>
-        </div>
-        <div className="max-w-xs">
           <Field label={t('audit.since')}>
             {(control) => (
               <Input
@@ -331,8 +386,6 @@ export function AuditRoute(): JSX.Element {
               />
             )}
           </Field>
-        </div>
-        <div className="max-w-xs">
           <Field label={t('audit.until')}>
             {(control) => (
               <Input
@@ -348,30 +401,29 @@ export function AuditRoute(): JSX.Element {
             )}
           </Field>
         </div>
-        <Button type="submit">{t('audit.filter')}</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit">{t('audit.filter')}</Button>
+          <Button variant="secondary" size="sm" onClick={() => quickRange(0)}>
+            {t('audit.rangeToday')}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => quickRange(7)}>
+            {t('audit.range7d')}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => quickRange(30)}>
+            {t('audit.range30d')}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setSince('')
+              setUntil('')
+            }}
+          >
+            {t('audit.rangeClear')}
+          </Button>
+        </div>
       </form>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" onClick={() => quickRange(0)}>
-          {t('audit.rangeToday')}
-        </Button>
-        <Button variant="secondary" size="sm" onClick={() => quickRange(7)}>
-          {t('audit.range7d')}
-        </Button>
-        <Button variant="secondary" size="sm" onClick={() => quickRange(30)}>
-          {t('audit.range30d')}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            setSince('')
-            setUntil('')
-          }}
-        >
-          {t('audit.rangeClear')}
-        </Button>
-      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <Button
@@ -404,14 +456,14 @@ export function AuditRoute(): JSX.Element {
 
       {!loading && error === null && pager}
       {!loading && error === null && (
-        <TableRoot label={t('audit.heading')}>
-          <Table className="min-w-[56rem]">
+        <TableRoot label={t('audit.heading')} stacked>
+          <Table>
             <TableHead>
               <TableRow>
                 <TableHeader>{t('audit.date')}</TableHeader>
+                <TableHeader>{t('audit.action')}</TableHeader>
                 <TableHeader>{t('audit.actor')}</TableHeader>
                 <TableHeader>{t('audit.roles')}</TableHeader>
-                <TableHeader>{t('audit.action')}</TableHeader>
                 <TableHeader>{t('audit.collection')}</TableHeader>
                 <TableHeader>{t('audit.entry')}</TableHeader>
                 <TableHeader>{t('audit.actionsColumn')}</TableHeader>
@@ -420,23 +472,39 @@ export function AuditRoute(): JSX.Element {
             <TableBody>
               {entries.map((entry) => (
                 <TableRow key={entry.id}>
-                  <TableCell>
-                    <span title={entry.at}>{formatDateTime(entry.at, i18n.language)}</span>
+                  <TableCell className="whitespace-nowrap" label={t('audit.date')}>
+                    <span title={entry.at}>{formatWhen(entry.at)}</span>
                   </TableCell>
-                  <TableCell>
-                    {entry.actorId === null
+                  <TableCell stack="heading">{auditActionLabel(t, entry.action)}</TableCell>
+                  <TableCell label={t('audit.actor')}>
+                    {auditActorLabel(t, entry.actorId, actorNames)}
+                  </TableCell>
+                  <TableCell label={t('audit.roles')}>
+                    {entry.actorRoles.length === 0 ? '—' : roleLabels(t, entry.actorRoles)}
+                  </TableCell>
+                  <TableCell label={t('audit.collection')}>
+                    {entry.collection === null
                       ? '—'
-                      : (actorNames.get(entry.actorId) ?? entry.actorId)}
+                      : (collectionOptions.find((option) => option.name === entry.collection)
+                          ?.label ?? entry.collection)}
                   </TableCell>
-                  <TableCell>{entry.actorRoles.join(', ')}</TableCell>
-                  <TableCell>
-                    {t(`audit.actionLabel.${entry.action}`, { defaultValue: entry.action })}
+                  <TableCell label={t('audit.entry')}>
+                    {entry.collection !== null && entry.entryId !== null ? (
+                      <Link
+                        to={`/collections/${entry.collection}/${entry.entryId}`}
+                        title={entry.entryId}
+                      >
+                        {t('audit.openEntry')}
+                      </Link>
+                    ) : entry.entryId !== null && actorNames.has(entry.entryId) ? (
+                      t('audit.targetAccount', { email: actorNames.get(entry.entryId) })
+                    ) : (
+                      (entry.entryId ?? '—')
+                    )}
                   </TableCell>
-                  <TableCell>{entry.collection ?? '—'}</TableCell>
-                  <TableCell>{entry.entryId ?? '—'}</TableCell>
-                  <TableCell>
+                  <TableCell stack="actions">
                     <Button variant="secondary" size="sm" onClick={() => void openDetail(entry.id)}>
-                      {t('audit.viewDetail')}
+                      {t('audit.viewDetailShort')}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -475,14 +543,17 @@ function IntegrityPanel({
   status,
   checking,
   error,
+  justVerified,
   onRunNow,
 }: {
   readonly status: AuditIntegrityStatus | null
   readonly checking: boolean
   readonly error: string | null
+  readonly justVerified: boolean
   onRunNow(): void
 }): JSX.Element | null {
   const { t } = useTranslation()
+  const formatWhen = useDateTimeFormatter()
   // `null` means this site never wired a scheduled check up at all — say
   // nothing rather than a confusing "unknown" state.
   if (status === null) return null
@@ -498,7 +569,7 @@ function IntegrityPanel({
               : status.lastCheckedAt === null
                 ? t('audit.integrityNeverRun')
                 : t('audit.integrityLastChecked', {
-                    at: status.lastCheckedAt,
+                    at: formatWhen(status.lastCheckedAt),
                     mode:
                       status.lastMode === null
                         ? '?'
@@ -519,7 +590,7 @@ function IntegrityPanel({
       )}
       {status.state === 'ok' && status.lastCheckedAt !== null && (
         <p className="m-0 text-sm" role="status">
-          {t('audit.integrityOk')}
+          {justVerified ? t('audit.verifyDone') : t('audit.integrityOk')}
         </p>
       )}
       {error !== null && (
@@ -532,24 +603,23 @@ function IntegrityPanel({
 }
 
 function EntryDetail({ detail }: { readonly detail: AuditEntryDetail }): JSX.Element {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
+  const formatWhen = useDateTimeFormatter()
   const { entry } = detail
 
   return (
     <dl className="flex flex-col gap-3 text-sm">
       <Row label={t('audit.detailDate')}>
-        <span title={entry.at}>{formatDateTime(entry.at, i18n.language)}</span>
+        <span title={entry.at}>{formatWhen(entry.at)}</span>
       </Row>
       <Row label={t('audit.detailActor')}>
-        {detail.actorLabel ?? entry.actorId ?? t('audit.detailSystemActor')}
+        {detail.actorLabel ?? auditActorLabel(t, entry.actorId, new Map())}
       </Row>
       <Row label={t('audit.detailActorKind')}>{t(`audit.actorKind.${detail.actorKind}`)}</Row>
       <Row label={t('audit.detailRoles')}>
-        {entry.actorRoles.length === 0 ? '—' : entry.actorRoles.join(', ')}
+        {entry.actorRoles.length === 0 ? '—' : roleLabels(t, entry.actorRoles)}
       </Row>
-      <Row label={t('audit.detailAction')}>
-        {t(`audit.actionLabel.${entry.action}`, { defaultValue: entry.action })}
-      </Row>
+      <Row label={t('audit.detailAction')}>{auditActionLabel(t, entry.action)}</Row>
       {entry.collection !== null && entry.entryId !== null && (
         <Row label={t('audit.detailEntry')}>
           <Link to={`/collections/${entry.collection}/${entry.entryId}`}>

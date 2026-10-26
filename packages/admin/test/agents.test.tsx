@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../src/app.js'
 import { installMockFetch, VALID_TOKEN } from './helpers/mock-fetch.js'
@@ -47,11 +47,11 @@ describe('agents', () => {
     await goToAgents()
 
     expect(await screen.findByText('security')).toBeDefined()
-    expect(screen.getByText('Activé')).toBeDefined()
+    // No provider is enabled in this fixture, so the single state badge says so.
+    expect(screen.getByText('Activé, sans fournisseur')).toBeDefined()
     // "propose" (contract C) reads as "Co-pilote", the L22 task 1 UI label.
     expect(screen.getByText('Co-pilote')).toBeDefined()
     expect(screen.getByText(/1\s234 consommés sur 200\s000/u)).toBeDefined()
-    expect(screen.getByText('Activé, fournisseur indisponible')).toBeDefined()
   })
 
   it('disables an agent from the list', async () => {
@@ -81,11 +81,13 @@ describe('agents', () => {
     // through a `<Link>`, not a button that swaps state in place.
     fireEvent.click(await screen.findByRole('link', { name: 'security' }))
 
-    expect(await screen.findByText(/end_turn/)).toBeDefined()
+    expect(await screen.findByText(/terminé/)).toBeDefined()
     // `deps.scan` now also appears in the L21 task 4 permission checklist and
     // the autonomy overrides table, so this asserts on the history entry's
     // own action text specifically rather than the ambiguous bare name.
-    expect(await screen.findByText('2026-03-01T00:00:00.000Z — deps.scan')).toBeDefined()
+    // The timestamp is now shown in the reader's own time zone and language
+    // ("1 mars 2026, 01:00"), so match the year rather than a fixed instant.
+    expect(await screen.findByText(/2026.* — deps\.scan$/u)).toBeDefined()
   })
 
   // L21 task 4: the detail panel now shows everything `AgentDeclaration`
@@ -95,7 +97,20 @@ describe('agents', () => {
   it('shows the full declared configuration for the selected agent', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
-    installMockFetch({ roles: ['admin'] })
+    // The read-only view names the provider that actually answers: the
+    // agent's preferred one ("claude-sonnet" in the fixture) when it is enabled.
+    installMockFetch({
+      roles: ['admin'],
+      providers: [
+        {
+          provider: 'claude-sonnet',
+          enabled: true,
+          model: 'claude-sonnet-5',
+          maskedKey: '••••abcd',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+      ],
+    })
 
     render(<App />)
     await goToAgents()
@@ -110,8 +125,11 @@ describe('agents', () => {
     fireEvent.click(await screen.findByRole('button', { name: "Réglages de l'agent" }))
 
     // Model preference.
-    expect(await screen.findByText(/claude-sonnet/)).toBeDefined()
-    expect(screen.getByText(/local/)).toBeDefined()
+    expect(
+      await within(await screen.findByRole('dialog')).findByText(
+        'Répond avec le fournisseur « claude-sonnet »',
+      ),
+    ).toBeDefined()
 
     // Autonomy default, shown as the UI's three-level label (L22 task 1
     // item 4): "propose" (contract C) reads as "Co-pilote".
@@ -122,10 +140,10 @@ describe('agents', () => {
     expect(screen.getByText('30')).toBeDefined()
 
     // Permissions: the granted tool is checked, an undeclared one is not.
-    const grantedCheckbox = screen.getByLabelText('deps.scan') as HTMLInputElement
+    const grantedCheckbox = screen.getByLabelText('Analyser les dépendances') as HTMLInputElement
     expect(grantedCheckbox.checked).toBe(true)
     expect(grantedCheckbox.disabled).toBe(true)
-    const ungrantedCheckbox = screen.getByLabelText('content.publish') as HTMLInputElement
+    const ungrantedCheckbox = screen.getByLabelText('Publier un contenu') as HTMLInputElement
     expect(ungrantedCheckbox.checked).toBe(false)
     expect(ungrantedCheckbox.disabled).toBe(true)
 
@@ -134,6 +152,34 @@ describe('agents', () => {
 
     // No subagents declared for this fixture — the empty state renders.
     expect(screen.getByText('Aucun sous-agent déclaré.')).toBeDefined()
+  })
+
+  it('falls back to the declared fallback provider when the preferred one is not enabled', async () => {
+    localStorage.clear()
+    localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
+    installMockFetch({
+      roles: ['admin'],
+      providers: [
+        {
+          provider: 'local',
+          enabled: true,
+          model: 'llama',
+          maskedKey: '••••abcd',
+          updatedAt: '2026-03-01T00:00:00.000Z',
+        },
+      ],
+    })
+
+    render(<App />)
+    await goToAgents()
+    fireEvent.click(await screen.findByRole('link', { name: 'security' }))
+    fireEvent.click(await screen.findByRole('button', { name: "Réglages de l'agent" }))
+
+    expect(
+      await within(await screen.findByRole('dialog')).findByText(
+        'Répond avec le fournisseur « local »',
+      ),
+    ).toBeDefined()
   })
 
   it('creates a new agent and runs it, showing the result', async () => {
@@ -177,7 +223,7 @@ describe('agents', () => {
   // Fiche 55 task 3: creating still requires just a name and a provider —
   // the rest (role, objectives, style, system prompt, tools, autonomy) is
   // now collectible in the same form, but never required.
-  it('the create form disables Save until a name and an enabled provider are both present', async () => {
+  it('the create form disables Save until a name is present, and lets Cogenta pick the provider when none is enabled', async () => {
     localStorage.clear()
     localStorage.setItem(TOKEN_STORAGE_KEY, VALID_TOKEN)
     installMockFetch({ roles: ['admin'] }) // no providers configured
@@ -186,12 +232,15 @@ describe('agents', () => {
     await goToAgents()
 
     fireEvent.click(screen.getByRole('button', { name: 'Créer un agent' }))
-    expect(await screen.findByText(/Aucun fournisseur n'est encore activé/)).toBeDefined()
+    expect(await screen.findByText(/Aucun fournisseur n’est actif/)).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Enregistrer' })).toHaveProperty('disabled', true)
     fireEvent.change(screen.getByPlaceholderText('ex. Rédacteur de newsletter'), {
       target: { value: 'Helper' },
     })
 
-    expect(screen.getByRole('button', { name: 'Enregistrer' })).toHaveProperty('disabled', true)
+    // The provider is "Automatique" by default, so a name is enough: the agent
+    // answers once a provider is enabled (the notice above says so).
+    expect(screen.getByRole('button', { name: 'Enregistrer' })).toHaveProperty('disabled', false)
   })
 
   // Fiche 55 task 1/3: creation grows into role/objectives/style/system
@@ -275,7 +324,7 @@ describe('agent detail — a real route with its own URL (fiche 71)', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: /security/, level: 1 })).toBeDefined()
-    expect(await screen.findByText(/end_turn/)).toBeDefined()
+    expect(await screen.findByText(/terminé/)).toBeDefined()
   })
 
   it('has a real "Retour" link back to the list, never history.back()', async () => {
@@ -343,6 +392,9 @@ describe('agent detail — a real route with its own URL (fiche 71)', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
+    // Saving closes the dialog and confirms; reopen it to read what was stored.
+    expect(await screen.findByText('Réglages enregistrés.')).toBeDefined()
+    fireEvent.click(await screen.findByRole('button', { name: "Réglages de l'agent" }))
     expect(await screen.findByText('10')).toBeDefined()
   })
 })

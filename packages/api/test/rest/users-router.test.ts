@@ -239,6 +239,22 @@ describe('GET /api/users', () => {
 })
 
 describe('POST /api/users', () => {
+  it('refuses an admin API key that tries to create or promote an account', async () => {
+    const editor = await makeUser('editor@example.com', ['editor'])
+    const key = actorFor('apikey:01a15b7a-0000-7000-8000-000000000001', ['admin'])
+
+    const created = await router().handle(
+      request('POST', '/api/users', { email: 'second-admin@example.com', roles: ['admin'] }),
+      key,
+    )
+    expect(created.status).toBe(403)
+    const promoted = await router().handle(
+      request('PATCH', `/api/users/${editor.id}`, { roles: ['admin'] }),
+      key,
+    )
+    expect(promoted.status).toBe(403)
+  })
+
   it('creates the account and returns a generated password exactly once', async () => {
     const admin = await makeUser('root@example.com', ['admin'])
     const response = await router().handle(
@@ -1368,11 +1384,23 @@ describe('dormant accounts and the MFA-recommended signal (fiche 17 task 4)', ()
     expect(dataOf<{ mfaRecommended: boolean }>(response).mfaRecommended).toBe(false)
   })
 
-  it('marks an account with no sign-in ever as dormant', async () => {
+  it('does not mark an account that was just created and never signed in as dormant', async () => {
     const admin = await makeUser('root@example.com', ['admin'])
-    const dormant = await makeUser('dormant@example.com', ['editor'])
+    const fresh = await makeUser('fresh@example.com', ['editor'])
 
     const response = await router().handle(
+      request('GET', `/api/users/${fresh.id}`),
+      actorFor(admin.id, ['admin']),
+    )
+    expect(dataOf<{ dormant: boolean }>(response).dormant).toBe(false)
+  })
+
+  it('marks an account with no sign-in ever as dormant once it is older than the threshold', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const dormant = await makeUser('dormant@example.com', ['editor'])
+    const later = Date.now() + 91 * 24 * 60 * 60 * 1000
+
+    const response = await createUsersRouter({ auth, now: () => later }).handle(
       request('GET', `/api/users/${dormant.id}`),
       actorFor(admin.id, ['admin']),
     )

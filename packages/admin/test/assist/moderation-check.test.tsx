@@ -49,7 +49,7 @@ describe('the moderation check on a site with no AI provider', () => {
 })
 
 describe('the moderation check on a configured site', () => {
-  it('gives repeated comment checks distinct contextual landmarks and heading ids', async () => {
+  it('gives repeated comment checks distinct contextual landmarks and no duplicate ids', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => jsonResponse(CAPABILITIES)),
@@ -72,8 +72,11 @@ describe('the moderation check on a configured site', () => {
     expect(
       screen.getByRole('region', { name: 'Vérification du commentaire 2 de Alex' }),
     ).toBeDefined()
-    const headings = screen.getAllByRole('heading', { level: 2 })
-    expect(new Set(headings.map((heading) => heading.id)).size).toBe(2)
+    // Inline in a list row, the check is told apart by its landmark name alone:
+    // it draws no heading, so repeated rows cannot repeat a heading id either.
+    expect(screen.queryAllByRole('heading')).toHaveLength(0)
+    const ids = [...container.querySelectorAll('[id]')].map((node) => node.id)
+    expect(new Set(ids).size).toBe(ids.length)
     const results = await run(container as unknown as Parameters<typeof run>[0], {
       runOnly: { type: 'rule', values: ['landmark-unique'] },
     })

@@ -46,14 +46,18 @@ describe('prompt settings', () => {
       target: { value: 'Rewrite a passage.' },
     })
     fireEvent.change(screen.getByLabelText('Catégorie'), { target: { value: 'text' } })
-    fireEvent.change(screen.getByLabelText('Modèle'), {
+    fireEvent.change(screen.getByLabelText('Texte de la consigne'), {
       target: { value: 'Rewrite the passage. {{localeLine}}' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     expect(await screen.findByText('Rewrite')).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    // The row's own button only opens a confirmation; nothing is removed yet.
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer la consigne Rewrite' }))
+    expect(await screen.findByRole('button', { name: 'Supprimer la consigne' })).toBeDefined()
+    expect(screen.getByText('Rewrite')).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer la consigne' }))
 
     expect(await screen.findByText(/Aucun modèle de prompt configuré/)).toBeDefined()
   })
@@ -67,7 +71,7 @@ describe('prompt settings — the open row has its own URL (fiche 71)', () => {
       target: { value: 'Rewrite a passage.' },
     })
     fireEvent.change(screen.getByLabelText('Catégorie'), { target: { value: 'text' } })
-    fireEvent.change(screen.getByLabelText('Modèle'), {
+    fireEvent.change(screen.getByLabelText('Texte de la consigne'), {
       target: { value: 'Rewrite the passage. {{localeLine}}' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))

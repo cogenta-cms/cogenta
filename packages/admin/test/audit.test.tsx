@@ -42,8 +42,12 @@ describe('audit log', () => {
     render(<App />)
     await goToAudit()
 
-    expect(await screen.findByText('Contenu créé')).toBeDefined()
-    expect(screen.getByText('article')).toBeDefined()
+    // Scoped to the table: the action filter above also lists "Contenu créé".
+    // The collection is named by its label ("Articles"), not its identifier.
+    await screen.findByRole('table')
+    const table = within(screen.getByRole('table'))
+    expect(await table.findByText('Contenu créé')).toBeDefined()
+    expect(table.getByText('Articles')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Vérifier maintenant' }))
     expect(await screen.findByText(/Chaîne intacte/)).toBeDefined()
@@ -57,8 +61,9 @@ describe('audit log', () => {
     render(<App />)
     await goToAudit()
 
-    await screen.findByText('Contenu créé')
+    await screen.findByRole('table')
     const table = within(screen.getByRole('table'))
+    await table.findByText('Contenu créé')
     // The fixture's every row is `actorId: 'user-1'`, resolved through
     // `/api/users` the same best-effort way `trash.tsx`/`version-history.tsx`
     // already resolve an actor — the raw id must not be what shows. (The
@@ -112,8 +117,9 @@ describe('audit log', () => {
     // The default fixture lists two entries (fiche 07 task 3 added a second,
     // `note`/`content.delete`, row) — both carry a "Détail" button, so the
     // query is scoped to `entry-1`'s own row rather than assuming there is
-    // only one on the page.
-    const entryRow = (await screen.findByText('entry-1')).closest('tr')
+    // only one on the page. The row no longer prints the raw entry id: its
+    // link to the entry carries it as a title.
+    const entryRow = (await screen.findByTitle('entry-1')).closest('tr')
     if (entryRow === null) throw new Error('entry-1 row not found')
     fireEvent.click(within(entryRow).getByRole('button', { name: 'Détail' }))
 
@@ -157,20 +163,20 @@ describe('audit log', () => {
 
     // Newest first: entry 59 (the last minute) is on the first page, entry 0
     // (the earliest) is not — until the third cursor page.
-    await screen.findByText('entry-59')
-    expect(screen.queryByText('entry-0')).toBeNull()
+    await screen.findByTitle('entry-59')
+    expect(screen.queryByTitle('entry-0')).toBeNull()
 
     expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(21)
     fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
-    await screen.findByText('entry-39')
-    expect(screen.queryByText('entry-59')).toBeNull()
+    await screen.findByTitle('entry-39')
+    expect(screen.queryByTitle('entry-59')).toBeNull()
     expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(21)
     fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
-    await screen.findByText('entry-0')
-    expect(screen.queryByText('entry-39')).toBeNull()
+    await screen.findByTitle('entry-0')
+    expect(screen.queryByTitle('entry-39')).toBeNull()
     fireEvent.click(screen.getAllByRole('button', { name: 'Précédent' })[0] as HTMLElement)
-    await screen.findByText('entry-39')
-    expect(screen.queryByText('entry-0')).toBeNull()
+    await screen.findByTitle('entry-39')
+    expect(screen.queryByTitle('entry-0')).toBeNull()
 
     // A slow next-page response must not replace a newer filtered first page.
     let release: (() => void) | undefined
@@ -182,7 +188,7 @@ describe('audit log', () => {
     const originalFetch = globalThis.fetch
     vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString()
-      if (url.includes('/api/audit?') && url.includes('collection=missing')) {
+      if (url.includes('/api/audit?') && url.includes('collection=note')) {
         return Response.json({ data: [], page: { hasMore: false, nextCursor: null } })
       }
       if (url.includes('/api/audit?') && url.includes('after=')) {
@@ -197,13 +203,15 @@ describe('audit log', () => {
     try {
       fireEvent.click(screen.getAllByRole('button', { name: 'Suivant' })[0] as HTMLElement)
       await waitFor(() => expect(requested).toBe(true))
-      fireEvent.change(screen.getByLabelText('Collection'), { target: { value: 'missing' } })
+      // A real option of the collection filter (the schema's "Notes").
+      await screen.findByRole('option', { name: 'Notes' })
+      fireEvent.change(screen.getByLabelText('Collection'), { target: { value: 'note' } })
       await screen.findByText('Aucune entrée.')
       release?.()
       await waitFor(() => expect(finished).toBe(true))
-      expect(screen.queryByText('entry-0')).toBeNull()
+      expect(screen.queryByTitle('entry-0')).toBeNull()
       fireEvent.change(screen.getByLabelText('Collection'), { target: { value: '' } })
-      await screen.findByText('entry-59')
+      await screen.findByTitle('entry-59')
       expect(
         screen
           .getAllByRole('button', { name: 'Précédent' })

@@ -37,6 +37,29 @@ describe('content diff', () => {
       expect(diffValues(before, before)).toEqual([])
     })
 
+    it('does not report a rich-text body as changed when only its generated keys differ', () => {
+      const paragraph = (blockKey: string, spanKey: string, text: string) => ({
+        _key: blockKey,
+        _type: 'block',
+        style: 'normal',
+        children: [{ _key: spanKey, _type: 'span', text, marks: [] }],
+        markDefs: [],
+      })
+
+      expect(
+        diffValues(
+          { body: [paragraph('a1', 's1', 'Bonjour')] },
+          { body: [paragraph('z9', 'q7', 'Bonjour')] },
+        ),
+      ).toEqual([])
+      expect(
+        diffValues(
+          { body: [paragraph('a1', 's1', 'Bonjour')] },
+          { body: [paragraph('z9', 'q7', 'Bonsoir')] },
+        ),
+      ).toHaveLength(1)
+    })
+
     it('does not report a change because the driver returned keys in another order', () => {
       expect(diffValues({ meta: { a: 1, b: 2 } }, { meta: { b: 2, a: 1 } })).toEqual([])
     })

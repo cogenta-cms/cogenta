@@ -83,7 +83,49 @@ describe('the redirects screen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ajouter la redirection' }))
 
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('redirect')
+    expect(alert.textContent).toContain('elle-même')
+    expect(screen.queryByText('/loop')).toBeNull()
+  })
+
+  it('refuses a javascript: target, an empty form and a path without a slash, in French', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToRedirects()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter la redirection' }))
+    expect((await screen.findAllByRole('alert'))[0]?.textContent).toContain('obligatoire')
+
+    fireEvent.change(screen.getByLabelText('Depuis'), { target: { value: '/a' } })
+    fireEvent.change(screen.getByLabelText('Vers'), { target: { value: 'javascript:alert(1)' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter la redirection' }))
+    expect((await screen.findAllByRole('alert'))[0]?.textContent).toContain('javascript:')
+
+    fireEvent.change(screen.getByLabelText('Vers'), { target: { value: 'sans-slash' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter la redirection' }))
+    expect((await screen.findAllByRole('alert'))[0]?.textContent).toContain('commencer par')
+  })
+
+  it('asks before replacing a redirect that already leaves the same path', async () => {
+    signedIn(['admin'])
+    render(<App />)
+    await goToRedirects()
+
+    fireEvent.change(screen.getByLabelText('Depuis'), { target: { value: '/dup' } })
+    fireEvent.change(screen.getByLabelText('Vers'), { target: { value: '/first' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter la redirection' }))
+    await screen.findByText('/first')
+
+    fireEvent.change(screen.getByLabelText('Depuis'), { target: { value: '/dup' } })
+    fireEvent.change(screen.getByLabelText('Vers'), { target: { value: '/second' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter la redirection' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/Une redirection part déjà de \/dup/u)).toBeDefined()
+    // Nothing was written yet.
+    expect(screen.queryByText('/second')).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remplacer' }))
+    expect(await screen.findByText('/second')).toBeDefined()
+    expect(screen.queryByText('/first')).toBeNull()
   })
 
   it('removes a redirect through the real API', async () => {
@@ -97,6 +139,10 @@ describe('the redirects screen', () => {
     await screen.findByText('/gone')
 
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    // Deleting asks first: the rule is still there behind the dialog.
+    const dialog = await screen.findByRole('dialog')
+    expect(screen.getAllByText('/gone').length).toBeGreaterThan(0)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Supprimer' }))
     expect(await screen.findByText("Aucune redirection pour l'instant.")).toBeDefined()
   })
 })

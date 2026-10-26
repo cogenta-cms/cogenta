@@ -1,0 +1,25 @@
+{
+  "sitePlan": {
+    "noProvider": "Aucun fournisseur d’IA actif : un nouveau document ne peut pas être analysé ici. Les propositions déjà faites restent consultables et applicables. Tout le reste de cette administration fonctionne sans fournisseur.",
+    "chooseFiles": "Choisir un ou plusieurs fichiers",
+    "noFileChosen": "Aucun fichier choisi",
+    "filesChosen_other": "{{count}} fichiers choisis : {{names}}",
+    "filesChosen_one": "{{count}} fichier choisi : {{names}}",
+    "analyse": "Analyser le document",
+    "analysing": "Analyse en cours…",
+    "analyseNeedsFile": "Choisissez d’abord un fichier.",
+    "analysingHint": "Cela peut prendre une minute : le modèle lit le document puis propose la structure du site.",
+    "review": "Relire",
+    "progressSaved": "Avancement enregistré : vos décisions sont conservées.",
+    "discarded": "Proposition écartée.",
+    "appliedTitle": "Plan appliqué",
+    "undecided": "Pas encore tranché",
+    "discardTitle": "Écarter cette proposition ?",
+    "discardBody": "« {{name}} » et les décisions déjà prises seront supprimées. Le document d’origine n’est pas touché : vous pourrez l’analyser de nouveau.",
+    "discardConfirm": "Écarter la proposition",
+    "enlargePreview": "Agrandir l’aperçu du design {{label}}",
+    "enlargedTitle": "Aperçu du design « {{label}} »",
+    "uploadHelp": "PDF, DOCX, Markdown ou texte brut : un cahier des charges, une description du projet, une spécification.",
+    "heading": "Générer le site"
+  }
+}

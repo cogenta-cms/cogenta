@@ -90,7 +90,7 @@ export interface SitePlannerLike {
     | { readonly ok: false; readonly stage: string; readonly reason: string }
   >
   /** The draft, flattened into the units a human decides on. */
-  sections(draft: SitePlanDraftLike): readonly PlanSectionLike[]
+  sections(draft: SitePlanDraftLike, locale?: string): readonly PlanSectionLike[]
   /**
    * Whether a model can be reached right now. Absent means always: a host
    * whose provider can be configured while it runs answers per request.
@@ -102,7 +102,12 @@ export interface AppliedPlanReport {
   /** Collections actually created. */
   readonly added: readonly string[]
   /** Proposals refused because the site already has a collection of that name. */
-  readonly skipped: readonly { readonly name: string; readonly reason: string }[]
+  readonly skipped: readonly {
+    readonly name: string
+    readonly reason: string
+    /** Stable code of `reason`, so a screen can word it in its own language. */
+    readonly reasonKey?: string
+  }[]
   readonly entriesSeeded: number
   /**
    * Pages actually created as drafts.
@@ -114,10 +119,16 @@ export interface AppliedPlanReport {
    */
   readonly pagesCreated: number
   /** Pages that could not be created, and why — never a silent drop. */
-  readonly pagesSkipped: readonly { readonly title: string; readonly reason: string }[]
+  readonly pagesSkipped: readonly {
+    readonly title: string
+    readonly reason: string
+    readonly reasonKey?: string
+  }[]
   readonly skinApplied: boolean
   /** What the operator still has to do by hand — a restart, most often. Never claimed to be automatic. */
   readonly followUp: readonly string[]
+  /** Stable codes of the `followUp` lines (same order), with the number they mention when they do. */
+  readonly followUpKeys?: readonly { readonly key: string; readonly count?: number }[]
 }
 
 export interface SitePlanApplierLike {
@@ -288,6 +299,15 @@ function requireDecisions(body: unknown): PlanDecisionsLike {
   return out
 }
 
+/** The language the admin reads in, asked for with `?locale=` so the review wording matches it. */
+function localeOf(request: RestRequest): string | undefined {
+  const value = request.query['locale']
+  const first = Array.isArray(value) ? value[0] : value
+  return typeof first === 'string' && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$/u.test(first)
+    ? first
+    : undefined
+}
+
 function summaryOf(stored: StoredSitePlanLike): Record<string, unknown> {
   return {
     id: stored.draft.id,
@@ -355,7 +375,7 @@ export function createSitePlanRouter(options: SitePlanRouterOptions): SitePlanRo
               data: {
                 ...summaryOf(stored),
                 draft: stored.draft,
-                sections: options.planner.sections(stored.draft),
+                sections: options.planner.sections(stored.draft, localeOf(request)),
                 decisions: stored.decisions,
               },
             })
@@ -375,7 +395,7 @@ export function createSitePlanRouter(options: SitePlanRouterOptions): SitePlanRo
             data: {
               ...summaryOf(stored),
               draft: stored.draft,
-              sections: options.planner?.sections(stored.draft) ?? [],
+              sections: options.planner?.sections(stored.draft, localeOf(request)) ?? [],
               decisions: stored.decisions,
             },
           })

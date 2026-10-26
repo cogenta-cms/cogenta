@@ -35,7 +35,15 @@ export interface ToolRunLike {
   readonly finishedAt: string | undefined
   /** Lines of progress, oldest first, already redacted by the caller. */
   readonly log: readonly string[]
+  /** The same lines as stable codes plus parameters, for a translated screen — absent for a line without one. */
+  readonly items?: readonly {
+    readonly code: string
+    readonly params: Readonly<Record<string, string | number>>
+    readonly text: string
+  }[]
   readonly error: string | undefined
+  /** The `CogentaError` code of a failure, when it had one. */
+  readonly errorCode?: string
 }
 
 export interface ToolsRouterOptions {

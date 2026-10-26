@@ -146,3 +146,19 @@ export function removeProvider(
     headers: authHeader(token),
   })
 }
+
+export interface ProviderTestResult {
+  readonly ok: boolean
+  /** How long the round trip took, when it got that far. */
+  readonly latencyMs?: number
+  /** Why it failed, in the provider's own words — never the key. */
+  readonly detail?: string
+}
+
+/** Sends one tiny request through the saved key and says whether the provider answered. */
+export function testProvider(token: string, provider: string): Promise<ProviderTestResult> {
+  return request(`/api/providers/${encodeURIComponent(provider)}/test`, {
+    method: 'POST',
+    headers: authHeader(token),
+  })
+}

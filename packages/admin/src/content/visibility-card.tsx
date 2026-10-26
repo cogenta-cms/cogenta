@@ -101,7 +101,9 @@ export function VisibilityCard({
           <Field
             label={t('entryEdit.visibility.passwordLabel')}
             description={
-              current === 'password' ? t('entryEdit.visibility.passwordKeep') : undefined
+              current === 'password'
+                ? t('entryEdit.visibility.passwordKeep')
+                : t('entryEdit.visibility.passwordRequired')
             }
           >
             {(control) => (

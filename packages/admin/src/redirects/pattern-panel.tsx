@@ -1,6 +1,5 @@
 import { type FormEvent, type JSX, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/http.js'
 import {
   createRedirectPattern,
   deleteRedirectPattern,
@@ -21,6 +20,7 @@ import {
   TableRoot,
   TableRow,
 } from '../ui/index.js'
+import { redirectErrorMessage } from './redirect-errors.js'
 
 /**
  * Prefix redirects (fiche 12 task 4) — `/blog/*` to `/actualites/*`.
@@ -48,7 +48,7 @@ export function PatternPanel({ token }: { readonly token: string }): JSX.Element
     try {
       setPatterns(await listRedirectPatterns(token))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.patternsLoadError'))
+      setError(redirectErrorMessage(caught, 'redirects.patternsLoadError', t))
     } finally {
       setLoading(false)
     }
@@ -68,7 +68,7 @@ export function PatternPanel({ token }: { readonly token: string }): JSX.Element
       setToPrefix('')
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.patternsCreateError'))
+      setError(redirectErrorMessage(caught, 'redirects.patternsCreateError', t))
     } finally {
       setSaving(false)
     }
@@ -80,7 +80,7 @@ export function PatternPanel({ token }: { readonly token: string }): JSX.Element
       await deleteRedirectPattern(token, pattern.fromPrefix)
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('redirects.patternsDeleteError'))
+      setError(redirectErrorMessage(caught, 'redirects.patternsDeleteError', t))
     }
   }
 
@@ -140,7 +140,7 @@ export function PatternPanel({ token }: { readonly token: string }): JSX.Element
       {loading && <p>{t('common.loading')}</p>}
 
       {!loading && (
-        <TableRoot label={t('redirects.patternsTableLabel')}>
+        <TableRoot label={t('redirects.patternsTableLabel')} stacked>
           <Table>
             <TableHead>
               <TableRow>
@@ -153,10 +153,14 @@ export function PatternPanel({ token }: { readonly token: string }): JSX.Element
             <TableBody>
               {patterns.map((pattern) => (
                 <TableRow key={pattern.id}>
-                  <TableCell className="font-mono text-sm">{pattern.fromPrefix}*</TableCell>
-                  <TableCell className="font-mono text-sm">{pattern.toPrefix}*</TableCell>
-                  <TableCell>{pattern.status}</TableCell>
-                  <TableCell>
+                  <TableCell stack="heading" className="font-mono text-sm">
+                    {pattern.fromPrefix}*
+                  </TableCell>
+                  <TableCell label={t('redirects.patternsToPrefix')} className="font-mono text-sm">
+                    {pattern.toPrefix}*
+                  </TableCell>
+                  <TableCell label={t('redirects.status')}>{pattern.status}</TableCell>
+                  <TableCell stack="actions">
                     <Button variant="destructive" size="sm" onClick={() => void remove(pattern)}>
                       {t('redirects.patternsDelete')}
                     </Button>

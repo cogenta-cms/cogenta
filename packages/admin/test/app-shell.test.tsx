@@ -81,11 +81,16 @@ describe('App, signed in', () => {
     expect(main.id).toBe('main-content')
   })
 
-  it('shows the signed-in user and lets them sign out', async () => {
+  it('shows the signed-in user and lets them sign out from the account menu', async () => {
     render(<App />)
     expect(await screen.findByText(USER.email)).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Se déconnecter' }))
+    fireEvent.click(screen.getByRole('button', { name: /Menu du compte/ }))
+    // The sidebar has its own "Mon profil" link: scope to the opened menu.
+    const panel = document.querySelector('.app-shell__account-panel') as HTMLElement
+    expect(panel).not.toBeNull()
+    expect(within(panel).getByRole('link', { name: 'Mon profil' })).toBeDefined()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Se déconnecter' }))
 
     expect(await screen.findByRole('heading', { name: 'Connexion à Cogenta' })).toBeDefined()
     expect(localStorage.getItem(TOKEN_STORAGE_KEY)).toBeNull()
@@ -309,8 +314,9 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
   })
 
   it("totals a group's own items' badges onto its top-level row, the way WordPress totals onto a parent", async () => {
-    // Every other item in "Exploitation" (ops) carries no badge, so this is
-    // an unambiguous total, not a sum that happens to also work.
+    // The marketplace lives in "Apparence" and every other item of that
+    // group carries no badge, so this is an unambiguous total, not a sum that
+    // happens to also work.
     installMockFetch({ roles: ['admin'], shellStatus: { marketplaceUpdates: 4 } })
     render(<App />)
     await screen.findByRole('heading', { name: 'Tableau de bord' })
@@ -318,10 +324,10 @@ describe('App, sidebar flyout submenus (WordPress-style redesign)', () => {
     // A name match by substring, not exact equality: the badge's own
     // `role="status"`/`aria-label` (fiche 35 task 3's existing pattern,
     // reused here) folds its text into the button's own accessible name —
-    // "Exploitation, 4 élément(s)" is the point, not a string to work
+    // "Apparence, 4 élément(s)" is the point, not a string to work
     // around, but this assertion should not depend on its exact wording.
     await waitFor(() => {
-      const opsTrigger = screen.getByRole('button', { name: /Exploitation/u })
+      const opsTrigger = screen.getByRole('button', { name: /^Apparence/u })
       expect(opsTrigger.querySelector('.app-shell__badge')?.textContent).toBe('4')
     })
   })

@@ -171,15 +171,17 @@ export function defaultSettings(
     case 'embed':
       return { url: '', caption: '' }
     case 'quote':
-      return { text: words.sampleText, attribution: '', role: '' }
+      // Empty on purpose: the form shows the sample as a placeholder, so saving
+      // without typing is refused instead of publishing the sample sentence.
+      return { text: '', attribution: '', role: '' }
     case 'cta':
-      return { heading: words.sampleHeading, body: '', label: words.sampleLink, href: '/' }
+      return { heading: '', body: '', label: '', href: '/' }
     case 'links':
       return { items: [{ label: words.sampleLink, href: '/', newTab: false }] }
     case 'contact':
       return { address: '', phone: '', email: '', hours: [] }
     case 'about':
-      return { heading: words.sampleHeading, body: words.sampleText }
+      return { heading: '', body: '' }
     case 'recentEntries':
       return {
         collection: firstCollection,
@@ -241,4 +243,30 @@ export function widgetGroups(): readonly {
     ...WIDGET_GROUPS,
     { id: 'plugins', types: pluginWidgets.map((type) => type.name as WidgetType) },
   ]
+}
+
+/**
+ * The text a widget cannot be saved without, by type: the translation key of
+ * the field's label, or `null` when everything required is filled in. These
+ * are the types whose starting values are empty on purpose (the form shows an
+ * example as a placeholder rather than saving it as if it were the content).
+ */
+const REQUIRED_TEXT: Readonly<Record<string, readonly (readonly [string, string])[]>> = {
+  quote: [['text', 'widgets.settings.quote']],
+  about: [['body', 'widgets.settings.bodyText']],
+  cta: [
+    ['heading', 'widgets.settings.heading'],
+    ['label', 'widgets.settings.buttonLabel'],
+  ],
+}
+
+export function missingRequiredText(
+  type: WidgetType,
+  settings: Readonly<Record<string, unknown>>,
+): string | null {
+  for (const [field, labelKey] of REQUIRED_TEXT[type] ?? []) {
+    const value = settings[field]
+    if (typeof value !== 'string' || value.trim() === '') return labelKey
+  }
+  return null
 }

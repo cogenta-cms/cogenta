@@ -6,9 +6,9 @@ import { SiteSettingsField } from '../src/settings/site-settings-field.js'
 /**
  * `uiType: 'linkList'` (fiche L25 D2) — the textarea encoding of
  * `general.socialLinks`, a JSON array of `{label, url}` the generic field
- * renderer has to turn into something an admin can actually edit, per the
- * lot's own note: "si un champ liste JSON n'a pas encore d'éditeur, le
- * rendre comme une zone de texte d'une ligne Label | url par entrée".
+ * renderer has to turn into something an admin can actually edit. It was a
+ * `Label | url` textarea; it is now one row per link (a label input and an
+ * address input), with add and remove buttons.
  */
 
 function setting(overrides: Partial<SiteSetting> = {}): SiteSetting {
@@ -29,7 +29,7 @@ function setting(overrides: Partial<SiteSetting> = {}): SiteSetting {
 }
 
 describe('SiteSettingsField, uiType: linkList', () => {
-  it('renders the stored array as one "Label | url" line per entry', () => {
+  it('renders the stored array as one row per entry, with a label and an address', () => {
     render(
       <SiteSettingsField
         setting={setting({
@@ -43,24 +43,36 @@ describe('SiteSettingsField, uiType: linkList', () => {
         onSave={vi.fn()}
       />,
     )
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
-    expect(textarea.value).toBe('X | https://x.com/cogenta\nGitHub | https://github.com/cogenta')
+    expect((screen.getByLabelText('Libellé du lien 1') as HTMLInputElement).value).toBe('X')
+    expect((screen.getByLabelText('Adresse du lien 1') as HTMLInputElement).value).toBe(
+      'https://x.com/cogenta',
+    )
+    expect((screen.getByLabelText('Libellé du lien 2') as HTMLInputElement).value).toBe('GitHub')
+    expect((screen.getByLabelText('Adresse du lien 2') as HTMLInputElement).value).toBe(
+      'https://github.com/cogenta',
+    )
+    expect(screen.queryByLabelText('Libellé du lien 3')).toBeNull()
   })
 
-  it('renders an empty textarea for the empty default', () => {
+  it('renders no row for the empty default, only the button to add one', () => {
     render(<SiteSettingsField setting={setting()} canEdit onSave={vi.fn()} />)
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
-    expect(textarea.value).toBe('')
+    expect(screen.queryByLabelText('Libellé du lien 1')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Ajouter un lien' })).toBeDefined()
   })
 
-  it('saves the typed lines as a parsed array of {label, url}, on blur', async () => {
+  it('saves the typed rows as a parsed array of {label, url}, on blur', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     render(<SiteSettingsField setting={setting()} canEdit onSave={onSave} />)
-    const textarea = screen.getByRole('textbox')
-    fireEvent.change(textarea, {
-      target: { value: 'X | https://x.com/cogenta\nGitHub | https://github.com/cogenta' },
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter un lien' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter un lien' }))
+    fireEvent.change(screen.getByLabelText('Libellé du lien 1'), { target: { value: 'X' } })
+    fireEvent.change(screen.getByLabelText('Adresse du lien 1'), {
+      target: { value: 'https://x.com/cogenta' },
     })
-    fireEvent.blur(textarea)
+    fireEvent.change(screen.getByLabelText('Libellé du lien 2'), { target: { value: 'GitHub' } })
+    const address = screen.getByLabelText('Adresse du lien 2')
+    fireEvent.change(address, { target: { value: 'https://github.com/cogenta' } })
+    fireEvent.blur(address)
 
     expect(onSave).toHaveBeenCalledWith([
       { label: 'X', url: 'https://x.com/cogenta' },
@@ -69,16 +81,22 @@ describe('SiteSettingsField, uiType: linkList', () => {
     await screen.findByText('Enregistré.')
   })
 
-  it('drops a blank line and a line with no separator, without failing the rest', async () => {
+  it('leaves out a row with no address, without failing the rest', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     render(<SiteSettingsField setting={setting()} canEdit onSave={onSave} />)
-    const textarea = screen.getByRole('textbox')
-    fireEvent.change(textarea, {
-      target: {
-        value: 'X | https://x.com/cogenta\n\nnot a valid line\nGitHub | https://github.com/cogenta',
-      },
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter un lien' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter un lien' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter un lien' }))
+    fireEvent.change(screen.getByLabelText('Libellé du lien 1'), { target: { value: 'X' } })
+    fireEvent.change(screen.getByLabelText('Adresse du lien 1'), {
+      target: { value: 'https://x.com/cogenta' },
     })
-    fireEvent.blur(textarea)
+    // Row 2 is still being typed: a label and no address.
+    fireEvent.change(screen.getByLabelText('Libellé du lien 2'), { target: { value: 'half' } })
+    fireEvent.change(screen.getByLabelText('Libellé du lien 3'), { target: { value: 'GitHub' } })
+    const address = screen.getByLabelText('Adresse du lien 3')
+    fireEvent.change(address, { target: { value: 'https://github.com/cogenta' } })
+    fireEvent.blur(address)
 
     expect(onSave).toHaveBeenCalledWith([
       { label: 'X', url: 'https://x.com/cogenta' },
@@ -86,7 +104,7 @@ describe('SiteSettingsField, uiType: linkList', () => {
     ])
   })
 
-  it('saves an empty array when every line is cleared', async () => {
+  it('saves an empty array when every row is removed', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     render(
       <SiteSettingsField
@@ -95,16 +113,27 @@ describe('SiteSettingsField, uiType: linkList', () => {
         onSave={onSave}
       />,
     )
-    const textarea = screen.getByRole('textbox')
-    fireEvent.change(textarea, { target: { value: '' } })
-    fireEvent.blur(textarea)
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer le lien 1' }))
 
     expect(onSave).toHaveBeenCalledWith([])
+    expect(screen.queryByLabelText('Libellé du lien 1')).toBeNull()
   })
 
-  it('disables the textarea for a non-admin, exactly like every other field', () => {
-    render(<SiteSettingsField setting={setting()} canEdit={false} onSave={vi.fn()} />)
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
-    expect(textarea.disabled).toBe(true)
+  it('disables every control for a non-admin, exactly like every other field', () => {
+    render(
+      <SiteSettingsField
+        setting={setting({ value: [{ label: 'X', url: 'https://x.com/a' }], isDefault: false })}
+        canEdit={false}
+        onSave={vi.fn()}
+      />,
+    )
+    expect((screen.getByLabelText('Libellé du lien 1') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Adresse du lien 1') as HTMLInputElement).disabled).toBe(true)
+    expect(
+      (screen.getByRole('button', { name: 'Supprimer le lien 1' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(
+      (screen.getByRole('button', { name: 'Ajouter un lien' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
   })
 })

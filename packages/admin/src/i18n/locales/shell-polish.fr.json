@@ -1,0 +1,104 @@
+{
+  "auth": {
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
+    "emailRequired": "Saisissez votre adresse e-mail.",
+    "passwordRequired": "Saisissez votre mot de passe.",
+    "codeRequired": "Saisissez le code."
+  },
+  "login": {
+    "signedOut": "Vous êtes déconnecté.",
+    "pageTitle": "Connexion",
+    "projectLink": "Le projet Cogenta (s’ouvre dans un nouvel onglet)"
+  },
+  "forgotPassword": {
+    "pageTitle": "Mot de passe oublié"
+  },
+  "resetPassword": {
+    "pageTitle": "Nouveau mot de passe",
+    "linkInvalid": "Ce lien de réinitialisation n’est plus valable : il a expiré, il a déjà servi ou il est incorrect.",
+    "requestNewLink": "Demander un nouveau lien",
+    "tooShort_one": "Le mot de passe doit comporter au moins {{count}} caractère.",
+    "tooShort_other": "Le mot de passe doit comporter au moins {{count}} caractères.",
+    "strengthShort_one": "Encore {{count}} caractère nécessaire.",
+    "strengthShort_other": "Encore {{count}} caractères nécessaires."
+  },
+  "breadcrumb": {
+    "notFound": "Page introuvable",
+    "search": "Recherche",
+    "themeSandbox": "Atelier de thèmes"
+  },
+  "searchResults": {
+    "mediaKind": {
+      "image": "Image",
+      "video": "Vidéo",
+      "audio": "Audio",
+      "file": "Fichier"
+    },
+    "extensionKind": {
+      "plugin": "Extension",
+      "theme": "Thème",
+      "skin": "Palette",
+      "skill": "Compétence"
+    }
+  },
+  "searchPage": {
+    "filtersToggle": "Filtres",
+    "tooShort": "Le contenu se cherche à partir de trois lettres. Les médias, les comptes, les menus et les commandes répondent dès la première."
+  },
+  "globalSearch": {
+    "placeholder": "Rechercher dans l’admin…"
+  },
+  "shell": {
+    "versionLink": "Voir les mises à jour"
+  },
+  "notFound": {
+    "searchLabel": "Rechercher dans l’admin",
+    "searchPlaceholder": "Chercher un écran ou un contenu…",
+    "searchSubmit": "Rechercher"
+  },
+  "review": {
+    "empty": "Aucune entrée à relire ici.",
+    "emptyHelp": "Quand un auteur soumet une entrée d’une collection qui a activé la relecture, elle arrive dans cette file ; vous pouvez alors l’approuver ou demander des modifications."
+  },
+  "documentation": {
+    "docs": {
+      "technicalInEnglish": "La documentation technique (architecture, contrats, thèmes et extensions) s’adresse aux développeurs et est rédigée en anglais, comme le code.",
+      "pagesToggle": "Pages"
+    },
+    "sections": {
+      "ops": {
+        "summary": "Surveiller le site, garder une trace de ce qui s’y passe, automatiser ses tâches et le tenir à jour : journal d’audit, statistiques, import, sécurité, mises à jour, santé, observabilité, outils et tâches planifiées.",
+        "quickstart": {
+          "step1": "Ouvrez « Santé » pour vérifier que la base, le stockage et les files d’attente répondent.",
+          "step2": "Consultez le « Journal d’audit » pour savoir qui a changé quoi, et « Statistiques » pour la fréquentation.",
+          "step3": "Dans « Tâches planifiées », vérifiez que les publications programmées et la purge de la corbeille tournent.",
+          "step4": "Avant de mettre le site à jour, ouvrez « Mises à jour » : un point de restauration est créé d’abord."
+        }
+      }
+    }
+  },
+  "notices": {
+    "details": "Pourquoi cette recommandation ?",
+    "hidden": "Recommandation masquée.",
+    "undo": "Annuler"
+  },
+  "sessionLabels": {
+    "browser": {
+      "bot": "Robot",
+      "other": "Navigateur inconnu",
+      "unknown": "Navigateur inconnu"
+    },
+    "device": {
+      "desktop": "ordinateur",
+      "mobile": "mobile",
+      "tablet": "tablette",
+      "bot": "robot",
+      "unknown": "appareil inconnu"
+    }
+  },
+  "profile": {
+    "sessionsRevokedOthers_one": "{{count}} autre session déconnectée. Celle-ci reste connectée.",
+    "sessionsRevokedOthers_other": "{{count}} autres sessions déconnectées. Celle-ci reste connectée."
+  }
+}

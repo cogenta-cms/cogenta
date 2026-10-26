@@ -675,6 +675,8 @@ export interface ReplacementHit {
   readonly before: string
   readonly after: string
   readonly occurrences: number
+  /** The type of the block the match sits in, when it sits in one. */
+  readonly blockType?: string
 }
 
 export interface EntryReplacementPlan {

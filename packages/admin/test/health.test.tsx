@@ -135,6 +135,6 @@ describe('health screen — untranslated diagnostic text', () => {
     ).toBeDefined()
 
     // Three technical-detail badges: one per note, problem and check message.
-    expect(screen.getAllByText('détail technique')).toHaveLength(3)
+    expect(screen.getAllByText('détail technique, en anglais')).toHaveLength(3)
   })
 })

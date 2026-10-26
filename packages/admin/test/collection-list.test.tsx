@@ -75,10 +75,10 @@ describe('CollectionListRoute', () => {
     await goToArticles()
     await screen.findByText('First article')
 
-    expect(screen.queryByRole('button', { name: /Supprimer/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Mettre à la corbeille/ })).toBeNull()
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner First article' }))
-    expect(screen.getByRole('button', { name: 'Supprimer (1)' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Mettre à la corbeille (1)' })).toBeDefined()
   })
 
   it('searches the collection and shows only the matching entries (L10 task 3)', async () => {
@@ -287,7 +287,9 @@ describe('CollectionListRoute', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner Second article' }))
     fireEvent.click(screen.getByRole('button', { name: 'Publier (2)' }))
 
-    await screen.findByText('1 sur 2 ont réussi.')
+    await screen.findByText(
+      '1 sur 2 entrées traitées (publication). Voir ci-dessous ce qui a échoué.',
+    )
     expect(screen.getByText('Second article : Access denied: publish on article.')).toBeDefined()
   })
 
@@ -353,7 +355,7 @@ describe('trashing from the collection list refreshes the sidebar status', () =>
     expect(before).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Sélectionner First article' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Supprimer (1)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mettre à la corbeille (1)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Mettre à la corbeille' }))
 
     await waitFor(() => {

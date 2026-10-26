@@ -20,6 +20,8 @@ export interface PromptTemplateSummary {
   readonly category: string
   readonly template: string
   readonly builtin: boolean
+  /** For a template Cogenta ships: the text it shipped with, so a screen can say "modified" and offer to put it back. */
+  readonly originalTemplate?: string
   readonly createdAt: string
   readonly updatedAt: string
 }
@@ -43,6 +45,8 @@ export interface PromptTemplateRegistryLike {
     },
   ): Promise<PromptTemplateSummary>
   remove(id: string): Promise<void>
+  /** Puts a shipped template back to the name, description, category and text it shipped with. Absent when the host keeps no copy of them. */
+  reset?(id: string): Promise<PromptTemplateSummary>
 }
 
 export interface PromptTemplatesRouterOptions {
@@ -108,7 +112,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Prompt template routes are /api/prompt-templates and /api/prompt-templates/:id.',
+    hint: 'Prompt template routes are /api/prompt-templates, /api/prompt-templates/:id and /api/prompt-templates/:id/reset.',
   })
 }
 
@@ -184,6 +188,13 @@ export function createPromptTemplatesRouter(
             return jsonResponse(201, { data: created })
           }
           return methodNotAllowed(['GET', 'POST'])
+        }
+
+        if (extra === 'reset') {
+          if (method !== 'POST') return methodNotAllowed(['POST'])
+          requireAdmin(actor)
+          if (options.templates.reset === undefined) throw noRoute()
+          return jsonResponse(200, { data: await options.templates.reset(id) })
         }
 
         if (extra !== undefined) throw noRoute()

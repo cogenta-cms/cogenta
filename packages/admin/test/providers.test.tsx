@@ -44,7 +44,7 @@ describe('providers', () => {
     fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-ant-secret-value' },
     })
-    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-5'), {
       target: { value: 'claude-sonnet' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
@@ -55,7 +55,9 @@ describe('providers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Désactiver' }))
     expect(await screen.findByText('Désactivé')).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retirer' }))
+    // Removing a provider (and its saved key) now asks for confirmation first.
+    fireEvent.click(screen.getByRole('button', { name: 'Retirer le fournisseur anthropic' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Retirer le fournisseur' }))
     expect(await screen.findByText(/Aucun fournisseur pour l’instant/)).toBeDefined()
   })
 
@@ -72,7 +74,7 @@ describe('providers', () => {
       target: { value: 'claude-sonnet-5' },
     })
 
-    expect(screen.getByPlaceholderText('ex. claude-sonnet-4')).toHaveProperty(
+    expect(screen.getByPlaceholderText('ex. claude-sonnet-5')).toHaveProperty(
       'value',
       'claude-sonnet-5',
     )
@@ -90,16 +92,21 @@ describe('providers', () => {
     fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-deepseek-secret' },
     })
-    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-5'), {
       target: { value: 'deepseek-v4-flash' },
     })
-    fireEvent.change(screen.getByLabelText('Tokens de sortie max'), {
+    // The shared defaults card reuses these labels, so scope to the add form.
+    const addForm = within(
+      screen.getByRole('heading', { name: 'Ajouter un fournisseur' }).closest('section') ??
+        document.body,
+    )
+    fireEvent.change(addForm.getByLabelText('Longueur maximale d’une réponse (tokens)'), {
       target: { value: '12000' },
     })
-    fireEvent.change(screen.getByLabelText("Délai d'attente (secondes)"), {
+    fireEvent.change(addForm.getByLabelText('Temps d’attente maximal (secondes)'), {
       target: { value: '240' },
     })
-    fireEvent.change(screen.getByLabelText('Tentatives de correction max'), {
+    fireEvent.change(addForm.getByLabelText('Nouvelles tentatives maximales'), {
       target: { value: '5' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
@@ -119,7 +126,7 @@ describe('providers', () => {
     fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-ant-secret-value' },
     })
-    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-5'), {
       target: { value: 'claude-sonnet' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
@@ -142,7 +149,7 @@ describe('providers', () => {
     fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-ant-secret-value' },
     })
-    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-5'), {
       target: { value: 'claude-sonnet' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
@@ -153,7 +160,7 @@ describe('providers', () => {
     // The dialog never asks for the API key at all.
     expect(within(dialog).queryByPlaceholderText('Collez la clé fournie par le service')).toBeNull()
 
-    fireEvent.change(within(dialog).getByLabelText('Tokens de sortie max'), {
+    fireEvent.change(within(dialog).getByLabelText('Longueur maximale d’une réponse (tokens)'), {
       target: { value: '20000' },
     })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
@@ -193,7 +200,7 @@ describe('providers', () => {
     fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-local-secret' },
     })
-    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-5'), {
       target: { value: 'llama-3' },
     })
 
@@ -227,7 +234,7 @@ describe('providers — image model', () => {
     fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-ant-secret-value' },
     })
-    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-5'), {
       target: { value: 'claude-sonnet' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
@@ -248,19 +255,19 @@ describe('providers — image model', () => {
     fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-openai-secret' },
     })
-    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-5'), {
       target: { value: 'gpt-5' },
     })
 
     // The image endpoint is secondary: it means nothing until a model names
     // what would be rendered, so it stays hidden until then.
-    expect(screen.queryByLabelText("Point d'accès image")).toBeNull()
-    fireEvent.change(screen.getByLabelText("Modèle d'image"), {
+    expect(screen.queryByLabelText('Point d’accès image')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Modèle d’image'), {
       target: { value: 'gpt-image-1' },
     })
-    expect(screen.getByLabelText("Point d'accès image")).toBeDefined()
+    expect(screen.getByLabelText('Point d’accès image')).toBeDefined()
     // Naming a model on a vendor that really does images warns about nothing.
-    expect(screen.queryByText(/ne sait pas générer d'images/)).toBeNull()
+    expect(screen.queryByText(/ne sait pas générer d’images/)).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
@@ -281,14 +288,14 @@ describe('providers — image model', () => {
     fireEvent.change(screen.getByPlaceholderText('Collez la clé fournie par le service'), {
       target: { value: 'sk-ant-secret-value' },
     })
-    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-4'), {
+    fireEvent.change(screen.getByPlaceholderText('ex. claude-sonnet-5'), {
       target: { value: 'claude-sonnet' },
     })
-    fireEvent.change(screen.getByLabelText("Modèle d'image"), {
+    fireEvent.change(screen.getByLabelText('Modèle d’image'), {
       target: { value: 'some-image-model' },
     })
 
-    expect(screen.getByText(/« anthropic » ne sait pas générer d'images/)).toBeDefined()
+    expect(screen.getByText(/« anthropic » ne sait pas générer d’images/)).toBeDefined()
     // The server, not this screen, decides: the save stays available.
     expect(screen.getByRole('button', { name: 'Enregistrer' })).toHaveProperty('disabled', false)
   })
@@ -317,9 +324,9 @@ describe('providers — image model', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
     const dialog = await screen.findByRole('dialog', { name: /Modifier —/ })
-    expect(within(dialog).getByLabelText("Modèle d'image")).toHaveProperty('value', 'gpt-image-1')
+    expect(within(dialog).getByLabelText('Modèle d’image')).toHaveProperty('value', 'gpt-image-1')
 
-    fireEvent.change(within(dialog).getByLabelText("Modèle d'image"), { target: { value: '' } })
+    fireEvent.change(within(dialog).getByLabelText('Modèle d’image'), { target: { value: '' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
 
     expect(await screen.findByText('Texte seulement')).toBeDefined()
@@ -335,10 +342,10 @@ describe('providers — image model', () => {
     await goToProviders()
     await screen.findByText(/Aucun fournisseur pour l’instant/)
 
-    fireEvent.change(screen.getByLabelText("Modèle d'image"), {
+    fireEvent.change(screen.getByLabelText('Modèle d’image'), {
       target: { value: 'some-image-model' },
     })
-    await screen.findByText(/ne sait pas générer d'images/)
+    await screen.findByText(/ne sait pas générer d’images/)
 
     await expectNoSeriousA11yViolations(container)
   })

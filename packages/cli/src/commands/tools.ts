@@ -75,7 +75,8 @@ export const TOOL_DEFINITIONS: readonly ToolDefinitionLike[] = [
   {
     id: 'test-email',
     labelKey: 'tools.testEmail',
-    reversible: true,
+    // A message that has been sent cannot be taken back.
+    reversible: false,
     estimatedDurationKey: 'tools.durationSeconds',
   },
   {
@@ -88,6 +89,16 @@ export const TOOL_DEFINITIONS: readonly ToolDefinitionLike[] = [
 
 export interface ToolContext {
   readonly log: (line: string) => void
+  /**
+   * A progress line that also carries a stable code and its parameters, so the
+   * admin can say it in its own language instead of showing the English text
+   * (which stays in the run's `log`, for a terminal or an unknown code).
+   */
+  readonly report: (
+    code: string,
+    params: Readonly<Record<string, string | number>>,
+    text: string,
+  ) => void
   readonly external: boolean
   readonly email: string | undefined
 }
@@ -120,7 +131,9 @@ interface MutableRun {
   startedAt: string
   finishedAt: string | undefined
   log: string[]
+  items: { code: string; params: Readonly<Record<string, string | number>>; text: string }[]
   error: string | undefined
+  errorCode: string | undefined
 }
 
 function toLike(run: MutableRun): ToolRunLike {
@@ -131,7 +144,9 @@ function toLike(run: MutableRun): ToolRunLike {
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
     log: [...run.log],
+    items: [...run.items],
     error: run.error,
+    ...(run.errorCode === undefined ? {} : { errorCode: run.errorCode }),
   }
 }
 
@@ -168,6 +183,10 @@ export function createToolRunner(options: ToolRunnerOptions): ToolRunner {
       try {
         await body({
           log: (line) => run.log.push(line),
+          report: (code, params, text) => {
+            run.log.push(text)
+            run.items.push({ code, params, text })
+          },
           external: job.payload.external === true,
           email: job.payload.email,
         })
@@ -175,6 +194,7 @@ export function createToolRunner(options: ToolRunnerOptions): ToolRunner {
       } catch (error) {
         run.status = 'failed'
         run.error = error instanceof Error ? error.message : String(error)
+        if (error instanceof CogentaError) run.errorCode = error.code
         options.logger.error('maintenance tool run failed', {
           tool: definition.id,
           runId: run.id,
@@ -196,7 +216,9 @@ export function createToolRunner(options: ToolRunnerOptions): ToolRunner {
         startedAt: now().toISOString(),
         finishedAt: undefined,
         log: [],
+        items: [],
         error: undefined,
+        errorCode: undefined,
       }
       runs.set(id, run)
       order.push(id)
@@ -252,6 +274,8 @@ export interface BuildToolBodiesOptions {
   readonly images: MediaImageProcessor | null
   readonly emailTransport: EmailTransport
   readonly siteName: string
+  /** Whether the host itself serves a path no collection route matches (archives, search) — spares the link check a false "dead link". */
+  readonly isServedPath?: (pathname: string) => boolean | Promise<boolean>
 }
 
 /** A fresh, undecorated store per collection — reindexing and link-checking only ever read, so none of the write-path wrapping (`withSearchIndexing`, the read-only guard, …) matters here. */
@@ -280,11 +304,15 @@ export function buildToolBodies(options: BuildToolBodiesOptions): Record<string,
   return {
     'purge-cache': async (ctx) => {
       if (options.cache === null) {
-        ctx.log('No cache driver is configured on this site — nothing to purge.')
+        ctx.report(
+          'cache-none',
+          {},
+          'No cache driver is configured on this site — nothing to purge.',
+        )
         return
       }
       await options.cache.clear()
-      ctx.log('Cache cleared.')
+      ctx.report('cache-cleared', {}, 'Cache cleared.')
     },
 
     'reindex-search': async (ctx) => {
@@ -293,16 +321,26 @@ export function buildToolBodies(options: BuildToolBodiesOptions): Record<string,
         const store = storeFor(collection)
         const count = await reindexAll(store, { collection, index: options.searchIndex })
         total += count
-        ctx.log(`${collection.name}: ${count} entr(y/ies) reindexed.`)
+        ctx.report(
+          'reindex-collection',
+          { collection: collection.name, count },
+          `${collection.name}: ${count} entr(y/ies) reindexed.`,
+        )
       }
-      ctx.log(
+      ctx.report(
+        'reindex-done',
+        { total, collections: options.collections.length },
         `Done. ${total} entr(y/ies) reindexed across ${options.collections.length} collection(s).`,
       )
     },
 
     'reindex-vectors': async (ctx) => {
       if (options.vectors === null) {
-        ctx.log('No embeddings provider is configured on this site — nothing to reindex.')
+        ctx.report(
+          'vectors-none',
+          {},
+          'No embeddings provider is configured on this site — nothing to reindex.',
+        )
         return
       }
       let total = 0
@@ -310,14 +348,22 @@ export function buildToolBodies(options: BuildToolBodiesOptions): Record<string,
         const store = storeFor(collection)
         const count = await reindexAllVectors(store, { ...options.vectors, collection })
         total += count
-        ctx.log(`${collection.name}: ${count} entr(y/ies) reindexed.`)
+        ctx.report(
+          'reindex-collection',
+          { collection: collection.name, count },
+          `${collection.name}: ${count} entr(y/ies) reindexed.`,
+        )
       }
-      ctx.log(`Done. ${total} entr(y/ies) reindexed.`)
+      ctx.report('reindex-vectors-done', { total }, `Done. ${total} entr(y/ies) reindexed.`)
     },
 
     'regenerate-images': async (ctx) => {
       if (options.images === null) {
-        ctx.log('No image driver is available on this host — nothing to regenerate.')
+        ctx.report(
+          'images-none',
+          {},
+          'No image driver is available on this host — nothing to regenerate.',
+        )
         return
       }
       const images = options.images
@@ -350,9 +396,15 @@ export function buildToolBodies(options: BuildToolBodiesOptions): Record<string,
               )
             }
             processed += 1
-            ctx.log(`${asset.filename}: ${variants.length} variant(s) regenerated.`)
+            ctx.report(
+              'image-regenerated',
+              { filename: asset.filename, count: variants.length },
+              `${asset.filename}: ${variants.length} variant(s) regenerated.`,
+            )
           } catch (error) {
-            ctx.log(
+            ctx.report(
+              'image-failed',
+              { filename: asset.filename },
               `${asset.filename}: failed — ${error instanceof Error ? error.message : String(error)}`,
             )
           }
@@ -360,7 +412,7 @@ export function buildToolBodies(options: BuildToolBodiesOptions): Record<string,
         if (!page.hasMore || page.nextCursor === null) break
         cursor = page.nextCursor
       }
-      ctx.log(`Done. ${processed} image(s) processed.`)
+      ctx.report('images-done', { count: processed }, `Done. ${processed} image(s) processed.`)
     },
 
     'check-links': async (ctx) => {
@@ -369,18 +421,23 @@ export function buildToolBodies(options: BuildToolBodiesOptions): Record<string,
         storeFor,
         locales: options.locales,
         defaultLocale: options.defaultLocale,
+        ...(options.isServedPath === undefined ? {} : { isServedPath: options.isServedPath }),
         ...(ctx.external ? { checkExternal: true } : {}),
       })
-      ctx.log(
+      ctx.report(
+        'links-checked',
+        { links: report.checkedLinks, entries: report.checkedEntries },
         `Checked ${report.checkedLinks} link(s) across ${report.checkedEntries} published entries.`,
       )
       if (report.skippedExternal > 0) {
-        ctx.log(
+        ctx.report(
+          'links-external-skipped',
+          { count: report.skippedExternal },
           `${report.skippedExternal} external link(s) were not followed (external checking is off).`,
         )
       }
       if (report.broken.length === 0) {
-        ctx.log('Nothing broken.')
+        ctx.report('links-none-broken', {}, 'Nothing broken.')
         return
       }
       for (const broken of report.broken) {
@@ -388,7 +445,17 @@ export function buildToolBodies(options: BuildToolBodiesOptions): Record<string,
           broken.link.kind === 'url'
             ? broken.link.href
             : `${broken.link.collection}/${broken.link.id}`
-        ctx.log(
+        ctx.report(
+          'link-broken',
+          {
+            collection: broken.collection,
+            entryId: broken.entryId,
+            locale: broken.locale,
+            at: broken.at,
+            target,
+            reason: broken.reason,
+            ...(broken.status === undefined ? {} : { status: broken.status }),
+          },
           `${broken.collection}/${broken.entryId} [${broken.locale}] ${broken.at} → ${target}: ${broken.reason}`,
         )
       }
@@ -396,7 +463,7 @@ export function buildToolBodies(options: BuildToolBodiesOptions): Record<string,
 
     'test-email': async (ctx) => {
       if (ctx.email === undefined) {
-        ctx.log('No destination address was given.')
+        ctx.report('email-no-address', {}, 'No destination address was given.')
         throw new CogentaError({
           code: 'MAINT_TOOL_INPUT_INVALID',
           message: 'The "test email" tool needs a destination address.',
@@ -412,9 +479,13 @@ export function buildToolBodies(options: BuildToolBodiesOptions): Record<string,
             text: `${options.siteName} — this is a test message from the admin's "Tools" screen. If it reached you, outgoing mail works.`,
           },
         )
-        ctx.log(`Sent to ${ctx.email}.`)
+        ctx.report('email-sent', { email: ctx.email }, `Sent to ${ctx.email}.`)
       } catch (error) {
-        ctx.log(`Transport error: ${error instanceof Error ? error.message : String(error)}`)
+        ctx.report(
+          'email-failed',
+          { detail: error instanceof Error ? error.message : String(error) },
+          `Transport error: ${error instanceof Error ? error.message : String(error)}`,
+        )
         throw error
       }
     },
@@ -424,10 +495,16 @@ export function buildToolBodies(options: BuildToolBodiesOptions): Record<string,
       for (const collection of options.collections) {
         const store = storeFor(collection)
         const report = await store.purgeExpired()
-        if (report.purged > 0) ctx.log(`${collection.name}: ${report.purged} entr(y/ies) purged.`)
+        if (report.purged > 0) {
+          ctx.report(
+            'purge-collection',
+            { collection: collection.name, count: report.purged },
+            `${collection.name}: ${report.purged} entr(y/ies) purged.`,
+          )
+        }
         total += report.purged
       }
-      ctx.log(`Done. ${total} entr(y/ies) purged in total.`)
+      ctx.report('purge-done', { count: total }, `Done. ${total} entr(y/ies) purged in total.`)
     },
   }
 }

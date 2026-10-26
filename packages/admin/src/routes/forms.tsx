@@ -1,7 +1,7 @@
 import { type JSX, useCallback, useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { ApiError } from '../api/client.js'
+import { describeApiError } from '../api/describe-error.js'
 import {
   createForm,
   deleteForm,
@@ -65,7 +65,6 @@ import {
 const NO_CONDITION = '' as const
 
 const FIELD_EDITOR_ITEMS: readonly ItemFieldDefinition[] = [
-  { name: 'name', kind: 'text', required: true, localized: false, options: {} },
   { name: 'label', kind: 'text', required: true, localized: false, options: {} },
   {
     name: 'kind',
@@ -73,6 +72,7 @@ const FIELD_EDITOR_ITEMS: readonly ItemFieldDefinition[] = [
     required: true,
     localized: false,
     options: { options: FORM_FIELD_KINDS.map((value) => ({ value })) },
+    default: 'text',
   },
   { name: 'required', kind: 'boolean', required: false, localized: false, options: {} },
   { name: 'help', kind: 'text', required: false, localized: false, options: {} },
@@ -92,18 +92,6 @@ const FIELD_EDITOR_ITEMS: readonly ItemFieldDefinition[] = [
     options: {},
     visibleWhen: { field: 'kind', equals: ['consent'] },
   },
-  { name: 'step', kind: 'text', required: false, localized: false, options: {} },
-  { name: 'showIfField', kind: 'text', required: false, localized: false, options: {} },
-  {
-    name: 'showIfOperator',
-    kind: 'select',
-    required: false,
-    localized: false,
-    options: {
-      options: [{ value: NO_CONDITION }, ...FORM_CONDITION_OPERATORS.map((value) => ({ value }))],
-    },
-  },
-  { name: 'showIfValue', kind: 'text', required: false, localized: false, options: {} },
   {
     name: 'acceptCategoriesText',
     kind: 'text',
@@ -120,6 +108,25 @@ const FIELD_EDITOR_ITEMS: readonly ItemFieldDefinition[] = [
     options: {},
     visibleWhen: { field: 'kind', equals: ['file'] },
   },
+  { name: 'step', kind: 'text', required: false, localized: false, options: {} },
+  {
+    name: 'showIfField',
+    kind: 'select',
+    required: false,
+    localized: false,
+    options: { options: [{ value: NO_CONDITION }] },
+  },
+  {
+    name: 'showIfOperator',
+    kind: 'select',
+    required: false,
+    localized: false,
+    options: {
+      options: [{ value: NO_CONDITION }, ...FORM_CONDITION_OPERATORS.map((value) => ({ value }))],
+    },
+  },
+  { name: 'showIfValue', kind: 'text', required: false, localized: false, options: {} },
+  { name: 'name', kind: 'text', required: false, localized: false, options: {} },
 ]
 
 interface FieldEditorRow {
@@ -170,9 +177,26 @@ function withStepColumn(
   return rows.map((row) => ({ ...row, step: stepByField.get(row.name) ?? '' }))
 }
 
+/**
+ * The technical name of every row, in order. A row the editor never named gets
+ * one from its label ("Adresse e-mail" → `adresse-e-mail`); two rows that
+ * would share a name get a numeric suffix, so the form always saves.
+ */
+function resolveRowNames(rows: readonly FieldEditorRow[]): readonly string[] {
+  const taken = new Set<string>()
+  return rows.map((row, index) => {
+    const wanted = row.name.trim() || slugify(row.label) || `champ-${index + 1}`
+    let candidate = wanted
+    for (let attempt = 2; taken.has(candidate); attempt += 1) candidate = `${wanted}-${attempt}`
+    taken.add(candidate)
+    return candidate
+  })
+}
+
 function fieldsFromRows(rows: readonly FieldEditorRow[]): readonly FormFieldDefinition[] {
-  return rows.map((row) => ({
-    name: row.name.trim(),
+  const names = resolveRowNames(rows)
+  return rows.map((row, index) => ({
+    name: names[index] ?? '',
     label: row.label.trim(),
     kind: row.kind,
     required: row.required === true,
@@ -224,14 +248,15 @@ function fieldsFromRows(rows: readonly FieldEditorRow[]): readonly FormFieldDefi
 function stepsFromRows(rows: readonly FieldEditorRow[]): readonly FormStepDefinition[] {
   const order: string[] = []
   const fieldNamesByStep = new Map<string, string[]>()
-  for (const row of rows) {
+  const names = resolveRowNames(rows)
+  for (const [index, row] of rows.entries()) {
     const step = (row.step ?? '').trim()
     if (step === '') continue
     if (!fieldNamesByStep.has(step)) {
       fieldNamesByStep.set(step, [])
       order.push(step)
     }
-    fieldNamesByStep.get(step)?.push(row.name.trim())
+    fieldNamesByStep.get(step)?.push(names[index] ?? row.name.trim())
   }
   return order.map((name) => ({ name, label: name, fieldNames: fieldNamesByStep.get(name) ?? [] }))
 }
@@ -357,7 +382,7 @@ export function FormsRoute(): JSX.Element {
     try {
       setForms(await listForms(token))
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('forms.loadError'))
+      setError(describeApiError(caught, t('forms.loadError')).message)
     }
   }, [token, t])
 
@@ -376,9 +401,28 @@ export function FormsRoute(): JSX.Element {
 
   async function save(): Promise<void> {
     if (token === null || draft === null) return
+    setNotice(null)
+    // Say what is wrong, and on which field, before the server has to: its own
+    // refusal talks about field kinds, not about the third row of this editor.
+    for (const [index, row] of draft.rows.entries()) {
+      if (row.label.trim() === '') {
+        setError(t('forms.rowLabelMissing', { position: index + 1 }))
+        return
+      }
+      if (!(FORM_FIELD_KINDS as readonly string[]).includes(row.kind)) {
+        setError(t('forms.rowKindMissing', { position: index + 1, label: row.label.trim() }))
+        return
+      }
+      if (
+        (row.kind === 'choiceSingle' || row.kind === 'choiceMulti') &&
+        (row.choicesText ?? '').split(',').every((choice) => choice.trim() === '')
+      ) {
+        setError(t('forms.rowChoicesMissing', { position: index + 1, label: row.label.trim() }))
+        return
+      }
+    }
     setSaving(true)
     setError(null)
-    setNotice(null)
     const wasNew = draft.id === null
     try {
       const notifyEmails = draft.notifyEmailsText
@@ -416,7 +460,7 @@ export function FormsRoute(): JSX.Element {
       )
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('forms.saveError'))
+      setError(describeApiError(caught, t('forms.saveError')).message)
     } finally {
       setSaving(false)
     }
@@ -429,7 +473,7 @@ export function FormsRoute(): JSX.Element {
       setConfirmDeleteId(null)
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('forms.deleteError'))
+      setError(describeApiError(caught, t('forms.deleteError')).message)
     }
   }
 
@@ -441,7 +485,7 @@ export function FormsRoute(): JSX.Element {
       setNotice(t('forms.duplicateSuccess', { label: copy.label }))
       await load()
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('forms.duplicateError'))
+      setError(describeApiError(caught, t('forms.duplicateError')).message)
     }
   }
 
@@ -474,7 +518,7 @@ export function FormsRoute(): JSX.Element {
           <p>{notice}</p>
         </Notice>
       )}
-      {error !== null && (
+      {error !== null && draft === null && (
         <Notice tone="danger" live="assertive">
           <p>{error}</p>
         </Notice>
@@ -487,6 +531,7 @@ export function FormsRoute(): JSX.Element {
           onCancel={() => setDraft(null)}
           onSave={() => void save()}
           saving={saving}
+          error={error}
           nameTouched={nameTouched}
           onNameTouched={() => setNameTouched(true)}
         />
@@ -522,7 +567,7 @@ export function FormsRoute(): JSX.Element {
                 {page.items.map((form) => (
                   <TableRow key={form.id}>
                     <TableCell className="font-medium">{form.label}</TableCell>
-                    <TableCell className="font-mono text-xs">{form.name}</TableCell>
+                    <TableCell className="font-mono text-xs">/forms/{form.name}</TableCell>
                     <TableCell>{form.fields.length}</TableCell>
                     <TableCell>{form.active ? t('forms.active') : t('forms.inactive')}</TableCell>
                     <TableCell className="flex flex-wrap gap-2">
@@ -599,6 +644,7 @@ function FormEditor({
   onCancel,
   onSave,
   saving,
+  error,
   nameTouched,
   onNameTouched,
 }: {
@@ -607,6 +653,7 @@ function FormEditor({
   onCancel(): void
   onSave(): void
   readonly saving: boolean
+  readonly error: string | null
   readonly nameTouched: boolean
   onNameTouched(): void
 }): JSX.Element {
@@ -636,6 +683,24 @@ function FormEditor({
             },
           }
         : {}),
+    ...(field.name === 'showIfField'
+      ? {
+          options: {
+            options: [
+              { value: NO_CONDITION, label: t('forms.conditionOperators.none') },
+              ...draft.rows
+                .map((row, index) => ({
+                  value: resolveRowNames(draft.rows)[index] ?? '',
+                  label:
+                    row.label.trim() === ''
+                      ? t('forms.unnamedField', { position: index + 1 })
+                      : row.label.trim(),
+                }))
+                .filter((option) => option.value !== ''),
+            ],
+          },
+        }
+      : {}),
   }))
 
   return (
@@ -817,6 +882,12 @@ function FormEditor({
           />
           {t('forms.activeToggle')}
         </label>
+
+        {error !== null && (
+          <Notice tone="danger" live="assertive">
+            <p>{error}</p>
+          </Notice>
+        )}
 
         <div className="flex gap-2">
           <Button type="button" onClick={onSave} disabled={saving || draft.label.trim() === ''}>

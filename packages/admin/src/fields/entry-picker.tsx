@@ -1,6 +1,5 @@
 import { type JSX, useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../api/client.js'
 import { type Entry, getEntriesByIds, listEntries } from '../api/content-client.js'
 import { type SearchHit, searchContent } from '../api/search-client.js'
 import { titleOf } from '../lib/entry-title.js'
@@ -9,6 +8,7 @@ import type { CollectionSummary } from '../schema/types.js'
 import { cn } from '../ui/cn.js'
 import { Button, Input, Label, Modal } from '../ui/index.js'
 import '../styles/entry-picker.css'
+import { describeApiError } from '../api/describe-error.js'
 
 /**
  * The reusable relation picker (fiche 03, task 1): browse-and-search a
@@ -313,7 +313,7 @@ function BrowsePanel({
       })
       .catch((caught: unknown) => {
         if (!cancelled) {
-          setError(caught instanceof ApiError ? caught.message : t('entryPicker.loadError'))
+          setError(describeApiError(caught, t('entryPicker.loadError')).message)
         }
       })
       .finally(() => {
@@ -333,7 +333,7 @@ function BrowsePanel({
       setHasMore(page.hasMore)
       setCursor(page.nextCursor ?? undefined)
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : t('entryPicker.loadError'))
+      setError(describeApiError(caught, t('entryPicker.loadError')).message)
     } finally {
       setLoading(false)
     }

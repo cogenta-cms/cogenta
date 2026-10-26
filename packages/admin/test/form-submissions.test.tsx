@@ -71,6 +71,18 @@ async function goToSubmissions(): Promise<void> {
   await screen.findByRole('heading', { name: 'Soumissions' })
 }
 
+/**
+ * Erasing by e-mail is irreversible, so it asks first: the dialog names the
+ * address and nothing is deleted until its own « Tout effacer » is pressed.
+ */
+async function confirmErase(email: string): Promise<void> {
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Effacer toutes les soumissions de cette personne ?',
+  })
+  expect(within(dialog).getByText(new RegExp(email.replace('.', '\\.'), 'u'))).toBeDefined()
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Tout effacer' }))
+}
+
 describe('the form submissions screen', () => {
   it('lists submissions across forms', async () => {
     signedIn(['admin'], {
@@ -228,6 +240,7 @@ describe('the form submissions screen', () => {
     await within(section).findByText(/Contact 20 —/u)
     expect(within(section).getAllByRole('listitem')).toHaveLength(1)
     fireEvent.click(within(section).getByRole('button', { name: 'Tout effacer' }))
+    await confirmErase('visitor@example.com')
     await waitFor(async () => {
       const response = await fetch('/api/forms/submissions', {
         headers: { authorization: `Bearer ${VALID_TOKEN}` },
@@ -294,6 +307,7 @@ describe('the form submissions screen', () => {
     await within(gdprSection).findByText(/Contact us/)
 
     fireEvent.click(within(gdprSection).getByRole('button', { name: 'Tout effacer' }))
+    await confirmErase('visitor@example.com')
 
     await waitFor(async () => {
       const response = await fetch('/api/forms/submissions', {
@@ -303,6 +317,36 @@ describe('the form submissions screen', () => {
       expect(body.data.map((s) => s.id)).not.toContain('sub-1')
       expect(body.data.map((s) => s.id)).toContain('sub-2')
     })
+  })
+
+  it('erases nothing when the GDPR erasure confirmation is cancelled', async () => {
+    signedIn(['admin'], {
+      forms: [CONTACT_FORM],
+      formSubmissions: [SUBMISSION_ONE, SUBMISSION_TWO],
+    })
+    render(<App />)
+    await goToSubmissions()
+    await screen.findAllByText('Contact us')
+
+    fireEvent.change(screen.getByLabelText('Adresse e-mail'), {
+      target: { value: 'visitor@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
+    const gdprSection = screen.getByRole('region', { name: 'Demande relative à une personne' })
+    await within(gdprSection).findByText(/Contact us/)
+
+    fireEvent.click(within(gdprSection).getByRole('button', { name: 'Tout effacer' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Effacer toutes les soumissions de cette personne ?',
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Annuler' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    const response = await fetch('/api/forms/submissions', {
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    })
+    const body = (await response.json()) as { data: { id: string }[] }
+    expect(body.data.map((item) => item.id)).toEqual(['sub-1', 'sub-2'])
   })
 
   it('exports the currently loaded submissions as CSV', async () => {

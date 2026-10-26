@@ -59,7 +59,10 @@ describe('the commerce tax screen', () => {
     })
     expect(screen.getByRole('table')).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    // Deleting a rule changes what gets taxed: it is confirmed first.
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer la règle Standard FR' }))
+    const confirm = await screen.findByRole('dialog', { name: /^Supprimer cette règle de taxe/u })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Supprimer la règle' }))
     await waitFor(() => {
       expect(
         screen.getByText(
@@ -92,7 +95,7 @@ describe('the commerce tax screen', () => {
     await goToTax()
     await screen.findByText('Standard FR')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Modifier' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier la règle Standard FR' }))
     const dialog = await screen.findByRole('dialog', { name: 'Modifier Standard FR' })
     fireEvent.change(within(dialog).getByLabelText('Nom'), {
       target: { value: 'Standard FR corrected' },
@@ -105,7 +108,8 @@ describe('the commerce tax screen', () => {
     })
     // Untouched fields (zone) survive the edit.
     const row = screen.getByText('Standard FR corrected').closest('tr') as HTMLElement
-    expect(within(row).getByText('FR — standard')).toBeDefined()
+    expect(within(row).getByText('France')).toBeDefined()
+    expect(within(row).getByText('standard')).toBeDefined()
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
@@ -151,12 +155,18 @@ describe('the commerce tax screen', () => {
 
     // "un livre est à 5,5 % et un ordinateur à 20 %" — the fiche's own
     // acceptance test for this task, reproduced against the real resolver.
-    await screen.findByText('5.5%')
-    expect(screen.getByText(/la correspondance la plus spécifique/u)).toBeDefined()
+    // The rule table lists the same rates, so read the simulator's own
+    // "Taux appliqué" line rather than any text that happens to match.
+    expect(await screen.findByText(/la correspondance la plus spécifique/u)).toBeDefined()
+    const appliedRate = (): string | null =>
+      // Intl puts a (narrow) no-break space before the percent sign.
+      screen.getByText('Taux appliqué').nextElementSibling?.textContent?.replace(/\s/gu, ' ') ??
+      null
+    expect(appliedRate()).toBe('5,5 %')
 
     fireEvent.change(screen.getByLabelText('Catégorie de taxe'), { target: { value: 'standard' } })
     fireEvent.click(screen.getByRole('button', { name: 'Simuler' }))
-    await screen.findByText('20%')
+    await waitFor(() => expect(appliedRate()).toBe('20 %'))
   })
 
   // fiche feedback: this screen used to be admin-only in the client even

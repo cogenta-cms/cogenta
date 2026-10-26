@@ -72,14 +72,14 @@ export function printRecap(input: RecapInput, out: Output): void {
     out.ok(`"${resolvedBlueprint.blueprint.id}" starting skin — written to theme.tokens.json.`)
     if (answers.llmProvider === 'none' || answers.siteDescription === undefined) {
       out.detail(
-        'AI skin generation was not offered: it needs an LLM provider and a site description. Run `cogenta skin generate` later (a future CLI task) to try it.',
+        'AI skin generation was not offered: it needs an LLM provider and a site description. Add a provider in the admin (IA → Fournisseurs d’IA), then run `cogenta skin generate --description "…"` or use Apparence → Générer un thème.',
       )
     }
   } else {
     out.ok('@cogenta/theme-canonical default skin — written to theme.tokens.json.')
     if (answers.llmProvider === 'none' || answers.siteDescription === undefined) {
       out.detail(
-        'AI skin generation was not offered: it needs an LLM provider and a site description. Run `cogenta skin generate` later (a future CLI task) to try it.',
+        'AI skin generation was not offered: it needs an LLM provider and a site description. Add a provider in the admin (IA → Fournisseurs d’IA), then run `cogenta skin generate --description "…"` or use Apparence → Générer un thème.',
       )
     }
   }
@@ -87,7 +87,7 @@ export function printRecap(input: RecapInput, out: Output): void {
   if (hasContentPack) {
     out.heading('Recommended agents')
     out.detail(
-      'Not enabled — no site runs a live agent scheduler yet. Recorded in .cogenta/recommended-agents.json for when one exists.',
+      'Not enabled automatically. Recorded in .cogenta/recommended-agents.json; turn them on from the admin (IA → Agents) once a provider is configured.',
     )
   }
 

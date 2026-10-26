@@ -3626,21 +3626,31 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 }
 
 /**
- * A query key that would write an object's prototype instead of a property
- * (`?__proto__=a&__proto__=b` makes the parsed query inherit from an array).
- * No route reads such a key, so it is dropped.
+ * A query key that is a plain property, not one that would write an
+ * object's prototype (`?__proto__=a&__proto__=b`). No route reads such a key.
+ * The query is built with `Object.fromEntries`, which defines properties
+ * rather than assigning them, so even a missed key could not reach a
+ * prototype.
  */
-function isPrototypeKey(key: string): boolean {
-  return key === '__proto__' || key === 'constructor' || key === 'prototype'
+function isOwnKey(key: string): boolean {
+  return key !== '__proto__' && key !== 'constructor' && key !== 'prototype'
+}
+
+function singleValuedQuery(url: URL): Record<string, string | undefined> {
+  return Object.fromEntries(
+    [...new Set(url.searchParams.keys())]
+      .filter(isOwnKey)
+      .map((key) => [key, url.searchParams.get(key) ?? undefined]),
+  )
 }
 
 function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestRequest {
-  const query: Record<string, string | readonly string[] | undefined> = {}
-  for (const key of url.searchParams.keys()) {
-    if (isPrototypeKey(key)) continue
-    const values = url.searchParams.getAll(key)
-    query[key] = values.length > 1 ? values : values[0]
-  }
+  const query: Record<string, string | readonly string[] | undefined> = Object.fromEntries(
+    [...new Set(url.searchParams.keys())].filter(isOwnKey).map((key) => {
+      const values = url.searchParams.getAll(key)
+      return [key, values.length > 1 ? values : values[0]]
+    }),
+  )
 
   const headers: Record<string, string | undefined> = {}
   for (const [key, value] of Object.entries(req.headers)) {
@@ -3663,14 +3673,10 @@ function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestReque
  * adapter rather than a cast of `toRestRequest`'s output.
  */
 function toCommerceRequest(req: IncomingMessage, url: URL, body: unknown): CommerceRequest {
-  const query: Record<string, string | undefined> = {}
+  const query = singleValuedQuery(url)
   const headers: Record<string, string> = {}
   for (const [name, value] of Object.entries(req.headers)) {
     if (typeof value === 'string') headers[name] = value
-  }
-  for (const key of url.searchParams.keys()) {
-    if (isPrototypeKey(key)) continue
-    query[key] = url.searchParams.get(key) ?? undefined
   }
   return {
     method: req.method ?? 'GET',
@@ -4030,11 +4036,7 @@ export interface AuthorArchiveResolution {
 }
 
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
-  const query: Record<string, string | undefined> = {}
-  for (const key of url.searchParams.keys()) {
-    if (isPrototypeKey(key)) continue
-    query[key] = url.searchParams.get(key) ?? undefined
-  }
+  const query = singleValuedQuery(url)
   // The connecting socket's address only — never `x-forwarded-for`, a
   // client-supplied header this server has no trusted-proxy list to
   // validate. Trusting it here would let a single attacker rotate a

@@ -9,6 +9,15 @@ export interface StepUpDialogProps {
   readonly open: boolean
   /** Offer the authenticator code as an alternative to the password. */
   readonly canUseCode: boolean
+  /**
+   * False for a passkey-only account, which has neither a password nor (unless
+   * it also set one up) an authenticator code to type. The dialog then asks the
+   * person to sign in again: the server counts a sign-in under five minutes old
+   * as a fresh confirmation.
+   */
+  readonly canUsePassword?: boolean
+  /** Ends the session so the person lands on the sign-in screen. Offered only when there is nothing to type. */
+  onSignInAgain?(): void
   readonly busy: boolean
   /** The server's refusal of the last attempt, shown inside the dialog. */
   readonly error: string | null
@@ -26,6 +35,8 @@ export interface StepUpDialogProps {
 export function StepUpDialog({
   open,
   canUseCode,
+  canUsePassword = true,
+  onSignInAgain,
   busy,
   error,
   onSubmit,
@@ -39,18 +50,46 @@ export function StepUpDialog({
   // attempt must not still be sitting in the field.
   useEffect(() => {
     if (open) {
-      setMode('password')
+      setMode(canUsePassword ? 'password' : 'code')
       setValue('')
     }
-  }, [open])
+  }, [open, canUsePassword])
 
   function submit(event: FormEvent): void {
     event.preventDefault()
     if (value === '') return
-    onSubmit(mode === 'password' ? { password: value } : { code: value.trim() })
+    onSubmit(usingCode ? { code: value.trim() } : { password: value })
   }
 
-  const usingCode = mode === 'code'
+  const mustSignInAgain = !canUsePassword && !canUseCode
+  const usingCode = mode === 'code' || (!canUsePassword && canUseCode)
+  if (mustSignInAgain) {
+    return (
+      <Modal
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) onCancel()
+        }}
+        title={t('profile.stepUpTitle')}
+        description={t('profile.stepUpSignInAgain')}
+        closeLabel={t('common.close')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={onCancel} disabled={busy}>
+              {t('common.cancel')}
+            </Button>
+            {onSignInAgain !== undefined && (
+              <Button onClick={onSignInAgain} disabled={busy}>
+                {t('profile.stepUpSignInAgainAction')}
+              </Button>
+            )}
+          </>
+        }
+      >
+        <DialogError message={error} />
+      </Modal>
+    )
+  }
   return (
     <Modal
       open={open}
@@ -86,7 +125,7 @@ export function StepUpDialog({
             />
           )}
         </Field>
-        {canUseCode && (
+        {canUseCode && canUsePassword && (
           <div>
             <Button
               type="button"

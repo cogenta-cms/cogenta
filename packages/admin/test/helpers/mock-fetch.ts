@@ -1259,6 +1259,12 @@ export function installMockFetch(
     readonly previewSigningKeyMissing?: boolean
     /** The interface language stored on the signed-in account (fiche 17 task 3). */
     readonly accountLocale?: string | null
+    /**
+     * Starts the signed-in account as a passkey-only one: one registered
+     * passkey and no password (pentest 2026-10-26 follow-up — such an account
+     * re-confirms by signing in again, there is nothing to type).
+     */
+    readonly passkeyOnlyAccount?: boolean
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -2163,6 +2169,7 @@ export function installMockFetch(
     createdAt: string
     updatedAt: string
     mfa: { totp: boolean; passkeys: number }
+    hasPassword?: boolean
     // Fiche 17 task 3's public profile, self-service only in the real router
     // — settable here only through the `me/profile` branch below.
     displayName?: string | null
@@ -2183,6 +2190,7 @@ export function installMockFetch(
       bio: account.bio ?? null,
       locale: account.locale ?? null,
       mfaRecommended: false,
+      hasPassword: account.hasPassword ?? true,
       // A real instant, not `null`: an account that has never signed in is
       // the one shape that never exercises a date formatter, and it was the
       // only shape this double produced — so the accounts table printed a raw
@@ -2490,7 +2498,8 @@ export function installMockFetch(
       status: 'active',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
-      mfa: { totp: false, passkeys: 0 },
+      mfa: { totp: false, passkeys: options.passkeyOnlyAccount === true ? 1 : 0 },
+      ...(options.passkeyOnlyAccount === true ? { hasPassword: false } : {}),
       // `GET /api/users/me` reads this list, not the session `user` above,
       // so the account's own stored language has to live here to be seen.
       ...(options.accountLocale === undefined ? {} : { locale: options.accountLocale }),

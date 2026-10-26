@@ -87,6 +87,15 @@ function errorCode(response: RestResponse): string | undefined {
   return (response.body as { error?: { code?: string } } | null)?.error?.code
 }
 
+/** A session whose sign-in is older than the five minutes a fresh sign-in counts as a re-authentication. */
+async function agedSession(userId: string) {
+  const kept = time
+  time = T0 - 6 * 60 * 1000
+  const session = await auth.sessions.create(userId)
+  time = kept
+  return session
+}
+
 /** An account, optionally with a confirmed TOTP factor, signed in on a fresh session. */
 async function account(options: { totp: boolean }) {
   const user = await auth.users.create({ email: 'admin@example.com', roles: ['admin'] })
@@ -95,7 +104,7 @@ async function account(options: { totp: boolean }) {
     await auth.credentials.setTotpSecret(user.id, SECRET)
     await auth.credentials.confirmTotp(user.id)
   }
-  const session = await auth.sessions.create(user.id)
+  const session = await agedSession(user.id)
   return { user, token: session.token, router: createAuthRouter({ auth }) }
 }
 
@@ -236,7 +245,7 @@ describe('a session alone cannot replace or remove a confirmed factor (F-01)', (
 
   it("does not let one session ride on another session's step-up", async () => {
     const { user, router, token } = await account({ totp: true })
-    const other = await auth.sessions.create(user.id)
+    const other = await agedSession(user.id)
     await router.handle(
       request('POST', '/api/auth/step-up', { token, body: { password: PASSWORD } }),
     )
@@ -296,14 +305,17 @@ describe('a session alone cannot replace or remove a confirmed factor (F-01)', (
     expect(allowed.status).toBe(200)
   })
 
-  it('leaves the first enrolment, and the first passkey, to the session alone (MFA stays optional)', async () => {
-    const { router, token } = await account({ totp: false })
+  it('refuses the first authenticator on a password account to a session alone, then allows it after a step-up', async () => {
+    const { user, router, token } = await account({ totp: false })
 
-    const passkey = await router.handle(
-      request('POST', '/api/auth/webauthn/register/begin', { token }),
+    const refused = await router.handle(request('POST', '/api/auth/totp/enrol', { token }))
+    expect(refused.status).toBe(403)
+    expect(errorCode(refused)).toBe('AUTH_STEP_UP_REQUIRED')
+    expect(await auth.credentials.pendingTotp(user.id)).toBeNull()
+
+    await router.handle(
+      request('POST', '/api/auth/step-up', { token, body: { password: PASSWORD } }),
     )
-    expect(passkey.status).toBe(200)
-
     const begin = await router.handle(request('POST', '/api/auth/totp/enrol', { token }))
     expect(begin.status).toBe(200)
     const { secret } = (begin.body as { data: { secret: string } }).data
@@ -314,6 +326,78 @@ describe('a session alone cannot replace or remove a confirmed factor (F-01)', (
       }),
     )
     expect(confirm.status).toBe(200)
+  })
+
+  it('refuses the first passkey on a password account to a session alone, then allows it after a step-up', async () => {
+    const { router, token } = await account({ totp: false })
+
+    const refused = await router.handle(
+      request('POST', '/api/auth/webauthn/register/begin', { token }),
+    )
+    expect(refused.status).toBe(403)
+    expect(errorCode(refused)).toBe('AUTH_STEP_UP_REQUIRED')
+
+    await router.handle(
+      request('POST', '/api/auth/step-up', { token, body: { password: PASSWORD } }),
+    )
+    const allowed = await router.handle(
+      request('POST', '/api/auth/webauthn/register/begin', { token }),
+    )
+    expect(allowed.status).toBe(200)
+  })
+
+  it('leaves an account with no password and no factor to the session alone (MFA stays optional)', async () => {
+    const user = await auth.users.create({ email: 'invitee@example.com', roles: ['editor'] })
+    const session = await agedSession(user.id)
+    const router = createAuthRouter({ auth })
+
+    const passkey = await router.handle(
+      request('POST', '/api/auth/webauthn/register/begin', { token: session.token }),
+    )
+    expect(passkey.status).toBe(200)
+    const begin = await router.handle(
+      request('POST', '/api/auth/totp/enrol', { token: session.token }),
+    )
+    expect(begin.status).toBe(200)
+  })
+})
+
+describe('a passkey-only account steps up by signing in again', () => {
+  async function passkeyOnly() {
+    const user = await auth.users.create({ email: 'key@example.com', roles: ['admin'] })
+    await auth.credentials.addWebAuthnCredential(user.id, {
+      credentialId: 'cred-1',
+      publicKey: 'key',
+      counter: 0,
+      transports: [],
+      label: undefined,
+    })
+    return { user, router: createAuthRouter({ auth }) }
+  }
+
+  it('refuses a session older than five minutes, and accepts a session just created', async () => {
+    const { user, router } = await passkeyOnly()
+    const old = await agedSession(user.id)
+    const refused = await router.handle(
+      request('POST', '/api/auth/webauthn/register/begin', { token: old.token }),
+    )
+    expect(errorCode(refused)).toBe('AUTH_STEP_UP_REQUIRED')
+
+    const fresh = await auth.sessions.create(user.id)
+    const allowed = await router.handle(
+      request('POST', '/api/auth/webauthn/register/begin', { token: fresh.token }),
+    )
+    expect(allowed.status).toBe(200)
+  })
+
+  it('stops counting a sign-in as fresh once five minutes have passed', async () => {
+    const { user, router } = await passkeyOnly()
+    const session = await auth.sessions.create(user.id)
+    time += 5 * 60 * 1000 + 1
+    const refused = await router.handle(
+      request('POST', '/api/auth/webauthn/register/begin', { token: session.token }),
+    )
+    expect(errorCode(refused)).toBe('AUTH_STEP_UP_REQUIRED')
   })
 })
 

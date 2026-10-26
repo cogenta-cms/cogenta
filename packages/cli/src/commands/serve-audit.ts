@@ -127,6 +127,16 @@ export async function recordAuthAudit(
     // `AUTH_INVALID_CREDENTIALS`-family codes for a different meaning each
     // time, so recording those here under one generic action would misname
     // what actually failed.
+    // A refused step-up is the signal that someone holding a session is
+    // guessing the password or a code to change a second factor. The attempt is
+    // recorded; the secret that was typed never is.
+    if (pathname.endsWith('/api/auth/step-up') && method === 'POST') {
+      await site.auth.audit
+        .record({ actorId: actor.id, actorRoles: actor.roles, action: 'auth.step_up_failed' })
+        .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+      return
+    }
+
     if (pathname.endsWith('/api/auth/login') && method === 'POST') {
       const email =
         body !== null &&

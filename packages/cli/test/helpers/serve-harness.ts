@@ -90,6 +90,20 @@ export async function createUser(
   await db.close()
 }
 
+/**
+ * Makes every existing session look like a sign-in from ten minutes ago, with
+ * no step-up on it. A sign-in under five minutes old counts as a
+ * re-authentication, so showing that "a session alone" is refused needs a
+ * session that has lived past that window; a test cannot wait five minutes.
+ */
+export async function ageSessions(root: string): Promise<void> {
+  const { createSqliteHandle, sql } = await import('@cogenta/core')
+  const db = await createSqliteHandle({ url: join(root, 'site.db') })
+  const longAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  await db.query(sql`update cogenta_sessions set created_at = ${longAgo}, step_up_until = ${null}`)
+  await db.close()
+}
+
 export interface RunningServer {
   readonly base: string
   stop(): Promise<void>

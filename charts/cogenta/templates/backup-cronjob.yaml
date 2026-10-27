@@ -1,0 +1,69 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "cogenta.fullname" . }}-backup
+  labels:
+    {{- include "cogenta.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: {{ .Values.backup.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "cogenta.labels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          serviceAccountName: {{ include "cogenta.fullname" . | quote }}
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            {{- include "cogenta.podSecurityContext" 70 | nindent 12 }}
+          containers:
+            - name: pg-dump
+              image: {{ .Values.postgresql.image | quote }}
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                {{- include "cogenta.containerSecurityContext" 70 | nindent 16 }}
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              command: [/bin/sh, -ec]
+              args:
+                - |
+                  umask 077
+                  dump="/backups/cogenta-$(date -u +%Y%m%dT%H%M%SZ).dump"
+                  trap 'rm -f "$dump.partial"' EXIT HUP INT TERM
+                  pg_dump -Fc --file="$dump.partial"
+                  pg_restore --list "$dump.partial" >/dev/null
+                  mv "$dump.partial" "$dump"
+                  find /backups -type f -name 'cogenta-*.dump' -mtime +{{ .Values.backup.retentionDays }} -exec rm -f {} \;
+              env:
+                - name: PGHOST
+                  value: {{ include "cogenta.fullname" . }}-postgresql
+                - {name: PGPORT, value: "5432"}
+                - name: PGUSER
+                  value: {{ .Values.postgresql.username | quote }}
+                - name: PGDATABASE
+                  value: {{ .Values.postgresql.database | quote }}
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "cogenta.postgresqlSecretName" . | quote }}
+                      key: postgres-password
+              volumeMounts:
+                - {name: backups, mountPath: /backups}
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: {{ default (printf "%s-backup" (include "cogenta.fullname" .)) .Values.backup.persistence.existingClaim | quote }}
+            - name: tmp
+              emptyDir: {sizeLimit: 256Mi}
+{{- end }}

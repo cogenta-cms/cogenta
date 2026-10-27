@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cogenta.fullname" . | quote }}
+  labels:
+    {{- include "cogenta.labels" . | nindent 4 }}
+data:
+  PORT: "4000"
+  COGENTA_DATABASE_DRIVER: {{ ternary "postgres" .Values.externalDatabase.driver .Values.postgresql.enabled | quote }}
+  COGENTA_SITE_URL: {{ .Values.site.url | quote }}
+  COGENTA_SITE_NAME: {{ .Values.site.name | quote }}
+  COGENTA_SITE_LOCALES: {{ join "," .Values.site.locales | quote }}
+  COGENTA_SITE_DEFAULT_LOCALE: {{ .Values.site.defaultLocale | quote }}
+  COGENTA_BLUEPRINT: {{ .Values.site.blueprint | quote }}
+  COGENTA_ADMIN_EMAIL: {{ .Values.site.adminEmail | quote }}
+  COGENTA_TRUST_PROXY: {{ .Values.site.trustProxy | quote }}
+  COGENTA_STORAGE_DRIVER: {{ .Values.storage.driver | quote }}
+  {{- if eq .Values.storage.driver "s3" }}
+  COGENTA_STORAGE_BUCKET: {{ .Values.storage.bucket | quote }}
+  COGENTA_STORAGE_REGION: {{ .Values.storage.region | quote }}
+  COGENTA_STORAGE_ENDPOINT: {{ .Values.storage.endpoint | quote }}
+  {{- end }}
+  COGENTA_CACHE_DRIVER: {{ .Values.cache.driver | quote }}
+  COGENTA_RATE_LIMIT_DRIVER: {{ .Values.rateLimit.driver | quote }}

@@ -1,0 +1,16 @@
+# No database server, credentials, or PVC is managed by this chart.
+postgresql:
+  enabled: false
+existingSecret: cogenta-app-private
+externalDatabase:
+  driver: mysql
+  existingSecret: cogenta-mysql-private
+persistence:
+  existingClaim: cogenta-site
+site:
+  url: https://cms.example.com
+ingress:
+  host: cms.example.com
+  className: nginx
+networkPolicy:
+  ingressControllerNamespace: ingress-nginx

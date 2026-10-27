@@ -1,0 +1,20 @@
+{{- if .Values.postgresql.enabled }}
+{{- range $suffix := list "-postgresql" "-pg-headless" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cogenta.fullname" $ }}{{ $suffix }}
+  labels:
+    {{- include "cogenta.labels" $ | nindent 4 }}
+spec:
+  {{- if eq $suffix "-pg-headless" }}
+  clusterIP: None
+  {{- end }}
+  type: ClusterIP
+  ports:
+    - {name: postgresql, port: 5432, targetPort: postgresql, protocol: TCP}
+  selector:
+    {{- include "cogenta.postgresqlSelectorLabels" $ | nindent 4 }}
+{{- end }}
+{{- end }}

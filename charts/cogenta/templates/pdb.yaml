@@ -1,0 +1,13 @@
+{{- if or (and (not .Values.autoscaling.enabled) (gt (int .Values.replicaCount) 1)) (and .Values.autoscaling.enabled (gt (int .Values.autoscaling.minReplicas) 1)) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cogenta.fullname" . | quote }}
+  labels:
+    {{- include "cogenta.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "cogenta.selectorLabels" . | nindent 6 }}
+{{- end }}

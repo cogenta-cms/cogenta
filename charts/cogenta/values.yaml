@@ -1,0 +1,137 @@
+nameOverride: ""
+fullnameOverride: ""
+replicaCount: 1
+image:
+  repository: ghcr.io/cogenta-cms/cogenta
+  tag: "" # Defaults to Chart.appVersion, the container release placeholder.
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+strategy:
+  type: Recreate
+site:
+  url: http://cogenta.local
+  name: Cogenta
+  locales: [en]
+  defaultLocale: en
+  blueprint: blog
+  adminEmail: admin@example.com
+  trustProxy: "off" # Set to the actual trusted ingress hop count, or cloudflare.
+existingSecret: "" # auth-signing-key, preview-signing-key, admin-password, database-url
+secretChecksum: "" # Bump to restart pods after externally managed secret changes.
+secrets:
+  authSigningKey: "" # Generated once; prefer existingSecret for GitOps.
+  previewSigningKey: ""
+  adminPassword: ""
+persistence:
+  size: 10Gi
+  storageClass: "" # Empty uses the cluster default; "-" disables dynamic provisioning.
+  accessMode: ReadWriteOnce
+  existingClaim: ""
+storage:
+  driver: local
+  bucket: ""
+  region: ""
+  endpoint: ""
+cache:
+  driver: memory # Inject COGENTA_CACHE_URL using a secretKeyRef for Redis.
+rateLimit:
+  driver: memory # Inject COGENTA_RATE_LIMIT_URL using a secretKeyRef for Redis.
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+startupProbe:
+  httpGet: {path: /livez, port: http}
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 60
+livenessProbe:
+  httpGet: {path: /livez, port: http}
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+readinessProbe:
+  httpGet: {path: /readyz, port: http}
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+terminationGracePeriodSeconds: 30
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+extraEnv: [] # Shared by bootstrap and serve. Use valueFrom for secrets.
+extraEnvFrom: [] # Shared by bootstrap and serve. Secret references only.
+extraVolumes: []
+extraVolumeMounts: []
+service:
+  port: 80
+  annotations: {}
+ingress:
+  enabled: true
+  className: ""
+  host: cogenta.local
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: "" # Defaults to <release>-cogenta-tls.
+    clusterIssuer: ""
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: kube-system
+  additionalIngress: [] # e.g. Prometheus namespace + pod selector on port 4000.
+  # Empty means unrestricted app egress. Set explicit rules to restrict it.
+  egress: []
+postgresql:
+  enabled: true
+  image: postgres:17-alpine
+  username: cogenta
+  database: cogenta
+  password: "" # Generated once. URI-unreserved characters only.
+  existingSecret: "" # Key: postgres-password (URI-unreserved characters only).
+  secretChecksum: ""
+  persistence:
+    size: 10Gi
+    storageClass: ""
+    existingClaim: ""
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 1Gi}
+externalDatabase:
+  driver: postgres
+  existingSecret: "" # Defaults to existingSecret; key configured below.
+  secretKey: database-url
+backup:
+  enabled: false # Built-in PostgreSQL only; managed DBs use their native backups.
+  schedule: "0 3 * * *"
+  retentionDays: 7
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  activeDeadlineSeconds: 3600
+  persistence:
+    size: 10Gi
+    storageClass: ""
+    existingClaim: ""
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+podDisruptionBudget:
+  maxUnavailable: 1
+serviceMonitor:
+  enabled: false # Requires the Prometheus Operator CRD and a metrics endpoint.
+  labels: {}
+  path: /metrics
+  interval: 30s
+  scrapeTimeout: 10s
+test:
+  image: curlimages/curl:8.16.0

@@ -122,6 +122,22 @@ export function applyEnv(
     output['storage'] = storage
   }
 
+  const security = section(output, 'security')
+  if (security !== undefined) {
+    const trustProxy = read(env, 'COGENTA_TRUST_PROXY')
+    if (trustProxy !== undefined) {
+      // `0` and the usual spellings of "off" mean off; a whole number counts
+      // proxies; anything else is a header name, which the schema validates.
+      const lowered = trustProxy.toLowerCase()
+      security['trustProxy'] = ['0', 'false', 'off', 'no', 'none'].includes(lowered)
+        ? false
+        : /^\d+$/u.test(trustProxy)
+          ? Number(trustProxy)
+          : trustProxy
+    }
+    output['security'] = security
+  }
+
   const webhooks = section(output, 'webhooks')
   if (webhooks !== undefined) {
     const endpoints = read(env, 'COGENTA_WEBHOOK_ENDPOINTS')

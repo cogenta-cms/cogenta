@@ -100,6 +100,15 @@ export interface CogentaConfigInput {
     /** How long a public page may be cached, in seconds. */
     readonly pageMaxAge?: number
     /**
+     * Where the server may read the client's address and protocol from when it
+     * runs behind a reverse proxy. `false` — the default — trusts nothing:
+     * the address is the socket's and a forwarded header is ignored. A header
+     * name (`cf-connecting-ip`, or the alias `cloudflare`) names the one the
+     * proxy sets; a number N counts proxies and takes the Nth entry from the
+     * right of `x-forwarded-for`.
+     */
+    readonly trustProxy?: false | number | string
+    /**
      * Audit-log retention (T09-01). Absent — the default — means the log
      * grows without bound, unchanged from before this field existed. `0` is
      * the explicit way to say "never purge" rather than leaving it absent.
@@ -344,6 +353,8 @@ export interface CogentaConfig {
     readonly hstsMaxAge: number
     readonly hstsIncludeSubDomains: boolean
     readonly pageMaxAge: number
+    /** See the input type: `false`, a number of proxy hops, or the name of the header that carries the client address. */
+    readonly trustProxy: false | number | string
     readonly audit: {
       /** `undefined` (absent) and `0` both mean "never purge" — see the input type's comment. */
       readonly retainDays: number | undefined

@@ -741,3 +741,44 @@ describe('resolveConfig — the MCP HTTP endpoint switch', () => {
     expect(() => resolveConfig(minimal, { COGENTA_MCP_HTTP: 'n' })).toThrow()
   })
 })
+
+describe('resolveConfig — security.trustProxy', () => {
+  it('trusts no forwarded header by default', () => {
+    expect(resolveConfig(minimal, noEnv).security.trustProxy).toBe(false)
+  })
+
+  it('accepts a header name, the cloudflare alias and a number of proxies from the file', () => {
+    const trust = (value: unknown) =>
+      resolveConfig({ ...minimal, security: { trustProxy: value } }, noEnv).security.trustProxy
+
+    expect(trust('cf-connecting-ip')).toBe('cf-connecting-ip')
+    expect(trust('cloudflare')).toBe('cloudflare')
+    expect(trust(2)).toBe(2)
+    expect(trust(false)).toBe(false)
+  })
+
+  it('reads COGENTA_TRUST_PROXY, and lets it win over the file', () => {
+    const fromEnv = (value: string, file: unknown = undefined) =>
+      resolveConfig(file === undefined ? minimal : { ...minimal, security: { trustProxy: file } }, {
+        COGENTA_TRUST_PROXY: value,
+      }).security.trustProxy
+
+    expect(fromEnv('cloudflare')).toBe('cloudflare')
+    expect(fromEnv('cf-connecting-ip')).toBe('cf-connecting-ip')
+    expect(fromEnv('2')).toBe(2)
+    expect(fromEnv('1', 'x-real-ip')).toBe(1)
+    expect(fromEnv('false', 'x-real-ip')).toBe(false)
+    expect(fromEnv('0', 2)).toBe(false)
+  })
+
+  it.each(['true', 'yes', 'on', 'not a header', 'x'.repeat(65), '99'])(
+    'refuses COGENTA_TRUST_PROXY=%s rather than guessing what to trust',
+    (value) => {
+      expect(() => resolveConfig(minimal, { COGENTA_TRUST_PROXY: value })).toThrow(CogentaError)
+    },
+  )
+
+  it('treats an empty COGENTA_TRUST_PROXY as unset', () => {
+    expect(resolveConfig(minimal, { COGENTA_TRUST_PROXY: '' }).security.trustProxy).toBe(false)
+  })
+})

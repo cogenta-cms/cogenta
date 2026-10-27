@@ -154,6 +154,38 @@ const securitySchema = z.strictObject({
   hstsIncludeSubDomains: z.boolean().default(true),
   /** How long a public page may be cached, in seconds. */
   pageMaxAge: z.number().int().nonnegative().max(86_400).default(60),
+  /**
+   * Which forwarded information the server may believe (`false`: none).
+   *
+   * Off by default, and that is the safe direction: a header is typed by
+   * whoever sends the request, so honouring one when no proxy is in front
+   * lets any visitor choose the address the rate limiter and the audit trail
+   * see. Behind a proxy it is the opposite problem — every request comes
+   * from the proxy's address, so per-address limits become one global limit.
+   * A header name trusts exactly that header (a CDN that overwrites it); a
+   * number counts the proxies the operator controls and reads that far in
+   * from the right of `x-forwarded-for`, the only end an attacker cannot
+   * prepend to.
+   */
+  trustProxy: z
+    .union([
+      z.literal(false),
+      z.number().int().min(1).max(32),
+      z
+        .string()
+        .regex(
+          /^[A-Za-z0-9-]{1,64}$/u,
+          'must be a header name, "cloudflare", or a number of proxies',
+        )
+        .refine(
+          (value) => !['true', 'false', 'on', 'off', 'yes', 'no'].includes(value.toLowerCase()),
+          {
+            error:
+              'name the header to trust or the number of proxies — a bare yes/no does not say which',
+          },
+        ),
+    ])
+    .default(false),
   audit: auditRetentionSchema.prefault({}),
 })
 

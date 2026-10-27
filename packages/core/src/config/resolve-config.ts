@@ -162,6 +162,7 @@ export function resolveConfig(
       hstsMaxAge: config.security.hstsMaxAge,
       hstsIncludeSubDomains: config.security.hstsIncludeSubDomains,
       pageMaxAge: config.security.pageMaxAge,
+      trustProxy: config.security.trustProxy,
       audit: Object.freeze({ retainDays: config.security.audit.retainDays }),
     }),
     graphql: Object.freeze({

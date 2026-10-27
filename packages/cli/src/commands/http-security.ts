@@ -1,5 +1,6 @@
 import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from 'node:http'
 import type { CogentaConfig } from '@cogenta/core'
+import { isSecureRequest, trustRuleFor } from './client-address.js'
 import { defaultCspFor } from './csp.js'
 import { remoteWebFontsEnabled } from './theme-fonts.js'
 
@@ -124,7 +125,7 @@ function baseHeadersFor(
   // Only over TLS. Sent on a plain HTTP response the header is ignored by
   // browsers anyway, and sending it locally is how somebody pins
   // `localhost` to HTTPS and cannot develop for the next year.
-  if (security.hstsMaxAge > 0 && isSecure(req)) {
+  if (security.hstsMaxAge > 0 && isSecure(req, security)) {
     headers['strict-transport-security'] = `max-age=${security.hstsMaxAge}${
       security.hstsIncludeSubDomains ? '; includeSubDomains' : ''
     }`
@@ -159,10 +160,12 @@ function headerOf(req: IncomingMessage, name: string): string | undefined {
   return Array.isArray(value) ? value[0] : value
 }
 
-/** True behind a TLS socket, or behind a proxy that says it terminated one. */
-export function isSecure(req: IncomingMessage): boolean {
-  if ('encrypted' in req.socket && req.socket.encrypted === true) return true
-  return headerOf(req, 'x-forwarded-proto')?.split(',')[0]?.trim() === 'https'
+/** True behind a TLS socket, or behind a proxy that says it terminated one (`client-address.ts`). */
+export function isSecure(
+  req: IncomingMessage,
+  security?: Pick<SecurityConfig, 'trustProxy'>,
+): boolean {
+  return isSecureRequest(req, trustRuleFor(security?.trustProxy ?? false))
 }
 
 /**

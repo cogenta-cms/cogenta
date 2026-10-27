@@ -782,3 +782,34 @@ describe('resolveConfig — security.trustProxy', () => {
     expect(resolveConfig(minimal, { COGENTA_TRUST_PROXY: '' }).security.trustProxy).toBe(false)
   })
 })
+
+describe('resolveConfig — security.trustProxyFrom', () => {
+  it('lists no proxy by default, which means any socket may speak for one', () => {
+    expect(resolveConfig(minimal, noEnv).security.trustProxyFrom).toEqual([])
+  })
+
+  it('accepts addresses and CIDR blocks of both families from the file', () => {
+    const from = ['10.0.0.0/8', '192.168.1.5', 'fd00::/8', '::1']
+    expect(
+      resolveConfig({ ...minimal, security: { trustProxyFrom: from } }, noEnv).security
+        .trustProxyFrom,
+    ).toEqual(from)
+  })
+
+  it('reads COGENTA_TRUST_PROXY_FROM as a comma-separated list, and lets it win over the file', () => {
+    const config = resolveConfig(
+      { ...minimal, security: { trustProxyFrom: ['192.0.2.1'] } },
+      { COGENTA_TRUST_PROXY_FROM: ' 10.0.0.0/8 , fd00::/8,, ' },
+    )
+    expect(config.security.trustProxyFrom).toEqual(['10.0.0.0/8', 'fd00::/8'])
+  })
+
+  it.each(['10.0.0.0/33', 'fd00::/129', 'proxy.internal', '10.0.0.0/', '10.0.0/8', '1.2.3.4/-1'])(
+    'refuses %s rather than trusting a block it cannot read',
+    (value) => {
+      expect(() => resolveConfig(minimal, { COGENTA_TRUST_PROXY_FROM: value })).toThrow(
+        CogentaError,
+      )
+    },
+  )
+})

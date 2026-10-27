@@ -158,6 +158,55 @@ describe('resolveClientAddress counting proxies in x-forwarded-for', () => {
   })
 })
 
+describe('resolveClientAddress limited to named proxies (trustProxyFrom)', () => {
+  const forwarded = { 'x-forwarded-for': '198.51.100.4' }
+  const rule = trustRuleFor(1, ['10.0.0.0/8', 'fd00::/8', '192.0.2.1'])
+
+  it('honours the header from a socket inside a CIDR block', () => {
+    expect(resolveClientAddress(request(forwarded, '10.1.2.3'), rule)).toBe('198.51.100.4')
+  })
+
+  it('honours the header from a socket that is a listed address', () => {
+    expect(resolveClientAddress(request(forwarded, '192.0.2.1'), rule)).toBe('198.51.100.4')
+  })
+
+  it('ignores the header from a socket outside every block, so a direct caller cannot choose its address', () => {
+    expect(resolveClientAddress(request(forwarded, '203.0.113.50'), rule)).toBe('203.0.113.50')
+    expect(
+      resolveClientAddress(
+        request(forwarded, '203.0.113.50'),
+        trustRuleFor('cloudflare', ['10.0.0.0/8']),
+      ),
+    ).toBe('203.0.113.50')
+  })
+
+  it('ignores the header when the socket has no address', () => {
+    expect(resolveClientAddress(request(forwarded, null), rule)).toBe('unknown')
+  })
+
+  it('matches an IPv6 socket against an IPv6 block', () => {
+    expect(resolveClientAddress(request(forwarded, 'fd00::7'), rule)).toBe('198.51.100.4')
+    expect(resolveClientAddress(request(forwarded, 'fe80::7'), rule)).toBe('fe80::7')
+  })
+
+  it('treats an IPv4-mapped IPv6 socket address as the IPv4 address it carries', () => {
+    expect(resolveClientAddress(request(forwarded, '::ffff:10.1.2.3'), rule)).toBe('198.51.100.4')
+    expect(resolveClientAddress(request(forwarded, '::ffff:203.0.113.50'), rule)).toBe(
+      '::ffff:203.0.113.50',
+    )
+  })
+
+  it('believes any socket when no proxy is named', () => {
+    expect(resolveClientAddress(request(forwarded, '203.0.113.50'), trustRuleFor(1, []))).toBe(
+      '198.51.100.4',
+    )
+  })
+
+  it('leaves the rule without an allow-list untouched', () => {
+    expect(trustRuleFor(2)).toEqual({ kind: 'hops', count: 2 })
+  })
+})
+
 describe('isSecureRequest', () => {
   const hops: TrustRule = trustRuleFor(2)
 

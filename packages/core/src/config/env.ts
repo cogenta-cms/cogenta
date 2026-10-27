@@ -135,6 +135,13 @@ export function applyEnv(
           ? Number(trustProxy)
           : trustProxy
     }
+    const trustProxyFrom = read(env, 'COGENTA_TRUST_PROXY_FROM')
+    if (trustProxyFrom !== undefined) {
+      security['trustProxyFrom'] = trustProxyFrom
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== '')
+    }
     output['security'] = security
   }
 

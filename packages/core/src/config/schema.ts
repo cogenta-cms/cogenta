@@ -1,3 +1,4 @@
+import { isIP } from 'node:net'
 import { z } from 'zod'
 import {
   CACHE_DRIVERS,
@@ -122,6 +123,17 @@ const auditRetentionSchema = z.strictObject({
   retainDays: z.number().int().nonnegative().max(3650).optional(),
 })
 
+/** An IPv4 or IPv6 address, optionally with a `/prefix` no longer than the family allows. */
+function isAddressOrCidr(value: string): boolean {
+  const slash = value.indexOf('/')
+  const address = slash === -1 ? value : value.slice(0, slash)
+  const family = isIP(address)
+  if (family === 0) return false
+  if (slash === -1) return true
+  const prefix = value.slice(slash + 1)
+  return /^\d{1,3}$/u.test(prefix) && Number(prefix) <= (family === 4 ? 32 : 128)
+}
+
 const securitySchema = z.strictObject({
   cors: corsSchema.prefault({}),
   /**
@@ -186,6 +198,21 @@ const securitySchema = z.strictObject({
         ),
     ])
     .default(false),
+  /**
+   * The only sockets whose forwarded header `trustProxy` believes: addresses
+   * or CIDR blocks (`10.0.0.0/8`, `fd00::/8`), IPv4 or IPv6. Without it the
+   * header is believed from any socket, so a pod reachable around the proxy
+   * (a NodePort, a sidecar, another namespace) lets a caller choose the
+   * address the rate limiter and the audit trail see.
+   */
+  trustProxyFrom: z
+    .array(
+      z.string().refine(isAddressOrCidr, {
+        error: 'must be an IPv4 or IPv6 address, or a CIDR block such as 10.0.0.0/8',
+      }),
+    )
+    .max(64)
+    .default([]),
   audit: auditRetentionSchema.prefault({}),
 })
 

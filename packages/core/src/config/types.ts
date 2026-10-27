@@ -109,6 +109,15 @@ export interface CogentaConfigInput {
      */
     readonly trustProxy?: false | number | string
     /**
+     * The proxies whose forwarded header is believed: addresses or CIDR blocks,
+     * IPv4 or IPv6. When set, `trustProxy` is honoured only for a request whose
+     * socket address is inside one of them; any other caller reaches the
+     * server directly and its header is ignored. Empty — the default — means
+     * the header is believed whatever the socket, which is only safe while the
+     * server cannot be reached except through the proxy.
+     */
+    readonly trustProxyFrom?: readonly string[]
+    /**
      * Audit-log retention (T09-01). Absent — the default — means the log
      * grows without bound, unchanged from before this field existed. `0` is
      * the explicit way to say "never purge" rather than leaving it absent.
@@ -355,6 +364,8 @@ export interface CogentaConfig {
     readonly pageMaxAge: number
     /** See the input type: `false`, a number of proxy hops, or the name of the header that carries the client address. */
     readonly trustProxy: false | number | string
+    /** See the input type: the addresses or CIDR blocks allowed to speak for a proxy; empty means any socket. */
+    readonly trustProxyFrom: readonly string[]
     readonly audit: {
       /** `undefined` (absent) and `0` both mean "never purge" — see the input type's comment. */
       readonly retainDays: number | undefined

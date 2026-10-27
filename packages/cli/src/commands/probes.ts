@@ -10,7 +10,9 @@ import type { Logger } from '@cogenta/core'
  *   a slow database never gets a healthy pod killed.
  * - `/readyz`: the database answers a trivial query. 503 otherwise, and 503
  *   while the server is shutting down so traffic drains before the socket
- *   closes.
+ *   closes. Anonymous and unthrottled, so it must not be a way to hammer the
+ *   database: concurrent probes share one in-flight check, its answer is
+ *   reused for a second, and only a change of state is logged.
  *
  * Anonymous by design, and therefore stingy: a bare word, no driver names, no
  * versions, no error text. They answer before the security headers, the
@@ -24,6 +26,9 @@ import type { Logger } from '@cogenta/core'
 export const LIVENESS_PATH = '/livez'
 export const READINESS_PATH = '/readyz'
 
+/** How long a readiness answer is reused before the database is asked again. */
+export const READINESS_CACHE_MS = 1000
+
 /** How long the database may take to answer before the pod is reported unready. */
 export const READINESS_TIMEOUT_MS = 3000
 
@@ -34,6 +39,8 @@ export interface ProbeOptions {
   /** Aborted when the server begins to shut down. */
   readonly signal?: AbortSignal
   readonly timeoutMs?: number
+  /** Clock, injectable so a test does not have to wait out the cache. */
+  readonly now?: () => number
 }
 
 function reply(req: IncomingMessage, res: ServerResponse, status: number, body: string): void {
@@ -46,7 +53,9 @@ function reply(req: IncomingMessage, res: ServerResponse, status: number, body: 
   res.end(req.method === 'HEAD' ? undefined : body)
 }
 
-async function databaseAnswers(options: ProbeOptions): Promise<boolean> {
+async function pingWithinTimeout(
+  options: ProbeOptions,
+): Promise<{ readonly ready: true } | { readonly ready: false; readonly error: string }> {
   let timer: NodeJS.Timeout | undefined
   try {
     await Promise.race([
@@ -58,12 +67,43 @@ async function databaseAnswers(options: ProbeOptions): Promise<boolean> {
         )
       }),
     ])
-    return true
+    return { ready: true }
   } catch (error) {
-    options.logger.warn('readiness probe failed', { error: String(error) })
-    return false
+    return { ready: false, error: String(error) }
   } finally {
     if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+/**
+ * One readiness decision per handler: shares the check in flight, reuses a
+ * fresh answer, and logs when the state flips rather than on every probe.
+ */
+function readinessCheck(options: ProbeOptions): () => Promise<boolean> {
+  const now = options.now ?? Date.now
+  let inFlight: Promise<boolean> | undefined
+  let answered: { readonly at: number; readonly ready: boolean } | undefined
+  let lastReady = true
+
+  const check = async (): Promise<boolean> => {
+    const outcome = await pingWithinTimeout(options)
+    const ready = outcome.ready
+    if (ready !== lastReady) {
+      if (outcome.ready) options.logger.info('readiness probe recovered')
+      else options.logger.warn('readiness probe failed', { error: outcome.error })
+      lastReady = ready
+    }
+    answered = { at: now(), ready }
+    return ready
+  }
+
+  return async () => {
+    if (inFlight !== undefined) return inFlight
+    if (answered !== undefined && now() - answered.at < READINESS_CACHE_MS) return answered.ready
+    inFlight = check().finally(() => {
+      inFlight = undefined
+    })
+    return inFlight
   }
 }
 
@@ -74,6 +114,7 @@ async function databaseAnswers(options: ProbeOptions): Promise<boolean> {
 export function createProbeHandler(
   options: ProbeOptions,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
+  const databaseAnswers = readinessCheck(options)
   return async (req, res) => {
     const path = (req.url ?? '/').split('?', 1)[0]
     if (path !== LIVENESS_PATH && path !== READINESS_PATH) return false
@@ -88,7 +129,7 @@ export function createProbeHandler(
       return true
     }
 
-    if (options.signal?.aborted === true || !(await databaseAnswers(options))) {
+    if (options.signal?.aborted === true || !(await databaseAnswers())) {
       reply(req, res, 503, 'unavailable')
       return true
     }

@@ -5051,13 +5051,23 @@ export function createRequestListener(
   logger: Logger,
   extras?: RuntimeExtras,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  if (site.security.trustProxy !== false && site.security.trustProxyFrom.length === 0) {
+    logger.warn(
+      'security.trustProxy is on but security.trustProxyFrom is empty: the forwarded header is believed from any socket, so a caller that reaches this server without going through the proxy can choose the address the rate limits and the audit trail see',
+      {
+        hint: 'Set security.trustProxyFrom (COGENTA_TRUST_PROXY_FROM) to the proxy addresses or CIDR blocks, or keep the pod reachable only through the proxy.',
+      },
+    )
+  }
+  const trustRule = trustRuleFor(site.security.trustProxy, site.security.trustProxyFrom)
+
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
 
     // The caller's address, decided once (`client-address.ts`): the socket's
     // unless `security.trustProxy` names a proxy whose header to believe.
     // Every rate limit, moderation rule and audit entry below reads this.
-    bindClientAddress(req, trustRuleFor(site.security.trustProxy))
+    bindClientAddress(req, trustRule)
 
     // Before anything else, and once: CORS, the security headers and the
     // cache-control class of this path (L10 task 6). A preflight is answered

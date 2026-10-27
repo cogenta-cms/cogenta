@@ -178,6 +178,93 @@ describe('createProbeHandler', () => {
     await after.arrayBuffer()
   })
 
+  it('shares one database check between concurrent /readyz probes', async () => {
+    let pings = 0
+    let release: () => void = () => undefined
+    const base = await listen(
+      createProbeHandler({
+        ping: () => {
+          pings++
+          return new Promise<void>((resolve) => {
+            release = resolve
+          })
+        },
+        logger,
+      }),
+    )
+    const answers = Promise.all(Array.from({ length: 10 }, () => fetch(`${base}/readyz`)))
+    while (pings === 0) await new Promise((resolve) => setTimeout(resolve, 5))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    release()
+    for (const response of await answers) {
+      expect(response.status).toBe(200)
+      await response.arrayBuffer()
+    }
+    expect(pings).toBe(1)
+  })
+
+  it('reuses a fresh /readyz answer for a second, then asks the database again', async () => {
+    let pings = 0
+    let clock = 1_000_000
+    const base = await listen(
+      createProbeHandler({
+        ping: async () => {
+          pings++
+        },
+        logger,
+        now: () => clock,
+      }),
+    )
+    const probe = async (): Promise<number> => {
+      const response = await fetch(`${base}/readyz`)
+      await response.arrayBuffer()
+      return response.status
+    }
+    expect(await probe()).toBe(200)
+    clock += 999
+    expect(await probe()).toBe(200)
+    expect(pings).toBe(1)
+
+    clock += 1
+    expect(await probe()).toBe(200)
+    expect(pings).toBe(2)
+  })
+
+  it('logs a failing database once, on the change of state, and again when it recovers', async () => {
+    const lines: string[] = []
+    const recording = createLogger({
+      level: 'info',
+      destination: (line) => lines.push(line),
+    })
+    let failing = true
+    let clock = 1_000_000
+    const base = await listen(
+      createProbeHandler({
+        ping: async () => {
+          if (failing) throw new Error('down')
+        },
+        logger: recording,
+        now: () => clock,
+      }),
+    )
+    const probe = async (): Promise<number> => {
+      clock += 2000
+      const response = await fetch(`${base}/readyz`)
+      await response.arrayBuffer()
+      return response.status
+    }
+    expect(await probe()).toBe(503)
+    expect(await probe()).toBe(503)
+    expect(await probe()).toBe(503)
+    expect(lines.filter((line) => line.includes('readiness probe failed'))).toHaveLength(1)
+
+    failing = false
+    expect(await probe()).toBe(200)
+    expect(await probe()).toBe(200)
+    expect(lines.filter((line) => line.includes('readiness probe recovered'))).toHaveLength(1)
+    expect(lines).toHaveLength(2)
+  })
+
   it('ignores any other path', async () => {
     const base = await listen(createProbeHandler({ ping: async () => undefined, logger }))
     const other = await fetch(`${base}/anything`)

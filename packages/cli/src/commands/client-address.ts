@@ -1,5 +1,5 @@
 import type { IncomingMessage } from 'node:http'
-import { isIP } from 'node:net'
+import { BlockList, isIP } from 'node:net'
 
 /**
  * Who is calling, and over what protocol — decided in one place.
@@ -23,8 +23,11 @@ import { isIP } from 'node:net'
  *   whatever the client claimed.
  *
  * Whatever does not parse as an address falls back to the socket's, never to
- * a guess. This cannot tell whether the socket really is the proxy: keeping
- * the pod reachable only through it (a network policy, a private network) is
+ * a guess. Left to itself this cannot tell whether the socket really is the
+ * proxy, so `security.trustProxyFrom` names the addresses or CIDR blocks the
+ * proxies connect from: a request from anywhere else reached the server
+ * directly and its forwarded headers are ignored. Without it, keeping the pod
+ * reachable only through the proxy (a network policy, a private network) is
  * the operator's half of the bargain, written in `docker/README.md`.
  */
 
@@ -32,17 +35,82 @@ export type TrustProxySetting = false | number | string
 
 export type TrustRule =
   | { readonly kind: 'none' }
-  | { readonly kind: 'header'; readonly header: string }
-  | { readonly kind: 'hops'; readonly count: number }
+  | {
+      readonly kind: 'header'
+      readonly header: string
+      readonly from?: ProxyAllowList
+    }
+  | {
+      readonly kind: 'hops'
+      readonly count: number
+      readonly from?: ProxyAllowList
+    }
+
+/** The sockets allowed to speak for a proxy. */
+export interface ProxyAllowList {
+  readonly sources: readonly string[]
+  contains(address: string): boolean
+}
 
 /** Cloudflare's own client-address header. */
 const CLOUDFLARE_HEADER = 'cf-connecting-ip'
 
-export function trustRuleFor(setting: TrustProxySetting): TrustRule {
+/**
+ * Builds the membership test for `security.trustProxyFrom`. The entries were
+ * validated as addresses or CIDR blocks by the configuration; `BlockList`
+ * compares an IPv4-mapped IPv6 socket address (`::ffff:10.0.0.7`, what a
+ * dual-stack listener reports) against IPv4 entries as the IPv4 address it is.
+ */
+export function proxyAllowList(sources: readonly string[]): ProxyAllowList {
+  const list = new BlockList()
+  for (const source of sources) {
+    const slash = source.indexOf('/')
+    const address = slash === -1 ? source : source.slice(0, slash)
+    const family = isIP(address) === 6 ? 'ipv6' : 'ipv4'
+    if (slash === -1) list.addAddress(address, family)
+    else list.addSubnet(address, Number(source.slice(slash + 1)), family)
+  }
+  return {
+    sources,
+    contains(address) {
+      // A zone suffix (`fe80::1%eth0`) is not part of the address.
+      const bare = address.split('%', 1)[0] ?? address
+      const family = isIP(bare)
+      if (family === 0) return false
+      return list.check(bare, family === 6 ? 'ipv6' : 'ipv4')
+    },
+  }
+}
+
+const allowLists = new Map<string, ProxyAllowList>()
+
+export function trustRuleFor(
+  setting: TrustProxySetting,
+  trustedSources: readonly string[] = [],
+): TrustRule {
   if (setting === false) return { kind: 'none' }
-  if (typeof setting === 'number') return { kind: 'hops', count: setting }
+  // The rule is rebuilt per request, the block list is not.
+  const key = trustedSources.join(',')
+  let from = allowLists.get(key)
+  if (from === undefined && trustedSources.length > 0) {
+    from = proxyAllowList(trustedSources)
+    allowLists.set(key, from)
+  }
+  const sources = from === undefined ? {} : { from }
+  if (typeof setting === 'number') return { kind: 'hops', count: setting, ...sources }
   const header = setting.toLowerCase()
-  return { kind: 'header', header: header === 'cloudflare' ? CLOUDFLARE_HEADER : header }
+  return {
+    kind: 'header',
+    header: header === 'cloudflare' ? CLOUDFLARE_HEADER : header,
+    ...sources,
+  }
+}
+
+/** True when the socket may speak for a proxy: always, unless `trustProxyFrom` narrows it. */
+function comesFromTrustedProxy(req: Pick<IncomingMessage, 'socket'>, rule: TrustRule): boolean {
+  if (rule.kind === 'none' || rule.from === undefined) return true
+  const address = req.socket.remoteAddress
+  return address !== undefined && rule.from.contains(address)
 }
 
 function headerOf(req: Pick<IncomingMessage, 'headers'>, name: string): string | undefined {
@@ -84,7 +152,7 @@ export function resolveClientAddress(
   req: Pick<IncomingMessage, 'headers' | 'socket'>,
   rule: TrustRule,
 ): string {
-  if (rule.kind === 'none') return socketAddress(req)
+  if (rule.kind === 'none' || !comesFromTrustedProxy(req, rule)) return socketAddress(req)
 
   if (rule.kind === 'header') {
     const value = headerOf(req, rule.header)

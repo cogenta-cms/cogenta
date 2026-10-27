@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { AuthStore, LoginResult, User } from '@cogenta/auth'
+import type { AuthStore, LoginResult, Session, User } from '@cogenta/auth'
 import { looksLikeApiKey } from '@cogenta/auth'
 import { CogentaError, type RateLimitDriver } from '@cogenta/core'
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server'
@@ -24,6 +24,28 @@ const REQUEST_QUOTA_WINDOW_MS = 60_000
 /**
  * `/api/auth/*` — sign-in, its second factor, first-time TOTP enrolment,
  * passkey registration and passkey sign-in, and "who am I".
+ *
+ * Changing or removing a second factor needs more than a session (pentest
+ * 2026-10-26, F-01). `POST /api/auth/step-up` takes the current password or a
+ * current authenticator code and marks *that session* as freshly
+ * re-authenticated for five minutes; the sensitive routes below then accept the
+ * session, and refuse it with `AUTH_STEP_UP_REQUIRED` (403) and no side effect
+ * once the five minutes have passed. The mark lives on the session row, not in
+ * a token the client carries, so there is nothing extra to send or to leak and
+ * it ends with the session. Sensitive means: turning TOTP off, starting a TOTP
+ * (re)enrolment, regenerating recovery codes, and starting a passkey
+ * registration. The first two of those and the passkey are guarded whenever the
+ * account has a confirmed factor *or a password* — the first factor of a
+ * password account is a new way in (a passkey outlives a password reset) or a
+ * lock-out (someone else's authenticator), so a stolen session alone must not
+ * add it. Only an account with neither a factor nor a password needs the
+ * session alone. MFA itself stays optional (ADR-0021): this confirms identity,
+ * it never forces enrolment.
+ *
+ * A session created within the last five minutes counts as stepped-up: signing
+ * in is a re-authentication, and for a passkey-only account (no password, no
+ * authenticator code to type) it is the only one available — such a person
+ * signs in again with the passkey and then acts.
  *
  * Same shape as the REST router: a plain request in, a plain response out,
  * nothing that listens on a port. `resolveActor` is exported separately
@@ -304,6 +326,7 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
     if (segments.length !== 1) throw noRoute()
 
     if (action === 'recovery-code') return recoveryCodeRoute(request, method)
+    if (action === 'step-up') return stepUpRoute(request, method)
     if (action === 'password-policy') return passwordPolicyRoute(method)
 
     if (action === 'login') {
@@ -351,6 +374,42 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
     }
 
     throw noRoute()
+  }
+
+  /**
+   * The session behind this request, for the routes that act on the caller's
+   * own account *and* may need its step-up mark. An API key has no session and
+   * is refused here: a script's credential does not manage a person's factors.
+   */
+  async function callerSession(
+    request: RestRequest,
+    what: string,
+  ): Promise<{ readonly userId: string; readonly session: Session }> {
+    const token = bearerToken(request.headers)
+    if (token === null || looksLikeApiKey(token)) throw unauthenticated(what)
+    const session = await auth.sessions.resolve(token)
+    if (session === null) throw unauthenticated(what)
+    const user = await auth.users.byId(session.userId)
+    if (user === null || user.status !== 'active') throw unauthenticated(what)
+    return { userId: user.id, session }
+  }
+
+  /**
+   * `POST /api/auth/step-up` — body `{ "password": "…" }` or `{ "code": "123456" }`.
+   * A wrong proof is `AUTH_INVALID_CREDENTIALS` and rate-limited; a right one
+   * answers `{ expiresAt }` and nothing else changes.
+   */
+  async function stepUpRoute(request: RestRequest, method: string): Promise<RestResponse> {
+    if (method !== 'POST') return methodNotAllowed(['POST'])
+    const { userId, session } = await callerSession(request, 're-confirming your identity')
+    const body = asRecord(request.body)
+    const password = typeof body['password'] === 'string' ? body['password'] : undefined
+    const code = typeof body['code'] === 'string' ? body['code'] : undefined
+    const proof = {
+      ...(password === undefined ? {} : { password }),
+      ...(code === undefined ? {} : { code }),
+    }
+    return jsonResponse(200, { data: await auth.login.stepUp(userId, session, proof) })
   }
 
   /**
@@ -483,9 +542,14 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
       }
 
       if (method === 'DELETE') {
-        const actor = await resolveActor(auth, request.headers)
-        if (actor.id === null) throw unauthenticated('turning off two-step verification')
-        await auth.login.disableTotp(actor.id)
+        const { userId, session } = await callerSession(
+          request,
+          'turning off two-step verification',
+        )
+        if ((await auth.login.enrolledFactors(userId)).includes('totp')) {
+          auth.login.assertSteppedUp(session)
+        }
+        await auth.login.disableTotp(userId)
         return { status: 204, body: null, headers: {} }
       }
 
@@ -494,9 +558,12 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
 
     if (segments.length === 2 && segments[1] === 'enrol') {
       if (method !== 'POST') return methodNotAllowed(['POST'])
-      const actor = await resolveActor(auth, request.headers)
-      if (actor.id === null) throw unauthenticated('setting up two-step verification')
-      return jsonResponse(200, { data: await auth.login.beginTotpEnrolment(actor.id) })
+      const { userId, session } = await callerSession(request, 'setting up two-step verification')
+      // Replacing a factor that already protects the account is sensitive, and
+      // so is the first one on an account with a password: an authenticator
+      // enrolled with a stolen session would lock the owner out.
+      if (await auth.login.requiresStepUp(userId)) auth.login.assertSteppedUp(session)
+      return jsonResponse(200, { data: await auth.login.beginTotpEnrolment(userId) })
     }
 
     if (segments.length === 3 && segments[1] === 'enrol' && segments[2] === 'confirm') {
@@ -527,9 +594,11 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
 
     if (segments.length === 3 && segments[1] === 'recovery-codes' && segments[2] === 'regenerate') {
       if (method !== 'POST') return methodNotAllowed(['POST'])
-      const actor = await resolveActor(auth, request.headers)
-      if (actor.id === null) throw unauthenticated('regenerating your recovery codes')
-      const issued = await auth.login.regenerateRecoveryCodes(actor.id)
+      const { userId, session } = await callerSession(request, 'regenerating your recovery codes')
+      if ((await auth.login.enrolledFactors(userId)).includes('totp')) {
+        auth.login.assertSteppedUp(session)
+      }
+      const issued = await auth.login.regenerateRecoveryCodes(userId)
       return jsonResponse(200, { data: { recoveryCodes: issued.codes } })
     }
 
@@ -582,9 +651,12 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
     const [, resource, step] = segments
 
     if (resource === 'register' && step === 'begin') {
-      const actor = await resolveActor(auth, request.headers)
-      if (actor.id === null) throw unauthenticated('registering a passkey')
-      const challenge = await auth.login.beginWebAuthnRegistration(actor.id)
+      const { userId, session } = await callerSession(request, 'registering a passkey')
+      // A passkey is a way in that needs no password and survives a password
+      // reset, so adding even the first one needs the same fresh proof as
+      // replacing TOTP.
+      if (await auth.login.requiresStepUp(userId)) auth.login.assertSteppedUp(session)
+      const challenge = await auth.login.beginWebAuthnRegistration(userId)
       return jsonResponse(200, { data: challenge })
     }
 
@@ -641,7 +713,7 @@ function noRoute(): CogentaError {
       '/api/auth/reset-password, /api/auth/totp, /api/auth/totp/enrol, ' +
       '/api/auth/totp/enrol/confirm, /api/auth/totp/recovery-codes, ' +
       '/api/auth/totp/recovery-codes/regenerate, /api/auth/recovery-code, ' +
-      '/api/auth/password-policy, /api/auth/session, and ' +
+      '/api/auth/password-policy, /api/auth/step-up, /api/auth/session, and ' +
       '/api/auth/webauthn/{register|login}/{begin|complete}.',
   })
 }

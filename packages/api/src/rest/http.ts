@@ -158,6 +158,8 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   BLOCK_UNKNOWN: 400,
   BLOCK_INVALID: 400,
   QUERY_INVALID: 400,
+  REQUEST_BODY_TOO_LARGE: 413,
+  REQUEST_UNSUPPORTED_MEDIA_TYPE: 415,
   FORBIDDEN: 403,
   UNAUTHENTICATED: 401,
   PREVIEW_TOKEN_INVALID: 403,
@@ -196,6 +198,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // for), not a malformed request.
   AUTH_RECOVERY_CODE_INVALID: 401,
   AUTH_RECOVERY_CODES_UNAVAILABLE: 409,
+  // Step-up (pentest 2026-10-26, F-01). 403, not 401: the session is valid and
+  // the caller is who they say they are — they only have to prove it again for
+  // this one action — and a client that signs the user out on every 401 must
+  // not do so here.
+  AUTH_STEP_UP_REQUIRED: 403,
 
   // Account lifecycle (fiche 17: invitations and anonymization). Both invite
   // codes describe a conflict with the account's *current* state, not a
@@ -547,6 +554,20 @@ export function errorResponse(error: unknown): RestResponse {
       ...response,
       headers: { ...response.headers, 'retry-after': String(retryAfterSeconds) },
     }
+  }
+
+  // `decodeURIComponent` on a path segment throws a bare `URIError` for a
+  // malformed escape such as `%` or `%E0%A4%A`. That is the caller's input, not
+  // a fault of ours, and many routers decode their segments themselves.
+  if (error instanceof URIError) {
+    const malformed: RestErrorBody = {
+      error: {
+        code: 'QUERY_INVALID',
+        message: 'The request path is not validly percent-encoded.',
+        hint: 'Encode the characters of the path as UTF-8 percent-escapes.',
+      },
+    }
+    return jsonResponse(400, malformed)
   }
 
   const internal: RestErrorBody = {

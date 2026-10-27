@@ -1259,6 +1259,12 @@ export function installMockFetch(
     readonly previewSigningKeyMissing?: boolean
     /** The interface language stored on the signed-in account (fiche 17 task 3). */
     readonly accountLocale?: string | null
+    /**
+     * Starts the signed-in account as a passkey-only one: one registered
+     * passkey and no password (pentest 2026-10-26 follow-up — such an account
+     * re-confirms by signing in again, there is nothing to type).
+     */
+    readonly passkeyOnlyAccount?: boolean
   } = {},
 ): void {
   const password = options.password ?? 'correct horse battery staple'
@@ -2163,6 +2169,7 @@ export function installMockFetch(
     createdAt: string
     updatedAt: string
     mfa: { totp: boolean; passkeys: number }
+    hasPassword?: boolean
     // Fiche 17 task 3's public profile, self-service only in the real router
     // — settable here only through the `me/profile` branch below.
     displayName?: string | null
@@ -2183,6 +2190,7 @@ export function installMockFetch(
       bio: account.bio ?? null,
       locale: account.locale ?? null,
       mfaRecommended: false,
+      hasPassword: account.hasPassword ?? true,
       // A real instant, not `null`: an account that has never signed in is
       // the one shape that never exercises a date formatter, and it was the
       // only shape this double produced — so the accounts table printed a raw
@@ -2490,7 +2498,8 @@ export function installMockFetch(
       status: 'active',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
-      mfa: { totp: false, passkeys: 0 },
+      mfa: { totp: false, passkeys: options.passkeyOnlyAccount === true ? 1 : 0 },
+      ...(options.passkeyOnlyAccount === true ? { hasPassword: false } : {}),
       // `GET /api/users/me` reads this list, not the session `user` above,
       // so the account's own stored language has to live here to be seen.
       ...(options.accountLocale === undefined ? {} : { locale: options.accountLocale }),
@@ -2544,6 +2553,23 @@ export function installMockFetch(
   // shape closely enough for the admin's own tests — a batch plus how many
   // remain unused.
   const recoveryCodes: Record<string, { total: number; remaining: number }> = {}
+
+  // Step-up (pentest 2026-10-26, F-01): a session alone cannot change or remove
+  // a factor the account already has. `POST /api/auth/step-up` with the right
+  // password marks the session; the sensitive routes below refuse until then.
+  // Like the server, a first enrolment (no factor yet) needs nothing.
+  let steppedUp = false
+  const stepUpRefusal = (): Response =>
+    json(403, {
+      error: {
+        code: 'AUTH_STEP_UP_REQUIRED',
+        message: 'This change needs you to confirm it is you.',
+      },
+    })
+  const accountHasFactor = (): boolean => {
+    const mine = accounts.find((candidate) => candidate.id === user.id)
+    return mine !== undefined && (mine.mfa.totp || mine.mfa.passkeys > 0)
+  }
 
   let apiKeyCounter = 0
   const apiKeys: {
@@ -3120,10 +3146,24 @@ export function installMockFetch(
 
       // Self-service enrolment (ADR-0021): identified by the bearer token, never
       // by anything in the request body.
+      if (url.endsWith('/api/auth/step-up') && method === 'POST') {
+        if (auth !== `Bearer ${VALID_TOKEN}`) {
+          return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
+        }
+        if (body.password !== password && body.code !== '123456') {
+          return json(401, {
+            error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'Incorrect password.' },
+          })
+        }
+        steppedUp = true
+        return json(200, { data: { expiresAt: '2026-01-01T00:05:00.000Z' } })
+      }
+
       if (url.endsWith('/api/auth/totp/enrol') && method === 'POST') {
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
+        if (accountHasFactor() && !steppedUp) return stepUpRefusal()
         return json(200, {
           data: { secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Cogenta:alice@example.com' },
         })
@@ -3151,6 +3191,7 @@ export function installMockFetch(
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
+        if (accountHasFactor() && !steppedUp) return stepUpRefusal()
         delete recoveryCodes[user.id]
         const disabledAccount = accounts.find((candidate) => candidate.id === user.id)
         if (disabledAccount !== undefined) disabledAccount.mfa.totp = false
@@ -3168,6 +3209,7 @@ export function installMockFetch(
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
+        if (!steppedUp) return stepUpRefusal()
         recoveryCodes[user.id] = { total: 10, remaining: 10 }
         return json(200, { data: { recoveryCodes: mockRecoveryCodeBatch() } })
       }
@@ -4231,6 +4273,7 @@ export function installMockFetch(
         if (auth !== `Bearer ${VALID_TOKEN}`) {
           return json(401, { error: { code: 'UNAUTHENTICATED', message: 'Sign in first.' } })
         }
+        if (accountHasFactor() && !steppedUp) return stepUpRefusal()
         return json(200, {
           data: {
             options: {

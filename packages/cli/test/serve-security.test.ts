@@ -2,8 +2,23 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CollectionDefinition } from '@cogenta/schema'
+import { THEME_TOGGLE_SCRIPT } from '@cogenta/theme-kit'
 import { afterEach, describe, expect, it } from 'vitest'
+import { cspHashOf, THEME_TOGGLE_SCRIPT_HASH } from '../src/commands/csp.js'
+import { FORM_CONDITIONS_SCRIPT } from '../src/commands/forms-page.js'
 import { createUser, loginWithMfaSetup, startServer } from './helpers/serve-harness.js'
+
+/** The text of every executable inline `<script>` of a page (not `src=` ones, not JSON data blocks). */
+function inlineScripts(html: string): string[] {
+  const found: string[] = []
+  for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/giu)) {
+    const attributes = match[1] ?? ''
+    if (/\bsrc=/u.test(attributes)) continue
+    if (/type="application\/(ld\+)?json"/u.test(attributes)) continue
+    found.push(match[2] ?? '')
+  }
+  return found
+}
 
 /**
  * L10 task 6, against a real server: CORS, security headers, cache-control.
@@ -27,7 +42,7 @@ const COLLECTIONS: readonly CollectionDefinition[] = [
   },
 ]
 
-async function project(security?: string): Promise<string> {
+async function project(security?: string, extraConfig = ''): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'cogenta-security-'))
   await writeFile(
     join(root, 'cogenta.config.mjs'),
@@ -36,7 +51,7 @@ async function project(security?: string): Promise<string> {
   database: { url: ${JSON.stringify(join(root, 'site.db'))} },
   cache: { path: ${JSON.stringify(join(root, 'cache'))} },
   storage: { path: ${JSON.stringify(join(root, 'media'))} },
-${security === undefined ? '' : `  security: ${security},\n`}}
+${security === undefined ? '' : `  security: ${security},\n`}${extraConfig}}
 `,
     'utf8',
   )
@@ -90,12 +105,11 @@ describe('cogenta serve — security headers (L10 task 6)', () => {
     }
   }, 60_000)
 
-  it('sends no CSP and no HSTS unless the site asks for them', async () => {
+  it('sends no HSTS unless the site asks for it', async () => {
     const root = await project()
     const server = await startServer(root, { registry: activeServers })
     try {
       const response = await fetch(`${server.base}/robots.txt`)
-      expect(response.headers.get('content-security-policy')).toBeNull()
       // HSTS on a host that is not fully HTTPS locks browsers out of it with
       // no server-side undo. Off unless asked, and never over plain HTTP.
       expect(response.headers.get('strict-transport-security')).toBeNull()
@@ -105,15 +119,162 @@ describe('cogenta serve — security headers (L10 task 6)', () => {
     }
   }, 60_000)
 
+  it('sends a blocking default CSP on the admin, a public page, the 404 page and a JSON response', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await seedPage(root, server.base)
+
+      const policies = new Map<string, string>()
+      for (const path of ['/admin', '/a-page', '/no-such-page', '/', '/api/content/page']) {
+        const response = await fetch(`${server.base}${path}`)
+        const policy = response.headers.get('content-security-policy')
+        expect(policy, path).not.toBeNull()
+        policies.set(path, policy ?? '')
+        await response.arrayBuffer()
+      }
+
+      for (const [path, policy] of policies) {
+        // Never inline scripts in general, on any class of path.
+        expect(policy, path).not.toMatch(/script-src[^;]*'unsafe-inline'/u)
+        expect(policy, path).not.toMatch(/script-src[^;]*'unsafe-eval'/u)
+      }
+      expect(policies.get('/admin')).toContain("script-src 'self'")
+      expect(policies.get('/admin')).toContain("img-src 'self' data: blob:")
+      expect(policies.get('/admin')).toContain("object-src 'none'")
+      expect(policies.get('/admin')).toContain("frame-ancestors 'self'")
+      expect(policies.get('/a-page')).toContain(`script-src 'self' ${THEME_TOGGLE_SCRIPT_HASH}`)
+      expect(policies.get('/no-such-page')).toBe(policies.get('/a-page'))
+      expect(policies.get('/')).toBe(policies.get('/a-page'))
+      expect(policies.get('/api/content/page')).toContain("default-src 'none'")
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
+  it('allows exactly the inline scripts a public page emits, by hash, and no others', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await seedPage(root, server.base)
+      for (const path of ['/a-page', '/no-such-page']) {
+        const response = await fetch(`${server.base}${path}`)
+        const policy = response.headers.get('content-security-policy') ?? ''
+        const html = await response.text()
+        const scripts = inlineScripts(html)
+        // The theme toggle is the one inline script a public page has.
+        expect(scripts, path).toContain(THEME_TOGGLE_SCRIPT)
+        for (const script of scripts) {
+          expect(policy, `${path}: ${script.slice(0, 40)}`).toContain(cspHashOf(script))
+        }
+      }
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
+  it('allows the conditional-fields script of a form page, and Turnstile only there', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+      const token = await loginWithMfaSetup(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+      const created = await fetch(`${server.base}/api/forms`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name: 'contact',
+          label: 'Contact us',
+          fields: [
+            {
+              name: 'kind',
+              label: 'Kind',
+              kind: 'choiceSingle',
+              required: true,
+              choices: ['a', 'b'],
+            },
+            {
+              name: 'detail',
+              label: 'Detail',
+              kind: 'text',
+              required: false,
+              showIf: { field: 'kind', operator: 'equals', value: 'b' },
+            },
+          ],
+          notifyEmails: ['owner@example.com'],
+        }),
+      })
+      expect(created.status).toBe(201)
+
+      const page = await fetch(`${server.base}/forms/contact`)
+      const policy = page.headers.get('content-security-policy') ?? ''
+      const html = await page.text()
+      const scripts = inlineScripts(html)
+      expect(scripts).toContain(FORM_CONDITIONS_SCRIPT)
+      for (const script of scripts) expect(policy).toContain(cspHashOf(script))
+      expect(policy).toContain('https://challenges.cloudflare.com')
+
+      const elsewhere = await fetch(`${server.base}/`)
+      expect(elsewhere.headers.get('content-security-policy')).not.toContain('cloudflare')
+      await elsewhere.arrayBuffer()
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
+  it('opens Google Fonts in the default CSP only when appearance.remoteWebFonts is on', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const response = await fetch(`${server.base}/robots.txt`)
+      expect(response.headers.get('content-security-policy')).not.toContain('googleapis')
+      await response.arrayBuffer()
+    } finally {
+      await server.stop()
+    }
+
+    const remote = await project(undefined, '  appearance: { remoteWebFonts: true },\n')
+    const remoteServer = await startServer(remote, { registry: activeServers })
+    try {
+      const response = await fetch(`${remoteServer.base}/robots.txt`)
+      const policy = response.headers.get('content-security-policy') ?? ''
+      expect(policy).toContain('https://fonts.googleapis.com')
+      expect(policy).toContain('https://fonts.gstatic.com')
+      await response.arrayBuffer()
+    } finally {
+      await remoteServer.stop()
+    }
+  }, 60_000)
+
+  it('sends no CSP at all when the site sets csp: false', async () => {
+    const root = await project('{ csp: false }')
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      for (const path of ['/admin', '/robots.txt', '/api/content/page']) {
+        const response = await fetch(`${server.base}${path}`)
+        expect(response.headers.get('content-security-policy'), path).toBeNull()
+        await response.arrayBuffer()
+      }
+    } finally {
+      await server.stop()
+    }
+  }, 60_000)
+
   it('sends the configured CSP verbatim', async () => {
     const root = await project(`{ csp: "default-src 'self'; img-src 'self' data:" }`)
     const server = await startServer(root, { registry: activeServers })
     try {
-      const response = await fetch(`${server.base}/robots.txt`)
-      expect(response.headers.get('content-security-policy')).toBe(
-        "default-src 'self'; img-src 'self' data:",
-      )
-      await response.arrayBuffer()
+      for (const path of ['/robots.txt', '/admin', '/api/content/page']) {
+        const response = await fetch(`${server.base}${path}`)
+        expect(response.headers.get('content-security-policy'), path).toBe(
+          "default-src 'self'; img-src 'self' data:",
+        )
+        await response.arrayBuffer()
+      }
     } finally {
       await server.stop()
     }

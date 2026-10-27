@@ -237,10 +237,15 @@ describe('POST /api/auth/login, since MFA stopped being a gate', () => {
 describe('TOTP self-service enrolment', () => {
   async function signedInEditor() {
     const db_ = await createSqliteHandle({ url: ':memory:' })
+    // A clock the test can move: a sign-in under five minutes old already counts
+    // as a re-authentication, so showing that a session *alone* is refused
+    // means letting the sign-in age.
+    let clock = Date.now()
     const authWithMfa = await createAuthStore({
       db: db_,
       signingKey: SIGNING_KEY,
       collections: PUBLISH_COLLECTIONS,
+      now: () => clock,
     })
     const user = await authWithMfa.users.create({ email: 'ed@example.com', roles: ['editor'] })
     await authWithMfa.credentials.setPassword(user.id, 'correct horse battery staple')
@@ -251,6 +256,9 @@ describe('TOTP self-service enrolment', () => {
       router: createAuthRouter({ auth: authWithMfa }),
       user,
       token: session.token,
+      advance: (ms: number) => {
+        clock += ms
+      },
     }
   }
 
@@ -358,7 +366,7 @@ describe('TOTP self-service enrolment', () => {
   })
 
   it('turns the factor back off, and the next sign-in stops asking', async () => {
-    const { db: db_, router, token } = await signedInEditor()
+    const { db: db_, router, token, advance } = await signedInEditor()
     try {
       const now = Math.floor(Date.now() / 1000)
       const begin = await router.handle(request('POST', '/api/auth/totp/enrol', { token }))
@@ -369,7 +377,17 @@ describe('TOTP self-service enrolment', () => {
           body: { token: codeFor(secret, now) },
         }),
       )
+      advance(6 * 60 * 1000)
 
+      // A session alone no longer removes a confirmed factor (F-01).
+      const refused = await router.handle(request('DELETE', '/api/auth/totp', { token }))
+      expect(refused.status).toBe(403)
+      await router.handle(
+        request('POST', '/api/auth/step-up', {
+          token,
+          body: { password: 'correct horse battery staple' },
+        }),
+      )
       const off = await router.handle(request('DELETE', '/api/auth/totp', { token }))
       expect(off.status).toBe(204)
 
@@ -518,6 +536,12 @@ describe('Recovery codes', () => {
     it('replaces the batch: the old codes stop working, the new ones do', async () => {
       const { db: db_, router, token, codes } = await signedInEditorWithTotpAndCodes()
       try {
+        await router.handle(
+          request('POST', '/api/auth/step-up', {
+            token,
+            body: { password: 'correct horse battery staple' },
+          }),
+        )
         const regenerate = await router.handle(
           request('POST', '/api/auth/totp/recovery-codes/regenerate', { token }),
         )

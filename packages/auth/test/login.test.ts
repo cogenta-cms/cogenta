@@ -419,7 +419,9 @@ describe('TOTP self-service enrolment', () => {
     const { auth, credentials, user } = await signedInEditor()
     await auth.beginTotpEnrolment(user.id)
 
-    expect((await credentials.totpSecret(user.id))?.verified).toBe(false)
+    // The secret waits as a pending enrolment; there is no active factor yet.
+    expect(await credentials.totpSecret(user.id)).toBeNull()
+    expect(await credentials.pendingTotp(user.id)).not.toBeNull()
     const beforeConfirming = await auth.passwordLogin(
       'ed@example.com',
       'correct horse battery staple',
@@ -445,7 +447,7 @@ describe('TOTP self-service enrolment', () => {
     await expect(auth.confirmTotpEnrolment(user.id, '000000')).rejects.toMatchObject({
       code: 'AUTH_INVALID_CREDENTIALS',
     })
-    expect((await credentials.totpSecret(user.id))?.verified).toBe(false)
+    expect(await credentials.totpSecret(user.id)).toBeNull()
   })
 
   it('only the most recently requested secret can be confirmed', async () => {

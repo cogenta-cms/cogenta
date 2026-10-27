@@ -193,6 +193,20 @@ describe('GET /api/users', () => {
     expect(users.find((user) => user.id === admin.id)?.mfa.totp).toBe(false)
   })
 
+  it('says whether each account has a password to re-confirm with', async () => {
+    const admin = await makeUser('root@example.com', ['admin'])
+    const keyOnly = await makeUser('key@example.com', ['editor'])
+    await auth.credentials.setPassword(admin.id, 'correct horse battery staple')
+
+    const response = await router().handle(
+      request('GET', '/api/users'),
+      actorFor(admin.id, ['admin']),
+    )
+    const users = dataOf<{ id: string; hasPassword: boolean }[]>(response)
+    expect(users.find((user) => user.id === admin.id)?.hasPassword).toBe(true)
+    expect(users.find((user) => user.id === keyOnly.id)?.hasPassword).toBe(false)
+  })
+
   it('filters by role', async () => {
     const admin = await makeUser('root@example.com', ['admin'])
     await makeUser('ed@example.com', ['editor'])

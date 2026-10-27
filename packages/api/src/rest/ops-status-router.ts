@@ -110,6 +110,7 @@ interface SecurityStatus {
     readonly credentials: boolean
     readonly maxAge: number
   }
+  /** `null`: the site configures none, so Cogenta's built-in policy applies. `false`: turned off. A string: the site's own, verbatim. */
   readonly csp: string | false | null
   readonly hsts: {
     readonly enabled: boolean

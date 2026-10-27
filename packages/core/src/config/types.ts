@@ -88,7 +88,11 @@ export interface CogentaConfigInput {
       readonly credentials?: boolean
       readonly maxAge?: number
     }
-    /** `Content-Security-Policy`, verbatim. `false` sends none. */
+    /**
+     * `Content-Security-Policy`. Absent: Cogenta's built-in blocking policy
+     * (no inline script but the server's own, by hash). A string: that policy,
+     * verbatim, everywhere. `false`: no header.
+     */
     readonly csp?: string | false
     /** `Strict-Transport-Security` max-age in seconds. `0` — the default — sends none. */
     readonly hstsMaxAge?: number
@@ -102,6 +106,21 @@ export interface CogentaConfigInput {
      */
     readonly audit?: {
       readonly retainDays?: number
+    }
+  }
+  /**
+   * The per-document budget of the GraphQL endpoint (pentest 2026-10-26,
+   * O-01). Absent — the default — applies 20 root fields, 1000 selections and
+   * a depth of 12; a document over any of them is refused before it runs.
+   */
+  readonly graphql?: {
+    readonly limits?: {
+      /** Root selections of one operation, aliases included. */
+      readonly maxRootFields?: number
+      /** Field selections of one operation after fragment expansion. */
+      readonly maxSelections?: number
+      /** Nesting of fields; fragments are not a level. */
+      readonly maxDepth?: number
     }
   }
   /**
@@ -328,6 +347,14 @@ export interface CogentaConfig {
     readonly audit: {
       /** `undefined` (absent) and `0` both mean "never purge" — see the input type's comment. */
       readonly retainDays: number | undefined
+    }
+  }
+  /** The GraphQL per-document budget, resolved, defaults applied. */
+  readonly graphql: {
+    readonly limits: {
+      readonly maxRootFields: number
+      readonly maxSelections: number
+      readonly maxDepth: number
     }
   }
   /** The log of public URLs that answered a 404 (fiche 12 task 1). Resolved, defaults applied. */

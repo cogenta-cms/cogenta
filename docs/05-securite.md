@@ -66,7 +66,9 @@ construction.
 ## 4. Authentification et accès
 
 - **Passkeys/WebAuthn** en méthode principale ; mot de passe + TOTP en secours
-- **MFA obligatoire** pour tout rôle disposant de `content.publish` ou `site.config_write`
+- **MFA fortement recommandée** pour tout rôle disposant de `content.publish` ou `site.config_write` :
+  une notice persistante de l'admin la réclame, mais elle ne bloque jamais la connexion
+  (ADR-0021, qui remplace l'obligation d'origine)
 - Sessions révocables individuellement, liste des sessions actives visible
 - Limitation de débit et backoff progressif sur l'authentification
 - Allowlist IP optionnelle sur l'admin
@@ -76,8 +78,9 @@ construction.
 
 ## 5. Application
 
-- **CSP stricte avec nonce**, pas de `unsafe-inline`. Le thème canonique est conçu pour
-  s'en passer ; un thème qui l'exige est signalé à l'installation.
+- **CSP stricte**, pas de `unsafe-inline` pour les scripts (empreintes plutôt que nonce, voir
+  l'état réel ci-dessous). Le thème canonique est conçu pour s'en passer ; un thème qui
+  l'exige est signalé à l'installation.
 - Sanitization du texte riche sur une allowlist, à l'écriture **et** au rendu
 - Protection CSRF sur toutes les mutations
 - `Strict-Transport-Security`, `X-Content-Type-Options`, `Referrer-Policy`,
@@ -86,10 +89,17 @@ construction.
 - Uploads : vérification du type réel, pas de l'extension ; réencodage systématique des
   images ; SVG assainis ou refusés
 - **État réel au 2026-10-21** (revue de sécurité de ce jour) :
-  - *CSP* : toujours facultative (`security.csp`), **pas encore envoyée par défaut** —
-    les scripts en ligne des thèmes (bascule clair/sombre, JSON-LD) n'ont pas de nonce.
-    C'est la prochaine marche ; elle compte d'autant plus que le jeton de session de
-    l'admin vit dans `localStorage` sur l'origine du site.
+  - *CSP* : **envoyée par défaut depuis le 2026-10-26** (pentest F-04, première partie),
+    bloquante, sans `unsafe-inline` pour les scripts. Les deux seuls scripts en ligne que le
+    serveur écrit lui-même (bascule clair/sombre, conditions d'un formulaire) sont autorisés
+    par leur empreinte sha256, calculée au démarrage depuis les constantes que les gabarits
+    insèrent — pas par nonce : les pages publiques sont cachables, un nonce par réponse ne
+    l'est pas. Le JSON-LD est un bloc de données, hors du champ de `script-src`. Quatre
+    classes de chemin (admin, pages publiques, formulaires, API) ; `security.csp` reste
+    prioritaire, mot pour mot, et `security.csp: false` coupe l'en-tête. `style-src` garde
+    `'unsafe-inline'` (attributs `style=` des thèmes) : décision assumée, ils n'exécutent
+    rien. Le jeton de session de l'admin vit toujours dans `localStorage` : la CSP réduit la
+    probabilité qu'un script injecté s'exécute, elle ne rend pas le jeton inaccessible.
   - *Liens* : `javascript:`, `vbscript:` et `data:` refusés à l'écriture dans le contrat B
     (`isScriptUrl`) et neutralisés au rendu pour tout thème et tout arbre de plugin
     (`safeUrlAttribute`, dans `serialize` de `@cogenta/theme-kit`).

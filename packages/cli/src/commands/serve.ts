@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, rm, stat, statfs, writeFile } from 'node:fs/promises'
+import { mkdtemp, open, readFile, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -107,6 +107,7 @@ import {
   type ForgotPasswordEvent,
   type FormsRequestContext,
   type FormsRouter,
+  type GraphQLLimits,
   type HealthRouter,
   type ImportRouter,
   type InvitedUserEvent,
@@ -144,6 +145,7 @@ import {
   type SitePlanRouter,
   type SitePlanRouterOptions,
   type SiteSettingsRouter,
+  statusFor,
   streamSubmissionsCsv,
   type TaxonomyRouter,
   type ThemeRouter,
@@ -1020,6 +1022,8 @@ export interface Site {
   /** `null` when no image driver loaded — `/_image` then serves originals only. */
   readonly images: MediaImageProcessor | null
   readonly graphqlSchema: GraphQLSchema
+  /** The per-document budget of `POST /api/graphql` (`graphql.limits`; defaults when absent). */
+  readonly graphqlLimits: Partial<GraphQLLimits> | undefined
   readonly gateway: ReturnType<typeof createContentGateway>
   /**
    * The same layer the gateway and the REST service already ask. Held here so
@@ -1385,6 +1389,8 @@ interface AssembleSiteOptions {
    * readable and dismissible from the admin screen either way.
    */
   readonly notFoundLog: CogentaConfig['notFoundLog']
+  /** `graphql.limits` of the configuration; absent applies the built-in budget. */
+  readonly graphqlLimits?: CogentaConfig['graphql']['limits']
   /**
    * The site's outbound webhook configuration, read-only mirrored at
    * `GET /api/webhooks-status` (audit follow-up to L14 task 1). Distinct from
@@ -3353,6 +3359,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     storage,
     images: options.images ?? null,
     graphqlSchema: buildContentSchema({ collections }),
+    graphqlLimits: options.graphqlLimits,
     gateway,
     permissions,
     schemaDocument: buildSchemaDocument(
@@ -3516,11 +3523,42 @@ const MAX_ANONYMOUS_MULTIPART_BYTES = FORM_FILE_HARD_MAX_BYTES + 1024 * 1024
 /** The ceiling for one request, set once its actor is known (`createRequestListener`). */
 const bodyLimits = new WeakMap<IncomingMessage, number>()
 
-function bodyLimitFor(req: IncomingMessage, actor: Actor): number {
+/**
+ * The public routes that really take a file. The larger multipart budget is
+ * theirs alone: a `Content-Type` header is the caller's to choose, so letting
+ * it raise the ceiling on any other anonymous route (a sign-in, a comment)
+ * handed every visitor a 26 MiB read budget on demand.
+ */
+const ANONYMOUS_MULTIPART_ROUTE = /^\/api\/forms\/[^/]+\/submit$/u
+
+function bodyLimitFor(req: IncomingMessage, actor: Actor, pathname: string): number {
   if (actor.id !== null) return MAX_REQUEST_BODY_BYTES
-  return (req.headers['content-type'] ?? '').includes('multipart/form-data')
+  return req.method === 'POST' &&
+    ANONYMOUS_MULTIPART_ROUTE.test(pathname) &&
+    (req.headers['content-type'] ?? '').includes('multipart/form-data')
     ? MAX_ANONYMOUS_MULTIPART_BYTES
     : MAX_ANONYMOUS_BODY_BYTES
+}
+
+const JSON_CONTENT_TYPE = /^application\/(?:[\w.-]+\+)?json\s*(?:;|$)/iu
+
+/**
+ * Every `/api/auth/*` route reads JSON and nothing else. Refusing another
+ * content type before the body is read means a sign-in never pays for a
+ * multipart or form parse it cannot use.
+ */
+function assertAuthBodyIsJson(req: IncomingMessage, pathname: string): void {
+  if (!pathname.startsWith('/api/auth/')) return
+  const method = req.method ?? 'GET'
+  if (method === 'GET' || method === 'HEAD' || method === 'DELETE' || method === 'OPTIONS') return
+  const contentType = req.headers['content-type']
+  if (contentType === undefined || JSON_CONTENT_TYPE.test(contentType)) return
+  if (req.headers['content-length'] === '0') return
+  throw new CogentaError({
+    code: 'REQUEST_UNSUPPORTED_MEDIA_TYPE',
+    message: 'This route only accepts a JSON body.',
+    hint: 'Send the request with the Content-Type: application/json header.',
+  })
 }
 
 async function readRawBodyBuffer(req: IncomingMessage): Promise<Buffer | undefined> {
@@ -4578,6 +4616,62 @@ function writeRestResponse(res: ServerResponse, response: RestResponse): void {
   )
 }
 
+const MAX_SECURITY_TXT_BYTES = 64 * 1024
+
+/**
+ * The site's own `security.txt`: `public/.well-known/security.txt` first, then
+ * `security.txt` at the project root. Anything absent, unreadable or larger
+ * than a contact file has any reason to be is "no file".
+ */
+async function readSecurityTxt(projectRoot: string): Promise<string | undefined> {
+  for (const path of [
+    join(projectRoot, 'public', '.well-known', 'security.txt'),
+    join(projectRoot, 'security.txt'),
+  ]) {
+    // One handle for the check and the read, so the file measured is the one served.
+    let handle: Awaited<ReturnType<typeof open>> | undefined
+    try {
+      handle = await open(path, 'r')
+      const info = await handle.stat()
+      if (!info.isFile() || info.size === 0 || info.size > MAX_SECURITY_TXT_BYTES) continue
+      return await handle.readFile('utf8')
+    } catch {
+      // A missing candidate is the normal case; try the next one.
+    } finally {
+      await handle?.close()
+    }
+  }
+  return undefined
+}
+
+/**
+ * What the caller got wrong, as a status and a stable code — or `null` when
+ * the failure is the server's own. A bad percent-escape surfaces as a
+ * `URIError` from `decodeURIComponent`, which many routers call on a path
+ * segment; a typed error maps through the same table the routers use.
+ */
+function toClientError(
+  error: unknown,
+): { status: number; code: string; message: string; hint?: string } | null {
+  if (error instanceof URIError) {
+    return {
+      status: 400,
+      code: 'QUERY_INVALID',
+      message: 'The request path is not validly percent-encoded.',
+      hint: 'Encode the characters of the path as UTF-8 percent-escapes.',
+    }
+  }
+  if (!isCogentaError(error)) return null
+  const status = statusFor(error.code)
+  if (status < 400 || status >= 500) return null
+  return {
+    status,
+    code: error.code,
+    message: error.message,
+    ...(error.hint === undefined ? {} : { hint: error.hint }),
+  }
+}
+
 function jsonError(
   res: ServerResponse,
   status: number,
@@ -4967,7 +5061,8 @@ export function createRequestListener(
         ),
         site.requestQuota === undefined ? {} : { requestQuota: site.requestQuota },
       )
-      bodyLimits.set(req, bodyLimitFor(req, actor))
+      bodyLimits.set(req, bodyLimitFor(req, actor, url.pathname))
+      assertAuthBodyIsJson(req, url.pathname)
 
       // MCP over Streamable HTTP (`mcp-http.ts`): API key only, its own body
       // limit, its own JSON-RPC replies. Turned off by `mcp.http: false`,
@@ -5280,7 +5375,13 @@ export function createRequestListener(
                 : undefined,
             operationName: typeof body?.operationName === 'string' ? body.operationName : undefined,
           },
-          { schema: site.graphqlSchema, gateway: site.gateway, access: context, logger },
+          {
+            schema: site.graphqlSchema,
+            gateway: site.gateway,
+            access: context,
+            logger,
+            limits: site.graphqlLimits,
+          },
         )
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
         res.end(JSON.stringify(result))
@@ -7325,6 +7426,27 @@ export function createRequestListener(
         }
       }
 
+      // RFC 9116: how to report a vulnerability in *this* site. It is the
+      // site owner's own file or nothing — Cogenta's contact is never served
+      // as every site's, so a report about a site cannot land with the wrong
+      // people. Without the file the path stays an ordinary 404.
+      if (url.pathname === '/.well-known/security.txt' && extras?.projectRoot !== undefined) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.writeHead(405, { allow: 'GET, HEAD' }).end()
+          return
+        }
+        const securityTxt = await readSecurityTxt(extras.projectRoot)
+        if (securityTxt !== undefined) {
+          res.writeHead(200, {
+            'content-type': 'text/plain; charset=utf-8',
+            'cache-control': 'public, max-age=3600',
+            'x-content-type-options': 'nosniff',
+          })
+          res.end(req.method === 'HEAD' ? undefined : securityTxt)
+          return
+        }
+      }
+
       // `robots.txt` and `sitemap.xml`, from the real content (L10 task 2).
       // Both are built as `ANONYMOUS` inside `collectRoutedResources`,
       // whoever asked: a crawler and a signed-in editor must get the same
@@ -8161,18 +8283,6 @@ export function createRequestListener(
         }),
       )
     } catch (error) {
-      logger.error('request failed', {
-        error: isCogentaError(error) ? error.toJSON() : String(error),
-      })
-      // The error journal (fiche 24 task 4): a bounded, redacted record of
-      // exactly this failure, readable from the admin on a host where the
-      // process's own stdout is not — see `createErrorLog` for why redaction
-      // here is not optional.
-      extras?.errorLog.recordError(error, { method: req.method ?? 'GET', path: url.pathname })
-      if (isCogentaError(error) && error.code === 'REQUEST_BODY_TOO_LARGE') {
-        jsonError(res, 413, error.code, error.message)
-        return
-      }
       // A valid, over-quota API key (fiche 20 task 3) — the one error this
       // listener turns into rate-limit headers, since `errorResponse` in
       // `@cogenta/api` deliberately never serialises `details` onto the wire
@@ -8185,6 +8295,23 @@ export function createRequestListener(
         res.end(JSON.stringify({ error: { code: error.code, message: error.message } }))
         return
       }
+      // A refusal the caller caused (malformed JSON, a bad percent-escape, a
+      // typed 4xx) is a normal answer, not an incident: it is neither logged as
+      // an error nor kept in the error journal, and it never becomes a 500.
+      const clientError = toClientError(error)
+      if (clientError !== null) {
+        logger.warn('request refused', { code: clientError.code, status: clientError.status })
+        jsonError(res, clientError.status, clientError.code, clientError.message, clientError.hint)
+        return
+      }
+      logger.error('request failed', {
+        error: isCogentaError(error) ? error.toJSON() : String(error),
+      })
+      // The error journal (fiche 24 task 4): a bounded, redacted record of
+      // exactly this failure, readable from the admin on a host where the
+      // process's own stdout is not — see `createErrorLog` for why redaction
+      // here is not optional.
+      extras?.errorLog.recordError(error, { method: req.method ?? 'GET', path: url.pathname })
       res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
       res.end(
         JSON.stringify({
@@ -9029,6 +9156,7 @@ export async function runServe(options: ServeOptions): Promise<number> {
     images: images?.processor ?? null,
     security: loaded.config.security,
     notFoundLog: loaded.config.notFoundLog,
+    graphqlLimits: loaded.config.graphql.limits,
     webhooks: loaded.config.webhooks,
     billing: loaded.config.billing,
     payment: loaded.config.payment,

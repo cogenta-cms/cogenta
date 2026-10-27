@@ -12,7 +12,17 @@
 // codes — the way back in for an account that enrolled TOTP and then lost
 // the device. Same shape as every other kind here: interpreted only by
 // `credentials.ts`, never by this layer.
-export const CREDENTIAL_KINDS = ['password', 'totp', 'webauthn', 'recovery_codes'] as const
+//
+// `totp_pending` (pentest 2026-10-26, F-01) is a re-enrolment waiting for its
+// first code. It lives beside the active `totp` row and never replaces it
+// until the new secret has been confirmed.
+export const CREDENTIAL_KINDS = [
+  'password',
+  'totp',
+  'totp_pending',
+  'webauthn',
+  'recovery_codes',
+] as const
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number]
 
 /**
@@ -82,6 +92,12 @@ export interface Session {
    */
   readonly browser: string
   readonly device: string
+  /**
+   * Until when this session counts as freshly re-authenticated (pentest
+   * 2026-10-26, F-01). Absent when it never stepped up. A sensitive change to
+   * a second factor is refused unless this is still in the future.
+   */
+  readonly stepUpUntil?: string
 }
 
 /**

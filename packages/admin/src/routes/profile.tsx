@@ -13,6 +13,7 @@ import {
   type RecoveryCodesStatus,
   regenerateRecoveryCodes,
   registerPasskey,
+  stepUp,
   type TotpSetup,
 } from '../api/client.js'
 import { getMedia, type MediaAsset } from '../api/media-client.js'
@@ -43,6 +44,7 @@ import { roleLabels } from '../lib/role-label.js'
 import { AvatarPicker } from '../media/avatar-picker.js'
 import { MediaThumbnail } from '../media/media-thumbnail.js'
 import { QrCode } from '../profile/qr-code.js'
+import { StepUpDialog, type StepUpProof } from '../profile/step-up-dialog.js'
 import { useDateTimeFormatter } from '../settings/site-settings-context.js'
 import {
   Button,
@@ -269,6 +271,14 @@ export function ProfileRoute(): JSX.Element {
 
   const [passkeyLabel, setPasskeyLabel] = useState('')
 
+  // Pentest 2026-10-26, F-01. Changing or removing a second factor needs a
+  // fresh proof of the current password (or an authenticator code): the server
+  // refuses with `AUTH_STEP_UP_REQUIRED`, this holds the refused action, asks,
+  // and replays it once the server has accepted the proof.
+  const [stepUpRetry, setStepUpRetry] = useState<(() => Promise<void>) | null>(null)
+  const [stepUpBusy, setStepUpBusy] = useState(false)
+  const [stepUpError, setStepUpError] = useState<string | null>(null)
+
   // Public profile (fiche 17 task 3). Seeded from `profile` only once, keyed
   // on the account id rather than the whole object: `load()` re-runs after
   // every unrelated MFA action on this same page, and re-seeding on each of
@@ -491,6 +501,41 @@ export function ProfileRoute(): JSX.Element {
     }
   }
 
+  /** True when the server refused an action only because it wants a fresh proof. */
+  function needsStepUp(caught: unknown): boolean {
+    return caught instanceof ApiError && caught.code === 'AUTH_STEP_UP_REQUIRED'
+  }
+
+  function askForStepUp(retry: () => Promise<void>): void {
+    setStepUpError(null)
+    setStepUpRetry(() => retry)
+  }
+
+  async function submitStepUp(proof: StepUpProof): Promise<void> {
+    if (token === null || stepUpRetry === null) return
+    setStepUpBusy(true)
+    setStepUpError(null)
+    try {
+      await stepUp(token, proof)
+    } catch (caught) {
+      setStepUpBusy(false)
+      setStepUpError(
+        caught instanceof ApiError && caught.code === 'RATE_LIMITED'
+          ? caught.message
+          : caught instanceof ApiError && caught.code === 'AUTH_RATE_LIMITED'
+            ? caught.message
+            : 'password' in proof
+              ? t('profile.stepUpWrongPassword')
+              : t('profile.stepUpWrongCode'),
+      )
+      return
+    }
+    const retry = stepUpRetry
+    setStepUpRetry(null)
+    setStepUpBusy(false)
+    await retry()
+  }
+
   async function startTotp(): Promise<void> {
     if (token === null) return
     setSecurityError(null)
@@ -498,6 +543,10 @@ export function ProfileRoute(): JSX.Element {
     try {
       setEnrolment(await beginTotpEnrolment(token))
     } catch (caught) {
+      if (needsStepUp(caught)) {
+        askForStepUp(startTotp)
+        return
+      }
       setSecurityError(caught instanceof ApiError ? caught.message : t('profile.totpBeginError'))
     }
   }
@@ -540,6 +589,10 @@ export function ProfileRoute(): JSX.Element {
       setRecoveryCodes(issued.recoveryCodes)
       setRecoveryStatus(await getRecoveryCodesStatus(token))
     } catch (caught) {
+      if (needsStepUp(caught)) {
+        askForStepUp(regenerateCodes)
+        return
+      }
       setRecoveryError(
         caught instanceof ApiError ? caught.message : t('profile.recoveryRegenerateError'),
       )
@@ -612,12 +665,20 @@ export function ProfileRoute(): JSX.Element {
       setSecurityDone(t('profile.totpDisabled'))
       await load()
     } catch (caught) {
+      if (needsStepUp(caught)) {
+        askForStepUp(turnOffTotp)
+        return
+      }
       setSecurityError(caught instanceof ApiError ? caught.message : t('profile.totpDisableError'))
     }
   }
 
   async function addPasskey(event: FormEvent): Promise<void> {
     event.preventDefault()
+    await registerNewPasskey()
+  }
+
+  async function registerNewPasskey(): Promise<void> {
     if (token === null) return
     setSecurityError(null)
     setSecurityDone(null)
@@ -627,6 +688,10 @@ export function ProfileRoute(): JSX.Element {
       setSecurityDone(t('profile.passkeyAdded'))
       await load()
     } catch (caught) {
+      if (needsStepUp(caught)) {
+        askForStepUp(registerNewPasskey)
+        return
+      }
       // A cancelled browser prompt throws too, and "try again" covers both that
       // and a genuine failure.
       setSecurityError(caught instanceof ApiError ? caught.message : t('profile.passkeyRefused'))
@@ -944,22 +1009,7 @@ export function ProfileRoute(): JSX.Element {
                   ` ${t('profile.passkeyCount', { count: profile.mfa.passkeys })}`}
               </p>
 
-              {profile?.mfa.totp === true ? (
-                <div>
-                  <Button variant="destructive" onClick={() => void turnOffTotp()}>
-                    {t('profile.disableTotp')}
-                  </Button>
-                </div>
-              ) : enrolment === null ? (
-                <div>
-                  <Button
-                    className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
-                    onClick={() => void startTotp()}
-                  >
-                    {t('profile.enableTotp')}
-                  </Button>
-                </div>
-              ) : (
+              {enrolment !== null ? (
                 <form onSubmit={confirmTotp} noValidate className="flex flex-col gap-4">
                   <p>{t('profile.totpScan')}</p>
                   <QrCode value={enrolment.uri} label={t('profile.totpQrLabel')} />
@@ -979,10 +1029,41 @@ export function ProfileRoute(): JSX.Element {
                       />
                     )}
                   </Field>
-                  <div>
+                  <div className="flex flex-wrap gap-2">
                     <Button type="submit">{t('profile.totpConfirm')}</Button>
+                    {/* The pending secret is only ever a candidate: leaving it
+                        changes nothing about the factor already protecting the account. */}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setEnrolment(null)
+                        setTotpCode('')
+                        setSecurityError(null)
+                      }}
+                    >
+                      {t('common.cancel')}
+                    </Button>
                   </div>
                 </form>
+              ) : profile?.mfa.totp === true ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => void startTotp()}>
+                    {t('profile.reconfigureTotp')}
+                  </Button>
+                  <Button variant="destructive" onClick={() => void turnOffTotp()}>
+                    {t('profile.disableTotp')}
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <Button
+                    className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-left"
+                    onClick={() => void startTotp()}
+                  >
+                    {t('profile.enableTotp')}
+                  </Button>
+                </div>
               )}
 
               <form onSubmit={addPasskey} className="flex flex-col gap-4">
@@ -1203,6 +1284,24 @@ export function ProfileRoute(): JSX.Element {
           </Card>
         </div>
       </div>
+
+      <StepUpDialog
+        open={stepUpRetry !== null}
+        canUseCode={profile?.mfa.totp === true}
+        canUsePassword={profile?.hasPassword !== false}
+        onSignInAgain={() => {
+          setStepUpRetry(null)
+          setStepUpError(null)
+          void auth.logout()
+        }}
+        busy={stepUpBusy}
+        error={stepUpError}
+        onSubmit={(proof) => void submitStepUp(proof)}
+        onCancel={() => {
+          setStepUpRetry(null)
+          setStepUpError(null)
+        }}
+      />
     </section>
   )
 }

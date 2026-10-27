@@ -357,6 +357,51 @@ function stepFieldsOf(
 }
 
 /**
+ * The conditional-fields script of a form page, byte for byte as it is inlined.
+ * Exported so the default Content-Security-Policy can allow exactly this text
+ * by its sha256 hash (`csp.ts`) instead of allowing inline scripts in general.
+ */
+export const FORM_CONDITIONS_SCRIPT = `
+(() => {
+  const form = document.querySelector('.cg-form');
+  const accumulated = JSON.parse(form.querySelector('[name="_accumulated"]')?.value || '{}');
+  const fields = Array.from(form.querySelectorAll('[data-show-if]'));
+  const update = () => {
+    // Recompute after disabling a parent so a dependent field sees only
+    // answers that will actually be sent, even when fields are out of order.
+    for (let pass = 0; pass <= fields.length; pass += 1) {
+    let changed = false;
+    for (const field of fields) {
+      const values = new FormData(form);
+      const condition = JSON.parse(field.dataset.showIf);
+      const controls = Array.from(form.elements).filter(control => control.name === condition.field);
+      const raw = controls.length ? values.getAll(condition.field) : [].concat(accumulated[condition.field] ?? []);
+      const actual = raw.map(String);
+      const wanted = condition.value ?? '';
+      const blank = actual.length === 0 || actual.every(value => value.trim() === '');
+      const visible = condition.operator === 'equals' ? actual.includes(wanted)
+        : condition.operator === 'notEquals' ? !actual.includes(wanted)
+        : condition.operator === 'contains' ? actual.some(value => value.includes(wanted))
+        : condition.operator === 'isEmpty' ? blank : !blank;
+      if (field.hidden === visible) changed = true;
+      field.hidden = !visible;
+      for (const control of field.querySelectorAll('input,select,textarea')) {
+        control.disabled = !visible;
+        if (field.dataset.kind !== 'choiceMulti' && field.dataset.kind !== 'file') {
+          control.required = visible && field.dataset.required === 'true';
+        }
+      }
+    }
+    if (!changed) break;
+    }
+  };
+  form.addEventListener('input', update);
+  form.addEventListener('change', update);
+  update();
+})();
+`
+
+/**
  * The whole page: the form itself (one step of it, for a multi-step form),
  * or its confirmation view under `?submitted=1` when the form has no
  * `redirectTo` of its own.
@@ -405,45 +450,7 @@ export function renderFormPage(
   // and the server still decides whether an answer is required or ignored.
   // Accumulated answers are JSON in an HTML attribute, never executable code.
   const conditionsScript = stepFields.some((field) => field.showIf !== undefined)
-    ? `<script>
-(() => {
-  const form = document.querySelector('.cg-form');
-  const accumulated = JSON.parse(form.querySelector('[name="_accumulated"]')?.value || '{}');
-  const fields = Array.from(form.querySelectorAll('[data-show-if]'));
-  const update = () => {
-    // Recompute after disabling a parent so a dependent field sees only
-    // answers that will actually be sent, even when fields are out of order.
-    for (let pass = 0; pass <= fields.length; pass += 1) {
-    let changed = false;
-    for (const field of fields) {
-      const values = new FormData(form);
-      const condition = JSON.parse(field.dataset.showIf);
-      const controls = Array.from(form.elements).filter(control => control.name === condition.field);
-      const raw = controls.length ? values.getAll(condition.field) : [].concat(accumulated[condition.field] ?? []);
-      const actual = raw.map(String);
-      const wanted = condition.value ?? '';
-      const blank = actual.length === 0 || actual.every(value => value.trim() === '');
-      const visible = condition.operator === 'equals' ? actual.includes(wanted)
-        : condition.operator === 'notEquals' ? !actual.includes(wanted)
-        : condition.operator === 'contains' ? actual.some(value => value.includes(wanted))
-        : condition.operator === 'isEmpty' ? blank : !blank;
-      if (field.hidden === visible) changed = true;
-      field.hidden = !visible;
-      for (const control of field.querySelectorAll('input,select,textarea')) {
-        control.disabled = !visible;
-        if (field.dataset.kind !== 'choiceMulti' && field.dataset.kind !== 'file') {
-          control.required = visible && field.dataset.required === 'true';
-        }
-      }
-    }
-    if (!changed) break;
-    }
-  };
-  form.addEventListener('input', update);
-  form.addEventListener('change', update);
-  update();
-})();
-</script>`
+    ? `<script>${FORM_CONDITIONS_SCRIPT}</script>`
     : ''
 
   const body = `${errorBanner}

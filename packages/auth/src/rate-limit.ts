@@ -1,27 +1,32 @@
-import { CogentaError, type DatabaseHandle, identifier, newId, sql } from '@cogenta/core'
+import {
+  CogentaError,
+  type DatabaseHandle,
+  identifier,
+  newId,
+  type SqlFragment,
+  sql,
+  limit as sqlLimit,
+} from '@cogenta/core'
 import { TABLES } from './tables.js'
 
 /**
  * Backoff on login attempts, keyed by subject — the email tried, or the caller's
  * IP when the email itself is what needs protecting from enumeration.
  *
- * Progressive, not a hard cap: five attempts inside a minute is a typo, thirty
- * is a script. The delay is what makes a script expensive without locking a
- * real person out of their own account after one bad guess.
+ * Five attempts inside a rolling window is a typo, more is a script. A subject
+ * past that is refused until enough of its attempts have aged out of the
+ * window, and the refusal announces exactly that moment: what a client is told
+ * to wait is what it has to wait, not a shorter figure that sends it back to be
+ * refused again.
  */
 const WINDOW_MS = 15 * 60 * 1000
-const THRESHOLDS: readonly { readonly attempts: number; readonly delayMs: number }[] = [
-  { attempts: 5, delayMs: 1_000 },
-  { attempts: 10, delayMs: 10_000 },
-  { attempts: 15, delayMs: 60_000 },
-  { attempts: 20, delayMs: 15 * 60 * 1000 },
-]
+const ATTEMPTS_BEFORE_REFUSAL = 5
 
 /** How long failed attempts keep counting. Exported so a reader shares the exact window. */
 export const LOGIN_ATTEMPT_WINDOW_MS = WINDOW_MS
 
 /** The number of attempts past which a subject is being backed off at all. */
-const FIRST_THRESHOLD = THRESHOLDS[0]?.attempts ?? 5
+const FIRST_THRESHOLD = ATTEMPTS_BEFORE_REFUSAL
 
 /**
  * What the failed attempts inside the window add up to, for one subject
@@ -119,16 +124,77 @@ export function createRateLimiter(db: DatabaseHandle, now: () => number = Date.n
     return Number(result.rows[0]?.n ?? 0)
   }
 
-  function refuseIfPast(attempts: number, scale = 1): void {
-    const threshold = [...THRESHOLDS].reverse().find((entry) => attempts >= entry.attempts * scale)
-    if (threshold === undefined) return
+  /**
+   * How long until the attempts inside the window no longer put a subject past
+   * `scale` times the limit, given every one of them stays quiet.
+   *
+   * A subject is refused while the attempts that count against a new one
+   * number `limit` or more. `total` rows are in the window, so `total - limit
+   * + 1` of the oldest must age out before one more is allowed; the last of
+   * those ages out one millisecond after `at + WINDOW_MS`.
+   */
+  async function msUntilAllowed(
+    total: number,
+    scale: number,
+    oldestFirst: (offset: number) => SqlFragment,
+  ): Promise<number> {
+    const limit = Math.ceil(ATTEMPTS_BEFORE_REFUSAL * scale)
+    const mustExpire = total - limit + 1
+    const result = await db.query<{ at: string }>(oldestFirst(Math.max(0, mustExpire - 1)))
+    const at = result.rows[0]?.at
+    if (at === undefined) return WINDOW_MS
+    return Math.max(1, Date.parse(at) + WINDOW_MS + 1 - now())
+  }
 
-    throw new CogentaError({
+  function refusal(retryAfterMs: number): CogentaError {
+    return new CogentaError({
       code: 'AUTH_RATE_LIMITED',
       message: 'Too many attempts. Try again later.',
-      hint: `Wait about ${Math.ceil(threshold.delayMs / 1000)} seconds before trying again, or use a passkey, which this limit does not slow down.`,
-      details: { retryAfterMs: threshold.delayMs },
+      hint: `Wait about ${Math.ceil(retryAfterMs / 1000)} seconds before trying again, or use a passkey, which this limit does not slow down.`,
+      details: { retryAfterMs },
     })
+  }
+
+  /**
+   * The wait that would clear `subject`, or `null` when `counted` attempts are
+   * still under the limit. `total` is every row in the window (a `reserve` has
+   * just written one of them, `counted` leaves it out).
+   */
+  async function waitForSubject(
+    subject: string,
+    total: number,
+    counted: number,
+    scale = 1,
+  ): Promise<number | null> {
+    if (counted < ATTEMPTS_BEFORE_REFUSAL * scale) return null
+    const since = new Date(now() - WINDOW_MS).toISOString()
+    return msUntilAllowed(
+      total,
+      scale,
+      (offset) => sql`
+        select at from ${table}
+        where subject = ${subject} and at >= ${since}
+        order by at asc limit ${sqlLimit(1)} offset ${sqlLimit(offset)}`,
+    )
+  }
+
+  async function waitForAccount(
+    account: string,
+    total: number,
+    counted: number,
+    scale: number,
+  ): Promise<number | null> {
+    if (counted < ATTEMPTS_BEFORE_REFUSAL * scale) return null
+    const since = new Date(now() - WINDOW_MS).toISOString()
+    return msUntilAllowed(
+      total,
+      scale,
+      (offset) => sql`
+        select at from ${table}
+        where at >= ${since}
+          and (subject = ${account} or subject like ${scopedPattern(account)} escape '!')
+        order by at asc limit ${sqlLimit(1)} offset ${sqlLimit(offset)}`,
+    )
   }
 
   async function insertAttempt(subject: string): Promise<void> {
@@ -138,7 +204,9 @@ export function createRateLimiter(db: DatabaseHandle, now: () => number = Date.n
 
   return {
     check: async (subject) => {
-      refuseIfPast(await countRecent(subject))
+      const total = await countRecent(subject)
+      const wait = await waitForSubject(subject, total, total)
+      if (wait !== null) throw refusal(wait)
     },
 
     record: insertAttempt,
@@ -147,14 +215,23 @@ export function createRateLimiter(db: DatabaseHandle, now: () => number = Date.n
       await insertAttempt(subject)
       // Every row this one could have raced with is already written, so the
       // count it sees includes them; minus one for this attempt itself.
-      refuseIfPast((await countRecent(subject)) - 1)
+      const total = await countRecent(subject)
+      const wait = await waitForSubject(subject, total, total - 1)
+      if (wait !== null) throw refusal(wait)
     },
 
     reserveScoped: async (account, scope, accountScale) => {
       const subject = `${account}|${scope}`
       await insertAttempt(subject)
-      refuseIfPast((await countRecent(subject)) - 1)
-      refuseIfPast((await countAccount(account)) - 1, accountScale)
+      const placeTotal = await countRecent(subject)
+      const accountTotal = await countAccount(account)
+      const waits = [
+        await waitForSubject(subject, placeTotal, placeTotal - 1),
+        await waitForAccount(account, accountTotal, accountTotal - 1, accountScale),
+      ].filter((wait): wait is number => wait !== null)
+      // Refused by the place, the account, or both: the caller is told to wait
+      // for the later of the two, since earlier would only be refused again.
+      if (waits.length > 0) throw refusal(Math.max(...waits))
     },
 
     clear: async (subject) => {

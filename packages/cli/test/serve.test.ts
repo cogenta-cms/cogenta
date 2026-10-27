@@ -252,6 +252,74 @@ describe('runServe', () => {
     }
   })
 
+  it('refuses a GraphQL document with more root fields than the default budget allows', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const aliased = (count: number): string =>
+        `{ ${Array.from({ length: count }, (_, i) => `a${i}: articles(limit: 1) { edges { node { title } } }`).join(' ')} }`
+      const post = async (query: string) => {
+        const response = await fetch(`${server.base}/api/graphql`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ query }),
+        })
+        return {
+          status: response.status,
+          body: (await response.json()) as {
+            data?: unknown
+            errors?: { extensions: { code: string } }[]
+          },
+        }
+      }
+
+      const within = await post(aliased(20))
+      expect(within.body.errors).toBeUndefined()
+
+      const over = await post(aliased(21))
+      // Same transport behaviour as a validation error: 200 with `errors`.
+      expect(over.status).toBe(200)
+      expect(over.body.data).toBeUndefined()
+      expect(over.body.errors?.[0]?.extensions.code).toBe('GRAPHQL_QUERY_TOO_COMPLEX')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('applies the graphql.limits of the configuration file to the endpoint', async () => {
+    const root = await project()
+    await writeFile(
+      join(root, 'cogenta.config.mjs'),
+      `export default {
+  site: { name: 'Test site', url: 'https://example.com' },
+  database: { url: ${JSON.stringify(join(root, 'site.db'))} },
+  cache: { path: ${JSON.stringify(join(root, 'cache'))} },
+  storage: { path: ${JSON.stringify(join(root, 'media'))} },
+  graphql: { limits: { maxRootFields: 2 } },
+}
+`,
+      'utf8',
+    )
+    const server = await startServer(root)
+    try {
+      const post = async (query: string) => {
+        const response = await fetch(`${server.base}/api/graphql`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ query }),
+        })
+        return (await response.json()) as { errors?: { extensions: { code: string } }[] }
+      }
+
+      expect((await post('{ a: __typename b: __typename }')).errors).toBeUndefined()
+      expect(
+        (await post('{ a: __typename b: __typename c: __typename }')).errors?.[0]?.extensions.code,
+      ).toBe('GRAPHQL_QUERY_TOO_COMPLEX')
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('logs in and reaches an authenticated route with the returned token', async () => {
     const root = await project()
     const server = await startServer(root)

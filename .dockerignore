@@ -22,6 +22,10 @@
 **/*.db-wal
 **/*.db-shm
 
+# A developer's local playground is git-ignored, so it is absent from the
+# lockfile and from a CI checkout: it must not make a local build differ.
+examples/local-playground
+
 # Design documents: nothing builds from them, except the plugin guide the admin
 # bundles into its documentation screen.
 docs/*

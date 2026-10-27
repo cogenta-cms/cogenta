@@ -5,6 +5,7 @@ import {
   isSecureRequest,
   resolveClientAddress,
   type TrustRule,
+  trustProxyWarning,
   trustRuleFor,
 } from '../src/commands/client-address.js'
 
@@ -240,5 +241,19 @@ describe('the per-request binding', () => {
 
     const unseen = request({ 'x-forwarded-for': '198.51.100.4' })
     expect(clientAddressOf(unseen)).toBe('10.0.0.7')
+  })
+})
+
+describe('trustProxyWarning', () => {
+  it('warns when a header is trusted from any socket', () => {
+    expect(trustProxyWarning({ trustProxy: 1, trustProxyFrom: [] })).toMatch(
+      /trustProxyFrom is empty/u,
+    )
+    expect(trustProxyWarning({ trustProxy: 'cloudflare', trustProxyFrom: [] })).toBeDefined()
+  })
+
+  it('stays quiet when proxies are named or nothing is trusted', () => {
+    expect(trustProxyWarning({ trustProxy: 1, trustProxyFrom: ['10.0.0.0/8'] })).toBeUndefined()
+    expect(trustProxyWarning({ trustProxy: false, trustProxyFrom: [] })).toBeUndefined()
   })
 })

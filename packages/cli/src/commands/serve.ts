@@ -405,7 +405,12 @@ import {
 import { type AssistantAssembly, buildAssistant, reindexKnowledgeIndex } from './assistant.js'
 import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { readChannelsRunner } from './channels-status.js'
-import { bindClientAddress, clientAddressOf, trustRuleFor } from './client-address.js'
+import {
+  bindClientAddress,
+  clientAddressOf,
+  trustProxyWarning,
+  trustRuleFor,
+} from './client-address.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
 import { createDecoratedContentStores } from './decorated-content-stores.js'
 import {
@@ -5051,14 +5056,6 @@ export function createRequestListener(
   logger: Logger,
   extras?: RuntimeExtras,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
-  if (site.security.trustProxy !== false && site.security.trustProxyFrom.length === 0) {
-    logger.warn(
-      'security.trustProxy is on but security.trustProxyFrom is empty: the forwarded header is believed from any socket, so a caller that reaches this server without going through the proxy can choose the address the rate limits and the audit trail see',
-      {
-        hint: 'Set security.trustProxyFrom (COGENTA_TRUST_PROXY_FROM) to the proxy addresses or CIDR blocks, or keep the pod reachable only through the proxy.',
-      },
-    )
-  }
   const trustRule = trustRuleFor(site.security.trustProxy, site.security.trustProxyFrom)
 
   return async (req, res) => {
@@ -8635,6 +8632,11 @@ export async function runServe(options: ServeOptions): Promise<number> {
     stderr('COGENTA_AUTH_SIGNING_KEY before running serve again.\n')
     return 1
   }
+
+  // Said on stderr, once, where an operator reading the container logs will
+  // see it: the default logger here is silent.
+  const proxyWarning = trustProxyWarning(loaded.config.security)
+  if (proxyWarning !== undefined) stderr(`warning: ${proxyWarning}\n`)
 
   let collections: readonly CollectionDefinition[]
   let taxonomies: readonly TaxonomyDefinition[]

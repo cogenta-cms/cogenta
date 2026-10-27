@@ -106,6 +106,24 @@ export function trustRuleFor(
   }
 }
 
+/**
+ * The start-up warning for a trusted header with no named proxy: anything that
+ * reaches the server without going through the proxy can then pick the
+ * address the rate limits and the audit trail see. `undefined` when there is
+ * nothing to warn about.
+ */
+export function trustProxyWarning(security: {
+  readonly trustProxy: TrustProxySetting
+  readonly trustProxyFrom: readonly string[]
+}): string | undefined {
+  if (security.trustProxy === false || security.trustProxyFrom.length > 0) return undefined
+  return (
+    'security.trustProxy is on but security.trustProxyFrom is empty: the forwarded header is believed from any socket, ' +
+    'so a caller that reaches this server without going through the proxy can choose the address the rate limits and the audit trail see. ' +
+    'Set COGENTA_TRUST_PROXY_FROM to the proxy addresses or CIDR blocks, or keep the pod reachable only through the proxy.'
+  )
+}
+
 /** True when the socket may speak for a proxy: always, unless `trustProxyFrom` narrows it. */
 function comesFromTrustedProxy(req: Pick<IncomingMessage, 'socket'>, rule: TrustRule): boolean {
   if (rule.kind === 'none' || rule.from === undefined) return true

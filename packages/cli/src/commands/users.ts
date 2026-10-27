@@ -33,7 +33,13 @@ export interface UsersOptions {
   readonly admin?: boolean
   /** `reset-password`: the token from the mail, redeeming the reset. */
   readonly token?: string
-  /** `reset-password`: the new password. Generated and printed once when absent. */
+  /**
+   * `reset-password`: the new password. `create`: the first password, for a
+   * caller that already holds one (a container's `COGENTA_ADMIN_PASSWORD`) and
+   * must not have it echoed back. Generated and printed once when absent.
+   * The command line does not offer it for `create` — an argument is visible
+   * to every process on the machine.
+   */
   readonly password?: string
   /** Where the outgoing mail is written. Defaults to `.cogenta/mail` under the project. */
   readonly mailDir?: string
@@ -259,7 +265,8 @@ export async function runUsers(options: UsersOptions): Promise<number> {
     return 2
   }
 
-  const password = generatePassword()
+  const chosen = options.password !== undefined
+  const password = options.password ?? generatePassword()
 
   try {
     return await withDatabase(options, logger, async (db) => {
@@ -272,10 +279,12 @@ export async function runUsers(options: UsersOptions): Promise<number> {
 
       out.heading('User created')
       out.ok(`${user.email} — ${user.roles.join(', ')}`)
-      out.line()
-      out.line(`Password: ${password}`)
-      out.line()
-      out.warn('This password is shown once. It is stored only as a salted hash.')
+      if (!chosen) {
+        out.line()
+        out.line(`Password: ${password}`)
+        out.line()
+        out.warn('This password is shown once. It is stored only as a salted hash.')
+      }
       out.detail(
         'Sign in with it straight away — a second factor is recommended for a role that can publish, or admin, but never demanded at sign-in (ADR-0021). Turn it on from the profile screen in the admin.',
       )

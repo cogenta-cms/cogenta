@@ -80,6 +80,55 @@ describe('users create', () => {
     await db.close()
   })
 
+  it('ignores --password on the command line: an argument is visible to every process on the machine', async () => {
+    const root = await project()
+    expect(
+      await users(
+        root,
+        'create',
+        '--email',
+        'admin@example.com',
+        '--admin',
+        '--password',
+        'argv-visible',
+      ),
+    ).toBe(0)
+    // A generated password was printed, so the one on the command line was not used.
+    expect(output()).toMatch(/Password: \S+/)
+    expect(output()).not.toContain('argv-visible')
+  })
+
+  it('uses a password handed in through the API and does not echo it back', async () => {
+    const root = await project()
+    const { runUsers } = await import('../src/commands/users.js')
+    const { createOutput } = await import('../src/output.js')
+    const lines: string[] = []
+    const code = await runUsers({
+      subcommand: 'create',
+      cwd: root,
+      env: {},
+      email: 'admin@example.com',
+      admin: true,
+      password: 'a passphrase the operator chose',
+      out: createOutput((text) => void lines.push(text), false),
+      stderr,
+    })
+    expect(code).toBe(0)
+    expect(lines.join('')).not.toContain('Password:')
+    expect(lines.join('')).not.toContain('a passphrase the operator chose')
+
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    const { createCredentialStore } = await import('@cogenta/auth')
+    const userRow = await db.query<{ id: string }>(sql`select id from cogenta_users limit 1`)
+    expect(
+      await createCredentialStore(db).verifyPassword(
+        userRow.rows[0]?.id as string,
+        'a passphrase the operator chose',
+      ),
+    ).toBe(true)
+    await db.close()
+  })
+
   it('refuses a second user with the same email', async () => {
     const root = await project()
     await users(root, 'create', '--email', 'dup@example.com', '--admin')

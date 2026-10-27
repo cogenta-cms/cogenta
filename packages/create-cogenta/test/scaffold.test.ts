@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createUserStore, ensureAuthTables } from '@cogenta/auth'
+import { createCredentialStore, createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { createDatabaseRegistry, createLogger, loadConfig } from '@cogenta/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { scaffoldSite } from '../src/scaffold.js'
@@ -179,5 +179,104 @@ describe('scaffoldSite', () => {
     // Two independent secrets, never the same value twice over: a leak of
     // one must not also hand over the other.
     expect(previewKey).not.toBe(authKey)
+  })
+  describe('when the secrets live in the environment (a container)', () => {
+    it('writes no .env, uses the password it was given and does not print it', async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-'))
+      dirs.push(targetDir)
+
+      const result = await scaffoldSite(
+        {
+          targetDir,
+          siteName: 'My Site',
+          siteUrl: 'http://localhost:4000',
+          defaultLocale: 'en',
+          databaseDriver: 'sqlite',
+          adminEmail: 'admin@example.com',
+          adminPassword: 'a long passphrase supplied by the operator',
+          secretsFromEnvironment: true,
+        },
+        { COGENTA_AUTH_SIGNING_KEY: 'test-signing-key-not-a-real-secret' },
+      )
+
+      expect(result.usersExitCode).toBe(0)
+      expect(result.usersOutput).not.toContain('Password:')
+      expect(result.usersOutput).not.toContain('a long passphrase')
+      await expect(readFile(join(targetDir, '.env'), 'utf8')).rejects.toMatchObject({
+        code: 'ENOENT',
+      })
+
+      const loaded = await loadConfig({
+        cwd: targetDir,
+        env: { COGENTA_AUTH_SIGNING_KEY: 'test-signing-key-not-a-real-secret' },
+      })
+      const selection = await createDatabaseRegistry({
+        logger: createLogger({ level: 'silent' }),
+      }).select(loaded.config.database)
+      try {
+        const admin = await createUserStore(selection.instance).byEmail('admin@example.com')
+        expect(admin).not.toBeNull()
+        const credentials = createCredentialStore(selection.instance)
+        expect(
+          await credentials.verifyPassword(
+            admin?.id ?? '',
+            'a long passphrase supplied by the operator',
+          ),
+        ).toBe(true)
+      } finally {
+        await selection.dispose()
+      }
+    })
+
+    it('keeps a server database URL, password included, out of the config file', async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-'))
+      dirs.push(targetDir)
+      const url = 'postgres://cogenta:s3cr3t-pa55@127.0.0.1:1/cogenta'
+
+      // Nothing listens on that port, so migrations fail; the files are
+      // written before they run, which is all this asserts.
+      await scaffoldSite(
+        {
+          targetDir,
+          siteName: 'My Site',
+          siteUrl: 'http://localhost:4000',
+          defaultLocale: 'en',
+          databaseDriver: 'postgres',
+          databaseUrl: url,
+          adminEmail: 'admin@example.com',
+          secretsFromEnvironment: true,
+        },
+        {
+          COGENTA_DATABASE_URL: url,
+          COGENTA_AUTH_SIGNING_KEY: 'test-signing-key-not-a-real-secret',
+        },
+      )
+
+      const config = await readFile(join(targetDir, 'cogenta.config.mjs'), 'utf8')
+      expect(config).not.toContain('s3cr3t-pa55')
+      expect(config).not.toContain('postgres://')
+      expect(config).toContain('"postgres"')
+
+      // ...and the runtime still finds it, from the environment.
+      const loaded = await loadConfig({
+        cwd: targetDir,
+        env: { COGENTA_DATABASE_URL: url, COGENTA_AUTH_SIGNING_KEY: 'x' },
+      })
+      expect(loaded.config.database.url).toBe(url)
+    }, 30_000)
+
+    it('still writes the .env by default', async () => {
+      const targetDir = await mkdtemp(join(tmpdir(), 'cogenta-scaffold-'))
+      dirs.push(targetDir)
+      await scaffoldSite({
+        targetDir,
+        siteName: 'My Site',
+        siteUrl: 'http://localhost:4000',
+        defaultLocale: 'en',
+        databaseDriver: 'sqlite',
+        adminEmail: 'admin@example.com',
+      })
+      expect(await readFile(join(targetDir, '.env'), 'utf8')).toContain('COGENTA_AUTH_SIGNING_KEY=')
+    })
   })
 })

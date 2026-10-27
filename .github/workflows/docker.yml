@@ -1,0 +1,170 @@
+name: Container image
+
+# Builds the official image from the checked-out commit and pushes it to GHCR,
+# multi-arch, scanned and signed.
+#
+#   - a `v*` tag, or a published GitHub release: the version comes from the tag;
+#   - a manual run: the version is the CLI's, from packages/cli/package.json,
+#     and `latest` is only moved when the run is on the default branch.
+#
+# Nothing here reads a long-lived secret: GHCR takes the job's own token, and
+# the signature is keyless (Sigstore, through the job's OIDC identity).
+
+on:
+  push:
+    tags: ['v*']
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      push:
+        description: Push the image (otherwise build and scan only)
+        type: boolean
+        default: true
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/cogenta
+
+jobs:
+  image:
+    name: Build, scan, push, sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write # push to GHCR
+      id-token: write # keyless cosign signature
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Work out the version
+        id: version
+        run: |
+          ref="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${ref#v}" != "$ref" ]; then
+            version="${ref#v}"
+          else
+            version="$(node -p "require('./packages/cli/package.json').version")"
+          fi
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::cannot derive a semantic version from '$version'"; exit 1 ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "minor=${version%.*}" >> "$GITHUB_OUTPUT"
+          # A pre-release (1.2.3-rc.1) never becomes `latest`.
+          case "$version" in
+            *-*) echo "stable=false" >> "$GITHUB_OUTPUT" ;;
+            *) echo "stable=true" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: github.event_name != 'workflow_dispatch' || inputs.push
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Docker Hub mirror — switched off until the repository has the two
+      # secrets it needs. To enable it:
+      #   1. create a Docker Hub access token with "Read & Write" scope for the
+      #      namespace that will hold `cogenta`;
+      #   2. add the repository secrets DOCKERHUB_USERNAME (the account or
+      #      organisation name) and DOCKERHUB_TOKEN (that token);
+      #   3. uncomment this step AND the `docker.io/...` line in the tags list
+      #      of the "Image tags" step below.
+      # - uses: docker/login-action@v3
+      #   if: github.event_name != 'workflow_dispatch' || inputs.push
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.IMAGE }}
+            # docker.io/<DOCKERHUB_USERNAME>/cogenta
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.minor }},enable=${{ steps.version.outputs.stable == 'true' }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.stable == 'true' && (github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch) }}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      # Build and scan the image BEFORE it is pushed anywhere: a CRITICAL
+      # vulnerability that has a fix stops the release, it does not ship and
+      # get reported afterwards. The image is loaded into the local daemon for
+      # the scan (single platform; the pushed one is the same Dockerfile).
+      - name: Build (amd64) for the scan
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: cogenta:scan
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=cogenta-image
+          cache-to: type=gha,scope=cogenta-image,mode=max
+
+      # trivy-action publishes exact tags only (no floating major), so this one
+      # is pinned to a release; Dependabot-style bumps are a one-line change.
+      - name: Scan for fixable critical vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: cogenta:scan
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          vuln-type: os,library
+
+      - name: Build and push (amd64, arm64)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'workflow_dispatch' || inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          # Build provenance and the software bill of materials, attached to
+          # the image in the registry.
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=cogenta-image
+          cache-to: type=gha,scope=cogenta-image,mode=max
+
+      - uses: sigstore/cosign-installer@v3
+        if: github.event_name != 'workflow_dispatch' || inputs.push
+
+      # Signs the digest, not a tag: a tag can be moved, a digest cannot. The
+      # certificate identity is this workflow, so `cosign verify` can pin it:
+      #   cosign verify ghcr.io/<owner>/cogenta:<version> \
+      #     --certificate-identity-regexp 'https://github.com/<owner>/cogenta/.github/workflows/docker.yml@.*' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - name: Sign the image (keyless)
+        if: github.event_name != 'workflow_dispatch' || inputs.push
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"

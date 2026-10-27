@@ -1,0 +1,33 @@
+# The build context is the whole workspace (docker/Dockerfile builds it), so
+# keep out everything the build does not read: it makes the upload small and
+# keeps secrets, local state and other people's worktrees out of an image layer.
+.git
+.claude
+.ci-logs
+.github
+.changeset
+.cogenta
+.turbo
+**/.turbo
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/.cogenta
+**/*.log
+.env
+.env.*
+!.env.example
+**/*.db
+**/*.db-wal
+**/*.db-shm
+
+# Design documents: nothing builds from them, except the plugin guide the admin
+# bundles into its documentation screen.
+docs/*
+!docs/guide-plugin.md
+
+# Tests and fixtures never run in the image.
+tests
+playwright.config.ts
+**/test/tmp

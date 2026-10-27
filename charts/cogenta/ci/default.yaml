@@ -1,0 +1,11 @@
+# Exercise the default install, including database dumps and TLS.
+site:
+  url: https://blog.example.com
+  trustProxy: "1"
+ingress:
+  host: blog.example.com
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+backup:
+  enabled: true

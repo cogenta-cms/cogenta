@@ -1,0 +1,57 @@
+replicaCount: 3
+strategy:
+  type: RollingUpdate
+persistence:
+  accessMode: ReadWriteMany
+  storageClass: shared-filesystem
+storage:
+  driver: s3
+  bucket: cogenta-media
+  region: eu-west-3
+postgresql:
+  enabled: false
+existingSecret: cogenta-app-private
+externalDatabase:
+  driver: postgres
+  existingSecret: cogenta-managed-db-private
+cache:
+  driver: redis
+rateLimit:
+  driver: redis
+extraEnvFrom:
+  - secretRef:
+      name: cogenta-services-private
+site:
+  url: https://cms.example.com
+  trustProxy: "1"
+ingress:
+  host: cms.example.com
+  className: nginx
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+networkPolicy:
+  ingressControllerNamespace: ingress-nginx
+  additionalIngress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - {port: 4000, protocol: TCP}
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 6
+serviceMonitor:
+  enabled: true
+  labels:
+    release: prometheus
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: cogenta
+        app.kubernetes.io/component: app

@@ -1,0 +1,67 @@
+{{- if not (has .Values.site.defaultLocale .Values.site.locales) -}}
+{{- fail "site.defaultLocale must be one of site.locales." -}}
+{{- end -}}
+{{- $multiple := or (gt (int .Values.replicaCount) 1) .Values.autoscaling.enabled -}}
+{{- if and $multiple (ne .Values.persistence.accessMode "ReadWriteMany") -}}
+{{- fail "Multiple replicas/HPA require persistence.accessMode=ReadWriteMany: /data contains site and state even with S3." -}}
+{{- end -}}
+{{- if and (eq .Values.strategy.type "RollingUpdate") (ne .Values.persistence.accessMode "ReadWriteMany") (ne .Values.storage.driver "s3") -}}
+{{- fail "RollingUpdate requires ReadWriteMany or S3; use Recreate for local media on RWO." -}}
+{{- end -}}
+{{- if and $multiple (not .Values.postgresql.enabled) (eq .Values.externalDatabase.driver "sqlite") -}}
+{{- fail "SQLite supports a single replica only; use PostgreSQL or MySQL for multiple replicas/HPA." -}}
+{{- end -}}
+{{- if and (not .Values.postgresql.enabled) (not (or .Values.externalDatabase.existingSecret .Values.existingSecret)) -}}
+{{- fail "Disabling PostgreSQL requires externalDatabase.existingSecret or existingSecret with the database URL." -}}
+{{- end -}}
+{{- if and .Values.backup.enabled (not .Values.postgresql.enabled) -}}
+{{- fail "backup.enabled supports built-in PostgreSQL only; use the external database provider's backups." -}}
+{{- end -}}
+{{- if and (eq .Values.storage.driver "s3") (not .Values.storage.bucket) -}}
+{{- fail "storage.bucket is required when storage.driver=s3; inject credentials using secretKeyRef/extraEnvFrom." -}}
+{{- end -}}
+{{- if gt (int .Values.autoscaling.minReplicas) (int .Values.autoscaling.maxReplicas) -}}
+{{- fail "autoscaling.minReplicas must not exceed autoscaling.maxReplicas." -}}
+{{- end -}}
+{{- range $key, $_ := .Values.podLabels -}}
+{{- if or (hasPrefix "app.kubernetes.io/" $key) (eq $key "helm.sh/chart") -}}
+{{- fail "podLabels must not override reserved app.kubernetes.io/* or helm.sh/chart labels." -}}
+{{- end -}}
+{{- end -}}
+{{- range $key, $_ := .Values.podAnnotations -}}
+{{- if hasPrefix "checksum/" $key -}}
+{{- fail "podAnnotations must not override reserved checksum/* annotations." -}}
+{{- end -}}
+{{- end -}}
+{{- $reserved := list "PORT" "POSTGRES_PASSWORD" "COGENTA_DATABASE_DRIVER" "COGENTA_DATABASE_URL" "COGENTA_AUTH_SIGNING_KEY" "COGENTA_PREVIEW_SIGNING_KEY" "COGENTA_ADMIN_PASSWORD" "COGENTA_ADMIN_EMAIL" "COGENTA_SITE_URL" "COGENTA_SITE_NAME" "COGENTA_SITE_LOCALES" "COGENTA_SITE_DEFAULT_LOCALE" "COGENTA_BLUEPRINT" "COGENTA_TRUST_PROXY" "COGENTA_STORAGE_DRIVER" "COGENTA_STORAGE_BUCKET" "COGENTA_STORAGE_REGION" "COGENTA_STORAGE_ENDPOINT" "COGENTA_CACHE_DRIVER" "COGENTA_RATE_LIMIT_DRIVER" -}}
+{{- $seen := dict -}}
+{{- range .Values.extraEnv -}}
+{{- if or (has .name $reserved) (hasKey $seen .name) -}}
+{{- fail (printf "extraEnv contains a duplicate or chart-managed variable: %s" .name) -}}
+{{- end -}}
+{{- $_ := set $seen .name true -}}
+{{- end -}}
+{{- range .Values.extraVolumes -}}
+{{- if has .name (list "data" "tmp") -}}
+{{- fail "extraVolumes must not override data or tmp." -}}
+{{- end -}}
+{{- end -}}
+{{- range .Values.extraVolumeMounts -}}
+{{- if or (has .name (list "data" "tmp")) (has .mountPath (list "/data" "/tmp")) -}}
+{{- fail "extraVolumeMounts must not override /data or /tmp." -}}
+{{- end -}}
+{{- end -}}
+{{- range $key, $_ := .Values.serviceMonitor.labels -}}
+{{- if or (hasPrefix "app.kubernetes.io/" $key) (eq $key "helm.sh/chart") -}}
+{{- fail "serviceMonitor.labels must not override reserved app.kubernetes.io/* or helm.sh/chart labels." -}}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.postgresql.enabled .Values.postgresql.existingSecret -}}
+{{- $stored := (lookup "v1" "Secret" .Release.Namespace .Values.postgresql.existingSecret) | default dict -}}
+{{- if $stored -}}
+{{- $password := get (get $stored "data" | default dict) "postgres-password" | default "" | b64dec -}}
+{{- if not (regexMatch "^[A-Za-z0-9._~-]+$" $password) -}}
+{{- fail "postgresql.existingSecret requires postgres-password with URI-unreserved characters." -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

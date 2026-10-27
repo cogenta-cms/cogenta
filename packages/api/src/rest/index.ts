@@ -161,6 +161,7 @@ export type {
   TrashStatus,
 } from './ops-status-router.js'
 export { createOpsStatusRouter } from './ops-status-router.js'
+export { assertPasswordPolicy, MIN_PASSWORD_LENGTH } from './password-policy.js'
 export type { PathResolution, RoutingOptions } from './path-resolution.js'
 export { lookupFilter, NO_REDIRECTS } from './path-resolution.js'
 export type { PatternRouter, PatternRouterOptions } from './pattern-router.js'

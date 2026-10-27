@@ -129,6 +129,52 @@ describe('users create', () => {
     await db.close()
   })
 
+  it('refuses a chosen password shorter than the sign-in floor, creates nothing and does not echo it', async () => {
+    const root = await project()
+    const { runUsers } = await import('../src/commands/users.js')
+    const { createOutput } = await import('../src/output.js')
+    const lines: string[] = []
+    const code = await runUsers({
+      subcommand: 'create',
+      cwd: root,
+      env: {},
+      email: 'admin@example.com',
+      admin: true,
+      password: 'short-pw',
+      out: createOutput((text) => void lines.push(text), false),
+      stderr,
+    })
+    expect(code).toBe(1)
+    expect(errors()).toContain('AUTH_PASSWORD_INVALID')
+    expect(errors()).toContain('at least 12 characters')
+    expect(errors()).not.toContain('short-pw')
+    expect(lines.join('')).not.toContain('short-pw')
+
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    const rows = await db
+      .query<{ n: number }>(sql`select count(*) as n from cogenta_users`)
+      .catch(() => ({ rows: [{ n: 0 }] }))
+    expect(Number(rows.rows[0]?.n)).toBe(0)
+    await db.close()
+  })
+
+  it('accepts a chosen password of exactly the floor', async () => {
+    const root = await project()
+    const { runUsers } = await import('../src/commands/users.js')
+    const { createOutput } = await import('../src/output.js')
+    const code = await runUsers({
+      subcommand: 'create',
+      cwd: root,
+      env: {},
+      email: 'admin@example.com',
+      admin: true,
+      password: 'twelve-chars',
+      out: createOutput(() => undefined, false),
+      stderr,
+    })
+    expect(code).toBe(0)
+  })
+
   it('refuses a second user with the same email', async () => {
     const root = await project()
     await users(root, 'create', '--email', 'dup@example.com', '--admin')

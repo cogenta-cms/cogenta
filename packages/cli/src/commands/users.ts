@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { resolve } from 'node:path'
 import process from 'node:process'
+import { assertPasswordPolicy } from '@cogenta/api'
 import {
   createCredentialStore,
   createPasswordResetStore,
@@ -167,6 +168,9 @@ async function issueReset(options: UsersOptions, logger: Logger): Promise<number
 async function redeemReset(options: UsersOptions, logger: Logger): Promise<number> {
   const { out, stderr } = options
   const token = options.token as string
+  // Before the token is spent: a refused password must not cost the operator
+  // a single-use reset link. The generated one always clears the floor.
+  if (options.password !== undefined) assertPasswordPolicy(options.password)
   const password = options.password ?? generatePassword()
   const chosen = options.password !== undefined
 
@@ -266,9 +270,13 @@ export async function runUsers(options: UsersOptions): Promise<number> {
   }
 
   const chosen = options.password !== undefined
-  const password = options.password ?? generatePassword()
 
   try {
+    // The same floor the sign-in screens enforce (`assertPasswordPolicy`): an
+    // account created here must not be weaker than one reset from the admin.
+    // Checked before anything is written, and the message never echoes it.
+    if (options.password !== undefined) assertPasswordPolicy(options.password)
+    const password = options.password ?? generatePassword()
     return await withDatabase(options, logger, async (db) => {
       await ensureAuthTables(db)
       const users = createUserStore(db)

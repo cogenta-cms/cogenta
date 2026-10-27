@@ -11,6 +11,10 @@
 # POSIX sh on purpose: the image has no bash.
 set -eu
 
+# Whatever the process writes (the site config, the database file, uploads) is
+# readable by its owner only; a volume shared with another pod keeps it so.
+umask 077
+
 SITE_DIR="${COGENTA_SITE_DIR:-/data/site}"
 RUNTIME_DIR="${COGENTA_RUNTIME_DIR:-/opt/cogenta}"
 export COGENTA_SITE_DIR="$SITE_DIR"
@@ -57,6 +61,14 @@ require_keys() {
   fi
 }
 
+# The first admin's password is needed by `bootstrap` and by nothing after it.
+# The server and every plugin process it starts inherit the environment, so
+# the variable is dropped before `serve` execs; it is also then absent from
+# /proc/<pid>/environ of the long-running process.
+forget_admin_password() {
+  unset COGENTA_ADMIN_PASSWORD COGENTA_ADMIN_PASSWORD_FILE
+}
+
 cogenta() {
   # SQLite is a stable module in Node 22 for this use but still prints an
   # "experimental" notice; the CLI's own entry point filters that one warning.
@@ -79,6 +91,7 @@ serve() {
     [ -f "$name" ] && found="$name"
   done
   [ -n "$found" ] || die "no site in $SITE_DIR yet. Run 'cogenta-entrypoint bootstrap' first (or use 'up')."
+  forget_admin_password
   cogenta serve --host 0.0.0.0 --port "${PORT:-4000}"
 }
 

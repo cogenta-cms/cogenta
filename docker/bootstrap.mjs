@@ -181,7 +181,24 @@ async function waitForDatabase(database) {
 
 // --- the two paths -----------------------------------------------------------
 
-function requireFirstAdmin() {
+/**
+ * The first admin's password clears the same floor as every other password
+ * (`assertPasswordPolicy`, reused rather than restated). Refused before the
+ * database is touched; the message names the variable and the rule, never the
+ * value.
+ */
+async function assertAdminPasswordPolicy(password) {
+  const { assertPasswordPolicy } = await import('@cogenta/api')
+  try {
+    assertPasswordPolicy(password)
+  } catch (error) {
+    fail(
+      `COGENTA_ADMIN_PASSWORD (or COGENTA_ADMIN_PASSWORD_FILE) is refused: ${error instanceof Error ? error.message : 'it does not meet the password policy.'} Generate one with: openssl rand -base64 18`,
+    )
+  }
+}
+
+async function requireFirstAdmin() {
   const email = read('COGENTA_ADMIN_EMAIL')
   const password = env.COGENTA_ADMIN_PASSWORD
   if (email === undefined || password === undefined || password === '') {
@@ -189,6 +206,7 @@ function requireFirstAdmin() {
       'first boot needs COGENTA_ADMIN_EMAIL and COGENTA_ADMIN_PASSWORD (or COGENTA_ADMIN_PASSWORD_FILE): without an account there is no way into /admin.',
     )
   }
+  await assertAdminPasswordPolicy(password)
   return { email, password }
 }
 
@@ -214,7 +232,7 @@ async function firstBoot() {
     'create-cogenta'
   )
 
-  const admin = requireFirstAdmin()
+  const admin = await requireFirstAdmin()
   const blueprintId = read('COGENTA_BLUEPRINT') ?? DEFAULT_BLUEPRINT_ID
   if (resolveBlueprint(blueprintId).fellBackToBlank && blueprintId !== 'blank') {
     fail(
@@ -287,6 +305,7 @@ async function ensureFirstAdmin() {
     await ensureAuthTables(selection.instance)
     const users = createUserStore(selection.instance)
     if ((await users.list()).length > 0) return
+    await assertAdminPasswordPolicy(password)
     const user = await users.create({ email, roles: ['admin'] })
     await createCredentialStore(selection.instance).setPassword(user.id, password)
     say(`created the first admin ${email}`)

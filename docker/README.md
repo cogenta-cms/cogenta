@@ -72,7 +72,7 @@ database but the default SQLite file on the volume.
 | `COGENTA_STORAGE_SIGNING_KEY` | Keeps signed media URLs valid across restarts and replicas |
 | `COGENTA_CACHE_*`, `COGENTA_RATE_LIMIT_*`, `REDIS_URL` | Redis for the shared cache and rate limits |
 | `COGENTA_LLM_PROVIDER`, `_MODEL`, `COGENTA_LLM_API_KEY` | Optional; the CMS works without AI |
-| `COGENTA_TRUST_PROXY` | See below |
+| `COGENTA_TRUST_PROXY`, `COGENTA_TRUST_PROXY_FROM` | See below |
 | `PORT` | Listening port (4000) |
 | `COGENTA_BOOTSTRAP_WAIT_SECONDS` | How long `bootstrap` waits for the database to answer (60) |
 
@@ -96,9 +96,14 @@ Every request reaches the pod from the ingress, so by default per-address limits
   Behind Cloudflare and an ingress, use `2`.
 
 An address that is missing, malformed or beyond the chain falls back to the socket's.
-The pod cannot tell a proxy from a client typing the same header, so make it reachable
-only through the proxy (a NetworkPolicy, a private network). `x-forwarded-proto` decides
-whether a request is HTTPS (HSTS, `Secure` cookies).
+`x-forwarded-proto` decides whether a request is HTTPS (HSTS, `Secure` cookies).
+
+Set `COGENTA_TRUST_PROXY_FROM` to the addresses or CIDR blocks the proxies connect from,
+comma separated, IPv4 or IPv6 (`10.0.0.0/8,fd00::/8`). The header is then honoured only
+when the connection comes from one of them; a caller that reaches the pod directly is
+attributed to its own address. Without it the header is believed from any socket, the
+server logs a warning at start-up saying so, and the pod must be reachable only through
+the proxy (a NetworkPolicy, a private network) or a caller can pick its own address.
 
 ## Probes
 
@@ -123,9 +128,17 @@ Runs as `10001:10001` with `readOnlyRootFilesystem: true`. The only writable pat
   already holds a site would try to create the admin a second time and fail.
 - If the first boot fails after the admin account was created, drop the database and
   the volume and start again; a failure before that leaves nothing behind.
-- Verify an image: `cosign verify ghcr.io/cogenta-cms/cogenta:<version>
-  --certificate-identity-regexp 'https://github.com/cogenta-cms/cogenta/.github/workflows/docker.yml@.*'
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com`.
+- Verify an image before running it:
+
+  ```sh
+  cosign verify ghcr.io/cogenta-cms/cogenta:<version> \
+    --certificate-identity-regexp '^https://github\.com/cogenta-cms/cogenta/\.github/workflows/docker\.yml@refs/tags/v.+$' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  ```
+
+  The identity is limited to the workflow running on a `v*` tag, so an image signed
+  from a branch (a manual run on a fork or a feature branch) does not verify. Pin the
+  digest the command prints (`image@sha256:...`) in your manifests rather than a tag.
 - The workflow (`.github/workflows/docker.yml`) pushes multi-arch (amd64, arm64) to
   GHCR with provenance and an SBOM after a Trivy scan, and signs the digest. A Docker
   Hub mirror is written but commented out; its two secrets are `DOCKERHUB_USERNAME` and

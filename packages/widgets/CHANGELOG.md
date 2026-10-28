@@ -1,5 +1,15 @@
 # @cogenta/widgets
 
+## 0.2.9
+
+### Patch Changes
+
+- [#40](https://github.com/cogenta-cms/cogenta/pull/40) [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Require zod 4.6.7 or later (GHSA-mrhx-c7xc-m3w5): validating an array larger than its `.max()` no longer builds one issue per element. The transitive copies pulled by `@langchain/core` are held to the same version.
+- Updated dependencies [[`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`5c2f75a`](https://github.com/cogenta-cms/cogenta/commit/5c2f75a43d934265a4a8d98a1667ef90f75ac668), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`5c2f75a`](https://github.com/cogenta-cms/cogenta/commit/5c2f75a43d934265a4a8d98a1667ef90f75ac668), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7)]:
+  - @cogenta/core@0.14.1
+  - @cogenta/blocks@1.2.1
+  - @cogenta/schema@0.11.2
+
 ## 0.2.8
 
 ### Patch Changes

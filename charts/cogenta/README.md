@@ -1,9 +1,8 @@
 # Cogenta Helm chart
 
 The official Cogenta CMS chart. Chart version **0.1.0** is independent of the
-application version. `appVersion: 0.20.1` is the container release placeholder;
-release maintainers must set it to a published image before distribution. The
-image contract is `ghcr.io/cogenta-cms/cogenta:<appVersion>` with port 4000,
+application version; `appVersion` is the Cogenta release whose image the chart
+runs by default, and it moves with every Cogenta release. The image contract is `ghcr.io/cogenta-cms/cogenta:<appVersion>` with port 4000,
 `/livez`, `/readyz`, and `cogenta-entrypoint bootstrap|serve|cli`.
 
 Requires Helm 3.19+, Kubernetes 1.27+, a default StorageClass supporting fsGroup,
@@ -215,7 +214,7 @@ drivers remain available without AI, S3 or Redis.
 ## Upgrades, scaling and rollback
 
 ```sh
-helm upgrade blog oci://ghcr.io/cogenta-cms/charts/cogenta --version 0.1.0 -f private-values.yaml --set image.tag=0.20.1 --wait --timeout 10m
+helm upgrade blog oci://ghcr.io/cogenta-cms/charts/cogenta --version 0.1.0 -f private-values.yaml --set image.tag=0.21.0 --wait --timeout 10m
 helm history blog
 helm rollback blog <revision> --wait --timeout 10m
 ```

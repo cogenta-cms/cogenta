@@ -27,7 +27,7 @@
     "services:up": "docker compose -f docker-compose.test.yml down -v --remove-orphans && docker compose -f docker-compose.test.yml up -d --wait",
     "services:down": "docker compose -f docker-compose.test.yml down -v",
     "changeset": "changeset",
-    "version-packages": "changeset version && pnpm install --lockfile-only",
+    "version-packages": "changeset version && node scripts/sync-chart-version.mjs && pnpm install --lockfile-only",
     "release": "turbo run build && node scripts/publish-changed.mjs",
     "release:manual": "turbo run build && node scripts/publish-changed.mjs --no-provenance",
     "prepare": "lefthook install"

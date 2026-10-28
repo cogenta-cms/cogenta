@@ -142,6 +142,10 @@ export function applyEnv(
         .map((entry) => entry.trim())
         .filter((entry) => entry !== '')
     }
+    // Seconds, validated by the schema's own bounds (whole number, 0 to two
+    // years): a value it cannot read is refused rather than silently ignored.
+    const hstsMaxAge = read(env, 'COGENTA_SECURITY_HSTS_MAX_AGE')
+    if (hstsMaxAge !== undefined) security['hstsMaxAge'] = Number(hstsMaxAge)
     output['security'] = security
   }
 

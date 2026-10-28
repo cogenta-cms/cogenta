@@ -100,6 +100,19 @@
           "type": ["string", "integer"],
           "pattern": "^(off|cloudflare|[0-9]+)$",
           "minimum": 0
+        },
+        "trustProxyFrom": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$"
+          },
+          "uniqueItems": true
+        },
+        "hstsMaxAge": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63072000
         }
       },
       "required": [
@@ -109,7 +122,9 @@
         "defaultLocale",
         "blueprint",
         "adminEmail",
-        "trustProxy"
+        "trustProxy",
+        "trustProxyFrom",
+        "hstsMaxAge"
       ]
     },
     "existingSecret": {
@@ -333,6 +348,12 @@
             "pattern": "^/"
           }
         }
+      }
+    },
+    "extraObjects": {
+      "type": "array",
+      "items": {
+        "type": ["object", "string"]
       }
     },
     "service": {
@@ -658,6 +679,7 @@
     "extraEnvFrom",
     "extraVolumes",
     "extraVolumeMounts",
+    "extraObjects",
     "service",
     "ingress",
     "networkPolicy",

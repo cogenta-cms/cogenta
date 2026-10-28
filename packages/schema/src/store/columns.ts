@@ -77,6 +77,20 @@ export function isMintedId(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(value)
 }
 
+/**
+ * Whether the database could hold a row under this id — `isMintedId` for the
+ * dialect that needs it, and nothing at all elsewhere.
+ *
+ * `CreateInput.id` lets an importer keep an identity that already exists
+ * elsewhere, and on SQLite and MySQL that identity may be any string that fits
+ * the column; only Postgres' `uuid` makes a non-UUID id impossible. So the
+ * check that spares Postgres a 500 must not turn into "not found" for a site
+ * that really stored an entry as `legacy-42`.
+ */
+export function isStorableId(value: string, dialect: DatabaseDialect): boolean {
+  return dialect !== 'postgres' || isMintedId(value)
+}
+
 export function booleanValue(value: boolean, dialect: DatabaseDialect): boolean | number {
   return dialect === 'postgres' ? value : value ? 1 : 0
 }

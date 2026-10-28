@@ -18,7 +18,7 @@ import {
   type ReviewState,
   type ReviewTransition,
 } from '../types.js'
-import { isColumnless } from './columns.js'
+import { isColumnless, isStorableId } from './columns.js'
 import { type Cursor, decodeCursor, encodeCursor } from './cursor.js'
 import { type ContentDiff, diffContent } from './diff.js'
 import { joinFragments, valueList } from './fragments.js'
@@ -445,6 +445,9 @@ export function createContentStore<TValues extends ContentValues = ContentValues
   // ---------------------------------------------------------------- reading
 
   async function loadRow(tx: SqlExecutor, id: string): Promise<Row | null> {
+    // Postgres throws on a cast to `uuid` (a 500 from an anonymous URL) where
+    // the other engines answer "no row": see `isStorableId`.
+    if (!isStorableId(id, dialect)) return null
     const found = await tx.query<Row>(
       sql`select * from ${entries} where ${identifier('id', dialect)} = ${id}`,
     )
@@ -1620,7 +1623,9 @@ export function createContentStore<TValues extends ContentValues = ContentValues
         predicates.push(
           listOptions.translationOf === null
             ? sql`${identifier('translation_of', dialect)} is null`
-            : sql`${identifier('translation_of', dialect)} = ${listOptions.translationOf}`,
+            : isStorableId(listOptions.translationOf, dialect)
+              ? sql`${identifier('translation_of', dialect)} = ${listOptions.translationOf}`
+              : sql`1 = 0`,
         )
       }
 
@@ -1634,15 +1639,35 @@ export function createContentStore<TValues extends ContentValues = ContentValues
             details: { collection: collection.name, field },
           })
         }
+        // A to-one relation is a `uuid` column on Postgres: a value no id could
+        // equal selects nothing instead of failing the cast.
+        const cannotMatch =
+          definition.kind === 'relation' &&
+          typeof value === 'string' &&
+          !isStorableId(value, dialect)
         predicates.push(
           value === null
             ? sql`${identifier(columnFor(field), dialect)} is null`
-            : sql`${identifier(columnFor(field), dialect)} = ${value}`,
+            : cannotMatch
+              ? sql`1 = 0`
+              : sql`${identifier(columnFor(field), dialect)} = ${value}`,
         )
       }
 
       if (listOptions.cursor !== undefined) {
-        predicates.push(keysetPredicate(decodeCursor(listOptions.cursor, order)))
+        const cursor = decodeCursor(listOptions.cursor, order)
+        // The position is an id the database compares: a forged one would only
+        // reach a `uuid` cast on Postgres. A cursor this store produced always
+        // carries a real id, so refusing the rest costs no honest caller.
+        if (!isStorableId(cursor.id, dialect)) {
+          throw new CogentaError({
+            code: 'CONTENT_INVALID',
+            message:
+              'This pagination cursor cannot be used: its position is not an id of this store.',
+            hint: 'Pass the `nextCursor` of the previous page unchanged, with the same sort.',
+          })
+        }
+        predicates.push(keysetPredicate(cursor))
       }
 
       const where =

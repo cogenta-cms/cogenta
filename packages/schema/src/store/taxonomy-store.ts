@@ -8,6 +8,7 @@ import {
 } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
 import type { TaxonomyDefinition, TaxonomyTerm } from '../types.js'
+import { isStorableId } from './columns.js'
 import { joinFragments, valueList } from './fragments.js'
 import { taxonomyTable } from './naming.js'
 import { assertDepth, childPath, depthOf, isBelow, isWithin, rebasedPath } from './taxonomy-path.js'
@@ -143,6 +144,10 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
   }
 
   async function rowOf(tx: SqlExecutor, id: string): Promise<Row | null> {
+    // An id that is not shaped like one `newId()` mints cannot name a row, and
+    // Postgres would throw on the cast (a 500 from an anonymous URL) where the
+    // other engines answer "no row": see `isStorableId`.
+    if (!isStorableId(id, dialect)) return null
     const found = await tx.query<Row>(sql`select * from ${table} where ${idColumn} = ${id}`)
     return found.rows[0] ?? null
   }

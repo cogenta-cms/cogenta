@@ -37,6 +37,17 @@ spec:
               command: [/bin/sh, -ec]
               args:
                 - |
+                  # A brand-new pod is refused by the PostgreSQL NetworkPolicy for its
+                  # first seconds, until the CNI has programmed it: wait for the
+                  # database instead of failing the whole Job on that race.
+                  deadline=$(( $(date +%s) + 60 ))
+                  until pg_isready -q -h "$PGHOST" -p "$PGPORT" -t 2; do
+                    if [ "$(date +%s)" -ge "$deadline" ]; then
+                      echo "database $PGHOST:$PGPORT did not accept connections within 60 s" >&2
+                      exit 1
+                    fi
+                    sleep 2
+                  done
                   umask 077
                   dump="/backups/cogenta-$(date -u +%Y%m%dT%H%M%SZ).dump"
                   trap 'rm -f "$dump.partial"' EXIT HUP INT TERM

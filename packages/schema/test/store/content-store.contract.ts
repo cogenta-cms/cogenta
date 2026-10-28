@@ -5,6 +5,7 @@ import type { ContentStore } from '../../src/store/store.js'
 import { createContentStore } from '../../src/store/store.js'
 import { createSchemaTables, dropSchemaTables } from '../../src/store/tables.js'
 import type { CollectionDefinition } from '../../src/types.js'
+import { postgresRefusingEveryStatement } from '../helpers/postgres-like.js'
 
 export interface ContentStoreHarness {
   readonly db: DatabaseHandle
@@ -1121,6 +1122,75 @@ export function runContentStoreContract(
         await expect(articles.diff(entry.id, 2, 12)).rejects.toMatchObject({
           code: 'CONTENT_NOT_FOUND',
         })
+      })
+    })
+
+    describe('an id that was never minted', () => {
+      /**
+       * An id comes from a URL, and `uuid` is a real column type on Postgres,
+       * which refuses to compare it with text: `/api/content/post/xx` was a 500
+       * `DB_UNREACHABLE` there and a plain 404 everywhere else. The store must
+       * answer "no such entry" without asking the database — which the first
+       * group proves on any engine, and the second proves on the real one.
+       */
+      const onPostgres = (): ContentStore =>
+        createContentStore({
+          db: postgresRefusingEveryStatement(db),
+          now: () => clock,
+          defaultLocale: 'fr',
+          siblings: schema,
+          collection: article,
+        })
+
+      describe.each(['xx', 'not-a-uuid-at-all', '', '1', "' or 1=1 --"])('%j', (id) => {
+        it('reads as not found on a uuid column without sending a statement', async () => {
+          const store = onPostgres()
+          expect(await store.read(id)).toBeNull()
+          expect(await store.read(id, { state: 'working' })).toBeNull()
+          expect(await store.read(id, { trashed: 'include' })).toBeNull()
+        })
+
+        it('is not found for a write aimed at it, instead of failing the statement', async () => {
+          const store = onPostgres()
+          await expect(store.update(id, { values: { title: 'x' } })).rejects.toMatchObject({
+            code: 'CONTENT_NOT_FOUND',
+          })
+          expect(await store.delete(id)).toBe(false)
+        })
+      })
+
+      it('refuses a forged pagination cursor whose position is not an id, before any statement', async () => {
+        const forged = Buffer.from(
+          JSON.stringify({ field: 'id', direction: 'asc', value: null, id: 'xx' }),
+          'utf8',
+        ).toString('base64url')
+
+        await expect(
+          onPostgres().list({ sort: { field: 'id', direction: 'asc' }, cursor: forged }),
+        ).rejects.toMatchObject({ code: 'CONTENT_INVALID' })
+      })
+
+      it('lists nothing, rather than failing, for a translationOf or relation filter that cannot match', async () => {
+        await articles.create({ values: { title: 'a', slug: 'a' }, status: 'published' })
+
+        expect((await articles.list({ translationOf: 'xx' })).items).toEqual([])
+        expect((await articles.list({ where: { writer: 'xx' } })).items).toEqual([])
+        expect(await articles.read('xx')).toBeNull()
+      })
+
+      it('keeps an id an importer chose readable wherever the column is not a uuid', async () => {
+        // `CreateInput.id` is for content that already has an identity
+        // elsewhere. Only Postgres cannot hold one that is not a UUID.
+        if (db.dialect === 'postgres') return
+
+        const entry = await articles.create({
+          id: 'legacy-42',
+          values: { title: 'Imported', slug: 'imported' },
+          status: 'published',
+        })
+
+        expect(entry.id).toBe('legacy-42')
+        expect((await articles.read('legacy-42'))?.values['title']).toBe('Imported')
       })
     })
 

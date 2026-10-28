@@ -9,6 +9,7 @@ import { createSchemaTables, dropSchemaTables } from '../../src/store/tables.js'
 import type { TaxonomyStore } from '../../src/store/taxonomy-store.js'
 import { createTaxonomyStore } from '../../src/store/taxonomy-store.js'
 import { countTaxonomyUsage } from '../../src/store/taxonomy-usage.js'
+import { postgresRefusingEveryStatement } from '../helpers/postgres-like.js'
 
 export interface TaxonomyHarness {
   readonly db: DatabaseHandle
@@ -135,6 +136,18 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
         expect((await categories.bySlug('cuisine'))?.id).toBe(term.id)
         expect(await categories.bySlug('nope')).toBeNull()
       })
+
+      it.each(['xx', 'not-a-uuid-at-all', ''])(
+        'reads the id %j as no term on a uuid column, without sending a statement',
+        async (id) => {
+          const store = createTaxonomyStore({
+            db: postgresRefusingEveryStatement(db),
+            taxonomy: category,
+          })
+
+          expect(await store.read(id)).toBeNull()
+        },
+      )
 
       it('refuses to nest a term of a flat taxonomy', async () => {
         const root = await keywords.create({ slug: 'vegan', labels: { en: 'Vegan' } })

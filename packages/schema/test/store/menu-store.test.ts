@@ -5,6 +5,7 @@ import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMenuStore, type MenuStore } from '../../src/store/menu-store.js'
 import { ensureMenuTables } from '../../src/store/menu-tables.js'
+import { postgresRefusingEveryStatement } from '../helpers/postgres-like.js'
 
 describe('createMenuStore (sqlite)', () => {
   let directory: string
@@ -21,6 +22,28 @@ describe('createMenuStore (sqlite)', () => {
   afterEach(async () => {
     await db.close()
     await rm(directory, { recursive: true, force: true })
+  })
+
+  it.each(['xx', 'not-a-uuid-at-all', ''])(
+    'reads the id %j as no menu and no item on a uuid column, without sending a statement',
+    async (id) => {
+      const onPostgres = createMenuStore({ db: postgresRefusingEveryStatement(db) })
+
+      expect(await onPostgres.read(id)).toBeNull()
+      expect(await onPostgres.readItem(id)).toBeNull()
+    },
+  )
+
+  it('keeps a menu id an importer chose readable on a database that does not need a uuid', async () => {
+    const menu = await store.create({
+      id: 'legacy-menu',
+      name: 'main',
+      locale: 'en',
+      label: 'Main',
+    })
+
+    expect(menu.id).toBe('legacy-menu')
+    expect((await store.read('legacy-menu'))?.name).toBe('main')
   })
 
   it('creates a menu and finds it by name and locale', async () => {

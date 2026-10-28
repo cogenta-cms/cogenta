@@ -150,7 +150,7 @@ export interface ChromeInput {
    * The languages the site is published in, one entry per language with the
    * page's own included (contract D `theme@1.10`). Absent — and empty — on a
    * site with a single language, so a theme can render
-   * `renderLanguageSwitcher(input.languages)` unconditionally. A theme that
+   * `renderLanguageSwitcher(input.languages, { locale: input.locale })` unconditionally. A theme that
    * never reads it loses nothing a pre-1.10 site had.
    */
   readonly languages?: readonly ChromeLanguage[]

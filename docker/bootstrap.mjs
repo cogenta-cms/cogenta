@@ -314,34 +314,6 @@ async function ensureFirstAdmin() {
   }
 }
 
-/**
- * A site scaffolded before multilingual routing keeps its schema file on the
- * volume across an image upgrade, and that file says its collections are not
- * served by language: an English page of a French and English site could only
- * be reached at an unprefixed address, and `/en/` was a 404. When the site
- * declares several languages, bring the schema file to the shape a new
- * scaffold has (`localizeSchemaFile`): idempotent, the original kept beside it,
- * and nothing is touched when the file is not the one the installer wrote.
- * Never fatal: the site serves either way.
- */
-async function localizeRoutes() {
-  try {
-    const { loadConfig } = await import('@cogenta/core')
-    const { localizeSchemaFile } = await import('create-cogenta')
-    const { config } = await loadConfig({ cwd: siteDir, env })
-    const result = await localizeSchemaFile(siteDir, config.site.locales)
-    if (result.status === 'updated') {
-      say(
-        `serving ${result.collections.join(', ')} by language (${config.site.locales.join('/')}); the previous schema file is kept as ${result.backup}`,
-      )
-    } else if (result.status === 'reverted') {
-      say(`left the schema file as it was: ${result.reason}`)
-    }
-  } catch (error) {
-    say(`could not check the schema file for language routing: ${error?.message ?? error}`)
-  }
-}
-
 async function main() {
   await mkdir(siteDir, { recursive: true })
   const waitMs = Number(read('COGENTA_BOOTSTRAP_LOCK_WAIT_SECONDS') ?? '600') * 1000
@@ -359,7 +331,6 @@ async function main() {
       const { loadConfig } = await import('@cogenta/core')
       await waitForDatabase((await loadConfig({ cwd: siteDir, env })).config.database)
       await migrate()
-      await localizeRoutes()
       await ensureFirstAdmin()
       say('site present: migrations are up to date')
     }

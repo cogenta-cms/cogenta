@@ -1366,6 +1366,8 @@ autre langue. `renderLanguageSwitcher` (`@cogenta/theme-kit`) rend la liste ; `t
 l'utilise dans son en-tête, les neuf autres thèmes ne l'ont pas encore branché (un thème
 qui ignore `languages` rend exactement comme avant).
 
+Sur une page d'une langue servie sous préfixe, `ChromeInput.homeHref` est désormais l'accueil de cette langue (`/en/`) et non plus `/`.
+
 Le modèle de routage, lui, ne change pas : `routing.locale: true` préfixe l'URL d'une
 collection par la langue (`/en/blog/hello`), la langue par défaut restant sans préfixe.
 `buildPath` accepte désormais `{ defaultLocale }` pour produire ce couple d'adresses que

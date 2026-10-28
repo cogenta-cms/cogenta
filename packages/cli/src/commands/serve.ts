@@ -2974,7 +2974,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(mcpHttp === undefined ? {} : { mcpHttp }),
     ...(options.pluginWidgets === undefined ? {} : { pluginWidgets: options.pluginWidgets }),
     storeFor,
-    restRouter: createRestRouter({ service, siteUrl: site.url }),
+    restRouter: createRestRouter({
+      service,
+      siteUrl: site.url,
+      defaultLocale: site.defaultLocale,
+    }),
     authRouter: createAuthRouter({
       auth,
       ...(options.onForgotPassword == null ? {} : { onForgotPassword: options.onForgotPassword }),

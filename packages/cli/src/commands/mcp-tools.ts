@@ -475,6 +475,7 @@ function browseServiceOf(
   service: ContentService,
   permissions: PermissionLayer,
   collections: readonly CollectionDefinition[],
+  defaultLocale: string,
 ): ContentBrowseServiceLike {
   const byName = new Map(collections.map((collection) => [collection.name, collection]))
   const pathOf = (
@@ -488,7 +489,7 @@ function browseServiceOf(
       if (typeof value === 'string') params[key] = value
     }
     try {
-      return buildPath(collection, params, locale)
+      return buildPath(collection, params, locale, { defaultLocale })
     } catch {
       return null
     }
@@ -645,7 +646,12 @@ export function createMcpToolSource(
 ): () => Promise<readonly McpTool[]> {
   const now = options.now ?? Date.now
   const byName = new Map(options.collections.map((collection) => [collection.name, collection]))
-  const browse = browseServiceOf(options.contentService, options.permissions, options.collections)
+  const browse = browseServiceOf(
+    options.contentService,
+    options.permissions,
+    options.collections,
+    options.site.defaultLocale,
+  )
   const schema = schemaServiceOf(options.contentService, options.collections)
   const search =
     options.search === undefined

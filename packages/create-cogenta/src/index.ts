@@ -31,8 +31,6 @@ export type {
   ValidateKeyResult,
 } from './llm-setup.js'
 export { createProviderClient, LLM_PROVIDERS, validateApiKey } from './llm-setup.js'
-export type { LocalizeSchemaOutcome } from './localize-schema.js'
-export { localizeSchemaFile } from './localize-schema.js'
 export type { ResetPlaygroundDataOptions } from './playground-reset.js'
 export { resetPlaygroundData } from './playground-reset.js'
 export type { Choice, Prompter, PromptIO } from './prompts.js'

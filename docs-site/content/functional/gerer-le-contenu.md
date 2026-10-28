@@ -245,6 +245,25 @@ langue quand elle n'existe pas encore. Un site créé en `fr` et `en` avec le mo
 langue s'écrit depuis `/translations` (traduire la page `home`), et ses widgets et menus
 se règlent par langue dans les écrans Widgets (visibilité « Langue ») et Menus.
 
+### Passer un site existant en routage par langue
+
+Un site créé avant ce routage garde son fichier `cogenta.schema.mjs` : ses contenus
+d'une autre langue restent à une adresse sans préfixe. Le schéma est en lecture seule en
+production (ADR-0010) : la mise à jour se fait comme tout changement de schéma, **sur une
+copie de développement**, jamais par le serveur ni au démarrage.
+
+1. Sur la copie, `cogenta schema localize-routes` : simulation seule. Elle nomme les
+   collections qui passeront sous préfixe et liste les redirections 301 nécessaires
+   (`301 /blog/hello -> /en/blog/hello`) pour chaque contenu publié d'une autre langue.
+2. `cogenta schema localize-routes --write` modifie `cogenta.schema.mjs` (l'original reste
+   à côté, en `cogenta.schema.mjs.before-locale-routing`). À défaut, ajoutez à la main
+   `"locale": true` dans chaque objet `routing`.
+3. Commitez le fichier et déployez-le sur le site (volume ou image).
+4. Ajoutez les redirections listées dans l'admin, écran Redirections : sans elles,
+   l'ancienne adresse d'un contenu d'une autre langue répond 404.
+5. Écrivez la traduction de la page `home` (écran Traductions) pour que `/en/` existe, puis
+   réglez les widgets et les menus de l'autre langue comme ci-dessus.
+
 ## Médias
 
 `/media` — la médiathèque. Une image téléversée produit automatiquement ses

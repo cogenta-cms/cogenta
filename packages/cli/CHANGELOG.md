@@ -1,5 +1,54 @@
 # @cogenta/cli
 
+## 0.22.0
+
+### Minor Changes
+
+- [#45](https://github.com/cogenta-cms/cogenta/pull/45) [`9178b5c`](https://github.com/cogenta-cms/cogenta/commit/9178b5c4ab793c5f17f10c74350f30034e1b208a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A site published in several languages is bilingual for real. Scaffolded with locales `fr,en` (default `fr`), every blueprint now serves its routed collections under a locale prefix: the default language at its usual addresses, the other at `/en/…`, including its own home page at `/en/`. The blog blueprint also ships its English words as translations of its French pages and essays, with their own navigation, settings and widgets. Lists on a page (`collectionList`, latest, related, popular, archives, subject counts) show the entries of the page's own language. `theme@1.10` (additive) adds `ChromeInput.languages` and `renderLanguageSwitcher` to `@cogenta/theme-kit`, and `ChromeInput.homeHref` is now the language's home (`/en/`) on a page in a language served under a prefix; the blog theme draws the switcher in its header.
+  
+  `buildPath` accepts `{ defaultLocale }`, and every caller that names a public address now passes it: links, preview links, MCP and agent redirect targets, menu entries, content-webhook `path` and slug-change redirect origins all drop the default-locale prefix on a localised route (a redirect is recorded from `/blog/old`, not `/fr/blog/old`; a webhook carries `/blog/post`, not `/fr/blog/post`). Single-language sites, and collections not routed by locale, are unchanged.
+  
+  A site scaffolded before this keeps its schema (ADR-0010, ADR-0023: the schema is never rewritten by a server or a bootstrap). The new operator command `cogenta schema localize-routes` (dry run unless `--write`) brings `cogenta.schema.mjs` to the same routing and prints the 301 redirects the move needs; run it on a development copy, commit the file, deploy it. Other themes do not draw the switcher yet.
+
+### Patch Changes
+
+- [#43](https://github.com/cogenta-cms/cogenta/pull/43) [`8f89cf0`](https://github.com/cogenta-cms/cogenta/commit/8f89cf041454f3172586c931f23a2be11c02f811) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The official container image starts on Kubernetes with an empty volume. Its working directory was `/data/site`, inside the volume, so the container runtime created that directory as root before the entrypoint ran, and the first boot stopped with "cannot write in /data/site". The image now works from `/data`, and the entrypoint replaces an empty site directory it cannot write, which repairs a volume a 0.21.0 pod already touched. Chart 0.1.1 also sets `workingDir: /data`.
+
+- [#46](https://github.com/cogenta-cms/cogenta/pull/46) [`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` answers `HEAD` like `GET` without a body, for public pages, `/robots.txt`, `/sitemap.xml`, the admin and the probes; link checkers and uptime monitors that use `HEAD` saw 404 and 405 on a healthy site. The version shown in the public footer, the admin and `GET /api/shell-status` is now the `@cogenta/cli` release (the one the container image and Helm chart carry) instead of the independently versioned `@cogenta/core`.
+- Updated dependencies [[`9178b5c`](https://github.com/cogenta-cms/cogenta/commit/9178b5c4ab793c5f17f10c74350f30034e1b208a), [`b32a6bd`](https://github.com/cogenta-cms/cogenta/commit/b32a6bd051ab887f8f14507693abccf34ee655e8), [`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214), [`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214)]:
+  - @cogenta/schema@0.12.0
+  - @cogenta/theme-kit@0.9.0
+  - @cogenta/theme-blog@0.7.0
+  - @cogenta/starters@0.5.0
+  - @cogenta/api@2.13.1
+  - @cogenta/render@0.6.3
+  - @cogenta/core@0.14.2
+  - @cogenta/agents@0.11.2
+  - @cogenta/auth@0.7.1
+  - @cogenta/blocks@1.2.2
+  - @cogenta/export@0.3.3
+  - @cogenta/import@0.2.18
+  - @cogenta/plugins@0.9.2
+  - @cogenta/seo@0.4.3
+  - @cogenta/widgets@0.2.10
+  - @cogenta/theme-association@0.6.3
+  - @cogenta/theme-canonical@1.4.3
+  - @cogenta/theme-docs@0.6.3
+  - @cogenta/theme-ecommerce@1.4.3
+  - @cogenta/theme-entreprise@1.5.3
+  - @cogenta/theme-magazine@1.4.3
+  - @cogenta/theme-portfolio@1.4.3
+  - @cogenta/theme-restaurant@0.6.3
+  - @cogenta/theme-saas@0.6.3
+  - @cogenta/agents-builtin@0.7.4
+  - @cogenta/analytics@0.3.11
+  - @cogenta/channels@0.3.19
+  - @cogenta/comments@0.2.12
+  - @cogenta/commerce@0.5.14
+  - @cogenta/forms@0.2.19
+  - @cogenta/mcp@0.3.17
+  - @cogenta/observability@0.2.11
+
 ## 0.21.0
 
 ### Minor Changes

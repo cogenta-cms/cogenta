@@ -1,5 +1,21 @@
 # @cogenta/schema
 
+## 0.12.0
+
+### Minor Changes
+
+- [#45](https://github.com/cogenta-cms/cogenta/pull/45) [`9178b5c`](https://github.com/cogenta-cms/cogenta/commit/9178b5c4ab793c5f17f10c74350f30034e1b208a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A site published in several languages is bilingual for real. Scaffolded with locales `fr,en` (default `fr`), every blueprint now serves its routed collections under a locale prefix: the default language at its usual addresses, the other at `/en/…`, including its own home page at `/en/`. The blog blueprint also ships its English words as translations of its French pages and essays, with their own navigation, settings and widgets. Lists on a page (`collectionList`, latest, related, popular, archives, subject counts) show the entries of the page's own language. `theme@1.10` (additive) adds `ChromeInput.languages` and `renderLanguageSwitcher` to `@cogenta/theme-kit`, and `ChromeInput.homeHref` is now the language's home (`/en/`) on a page in a language served under a prefix; the blog theme draws the switcher in its header.
+  
+  `buildPath` accepts `{ defaultLocale }`, and every caller that names a public address now passes it: links, preview links, MCP and agent redirect targets, menu entries, content-webhook `path` and slug-change redirect origins all drop the default-locale prefix on a localised route (a redirect is recorded from `/blog/old`, not `/fr/blog/old`; a webhook carries `/blog/post`, not `/fr/blog/post`). Single-language sites, and collections not routed by locale, are unchanged.
+  
+  A site scaffolded before this keeps its schema (ADR-0010, ADR-0023: the schema is never rewritten by a server or a bootstrap). The new operator command `cogenta schema localize-routes` (dry run unless `--write`) brings `cogenta.schema.mjs` to the same routing and prints the 301 redirects the move needs; run it on a development copy, commit the file, deploy it. Other themes do not draw the switcher yet.
+
+### Patch Changes
+
+- [#46](https://github.com/cogenta-cms/cogenta/pull/46) [`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214) Thanks [@georgesmomo](https://github.com/georgesmomo)! - An id that is not shaped like one the store mints is now "not found" on every database, without a query. `GET /api/content/post/xx` answered a 500 `DB_UNREACHABLE` on Postgres (the `uuid` column refuses the cast) and a 404 elsewhere; the content, taxonomy and menu stores, a `translationOf` or to-one relation filter, and a forged pagination cursor now behave the same on all three.
+- Updated dependencies [[`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214)]:
+  - @cogenta/core@0.14.2
+
 ## 0.11.2
 
 ### Patch Changes

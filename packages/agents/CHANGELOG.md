@@ -1,5 +1,15 @@
 # @cogenta/agents
 
+## 0.11.2
+
+### Patch Changes
+
+- Updated dependencies [[`9178b5c`](https://github.com/cogenta-cms/cogenta/commit/9178b5c4ab793c5f17f10c74350f30034e1b208a), [`b32a6bd`](https://github.com/cogenta-cms/cogenta/commit/b32a6bd051ab887f8f14507693abccf34ee655e8), [`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214), [`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214)]:
+  - @cogenta/schema@0.12.0
+  - @cogenta/render@0.6.3
+  - @cogenta/core@0.14.2
+  - @cogenta/blocks@1.2.2
+
 ## 0.11.1
 
 ### Patch Changes

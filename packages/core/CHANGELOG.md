@@ -1,5 +1,11 @@
 # @cogenta/core
 
+## 0.14.2
+
+### Patch Changes
+
+- [#46](https://github.com/cogenta-cms/cogenta/pull/46) [`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `COGENTA_SECURITY_HSTS_MAX_AGE` sets `security.hstsMaxAge` from the environment, validated by the same bounds as the config file (a whole number of seconds, 0 to two years), so a container or Helm deployment can turn on `Strict-Transport-Security` without a config file.
+
 ## 0.14.1
 
 ### Patch Changes

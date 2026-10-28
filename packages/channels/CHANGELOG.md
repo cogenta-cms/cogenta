@@ -1,5 +1,13 @@
 # @cogenta/channels
 
+## 0.3.19
+
+### Patch Changes
+
+- Updated dependencies [[`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214)]:
+  - @cogenta/core@0.14.2
+  - @cogenta/agents@0.11.2
+
 ## 0.3.18
 
 ### Patch Changes

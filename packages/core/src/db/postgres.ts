@@ -1,6 +1,13 @@
 import type { Driver, HealthReport } from '../drivers/index.js'
 import { CogentaError } from '../errors/index.js'
-import { type CompiledQuery, compile, isWrite, returnsRows, type SqlFragment } from './dialect.js'
+import {
+  type CompiledQuery,
+  compile,
+  isWrite,
+  returnsRows,
+  type SqlFragment,
+  withIdempotentDdl,
+} from './dialect.js'
 import type {
   DatabaseConfig,
   DatabaseHandle,
@@ -78,9 +85,12 @@ function executorFor(connection: PostgresSql): SqlExecutor {
       executor.execute<TRow>(compile(fragment, 'postgres')),
 
     execute: async <TRow>(
-      { text, params }: CompiledQuery,
+      { text: requested, params }: CompiledQuery,
       options?: ExecuteOptions,
     ): Promise<QueryResult<TRow>> => {
+      // An additive DDL statement that may already have run is sent with its
+      // `if not exists`, so the server log carries no error for it.
+      const text = withIdempotentDdl(requested)
       try {
         const pending = connection.unsafe(text, params)
         const result = options?.asArrays === true ? await pending.values() : await pending

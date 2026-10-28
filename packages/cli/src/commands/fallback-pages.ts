@@ -208,10 +208,13 @@ export const FALLBACK_PAGE_FLOOR_CSS = `:where(.cg-fallback){box-sizing:border-b
 :where(.cg-fallback__steps) li::before{content:counter(cg-step, decimal-leading-zero);color:color-mix(in srgb, currentColor 72%, transparent);font-family:var(--cogenta-font-sans);font-weight:600;font-variant-numeric:tabular-nums}`
 
 /** Everything the site chrome needs, minus what this module writes itself. */
-export type FallbackPageOptions = Omit<PageChromeOptions, 'headHtml' | 'bodyHtml'>
+export type FallbackPageOptions = Omit<PageChromeOptions, 'headHtml' | 'bodyHtml'> & {
+  /** Where the search form posts: `/en/search` on the English side of a bilingual site. `/search` when absent. */
+  readonly searchAction?: string
+}
 
-function searchForm(s: Readonly<Record<string, string>>): string {
-  return `<form class="cg-search__form cg-fallback__search" action="/search" method="get" role="search">
+function searchForm(s: Readonly<Record<string, string>>, action: string): string {
+  return `<form class="cg-search__form cg-fallback__search" action="${escapeHtmlAttribute(action)}" method="get" role="search">
 <label for="cg-fallback-q">${escapeHtmlText(s['searchLabel'] ?? '')}</label>
 <input id="cg-fallback-q" type="search" name="q" placeholder="${escapeHtmlAttribute(s['searchPlaceholder'] ?? '')}" required>
 <button type="submit">${escapeHtmlText(s['searchButton'] ?? '')}</button>
@@ -252,8 +255,8 @@ export function renderFallbackNotFoundPage(
 <p class="cg-fallback__eyebrow">${escapeHtmlText(s['notFoundEyebrow'] ?? '')}</p>
 <h1 class="cg-fallback__title" id="cg-fallback-title">${escapeHtmlText(s['notFoundTitle'] ?? '')}</h1>
 <p class="cg-fallback__body">${escapeHtmlText(s['notFoundBody'] ?? '')}</p>
-<p class="cg-fallback__actions"><a class="cg-action cg-fallback__primary" data-emphasis="primary" href="/">${escapeHtmlText(s['home'] ?? '')}</a></p>
-${searchForm(s)}
+<p class="cg-fallback__actions"><a class="cg-action cg-fallback__primary" data-emphasis="primary" href="${escapeHtmlAttribute(options.homeHref ?? '/')}">${escapeHtmlText(s['home'] ?? '')}</a></p>
+${searchForm(s, options.searchAction ?? '/search')}
 </section>`,
   )
 }

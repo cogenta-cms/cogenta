@@ -9,7 +9,10 @@ import { createSchemaTables, dropSchemaTables } from '../../src/store/tables.js'
 import type { TaxonomyStore } from '../../src/store/taxonomy-store.js'
 import { createTaxonomyStore } from '../../src/store/taxonomy-store.js'
 import { countTaxonomyUsage } from '../../src/store/taxonomy-usage.js'
-import { postgresRefusingEveryStatement } from '../helpers/postgres-like.js'
+import {
+  postgresRefusingEveryStatement,
+  postgresRejectingNulBytes,
+} from '../helpers/postgres-like.js'
 
 export interface TaxonomyHarness {
   readonly db: DatabaseHandle
@@ -148,6 +151,16 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
           expect(await store.read(id)).toBeNull()
         },
       )
+
+      it('reads a slug holding a NUL byte as no term, without sending it to the database', async () => {
+        // `/categorie/%00`: Postgres rejects a NUL byte in a text parameter.
+        const store = createTaxonomyStore({
+          db: postgresRejectingNulBytes(db),
+          taxonomy: category,
+        })
+
+        expect(await store.bySlug('a\u0000b')).toBeNull()
+      })
 
       it('refuses to nest a term of a flat taxonomy', async () => {
         const root = await keywords.create({ slug: 'vegan', labels: { en: 'Vegan' } })

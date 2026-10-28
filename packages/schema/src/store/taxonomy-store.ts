@@ -8,7 +8,7 @@ import {
 } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
 import type { TaxonomyDefinition, TaxonomyTerm } from '../types.js'
-import { isStorableId } from './columns.js'
+import { isStorableId, isStorableText } from './columns.js'
 import { joinFragments, valueList } from './fragments.js'
 import { taxonomyTable } from './naming.js'
 import { assertDepth, childPath, depthOf, isBelow, isWithin, rebasedPath } from './taxonomy-path.js'
@@ -304,6 +304,8 @@ export function createTaxonomyStore(options: TaxonomyStoreOptions): TaxonomyStor
     },
 
     bySlug: async (slug) => {
+      // A slug Postgres cannot hold names no term: see `isStorableText`.
+      if (!isStorableText(slug)) return null
       const found = await db.query<Row>(sql`select * from ${table} where ${slugColumn} = ${slug}`)
       const row = found.rows[0]
       return row === undefined ? null : toTerm(row)

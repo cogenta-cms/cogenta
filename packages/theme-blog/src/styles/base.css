@@ -875,6 +875,14 @@ img {
   color: var(--cg-panel-muted);
 }
 
+/* The Cogenta mark is dark-blue artwork and the footer is an ink panel in
+   both schemes, so it vanished (dark blue on near-black). It is drawn as the
+   panel's own foreground instead: a silhouette the colour of the text beside it. */
+.cg-site-footer__brand-logo {
+  filter: brightness(0) invert(1);
+  opacity: 0.82;
+}
+
 /* The name once more, across the whole width: a signature, not a heading
    (hidden from assistive technology, and never a link). */
 .cg-site-footer__name {

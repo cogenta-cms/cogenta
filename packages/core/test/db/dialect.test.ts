@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { compile, encodeValue, identifier, sql, unsafeRaw } from '../../src/db/dialect.js'
+import {
+  compile,
+  encodeValue,
+  identifier,
+  sql,
+  unsafeRaw,
+  withIdempotentDdl,
+} from '../../src/db/dialect.js'
 import type { DatabaseDialect } from '../../src/db/types.js'
 
 const dialects: DatabaseDialect[] = ['postgres', 'mysql', 'sqlite']
@@ -95,5 +102,43 @@ describe('encodeValue — the differences that leak', () => {
 
   it.each(dialects)('renders bigint as text on %s, since JSON and drivers lose it', (dialect) => {
     expect(encodeValue(9_007_199_254_740_993n, dialect)).toBe('9007199254740993')
+  })
+})
+
+describe('withIdempotentDdl — additive DDL that may already have run', () => {
+  it('adds `if not exists` to a column added by `alter table`, keeping every other word', () => {
+    expect(withIdempotentDdl('alter table "users" add column "bio" text')).toBe(
+      'alter table "users" add column if not exists "bio" text',
+    )
+    expect(
+      withIdempotentDdl(
+        "ALTER TABLE t\n  ADD COLUMN a integer,\n  ADD COLUMN b text not null default 'x'",
+      ),
+    ).toBe(
+      "ALTER TABLE t\n  add column if not exists a integer,\n  add column if not exists b text not null default 'x'",
+    )
+  })
+
+  it('adds `if not exists` to an index, unique or not, and never to a nameless one', () => {
+    expect(withIdempotentDdl('create index "cogenta_sessions_user" on "s" ("user_id")')).toBe(
+      'create index if not exists "cogenta_sessions_user" on "s" ("user_id")',
+    )
+    expect(withIdempotentDdl('  create unique index concurrently "u" on "s" ("a")')).toBe(
+      '  create unique index concurrently if not exists "u" on "s" ("a")',
+    )
+    expect(withIdempotentDdl('create index on "s" ("a")')).toBe('create index on "s" ("a")')
+  })
+
+  it('leaves a statement that already says it, and every other statement, untouched', () => {
+    const untouched = [
+      'alter table t add column if not exists a text',
+      'create index if not exists i on t (a)',
+      'alter table t drop column a',
+      'alter table t add constraint c foreign key (a) references u (id)',
+      'create table if not exists t (id text)',
+      "insert into notes (body) values ('alter table t add column a text')",
+      "select 'create index i on t (a)'",
+    ]
+    for (const text of untouched) expect(withIdempotentDdl(text)).toBe(text)
   })
 })

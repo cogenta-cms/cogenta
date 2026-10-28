@@ -9,6 +9,7 @@ import {
 } from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
 import type { WidgetAreas } from '@cogenta/theme-kit'
+import { homePathFor, languageSwitcher, searchPathFor } from './locale-paths.js'
 import type { SeoRenderDefaults } from './seo.js'
 import {
   type BrandingSettings,
@@ -66,6 +67,12 @@ export interface SearchPageOptions {
   readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
   /** Widget areas already resolved for this page (L30). */
   readonly widgets?: WidgetAreas
+  /**
+   * The language of this page: the one the visitor searches in (`/en/search`),
+   * defaulting to the site's. Results, strings, chrome and the form's own
+   * address all follow it.
+   */
+  readonly locale?: string
 }
 
 interface ResolvedHit {
@@ -196,8 +203,8 @@ function searchPageStrings(locale: string): SearchPageStrings {
 }
 
 /** The form on its own, so an empty query still gets a usable page. */
-function searchForm(query: string, strings: SearchPageStrings): string {
-  return `<form class="cg-search__form" action="/search" method="get" role="search">
+function searchForm(query: string, strings: SearchPageStrings, action: string): string {
+  return `<form class="cg-search__form" action="${escapeHtmlAttribute(action)}" method="get" role="search">
 <label for="cg-search-q">${escapeHtmlText(strings.search)}</label>
 <input id="cg-search-q" type="search" name="q" value="${escapeHtmlAttribute(query)}" required>
 <button type="submit">${escapeHtmlText(strings.search)}</button>
@@ -244,7 +251,8 @@ export async function renderSearchPage(
   context: AccessContext,
 ): Promise<string> {
   const trimmed = query.trim()
-  const strings = searchPageStrings(options.site.defaultLocale)
+  const locale = options.locale ?? options.site.defaultLocale
+  const strings = searchPageStrings(locale)
 
   let results: readonly ResolvedHit[] = []
   let failure: string | null = null
@@ -255,7 +263,11 @@ export async function renderSearchPage(
 
   if (trimmed.length > 0 && !tooShort) {
     const response = await options.router.handle(
-      { method: 'GET', path: '/api/search', query: { q: trimmed } },
+      {
+        method: 'GET',
+        path: '/api/search',
+        query: options.site.locales.length > 1 ? { q: trimmed, locale } : { q: trimmed },
+      },
       context,
     )
     if (response.status === 200) {
@@ -286,7 +298,7 @@ export async function renderSearchPage(
         ? `<p class="cg-search__empty">${escapeHtmlText(strings.tooShort(MIN_TOKEN_LENGTH))}</p>`
         : trimmed.length === 0
           ? ''
-          : resultList(results, options.site.defaultLocale, strings)
+          : resultList(results, locale, strings)
 
   // The real site chrome (`renderPageChrome`, `theme-render.ts`) — the same
   // skip link, header and footer every collection page renders, not a
@@ -297,13 +309,18 @@ export async function renderSearchPage(
   return renderPageChrome(
     {
       site: options.site,
-      locale: options.site.defaultLocale,
+      locale,
+      homeHref: homePathFor(locale, options.site, options.collections),
+      languages: languageSwitcher(locale, options.site, options.collections, (target) => {
+        const path = searchPathFor(target, options.site, options.collections)
+        return trimmed.length === 0 ? path : `${path}?q=${encodeURIComponent(trimmed)}`
+      }),
       styles: options.styles,
       headHtml: `<title>${heading} — ${escapeHtmlText(options.site.name)}</title>
 <meta name="robots" content="noindex, follow" />`,
       bodyHtml: `<main class="cg-main cg-search-page" id="cg-main">
 <h1 class="cg-page__title">${heading}${count}</h1>
-${searchForm(trimmed, strings)}
+${searchForm(trimmed, strings, searchPathFor(locale, options.site, options.collections))}
 ${main}
 </main>
 <style>${SEARCH_PAGE_FLOOR_CSS}</style>`,

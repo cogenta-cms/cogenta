@@ -441,6 +441,15 @@ import {
   type SecurityConfig,
 } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
+import {
+  homePathFor,
+  isLocaleRouted,
+  languageSwitcher,
+  localeOfPath,
+  localePrefix,
+  searchPathFor,
+  termArchivePathFor,
+} from './locale-paths.js'
 import { createMcpHttpEndpoint, type McpHttpEndpoint, mcpConnectionInfo } from './mcp-http.js'
 import { MCP_API_KEY_ENV } from './mcp-tools.js'
 import { selectMediaImageProcessor } from './media-images.js'
@@ -475,6 +484,7 @@ import {
 } from './plugin-sandbox.js'
 import { loadPluginStylesheets, pluginStylesheetPath } from './plugin-styles.js'
 import { createProbeHandler } from './probes.js'
+import { hasControlCharacter, pathHasControlCharacter } from './request-path.js'
 import { createSampleDataEngine } from './sample-data.js'
 import { renderSearchPage } from './search-page.js'
 import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
@@ -520,10 +530,12 @@ import {
   renderDraftPage,
   renderMaintenancePage,
   renderRequestedPage,
+  renderRequestedPageOrRedirect,
   renderThemeGalleryPreview,
   resolveEntry,
   type SiteIdentityMedia,
   STYLESHEET_PATH,
+  stylesheetDigest,
 } from './theme-render.js'
 import {
   checkThemeDeployment,
@@ -1137,6 +1149,8 @@ export interface Site {
   readonly resolveTermArchive: (
     taxonomyName: string,
     termSlug: string,
+    /** The language of the page: the labels and the entries listed are its own. */
+    locale?: string,
   ) => Promise<TermArchiveResolution | null>
   /** `/archive/author/{slug}` → the author and their archive (L37), or `null` when the slug names none. */
   readonly resolveAuthorArchive: (slug: string) => Promise<AuthorArchiveResolution | null>
@@ -2409,7 +2423,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
 
     return {
       label: termLabel(term, locale),
-      route: `/${encodeURIComponent(taxonomy.name)}/${encodeURIComponent(term.slug)}`,
+      route: termArchivePathFor(
+        taxonomy.name,
+        term.slug,
+        locale ?? site.defaultLocale,
+        site,
+        collections,
+      ),
     }
   }
 
@@ -2437,6 +2457,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const entriesForTerm = async (
     taxonomyName: string,
     termId: string,
+    /** Only the entries written in this language, for a collection routed by locale. */
+    locale?: string,
   ): Promise<readonly { readonly collection: string; readonly id: string }[]> => {
     const dialect = db.dialect
     const idColumn = identifier('id', dialect)
@@ -2451,6 +2473,16 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       )
       if (relevant.length === 0) continue
       const entriesTableName = identifier(entriesTable(collection.name), dialect)
+      // A collection routed by locale has an archive per language; one that
+      // is not keeps every language in the one list.
+      const inLocale =
+        locale !== undefined && site.locales.length > 1 && collection.routing?.locale === true
+          ? sql`and e.${identifier('locale', dialect)} = ${locale}`
+          : sql``
+      const inLocaleBare =
+        locale !== undefined && site.locales.length > 1 && collection.routing?.locale === true
+          ? sql`and ${identifier('locale', dialect)} = ${locale}`
+          : sql``
 
       for (const relation of relevant) {
         if (relation.many) {
@@ -2461,7 +2493,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
                 join ${entriesTableName} e on e.${idColumn} = jt.${identifier('entry_id', dialect)}
                 where jt.${identifier('target_id', dialect)} = ${termId}
                   and e.${deletedAtColumn} is null
-                  and e.${statusColumn} = ${'published'}`,
+                  and e.${statusColumn} = ${'published'}
+                  ${inLocale}`,
           )
           for (const row of rows.rows) {
             found.push({
@@ -2478,7 +2511,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
               from ${entriesTableName}
               where ${column} = ${termId}
                 and ${deletedAtColumn} is null
-                and ${statusColumn} = ${'published'}`,
+                and ${statusColumn} = ${'published'}
+                ${inLocaleBare}`,
         )
         for (const row of rows.rows) {
           found.push({
@@ -2513,6 +2547,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const resolveTermArchive = async (
     taxonomyName: string,
     termSlug: string,
+    locale?: string,
   ): Promise<TermArchiveResolution | null> => {
     const taxonomy = taxonomies.find((candidate) => candidate.name === taxonomyName)
     if (taxonomy === undefined) return null
@@ -2527,13 +2562,18 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
 
     return {
       taxonomyName: taxonomy.name,
+      taxonomyLabel:
+        taxonomy.labels.singular[locale ?? site.defaultLocale] ??
+        taxonomy.labels.singular[site.defaultLocale] ??
+        Object.values(taxonomy.labels.singular)[0] ??
+        taxonomy.name,
       termId: term.id,
-      term: { slug: term.slug, label: termLabel(term) },
+      term: { slug: term.slug, label: termLabel(term, locale) },
       ancestors: lineage
         .filter((ancestor) => ancestor.id !== term.id)
-        .map((ancestor) => ({ slug: ancestor.slug, label: termLabel(ancestor) })),
-      children: children.map((child) => ({ slug: child.slug, label: termLabel(child) })),
-      entries: await entriesForTerm(taxonomy.name, term.id),
+        .map((ancestor) => ({ slug: ancestor.slug, label: termLabel(ancestor, locale) })),
+      children: children.map((child) => ({ slug: child.slug, label: termLabel(child, locale) })),
+      entries: await entriesForTerm(taxonomy.name, term.id, locale),
     }
   }
 
@@ -2545,18 +2585,40 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
    */
   const termSitemapUrls = async (): Promise<readonly SitemapUrl[]> => {
     const urls: SitemapUrl[] = []
+    // One URL per language, each pointing at the others (and at the default
+    // as `x-default`), on a site that routes by locale; one URL otherwise.
+    const languages = isLocaleRouted(site, collections) ? site.locales : [site.defaultLocale]
     for (const taxonomy of taxonomies) {
       for (const term of await taxonomyStoreFor(taxonomy).list()) {
-        const entries = await entriesForTerm(taxonomy.name, term.id)
-        if (entries.length === 0) continue
-        urls.push({
-          loc: new URL(
-            `/${encodeURIComponent(taxonomy.name)}/${encodeURIComponent(term.slug)}`,
-            site.url,
-          ).toString(),
-          changefreq: 'weekly',
-          priority: 0.5,
-        })
+        const addresses = new Map<string, string>()
+        for (const language of languages) {
+          if ((await entriesForTerm(taxonomy.name, term.id, language)).length === 0) continue
+          addresses.set(
+            language,
+            new URL(
+              termArchivePathFor(taxonomy.name, term.slug, language, site, collections),
+              site.url,
+            ).toString(),
+          )
+        }
+        const alternates =
+          addresses.size < 2
+            ? []
+            : [
+                ...[...addresses].map(([hreflang, href]) => ({ hreflang, href })),
+                {
+                  hreflang: 'x-default',
+                  href: addresses.get(site.defaultLocale) ?? [...addresses.values()][0] ?? '',
+                },
+              ]
+        for (const loc of addresses.values()) {
+          urls.push({
+            loc,
+            changefreq: 'weekly',
+            priority: 0.5,
+            ...(alternates.length === 0 ? {} : { alternates }),
+          })
+        }
       }
     }
     return urls
@@ -3805,10 +3867,18 @@ async function commentsForEntry(
  * answers (L36) — the same live reads `/search` makes, so an error page
  * carries the site's own header, footer, logo and theme.
  */
-async function fallbackPageOptions(site: Site): Promise<FallbackPageOptions> {
+async function fallbackPageOptions(
+  site: Site,
+  locale: string = site.site.defaultLocale,
+): Promise<FallbackPageOptions> {
   return {
     site: await renderSiteFor(site),
-    locale: site.site.defaultLocale,
+    locale,
+    homeHref: homePathFor(locale, site.site, site.collections),
+    searchAction: searchPathFor(locale, site.site, site.collections),
+    languages: languageSwitcher(locale, site.site, site.collections, (target) =>
+      homePathFor(target, site.site, site.collections),
+    ),
     styles: await site.resolveStyles(),
     menus: { menuRouter: site.menuRouter },
     branding: () => brandingForSite(site),
@@ -4948,6 +5018,10 @@ async function serveImageVariant(
     jsonError(res, 400, 'QUERY_INVALID', 'An image request must name the media it wants.')
     return
   }
+  if (hasControlCharacter(id)) {
+    jsonError(res, 404, 'MEDIA_NOT_FOUND', 'No image asset with this id.')
+    return
+  }
 
   const asset = await site.mediaStore.get(id)
   if (asset === null || asset.kind !== 'image') {
@@ -5089,6 +5163,29 @@ export function createRequestListener(
     // here and never reaches a route.
     if (applySecurity(req, res, url.pathname, site.security)) return
 
+    // A control character (NUL above all) in the decoded path names nothing
+    // this server serves, and would reach a lookup the database may refuse:
+    // answered here, before any route, the way an unknown URL is.
+    if (pathHasControlCharacter(url.pathname)) {
+      if (url.pathname.startsWith('/api/')) {
+        jsonError(
+          res,
+          400,
+          'QUERY_INVALID',
+          'The request path contains a control character.',
+          'Remove the control characters from the path.',
+        )
+      } else {
+        res
+          .writeHead(404, {
+            'content-type': 'text/plain; charset=utf-8',
+            'cache-control': 'no-store',
+          })
+          .end('Not found')
+      }
+      return
+    }
+
     try {
       const actor = await resolveActor(
         site.auth,
@@ -5204,17 +5301,24 @@ export function createRequestListener(
           return
         }
         const etag = cssEtag(liveStyles)
+        // A page links the sheet by its own digest (`stylesheetHref`): the
+        // address that names the sheet being served can never change its
+        // bytes, so it is kept a year. Any other address (no digest, or an
+        // older page's) is revalidated every time — a skin swap must show up
+        // on the next request, which is the whole promise of contract D's hot
+        // swap — and the ETag makes that a 304 rather than a re-download.
+        const cacheControl =
+          url.searchParams.get('v') === stylesheetDigest(liveStyles)
+            ? 'public, max-age=31536000, immutable'
+            : 'public, max-age=0, must-revalidate'
         if (req.headers['if-none-match'] === etag) {
-          res.writeHead(304, { etag }).end()
+          res.writeHead(304, { etag, 'cache-control': cacheControl }).end()
           return
         }
         res.writeHead(200, {
           'content-type': 'text/css; charset=utf-8',
           etag,
-          // Revalidate every time: a skin swap must show up on the next
-          // request, which is the whole promise of contract D's hot swap. The
-          // ETag makes that revalidation a 304 rather than a re-download.
-          'cache-control': 'public, max-age=0, must-revalidate',
+          'cache-control': cacheControl,
         })
         res.end(liveStyles)
         return
@@ -7353,7 +7457,7 @@ export function createRequestListener(
               collections: site.collections,
               gateway: site.gateway,
               site: await renderSiteFor(site),
-              styles: site.styles,
+              styles: await site.resolveStyles(),
               loadMedia: (ids) => loadRenderMedia(site, ids),
               // Present so the preview's `<body>` stays byte-identical to the
               // published page's (the property `theme-render-fidelity`
@@ -7796,10 +7900,14 @@ export function createRequestListener(
         return
       }
 
-      if (url.pathname === '/search' && req.method === 'GET') {
+      // `/search`, and `/en/search` for another language of the site: the
+      // same page, answering in the language it is asked in.
+      const searchAddress = localeOfPath(url.pathname, site.site, site.collections)
+      if (searchAddress.rest === '/search' && req.method === 'GET') {
         const html = await renderSearchPage(
           url.searchParams.get('q') ?? '',
           {
+            locale: searchAddress.locale,
             router: site.searchRouter,
             gateway: site.gateway,
             collections: site.collections,
@@ -7812,7 +7920,7 @@ export function createRequestListener(
             chromeExtras: (locale: string) => chromeExtrasForSite(site, locale),
             widgets: await widgetsForSite(
               site,
-              { context: { path: url.pathname, kind: 'search', locale: site.site.defaultLocale } },
+              { context: { path: url.pathname, kind: 'search', locale: searchAddress.locale } },
               context,
             ),
             loadMedia: (ids: readonly string[]) => loadRenderMedia(site, ids),
@@ -7987,7 +8095,7 @@ export function createRequestListener(
           url.searchParams.get('reason'),
         )
         let clockDependent = false
-        const html = await renderRequestedPage(
+        const requested = await renderRequestedPageOrRedirect(
           url.pathname,
           {
             ...renderOptions,
@@ -7998,6 +8106,19 @@ export function createRequestListener(
           },
           context,
         )
+        // A duplicate address of a page (`/home`, `/fr/…`, a trailing slash)
+        // moves permanently to the one it has, query string kept.
+        if (requested?.kind === 'redirect' && (req.method === 'GET' || req.method === 'HEAD')) {
+          res.writeHead(301, {
+            location: `${requested.location}${url.search}`,
+            // Never loosened for a request with credentials: `applySecurity`
+            // already made that one `private, no-store`.
+            ...(hasCredentials(req) ? {} : { 'cache-control': 'public, max-age=3600' }),
+          })
+          res.end()
+          return
+        }
+        const html = requested?.kind === 'page' ? requested.html : null
         if (html !== null) {
           res.writeHead(200, {
             'content-type': 'text/html; charset=utf-8',
@@ -8025,11 +8146,16 @@ export function createRequestListener(
         // `TaxonomyDefinition` no routing, on purpose) for a feature that
         // does not need one.
         {
-          const archiveMatch = /^\/([^/]+)\/([^/]+)$/u.exec(url.pathname)
+          // `/{taxonomy}/{term}`, and `/en/{taxonomy}/{term}` for another
+          // language of the site: the archive of that language's entries,
+          // with that language's labels.
+          const archiveAddress = localeOfPath(url.pathname, site.site, site.collections)
+          const archiveMatch = /^\/([^/]+)\/([^/]+)$/u.exec(archiveAddress.rest)
           if (archiveMatch !== null) {
             const resolution = await site.resolveTermArchive(
               decodeURIComponent(archiveMatch[1] as string),
               decodeURIComponent(archiveMatch[2] as string),
+              archiveAddress.locale,
             )
             if (resolution !== null) {
               const requested = Number.parseInt(url.searchParams.get('page') ?? '1', 10)
@@ -8037,6 +8163,7 @@ export function createRequestListener(
                 resolution,
                 Number.isFinite(requested) ? requested : 0,
                 {
+                  locale: archiveAddress.locale,
                   collections: site.collections,
                   gateway: site.gateway,
                   site: await renderSiteFor(site),
@@ -8054,7 +8181,7 @@ export function createRequestListener(
                       context: {
                         path: url.pathname,
                         kind: 'taxonomy',
-                        locale: site.site.defaultLocale,
+                        locale: archiveAddress.locale,
                         taxonomy: resolution.taxonomyName,
                         ...(resolution.termId === undefined ? {} : { termId: resolution.termId }),
                       },
@@ -8289,8 +8416,13 @@ export function createRequestListener(
         // The guard matters: without it, a site whose 404 page is missing (or
         // whose `notFoundPath` is itself unroutable) would ask for it again
         // for every unmatched URL forever. One extra lookup, never two.
-        if (url.pathname !== site.site.notFoundPath) {
-          const notFound = await renderRequestedPage(site.site.notFoundPath, renderOptions, context)
+        // On the other side of a bilingual site (`/en/nope`) the page is the
+        // one of that language: its own 404 entry if it has one, the host's
+        // page in that language otherwise — never the default language's.
+        const missing = localeOfPath(url.pathname, site.site, site.collections)
+        const notFoundAddress = `${localePrefix(missing.locale, site.site, site.collections)}${site.site.notFoundPath}`
+        if (url.pathname !== notFoundAddress) {
+          const notFound = await renderRequestedPage(notFoundAddress, renderOptions, context)
           if (notFound !== null) {
             res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' })
             res.end(notFound)
@@ -8305,7 +8437,10 @@ export function createRequestListener(
         // `/api/*` call still gets JSON below — a wrong API call is not a
         // page a person is reading.
         if (!url.pathname.startsWith('/api/')) {
-          const html = await renderFallbackNotFoundPage(await fallbackPageOptions(site), context)
+          const html = await renderFallbackNotFoundPage(
+            await fallbackPageOptions(site, missing.locale),
+            context,
+          )
           res.writeHead(404, {
             'content-type': 'text/html; charset=utf-8',
             'cache-control': 'no-store',

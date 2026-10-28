@@ -40,3 +40,53 @@ export function postgresRefusingEveryStatement(db: DatabaseHandle): DatabaseHand
     },
   })
 }
+
+/**
+ * A handle that fails a statement the way Postgres does when a text parameter
+ * holds a NUL byte (`invalid byte sequence for encoding "UTF8": 0x00`), and
+ * runs every other statement on the real engine underneath. `/blog/%00` was a
+ * 500 `DB_UNREACHABLE` from an anonymous URL there and a plain 404 elsewhere.
+ */
+export function postgresRejectingNulBytes(db: DatabaseHandle): DatabaseHandle {
+  const check = (statement: unknown): void => {
+    const values = (statement as { values?: readonly unknown[] }).values ?? []
+    if (values.some((value) => typeof value === 'string' && value.includes('\u0000'))) {
+      throw new CogentaError({
+        code: 'DB_UNREACHABLE',
+        message: 'Postgres rejected a statement: invalid byte sequence for encoding "UTF8": 0x00.',
+        hint: 'The store should not have sent this statement.',
+      })
+    }
+  }
+  const guarded = <T extends SqlExecutor>(target: T): T =>
+    new Proxy(target, {
+      get: (inner, key) => {
+        const value: unknown = Reflect.get(inner, key)
+        if (typeof value !== 'function') return value
+        if (key === 'query' || key === 'execute') {
+          return (statement: unknown) => {
+            check(statement)
+            return (value as (statement: unknown) => unknown).call(inner, statement)
+          }
+        }
+        return value.bind(inner)
+      },
+    })
+  return new Proxy(db, {
+    get: (target, key) => {
+      const value: unknown = Reflect.get(target, key)
+      if (typeof value !== 'function') return value
+      if (key === 'query' || key === 'execute') {
+        return (statement: unknown) => {
+          check(statement)
+          return (value as (statement: unknown) => unknown).call(target, statement)
+        }
+      }
+      if (key === 'transaction') {
+        return (run: (tx: SqlExecutor) => Promise<unknown>, options?: unknown) =>
+          target.transaction((tx) => run(guarded(tx)), options as never)
+      }
+      return value.bind(target)
+    },
+  })
+}

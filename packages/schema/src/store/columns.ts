@@ -91,6 +91,18 @@ export function isStorableId(value: string, dialect: DatabaseDialect): boolean {
   return dialect !== 'postgres' || isMintedId(value)
 }
 
+/**
+ * Whether a string can be compared with a stored text column. Postgres refuses
+ * a NUL byte in any text parameter (`invalid byte sequence`), so a slug read
+ * from `/blog/%00` was a 500 from an anonymous URL; the other engines simply
+ * find no row. No slug, locale or term name a site stores holds a NUL byte, so
+ * a value this refuses equals nothing and the caller answers "no row" without
+ * asking — on every engine, the same answer everywhere.
+ */
+export function isStorableText(value: string): boolean {
+  return !value.includes('\u0000')
+}
+
 export function booleanValue(value: boolean, dialect: DatabaseDialect): boolean | number {
   return dialect === 'postgres' ? value : value ? 1 : 0
 }

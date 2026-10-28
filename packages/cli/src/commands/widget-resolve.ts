@@ -31,6 +31,7 @@ import {
   type WidgetRequestContext,
   type WidgetSettings,
 } from '@cogenta/widgets'
+import { searchPathFor, termArchivePathFor } from './locale-paths.js'
 
 /**
  * Turns the site's stored widgets into the finished view models a theme
@@ -711,7 +712,7 @@ export async function resolveWidgetAreas(
         const terms = await deps.terms(taxonomy)
         const usage = await deps.termUsage(taxonomy, terms, access, locale)
         const hrefFor = (term: TaxonomyTerm): string =>
-          `/${encodeURIComponent(taxonomy.name)}/${encodeURIComponent(term.slug)}`
+          termArchivePathFor(taxonomy.name, term.slug, locale, deps.site, deps.collections)
         const labelOf = (term: TaxonomyTerm): string =>
           term.labels[locale] ??
           term.labels[deps.site.defaultLocale] ??
@@ -915,7 +916,7 @@ export async function resolveWidgetAreas(
         return () => ({
           ...base,
           type: 'search',
-          action: '/search',
+          action: searchPathFor(locale, deps.site, deps.collections),
           label: strings.search,
           placeholder: value.placeholder,
           button: strings.searchButton,

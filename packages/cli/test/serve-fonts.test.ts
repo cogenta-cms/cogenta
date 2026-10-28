@@ -210,7 +210,7 @@ describe('a default site never asks a third party for a font', () => {
         const html = await page.text()
         expect(html.length, `${theme} ${path}`).toBeGreaterThan(200)
         expect(html, `${theme} ${path}`).not.toMatch(/googleapis|gstatic/iu)
-        expect(html, `${theme} ${path}`).toContain('href="/_cogenta/styles.css"')
+        expect(html, `${theme} ${path}`).toContain('href="/_cogenta/styles.css?v=')
         for (const referenced of referencedUrls(html)) {
           // Nothing the browser loads for the page may leave the site. (A
           // canonical or alternate link names the site's own address.)

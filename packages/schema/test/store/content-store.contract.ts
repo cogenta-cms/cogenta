@@ -5,7 +5,10 @@ import type { ContentStore } from '../../src/store/store.js'
 import { createContentStore } from '../../src/store/store.js'
 import { createSchemaTables, dropSchemaTables } from '../../src/store/tables.js'
 import type { CollectionDefinition } from '../../src/types.js'
-import { postgresRefusingEveryStatement } from '../helpers/postgres-like.js'
+import {
+  postgresRefusingEveryStatement,
+  postgresRejectingNulBytes,
+} from '../helpers/postgres-like.js'
 
 export interface ContentStoreHarness {
   readonly db: DatabaseHandle
@@ -1176,6 +1179,20 @@ export function runContentStoreContract(
         expect((await articles.list({ translationOf: 'xx' })).items).toEqual([])
         expect((await articles.list({ where: { writer: 'xx' } })).items).toEqual([])
         expect(await articles.read('xx')).toBeNull()
+      })
+
+      it('lists nothing, rather than failing, for a text filter or locale holding a NUL byte', async () => {
+        // `/blog/%00` reaches the slug lookup as "\u0000": Postgres rejects a NUL
+        // byte in a text parameter, so the store must not send the statement.
+        const store = createContentStore({
+          db: postgresRejectingNulBytes(db),
+          now: () => clock,
+          defaultLocale: 'fr',
+          siblings: schema,
+          collection: article,
+        })
+        expect((await store.list({ where: { slug: 'a\u0000b' } })).items).toEqual([])
+        expect((await store.list({ locale: 'f\u0000r' })).items).toEqual([])
       })
 
       it('keeps an id an importer chose readable wherever the column is not a uuid', async () => {

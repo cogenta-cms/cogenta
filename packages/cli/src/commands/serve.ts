@@ -475,6 +475,7 @@ import {
 } from './plugin-sandbox.js'
 import { loadPluginStylesheets, pluginStylesheetPath } from './plugin-styles.js'
 import { createProbeHandler } from './probes.js'
+import { hasControlCharacter, pathHasControlCharacter } from './request-path.js'
 import { createSampleDataEngine } from './sample-data.js'
 import { renderSearchPage } from './search-page.js'
 import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
@@ -4948,6 +4949,10 @@ async function serveImageVariant(
     jsonError(res, 400, 'QUERY_INVALID', 'An image request must name the media it wants.')
     return
   }
+  if (hasControlCharacter(id)) {
+    jsonError(res, 404, 'MEDIA_NOT_FOUND', 'No image asset with this id.')
+    return
+  }
 
   const asset = await site.mediaStore.get(id)
   if (asset === null || asset.kind !== 'image') {
@@ -5088,6 +5093,29 @@ export function createRequestListener(
     // cache-control class of this path (L10 task 6). A preflight is answered
     // here and never reaches a route.
     if (applySecurity(req, res, url.pathname, site.security)) return
+
+    // A control character (NUL above all) in the decoded path names nothing
+    // this server serves, and would reach a lookup the database may refuse:
+    // answered here, before any route, the way an unknown URL is.
+    if (pathHasControlCharacter(url.pathname)) {
+      if (url.pathname.startsWith('/api/')) {
+        jsonError(
+          res,
+          400,
+          'QUERY_INVALID',
+          'The request path contains a control character.',
+          'Remove the control characters from the path.',
+        )
+      } else {
+        res
+          .writeHead(404, {
+            'content-type': 'text/plain; charset=utf-8',
+            'cache-control': 'no-store',
+          })
+          .end('Not found')
+      }
+      return
+    }
 
     try {
       const actor = await resolveActor(

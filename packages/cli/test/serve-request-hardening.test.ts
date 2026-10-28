@@ -175,3 +175,24 @@ describe('cogenta serve — malformed input is a client error, not a server one'
     }
   })
 })
+
+describe('cogenta serve — control characters in a path', () => {
+  it('answers 400 to an API path and 404 to a public one holding a NUL byte, then keeps serving', async () => {
+    const server = await startServer(await project(), { registry: activeServers })
+    try {
+      for (const path of ['/api/content/page/%00', '/api/content/%00']) {
+        const response = await fetch(`${server.base}${path}`)
+        expect(response.status, path).toBe(400)
+        expect((await errorOf(response)).code, path).toBe('QUERY_INVALID')
+      }
+      for (const path of ['/%00', '/blog/%00', '/en/a%00', '/categorie/%00', '/etiquette/a%00b']) {
+        expect((await fetch(`${server.base}${path}`)).status, path).toBe(404)
+      }
+      const image = await fetch(`${server.base}/_image?id=%00&w=1`)
+      expect(image.status).toBe(404)
+      expect((await fetch(`${server.base}/api/health`)).status).toBeLessThan(500)
+    } finally {
+      await server.stop()
+    }
+  })
+})

@@ -394,6 +394,9 @@ export function createDatabaseMediaStore(options: DatabaseMediaStoreOptions): Me
     },
 
     get: async (id: string): Promise<MediaAsset | null> => {
+      // No stored id holds a NUL byte, and Postgres rejects one in a text
+      // parameter: `/_image?id=%00` must be "no asset", not a 500.
+      if (id.includes('\u0000')) return null
       await ensureTable()
       const result = await db.query<MediaRow>(sql`select * from ${table} where id = ${id}`)
       const row = result.rows[0]

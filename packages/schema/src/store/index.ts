@@ -44,6 +44,7 @@ export {
   isColumnless,
   isMintedId,
   isStorableId,
+  isStorableText,
   jsonColumn,
   onDeleteClause,
   textColumn,

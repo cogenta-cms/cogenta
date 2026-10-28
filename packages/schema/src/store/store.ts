@@ -18,7 +18,7 @@ import {
   type ReviewState,
   type ReviewTransition,
 } from '../types.js'
-import { isColumnless, isStorableId } from './columns.js'
+import { isColumnless, isStorableId, isStorableText } from './columns.js'
 import { type Cursor, decodeCursor, encodeCursor } from './cursor.js'
 import { type ContentDiff, diffContent } from './diff.js'
 import { joinFragments, valueList } from './fragments.js'
@@ -1616,7 +1616,11 @@ export function createContentStore<TValues extends ContentValues = ContentValues
       }
 
       if (listOptions.locale !== undefined) {
-        predicates.push(sql`${identifier('locale', dialect)} = ${listOptions.locale}`)
+        predicates.push(
+          isStorableText(listOptions.locale)
+            ? sql`${identifier('locale', dialect)} = ${listOptions.locale}`
+            : sql`1 = 0`,
+        )
       }
 
       if (listOptions.translationOf !== undefined) {
@@ -1641,10 +1645,11 @@ export function createContentStore<TValues extends ContentValues = ContentValues
         }
         // A to-one relation is a `uuid` column on Postgres: a value no id could
         // equal selects nothing instead of failing the cast.
+        // A text value Postgres cannot hold (a NUL byte, from `/blog/%00`)
+        // equals no stored value, so it selects nothing too.
         const cannotMatch =
-          definition.kind === 'relation' &&
           typeof value === 'string' &&
-          !isStorableId(value, dialect)
+          (definition.kind === 'relation' ? !isStorableId(value, dialect) : !isStorableText(value))
         predicates.push(
           value === null
             ? sql`${identifier(columnFor(field), dialect)} is null`

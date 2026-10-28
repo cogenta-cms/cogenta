@@ -14,6 +14,10 @@ data:
   COGENTA_BLUEPRINT: {{ .Values.site.blueprint | quote }}
   COGENTA_ADMIN_EMAIL: {{ .Values.site.adminEmail | quote }}
   COGENTA_TRUST_PROXY: {{ .Values.site.trustProxy | quote }}
+  {{- if .Values.site.trustProxyFrom }}
+  COGENTA_TRUST_PROXY_FROM: {{ join "," .Values.site.trustProxyFrom | quote }}
+  {{- end }}
+  COGENTA_SECURITY_HSTS_MAX_AGE: {{ .Values.site.hstsMaxAge | int | quote }}
   COGENTA_STORAGE_DRIVER: {{ .Values.storage.driver | quote }}
   {{- if eq .Values.storage.driver "s3" }}
   COGENTA_STORAGE_BUCKET: {{ .Values.storage.bucket | quote }}

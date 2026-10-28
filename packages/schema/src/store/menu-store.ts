@@ -7,6 +7,7 @@ import {
   sql,
 } from '@cogenta/core'
 import { newId as uuidv7 } from '../id.js'
+import { isStorableId } from './columns.js'
 import { joinFragments } from './fragments.js'
 import { MENU_TABLES } from './menu-tables.js'
 import { isSafeMenuUrl } from './menu-url.js'
@@ -256,11 +257,16 @@ export function createMenuStore(options: MenuStoreOptions): MenuStore {
   }
 
   async function menuRowOf(tx: SqlExecutor, id: string): Promise<Row | null> {
+    // An id that is not shaped like one `newId()` mints cannot name a row, and
+    // Postgres would throw on the cast (a 500 from an anonymous URL) where the
+    // other engines answer "no row": see `isStorableId`.
+    if (!isStorableId(id, dialect)) return null
     const found = await tx.query<Row>(sql`select * from ${menus} where ${idColumn} = ${id}`)
     return found.rows[0] ?? null
   }
 
   async function itemRowOf(tx: SqlExecutor, id: string): Promise<Row | null> {
+    if (!isStorableId(id, dialect)) return null
     const found = await tx.query<Row>(sql`select * from ${items} where ${idColumn} = ${id}`)
     return found.rows[0] ?? null
   }

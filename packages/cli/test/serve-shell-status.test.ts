@@ -1,10 +1,11 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createLogger, createSqliteHandle, getCoreVersion } from '@cogenta/core'
+import { createLogger, createSqliteHandle } from '@cogenta/core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runServe } from '../src/commands/serve.js'
 import { createOutput } from '../src/output.js'
+import { getCliVersion } from '../src/version.js'
 
 /**
  * `GET /api/shell-status` (fiche 35 task 3), reachable through a real
@@ -173,7 +174,7 @@ describe('the shell status route, end to end', () => {
       reviewPending: null,
       commentsPending: null,
       formSubmissionsUnread: null,
-      cogentaVersion: getCoreVersion(),
+      cogentaVersion: getCliVersion(),
     })
   })
 

@@ -16,6 +16,8 @@ site:
   blueprint: blog
   adminEmail: admin@example.com
   trustProxy: "off" # Set to the actual trusted ingress hop count, or cloudflare.
+  trustProxyFrom: [] # Addresses/CIDRs the proxy connects from, e.g. ["10.42.0.0/16"] on k3s.
+  hstsMaxAge: 0 # Seconds of Strict-Transport-Security on HTTPS; 0 disables (max 63072000).
 existingSecret: "" # auth-signing-key, preview-signing-key, admin-password, database-url
 secretChecksum: "" # Bump to restart pods after externally managed secret changes.
 secrets:
@@ -69,6 +71,7 @@ extraEnv: [] # Shared by bootstrap and serve. Use valueFrom for secrets.
 extraEnvFrom: [] # Shared by bootstrap and serve. Secret references only.
 extraVolumes: []
 extraVolumeMounts: []
+extraObjects: [] # Extra manifests (maps or strings) rendered with tpl, e.g. a redirect Middleware.
 service:
   port: 80
   annotations: {}

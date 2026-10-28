@@ -1,9 +1,9 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { getCoreVersion } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
 import { afterEach, describe, expect, it } from 'vitest'
+import { getCliVersion } from '../src/version.js'
 import { makePng } from './helpers/png.js'
 import { createUser, loginWithMfaSetup, startServer } from './helpers/serve-harness.js'
 
@@ -130,7 +130,7 @@ describe('cogenta serve — footer branding (fiche L21 task 8)', () => {
       // Fiche 22 tâche 8, part 4: the real installed version, next to the
       // credit — never a hardcoded string here, since a version bump must
       // not require touching this test.
-      expect(html).toContain(`cg-site-footer__version">v${getCoreVersion()}<`)
+      expect(html).toContain(`cg-site-footer__version">v${getCliVersion()}<`)
 
       const logo = await fetch(`${server.base}/_cogenta/logo-cogenta.png`)
       expect(logo.status).toBe(200)

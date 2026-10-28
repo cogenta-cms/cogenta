@@ -166,6 +166,46 @@ class ChartBehavior(unittest.TestCase):
         namespace = app_policy["spec"]["ingress"][0]["from"][0]["namespaceSelector"]["matchLabels"]
         self.assertEqual(namespace["kubernetes.io/metadata.name"], "kube-system")
 
+    def test_backup_waits_for_the_database_before_dumping_and_fails_loudly_when_it_never_answers(self):
+        # A brand-new pod is refused by the PostgreSQL NetworkPolicy for its first
+        # seconds; a dump started immediately fails every Job attempt.
+        documents = render({"backup": {"enabled": True}})
+        script = resource(documents, "CronJob")["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["args"][0]
+        self.assertIn("pg_isready", script)
+        self.assertLess(script.index("pg_isready"), script.index("pg_dump -Fc"))
+        self.assertLess(script.index("pg_isready"), script.index("umask 077"))
+        self.assertIn("sleep 2", script)
+        self.assertIn("exit 1", script)
+        self.assertIn("60", script)
+
+    def test_hsts_and_proxy_trust_reach_the_application_through_the_configmap(self):
+        data = resource(render(), "ConfigMap")["data"]
+        self.assertEqual(data["COGENTA_SECURITY_HSTS_MAX_AGE"], "0")
+        self.assertNotIn("COGENTA_TRUST_PROXY_FROM", data)
+        data = resource(render({"site": {"hstsMaxAge": 31536000, "trustProxy": "1", "trustProxyFrom": ["10.42.0.0/16", "fd00::/8"]}}), "ConfigMap")["data"]
+        self.assertEqual(data["COGENTA_SECURITY_HSTS_MAX_AGE"], "31536000")
+        self.assertEqual(data["COGENTA_TRUST_PROXY"], "1")
+        self.assertEqual(data["COGENTA_TRUST_PROXY_FROM"], "10.42.0.0/16,fd00::/8")
+
+    def test_extra_objects_are_rendered_with_tpl_and_default_to_nothing(self):
+        baseline = [item["kind"] for item in render()]
+        self.assertNotIn("Middleware", baseline)
+        documents = render({"extraObjects": [
+            {"apiVersion": "traefik.io/v1alpha1", "kind": "Middleware", "metadata": {"name": "{{ .Release.Name }}-https", "namespace": "{{ .Release.Namespace }}"},
+             "spec": {"redirectScheme": {"scheme": "https", "permanent": True}}},
+            "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ .Release.Name }}-extra\ndata:\n  key: value\n",
+        ]})
+        middleware = resource(documents, "Middleware")
+        self.assertEqual(middleware["metadata"], {"name": "test-https", "namespace": "cms"})
+        extra = next(item for item in documents if item["kind"] == "ConfigMap" and item["metadata"]["name"] == "test-extra")
+        self.assertEqual(extra["data"], {"key": "value"})
+
+    def test_new_values_are_validated(self):
+        for values in [{"site": {"hstsMaxAge": -1}}, {"site": {"hstsMaxAge": 63072001}}, {"site": {"trustProxyFrom": ["proxy.internal"]}}, {"extraObjects": "nope"}]:
+            with self.subTest(values=values):
+                self.assertIn("schema", render(values, success=False))
+        self.assertIn("chart-managed", render({"extraEnv": [{"name": "COGENTA_SECURITY_HSTS_MAX_AGE", "value": "1"}]}, success=False))
+
     def test_ha_profile_enables_scaling_budget_monitoring_and_tls(self):
         documents = render(fixture="ha-s3.yaml")
         deployment = resource(documents, "Deployment")

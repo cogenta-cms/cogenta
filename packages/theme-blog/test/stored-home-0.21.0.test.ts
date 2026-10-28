@@ -125,7 +125,8 @@ describe('a home page stored by 0.21.0, rendered by the magazine theme', () => {
 
   it('gives every block its own markup: nothing empty, no fallback or error marker, no stray undefined', () => {
     for (const section of html.split(/(?=<(?:section|div) class="cg-section)/).slice(1)) {
-      expect(section.replace(/<[^>]*>/g, '').trim().length).toBeGreaterThan(8)
+      const text = [...section.matchAll(/>([^<]*)</g)].map((match) => match[1]).join('')
+      expect(text.trim().length).toBeGreaterThan(8)
     }
     expect(html).not.toMatch(/undefined|\[object|NaN|data-fallback|cg-fallback|unsupported/i)
   })

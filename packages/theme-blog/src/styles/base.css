@@ -570,8 +570,14 @@ img {
   white-space: nowrap;
 }
 
+/* A channel never shrinks into two lines: the bar scrolls instead. */
+.cg-sections .cg-nav__items > li {
+  flex: none;
+}
+
 .cg-sections .cg-nav__items a,
 .cg-sections .cg-nav__items span {
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   min-block-size: 44px;

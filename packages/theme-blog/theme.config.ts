@@ -10,9 +10,9 @@ import { defineTheme } from '@cogenta/render'
  */
 export default defineTheme({
   name: 'blog',
-  version: '1.1.0',
+  version: '1.2.0',
   description:
-    'A personal publication made for reading: Literata and Figtree on a twelve-column grid with a margin, an editorial index grouped by year, hairlines instead of boxes and a designed dark mode.',
+    'A technology and science magazine: a lead story and a latest-first river with timestamps, section and topic bars, numbered reading lists, a solid ink panel, one vermilion accent and a condensed display face over a legible grotesk, a designed dark mode and scroll motion that disappears when the reader asks for less.',
   author: 'Cogenta',
   engine: '^1.0.0',
   blocks: '^2.0.0',

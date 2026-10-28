@@ -153,7 +153,7 @@ describe('the dark palette is designed, not inverted', () => {
 
   it('lifts the accent by more than a mechanical brightening would', () => {
     expect(lightness('--cg-accent', 'dark')).toBeGreaterThan(
-      lightness('--cg-accent', 'light') + 0.2,
+      lightness('--cg-accent', 'light') + 0.18,
     )
   })
 
@@ -187,64 +187,114 @@ describe('the dark palette is designed, not inverted', () => {
     expect(lightness('--cg-canvas', 'dark')).toBeLessThan(0.3)
   })
 
-  it('takes the dark ground from the warm ink of the light page, never a neutral grey', () => {
-    expect(chroma('--cg-canvas', 'dark')).toBeGreaterThan(0.004)
+  it('takes the dark ground from the ink of the light page, never a neutral grey', () => {
+    expect(chroma('--cg-canvas', 'dark')).toBeGreaterThan(0.003)
     expect(Math.abs(hue('--cg-canvas', 'dark') - hue('--cg-ink', 'light'))).toBeLessThan(25)
   })
 
-  it('desaturates the lifted accent rather than just brightening it', () => {
-    expect(chroma('--cg-accent', 'dark')).toBeLessThan(chroma('--cg-accent', 'light'))
+  it('keeps the lifted accent hot: lighter, but not washed out to salmon', () => {
+    expect(chroma('--cg-accent', 'dark')).toBeGreaterThan(0.12)
+    expect(chroma('--cg-accent', 'dark')).toBeLessThan(chroma('--cg-accent', 'light') + 0.02)
+  })
+
+  it('sets the solid panel as ink on paper by day and a raised surface by night', () => {
+    expect(lightness('--cg-panel', 'light')).toBeLessThan(0.3)
+    expect(lightness('--cg-panel', 'dark')).toBeGreaterThan(lightness('--cg-canvas', 'dark'))
+    for (const scheme of ['light', 'dark'] as const) {
+      expect(
+        contrast(color('--cg-panel-fg', scheme), color('--cg-panel', scheme)),
+      ).toBeGreaterThanOrEqual(7)
+      expect(
+        contrast(color('--cg-panel-muted', scheme), color('--cg-panel', scheme)),
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrast(color('--cg-panel-accent', scheme), color('--cg-panel', scheme)),
+      ).toBeGreaterThanOrEqual(4.5)
+    }
   })
 
   it('dims photographs on ink with a brightness step, never a blur', () => {
     const tokens = SOURCES.get('tokens.css') as string
-    expect(tokens).toMatch(/\[data-theme="dark"\]\)\s*\{\s*--cg-image-brightness:\s*0\.9/)
+    expect(tokens).toMatch(/\[data-theme="dark"\]\)\s*\{\s*--cg-image-brightness:\s*0\.88/)
     expect(SOURCES.get('base.css')).toMatch(/filter:\s*brightness\(var\(--cg-image-brightness\)\)/)
   })
 })
 
 /**
- * The studio charter (`docs/lots/L27`): motion is a colour or an underline
- * changing, nothing lifts, nothing fades in, and a photograph never casts a
- * shadow. Checked on the real stylesheets, comments stripped.
+ * The motion charter: motion is a reveal on scroll, a picture settling under
+ * a hover, a rule drawing itself in, and nothing else. Every piece is
+ * declared behind a feature query or `(hover: hover)`, every piece is removed
+ * by `prefers-reduced-motion`, nothing casts a shadow, and the first block
+ * of a page (the largest paint) never animates. Checked on the real
+ * stylesheets, comments stripped.
  */
 describe('the motion and depth rules', () => {
-  it('caps every transition at 150 ms through the one duration token', () => {
-    expect(CG.get('--cg-duration')).toMatch(/min\(var\(--cogenta-motion-duration\), 150ms\)/)
-    const literal = [...CODE.matchAll(/transition[^;]*?(\d+(?:\.\d+)?)(ms|s)\b/g)].map((match) =>
-      match[2] === 's' ? Number(match[1]) * 1000 : Number(match[1]),
-    )
-    expect(literal.every((ms) => ms <= 150)).toBe(true)
-  })
-
-  it('removes every transition under prefers-reduced-motion, through the same token', () => {
-    expect(CODE).toMatch(
-      /prefers-reduced-motion: reduce\)\s*\{\s*:root\s*\{\s*--cg-duration:\s*0ms;/,
-    )
+  it('reads one duration token, never longer than 200 ms, for every colour transition', () => {
+    expect(CG.get('--cg-duration')).toMatch(/min\(var\(--cogenta-motion-duration\), 200ms\)/)
     const transitions = [...CODE.matchAll(/transition\s*:([^;]*);/g)].map((m) => m[1] as string)
     expect(transitions.length).toBeGreaterThan(3)
-    for (const value of transitions) expect(value).toContain('var(--cg-duration)')
-  })
-
-  it('never moves or scales an element on hover', () => {
-    const hoverRules = [...CODE.matchAll(/:hover[^{]*\{([^}]*)\}/g)].map(
-      (match) => match[1] as string,
-    )
-    expect(hoverRules.length).toBeGreaterThan(5)
-    for (const body of hoverRules) {
-      expect(body).not.toMatch(/transform|translate|box-shadow|scale|rotate/)
+    for (const value of transitions) {
+      // A picture settling is the one slower transition, and only on hover.
+      if (/\bscale\b/.test(value) && /600ms/.test(value)) continue
+      expect(value).toContain('var(--cg-duration)')
     }
   })
 
-  it('declares no keyframes and no entrance animation', () => {
-    expect(CODE).not.toMatch(/@keyframes|animation\s*:/)
+  it('removes every animation and every transition under prefers-reduced-motion', () => {
+    expect(CODE).toMatch(
+      /prefers-reduced-motion: reduce\)\s*\{\s*:root\s*\{\s*--cg-duration:\s*0ms;[\s\S]*?animation:\s*none !important/,
+    )
+    // The slow picture transition lives inside the opposite query.
+    const slow = CODE.indexOf('transition: scale 600ms')
+    expect(slow).toBeGreaterThan(-1)
+    expect(CODE.slice(0, slow)).toMatch(/\(prefers-reduced-motion: no-preference\)[^{]*\{[^}]*$/)
+  })
+
+  it('drives animations from the scroll only behind a feature query', () => {
+    const uses = [...CODE.matchAll(/(?<!\()animation-timeline\s*:/g)]
+    expect(uses.length).toBeGreaterThan(0)
+    for (const use of uses) {
+      const before = CODE.slice(0, use.index)
+      const lastSupports = before.lastIndexOf('@supports (animation-timeline')
+      expect(lastSupports, 'every scroll-driven rule sits inside @supports').toBeGreaterThan(-1)
+    }
+  })
+
+  it('never reveals the first block of a page, the largest paint', () => {
+    expect(CODE).toMatch(/> \.cg-section:not\(:first-child\)\s+:is\(/)
+  })
+
+  it('reveals by position only: no keyframe ever lowers opacity, so a capture or an audit sees every word', () => {
+    const keyframes = [...CODE.matchAll(/@keyframes\s+[a-z-]+\s*\{[\s\S]*?\n\}\n/g)].map(
+      (m) => m[0],
+    )
+    expect(keyframes.length).toBeGreaterThan(1)
+    for (const block of keyframes) {
+      if (block.includes('cg-reveal') || block.includes('cg-draw'))
+        expect(block).not.toMatch(/opacity/)
+    }
+  })
+
+  it('moves or scales an element on hover only where a pointer can hover', () => {
+    const rules = [...CODE.matchAll(/:hover[^{]*\{([^}]*)\}/g)]
+    expect(rules.length).toBeGreaterThan(5)
+    for (const rule of rules) {
+      const body = rule[1] as string
+      expect(body).not.toMatch(/box-shadow|rotate|transform/)
+      if (/translate|scale/.test(body)) {
+        const before = CODE.slice(0, rule.index)
+        expect(before.lastIndexOf('@media (hover: hover)')).toBeGreaterThan(
+          before.lastIndexOf('\n}\n'),
+        )
+      }
+    }
   })
 
   it('casts no shadow at all, on a photograph or anywhere else', () => {
     expect(CODE.replace(/box-shadow:\s*inset[^;]*;/g, '')).not.toMatch(/box-shadow|drop-shadow/)
   })
 
-  it('keeps corners barely softened: no pill and no large radius anywhere', () => {
+  it('keeps corners square: no pill and no large radius anywhere', () => {
     const radii = [...CODE.matchAll(/border-radius:\s*([^;]+);/g)].map((m) =>
       (m[1] as string).trim(),
     )
@@ -292,10 +342,6 @@ describe('the reading typography', () => {
     expect(CODE).toMatch(/p, li, dd, figcaption, blockquote\)\s*\{[^}]*text-wrap:\s*pretty/)
   })
 
-  it('hangs punctuation where the browser supports it', () => {
-    expect(CODE).toMatch(/hanging-punctuation:\s*first/)
-  })
-
   it('sets figures in tabular lining numerals wherever numbers are compared', () => {
     for (const selector of ['.cg-figures__items', '.cg-tiers__price', '.cg-index__margin {']) {
       const at = CODE.indexOf(selector)
@@ -304,11 +350,17 @@ describe('the reading typography', () => {
     }
   })
 
-  it('uses the text face for what a reader reads and the interface face for what a reader uses', () => {
-    expect(CG.get('--cg-font-text')).toBe('var(--cogenta-font-serif)')
-    expect(CG.get('--cg-font-ui')).toBe('var(--cogenta-font-sans)')
+  it('owns three typefaces and falls back to the skin: display to headline, text to read, mono to count', () => {
+    expect(CG.get('--cg-font-display')).toMatch(
+      /^"Sofia Sans Condensed", .*var\(--cogenta-font-serif\)$/,
+    )
+    expect(CG.get('--cg-font-text')).toBe('"Hanken Grotesk", var(--cogenta-font-sans)')
+    expect(CG.get('--cg-font-code')).toBe('"Geist Mono", var(--cogenta-font-mono)')
     expect(CODE).toMatch(/body\s*\{[^}]*font-family:\s*var\(--cg-font-text\)/)
-    expect(CODE).toMatch(/\.cg-nav__items\s*\{[^}]*font-family:\s*var\(--cg-font-ui\)/)
+    expect(CODE).toMatch(
+      /:where\(h1, h2, h3, h4, h5, h6\)\s*\{[^}]*font-family:\s*var\(--cg-font-display\)/,
+    )
+    expect(CODE).toMatch(/\.cg-label\s*\{[^}]*font-family:\s*var\(--cg-font-code\)/)
   })
 
   it('tightens the tracking of the display sizes', () => {

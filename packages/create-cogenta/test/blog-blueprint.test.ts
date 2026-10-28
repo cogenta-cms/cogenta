@@ -95,12 +95,13 @@ describe('scaffoldSite, blog blueprint', () => {
     expect(packageJson.dependencies['@cogenta/theme-blog']).toBeDefined()
   })
 
-  it('writes its own starting skin, so the theme reads Literata and Figtree from the first render', async () => {
+  it('writes its own starting skin, so the theme reads its three typefaces from the first render', async () => {
     expect(result.skinSource).toBe('preset')
     const tokens = JSON.parse(await readFile(join(targetDir, 'theme.tokens.json'), 'utf8'))
-    expect(tokens.color.accent).toBe('#26426b')
-    expect(tokens.font.serif).toContain('Literata')
-    expect(tokens.font.sans).toContain('Figtree')
+    expect(tokens.color.accent).toBe('#c2310d')
+    expect(tokens.font.serif).toContain('Sofia Sans Condensed')
+    expect(tokens.font.sans).toContain('Hanken Grotesk')
+    expect(tokens.font.mono).toContain('Geist Mono')
   })
 
   it('seeds header, footer and header-action menus, general settings and five photographs', () => {

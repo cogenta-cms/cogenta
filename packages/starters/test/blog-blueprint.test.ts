@@ -198,9 +198,24 @@ describe('blog blueprint, content model and demo writing', () => {
     }
   })
 
-  it('seeds a home page of a featured essay, the index, an epigraph, a shelf, a strip, the subjects and the letter', () => {
+  it('opens the header menu with one link per subject, the topic bar of the theme', () => {
+    const topics = BLOG_MENUS.header.slice(0, BLOG_DEMO_CATEGORIES.length)
+    expect(topics.map((item) => item.label)).toEqual(BLOG_DEMO_CATEGORIES.map((demo) => demo.name))
+    expect(BLOG_MENUS.header.length).toBeGreaterThan(BLOG_DEMO_CATEGORIES.length)
+  })
+
+  it('seeds a home page of a lead story, the river, a pull quote, a rail, a numbered list, the topics and the newsletter band', () => {
     const [home] = buildBlogDemoPages(MEDIA)
     expect(home?.slug).toBe('home')
+    const lists = (home?.blocks ?? []).filter((block) => block._type === 'collectionList')
+    // river (list, titled), rail (grid, titled), ranked (list, titled, muted)
+    expect(lists.map((block) => 'layout' in block && block.layout)).toEqual([
+      'list',
+      'grid',
+      'list',
+    ])
+    expect(lists.every((block) => 'title' in block && block.title !== undefined)).toBe(true)
+    expect(lists.map((block) => block.variant?.background)).toEqual([undefined, undefined, 'muted'])
     expect(home?.blocks.map((block) => block._type)).toEqual([
       'hero',
       'collectionList',
@@ -250,9 +265,10 @@ describe('blog blueprint, content model and demo writing', () => {
     }
   })
 
-  it('links every menu item to a page the blueprint seeds or a route the server provides', () => {
+  it('links every menu item to a page the blueprint seeds, a subject it classifies under or a route the server provides', () => {
     const slugs = new Set(buildBlogDemoPages({}).map((demo) => `/${demo.slug}`))
-    const routes = new Set([...slugs, '/feed.xml'])
+    const subjects = BLOG_DEMO_CATEGORIES.map((demo) => `/category/${demo.slug}`)
+    const routes = new Set([...slugs, ...subjects, '/feed.xml'])
     for (const item of [...BLOG_MENUS.header, ...BLOG_MENUS.footer, BLOG_MENUS.headerAction]) {
       expect(routes.has(item?.url as string), item?.url).toBe(true)
     }
@@ -263,7 +279,8 @@ describe('blog blueprint, content model and demo writing', () => {
       await readFile(new URL('../../theme-blog/tokens.json', import.meta.url), 'utf8'),
     )
     expect(STARTING_SKINS.blog).toEqual(theme)
-    expect(STARTING_SKINS.blog?.font.serif.startsWith("'Literata'")).toBe(true)
-    expect(STARTING_SKINS.blog?.font.sans.startsWith("'Figtree'")).toBe(true)
+    expect(STARTING_SKINS.blog?.font.serif.startsWith("'Sofia Sans Condensed'")).toBe(true)
+    expect(STARTING_SKINS.blog?.font.sans.startsWith("'Hanken Grotesk'")).toBe(true)
+    expect(STARTING_SKINS.blog?.font.mono.startsWith("'Geist Mono'")).toBe(true)
   })
 })

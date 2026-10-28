@@ -8,17 +8,18 @@ import {
   image,
   type RenderContext,
 } from '@cogenta/theme-kit'
-import { section } from '../layout.js'
+import { section, withAttributes } from '../layout.js'
 
 /**
- * The featured essay, opened the way a printed feature opens: the kicker in
- * small capitals under a rule, the title set large across ten columns, then
- * the picture at 3:2 from the text line to the right edge, with the
- * standfirst and the way in waiting in the margin beside it.
+ * The lead story, set the way a magazine opens its front page: the picture
+ * at the left taking seven columns, and a solid ink panel at the right with
+ * the topic label (the block's eyebrow), the headline set large in the
+ * condensed face, the standfirst (the subtitle) and the way in. Without a
+ * picture the panel runs the full width, so the block never keeps an empty
+ * frame. On a narrow screen the picture comes first and the panel under it.
  *
- * Without a picture the standfirst takes the text line under the title, so
- * the block never keeps an empty frame. The picture loads eagerly: this is
- * the one image above the fold.
+ * The picture is the largest paint of the page and is marked as such:
+ * loaded eagerly, fetched with high priority, and never animated.
  */
 export function renderHero(block: HeroBlock, ctx: RenderContext): HtmlElement {
   const media =
@@ -27,11 +28,14 @@ export function renderHero(block: HeroBlock, ctx: RenderContext): HtmlElement {
       : h(
           'div',
           { class: 'cg-hero__media' },
-          image(ctx, block.media, {
-            className: 'cg-hero__image',
-            loading: 'eager',
-            sizes: '(min-width: 64rem) 60vw, 100vw',
-          }),
+          withAttributes(
+            image(ctx, block.media, {
+              className: 'cg-hero__image',
+              loading: 'eager',
+              sizes: '(min-width: 80rem) 46rem, (min-width: 64rem) 58vw, 100vw',
+            }),
+            { fetchpriority: 'high' },
+          ),
         )
   const aside =
     block.subtitle === undefined && (block.actions ?? []).length === 0
@@ -51,15 +55,19 @@ export function renderHero(block: HeroBlock, ctx: RenderContext): HtmlElement {
     'cg-hero',
     { 'data-media': media === null ? 'none' : 'present' },
     'div',
-    block.eyebrow === undefined
-      ? null
-      : h('p', { class: 'cg-hero__eyebrow', 'data-field': 'eyebrow' }, block.eyebrow),
-    heading(
-      blockHeadingTag('hero') ?? 'h1',
-      { class: 'cg-hero__title', 'data-field': 'title' },
-      block.title,
-    ),
-    aside,
     media,
+    h(
+      'div',
+      { class: 'cg-hero__panel' },
+      block.eyebrow === undefined
+        ? null
+        : h('p', { class: 'cg-hero__eyebrow cg-label', 'data-field': 'eyebrow' }, block.eyebrow),
+      heading(
+        blockHeadingTag('hero') ?? 'h1',
+        { class: 'cg-hero__title', 'data-field': 'title' },
+        block.title,
+      ),
+      aside,
+    ),
   )
 }

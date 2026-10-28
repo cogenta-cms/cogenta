@@ -3,10 +3,9 @@ import { type HtmlElement, h, image, type RenderContext } from '@cogenta/theme-k
 import { section } from '../layout.js'
 
 /**
- * An epigraph: the words in the italic of the text face, large, on the text
- * line, with the opening quotation mark hung in the margin so the first
- * letter keeps the column's edge. The attribution follows in the interface
- * face, a small portrait beside it when the block carries one.
+ * A pull quote: the words large in the condensed display face on a solid ink
+ * band, an accent rule at their start. The attribution follows in mono, a
+ * small portrait beside it when the block carries one.
  */
 export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement {
   const hasAttribution =
@@ -21,7 +20,7 @@ export function renderQuote(block: QuoteBlock, ctx: RenderContext): HtmlElement 
     hasAttribution
       ? h(
           'figcaption',
-          { class: 'cg-quote__attribution' },
+          { class: 'cg-quote__attribution cg-label' },
           block.avatar === undefined
             ? null
             : image(ctx, block.avatar, {

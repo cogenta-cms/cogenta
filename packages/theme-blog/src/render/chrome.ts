@@ -13,29 +13,28 @@ import {
 } from '@cogenta/theme-kit'
 
 /**
- * This theme's own header and footer (`theme@1.4`), drawn the way a personal
- * publication draws them: a quiet line at the top and a short colophon at
- * the bottom.
+ * This theme's own header and footer (`theme@1.4`), drawn the way a technology
+ * magazine draws them.
  *
- * Header: the publication's name set in the text face (or its uploaded
- * logo), a few navigation links in small interface type, the `headerAction`
- * as an outlined control with square corners, and the light/dark control
- * last. The header does not follow the reader down the page: nothing stays
- * on screen over the text. Below the breakpoint the links collapse into a
- * panel opened by a CSS-only toggle, a visually hidden checkbox paired with
- * a `<label>`, no `<script>`. The label precedes the `<nav>` so the sibling
- * combinator in `base.css` reaches it; the theme toggle follows the `<nav>`,
- * outside the panel, so appearance can be switched without opening it. On a site
- * with several languages the language switcher (`theme@1.10`) sits just before
- * that control, outside the panel for the same reason.
+ * Header, in two tiers. The masthead is the one sticky element of the site:
+ * the publication's name set large in the condensed display face (or its
+ * uploaded logo), and on the right what a reader uses at any time: the
+ * language switcher (`theme@1.10`), the light/dark control and the
+ * `headerAction` as the one filled button of the page. Under it the section
+ * bar carries the header menu as a row of channels; it scrolls away with the
+ * page, and on a narrow screen it scrolls sideways (a plain overflow, so there
+ * is no menu to open and no `<script>`). A site's menu is whatever its editor
+ * wrote; a blueprint that seeds topics gets a topic bar for free.
  *
- * Footer: the name and `tagline`, the `footerNote` beneath them, the footer
- * navigation, the social profiles with real icons (`renderSocialLinks`),
- * then a legal line under a hairline: the copyright year and the site's
- * name, beside Cogenta's credit (`brandingHtml`, placed exactly once, as
- * received). Footer widget columns (`theme@1.6`), when the site placed any,
- * sit between the two. Every `theme@1.4` field renders only when present, so a host
- * that predates them gets the name and the navigation, nothing broken.
+ * Footer, a solid ink panel: the publication's name and tagline, the
+ * `footerNote`, the invitation (`headerAction` again, then the RSS feed), the
+ * footer navigation, the social profiles with real icons
+ * (`renderSocialLinks`), footer widget columns (`theme@1.6`) when the site
+ * placed any, a legal line beside Cogenta's credit (`brandingHtml`, placed
+ * exactly once, as received), and the name once more, set across the whole
+ * width as the colophon's signature. Every `theme@1.4` field renders only
+ * when present, so a host that predates them gets the name and the navigation,
+ * nothing broken.
  */
 
 function navItems(links: readonly ChromeNavLink[]): string {
@@ -81,15 +80,14 @@ function renderFooterNote(note: string): string {
 
 export function renderChrome(input: ChromeInput): ChromeResult {
   const siteNameText = escapeText(input.site.name)
-  const headerNavList = renderNavList(input.headerNav)
+  const navList = renderNavList(input.headerNav)
   const headerAction = renderHeaderAction(input.headerAction)
-  const hasMenu = headerNavList !== '' || headerAction !== ''
   const mark =
     renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ??
     `<span class="cg-site-header__name">${siteNameText}</span>`
   const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
-  // Several languages (`theme@1.10`): outside the collapsible panel, like the
-  // appearance control, so a reader can change language without opening it.
+  // Several languages (`theme@1.10`): in the masthead, so a reader can change
+  // language from any scroll position.
   const switcher = renderLanguageSwitcher(input.languages, {
     locale: input.locale,
     className: 'cg-lang',
@@ -97,23 +95,14 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   })
   const languageSwitcher = switcher === null ? '' : serialize(switcher)
 
-  const menu = hasMenu
-    ? `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
-      `<label for="cg-nav-toggle" class="cg-nav-toggle-label" aria-hidden="true">` +
-      `<span class="cg-nav-toggle-bar"></span><span class="cg-nav-toggle-bar"></span>` +
-      `</label>` +
-      `<nav class="cg-site-header__nav" id="cg-nav" aria-label="Primary">` +
-      `${headerNavList}${headerAction}` +
-      `</nav>`
-    : ''
-
   const header =
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
     `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
-    `${menu}` +
-    `${languageSwitcher}` +
-    `${themeToggle}` +
-    `</div></header>`
+    `<div class="cg-site-header__tools">${languageSwitcher}${themeToggle}${headerAction}</div>` +
+    `</div></header>` +
+    (navList === ''
+      ? ''
+      : `<nav class="cg-sections" id="cg-nav" aria-label="Primary"><div class="cg-sections__inner">${navList}</div></nav>`)
 
   const tagline =
     input.tagline === undefined
@@ -128,20 +117,29 @@ export function renderChrome(input: ChromeInput): ChromeResult {
   // The copyright year is the year the page is rendered, which is what a
   // legal line on a live site means.
   const year = new Date().getFullYear()
-  // The footer widget columns (`theme@1.6`) sit under the colophon's name and
-  // navigation, above the legal line, on the same hairline rhythm.
   const footerWidgets = renderFooterWidgets(input.widgets, {
     className: 'cg-site-footer__widgets',
     headingLevel: 'h2',
   })
+  // The invitation: the site's own call to action, when it has one, and the
+  // feed every site serves (`/feed.xml`), named by the format's own name.
+  const join =
+    `<div class="cg-site-footer__join">` +
+    (input.headerAction === undefined
+      ? ''
+      : `<a class="cg-action" data-emphasis="primary" href="${escapeAttribute(input.headerAction.href)}">${escapeText(input.headerAction.label)}</a>`) +
+    `<a class="cg-site-footer__feed" href="/feed.xml">RSS</a>` +
+    `</div>`
 
   const footer =
     `<footer class="cg-site-footer"><div class="cg-site-footer__inner">` +
     `<div class="cg-site-footer__top">` +
     `<div class="cg-site-footer__brand">` +
-    `<a class="cg-site-footer__name" href="${escapeAttribute(input.homeHref)}">${siteNameText}</a>` +
     `${tagline}${note}` +
     `</div>` +
+    `${join}` +
+    `</div>` +
+    `<div class="cg-site-footer__grid">` +
     `${
       footerNavList === ''
         ? ''
@@ -154,6 +152,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `<p class="cg-site-footer__legal">© ${year} ${siteNameText}</p>` +
     `<div class="cg-site-footer__branding">${input.brandingHtml}</div>` +
     `</div>` +
+    `<p class="cg-site-footer__name" aria-hidden="true">${siteNameText}</p>` +
     `</div></footer>`
 
   return { header, footer }

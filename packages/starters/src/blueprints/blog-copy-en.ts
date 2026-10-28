@@ -67,6 +67,7 @@ export const BLOG_COPY_EN: BlogCopy = {
     },
     archiveTitle: 'From the archive',
     moreTitle: 'A few more essays',
+    startHereTitle: 'Read these first',
     subjectsTitle: 'What I write about',
     letterTitle: 'The Sunday letter',
     letterText:

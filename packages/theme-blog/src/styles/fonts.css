@@ -13,55 +13,73 @@
  */
 
 @font-face {
-  font-family: 'Figtree';
+  font-family: 'Sofia Sans Condensed';
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 500 900;
   font-display: swap;
-  src: url(/_cogenta/fonts/blog/figtree-normal-latin-ext-bf7828e2.woff2) format('woff2');
+  src: url(/_cogenta/fonts/blog/sofia-sans-condensed-normal-latin-ext-91741065.woff2) format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 @font-face {
-  font-family: 'Figtree';
+  font-family: 'Sofia Sans Condensed';
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 500 900;
   font-display: swap;
-  src: url(/_cogenta/fonts/blog/figtree-normal-latin-4ba7d3d0.woff2) format('woff2');
+  src: url(/_cogenta/fonts/blog/sofia-sans-condensed-normal-latin-a9b02e43.woff2) format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: 'Literata';
+  font-family: 'Hanken Grotesk';
   font-style: italic;
-  font-weight: 300 600;
+  font-weight: 400 700;
   font-display: swap;
-  src: url(/_cogenta/fonts/blog/literata-italic-latin-ext-09e48237.woff2) format('woff2');
+  src: url(/_cogenta/fonts/blog/hanken-grotesk-italic-latin-ext-8f7c62f4.woff2) format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 @font-face {
-  font-family: 'Literata';
+  font-family: 'Hanken Grotesk';
   font-style: italic;
-  font-weight: 300 600;
+  font-weight: 400 700;
   font-display: swap;
-  src: url(/_cogenta/fonts/blog/literata-italic-latin-97bc5aa3.woff2) format('woff2');
+  src: url(/_cogenta/fonts/blog/hanken-grotesk-italic-latin-bb432642.woff2) format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: 'Literata';
+  font-family: 'Hanken Grotesk';
   font-style: normal;
-  font-weight: 300 700;
+  font-weight: 400 700;
   font-display: swap;
-  src: url(/_cogenta/fonts/blog/literata-normal-latin-ext-1160835f.woff2) format('woff2');
+  src: url(/_cogenta/fonts/blog/hanken-grotesk-normal-latin-ext-768af292.woff2) format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 @font-face {
-  font-family: 'Literata';
+  font-family: 'Hanken Grotesk';
   font-style: normal;
-  font-weight: 300 700;
+  font-weight: 400 700;
   font-display: swap;
-  src: url(/_cogenta/fonts/blog/literata-normal-latin-29de894c.woff2) format('woff2');
+  src: url(/_cogenta/fonts/blog/hanken-grotesk-normal-latin-e9201edd.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url(/_cogenta/fonts/blog/geist-mono-normal-latin-ext-1a189eb9.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url(/_cogenta/fonts/blog/geist-mono-normal-latin-684ad5b5.woff2) format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }

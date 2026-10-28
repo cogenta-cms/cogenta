@@ -40,24 +40,36 @@ describe('web fonts', () => {
     expect(offenders).toEqual([])
   })
 
-  it('declares exactly Figtree and Literata, from the site itself', () => {
+  it('declares exactly Sofia Sans Condensed, Hanken Grotesk and Geist Mono, from the site itself', () => {
     expect(DECLARED.length).toBeGreaterThan(0)
     expect(FONTS_CSS).not.toMatch(/googleapis|gstatic|@import/i)
     const families = [...new Set(DECLARED.map((face) => face.family))].sort()
-    expect(families).toEqual(['Figtree', 'Literata'])
+    expect(families).toEqual(['Geist Mono', 'Hanken Grotesk', 'Sofia Sans Condensed'])
   })
 
   it('declares the weights, the italics and the width the stylesheets use', () => {
     const wanted = [
-      { family: 'Figtree', style: 'normal', weight: '400 700' },
-      { family: 'Literata', style: 'normal', weight: '300 700' },
-      { family: 'Literata', style: 'italic', weight: '300 600' },
+      { family: 'Sofia Sans Condensed', style: 'normal', weight: '500 900' },
+      { family: 'Hanken Grotesk', style: 'normal', weight: '400 700' },
+      { family: 'Hanken Grotesk', style: 'italic', weight: '400 700' },
+      { family: 'Geist Mono', style: 'normal', weight: '400 600' },
     ]
     for (const face of wanted) {
       expect(DECLARED, `${face.family} ${face.style} ${face.weight}`).toContainEqual(
         expect.objectContaining(face),
       )
     }
+  })
+
+  it('ships the whole family set in under 300 KiB, and loads only the Latin faces for French', async () => {
+    const { readdirSync, statSync } = await import('node:fs')
+    const dir = fileURLToPath(new URL('../fonts', import.meta.url))
+    const files = readdirSync(dir).filter((name) => name.endsWith('.woff2'))
+    const total = files.reduce((sum, name) => sum + statSync(join(dir, name)).size, 0)
+    expect(total).toBeLessThan(300 * 1024)
+    const latin = files.filter((name) => !name.includes('-latin-ext-'))
+    const latinTotal = latin.reduce((sum, name) => sum + statSync(join(dir, name)).size, 0)
+    expect(latinTotal).toBeLessThan(150 * 1024)
   })
 
   it('imports no font file from a stylesheet other than the entry point', () => {

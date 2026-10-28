@@ -1,7 +1,7 @@
 {
   "name": "@cogenta/theme-blog",
   "version": "0.6.2",
-  "description": "A personal publication theme for Cogenta: Literata and Figtree on a twelve-column grid with a reading margin, an editorial index grouped by year, a designed dark mode, and zero client JavaScript.",
+  "description": "A technology and science magazine theme for Cogenta: a lead story, a latest-first river, section and topic bars, numbered lists, a condensed display face over a legible grotesk, a designed dark mode, CSS-only motion and zero client JavaScript.",
   "license": "MPL-2.0",
   "type": "module",
   "sideEffects": false,

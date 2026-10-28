@@ -132,7 +132,7 @@ Cogenta ne la fait donc pas par défaut : les dix thèmes livrés embarquent leu
 Ce que cela change pour un skin :
 
 - un skin peut nommer **n'importe laquelle des familles embarquées** (Geist, Fraunces,
-  Instrument Sans, Source Serif 4, Literata, Karla, Archivo, IBM Plex, etc.), sur n'importe quel
+  Instrument Sans, Source Serif 4, Hanken Grotesk, Sofia Sans Condensed, Karla, Archivo, IBM Plex, etc.), sur n'importe quel
   thème : le site ajoute alors lui-même les fichiers correspondants ;
 - une famille qui n'est pas embarquée (Playfair Display, par exemple) s'affiche dans la police
   suivante de sa pile — ici Georgia — au lieu d'être demandée à un tiers ;

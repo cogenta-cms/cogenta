@@ -5,19 +5,22 @@ theme makes **no request to a font provider**.
 
 | Family | Style | Subset | Weight | File | Size |
 |---|---|---|---|---|---|
-| Figtree | normal | latin-ext | 400 700 | `figtree-normal-latin-ext-bf7828e2.woff2` | 10.0 KiB |
-| Figtree | normal | latin | 400 700 | `figtree-normal-latin-4ba7d3d0.woff2` | 19.7 KiB |
-| Literata | italic | latin-ext | 300 600 | `literata-italic-latin-ext-09e48237.woff2` | 89.3 KiB |
-| Literata | italic | latin | 300 600 | `literata-italic-latin-97bc5aa3.woff2` | 110.5 KiB |
-| Literata | normal | latin-ext | 300 700 | `literata-normal-latin-ext-1160835f.woff2` | 87.6 KiB |
-| Literata | normal | latin | 300 700 | `literata-normal-latin-29de894c.woff2` | 107.5 KiB |
+| Sofia Sans Condensed | normal | latin-ext | 500 900 | `sofia-sans-condensed-normal-latin-ext-91741065.woff2` | 18.1 KiB |
+| Sofia Sans Condensed | normal | latin | 500 900 | `sofia-sans-condensed-normal-latin-a9b02e43.woff2` | 40.3 KiB |
+| Hanken Grotesk | italic | latin-ext | 400 700 | `hanken-grotesk-italic-latin-ext-8f7c62f4.woff2` | 19.9 KiB |
+| Hanken Grotesk | italic | latin | 400 700 | `hanken-grotesk-italic-latin-bb432642.woff2` | 34.8 KiB |
+| Hanken Grotesk | normal | latin-ext | 400 700 | `hanken-grotesk-normal-latin-ext-768af292.woff2` | 19.1 KiB |
+| Hanken Grotesk | normal | latin | 400 700 | `hanken-grotesk-normal-latin-e9201edd.woff2` | 33.9 KiB |
+| Geist Mono | normal | latin-ext | 400 600 | `geist-mono-normal-latin-ext-1a189eb9.woff2` | 14.4 KiB |
+| Geist Mono | normal | latin | 400 600 | `geist-mono-normal-latin-684ad5b5.woff2` | 22.6 KiB |
 
-Total: 6 files, 424.6 KiB.
+Total: 8 files, 203.0 KiB.
 
 ## Licence
 
-- **Figtree**: SIL Open Font License 1.1, text in `OFL-figtree.txt`
-- **Literata**: SIL Open Font License 1.1, text in `OFL-literata.txt`
+- **Sofia Sans Condensed**: SIL Open Font License 1.1, text in `OFL-sofia-sans-condensed.txt`
+- **Hanken Grotesk**: SIL Open Font License 1.1, text in `OFL-hanken-grotesk.txt`
+- **Geist Mono**: SIL Open Font License 1.1, text in `OFL-geist-mono.txt`
 
 The OFL permits bundling and redistributing these files with this package, as
 long as the licence text travels with them (it does) and the fonts are not sold

@@ -14,7 +14,9 @@ describe('hero, the featured essay', () => {
   })
 
   it('sets the eyebrow as a typographic kicker, a paragraph and never a badge', () => {
-    expect(html()).toContain('<p class="cg-hero__eyebrow" data-field="eyebrow">Start here</p>')
+    expect(html()).toContain(
+      '<p class="cg-hero__eyebrow cg-label" data-field="eyebrow">Start here</p>',
+    )
   })
 
   it('omits the eyebrow entirely when the block has none', () => {
@@ -22,7 +24,7 @@ describe('hero, the featured essay', () => {
     expect(html(block)).not.toContain('cg-hero__eyebrow')
   })
 
-  it('keeps the standfirst and the way in together, in the aside beside the picture', () => {
+  it('keeps the standfirst and the way in together, in the aside of the ink panel', () => {
     expect(html()).toMatch(
       /<div class="cg-hero__aside"><p class="cg-hero__subtitle" data-field="subtitle">[^<]+<\/p><ul class="cg-actions"/,
     )
@@ -33,8 +35,10 @@ describe('hero, the featured essay', () => {
     expect(html(block)).not.toContain('cg-hero__aside')
   })
 
-  it('loads the picture eagerly: it is the one image above the fold', () => {
-    expect(html()).toMatch(/<img class="cg-hero__image"[^>]*loading="eager"/)
+  it('loads the picture eagerly and fetches it first: it is the largest paint of the page', () => {
+    expect(html()).toMatch(
+      /<img class="cg-hero__image"[^>]*loading="eager"[^>]*fetchpriority="high"/,
+    )
     expect(html()).not.toContain('loading="lazy"')
   })
 

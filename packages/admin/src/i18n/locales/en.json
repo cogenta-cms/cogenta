@@ -5972,7 +5972,7 @@
         "description": "A neighbourhood charity: a photograph of the people it works with, impact figures with their context, programmes, a dated events calendar with event pages, and a donation ask in its own yellow."
       },
       "theme-blog": {
-        "description": "A personal publication made for reading: Literata and Figtree on a twelve-column grid with a margin, an editorial index grouped by year, hairlines instead of boxes and a designed dark mode."
+        "description": "A technology and science magazine: a lead story and a latest-first river with timestamps, section and topic bars, numbered reading lists, a solid ink panel, one vermilion accent and a condensed display face over a legible grotesk, a designed dark mode and scroll motion that disappears when the reader asks for less."
       },
       "theme-canonical": {
         "description": "The reference theme: all seventeen blocks, zero client JavaScript, a neutral, accessible default."

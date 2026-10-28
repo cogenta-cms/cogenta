@@ -8,22 +8,28 @@ import {
   nestedHeadingTag,
   type RenderContext,
 } from '@cogenta/theme-kit'
-import { section, sectionHead } from '../layout.js'
+import { ordinal, section, sectionHead } from '../layout.js'
 
 /**
- * A publication's table of contents rather than a grid of tiles: one ruled
- * row per item, its name set in the text face in the margin columns and its
- * description on the text line beside it. A linked item makes its name the
- * link.
+ * A publication's channels rather than a grid of tiles: one ruled cell per
+ * item, a mono ordinal, the name set large in the display face and its
+ * description under it. A linked item makes its name the link, and the whole
+ * cell follows it (a stretched link), so a topic is one target.
  *
- * `icon` is deliberately not drawn. A symbol in a square beside every topic
- * is the pastel-tile pattern this theme exists to avoid, and a reading site
- * names its subjects in words.
+ * `icon` is deliberately not drawn. A symbol in a coloured square beside
+ * every topic is the pastel-tile pattern this theme exists to avoid, and a
+ * magazine names its sections in words.
  */
-function renderItem(item: FeatureItem, ctx: RenderContext, tag: HeadingTag): HtmlElement {
+function renderItem(
+  item: FeatureItem,
+  index: number,
+  ctx: RenderContext,
+  tag: HeadingTag,
+): HtmlElement {
   return h(
     'li',
     { class: 'cg-contents__item' },
+    h('span', { class: 'cg-contents__index cg-label', 'aria-hidden': 'true' }, ordinal(index)),
     heading(
       tag,
       { class: 'cg-contents__title' },
@@ -47,7 +53,7 @@ export function renderFeatureGrid(block: FeatureGridBlock, ctx: RenderContext): 
     h(
       'ul',
       { class: 'cg-contents__items' },
-      block.items.map((item) => renderItem(item, ctx, itemTag)),
+      block.items.map((item, index) => renderItem(item, index, ctx, itemTag)),
     ),
   )
 }

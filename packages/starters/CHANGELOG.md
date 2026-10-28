@@ -1,5 +1,34 @@
 # @cogenta/starters
 
+## 0.5.0
+
+### Minor Changes
+
+- [#45](https://github.com/cogenta-cms/cogenta/pull/45) [`9178b5c`](https://github.com/cogenta-cms/cogenta/commit/9178b5c4ab793c5f17f10c74350f30034e1b208a) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A site published in several languages is bilingual for real. Scaffolded with locales `fr,en` (default `fr`), every blueprint now serves its routed collections under a locale prefix: the default language at its usual addresses, the other at `/en/…`, including its own home page at `/en/`. The blog blueprint also ships its English words as translations of its French pages and essays, with their own navigation, settings and widgets. Lists on a page (`collectionList`, latest, related, popular, archives, subject counts) show the entries of the page's own language. `theme@1.10` (additive) adds `ChromeInput.languages` and `renderLanguageSwitcher` to `@cogenta/theme-kit`, and `ChromeInput.homeHref` is now the language's home (`/en/`) on a page in a language served under a prefix; the blog theme draws the switcher in its header.
+  
+  `buildPath` accepts `{ defaultLocale }`, and every caller that names a public address now passes it: links, preview links, MCP and agent redirect targets, menu entries, content-webhook `path` and slug-change redirect origins all drop the default-locale prefix on a localised route (a redirect is recorded from `/blog/old`, not `/fr/blog/old`; a webhook carries `/blog/post`, not `/fr/blog/post`). Single-language sites, and collections not routed by locale, are unchanged.
+  
+  A site scaffolded before this keeps its schema (ADR-0010, ADR-0023: the schema is never rewritten by a server or a bootstrap). The new operator command `cogenta schema localize-routes` (dry run unless `--write`) brings `cogenta.schema.mjs` to the same routing and prints the 301 redirects the move needs; run it on a development copy, commit the file, deploy it. Other themes do not draw the switcher yet.
+
+- [#48](https://github.com/cogenta-cms/cogenta/pull/48) [`b32a6bd`](https://github.com/cogenta-cms/cogenta/commit/b32a6bd051ab887f8f14507693abccf34ee655e8) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `@cogenta/theme-blog` is redesigned from a quiet literary notebook into a technology and science magazine. A neutral paper, an ink that is almost black and one vermilion accent; Sofia Sans Condensed to headline, Hanken Grotesk to read and Geist Mono to count (three self-hosted OFL families, 203 KiB in all instead of 425 KiB, served by `/_cogenta/fonts/blog/…`). No gradient, no shadow, no client script.
+  
+  The masthead is the one sticky element (name, language switcher, light/dark control and the header action as the one filled button) with the header menu set under it as a section bar that scrolls sideways on a narrow screen: no menu to open. The footer is a solid ink panel with the invitation, the feed and the name set across the page. Every block of contract B is restyled: `hero` is a lead story (picture and ink panel, fetched first and never animated), `collectionList` gets six forms chosen from the layout, the title and `variant.background` (index, river with timestamps, numbered list on a muted background, front, rail, strip), `featureGrid` becomes a row of ruled channels, `cta` a newsletter band, `quote` a pull quote on a solid band. The article has a topic label, a headline in condensed type, a standfirst, a byline, a wide lead picture and a 62ch reading column; term pages open on an ink band. Motion is CSS only and behind `@supports (animation-timeline)`: items settle in by position (never by opacity, so a capture or an audit sees every word), a section rule draws itself in, the masthead sheds its rule and shrinks its name by scroll; the picture zoom is a hover on a pointer device, and `prefers-reduced-motion` removes all of it.
+  
+  The theme owns its three typefaces and uses the skin's font stacks only as their fallback, so a site updated from the previous release (whose `theme.tokens.json` still names Literata and Figtree and whose home page is stored in its database) keeps rendering: every stored block is drawn (`index` and the old digest become the river, the titled grid the rail, the carousel the strip) and only the palette stays as the site chose it. Re-apply the theme's skin to get the new palette. Contract D is unchanged (`theme@1.10`).
+  
+  `@cogenta/starters`: the blog blueprint's starting skin and home composition follow the theme (lead story, river, pull quote, rail, a numbered "read these first" list on a muted background, channels, newsletter band), and its header menu opens with one link per subject, which the theme sets as a topic bar, in each language. Existing posts and copy are unchanged. `@cogenta/render`: `SELF_HOSTED_FAMILIES` now lists Hanken Grotesk and Sofia Sans Condensed and no longer lists Figtree and Literata, which no built-in theme bundles any more (a skin that names them falls back to the next family of its stack unless remote web fonts are on).
+
+### Patch Changes
+
+- Updated dependencies [[`9178b5c`](https://github.com/cogenta-cms/cogenta/commit/9178b5c4ab793c5f17f10c74350f30034e1b208a), [`b32a6bd`](https://github.com/cogenta-cms/cogenta/commit/b32a6bd051ab887f8f14507693abccf34ee655e8), [`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214), [`8be2bbd`](https://github.com/cogenta-cms/cogenta/commit/8be2bbde2b335367f1dba1b35dbd640447d30214)]:
+  - @cogenta/schema@0.12.0
+  - @cogenta/theme-kit@0.9.0
+  - @cogenta/api@2.13.1
+  - @cogenta/render@0.6.3
+  - @cogenta/core@0.14.2
+  - @cogenta/blocks@1.2.2
+  - @cogenta/widgets@0.2.10
+
 ## 0.4.3
 
 ### Patch Changes

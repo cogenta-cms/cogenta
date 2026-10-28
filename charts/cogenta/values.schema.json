@@ -472,7 +472,6 @@
         "image",
         "username",
         "database",
-        "password",
         "existingSecret",
         "secretChecksum",
         "persistence",

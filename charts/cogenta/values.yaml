@@ -92,7 +92,8 @@ postgresql:
   image: postgres:17-alpine
   username: cogenta
   database: cogenta
-  password: "" # Generated once. URI-unreserved characters only.
+  # password: set only to pin it; generated once otherwise. URI-unreserved
+  # characters only, 16 or more. Prefer existingSecret.
   existingSecret: "" # Key: postgres-password (URI-unreserved characters only).
   secretChecksum: ""
   persistence:

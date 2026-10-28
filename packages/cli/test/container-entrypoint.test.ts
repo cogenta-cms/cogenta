@@ -47,7 +47,9 @@ function entrypoint(
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
 }
 
-describe('docker/entrypoint.sh', () => {
+// The entrypoint is a POSIX shell script that only ever runs inside the Linux
+// image; Windows has neither `sh` nor the symlink semantics it relies on.
+describe.skipIf(process.platform === 'win32')('docker/entrypoint.sh', () => {
   it('refuses to serve without the session signing key, and says how to make one', async () => {
     const { runtimeDir, siteDir } = await runtime()
     const result = entrypoint(['serve'], {

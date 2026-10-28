@@ -388,25 +388,24 @@ export async function collectRoutedResources(
 }
 
 /**
- * The `hreflang` alternates for one entry, or an empty list.
+ * Every published member of an entry's translation family — itself included,
+ * one per language — or an empty list on a single-locale site.
  *
- * Skipped outright on a single-locale site: `alternatesFor` would return
- * nothing anyway, and the family lookup is a filtered scan of the collection —
- * work every page render on a monolingual site would pay for a guaranteed
- * empty answer.
+ * Skipped outright on a single-locale site: nothing downstream would use it,
+ * and the lookup is a filtered scan of the collection — work every page render
+ * on a monolingual site would pay for a guaranteed empty answer.
  *
  * The family is read through the same permission-checked gateway as the page
  * itself, with the same actor, so a translation the caller may not see never
- * becomes an alternate.
+ * becomes an alternate, nor a language the switcher links to.
  */
-export async function alternatesForEntry(
-  site: SeoSite,
+export async function translationFamilyOf(
   collection: CollectionDefinition,
   entry: ContentEntry,
   gateway: ContentGateway,
   context: AccessContext,
   locales: readonly string[],
-): Promise<readonly HreflangAlternate[]> {
+): Promise<readonly ContentEntry[]> {
   if (locales.length < 2) return []
 
   const sourceId = entry.translationOf ?? entry.id
@@ -423,15 +422,32 @@ export async function alternatesForEntry(
     },
     context,
   )
+  return page.items
+}
 
-  const resources = page.items.map((found) => ({ collection, entry: found }))
-  const family = groupTranslationFamilies(site, resources).find(
+/**
+ * The `hreflang` alternates for one entry, or an empty list.
+ *
+ * `family` is `translationFamilyOf`'s answer, read once per page and shared
+ * with the language switcher.
+ */
+export function alternatesForEntry(
+  site: SeoSite,
+  collection: CollectionDefinition,
+  entry: ContentEntry,
+  family: readonly ContentEntry[],
+): readonly HreflangAlternate[] {
+  if (family.length === 0) return []
+
+  const sourceId = entry.translationOf ?? entry.id
+  const resources = family.map((found) => ({ collection, entry: found }))
+  const grouped = groupTranslationFamilies(site, resources).find(
     (candidate) => candidate.sourceId === sourceId,
   )
   // A family of one is not a family: a self-referencing `hreflang` is noise,
   // and `buildHreflangMap` drops it for the same reason.
-  if (family === undefined || family.members.length < 2) return []
-  return alternatesFor(site, family)
+  if (grouped === undefined || grouped.members.length < 2) return []
+  return alternatesFor(site, grouped)
 }
 
 export interface HeadOptions {

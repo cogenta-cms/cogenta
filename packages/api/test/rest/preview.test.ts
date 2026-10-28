@@ -50,6 +50,25 @@ describe('preview links', () => {
     )
   })
 
+  it('names the address a visitor requests: no prefix for the default language of a localised route', async () => {
+    await harness.dispose()
+    harness = await createHarness({ siteUrl: 'https://example.com', routerDefaultLocale: 'en' })
+    const mint = async (locale: string, title: string): Promise<string> => {
+      const created = await harness.router.handle(
+        request('POST', '/rest_guide', { body: { locale, values: { title, slug: title } } }),
+        asEditor,
+      )
+      const minted = await harness.router.handle(
+        request('POST', `/rest_guide/${dataOf(created)['id'] as string}/preview`),
+        asEditor,
+      )
+      return dataOf(minted)['path'] as string
+    }
+
+    expect(await mint('en', 'hello')).toBe('/guide/hello')
+    expect(await mint('fr', 'bonjour')).toBe('/fr/guide/bonjour')
+  })
+
   it('refuses to mint a link for someone who cannot read the working state', async () => {
     const created = await harness.router.handle(
       request('POST', '/rest_page', {

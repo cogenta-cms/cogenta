@@ -371,6 +371,7 @@ function titleOf(values: Readonly<Record<string, unknown>>): string | null {
 function contentBrowseServiceLikeOf(
   service: ContentService,
   collections: readonly CollectionDefinition[],
+  defaultLocale: string,
 ): ContentBrowseServiceLike {
   const byName = new Map(collections.map((collection) => [collection.name, collection]))
 
@@ -384,7 +385,7 @@ function contentBrowseServiceLikeOf(
       if (typeof value === 'string') params[key] = value
     }
     try {
-      return buildPath(collection, params, entry.locale)
+      return buildPath(collection, params, entry.locale, { defaultLocale })
     } catch {
       return null
     }
@@ -517,6 +518,8 @@ function createLiveProviderRegistry(
 
 function buildToolRegistry(options: {
   readonly siteUrl?: string
+  /** The locale the site serves without a prefix, so a redirect target names the address a visitor requests. */
+  readonly defaultLocale: string
   readonly contentService: ContentService
   /**
    * Where `media.store_generated_image` puts a file — see
@@ -590,6 +593,7 @@ function buildToolRegistry(options: {
   const contentBrowseServiceLike = contentBrowseServiceLikeOf(
     options.contentService,
     options.collections,
+    options.defaultLocale,
   )
   const contentSchemaServiceLike = contentSchemaServiceLikeOf(
     options.contentService,
@@ -926,6 +930,7 @@ export async function buildAgentRuntime(
   await liveProviders.refresh()
 
   const coreToolOptions = {
+    defaultLocale: options.site.defaultLocale,
     ...(options.site.url === undefined ? {} : { siteUrl: options.site.url }),
     contentService: options.contentService,
     mediaStore: options.mediaStore,

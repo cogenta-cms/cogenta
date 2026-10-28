@@ -80,6 +80,45 @@ describe('withRedirectTracking', () => {
     })
   })
 
+  it('redirects from the address a visitor requests: no prefix for the default language', async () => {
+    const localised: CollectionDefinition = {
+      ...page,
+      name: 'redirect_tracking_localised',
+      routing: { pattern: '/blog/:slug', locale: true },
+    }
+    await createSchemaTables(db, [localised])
+    try {
+      const store = withRedirectTracking(
+        createContentStore({ db, collection: localised, defaultLocale: 'fr' }),
+        { collection: localised, redirects, defaultLocale: 'fr' },
+      )
+
+      const french = await store.create({
+        status: 'published',
+        values: { title: 'Ancien', slug: 'ancien' },
+      })
+      await store.update(french.id, { values: { slug: 'nouveau' } })
+      const english = await store.create({
+        locale: 'en',
+        translationOf: french.id,
+        status: 'published',
+        values: { title: 'Old', slug: 'old' },
+      })
+      await store.update(english.id, { values: { slug: 'new' } })
+
+      await expect(redirects.resolve('/blog/ancien')).resolves.toEqual({
+        to: '/blog/nouveau',
+        status: 301,
+      })
+      await expect(redirects.resolve('/en/blog/old')).resolves.toEqual({
+        to: '/en/blog/new',
+        status: 301,
+      })
+    } finally {
+      await dropSchemaTables(db, [localised])
+    }
+  })
+
   it('writes nothing for a draft — it never had a public URL to leave behind', async () => {
     const store = withRedirectTracking(createContentStore({ db, collection: page }), {
       collection: page,

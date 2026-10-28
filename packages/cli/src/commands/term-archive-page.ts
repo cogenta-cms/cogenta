@@ -143,7 +143,11 @@ function summaryOf(collection: CollectionDefinition, entry: ContentEntry): strin
   return null
 }
 
-function hrefOf(collection: CollectionDefinition, entry: ContentEntry): string | null {
+function hrefOf(
+  collection: CollectionDefinition,
+  entry: ContentEntry,
+  defaultLocale: string,
+): string | null {
   if (collection.routing === undefined) return null
   try {
     return buildPath(
@@ -154,6 +158,7 @@ function hrefOf(collection: CollectionDefinition, entry: ContentEntry): string |
         ),
       ),
       entry.locale ?? undefined,
+      { defaultLocale },
     )
   } catch {
     // A routed collection whose slug field is empty on this entry: listed
@@ -286,7 +291,7 @@ export async function renderTermArchivePage(
     if (entry === null) continue
     entries.push({
       title: entryTitle(entry),
-      href: hrefOf(collection, entry),
+      href: hrefOf(collection, entry, options.site.defaultLocale),
       summary: summaryOf(collection, entry),
       collection: collection.name,
       publishedAt: entry.publishedAt ?? null,

@@ -52,6 +52,17 @@ function segmentsOf(path: string): string[] {
     .filter((segment) => segment.length > 0)
 }
 
+export interface BuildPathOptions {
+  /**
+   * The locale the site serves without a prefix — the same value `matchPath`
+   * takes as `RouteOptions.defaultLocale`. A localised route then comes back
+   * as `/blog/hello` for that locale and `/en/blog/hello` for every other,
+   * which is the pair `matchPath` resolves and the one a canonical URL names.
+   * Unset, every localised route is prefixed, as before.
+   */
+  readonly defaultLocale?: string
+}
+
 /**
  * The path an entry is served at.
  *
@@ -63,6 +74,7 @@ export function buildPath(
   collection: CollectionDefinition,
   params: Readonly<Record<string, string>>,
   locale?: string,
+  options: BuildPathOptions = {},
 ): string {
   const routing = collection.routing
   if (routing === undefined) {
@@ -99,7 +111,7 @@ export function buildPath(
         details: { collection: collection.name, pattern: routing.pattern },
       })
     }
-    rendered.unshift(encodeURIComponent(locale))
+    if (locale !== options.defaultLocale) rendered.unshift(encodeURIComponent(locale))
   }
 
   return `/${rendered.join('/')}`

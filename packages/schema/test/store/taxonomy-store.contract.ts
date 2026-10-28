@@ -542,6 +542,49 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
         expect(usage.get(vegan.id)).toEqual({ own: 1, withDescendants: 1 })
       })
 
+      // A translation family shares its terms: the French essay and its English
+      // translation both carry "Cuisine". A page in one language counts its own.
+      it('counts only the entries of a locale, for a collection routed by locale', async () => {
+        const cuisine = await categories.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+        const source = await recipes.create({
+          locale: 'fr',
+          values: { title: 'Tarte', categories: [cuisine.id] },
+        })
+        await recipes.publish(source.id)
+        const translation = await recipes.create({
+          locale: 'en',
+          translationOf: source.id,
+          values: { title: 'Tart', categories: [cuisine.id] },
+        })
+        await recipes.publish(translation.id)
+
+        const countFor = async (
+          routed: boolean,
+          locale: string | undefined,
+        ): Promise<number | undefined> => {
+          const usage = await countTaxonomyUsage({
+            db,
+            taxonomy: category,
+            terms: await categories.list(),
+            collections: [
+              routed ? { ...recipe, routing: { pattern: '/tx/:slug', locale: true } } : recipe,
+              post,
+            ],
+            readable: () => true,
+            includeDrafts: () => false,
+            ...(locale === undefined ? {} : { locale }),
+          })
+          return usage.get(cuisine.id)?.own
+        }
+
+        expect(await countFor(true, 'en')).toBe(1)
+        expect(await countFor(true, 'fr')).toBe(1)
+        // No locale asked for, or a collection whose languages share one URL
+        // space: every entry counts, as before.
+        expect(await countFor(true, undefined)).toBe(2)
+        expect(await countFor(false, 'en')).toBe(2)
+      })
+
       it('excludes drafts unless the caller says this actor may read them on that collection', async () => {
         const cuisine = await categories.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
         // Never published: stays a draft.

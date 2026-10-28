@@ -240,3 +240,24 @@ describe('renderChrome, the footer', () => {
     expect(footer).not.toMatch(/<script/i)
   })
 })
+
+describe('renderChrome, the language switcher (theme@1.10)', () => {
+  const LANGUAGES = [
+    { locale: 'fr', label: 'Français', href: '/blog/bonjour', current: true },
+    { locale: 'en', label: 'English', href: '/en/blog/hello', current: false },
+  ] as const
+
+  it('draws nothing on a site with one language', () => {
+    expect(renderChrome(BASE).header).not.toContain('cg-lang')
+    expect(renderChrome({ ...BASE, languages: [LANGUAGES[0]] }).header).not.toContain('cg-lang')
+  })
+
+  it('links the translation of the page, outside the collapsible navigation panel', () => {
+    const { header } = renderChrome({ ...BASE, locale: 'fr', languages: LANGUAGES })
+    expect(header).toContain('<nav class="cg-lang" aria-label="Langue">')
+    expect(header).toContain('href="/en/blog/hello" lang="en" hreflang="en"')
+    expect(header).toContain('aria-current="true">Français</a>')
+    const panel = header.slice(header.indexOf('id="cg-nav"'), header.indexOf('</nav>'))
+    expect(panel).not.toContain('cg-lang')
+  })
+})

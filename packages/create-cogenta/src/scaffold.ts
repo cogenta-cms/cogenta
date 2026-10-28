@@ -350,7 +350,8 @@ export async function scaffoldSite(
   )
   // The pack in the site's own language: `vitrine` ships French and English
   // copy, addresses included (L36).
-  const pack = contentPackFor(blueprint.id, answers.defaultLocale)
+  const siteLocales = [...new Set([answers.defaultLocale, ...(answers.locales ?? [])])]
+  const pack = contentPackFor(blueprint.id, answers.defaultLocale, siteLocales)
 
   await mkdir(answers.targetDir, { recursive: true })
   await mkdir(join(answers.targetDir, '.cogenta'), { recursive: true })
@@ -539,6 +540,23 @@ export async function scaffoldSite(
             logger,
           )
         }
+        // The other languages of a site published in several: their own
+        // navigation and settings, so a page in English does not wear a
+        // French header.
+        for (const other of pack.additionalLocales ?? []) {
+          if (other.menus !== undefined) {
+            menusSeeded += await seedBlueprintMenus(selection.instance, other.locale, other.menus)
+          }
+          if (other.siteSettings !== undefined) {
+            siteSettingsSeeded += await seedSiteSettings(
+              selection.instance,
+              other.locale,
+              other.siteSettings,
+              adminId,
+              logger,
+            )
+          }
+        }
 
         // (c') no comment thread under a template page. Comments are on by
         // default site-wide (`discussion.enabled`), which is right for a post
@@ -597,6 +615,7 @@ export async function scaffoldSite(
           adminId,
           media,
           siteName: answers.siteName,
+          locales: siteLocales,
         })
       }
 

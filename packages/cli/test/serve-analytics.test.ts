@@ -197,12 +197,14 @@ describe('analytics — end to end through a real server', () => {
       // A real visitor, over real HTTP, following a real link from an
       // external site — the beacon pixel embedded in the page is what
       // records this, not a direct call to the beacon route.
-      const page = await fetch(`${server.base}/home`, {
+      // `/home` is the home page's duplicate address and answers a redirect: a
+      // visitor lands on `/`, which is where the page view is recorded.
+      const page = await fetch(`${server.base}/`, {
         headers: { referer: 'https://search.example/results?q=hello' },
       })
       expect(page.status).toBe(200)
       const html = await page.text()
-      expect(html).toContain('/api/analytics/beacon?p=%2Fhome')
+      expect(html).toContain('/api/analytics/beacon?p=%2F&')
 
       // The browser loading that <img> pixel — this is what a real browser
       // does automatically; the test does it explicitly to prove the pixel
@@ -231,7 +233,7 @@ describe('analytics — end to end through a real server', () => {
       // link (fiche 27 task 1) — resolved through the same route matcher and
       // permission-checked gateway the public page render uses, not a mock.
       expect(afterBody.data.topPages).toHaveLength(1)
-      expect(afterBody.data.topPages[0]?.path).toBe('/home')
+      expect(afterBody.data.topPages[0]?.path).toBe('/')
       expect(afterBody.data.topPages[0]?.views).toBe(1)
       expect(afterBody.data.topPages[0]?.title).toBe('Home')
       expect(afterBody.data.topPages[0]?.editHref).toMatch(/^\/admin\/collections\/page\/.+/)
@@ -294,21 +296,21 @@ describe('analytics — end to end through a real server', () => {
     const server = await startServer(root)
     try {
       const admin = await createAdmin(root, server.base)
-      const page = await fetch(`${server.base}/home`)
+      const page = await fetch(`${server.base}/`)
       const html = await page.text()
       const beaconUrlMatch = html.match(/<img src="([^"]*analytics\/beacon[^"]*)"/)
       const beaconPath = beaconUrlMatch?.[1]?.replace(/&amp;/g, '&')
       expect(beaconPath).toBeDefined()
       await fetch(`${server.base}${beaconPath}`)
 
-      const response = await fetch(`${server.base}/api/analytics/page?path=%2Fhome&days=7`, {
+      const response = await fetch(`${server.base}/api/analytics/page?path=%2F&days=7`, {
         headers: { authorization: `Bearer ${admin}` },
       })
       expect(response.status).toBe(200)
       const body = (await response.json()) as {
         data: { path: string; views: number; rank: number | null; rankedPages: number }
       }
-      expect(body.data.path).toBe('/home')
+      expect(body.data.path).toBe('/')
       expect(body.data.views).toBe(1)
       expect(body.data.rank).toBe(1)
       expect(body.data.rankedPages).toBe(1)

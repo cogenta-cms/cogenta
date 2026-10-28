@@ -1,6 +1,6 @@
 # Cogenta Helm chart
 
-The official Cogenta CMS chart. Chart version **0.1.1** is independent of the
+The official Cogenta CMS chart. Chart version **0.1.2** is independent of the
 application version; `appVersion` is the Cogenta release whose image the chart
 runs by default, and it moves with every Cogenta release. The image contract is `ghcr.io/cogenta-cms/cogenta:<appVersion>` with port 4000,
 `/livez`, `/readyz`, and `cogenta-entrypoint bootstrap|serve|cli`.
@@ -52,6 +52,8 @@ Kubernetes scheduling, volume and policy objects are validated by Kubernetes.
 | `site.locales`, `site.defaultLocale` | `[en]`, `en` | Initial content locales; default must be in the list |
 | `site.blueprint`, `site.adminEmail` | `blog`, `admin@example.com` | Initial scaffolding and administrator |
 | `site.trustProxy` | `"off"` | `off`, `cloudflare`, or the trusted proxy hop count |
+| `site.trustProxyFrom` | `[]` | Addresses or CIDR blocks the trusted proxy connects from (`COGENTA_TRUST_PROXY_FROM`), e.g. `["10.42.0.0/16"]` on k3s |
+| `site.hstsMaxAge` | `0` | Seconds of `Strict-Transport-Security` (`COGENTA_SECURITY_HSTS_MAX_AGE`, max `63072000`); only sent on requests the app sees as HTTPS, see [HTTPS and HSTS](#https-redirect-and-hsts) |
 | `existingSecret` | empty | Existing application Secret; recommended for production/GitOps |
 | `secrets.authSigningKey`, `secrets.previewSigningKey` | generated | At least 32 characters if explicitly supplied |
 | `secrets.adminPassword` | generated | At least 16 characters if explicitly supplied |
@@ -69,6 +71,7 @@ Kubernetes scheduling, volume and policy objects are validated by Kubernetes.
 | `priorityClassName` | empty | Application priority |
 | `extraEnv`, `extraEnvFrom` | `[]` | Environment shared by bootstrap and serve; Secret references for sensitive values |
 | `extraVolumes`, `extraVolumeMounts` | `[]` | Shared bootstrap/serve mounts; `/data` and `/tmp` are reserved |
+| `extraObjects` | `[]` | Extra manifests (maps or strings) rendered with `tpl`, e.g. a redirect Middleware |
 | `service.port`, `service.annotations` | `80`, `{}` | ClusterIP service to application port 4000 |
 | `ingress.enabled`, `ingress.host`, `ingress.className` | `true`, `cogenta.local`, empty | Ingress routing |
 | `ingress.annotations` | `{}` | Additional ingress annotations |
@@ -103,6 +106,65 @@ Every pod uses the dedicated ServiceAccount with token automount disabled.
 Writable PostgreSQL socket and temporary directories have explicit emptyDirs;
 PGDATA is a subdirectory of its PVC so initialization works without a root init
 container. Application `/tmp` is ephemeral and `/data` is always persistent.
+
+## HTTPS redirect and HSTS
+
+The chart does not redirect HTTP to HTTPS: that is the ingress controller's job, and
+every controller does it differently. Without it `http://` serves the site, the admin
+login included, in clear. `extraObjects` lets you add what your controller needs
+without forking the chart; each entry is a manifest (a map, or a string) rendered
+with `tpl`, so `{{ .Release.Name }}` and `{{ .Release.Namespace }}` are available.
+
+**Traefik** (k3s default): a `redirectScheme` Middleware, attached to the ingress by
+annotation as `<namespace>-<name>@kubernetescrd`. The ingress must also listen on
+`web` as well as `websecure` for the redirect to see plain-HTTP requests:
+
+```yaml
+extraObjects:
+  - apiVersion: traefik.io/v1alpha1
+    kind: Middleware
+    metadata:
+      name: "{{ .Release.Name }}-redirect-https"
+      namespace: "{{ .Release.Namespace }}"
+    spec:
+      redirectScheme:
+        scheme: https
+        permanent: true
+ingress:
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: cms-blog-redirect-https@kubernetescrd
+```
+
+(`cms-blog-redirect-https` is `<namespace>-<release>-redirect-https` for release `blog`
+in namespace `cms`; Traefik needs `providers.kubernetesCRD.allowCrossNamespace` only
+if the Middleware lives elsewhere.)
+
+**ingress-nginx** needs no extra object, only annotations (it redirects by default when
+a TLS section is present; make it explicit):
+
+```yaml
+ingress:
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+```
+
+**HSTS** is sent by the application, but only on a request it sees as HTTPS, and behind
+an ingress it sees HTTP unless the proxy is trusted. Set all three together; on k3s
+(Traefik, one hop, pod network `10.42.0.0/16`):
+
+```yaml
+site:
+  trustProxy: "1"
+  trustProxyFrom: ["10.42.0.0/16"]
+  hstsMaxAge: 31536000
+```
+
+Verify with `curl -sI https://your.site/ | grep -i strict-transport`. Browsers keep the
+policy for the whole period: start with `300` and raise it once everything you serve is
+HTTPS.
 
 ## Secrets and GitOps / ArgoCD
 
@@ -167,7 +229,7 @@ spec:
   source:
     repoURL: ghcr.io/cogenta-cms/charts
     chart: cogenta
-    targetRevision: 0.1.1
+    targetRevision: 0.1.2
     helm:
       releaseName: blog
       valuesObject:
@@ -214,7 +276,7 @@ drivers remain available without AI, S3 or Redis.
 ## Upgrades, scaling and rollback
 
 ```sh
-helm upgrade blog oci://ghcr.io/cogenta-cms/charts/cogenta --version 0.1.1 -f private-values.yaml --set image.tag=0.21.1 --wait --timeout 10m
+helm upgrade blog oci://ghcr.io/cogenta-cms/charts/cogenta --version 0.1.2 -f private-values.yaml --set image.tag=0.21.1 --wait --timeout 10m
 helm history blog
 helm rollback blog <revision> --wait --timeout 10m
 ```
@@ -260,8 +322,9 @@ explicit operator decision and a verified backup under Cogenta's migration rules
 
 ## Backup and restore
 
-Enable `backup.enabled=true` for the bundled PostgreSQL database. Every run uses
-`pg_dump -Fc`, verifies the archive's table of contents, atomically renames it,
+Enable `backup.enabled=true` for the bundled PostgreSQL database. Every run first waits up to
+60 seconds for PostgreSQL to accept connections (a new pod is refused by the
+NetworkPolicy for its first seconds), then uses `pg_dump -Fc`, verifies the archive's table of contents, atomically renames it,
 and only then expires old completed dumps. `find -mtime +N` uses whole-day
 rounding, so removal can occur after more than N+1 days. Partial failed dumps are
 removed; failed jobs are retained for inspection. Jobs never overlap and have a

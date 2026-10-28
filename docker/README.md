@@ -73,6 +73,7 @@ database but the default SQLite file on the volume.
 | `COGENTA_CACHE_*`, `COGENTA_RATE_LIMIT_*`, `REDIS_URL` | Redis for the shared cache and rate limits |
 | `COGENTA_LLM_PROVIDER`, `_MODEL`, `COGENTA_LLM_API_KEY` | Optional; the CMS works without AI |
 | `COGENTA_TRUST_PROXY`, `COGENTA_TRUST_PROXY_FROM` | See below |
+| `COGENTA_SECURITY_HSTS_MAX_AGE` | Seconds of `Strict-Transport-Security` on HTTPS responses; `0` (default) sends none, the maximum is `63072000`. See below |
 | `PORT` | Listening port (4000) |
 | `COGENTA_BOOTSTRAP_WAIT_SECONDS` | How long `bootstrap` waits for the database to answer (60) |
 
@@ -104,6 +105,25 @@ when the connection comes from one of them; a caller that reaches the pod direct
 attributed to its own address. Without it the header is believed from any socket, the
 server logs a warning at start-up saying so, and the pod must be reachable only through
 the proxy (a NetworkPolicy, a private network) or a caller can pick its own address.
+
+### HSTS
+
+`COGENTA_SECURITY_HSTS_MAX_AGE` (for example `31536000`, one year) makes the server send
+`Strict-Transport-Security` — but only on a request it recognises as HTTPS. Behind a TLS
+terminating proxy the pod sees plain HTTP, so the header is **absent until the proxy is
+trusted**: set `COGENTA_TRUST_PROXY` and `COGENTA_TRUST_PROXY_FROM`, and make the proxy
+send `x-forwarded-proto: https`. For example on k3s with Traefik (one hop, pod network
+`10.42.0.0/16`):
+
+```sh
+COGENTA_TRUST_PROXY=1
+COGENTA_TRUST_PROXY_FROM=10.42.0.0/16
+COGENTA_SECURITY_HSTS_MAX_AGE=31536000
+```
+
+Check with `curl -sI https://your.site/ | grep -i strict-transport`. Browsers remember
+the policy for the whole period, so start with a small value (`300`) and raise it once
+every subdomain you serve is HTTPS.
 
 ## Probes
 

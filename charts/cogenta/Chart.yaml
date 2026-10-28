@@ -2,7 +2,7 @@ apiVersion: v2
 name: cogenta
 description: The official Cogenta CMS chart with optional PostgreSQL and database backups.
 type: application
-version: 0.1.1
+version: 0.1.2
 # The Cogenta release; kept equal to @cogenta/cli by scripts/sync-chart-version.mjs.
 appVersion: "0.21.0"
 kubeVersion: ">=1.27.0-0"

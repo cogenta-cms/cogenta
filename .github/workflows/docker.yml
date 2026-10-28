@@ -3,7 +3,9 @@ name: Container image
 # Builds the official image from the checked-out commit and pushes it to GHCR,
 # multi-arch, scanned and signed.
 #
-#   - a `v*` tag, or a published GitHub release: the version comes from the tag;
+#   - a `v*` tag: the version comes from the tag. (No `release` trigger: the
+#     release workflow publishes one GitHub release per npm package, tagged
+#     `@cogenta/<pkg>@x.y.z`, and each would start a failing build.)
 #   - a manual run: the version is the CLI's, from packages/cli/package.json.
 #     It pushes only from the default branch or a v* tag (anywhere else it
 #     builds and scans), and `latest` only moves from the default branch.
@@ -14,8 +16,6 @@ name: Container image
 on:
   push:
     tags: ['v*']
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       push:
@@ -74,8 +74,8 @@ jobs:
             echo "stable=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # The one place that decides whether anything leaves the runner. A tag or
-      # a release always publishes; a manual run publishes only from the
+      # The one place that decides whether anything leaves the runner. A v* tag
+      # always publishes; a manual run publishes only from the
       # default branch or a v* tag, so a branch someone can push to cannot put
       # an unreviewed image under a registry name users pull from.
       - name: Decide whether to push

@@ -81,7 +81,12 @@ describe('the blog blueprint, on a site with several languages', () => {
   it('gives the other language its own navigation, under its prefix', () => {
     const pack = contentPackFor('blog', 'fr', ['fr', 'en'])
     const english = pack?.additionalLocales?.find((setup) => setup.locale === 'en')
-    expect(english?.menus?.header.map((item) => item.url)).toEqual(['/en/archive', '/en/about'])
+    // The subjects open the menu and link to the site's own term pages; the pages follow, under the prefix.
+    expect(english?.menus?.header.map((item) => item.url).slice(-2)).toEqual([
+      '/en/archive',
+      '/en/about',
+    ])
+    expect(english?.menus?.header[0]?.url).toBe('/categorie/lecture')
     // The feed belongs to the site, not to a language.
     expect(english?.menus?.footer.map((item) => item.url)).toContain('/feed.xml')
     expect(english?.siteSettings?.['general.tagline']).toBe(

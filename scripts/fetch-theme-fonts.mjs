@@ -49,6 +49,7 @@ const LICENCE_DIRS = {
   Fraunces: 'fraunces',
   Geist: 'geist',
   'Geist Mono': 'geistmono',
+  'Hanken Grotesk': 'hankengrotesk',
   'IBM Plex Mono': 'ibmplexmono',
   'IBM Plex Sans': 'ibmplexsans',
   'Instrument Sans': 'instrumentsans',
@@ -56,6 +57,7 @@ const LICENCE_DIRS = {
   Karla: 'karla',
   'Libre Franklin': 'librefranklin',
   Literata: 'literata',
+  'Sofia Sans Condensed': 'sofiasanscondensed',
   'Source Sans 3': 'sourcesans3',
   'Source Serif 4': 'sourceserif4',
 }
@@ -66,8 +68,9 @@ const REQUESTS = {
     'family=Source+Sans+3:ital,wght@0,200..900;1,200..900',
   ],
   blog: [
-    'family=Figtree:wght@400..700',
-    'family=Literata:ital,opsz,wght@0,7..72,300..700;1,7..72,300..600',
+    'family=Sofia+Sans+Condensed:wght@500..900',
+    'family=Hanken+Grotesk:ital,wght@0,400..700;1,400..700',
+    'family=Geist+Mono:wght@400..600',
   ],
   canonical: [
     'family=Instrument+Sans:ital,wght@0,400..700;1,400..700',

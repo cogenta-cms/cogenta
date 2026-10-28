@@ -1,17 +1,19 @@
 /*
  * `@cogenta/theme-blog`'s design system.
  *
- * The register is a personal publication made for reading: warm paper, a
- * warm near-black ink, one ink-blue accent kept for links, and depth drawn
- * with hairlines and space, never with shadows or tinted boxes. Literata
- * sets everything a reader reads (titles, essays, standfirsts, quotations)
- * at the optical size drawn for its point size; Figtree sets everything a
- * reader uses (navigation, dates, labels, buttons) small and quiet.
+ * The register is a technology and science magazine: a neutral paper, an
+ * ink that is almost black, ONE confident accent (a vermilion, kept for
+ * labels, numbers, links and the one filled button) and a condensed display
+ * grotesk set tight and heavy over a highly legible text sans. Structure is
+ * drawn with ink rules, solid panels and space; never with gradients,
+ * shadows, glows or blur. Geist Mono sets what is counted or timestamped
+ * (times, ranks, labels), and nothing else.
  *
  * Contract D fixes a closed skin token set, so nothing here adds a token:
- * every value is derived from a `--cogenta-*` property (`calc`,
+ * every colour is derived from a `--cogenta-*` property (`calc`,
  * `color-mix`, relative colour syntax). A skin swap rewrites that sheet and
- * this whole system follows.
+ * this whole system follows. The three typefaces are the theme's own: the
+ * skin's font stacks only come after them, as the fallback.
  *
  * Two rules hold in every stylesheet of this theme:
  *
@@ -34,7 +36,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   Space: one unit, one section rhythm, one grid with a margin.
+   Space: one unit, one section rhythm, one container.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
@@ -55,31 +57,27 @@
   --cg-s24: calc(var(--cg-unit) * 24);
   --cg-s32: calc(var(--cg-unit) * 32);
 
-  /* The only vertical rhythm between sections. Every block is padded by
-     half of it above and below, so any two blocks sit one full step apart
-     whatever their order. */
-  --cg-section: clamp(var(--cg-s12), 8vw, var(--cg-s24));
+  /* The only vertical rhythm between sections: every block is padded by
+     half of it above and below. */
+  --cg-section: clamp(var(--cg-s10), 6vw, var(--cg-s20));
 
-  /* Twelve columns with constant gutters. Columns one to three are the
-     margin; the text line starts at column four for every block. */
+  /* Twelve columns with constant gutters; the page is 80rem wide. */
   --cg-columns: 12;
-  --cg-gutter: clamp(var(--cg-s5), 4vw, var(--cg-s12));
+  --cg-gutter: clamp(var(--cg-s4), 3.4vw, var(--cg-s8));
   --cg-col-gap: clamp(var(--cg-s4), 2vw, var(--cg-s8));
-  --cg-page: 76rem;
+  --cg-page: 80rem;
 
-  /* One column's width, for an element that hangs into the margin. An
+  /* One column's width, for an element that hangs into a column count. An
      unregistered custom property is substituted where it is used, so `cqi`
      resolves against the grid container around that element. */
   --cg-col: calc((100cqi - (var(--cg-columns) - 1) * var(--cg-col-gap)) / var(--cg-columns));
 
-  --cg-measure: 68ch;
+  --cg-measure: 62ch;
   --cg-measure-short: 52ch;
-
-  --cg-header-height: var(--cg-s20);
 }
 
 :where([data-density="compact"]) {
-  --cg-density: 0.75;
+  --cg-density: 0.8;
 }
 
 :where([data-density="comfortable"]) {
@@ -87,17 +85,18 @@
 }
 
 :where([data-density="spacious"]) {
-  --cg-density: 1.25;
+  --cg-density: 1.2;
 }
 
 /* --------------------------------------------------------------------------
-   Type: Literata to read, Figtree to use. The skin names both.
+   Type: a condensed display to headline, a grotesk to read, a mono to count.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
-  --cg-font-text: var(--cogenta-font-serif);
-  --cg-font-ui: var(--cogenta-font-sans);
-  --cg-font-code: var(--cogenta-font-mono);
+  --cg-font-display: "Sofia Sans Condensed", "Arial Narrow", var(--cogenta-font-serif);
+  --cg-font-text: "Hanken Grotesk", var(--cogenta-font-sans);
+  --cg-font-ui: var(--cg-font-text);
+  --cg-font-code: "Geist Mono", var(--cogenta-font-mono);
 
   --cg-text-xs: var(--cogenta-font-size-xs, 0.68rem);
   --cg-text-sm: var(--cogenta-font-size-sm, 0.85rem);
@@ -110,57 +109,61 @@
      skin's own ratio. */
   --cg-text-4xl: calc(var(--cg-text-3xl) * var(--cogenta-font-scale, 1.25));
   --cg-text-5xl: calc(var(--cg-text-4xl) * var(--cogenta-font-scale, 1.25));
-  --cg-text-6xl: calc(var(--cg-text-5xl) * var(--cogenta-font-scale, 1.25));
 
   /* Interface text sits between two steps: `sm` is too small for a control
-     a reader aims at, `md` too loud beside the text face. */
+     a reader aims at, `md` too loud beside the headlines. */
   --cg-text-ui: calc((var(--cg-text-sm) + var(--cg-text-md)) / 2);
-  /* The reading size: from `md` on a phone to halfway to `lg` on a desk. */
+  --cg-text-label: var(--cg-text-xs);
+  /* The reading size: from `md` on a phone to a little above it on a desk. */
   --cg-text-reading: clamp(
     var(--cg-text-md),
-    calc(0.92rem + 0.32vw),
+    calc(0.96rem + 0.28vw),
     calc((var(--cg-text-md) + var(--cg-text-lg)) / 2)
   );
 
-  --cg-size-display: clamp(var(--cg-text-3xl), calc(1.2rem + 3.9vw), var(--cg-text-6xl));
-  --cg-size-title: clamp(var(--cg-text-2xl), calc(1rem + 2.9vw), var(--cg-text-5xl));
-  --cg-size-heading: clamp(var(--cg-text-xl), calc(0.95rem + 1.4vw), var(--cg-text-3xl));
-  --cg-size-subheading: clamp(var(--cg-text-lg), calc(0.9rem + 0.8vw), var(--cg-text-2xl));
-  --cg-size-entry: clamp(var(--cg-text-lg), calc(0.95rem + 0.55vw), var(--cg-text-xl));
-  --cg-size-quote: clamp(var(--cg-text-xl), calc(0.9rem + 1.9vw), var(--cg-text-3xl));
-  --cg-size-figure: clamp(var(--cg-text-2xl), calc(1rem + 2.6vw), var(--cg-text-4xl));
-  --cg-size-lead: clamp(var(--cg-text-md), calc(0.85rem + 0.7vw), var(--cg-text-xl));
+  --cg-size-hero: clamp(var(--cg-text-3xl), calc(1.5rem + 3.8vw), calc(var(--cg-text-5xl) * 1.12));
+  --cg-size-title: clamp(var(--cg-text-3xl), calc(1.5rem + 3.8vw), calc(var(--cg-text-5xl) * 1.1));
+  --cg-size-display: var(--cg-size-title);
+  --cg-size-figure: clamp(var(--cg-text-3xl), calc(1.4rem + 3vw), var(--cg-text-5xl));
+  --cg-size-heading: clamp(var(--cg-text-2xl), calc(1.2rem + 1.6vw), var(--cg-text-3xl));
+  --cg-size-subheading: clamp(var(--cg-text-xl), calc(1rem + 1vw), var(--cg-text-2xl));
+  --cg-size-entry: clamp(var(--cg-text-lg), calc(1rem + 0.5vw), var(--cg-text-xl));
+  --cg-size-quote: clamp(var(--cg-text-2xl), calc(1.1rem + 2.6vw), var(--cg-text-4xl));
+  --cg-size-lead: clamp(var(--cg-text-md), calc(0.9rem + 0.55vw), var(--cg-text-xl));
 
-  --cg-leading-display: 1.04;
-  --cg-leading-heading: 1.14;
-  --cg-leading-snug: 1.32;
-  --cg-leading-text: 1.68;
-  --cg-leading-ui: 1.45;
+  --cg-leading-display: 0.98;
+  --cg-leading-heading: 1.06;
+  --cg-leading-snug: 1.3;
+  --cg-leading-text: 1.62;
+  --cg-leading-ui: 1.4;
 
-  --cg-tracking-display: -0.021em;
-  --cg-tracking-heading: -0.012em;
-  --cg-tracking-caps: 0.09em;
+  --cg-tracking-display: -0.012em;
+  --cg-tracking-heading: -0.006em;
+  --cg-tracking-caps: 0.06em;
 
-  --cg-weight-light: 300;
+  --cg-weight-light: 400;
   --cg-weight-regular: 400;
   --cg-weight-book: 450;
   --cg-weight-medium: 500;
   --cg-weight-semibold: 600;
+  --cg-weight-display: 800;
+  --cg-weight-heading: 700;
 }
 
 /* --------------------------------------------------------------------------
-   Shape and motion: corners barely softened, motion is a colour change.
+   Shape and motion: square corners; motion is a reveal, a hover, a rule.
    -------------------------------------------------------------------------- */
 
 :where(:root) {
   --cg-radius: var(--cogenta-radius-sm);
   --cg-radius-control: var(--cogenta-radius-md);
 
-  --cg-duration: min(var(--cogenta-motion-duration), 150ms);
+  --cg-duration: min(var(--cogenta-motion-duration), 200ms);
   --cg-ease: var(--cogenta-motion-easing);
 
   --cg-rule: 1px;
   --cg-rule-strong: 2px;
+  --cg-rule-heavy: 4px;
 }
 
 /* --------------------------------------------------------------------------
@@ -173,13 +176,15 @@
 
    The dark palette is designed, not inverted:
 
-   1. The ground is ink, taken from the skin's own warm `fg` hue at a low
-      lightness: a reading lamp, never a neutral grey and never pure black.
-      Surfaces step up in lightness (sunken, canvas, raised).
-   2. Text is the paper colour lowered to a soft cream, so a long read on
-      ink stays calm; secondary text keeps the paper's warmth.
-   3. The accent is lifted and desaturated, and its foreground flips to ink.
-   4. Hairlines step up in lightness from the surface they sit on.
+   1. The ground is a near-black taken from the skin's own ink hue at a low
+      lightness; surfaces step up in lightness (sunken, canvas, raised).
+   2. Text is the paper lowered to a soft off-white; secondary text keeps
+      the paper's hue.
+   3. The accent is lifted to the lightness a vermilion needs on black, so
+      it keeps its heat instead of turning to salmon.
+   4. The solid panel of a lead story, a quotation and the footer is ink on
+      paper by day and a raised surface on black by night.
+   5. Hairlines step up in lightness from the surface they sit on.
 
    Every ratio is computed from this file by `test/design-system.test.ts`,
    in both schemes.
@@ -197,8 +202,8 @@
 
   --cg-accent: var(--cogenta-color-accent);
   --cg-accent-fg: var(--cogenta-color-accent-fg);
-  --cg-accent-hover: color-mix(in oklab, var(--cogenta-color-accent) 64%, var(--cogenta-color-fg));
-  --cg-accent-line: color-mix(in oklab, var(--cogenta-color-accent) 45%, var(--cogenta-color-bg));
+  --cg-accent-hover: color-mix(in oklab, var(--cogenta-color-accent) 70%, var(--cogenta-color-fg));
+  --cg-accent-line: color-mix(in oklab, var(--cogenta-color-accent) 50%, var(--cogenta-color-bg));
 
   --cg-line: var(--cogenta-color-border);
   --cg-line-soft: color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-bg));
@@ -210,12 +215,17 @@
   --cg-action-hover: var(--cogenta-color-accent);
   --cg-action-hover-fg: var(--cogenta-color-accent-fg);
 
-  /* The hero's photo overlay: always a dark tint and always a pale ink,
-     whichever scheme the page itself is in — the same reasoning as a
-     printed page's own ink, which does not invert when the room goes dark. */
-  --cg-hero-scrim: var(--cogenta-color-fg);
-  --cg-hero-ink: var(--cogenta-color-bg);
+  /* The solid panel: ink with paper text (a lead story, a quotation band,
+     the footer), and the accent as it must be lifted to read on it. */
+  --cg-panel: var(--cogenta-color-fg);
+  --cg-panel-fg: var(--cogenta-color-bg);
+  --cg-panel-muted: color-mix(in oklab, var(--cogenta-color-bg) 72%, var(--cogenta-color-fg));
+  --cg-panel-line: color-mix(in oklab, var(--cogenta-color-bg) 26%, var(--cogenta-color-fg));
+  --cg-panel-accent: color-mix(in oklab, var(--cogenta-color-accent) 60%, var(--cogenta-color-bg));
 
+  /* The image placeholder, and the veil that keeps an unloaded picture from
+     painting a white flash in a dark room. */
+  --cg-image-ground: var(--cogenta-color-muted);
   --cg-image-brightness: 1;
 }
 
@@ -224,55 +234,55 @@
   :where(:root) {
     --cg-canvas: light-dark(
       var(--cogenta-color-bg),
-      oklch(from var(--cogenta-color-fg) 0.205 calc(c * 0.9) h)
+      oklch(from var(--cogenta-color-fg) 0.18 calc(c * 0.9) h)
     );
     --cg-surface: light-dark(
       var(--cogenta-color-bg),
-      oklch(from var(--cogenta-color-fg) 0.205 calc(c * 0.9) h)
+      oklch(from var(--cogenta-color-fg) 0.18 calc(c * 0.9) h)
     );
     --cg-surface-raised: light-dark(
       var(--cogenta-color-bg),
-      oklch(from var(--cogenta-color-fg) 0.25 calc(c * 0.9) h)
+      oklch(from var(--cogenta-color-fg) 0.235 calc(c * 0.9) h)
     );
     --cg-surface-sunken: light-dark(
       var(--cogenta-color-muted),
-      oklch(from var(--cogenta-color-fg) 0.17 calc(c * 0.9) h)
+      oklch(from var(--cogenta-color-fg) 0.145 calc(c * 0.9) h)
     );
 
-    --cg-ink: light-dark(var(--cogenta-color-fg), oklch(from var(--cogenta-color-bg) 0.92 c h));
+    --cg-ink: light-dark(var(--cogenta-color-fg), oklch(from var(--cogenta-color-bg) 0.94 c h));
     --cg-ink-muted: light-dark(
       var(--cogenta-color-muted-fg),
-      oklch(from var(--cogenta-color-bg) 0.8 calc(c * 1.4) h)
+      oklch(from var(--cogenta-color-bg) 0.8 calc(c * 1.3) h)
     );
     --cg-ink-subtle: light-dark(
       color-mix(in oklab, var(--cogenta-color-muted-fg) 86%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-bg) 0.71 calc(c * 1.4) h)
+      oklch(from var(--cogenta-color-bg) 0.7 calc(c * 1.3) h)
     );
 
     --cg-accent: light-dark(
       var(--cogenta-color-accent),
-      oklch(from var(--cogenta-color-accent) 0.8 calc(c * 0.62) h)
+      oklch(from var(--cogenta-color-accent) 0.74 calc(c * 0.9) h)
     );
     --cg-accent-fg: light-dark(
       var(--cogenta-color-accent-fg),
-      oklch(from var(--cogenta-color-accent) 0.2 calc(c * 0.5) h)
+      oklch(from var(--cogenta-color-accent) 0.17 calc(c * 0.4) h)
     );
     --cg-accent-hover: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 64%, var(--cogenta-color-fg)),
-      oklch(from var(--cogenta-color-accent) 0.88 calc(c * 0.45) h)
+      color-mix(in oklab, var(--cogenta-color-accent) 70%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-accent) 0.84 calc(c * 0.7) h)
     );
     --cg-accent-line: light-dark(
-      color-mix(in oklab, var(--cogenta-color-accent) 45%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-accent) 0.52 calc(c * 0.6) h)
+      color-mix(in oklab, var(--cogenta-color-accent) 50%, var(--cogenta-color-bg)),
+      oklch(from var(--cogenta-color-accent) 0.5 calc(c * 0.7) h)
     );
 
     --cg-line: light-dark(
       var(--cogenta-color-border),
-      oklch(from var(--cogenta-color-fg) 0.33 calc(c * 0.9) h)
+      oklch(from var(--cogenta-color-fg) 0.31 calc(c * 0.9) h)
     );
     --cg-line-soft: light-dark(
       color-mix(in oklab, var(--cogenta-color-border) 55%, var(--cogenta-color-bg)),
-      oklch(from var(--cogenta-color-fg) 0.275 calc(c * 0.9) h)
+      oklch(from var(--cogenta-color-fg) 0.255 calc(c * 0.9) h)
     );
     --cg-line-strong: light-dark(
       color-mix(in oklab, var(--cogenta-color-border) 40%, var(--cogenta-color-fg)),
@@ -280,30 +290,47 @@
     );
     --cg-line-ink: light-dark(
       var(--cogenta-color-fg),
-      oklch(from var(--cogenta-color-bg) 0.78 calc(c * 1.2) h)
+      oklch(from var(--cogenta-color-bg) 0.8 calc(c * 1.1) h)
     );
 
-    --cg-action: light-dark(var(--cogenta-color-fg), oklch(from var(--cogenta-color-bg) 0.92 c h));
+    --cg-action: light-dark(var(--cogenta-color-fg), oklch(from var(--cogenta-color-bg) 0.94 c h));
     --cg-action-fg: light-dark(
       var(--cogenta-color-bg),
-      oklch(from var(--cogenta-color-fg) 0.205 calc(c * 0.9) h)
+      oklch(from var(--cogenta-color-fg) 0.18 calc(c * 0.9) h)
     );
     --cg-action-hover: light-dark(
       var(--cogenta-color-accent),
-      oklch(from var(--cogenta-color-accent) 0.8 calc(c * 0.62) h)
+      oklch(from var(--cogenta-color-accent) 0.74 calc(c * 0.9) h)
     );
     --cg-action-hover-fg: light-dark(
       var(--cogenta-color-accent-fg),
-      oklch(from var(--cogenta-color-accent) 0.2 calc(c * 0.5) h)
+      oklch(from var(--cogenta-color-accent) 0.17 calc(c * 0.4) h)
     );
 
-    --cg-hero-scrim: light-dark(
+    --cg-panel: light-dark(
       var(--cogenta-color-fg),
-      oklch(from var(--cogenta-color-fg) 0.24 calc(c * 0.9) h)
+      oklch(from var(--cogenta-color-fg) 0.235 calc(c * 0.9) h)
     );
-    --cg-hero-ink: light-dark(
+    --cg-panel-fg: light-dark(
       var(--cogenta-color-bg),
-      oklch(from var(--cogenta-color-bg) 0.95 c h)
+      oklch(from var(--cogenta-color-bg) 0.94 c h)
+    );
+    --cg-panel-muted: light-dark(
+      color-mix(in oklab, var(--cogenta-color-bg) 72%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-bg) 0.8 calc(c * 1.3) h)
+    );
+    --cg-panel-line: light-dark(
+      color-mix(in oklab, var(--cogenta-color-bg) 26%, var(--cogenta-color-fg)),
+      oklch(from var(--cogenta-color-fg) 0.36 calc(c * 0.9) h)
+    );
+    --cg-panel-accent: light-dark(
+      oklch(from var(--cogenta-color-accent) 0.76 calc(c * 0.9) h),
+      oklch(from var(--cogenta-color-accent) 0.76 calc(c * 0.9) h)
+    );
+
+    --cg-image-ground: light-dark(
+      var(--cogenta-color-muted),
+      oklch(from var(--cogenta-color-fg) 0.26 calc(c * 0.9) h)
     );
   }
 }
@@ -312,10 +339,10 @@
    not glare in a dark room. A brightness step, not a blur. */
 @media (prefers-color-scheme: dark) {
   :where(:root:not([data-theme="light"])) {
-    --cg-image-brightness: 0.9;
+    --cg-image-brightness: 0.88;
   }
 }
 
 :where(:root[data-theme="dark"]) {
-  --cg-image-brightness: 0.9;
+  --cg-image-brightness: 0.88;
 }

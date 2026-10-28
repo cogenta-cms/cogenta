@@ -28,7 +28,9 @@ const list = (entries: readonly ContentEntry[] = YEARS, block = BLOCKS.collectio
   serialize(renderCollectionList(block, ctx, entries))
 const index = (entries: readonly ContentEntry[] = YEARS): string =>
   serialize(renderCollectionList(untitled, ctx, entries))
-const digest = (entries: readonly ContentEntry[] = YEARS): string => list(entries)
+const river = (entries: readonly ContentEntry[] = YEARS): string => list(entries)
+const ranked = (entries: readonly ContentEntry[] = YEARS): string =>
+  list(entries, { ...BLOCKS.collectionList, variant: { background: 'muted' } })
 const front = (entries: readonly ContentEntry[] = YEARS): string =>
   serialize(renderCollectionList({ ...untitled, layout: 'grid' }, ctx, entries))
 const rail = (entries: readonly ContentEntry[] = YEARS): string =>
@@ -39,7 +41,8 @@ const strip = (entries: readonly ContentEntry[] = YEARS): string =>
 describe('collectionList names its form from the layout and the title an editor chose', () => {
   it('carries the form on the section, beside the layout it came from', () => {
     expect(index()).toContain('data-layout="list" data-form="index"')
-    expect(digest()).toContain('data-layout="list" data-form="digest"')
+    expect(river()).toContain('data-layout="list" data-form="river"')
+    expect(ranked()).toContain('data-layout="list" data-form="ranked"')
     expect(front()).toContain('data-layout="grid" data-form="front"')
     expect(rail()).toContain('data-layout="grid" data-form="rail"')
     expect(strip()).toContain('data-layout="carousel" data-form="strip"')
@@ -114,27 +117,65 @@ describe('collectionList, list layout with no title: the index', () => {
   })
 })
 
-describe('collectionList, list layout with a title: the digest', () => {
-  it('renders a short, ungrouped list — no year ever appears', () => {
-    const out = digest()
-    expect(out).toContain('<ol class="cg-digest">')
-    expect(out.match(/<li class="cg-digest__row"/g)).toHaveLength(4)
+describe('collectionList, list layout with a title: the river', () => {
+  it('renders a dense, ungrouped list: a row per entry, no year heading ever', () => {
+    const out = river()
+    expect(out).toContain('<ol class="cg-river">')
+    expect(out.match(/<li class="cg-river__row"/g)).toHaveLength(4)
     expect(out).not.toContain('cg-index')
-    expect(out).not.toContain('2026</span>')
+    expect(out).not.toContain('cg-index__year')
   })
 
-  it('sets the short margin date, title and (past the narrow breakpoint) the excerpt', () => {
-    expect(digest()).toMatch(
-      /<time datetime="2026-05-31T08:40:00\.000Z">May 31<\/time>.*<h3 class="cg-digest__title"><a class="cg-digest__link"[^>]*>Reading on the 7:52<\/a><\/h3><p class="cg-digest__excerpt">A standfirst\.<\/p>/s,
+  it('sets the timestamp first, then the topic, the headline and the standfirst', () => {
+    expect(river()).toMatch(
+      /<p class="cg-river__time cg-label"><time datetime="2026-05-31T08:40:00\.000Z">May 31<\/time><span class="cg-river__year">2026<\/span><\/p><div class="cg-river__body"><p class="cg-river__topic cg-label">Trains<\/p><h3 class="cg-river__title"><a class="cg-river__link"[^>]*>Reading on the 7:52<\/a><\/h3><p class="cg-river__excerpt">A standfirst\.<\/p>/,
     )
   })
 
   it('starts entry titles at h3, nested under the block’s own h2', () => {
-    expect(digest()).toContain('<h3 class="cg-digest__title">')
+    expect(river()).toContain('<h3 class="cg-river__title">')
   })
 
-  it('carries no picture at all: a digest is a compact list of words', () => {
-    expect(digest()).not.toContain('<img')
+  it('carries a thumbnail only for the entries that have one, hidden and untabbable', () => {
+    const out = river()
+    expect(out.match(/data-media="present"/g)).toHaveLength(2)
+    expect(out.match(/data-media="none"/g)).toHaveLength(2)
+    expect(out).toMatch(/<a class="cg-river__media" href="[^"]+" tabindex="-1" aria-hidden="true">/)
+    for (const tag of out.match(/<img\b[^>]*>/g) ?? []) expect(tag).toMatch(/\salt="/)
+  })
+
+  it('shows no date for an entry that only has a creation date', () => {
+    const undated: ContentEntry = {
+      id: 'x',
+      collection: 'post',
+      locale: 'en',
+      status: 'published',
+      title: 'Undated',
+      createdAt: '2026-03-01T09:00:00.000Z',
+    }
+    expect(river([undated])).not.toContain('<time')
+  })
+})
+
+describe('collectionList, list layout with a title on a muted background: the ranked list', () => {
+  it('numbers the entries in order, the number hidden from assistive technology', () => {
+    const out = ranked()
+    expect(out).toContain('<ol class="cg-ranked">')
+    expect(out).toContain('<span class="cg-ranked__rank" aria-hidden="true">01</span>')
+    expect(out).toContain('<span class="cg-ranked__rank" aria-hidden="true">04</span>')
+    expect(out.indexOf('>01<')).toBeLessThan(out.indexOf('>02<'))
+  })
+
+  it('sets a topic, a headline and the long date, and no picture', () => {
+    const out = ranked()
+    expect(out).toContain('<p class="cg-ranked__topic cg-label">Trains</p>')
+    expect(out).toMatch(/<h3 class="cg-ranked__title"><a class="cg-ranked__link"/)
+    expect(out).toContain('<time datetime="2026-05-31T08:40:00.000Z">May 31, 2026</time>')
+    expect(out).not.toContain('<img')
+  })
+
+  it('leaves the background to the block variant, which the host applies once', () => {
+    expect(ranked()).not.toContain('data-variant-background')
   })
 })
 
@@ -161,10 +202,10 @@ describe('collectionList, grid layout with no title: the front', () => {
     expect(front(five)).toContain('data-secondaries="3"')
   })
 
-  it('gives the lead a topic, its picture eagerly, and the standfirst', () => {
+  it('gives the lead a topic, its picture and the standfirst; the picture is lazy, the hero owns the first paint', () => {
     const out = front()
-    expect(out).toMatch(/<p class="cg-story__topic">Trains<\/p>/)
-    expect(out).toMatch(/<img class="cg-story__image"[^>]*loading="eager"/)
+    expect(out).toMatch(/<p class="cg-story__topic cg-label">Trains<\/p>/)
+    expect(out).toMatch(/<img class="cg-story__image"[^>]*loading="lazy"/)
     expect(out).toContain('<p class="cg-story__standfirst">A standfirst.</p>')
   })
 
@@ -172,8 +213,10 @@ describe('collectionList, grid layout with no title: the front', () => {
     expect(front()).not.toContain('cg-head')
   })
 
-  it('shows no date on the front: a lead and its secondaries read by rank, not by day', () => {
-    expect(front()).not.toContain('cg-story__meta')
+  it('dates the lead and its secondaries in the mono label', () => {
+    expect(front()).toContain(
+      '<p class="cg-story__meta cg-label"><time datetime="2026-05-31T08:40:00.000Z">',
+    )
   })
 })
 
@@ -186,15 +229,15 @@ describe('collectionList, grid layout with a title: the rail', () => {
     expect(out.match(/<li class="cg-rail__item">/g)).toHaveLength(3)
   })
 
-  it('gives the lead its date and standfirst; the column entries a headline and a date only', () => {
+  it('gives the lead its date and standfirst; the stack a headline, a date and a small picture when there is one', () => {
     const out = rail()
     const lead = out.slice(out.indexOf('cg-rail__lead'), out.indexOf('cg-rail__list'))
     expect(lead).toContain('<time datetime="2026-05-31T08:40:00.000Z">May 31, 2026</time>')
     expect(lead).toContain('cg-story__standfirst')
     const column = out.slice(out.indexOf('cg-rail__list'))
-    expect(column).not.toContain('<img')
     expect(column).not.toContain('cg-story__standfirst')
     expect(column).toContain('cg-story--brief')
+    expect(column.match(/<img /g)?.length ?? 0).toBeLessThanOrEqual(2)
   })
 })
 
@@ -215,7 +258,7 @@ describe('collectionList, carousel layout: the strip', () => {
 
 describe('collectionList, shared', () => {
   it('renders the translated empty state for every form, when there are no entries', () => {
-    for (const render of [index, digest, front, rail, strip]) {
+    for (const render of [index, river, ranked, front, rail, strip]) {
       const out = render([])
       expect(out).toContain('<p class="cg-collection__empty">collection.empty</p>')
     }

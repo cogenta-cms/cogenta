@@ -150,24 +150,26 @@ describe('renderPage, an essay', () => {
     expect(headingLevels(html).filter((level) => level === 1)).toHaveLength(1)
   })
 
-  it('puts the first term, the long date and the reading time in the margin', () => {
+  it('puts the first term over the headline, then the date and the reading time in the byline', () => {
     const html = essay()
     expect(html).toContain(
-      '<p class="cg-article-head__topic"><a class="cg-article-head__topic-link" href="/en/category/writing">Writing</a></p>',
+      '<p class="cg-article-head__topic cg-label"><a class="cg-article-head__topic-link" href="/en/category/writing">Writing</a></p>',
     )
+    expect(html.indexOf('cg-article-head__topic')).toBeLessThan(html.indexOf('<h1'))
+    expect(html.indexOf('<h1')).toBeLessThan(html.indexOf('cg-article-head__facts'))
     expect(html).toContain(
       '<time class="cg-article-head__date" datetime="2024-10-20T08:00:00.000Z">October 20, 2024</time>',
     )
     expect(html).toContain('<span class="cg-article-head__reading-time">entry.readingTime</span>')
   })
 
-  it('sets the standfirst and the cover at 3:2, loaded eagerly above the fold', () => {
+  it('sets the standfirst and the cover, fetched first and loaded eagerly: it is the largest paint', () => {
     const html = essay()
     expect(html).toContain(
       '<p class="cg-article-head__standfirst">A first draft tells you what a piece is about.</p>',
     )
     expect(html).toMatch(
-      /<figure class="cg-article-head__cover"><img class="cg-article-head__image"[^>]*loading="eager"/,
+      /<figure class="cg-article-head__cover"><img class="cg-article-head__image"[^>]*loading="eager"[^>]*fetchpriority="high"/,
     )
   })
 

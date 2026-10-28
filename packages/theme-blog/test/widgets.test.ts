@@ -60,13 +60,13 @@ describe('the sidebar layout on the grid', () => {
     expect(imports.at(-1)).toBe('./widgets.css')
   })
 
-  it('keeps the page twelve columns wide and gives the content nine of them, the sidebar three', () => {
+  it('keeps the page twelve columns wide and gives the content eight of them, the sidebar four', () => {
     const widgets = css('widgets.css')
     expect(widgets).toMatch(
       /\.cg-sidebar-layout\s*\{[^}]*grid-template-columns:\s*repeat\(12, minmax\(0, 1fr\)\)/,
     )
-    expect(widgets).toMatch(/\.cg-sidebar-layout__content\s*\{[^}]*--cg-columns:\s*9;/)
-    expect(widgets).toMatch(/\.cg-sidebar-layout__aside\s*\{[^}]*grid-column:\s*10 \/ -1/)
+    expect(widgets).toMatch(/\.cg-sidebar-layout__content\s*\{[^}]*--cg-columns:\s*8;/)
+    expect(widgets).toMatch(/\.cg-sidebar-layout__aside\s*\{[^}]*grid-column:\s*9 \/ -1/)
   })
 
   it('never insets a block twice inside the content column', () => {

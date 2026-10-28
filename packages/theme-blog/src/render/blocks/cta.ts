@@ -10,11 +10,11 @@ import {
 import { section } from '../layout.js'
 
 /**
- * An invitation set inline, between two rules: the title in the margin
- * columns, the supporting line and the actions on the text line beside it.
- * No tinted panel and no band: the rules and the space around them are the
- * whole frame, so a newsletter sign-up reads as part of the publication
- * rather than as an advertisement placed in it.
+ * The newsletter band: a solid panel across the container, the title set
+ * large in the display face on the left and the supporting line and the
+ * actions on the right. The first action is the one filled button of the
+ * panel; the rest are links. No box shadow, no illustration, no gradient:
+ * the panel is the whole frame.
  */
 export function renderCta(block: CtaBlock, ctx: RenderContext): HtmlElement {
   return section(
@@ -23,18 +23,22 @@ export function renderCta(block: CtaBlock, ctx: RenderContext): HtmlElement {
     'cg-cta',
     {},
     'div',
-    heading(
-      blockHeadingTag('cta') ?? 'h2',
-      { class: 'cg-cta__title', 'data-field': 'title' },
-      block.title,
-    ),
     h(
       'div',
-      { class: 'cg-cta__body' },
-      block.text === undefined
-        ? null
-        : h('p', { class: 'cg-cta__text', 'data-field': 'text' }, block.text),
-      actionList(ctx, block.actions, block.title),
+      { class: 'cg-cta__inner' },
+      heading(
+        blockHeadingTag('cta') ?? 'h2',
+        { class: 'cg-cta__title', 'data-field': 'title' },
+        block.title,
+      ),
+      h(
+        'div',
+        { class: 'cg-cta__body' },
+        block.text === undefined
+          ? null
+          : h('p', { class: 'cg-cta__text', 'data-field': 'text' }, block.text),
+        actionList(ctx, block.actions, block.title),
+      ),
     ),
   )
 }

@@ -38,56 +38,46 @@ describe('renderChrome, the header', () => {
     )
   })
 
-  it('renders every header link in one navigation landmark', () => {
+  it('makes the masthead the one sticky header, with the section bar as its own navigation landmark after it', () => {
     const { header } = renderChrome(BASE)
+    expect(header.match(/<header /g)).toHaveLength(1)
     expect(header.match(/<nav /g)).toHaveLength(1)
+    expect(header.indexOf('</header>')).toBeLessThan(header.indexOf('<nav'))
     expect(header).toMatch(
-      /<nav class="cg-site-header__nav" id="cg-nav" aria-label="Primary">[\s\S]*href="\/archive"[\s\S]*href="\/about"[\s\S]*<\/nav>/,
+      /<nav class="cg-sections" id="cg-nav" aria-label="Primary"><div class="cg-sections__inner"><ul class="cg-nav__items">[\s\S]*href="\/archive"[\s\S]*href="\/about"[\s\S]*<\/nav>/,
     )
   })
 
-  it('opens the navigation on a narrow screen with a CSS-only checkbox toggle, no script', () => {
-    const { header } = renderChrome(BASE)
-    expect(header).toContain(
-      '<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">',
-    )
-    expect(header).toContain('<label for="cg-nav-toggle" class="cg-nav-toggle-label"')
+  it('needs no menu to open: no checkbox, no script, no handler, whatever the screen', () => {
+    const { header } = renderChrome(FULL)
+    expect(header).not.toContain('<input')
+    expect(header).not.toContain('cg-nav-toggle')
     expect(header).not.toMatch(/<script|\son[a-z]+="/i)
   })
 
-  it('places the toggle label before the navigation, so the sibling selector reaches it', () => {
-    const { header } = renderChrome(BASE)
-    expect(header.indexOf('cg-nav-toggle-label')).toBeLessThan(
-      header.indexOf('cg-site-header__nav'),
-    )
-  })
-
-  it('renders no menu toggle and no navigation when there is nothing to navigate to', () => {
+  it('renders no section bar when there is nothing to navigate to', () => {
     const { header } = renderChrome({ ...BASE, headerNav: [] })
-    expect(header).not.toContain('cg-nav-toggle')
     expect(header).not.toContain('<nav')
+    expect(header).not.toContain('cg-sections')
   })
 
-  it('renders the menu for a header action alone, with no nav links', () => {
+  it('renders the header action alone, in the masthead, with no nav links', () => {
     const { header } = renderChrome({
       ...BASE,
       headerNav: [],
       headerAction: { label: 'Subscribe', href: '/newsletter' },
     })
-    expect(header).toContain('cg-nav-toggle-input')
     expect(header).toMatch(/<a class="cg-action cg-site-header__action"[^>]*>Subscribe<\/a>/)
+    expect(header).not.toContain('<nav')
   })
 
-  it('draws the header action as the outlined control, never a filled pill', () => {
+  it('draws the header action as a plain link the stylesheet fills, in the masthead after the toggle', () => {
     const { header } = renderChrome(FULL)
     expect(header).toMatch(/data-emphasis="outline" href="\/newsletter">Subscribe</)
-    expect(header).not.toContain('data-emphasis="primary"')
-  })
-
-  it('renders the header action inside the navigation, after the links', () => {
-    const { header } = renderChrome(FULL)
-    const nav = header.slice(header.indexOf('<nav'), header.indexOf('</nav>'))
-    expect(nav.indexOf('href="/about"')).toBeLessThan(nav.indexOf('cg-site-header__action'))
+    expect(header.indexOf('data-cg-theme-toggle')).toBeLessThan(
+      header.indexOf('cg-site-header__action'),
+    )
+    expect(header.indexOf('cg-site-header__action')).toBeLessThan(header.indexOf('</header>'))
   })
 
   it('renders an unlinked submenu placeholder as a span, never a dead link', () => {
@@ -150,9 +140,9 @@ describe('renderChrome, the manual light/dark toggle', () => {
     expect(header).toContain('data-cg-theme-toggle')
   })
 
-  it('places the toggle after the navigation, outside the panel it does not control', () => {
+  it('places the toggle in the masthead, before the section bar', () => {
     const { header } = renderChrome(FULL)
-    expect(header.indexOf('data-cg-theme-toggle')).toBeGreaterThan(header.indexOf('</nav>'))
+    expect(header.indexOf('data-cg-theme-toggle')).toBeLessThan(header.indexOf('<nav'))
   })
 
   it('reflects the locale passed to renderChrome', () => {
@@ -201,6 +191,14 @@ describe('renderChrome, the footer', () => {
     expect(footer).toContain('cg-site-footer__social')
     expect(footer).toContain('<span class="cg-visually-hidden">Mastodon</span>')
     expect(footer.match(/<svg class="cg-social__icon"/g)).toHaveLength(2)
+  })
+
+  it('invites a reader with the site action and the feed, and signs the page with the name once more', () => {
+    const { footer } = renderChrome(FULL)
+    expect(footer).toMatch(/data-emphasis="primary" href="\/newsletter">Subscribe</)
+    expect(footer).toContain('<a class="cg-site-footer__feed" href="/feed.xml">RSS</a>')
+    expect(footer).toContain('<p class="cg-site-footer__name" aria-hidden="true">Field Notes</p>')
+    expect(renderChrome(BASE).footer).not.toContain('data-emphasis="primary"')
   })
 
   it('renders the pre-1.4 shape when none of the new fields are set', () => {
@@ -252,12 +250,13 @@ describe('renderChrome, the language switcher (theme@1.10)', () => {
     expect(renderChrome({ ...BASE, languages: [LANGUAGES[0]] }).header).not.toContain('cg-lang')
   })
 
-  it('links the translation of the page, outside the collapsible navigation panel', () => {
+  it('links the translation of the page, in the masthead and not in the section bar', () => {
     const { header } = renderChrome({ ...BASE, locale: 'fr', languages: LANGUAGES })
     expect(header).toContain('<nav class="cg-lang" aria-label="Langue">')
     expect(header).toContain('href="/en/blog/hello" lang="en" hreflang="en"')
     expect(header).toContain('aria-current="true">Français</a>')
-    const panel = header.slice(header.indexOf('id="cg-nav"'), header.indexOf('</nav>'))
-    expect(panel).not.toContain('cg-lang')
+    const bar = header.slice(header.indexOf('id="cg-nav"'), header.indexOf('</nav>'))
+    expect(bar).not.toContain('cg-lang')
+    expect(header.indexOf('cg-lang')).toBeLessThan(header.indexOf('</header>'))
   })
 })

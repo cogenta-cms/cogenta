@@ -15,31 +15,30 @@ import {
   type RenderContext,
   renderImageSource,
 } from '@cogenta/theme-kit'
-import { dayMonth, section, sectionHead, yearOf } from '../layout.js'
+import { dayMonth, entryTopic, longDate, ordinal, section, sectionHead, yearOf } from '../layout.js'
 import { renderStory, type Story, storyFromEntry } from '../story.js'
 
 export { buildCollectionListQuery as query }
 
 /**
- * A listing, set in one of four forms chosen from what the editor already
- * decided in contract B (the layout, and whether the list has a title),
- * never from a setting this theme invents — the same discipline
- * `@cogenta/theme-magazine` keeps for its own four forms:
+ * A listing, set in one of six forms chosen from what the editor already
+ * decided in contract B (the layout, whether the list has a title, and the
+ * block's own `variant.background`), never from a setting this theme invents.
+ * A site that stored its home page for an earlier version of this theme
+ * keeps every block and gets the closest form of the new set.
  *
- * - `list` without a title is **the index**: this theme's own signature, a
- *   table of contents grouped by year, unchanged by this pass because
- *   nothing about it was incomplete.
- * - `list` with a title is **a digest**: a short, ungrouped list for a
- *   curated shelf ("Latest", "Reader favourites") rather than a
- *   chronological archive — grouping five recent posts by year would be
- *   furniture with nothing to organise.
- * - `grid` without a title is **the front**: the newest essay set large,
- *   with its picture and its standfirst, and the next few underneath as a
- *   row of smaller cards. This is what an essay collection opens on.
- * - `grid` with a title is **a rail**: the section label on a rule, its
- *   newest essay large beside a column of the others — a shelf that keeps
- *   reading after its first two items.
- * - `carousel` is **a strip**: essays side by side between column rules,
+ * - `list` without a title is **the index**: a table of contents grouped by
+ *   year, the form an archive page opens on.
+ * - `list` with a title is **the river**: the dense latest-first feed, a
+ *   timestamp in the margin, then the topic, the headline, the standfirst and
+ *   a thumbnail when the entry has one.
+ * - `list` with a title on a `muted` background is **the ranked list**: the
+ *   same handful as a numbered module, for "start here" and "most read".
+ * - `grid` without a title is **the front**: the newest story set large, with
+ *   its picture and its standfirst, and the next few under it as cards.
+ * - `grid` with a title is **the rail**: the section label on a rule, its
+ *   newest story large beside a stack of the others, each with a time.
+ * - `carousel` is **the strip**: stories side by side as picture cards,
  *   scrolling on a narrow screen.
  *
  * An empty list keeps its head and says so in one line.
@@ -132,34 +131,63 @@ function renderIndexRow(
 }
 
 /**
- * The digest: a short, ungrouped list — a compact row of date, title and
- * (on a wide screen) the standfirst, for a curated handful rather than a
- * chronological archive.
+ * The river: a timestamp, the topic and headline, the standfirst, and a
+ * thumbnail when the entry has one. A row without a picture is a row of text,
+ * never a row with a hole in it.
  */
-function digestRow(story: Story, tag: HeadingTag): HtmlElement {
+function riverRow(entry: ContentEntry, ctx: RenderContext, tag: HeadingTag): HtmlElement {
+  const url = entryHref(entry, ctx)
+  const iso = publicationDate(entry)
+  const day = iso === undefined ? null : dayMonth(iso, ctx.locale)
+  const year = iso === undefined ? null : yearOf(iso)
+  const topic = entryTopic(entry)
+  const excerpt = entryExcerpt(entry)
+  const media = picture(entry, ctx, url, 'cg-river', '(min-width: 48rem) 12rem, 30vw')
   return h(
     'li',
-    { class: 'cg-digest__row' },
-    story.date === undefined
-      ? null
+    { class: 'cg-river__row', 'data-media': media === null ? 'none' : 'present' },
+    iso === undefined || day === null
+      ? h('p', { class: 'cg-river__time cg-label' })
       : h(
           'p',
-          { class: 'cg-digest__date' },
-          h('time', { datetime: story.date.iso }, story.date.label),
+          { class: 'cg-river__time cg-label' },
+          h('time', { datetime: iso }, day),
+          year === null ? null : h('span', { class: 'cg-river__year' }, year),
         ),
     h(
       'div',
-      { class: 'cg-digest__body' },
-      heading(
-        tag,
-        { class: 'cg-digest__title' },
-        story.href === null
-          ? story.title
-          : h('a', { class: 'cg-digest__link', href: story.href }, story.title),
-      ),
-      story.standfirst === undefined
+      { class: 'cg-river__body' },
+      topic === undefined ? null : h('p', { class: 'cg-river__topic cg-label' }, topic),
+      title(entry, ctx, url, 'cg-river', tag),
+      excerpt === undefined ? null : h('p', { class: 'cg-river__excerpt' }, excerpt),
+    ),
+    media,
+  )
+}
+
+/** The ranked list: a number set large, the headline, the topic and the date. */
+function rankedRow(
+  entry: ContentEntry,
+  index: number,
+  ctx: RenderContext,
+  tag: HeadingTag,
+): HtmlElement {
+  const url = entryHref(entry, ctx)
+  const iso = publicationDate(entry)
+  const day = iso === undefined ? null : longDate(iso, ctx.locale)
+  const topic = entryTopic(entry)
+  return h(
+    'li',
+    { class: 'cg-ranked__row' },
+    h('span', { class: 'cg-ranked__rank', 'aria-hidden': 'true' }, ordinal(index)),
+    h(
+      'div',
+      { class: 'cg-ranked__body' },
+      topic === undefined ? null : h('p', { class: 'cg-ranked__topic cg-label' }, topic),
+      title(entry, ctx, url, 'cg-ranked', tag),
+      iso === undefined || day === null
         ? null
-        : h('p', { class: 'cg-digest__excerpt' }, story.standfirst),
+        : h('p', { class: 'cg-ranked__meta cg-label' }, h('time', { datetime: iso }, day)),
     ),
   )
 }
@@ -183,8 +211,8 @@ function frontStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
             variant: 'lead',
             image: true,
             standfirst: true,
-            sizes: '(min-width: 64rem) 60rem, 100vw',
-            loading: 'eager',
+            date: true,
+            sizes: '(min-width: 80rem) 46rem, (min-width: 64rem) 58vw, 100vw',
           }),
         ),
     secondaries.length === 0
@@ -201,7 +229,8 @@ function frontStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
                 variant: 'secondary',
                 image: true,
                 standfirst: true,
-                sizes: '(min-width: 64rem) 20rem, (min-width: 40rem) 45vw, 100vw',
+                date: true,
+                sizes: '(min-width: 64rem) 25rem, (min-width: 40rem) 45vw, 100vw',
               }),
             ),
           ),
@@ -232,7 +261,7 @@ function railStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
             image: true,
             standfirst: true,
             date: true,
-            sizes: '(min-width: 64rem) 34rem, 100vw',
+            sizes: '(min-width: 80rem) 46rem, (min-width: 64rem) 58vw, 100vw',
           }),
         ),
     rest.length === 0
@@ -244,7 +273,13 @@ function railStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
             h(
               'li',
               { class: 'cg-rail__item' },
-              renderStory(story, { tag, variant: 'brief', date: true }),
+              renderStory(story, {
+                tag,
+                variant: 'brief',
+                image: true,
+                date: true,
+                sizes: '(min-width: 64rem) 8rem, 30vw',
+              }),
             ),
           ),
         ),
@@ -264,8 +299,8 @@ function stripStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
           tag,
           variant: 'strip',
           image: true,
-          standfirst: true,
-          sizes: '(min-width: 40rem) 20rem, 70vw',
+          date: true,
+          sizes: '(min-width: 64rem) 19rem, (min-width: 40rem) 40vw, 72vw',
         }),
       ),
     ),
@@ -287,7 +322,9 @@ export function renderCollectionList(
       : block.layout === 'carousel'
         ? 'strip'
         : titled
-          ? 'digest'
+          ? block.variant?.background === 'muted'
+            ? 'ranked'
+            : 'river'
           : 'index'
 
   let body: HtmlElement
@@ -301,12 +338,17 @@ export function renderCollectionList(
       return row.node
     })
     body = h('ol', { class: 'cg-index' }, rows)
-  } else if (form === 'digest') {
-    const stories = entries.map((entry) => storyFromEntry(entry, ctx, 0, 'short'))
+  } else if (form === 'river') {
     body = h(
       'ol',
-      { class: 'cg-digest' },
-      stories.map((story) => digestRow(story, entryTag)),
+      { class: 'cg-river' },
+      entries.map((entry) => riverRow(entry, ctx, entryTag)),
+    )
+  } else if (form === 'ranked') {
+    body = h(
+      'ol',
+      { class: 'cg-ranked' },
+      entries.map((entry, index) => rankedRow(entry, index, ctx, entryTag)),
     )
   } else if (form === 'front') {
     const stories = entries.map((entry) => storyFromEntry(entry, ctx, 1200))

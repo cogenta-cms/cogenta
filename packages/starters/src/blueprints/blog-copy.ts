@@ -96,6 +96,8 @@ export interface BlogCopy {
     readonly epigraph: { readonly text: string; readonly author: string; readonly role: string }
     readonly archiveTitle: string
     readonly moreTitle: string
+    /** The numbered reading list near the end of the home page. */
+    readonly startHereTitle: string
     readonly subjectsTitle: string
     readonly letterTitle: string
     readonly letterText: string

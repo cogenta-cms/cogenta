@@ -72,7 +72,10 @@ describe('scaffoldSite, blog blueprint in French', () => {
     })
     expect(COPY.menus.footer.map((item) => item.url)).toContain('/credits-photo')
     expect(result.menusSeeded).toBe(
-      COPY.menus.header.length + COPY.menus.footer.length + (COPY.menus.headerAction ? 1 : 0),
+      COPY.categories.length +
+        COPY.menus.header.length +
+        COPY.menus.footer.length +
+        (COPY.menus.headerAction ? 1 : 0),
     )
   })
 

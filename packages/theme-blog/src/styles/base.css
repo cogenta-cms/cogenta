@@ -1,7 +1,7 @@
 /*
- * Document, accessibility floor, the grid, the chrome, the actions, and the
- * utility pages the host renders (search, forms, comments). Everything reads
- * `tokens.css`.
+ * Document, accessibility floor, the container, the chrome, the actions, and
+ * the utility pages the host renders (search, forms, comments). Everything
+ * reads `tokens.css`.
  */
 
 /* --------------------------------------------------------------------------
@@ -17,8 +17,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  scroll-padding-block-start: var(--cg-s8);
-  hanging-punctuation: first allow-end last;
+  scroll-padding-block-start: var(--cg-s20);
 }
 
 body {
@@ -30,8 +29,6 @@ body {
   font-weight: var(--cg-weight-regular);
   line-height: var(--cg-leading-text);
   font-kerning: normal;
-  font-optical-sizing: auto;
-  font-variant-ligatures: common-ligatures;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -52,6 +49,7 @@ iframe {
 
 img {
   object-fit: cover;
+  background: var(--cg-image-ground);
 }
 
 :where(img, video) {
@@ -60,10 +58,12 @@ img {
 
 :where(h1, h2, h3, h4, h5, h6) {
   margin: 0;
-  font-family: var(--cg-font-text);
-  font-weight: var(--cg-weight-regular);
+  font-family: var(--cg-font-display);
+  font-weight: var(--cg-weight-heading);
   line-height: var(--cg-leading-heading);
   letter-spacing: var(--cg-tracking-heading);
+  /* A condensed face sets a narrow word space: give it back a little. */
+  word-spacing: 0.07em;
   text-wrap: balance;
 }
 
@@ -111,9 +111,23 @@ img {
   border: 0;
 }
 
+/* The mono label: what is counted, dated or classified. */
+.cg-label {
+  font-family: var(--cg-font-code);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-medium);
+  line-height: var(--cg-leading-ui);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
 /* --------------------------------------------------------------------------
-   Focus, targets, motion. Motion is a colour or an underline changing, in
-   under 150 ms; nothing moves in space, nothing fades in on scroll.
+   Focus, targets, motion. Motion is a reveal on scroll, a picture settling
+   under a hover, a rule drawing itself in; all of it is declared behind
+   `@supports`/`(hover: hover)` and none of it survives
+   `prefers-reduced-motion`. The first screen never animates: the largest
+   paint of a page is never an element that is still fading in.
    -------------------------------------------------------------------------- */
 
 :where(a, button, summary, input, select, textarea, [tabindex]):focus-visible {
@@ -121,15 +135,73 @@ img {
   outline-offset: 3px;
 }
 
-:where(.cg-action, .cg-nav-toggle-label, .cg-theme-toggle, summary) {
+:where(.cg-action, .cg-theme-toggle, summary) {
   min-block-size: 44px;
 }
 
-/* Every transition in this theme reads `--cg-duration`, so reduced motion is
-   one declaration rather than an `!important` sweep over every element. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --cg-duration: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* A reveal is a settling, never a fade: the content is fully there (and fully
+   contrasted, for an audit, a capture or a preview) wherever the timeline
+   stands, and only its position changes by a rem. */
+@keyframes cg-reveal {
+  from {
+    translate: 0 1.25rem;
+  }
+
+  to {
+    translate: 0 0;
+  }
+}
+
+/* The accent bar on a section's rule draws itself in. */
+@keyframes cg-draw {
+  from {
+    scale: 0 1;
+  }
+
+  to {
+    scale: 1 1;
+  }
+}
+
+@supports (animation-timeline: view()) {
+  /* Items settle in as they enter the viewport. The first block of a page
+     (the lead story, the article's header) is left alone: it is the largest
+     paint and must be there at once. */
+  :is(.cg-main, .cg-sidebar-layout__content)
+    > .cg-section:not(:first-child)
+    :is(
+      .cg-story,
+      .cg-river__row,
+      .cg-ranked__row,
+      .cg-index__row,
+      .cg-parts__item,
+      .cg-contents__item,
+      .cg-cta__inner,
+      .cg-quote__inner
+    ) {
+    animation: cg-reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 0 entry 12rem;
+  }
+
+  .cg-head::before {
+    transform-origin: left center;
+    animation: cg-draw linear both;
+    animation-timeline: view();
+    animation-range: entry 0 entry 10rem;
   }
 }
 
@@ -137,7 +209,7 @@ img {
   position: absolute;
   inset-inline-start: var(--cg-s3);
   inset-block-start: calc(var(--cg-s16) * -1);
-  z-index: 20;
+  z-index: 30;
   padding: var(--cg-s2) var(--cg-s4);
   background: var(--cg-action);
   color: var(--cg-action-fg);
@@ -152,8 +224,9 @@ img {
 }
 
 /* --------------------------------------------------------------------------
-   The grid. Every block is a section around a twelve-column container; the
-   section rhythm is one variable, applied to all of them.
+   The container. Every block is a section around it; the section rhythm is
+   one variable, applied to all of them. The twelve-column grid is kept for
+   the blocks that lay themselves out on it.
    -------------------------------------------------------------------------- */
 
 .cg-main {
@@ -174,8 +247,6 @@ img {
   container-type: inline-size;
 }
 
-/* Below the wide breakpoint twelve columns only make slivers: every child
-   takes the full row, and each block redistributes from there. */
 .cg-container > * {
   grid-column: 1 / -1;
   min-inline-size: 0;
@@ -186,24 +257,37 @@ img {
 }
 
 :is(.cg-main, .cg-sidebar-layout__content) > .cg-section:first-child {
-  padding-block-start: calc(var(--cg-section) * 0.45);
+  padding-block-start: var(--cg-s6);
 }
 
 /* --- section heads ----------------------------------------------------------
-   One head for every titled block: a rule in ink across the grid, and the
-   title set under it in the text face, flush with the margin. */
+   One head for every titled block: an ink rule across the container with a
+   short accent bar laid over its start, and the title under it in the
+   display face, in capitals. */
 
 .cg-head {
+  position: relative;
   padding-block-start: var(--cg-s4);
   border-block-start: var(--cg-rule-strong) solid var(--cg-line-ink);
-  margin-block-end: var(--cg-s8);
+  margin-block-end: var(--cg-s6);
+}
+
+.cg-head::before {
+  content: "";
+  position: absolute;
+  inset-block-start: calc(var(--cg-rule-strong) * -1);
+  inset-inline-start: 0;
+  inline-size: var(--cg-s16);
+  block-size: var(--cg-rule-heavy);
+  background: var(--cg-accent);
 }
 
 .cg-head__title {
   font-size: var(--cg-size-heading);
-  font-weight: var(--cg-weight-semibold);
-  line-height: var(--cg-leading-heading);
-  letter-spacing: var(--cg-tracking-heading);
+  font-weight: var(--cg-weight-display);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
+  text-transform: uppercase;
 }
 
 /* --- per-block variants (blocks@2.0, RFC 0002) --------------------------- */
@@ -237,25 +321,22 @@ img {
 /* --- the title of a page that is not an essay ------------------------------ */
 
 .cg-page-head {
-  padding-block: calc(var(--cg-section) * 0.45) var(--cg-s4);
+  padding-block: var(--cg-section) var(--cg-s4);
 }
 
 .cg-page__title {
+  grid-column: 1 / -1;
+  max-inline-size: 18ch;
   font-size: var(--cg-size-title);
-  font-weight: var(--cg-weight-regular);
+  font-weight: var(--cg-weight-display);
   line-height: var(--cg-leading-display);
   letter-spacing: var(--cg-tracking-display);
-}
-
-@media (min-width: 64rem) {
-  .cg-page__title {
-    grid-column: 4 / span 8;
-  }
+  text-transform: uppercase;
 }
 
 /* --------------------------------------------------------------------------
-   Actions: a filled rectangle in ink for the primary intent, an outlined one
-   for the header's own, and for the rest the words underlined with an arrow
+   Actions: a filled rectangle in ink for the primary intent, the accent for
+   the header's own, and for the rest the words underlined with an arrow
    after them. Corners barely softened, no lift, no shadow.
    -------------------------------------------------------------------------- */
 
@@ -263,7 +344,7 @@ img {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--cg-s3) var(--cg-s8);
+  gap: var(--cg-s3) var(--cg-s6);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -272,9 +353,8 @@ img {
 .cg-action {
   font-family: var(--cg-font-ui);
   font-size: var(--cg-text-ui);
-  font-weight: var(--cg-weight-medium);
+  font-weight: var(--cg-weight-semibold);
   line-height: 1.2;
-  letter-spacing: 0.005em;
   text-decoration: none;
   transition:
     background-color var(--cg-duration) var(--cg-ease),
@@ -316,17 +396,14 @@ img {
 }
 
 /* A text link with an arrow after it. Not a flex container: in one, the
-   words and the arrow are two flex items and each gets its own underline.
-   As inline content the words carry one continuous underline, and the
-   arrow, an inline-block, inherits none (CSS Text Decoration: decorations
-   do not propagate to atomic inlines). */
+   words and the arrow are two flex items and each gets its own underline. */
 .cg-action[data-emphasis="secondary"] {
   display: inline-block;
   padding-block: var(--cg-s3);
   color: var(--cg-ink);
   text-decoration-line: underline;
-  text-decoration-thickness: var(--cg-rule);
-  text-decoration-color: var(--cg-line-strong);
+  text-decoration-thickness: var(--cg-rule-strong);
+  text-decoration-color: var(--cg-accent);
   text-underline-offset: 0.32em;
 }
 
@@ -334,30 +411,36 @@ img {
   content: "\2192" / "";
   display: inline-block;
   margin-inline-start: 0.4em;
+  transition: translate var(--cg-duration) var(--cg-ease);
 }
 
 .cg-action[data-emphasis="secondary"]:hover {
   color: var(--cg-accent);
-  text-decoration-color: currentColor;
+}
+
+@media (hover: hover) {
+  .cg-action[data-emphasis="secondary"]:hover::after {
+    translate: 0.2em 0;
+  }
 }
 
 /* --------------------------------------------------------------------------
-   Header: one quiet line, not sticky.
+   Masthead: the one sticky element. Under it, the section bar.
    -------------------------------------------------------------------------- */
 
 .cg-site-header {
-  position: relative;
-  z-index: 10;
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
   background: var(--cg-canvas);
   border-block-end: var(--cg-rule) solid var(--cg-line);
 }
 
 .cg-site-header__inner {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--cg-s8);
-  min-block-size: var(--cg-header-height);
+  gap: var(--cg-s4);
+  min-block-size: var(--cg-s16);
   max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
   margin-inline: auto;
   padding-inline: var(--cg-gutter);
@@ -369,6 +452,7 @@ img {
   margin-inline-end: auto;
   color: var(--cg-ink);
   text-decoration: none;
+  transform-origin: left center;
 }
 
 .cg-site-header__home:hover {
@@ -376,12 +460,13 @@ img {
 }
 
 .cg-site-header__name {
-  font-family: var(--cg-font-text);
-  font-size: var(--cg-text-lg);
-  font-weight: var(--cg-weight-semibold);
-  font-variation-settings: "opsz" 36;
-  letter-spacing: -0.012em;
+  white-space: nowrap;
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-text-2xl);
+  font-weight: var(--cg-weight-display);
+  letter-spacing: -0.01em;
   line-height: 1;
+  text-transform: uppercase;
 }
 
 .cg-site-header__logo {
@@ -390,90 +475,131 @@ img {
   inline-size: auto;
   max-inline-size: 14rem;
   object-fit: contain;
+  background: none;
   filter: none;
 }
 
-.cg-nav-toggle-input {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.cg-nav-toggle-label {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.42rem;
-  inline-size: 2.75rem;
-  padding: 0.7rem;
-  cursor: pointer;
-}
-
-.cg-nav-toggle-input:focus-visible ~ .cg-nav-toggle-label {
-  outline: var(--cg-rule-strong) solid var(--cg-accent);
-  outline-offset: 2px;
-}
-
-.cg-nav-toggle-bar {
-  display: block;
-  inline-size: 100%;
-  block-size: 1.5px;
-  background: var(--cg-ink);
-}
-
-.cg-site-header__nav {
+.cg-site-header__tools {
   display: flex;
   align-items: center;
-  gap: var(--cg-s8);
+  gap: var(--cg-s2);
+}
+
+.cg-site-header__action.cg-action {
+  min-block-size: 44px;
+  margin-inline-start: var(--cg-s2);
+  padding-block: var(--cg-s2);
+  padding-inline: var(--cg-s4);
+  border-color: var(--cg-accent);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+}
+
+.cg-site-header__action.cg-action:hover {
+  border-color: var(--cg-action);
+  background: var(--cg-action);
+  color: var(--cg-action-fg);
+}
+
+@supports (animation-timeline: scroll()) {
+  @keyframes cg-masthead-rule {
+    from {
+      border-block-end-color: transparent;
+    }
+
+    to {
+      border-block-end-color: var(--cg-line);
+    }
+  }
+
+  @keyframes cg-masthead-name {
+    from {
+      scale: 1;
+    }
+
+    to {
+      scale: 0.82;
+    }
+  }
+
+  .cg-site-header {
+    border-block-end-color: transparent;
+    animation: cg-masthead-rule linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 0 5rem;
+  }
+
+  .cg-site-header__home {
+    animation: cg-masthead-name linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 0 6rem;
+  }
+}
+
+/* The section bar: channels in a row, scrolling sideways when they do not
+   fit. A plain overflow, so a keyboard user tabs through it and nothing has
+   to be opened. */
+.cg-sections {
+  border-block-end: var(--cg-rule-strong) solid var(--cg-line-ink);
+  background: var(--cg-canvas);
+}
+
+.cg-sections__inner {
+  max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--cg-gutter);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cg-sections__inner::-webkit-scrollbar {
+  display: none;
 }
 
 .cg-nav__items {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--cg-s2) var(--cg-s8);
+  align-items: stretch;
+  gap: var(--cg-s6);
   margin: 0;
   padding: 0;
   list-style: none;
   font-family: var(--cg-font-ui);
   font-size: var(--cg-text-ui);
+  font-weight: var(--cg-weight-semibold);
   line-height: var(--cg-leading-ui);
+  white-space: nowrap;
 }
 
-.cg-nav__items a,
-.cg-nav__items span {
+.cg-sections .cg-nav__items a,
+.cg-sections .cg-nav__items span {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  border-block-end: var(--cg-rule-heavy) solid transparent;
+  margin-block-end: calc(var(--cg-rule-strong) * -1);
   color: var(--cg-ink);
-  text-decoration-line: underline;
-  text-decoration-color: transparent;
-  text-underline-offset: 0.4em;
+  text-decoration: none;
+  transition: border-color var(--cg-duration) var(--cg-ease);
 }
 
-.cg-nav__items a:hover {
+.cg-sections .cg-nav__items a:hover {
   color: var(--cg-ink);
-  text-decoration-color: var(--cg-ink);
-}
-
-.cg-site-header__action.cg-action[data-emphasis="outline"] {
-  min-block-size: 40px;
-  padding-block: var(--cg-s2);
-  padding-inline: var(--cg-s4);
+  border-block-end-color: var(--cg-accent);
 }
 
 .cg-lang {
   flex: none;
-  margin-inline-start: auto;
-  font-family: var(--cg-font-ui);
-  font-size: var(--cg-text-ui);
+  font-family: var(--cg-font-code);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
   line-height: var(--cg-leading-ui);
 }
 
 .cg-lang ul {
   display: flex;
   align-items: center;
-  gap: var(--cg-s1);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -487,7 +613,7 @@ img {
   color: var(--cg-ink-muted);
   text-decoration-line: underline;
   text-decoration-color: transparent;
-  text-underline-offset: 0.4em;
+  text-underline-offset: 0.5em;
   transition: color var(--cg-duration) var(--cg-ease);
 }
 
@@ -497,7 +623,8 @@ img {
 }
 
 .cg-lang a[aria-current] {
-  text-decoration-color: var(--cg-ink);
+  text-decoration-color: var(--cg-accent);
+  text-decoration-thickness: var(--cg-rule-strong);
 }
 
 .cg-theme-toggle {
@@ -506,7 +633,6 @@ img {
   justify-content: center;
   flex: none;
   inline-size: 2.75rem;
-  margin-inline: calc(var(--cg-s4) * -1) calc(var(--cg-s3) * -1);
   padding: 0;
   border: 0;
   background: transparent;
@@ -546,166 +672,98 @@ img {
   display: block;
 }
 
-/* Below the breakpoint the links become a panel under the line, shown while
-   the checkbox is checked: the whole mechanism is one selector. */
-@media (max-width: 47.99rem) {
+/* On the narrowest screens the language switcher keeps only the language the
+   reader can switch to: the current one is the page they are reading. */
+@media (max-width: 25.99rem) {
+  .cg-lang a[aria-current] {
+    display: none;
+  }
+}
+
+@media (max-width: 29.99rem) {
   .cg-site-header__inner {
     gap: var(--cg-s2);
-    min-block-size: var(--cg-s16);
+  }
+
+  .cg-site-header__tools {
+    gap: 0;
+  }
+
+  .cg-lang a {
+    padding-inline: var(--cg-s1);
   }
 
   .cg-theme-toggle {
-    order: 1;
-    margin-inline: 0;
+    inline-size: 2.5rem;
   }
 
-  .cg-nav-toggle-label {
-    display: flex;
-    order: 2;
-    margin-inline-end: calc(var(--cg-s3) * -1);
+  .cg-site-header__name {
+    font-size: var(--cg-text-xl);
   }
 
-  /* The open panel covers the rest of the viewport under the header's own
-     hairline, so the page never shows through beneath the menu. */
-  .cg-site-header__nav {
-    display: none;
-    position: absolute;
-    inset-inline: 0;
-    inset-block-start: calc(100% + var(--cg-rule));
-    block-size: calc(100dvh - var(--cg-s16) - var(--cg-rule));
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--cg-s10);
-    padding: var(--cg-s4) var(--cg-gutter) var(--cg-s12);
-    background: var(--cg-canvas);
-  }
-
-  .cg-nav-toggle-input:checked ~ .cg-site-header__nav {
-    display: flex;
-  }
-
-  :root:has(.cg-nav-toggle-input:checked) {
-    overflow: hidden;
-  }
-
-  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(1) {
-    transform: translateY(0.3rem) rotate(45deg);
-  }
-
-  .cg-nav-toggle-input:checked ~ .cg-nav-toggle-label .cg-nav-toggle-bar:nth-child(2) {
-    transform: translateY(-0.3rem) rotate(-45deg);
-  }
-
-  .cg-site-header__nav .cg-nav__items {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
-    font-family: var(--cg-font-text);
-    font-size: var(--cg-text-2xl);
-    line-height: var(--cg-leading-heading);
-  }
-
-  .cg-site-header__nav .cg-nav__items li {
-    border-block-end: var(--cg-rule) solid var(--cg-line);
-  }
-
-  .cg-site-header__nav .cg-nav__items a,
-  .cg-site-header__nav .cg-nav__items span {
-    display: block;
-    padding-block: var(--cg-s4);
-  }
-
-  .cg-site-header__nav .cg-site-header__action {
-    align-self: flex-start;
+  .cg-site-header__action.cg-action {
+    margin-inline-start: 0;
+    padding-inline: var(--cg-s3);
   }
 }
 
 /* --------------------------------------------------------------------------
-   Footer: a short colophon on the same grid.
+   Footer: a solid ink panel. The invitation, the navigation, the credit, and
+   the name once more across the whole width.
    -------------------------------------------------------------------------- */
 
 .cg-site-footer {
-  border-block-start: var(--cg-rule) solid var(--cg-line);
-  background: var(--cg-canvas);
-  color: var(--cg-ink-muted);
-  font-family: var(--cg-font-ui);
-  font-size: var(--cg-text-sm);
-  line-height: var(--cg-leading-ui);
+  margin-block-start: 0;
+  border-block-start: var(--cg-rule) solid var(--cg-panel-line);
+  background: var(--cg-panel);
+  color: var(--cg-panel-fg);
+  overflow: hidden;
 }
 
 .cg-site-footer__inner {
   max-inline-size: calc(var(--cg-page) + var(--cg-gutter) * 2);
   margin-inline: auto;
-  padding: var(--cg-s12) var(--cg-gutter) var(--cg-s8);
+  padding: var(--cg-s12) var(--cg-gutter) 0;
+}
+
+.cg-site-footer a {
+  color: var(--cg-panel-fg);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule);
+  text-decoration-color: var(--cg-panel-line);
+  text-underline-offset: 0.25em;
+}
+
+.cg-site-footer a:hover {
+  color: var(--cg-panel-accent);
+  text-decoration-color: currentColor;
 }
 
 .cg-site-footer__top {
   display: grid;
-  grid-template-columns: repeat(var(--cg-columns), minmax(0, 1fr));
-  column-gap: var(--cg-col-gap);
-  row-gap: var(--cg-s8);
-  padding-block-end: var(--cg-s12);
-}
-
-.cg-site-footer__top > * {
-  grid-column: 1 / -1;
-}
-
-@media (min-width: 48rem) {
-  .cg-site-footer__brand {
-    grid-column: 1 / span 7;
-  }
-
-  .cg-site-footer__nav {
-    grid-column: 8 / span 3;
-  }
-
-  .cg-site-footer__social-col {
-    grid-column: 11 / span 2;
-    justify-self: end;
-  }
-}
-
-@media (min-width: 64rem) {
-  .cg-site-footer__brand {
-    grid-column: 1 / span 6;
-  }
-
-  .cg-site-footer__nav {
-    grid-column: 8 / span 2;
-  }
-}
-
-.cg-site-footer__name {
-  font-family: var(--cg-font-text);
-  font-size: var(--cg-text-xl);
-  font-weight: var(--cg-weight-semibold);
-  font-variation-settings: "opsz" 36;
-  letter-spacing: -0.012em;
-  line-height: 1.1;
-  color: var(--cg-ink);
-  text-decoration: none;
-}
-
-.cg-site-footer__name:hover {
-  color: var(--cg-ink);
+  gap: var(--cg-s8);
+  padding-block-end: var(--cg-s10);
+  border-block-end: var(--cg-rule) solid var(--cg-panel-line);
 }
 
 .cg-site-footer__tagline {
-  margin: var(--cg-s3) 0 0;
-  max-inline-size: var(--cg-measure-short);
-  font-family: var(--cg-font-text);
-  font-size: var(--cg-text-md);
-  font-style: italic;
-  line-height: var(--cg-leading-snug);
-  color: var(--cg-ink);
+  max-inline-size: 16ch;
+  margin: 0;
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-size-heading);
+  font-weight: var(--cg-weight-display);
+  line-height: var(--cg-leading-display);
+  letter-spacing: var(--cg-tracking-display);
+  text-transform: uppercase;
+  text-wrap: balance;
 }
 
 .cg-site-footer__note {
-  margin-block-start: var(--cg-s4);
-  max-inline-size: var(--cg-measure-short);
+  max-inline-size: 44ch;
+  margin-block-start: var(--cg-s5);
+  color: var(--cg-panel-muted);
+  font-size: var(--cg-text-ui);
+  line-height: var(--cg-leading-snug);
 }
 
 .cg-site-footer__note p {
@@ -713,51 +771,75 @@ img {
 }
 
 .cg-site-footer__note p + p {
-  margin-block-start: var(--cg-s2);
+  margin-block-start: var(--cg-s3);
+}
+
+.cg-site-footer__join {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-s4) var(--cg-s6);
+}
+
+.cg-site-footer .cg-action[data-emphasis="primary"] {
+  border-color: var(--cg-accent);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+  text-decoration: none;
+}
+
+.cg-site-footer .cg-action[data-emphasis="primary"]:hover {
+  border-color: var(--cg-panel-fg);
+  background: var(--cg-panel-fg);
+  color: var(--cg-panel);
+}
+
+.cg-site-footer__feed {
+  font-family: var(--cg-font-code);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-caps);
+}
+
+.cg-site-footer__grid {
+  display: grid;
+  gap: var(--cg-s8);
+  padding-block: var(--cg-s8);
 }
 
 .cg-site-footer__nav .cg-nav__items {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--cg-s2);
-  font-size: var(--cg-text-sm);
-}
-
-.cg-site-footer__nav .cg-nav__items a {
-  color: var(--cg-ink);
-  text-decoration-color: var(--cg-line-strong);
-  text-underline-offset: 0.3em;
-}
-
-.cg-site-footer__nav .cg-nav__items a:hover {
-  text-decoration-color: currentColor;
+  flex-wrap: wrap;
+  gap: var(--cg-s2) var(--cg-s6);
+  font-weight: var(--cg-weight-medium);
+  white-space: normal;
 }
 
 .cg-site-footer__social {
   display: flex;
-  gap: var(--cg-s1);
-  margin: 0 calc(var(--cg-s2) * -1);
+  flex-wrap: wrap;
+  gap: var(--cg-s2);
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.cg-site-footer__social-item a {
+.cg-site-footer__social a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: 2.5rem;
-  block-size: 2.5rem;
-  color: var(--cg-ink-muted);
-  transition: color var(--cg-duration) var(--cg-ease);
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border: var(--cg-rule) solid var(--cg-panel-line);
+  border-radius: var(--cg-radius-control);
+  color: var(--cg-panel-fg);
+  text-decoration: none;
+  transition:
+    border-color var(--cg-duration) var(--cg-ease),
+    color var(--cg-duration) var(--cg-ease);
 }
 
-.cg-site-footer__social-item a:hover {
-  color: var(--cg-ink);
-}
-
-.cg-social__icon {
-  inline-size: 1.1rem;
-  block-size: 1.1rem;
+.cg-site-footer__social a:hover {
+  border-color: var(--cg-panel-accent);
 }
 
 .cg-site-footer__bottom {
@@ -765,38 +847,55 @@ img {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--cg-s4) var(--cg-s8);
-  padding-block-start: var(--cg-s5);
-  border-block-start: var(--cg-rule) solid var(--cg-line);
-  font-size: var(--cg-text-xs);
-  letter-spacing: 0.02em;
+  gap: var(--cg-s3) var(--cg-s6);
+  padding-block: var(--cg-s5);
+  border-block-start: var(--cg-rule) solid var(--cg-panel-line);
+  color: var(--cg-panel-muted);
+  font-family: var(--cg-font-code);
+  font-size: var(--cg-text-label);
+  letter-spacing: var(--cg-tracking-caps);
 }
 
 .cg-site-footer__legal {
   margin: 0;
-  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.cg-site-footer__branding {
+  font-family: var(--cg-font-ui);
+  letter-spacing: 0;
 }
 
 .cg-site-footer__branding a {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5em;
-  color: var(--cg-ink-subtle);
-  text-decoration: none;
+  color: var(--cg-panel-muted);
 }
 
-.cg-site-footer__branding a:hover {
-  color: var(--cg-ink);
+/* The name once more, across the whole width: a signature, not a heading
+   (hidden from assistive technology, and never a link). */
+.cg-site-footer__name {
+  margin: 0;
+  padding-block-end: var(--cg-s6);
+  color: var(--cg-panel-fg);
+  font-family: var(--cg-font-display);
+  font-size: clamp(var(--cg-text-4xl), 13.5vw, 11rem);
+  font-weight: var(--cg-weight-display);
+  line-height: 0.82;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  user-select: none;
 }
 
-.cg-site-footer__brand-logo {
-  display: block;
-  block-size: 18px;
-  inline-size: auto;
-}
+@media (min-width: 48rem) {
+  .cg-site-footer__top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
 
-.cg-site-footer__version {
-  font-variant-numeric: tabular-nums;
+  .cg-site-footer__grid {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -1014,4 +1113,37 @@ img {
 /* French sets its quotation marks with a no-break space inside them. */
 :lang(fr) {
   quotes: "«\00a0" "\00a0»" "“" "”";
+}
+
+/* A search hit: the headline in ink, underlined in the accent on hover. */
+.cg-search__title {
+  color: var(--cg-ink);
+  font-family: var(--cg-font-display);
+  font-size: var(--cg-size-entry);
+  font-weight: var(--cg-weight-heading);
+  line-height: var(--cg-leading-heading);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--cg-rule-strong);
+  text-decoration-color: transparent;
+  text-underline-offset: 0.14em;
+}
+
+.cg-search__title:hover {
+  color: var(--cg-ink);
+  text-decoration-color: var(--cg-accent);
+}
+
+.cg-search__excerpt {
+  margin: var(--cg-s1) 0 0;
+  color: var(--cg-ink-muted);
+  font-size: var(--cg-text-ui);
+}
+
+.cg-search__meta {
+  margin: var(--cg-s1) 0 0;
+  color: var(--cg-ink-subtle);
+  font-family: var(--cg-font-code);
+  font-size: var(--cg-text-label);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
 }

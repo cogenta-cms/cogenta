@@ -8,15 +8,16 @@ import {
   type RenderContext,
   renderImageSource,
 } from '@cogenta/theme-kit'
-import { longDate } from './layout.js'
+import { longDate, withAttributes } from './layout.js'
 
 /**
- * The header and the close of an essay, built from `PageContent.entry`
+ * The header and the close of an article, built from `PageContent.entry`
  * (contract D `theme@1.4`) rather than from `renderEntryHeader`'s shared
- * default, because this theme sets the furniture on its grid: the topic,
- * the date and the reading time in the margin beside the title, the title
- * and standfirst on the text line, the cover at 3:2 from the text line to
- * the right edge. On a narrow screen the margin simply comes first.
+ * default, because this theme sets the furniture its own way: the topic label
+ * in the accent over the headline, the headline in the condensed display
+ * face across nine columns, the standfirst under it, a byline row (author,
+ * date, reading time) between two rules, and the lead picture across the
+ * whole container.
  */
 
 /** Below this, a reading time tells a reader nothing they can use. */
@@ -44,39 +45,29 @@ function termLink(term: PageEntryTerm, className: string): HtmlElement {
     : h('a', { class: className, href: term.href }, term.label)
 }
 
-function renderMeta(entry: PageEntryMeta, ctx: RenderContext): HtmlElement | null {
-  const topic = entry.terms?.[0]
+function renderFacts(entry: PageEntryMeta, ctx: RenderContext): HtmlElement | null {
   const date = entry.publishedAt === undefined ? null : longDate(entry.publishedAt, ctx.locale)
   const minutes =
     entry.readingMinutes !== undefined && entry.readingMinutes >= MIN_READING_MINUTES_SHOWN
       ? entry.readingMinutes
       : undefined
-  if (topic === undefined && date === null && minutes === undefined && entry.author === undefined) {
-    return null
-  }
+  if (date === null && minutes === undefined && entry.author === undefined) return null
   return h(
-    'div',
-    { class: 'cg-article-head__meta' },
-    topic === undefined
+    'p',
+    { class: 'cg-article-head__facts cg-label' },
+    entry.author === undefined
       ? null
-      : h('p', { class: 'cg-article-head__topic' }, termLink(topic, 'cg-article-head__topic-link')),
-    h(
-      'p',
-      { class: 'cg-article-head__facts' },
-      date === null || entry.publishedAt === undefined
-        ? null
-        : h('time', { class: 'cg-article-head__date', datetime: entry.publishedAt }, date),
-      entry.author === undefined
-        ? null
-        : authorNode(entry.author, { class: 'cg-article-head__author' }),
-      minutes === undefined
-        ? null
-        : h(
-            'span',
-            { class: 'cg-article-head__reading-time' },
-            ctx.t('entry.readingTime', { minutes }),
-          ),
-    ),
+      : authorNode(entry.author, { class: 'cg-article-head__author' }),
+    date === null || entry.publishedAt === undefined
+      ? null
+      : h('time', { class: 'cg-article-head__date', datetime: entry.publishedAt }, date),
+    minutes === undefined
+      ? null
+      : h(
+          'span',
+          { class: 'cg-article-head__reading-time' },
+          ctx.t('entry.readingTime', { minutes }),
+        ),
   )
 }
 
@@ -85,27 +76,38 @@ export function renderArticleHeader(
   entry: PageEntryMeta,
   ctx: RenderContext,
 ): HtmlElement {
+  const topic = entry.terms?.[0]
   return h(
     'header',
     { class: 'cg-article-head' },
     h(
       'div',
       { class: 'cg-container cg-article-head__inner' },
-      renderMeta(entry, ctx),
+      topic === undefined
+        ? null
+        : h(
+            'p',
+            { class: 'cg-article-head__topic cg-label' },
+            termLink(topic, 'cg-article-head__topic-link'),
+          ),
       h('h1', { class: 'cg-article-head__title' }, page.title),
       entry.excerpt === undefined
         ? null
         : h('p', { class: 'cg-article-head__standfirst' }, entry.excerpt),
+      renderFacts(entry, ctx),
       entry.image === undefined
         ? null
         : h(
             'figure',
             { class: 'cg-article-head__cover' },
-            renderImageSource(entry.image, {
-              className: 'cg-article-head__image',
-              loading: 'eager',
-              sizes: '(min-width: 64rem) 60rem, 100vw',
-            }),
+            withAttributes(
+              renderImageSource(entry.image, {
+                className: 'cg-article-head__image',
+                loading: 'eager',
+                sizes: '(min-width: 80rem) 76rem, 100vw',
+              }),
+              { fetchpriority: 'high' },
+            ),
           ),
     ),
   )
@@ -128,7 +130,7 @@ export function renderArticleFooter(entry: PageEntryMeta): HtmlElement | null {
       { class: 'cg-container cg-article-foot__inner' },
       h(
         'ul',
-        { class: 'cg-article-foot__terms' },
+        { class: 'cg-article-foot__terms cg-label' },
         terms.map((term) =>
           h(
             'li',

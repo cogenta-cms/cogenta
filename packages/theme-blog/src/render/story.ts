@@ -17,14 +17,10 @@ import {
 import { dayMonth, entryTopic, longDate } from './layout.js'
 
 /**
- * One essay as a listing sets it: a topic, a title, a standfirst, a date
- * and, where the slot allows, a picture. The home page's opening, a rail, a
- * shelf and a carousel all build their cards from this one unit, so a topic
- * label or a title reads the same wherever a reader meets it — the same
- * discipline `@cogenta/theme-magazine` keeps with its own `Story`, in this
- * theme's own quieter register: a small-caps topic rather than a red kicker,
- * a serif headline rather than a display sans, margin dates rather than a
- * dateline rule.
+ * One story as a listing sets it: a topic label, a headline, a standfirst, a
+ * date and, where the slot allows, a picture. A front, a rail, a strip and a
+ * term archive all build their cards from this one unit, so a topic label or
+ * a headline reads the same wherever a reader meets it.
  *
  * The title is the one link. A picture links to the same place but is taken
  * out of the tab order and hidden from assistive technology, so a keyboard
@@ -145,7 +141,7 @@ export function renderStory(story: Story, options: StoryOptions): HtmlElement {
             renderImageSource(story.image, imageOptions),
           )
       : null,
-    story.topic === undefined ? null : h('p', { class: 'cg-story__topic' }, story.topic),
+    story.topic === undefined ? null : h('p', { class: 'cg-story__topic cg-label' }, story.topic),
     heading(options.tag, { class: 'cg-story__title' }, titleNode),
     options.standfirst === true && story.standfirst !== undefined
       ? h('p', { class: 'cg-story__standfirst' }, story.standfirst)
@@ -153,7 +149,7 @@ export function renderStory(story: Story, options: StoryOptions): HtmlElement {
     options.date === true && story.date !== undefined
       ? h(
           'p',
-          { class: 'cg-story__meta' },
+          { class: 'cg-story__meta cg-label' },
           h('time', { datetime: story.date.iso }, story.date.label),
         )
       : null,

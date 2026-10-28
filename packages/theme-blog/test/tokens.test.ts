@@ -57,25 +57,29 @@ describe('the default skin', () => {
     expect(contrast(tokens.color.mutedFg, tokens.color.muted)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('picks one ink-blue accent: blue over red and green, dark enough for links, never violet', () => {
+  it('picks one vermilion accent: red over green and blue, dark enough for links, never violet', () => {
     const hex = tokens.color.accent.replace('#', '')
     const [r, g, b] = [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16))
-    expect(b as number).toBeGreaterThan(r as number)
-    expect(b as number).toBeGreaterThan(g as number)
-    // A violet reads as the default of a generated template: red never climbs
-    // to meet blue.
-    expect((b as number) - (r as number)).toBeGreaterThan(50)
-    expect(contrast(tokens.color.accent, tokens.color.bg)).toBeGreaterThanOrEqual(7)
+    expect(r as number).toBeGreaterThan(g as number)
+    expect(r as number).toBeGreaterThan(b as number)
+    // A violet reads as the default of a generated template: blue never
+    // climbs to meet red.
+    expect((r as number) - (b as number)).toBeGreaterThan(100)
+    expect(contrast(tokens.color.accent, tokens.color.bg)).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(tokens.color.accent, tokens.color.muted)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('names the web font families this theme ships, with a real system fallback', () => {
-    expect(tokens.font.serif.startsWith("'Literata'")).toBe(true)
-    expect(tokens.font.serif).toMatch(/serif$/)
-    expect(tokens.font.sans.startsWith("'Figtree'")).toBe(true)
+  it('names the three typefaces this theme ships, with a real system fallback', () => {
+    expect(tokens.font.serif.startsWith("'Sofia Sans Condensed'")).toBe(true)
+    expect(tokens.font.serif).toMatch(/sans-serif$/)
+    expect(tokens.font.sans.startsWith("'Hanken Grotesk'")).toBe(true)
     expect(tokens.font.sans).toMatch(/system-ui/)
+    expect(tokens.font.mono.startsWith("'Geist Mono'")).toBe(true)
+    expect(tokens.font.mono).toMatch(/ui-monospace/)
     const fonts = readFileSync(new URL('../src/styles/fonts.css', import.meta.url), 'utf8')
-    expect(fonts).toContain("font-family: 'Literata'")
-    expect(fonts).toContain("font-family: 'Figtree'")
+    for (const family of ['Sofia Sans Condensed', 'Hanken Grotesk', 'Geist Mono']) {
+      expect(fonts).toContain(`font-family: '${family}'`)
+    }
   })
 
   it('names none of the typefaces generated templates reach for first', () => {
@@ -99,10 +103,6 @@ describe('the default skin', () => {
     }
   })
 
-  it('keeps two families and a system monospace, never a third web font', () => {
-    expect(tokens.font.mono.startsWith('ui-monospace')).toBe(true)
-  })
-
   it('uses a typographic scale that increases monotonically', () => {
     expect(tokens.font.scale).toBeGreaterThan(1)
   })
@@ -119,10 +119,13 @@ describe('the default skin', () => {
     expect(Number.parseFloat(tokens.radius.lg)).toBeLessThan(0.33)
   })
 
-  it('reads as a warm, paper-light ground rather than a stark white', () => {
-    // bg is warm off-white: red channel strictly greater than blue.
+  it('reads as a paper-light ground rather than a stark white', () => {
+    // bg is an off-white: the red channel is not above the blue one by more
+    // than a few steps (a neutral paper), and it is not pure white.
     const r = Number.parseInt(tokens.color.bg.slice(1, 3), 16)
     const b = Number.parseInt(tokens.color.bg.slice(5, 7), 16)
-    expect(r).toBeGreaterThan(b)
+    expect(r).toBeGreaterThanOrEqual(b)
+    expect(r - b).toBeLessThan(12)
+    expect(tokens.color.bg.toLowerCase()).not.toBe('#ffffff')
   })
 })

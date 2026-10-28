@@ -19,7 +19,7 @@ describe('quote, an epigraph', () => {
 
   it('renders the attribution outside the blockquote, in a figcaption', () => {
     expect(html()).toMatch(
-      /<\/blockquote><figcaption class="cg-quote__attribution">[\s\S]*<span class="cg-quote__author" data-field="author">Samuel Johnson<\/span><span class="cg-quote__role" data-field="role">/,
+      /<\/blockquote><figcaption class="cg-quote__attribution cg-label">[\s\S]*<span class="cg-quote__author" data-field="author">Samuel Johnson<\/span><span class="cg-quote__role" data-field="role">/,
     )
   })
 

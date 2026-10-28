@@ -131,13 +131,16 @@ describe('theme isolation', () => {
   })
 
   /**
-   * L27 charter: nothing fades or slides in as the page scrolls. A
-   * scroll-driven entrance also leaves whole sections blank on a full-page
-   * capture and in the appearance gallery's preview.
+   * Scroll-driven motion is progressive enhancement: every use sits behind
+   * `@supports (animation-timeline: …)`, so a browser without it renders the
+   * plain page, and `prefers-reduced-motion` removes it (`design-system.test.ts`).
    */
-  it('drives no animation from scrolling', () => {
+  it('drives animation from scrolling only inside a feature query', () => {
     const offenders = [...STYLESHEET_SOURCES, ...RENDER_SOURCES]
-      .filter(({ source }) => /animation-timeline|scroll-timeline|view-timeline/.test(source))
+      .filter(({ source }) =>
+        /(?<!\()(animation-timeline|scroll-timeline|view-timeline)\s*:/.test(source),
+      )
+      .filter(({ source }) => !/@supports \(animation-timeline/.test(source))
       .map(({ path }) => path)
     expect(offenders).toEqual([])
   })

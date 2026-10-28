@@ -1,58 +1,99 @@
 /*
- * The taxonomy-term archive: a chapter of the table of contents. Its rows
- * are the `collectionList` index (`blocks.css`), so only the head and the
- * pager live here.
+ * The taxonomy-term archive: a section front. A solid ink band opens it (the
+ * taxonomy as a mono label, the term as a headline in capitals, its
+ * description, its child terms as links), then the newest story large and the
+ * next few as cards: the same front a `collectionList` block opens a page
+ * with, so a subject page reads as one more chapter of the same publication.
  */
 
 .cg-archive__head {
-  padding-block: calc(var(--cg-section) * 0.45) var(--cg-s2);
+  background: var(--cg-panel);
+  color: var(--cg-panel-fg);
+  padding-block: var(--cg-s10) var(--cg-s12);
+}
+
+.cg-archive__head a {
+  color: var(--cg-panel-fg);
+  text-decoration-color: var(--cg-panel-line);
+}
+
+.cg-archive__head a:hover {
+  color: var(--cg-panel-accent);
+  text-decoration-color: currentColor;
+}
+
+.cg-archive__head .cg-archive__head-inner,
+.cg-sidebar-layout__content .cg-archive__head .cg-archive__head-inner {
+  padding-inline: var(--cg-gutter);
+}
+
+/* Inside the sidebar layout the band bleeds to the screen's edges while the
+   content column is the whole width; beside the sidebar it keeps its column. */
+@media (max-width: 74.99rem) {
+  .cg-sidebar-layout__content .cg-archive__head {
+    margin-inline: calc(var(--cg-gutter) * -1);
+  }
 }
 
 .cg-archive__breadcrumb ol {
   display: flex;
   flex-wrap: wrap;
   gap: var(--cg-s2);
-  margin: 0 0 var(--cg-s3);
+  margin: 0 0 var(--cg-s5);
   padding: 0;
   list-style: none;
-  font-family: var(--cg-font-ui);
-  font-size: var(--cg-text-sm);
+  font-family: var(--cg-font-code);
+  font-size: var(--cg-text-label);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
   line-height: var(--cg-leading-ui);
 }
 
 .cg-archive__breadcrumb li + li::before {
   content: "/";
   margin-inline-end: var(--cg-s2);
-  color: var(--cg-ink-subtle);
+  color: var(--cg-panel-muted);
 }
 
 .cg-archive__breadcrumb a {
-  color: var(--cg-ink-muted);
-  text-decoration-color: transparent;
-}
-
-.cg-archive__breadcrumb a:hover {
-  color: var(--cg-ink);
-  text-decoration-color: currentColor;
+  color: var(--cg-panel-muted);
+  text-decoration: none;
 }
 
 .cg-archive__kicker {
   margin: 0 0 var(--cg-s3);
-  color: var(--cg-accent);
+  color: var(--cg-panel-accent);
+  font-family: var(--cg-font-code);
+  font-size: var(--cg-text-label);
+  font-weight: var(--cg-weight-medium);
+  letter-spacing: var(--cg-tracking-caps);
+  text-transform: uppercase;
 }
 
 .cg-archive__title {
-  font-size: var(--cg-size-title);
-  font-weight: var(--cg-weight-regular);
+  font-size: calc(var(--cg-size-title) * 1.15);
+  font-weight: var(--cg-weight-display);
   line-height: var(--cg-leading-display);
   letter-spacing: var(--cg-tracking-display);
+  text-transform: uppercase;
+}
+
+.cg-archive__intro {
+  margin-block: var(--cg-s5) 0;
+  color: var(--cg-panel-muted);
+  font-size: var(--cg-size-lead);
+  line-height: var(--cg-leading-snug);
+}
+
+.cg-archive__portrait {
+  background: none;
 }
 
 .cg-archive__children {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--cg-s2) var(--cg-s6);
-  margin: var(--cg-s5) 0 0;
+  gap: var(--cg-s2);
+  margin: var(--cg-s6) 0 0;
   padding: 0;
   list-style: none;
   font-family: var(--cg-font-ui);
@@ -60,46 +101,46 @@
 }
 
 .cg-archive__children a {
-  color: var(--cg-ink);
-  text-decoration-color: var(--cg-line-strong);
-  text-underline-offset: 0.3em;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  padding-inline: var(--cg-s4);
+  border: var(--cg-rule) solid var(--cg-panel-line);
+  border-radius: var(--cg-radius);
+  text-decoration: none;
+  transition: border-color var(--cg-duration) var(--cg-ease);
 }
 
 .cg-archive__children a:hover {
-  text-decoration-color: currentColor;
+  border-color: var(--cg-panel-accent);
 }
 
 .cg-archive .cg-collection {
-  padding-block-start: var(--cg-s8);
-}
-
-.cg-archive .cg-index {
-  border-block-start: var(--cg-rule) solid var(--cg-line-ink);
-}
-
-.cg-archive .cg-index__row:first-child {
-  padding-block-start: var(--cg-s6);
+  padding-block-start: var(--cg-s10);
 }
 
 .cg-archive__pager {
   display: flex;
   justify-content: space-between;
   gap: var(--cg-s6);
-  margin-block-start: var(--cg-s8);
+  margin-block-start: var(--cg-s10);
+  padding-block-start: var(--cg-s5);
+  border-block-start: var(--cg-rule-strong) solid var(--cg-line-ink);
   font-family: var(--cg-font-ui);
   font-size: var(--cg-text-ui);
+  font-weight: var(--cg-weight-semibold);
 }
 
 .cg-archive__pager-link {
   padding-block: var(--cg-s3);
   color: var(--cg-ink);
-  text-decoration-color: var(--cg-line-strong);
+  text-decoration-color: var(--cg-accent);
+  text-decoration-thickness: var(--cg-rule-strong);
   text-underline-offset: 0.32em;
 }
 
 .cg-archive__pager-link:hover {
   color: var(--cg-accent);
-  text-decoration-color: currentColor;
 }
 
 .cg-archive__pager-link[rel="prev"]::before {
@@ -116,31 +157,4 @@
   content: "\2192" / "";
   display: inline-block;
   margin-inline-start: 0.4em;
-}
-
-@media (min-width: 64rem) {
-  .cg-archive__breadcrumb,
-  .cg-archive__kicker {
-    grid-column: 1 / span 3;
-  }
-
-  .cg-archive__kicker {
-    grid-row: 2;
-    align-self: start;
-    margin: 0;
-    padding-block-start: 1.2em;
-  }
-
-  .cg-archive__title {
-    grid-column: 4 / span 8;
-    grid-row: 2;
-  }
-
-  .cg-archive__children {
-    grid-column: 4 / span 7;
-  }
-
-  .cg-archive__pager {
-    grid-column: 4 / span 7;
-  }
 }

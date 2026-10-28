@@ -61,10 +61,12 @@ function allFrenchCopy(): string[] {
 
 describe('blog blueprint, French pack', () => {
   it('is picked for any French locale and leaves English alone', () => {
-    expect(contentPackFor('blog', 'fr')?.menus?.header[0]?.label).toBe('Archives')
-    expect(contentPackFor('blog', 'fr-FR')?.menus?.header[1]?.label).toBe('À propos')
-    expect(contentPackFor('blog', 'en')?.menus?.header[1]?.label).toBe('About')
-    expect(contentPackFor('blog', 'de')?.menus?.header[1]?.label).toBe('About')
+    // The subjects open the header menu (the theme's topic bar); the pages follow.
+    expect(contentPackFor('blog', 'fr')?.menus?.header.at(-2)?.label).toBe('Archives')
+    expect(contentPackFor('blog', 'fr-FR')?.menus?.header.at(-1)?.label).toBe('À propos')
+    expect(contentPackFor('blog', 'fr')?.menus?.header[0]?.label).toBe('Lecture')
+    expect(contentPackFor('blog', 'en')?.menus?.header.at(-1)?.label).toBe('About')
+    expect(contentPackFor('blog', 'de')?.menus?.header.at(-1)?.label).toBe('About')
   })
 
   it('names the taxonomies and the pages in French', () => {

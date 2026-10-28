@@ -5972,7 +5972,7 @@
         "description": "Une association de quartier : une photographie de ceux avec qui elle agit, des chiffres d'impact replacés dans leur contexte, ses actions, un agenda daté avec une page par événement, et un appel au don dans son jaune."
       },
       "theme-blog": {
-        "description": "Une publication personnelle faite pour la lecture : Literata et Figtree sur une grille de douze colonnes avec marge, un sommaire éditorial classé par année, des filets plutôt que des encadrés et un mode sombre dessiné."
+        "description": "Un magazine de technologie et de science : une grande une et un fil des dernières parutions horodaté, des barres de rubriques et de sujets, des listes de lecture numérotées, un panneau d’encre uni, un seul accent vermillon et une police condensée de titrage sur une grotesque lisible, un mode sombre dessiné et un mouvement au défilement qui s’efface quand le lecteur en demande moins."
       },
       "theme-canonical": {
         "description": "Le thème de référence : les dix-sept blocs, aucun JavaScript côté visiteur, une base neutre et accessible."

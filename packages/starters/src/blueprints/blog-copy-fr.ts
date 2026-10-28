@@ -76,6 +76,7 @@ export const BLOG_COPY_FR: BlogCopy = {
     },
     archiveTitle: 'Dans les archives',
     moreTitle: 'Quelques essais de plus',
+    startHereTitle: 'À lire d’abord',
     subjectsTitle: 'De quoi je parle',
     letterTitle: 'La lettre du dimanche',
     letterText:

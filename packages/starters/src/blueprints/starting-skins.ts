@@ -150,10 +150,11 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
   },
 
   /**
-   * A personal publication made for reading (`@cogenta/theme-blog`, L27
-   * studio pass): a warm paper, a warm near-black ink and one ink-blue
-   * accent kept for links; Literata for everything a reader reads and
-   * Figtree for everything a reader uses. Copied from
+   * A technology and science magazine (`@cogenta/theme-blog`, magazine
+   * redesign): a neutral paper, a near-black ink and one vermilion accent;
+   * Sofia Sans Condensed to headline (carried by the `serif` slot, a stack
+   * slot being a role rather than a style), Hanken Grotesk to read and
+   * Geist Mono to count. Copied from
    * `packages/theme-blog/tokens.json` rather than referenced (the same
    * independent-copy discipline `restaurant` and `vitrine` follow), so a
    * scaffolded `blog` site's skin names the theme's own typefaces and palette
@@ -162,25 +163,25 @@ export const STARTING_SKINS: Readonly<Record<string, SkinTokens>> = {
    */
   blog: {
     color: {
-      bg: '#f6f2ea',
-      fg: '#1e1b17',
-      accent: '#26426b',
+      bg: '#f6f5f1',
+      fg: '#14130f',
+      accent: '#c2310d',
       accentFg: '#ffffff',
-      muted: '#ece5d8',
-      mutedFg: '#5a5147',
-      border: '#ddd4c5',
+      muted: '#ebeae4',
+      mutedFg: '#56544d',
+      border: '#d8d6cd',
     },
     font: {
-      sans: "'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
-      serif: "'Literata', ui-serif, Georgia, Cambria, 'Times New Roman', serif",
-      mono: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+      sans: "'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+      serif: "'Sofia Sans Condensed', 'Arial Narrow', ui-sans-serif, system-ui, sans-serif",
+      mono: "'Geist Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
       scale: 1.25,
       baseSize: '1.0625rem',
     },
     space: { unit: '0.25rem', density: 'comfortable' },
     radius: { sm: '0.125rem', md: '0.1875rem', lg: '0.25rem' },
-    motion: { duration: '140ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
-    shadow: { sm: '0 1px 0 rgba(30, 27, 23, 0.06)', md: '0 8px 24px rgba(30, 27, 23, 0.1)' },
+    motion: { duration: '180ms', easing: 'cubic-bezier(0.2, 0, 0, 1)', reduced: true },
+    shadow: { sm: '0 1px 0 rgba(20, 19, 15, 0.06)', md: '0 8px 24px rgba(20, 19, 15, 0.1)' },
   },
   /**
    * B2B software for finance and operations teams (`@cogenta/theme-saas`,

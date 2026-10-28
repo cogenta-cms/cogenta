@@ -14,11 +14,9 @@ import {
  *
  * The outer element carries the section rhythm (`--cg-section`, applied once
  * to every block alike) and paints edge to edge when a variant asks for a
- * band. The inner element is the twelve-column container: columns one to
- * three are the margin, where this theme sets dates, years, labels and
- * attributions; the text line starts at column four for every block, so a
- * title in the index, the first line of an essay and a pull quote all share
- * one left edge.
+ * band. The inner element is the twelve-column container: a block lays
+ * itself out on it, edge to edge for a listing, from column four for text
+ * that is read (the reading column).
  *
  * `inner` is `figure` for a block whose own semantics are a figure (a
  * quotation and its attribution, an image and its caption): `<figcaption>`
@@ -55,6 +53,15 @@ export function sectionHead(blockName: string, title: string | undefined): HtmlE
       title,
     ),
   )
+}
+
+/**
+ * The same element with more attributes: the one way a renderer marks an
+ * image the browser should fetch first without rebuilding the markup
+ * `renderImageSource` already produces.
+ */
+export function withAttributes(element: HtmlElement, attrs: Attributes): HtmlElement {
+  return { ...element, attrs: { ...element.attrs, ...attrs } }
 }
 
 /** A two-digit, zero-padded ordinal: `01`, `02`. */

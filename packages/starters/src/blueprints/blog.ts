@@ -288,14 +288,15 @@ export function buildBlogDemoPages(
           layout: 'grid',
         },
         {
-          _key: 'demo-home-strip',
+          _key: 'demo-home-start',
           _type: 'collectionList',
           _version: BLOCK_VERSION,
-          title: home.moreTitle,
+          title: home.startHereTitle,
           collection: 'post',
-          sort: { field: 'createdAt', direction: 'desc' },
-          limit: 6,
-          layout: 'carousel',
+          sort: { field: 'updatedAt', direction: 'desc' },
+          limit: 5,
+          layout: 'list',
+          variant: { background: 'muted' },
         },
         {
           _key: 'demo-home-subjects',
@@ -471,7 +472,11 @@ export function blogMediaSpecs(copy: BlogCopy): readonly DemoMediaSpec[] {
 export const BLOG_MEDIA_SPECS: readonly DemoMediaSpec[] = blogMediaSpecs(BLOG_COPY_EN)
 
 /** Header, footer and the header's call to action. Every path is a page this blueprint seeds or a route the server provides. */
-export const BLOG_MENUS: BlueprintMenus = BLOG_COPY_EN.menus
+export const BLOG_MENUS: BlueprintMenus = withTopicBar(
+  BLOG_COPY_EN.menus,
+  BLOG_COPY_EN,
+  `/${BLOG_COPY_EN.schema.category.name}`,
+)
 
 export function blogSiteSettings(copy: BlogCopy): Readonly<Record<string, unknown>> {
   return {
@@ -812,6 +817,24 @@ function seedBlogDemoContent(
   }
 }
 
+/**
+ * The topics as the first items of the header menu, which this blueprint's
+ * theme sets as a section bar. The category taxonomy is named in the site's
+ * default language, so a translation links to the same term pages.
+ */
+function withTopicBar(
+  menus: BlueprintMenus,
+  copy: BlogCopy,
+  categoryPath: string,
+  termSlug: (copySlug: string) => string = (slug) => slug,
+): BlueprintMenus {
+  const topics: readonly MenuItemSpec[] = copy.categories.map((demo) => ({
+    label: demo.name,
+    url: `${categoryPath}/${termSlug(demo.slug)}`,
+  }))
+  return { ...menus, header: [...topics, ...menus.header] }
+}
+
 /** A menu's internal paths under a language's URL prefix; the feed and anything external are the site's, not the language's. */
 function prefixMenus(menus: BlueprintMenus, prefix: string): BlueprintMenus {
   const item = (entry: MenuItemSpec): MenuItemSpec =>
@@ -823,6 +846,24 @@ function prefixMenus(menus: BlueprintMenus, prefix: string): BlueprintMenus {
     footer: menus.footer.map(item),
     ...(menus.headerAction === undefined ? {} : { headerAction: item(menus.headerAction) }),
   }
+}
+
+/** A translation's menus: its own pages under its prefix, the topic bar on the site's term pages. */
+function translatedMenus(defaultCopy: BlogCopy, translation: BlogTranslation): BlueprintMenus {
+  const termSlugs = new Map(
+    translation.copy.categories.map((term, index) => [
+      term.slug,
+      defaultCopy.categories[index]?.slug,
+    ]),
+  )
+  const prefixed = prefixMenus(translation.copy.menus, `/${translation.locale}`)
+  const topics = withTopicBar(
+    { header: [], footer: [] },
+    translation.copy,
+    `/${defaultCopy.schema.category.name}`,
+    (slug) => termSlugs.get(slug) ?? slug,
+  )
+  return { ...prefixed, header: [...topics.header, ...prefixed.header] }
 }
 
 /**
@@ -845,7 +886,7 @@ export function createBlogContentPack(
     recommendedAgents: BLOG_RECOMMENDED_AGENTS,
     seedDemoContent: seedBlogDemoContent(copy, model, translations),
     defaultTheme: '@cogenta/theme-blog',
-    menus: copy.menus,
+    menus: withTopicBar(copy.menus, copy, `/${copy.schema.category.name}`),
     widgets: multilingual
       ? [
           ...blogWidgets(copy, { locale }),
@@ -864,7 +905,7 @@ export function createBlogContentPack(
       ? {
           additionalLocales: translations.map((translation) => ({
             locale: translation.locale,
-            menus: prefixMenus(translation.copy.menus, `/${translation.locale}`),
+            menus: translatedMenus(copy, translation),
             siteSettings: blogSiteSettings(translation.copy),
           })),
         }

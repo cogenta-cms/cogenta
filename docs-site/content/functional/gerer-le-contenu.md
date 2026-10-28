@@ -234,6 +234,17 @@ publiée pendant qu'une autre reste en brouillon ; un champ non traduit est
 recopié depuis la source, et l'admin signale visuellement ce qui a divergé
 depuis la dernière synchronisation.
 
+Sur un site publié en plusieurs langues (par exemple `fr` et `en`), la langue par défaut
+reste aux adresses habituelles (`/`, `/blog/mon-article`) et chaque autre langue vit sous
+son préfixe : `/en/` est l'accueil anglais, `/en/blog/my-article` une traduction. Les
+listes d'une page — derniers articles, « à lire ensuite », barre latérale — ne montrent
+que les contenus de la langue de la page. L'en-tête du thème **Blog** propose un
+sélecteur de langue qui mène à la traduction de la page lue, ou à l'accueil de l'autre
+langue quand elle n'existe pas encore. Un site créé en `fr` et `en` avec le modèle
+« Blog » reçoit déjà les deux langues ; pour tout autre modèle, l'accueil de l'autre
+langue s'écrit depuis `/translations` (traduire la page `home`), et ses widgets et menus
+se règlent par langue dans les écrans Widgets (visibilité « Langue ») et Menus.
+
 ## Médias
 
 `/media` — la médiathèque. Une image téléversée produit automatiquement ses

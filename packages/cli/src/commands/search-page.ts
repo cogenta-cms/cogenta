@@ -120,6 +120,7 @@ async function resolveHits(
             collection,
             { ...params, id: entry.id },
             collection.routing.locale === true ? entry.locale : undefined,
+            { defaultLocale: options.site.defaultLocale },
           )
         }
       }

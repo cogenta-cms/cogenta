@@ -26,6 +26,12 @@ export interface SlugChange {
   readonly params?: Readonly<Record<string, string>>
   /** The pattern parameter carrying the slug. Rarely anything but `slug`. */
   readonly slugParam?: string
+  /**
+   * The locale the site serves without a prefix. A redirect leaves the URL
+   * a visitor actually requests, so a default-locale entry of a localised
+   * collection redirects from `/blog/old`, not from `/fr/blog/old`.
+   */
+  readonly defaultLocale?: string
 }
 
 /**
@@ -50,12 +56,20 @@ export async function recordSlugChange(
   const slugParam = change.slugParam ?? 'slug'
   const base = change.params ?? {}
 
+  const pathOptions =
+    change.defaultLocale === undefined ? {} : { defaultLocale: change.defaultLocale }
   const from = buildPath(
     change.collection,
     { ...base, [slugParam]: change.previousSlug },
     change.locale,
+    pathOptions,
   )
-  const to = buildPath(change.collection, { ...base, [slugParam]: change.nextSlug }, change.locale)
+  const to = buildPath(
+    change.collection,
+    { ...base, [slugParam]: change.nextSlug },
+    change.locale,
+    pathOptions,
+  )
 
   if (from === to) return null
 

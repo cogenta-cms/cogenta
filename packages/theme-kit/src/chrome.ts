@@ -13,6 +13,7 @@
 
 import type { ImageSource } from './contract.js'
 import { escapeAttribute, type HtmlElement, h } from './html.js'
+import { createThemeTranslator } from './strings.js'
 import type { WidgetAreas } from './widgets.js'
 
 /**
@@ -61,6 +62,26 @@ export interface ChromeNavLink {
 export interface ChromeLink {
   readonly label: string
   readonly href: string
+}
+
+/**
+ * One language the site is published in, as a visitor can switch to it
+ * (contract D `theme@1.10`).
+ *
+ * `href` is the translation of the page being read when it exists and is
+ * published, and that language's home page when it does not: a visitor who
+ * asked for another language is never sent to a 404 and never left on a
+ * dead control. `label` is the language's own name ("Français", "English"),
+ * which is what a reader looking for their language recognises.
+ */
+export interface ChromeLanguage {
+  /** A BCP 47 tag, as the site declares it. */
+  readonly locale: string
+  /** The language written in itself. */
+  readonly label: string
+  readonly href: string
+  /** True for the language of the page being rendered. */
+  readonly current: boolean
 }
 
 export interface ChromeInput {
@@ -125,6 +146,14 @@ export interface ChromeInput {
    * with `renderFooterWidgets`; absent means none to show.
    */
   readonly widgets?: WidgetAreas
+  /**
+   * The languages the site is published in, one entry per language with the
+   * page's own included (contract D `theme@1.10`). Absent — and empty — on a
+   * site with a single language, so a theme can render
+   * `renderLanguageSwitcher(input.languages)` unconditionally. A theme that
+   * never reads it loses nothing a pre-1.10 site had.
+   */
+  readonly languages?: readonly ChromeLanguage[]
 }
 
 export interface ChromeResult {
@@ -371,6 +400,53 @@ export function renderSocialLinks(
           { href: link.href, rel: 'me noopener noreferrer', target: '_blank' },
           socialIcon(socialIconKindFor(link.href), 'cg-social__icon'),
           h('span', { class: 'cg-visually-hidden' }, link.label),
+        ),
+      ),
+    ),
+  )
+}
+
+/**
+ * The language switcher (contract D `theme@1.10`): a `<nav>` with one link
+ * per language, the current one marked `aria-current` — or `null` when the
+ * site has a single language, so a theme writes it into its header without a
+ * conditional of its own.
+ *
+ * Each link carries `lang` and `hreflang` so a screen reader pronounces the
+ * label in the language it names. Like `renderSocialLinks`, this ships no CSS:
+ * a theme styles `className` and `itemClassName` in its own register.
+ */
+export function renderLanguageSwitcher(
+  languages: readonly ChromeLanguage[] | undefined,
+  options: {
+    /** The page's locale, for the accessible name of the `<nav>`. */
+    readonly locale: string
+    readonly className?: string
+    readonly itemClassName?: string
+  },
+): HtmlElement | null {
+  if (languages === undefined || languages.length < 2) return null
+  const t = createThemeTranslator(options.locale)
+  return h(
+    'nav',
+    { class: options.className, 'aria-label': t('language.switcher') },
+    h(
+      'ul',
+      {},
+      languages.map((language) =>
+        h(
+          'li',
+          { class: options.itemClassName },
+          h(
+            'a',
+            {
+              href: language.href,
+              lang: language.locale,
+              hreflang: language.locale,
+              ...(language.current ? { 'aria-current': 'true' } : {}),
+            },
+            language.label,
+          ),
         ),
       ),
     ),

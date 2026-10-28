@@ -59,6 +59,18 @@ describe('buildPath', () => {
     expect(buildPath(page, { slug: 'contact' })).toBe('/contact')
   })
 
+  it('omits the prefix of the default locale only, so the path is one matchPath resolves back', () => {
+    const options = { defaultLocale: 'fr' }
+    expect(buildPath(article, { slug: 'bonjour' }, 'fr', options)).toBe('/blog/bonjour')
+    expect(buildPath(article, { slug: 'hello' }, 'en', options)).toBe('/en/blog/hello')
+    expect(
+      matchPath([article], buildPath(article, { slug: 'bonjour' }, 'fr', options), {
+        locales,
+        defaultLocale: 'fr',
+      })?.locale,
+    ).toBe('fr')
+  })
+
   it('percent-encodes a parameter that is not URL-safe', () => {
     expect(buildPath(page, { slug: 'r&d' })).toBe('/r%26d')
   })

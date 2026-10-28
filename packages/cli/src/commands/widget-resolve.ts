@@ -101,6 +101,7 @@ export interface WidgetResolverDeps {
     taxonomy: TaxonomyDefinition,
     terms: readonly TaxonomyTerm[],
     access: AccessContext,
+    locale: string,
   ) => Promise<ReadonlyMap<string, TermUsageCount>>
   readonly entriesForTerm: (
     taxonomy: string,
@@ -244,7 +245,11 @@ function imageIdOf(entry: ContentEntry): string | null {
   return null
 }
 
-function hrefOf(collection: CollectionDefinition, entry: ContentEntry): string | null {
+function hrefOf(
+  collection: CollectionDefinition,
+  entry: ContentEntry,
+  defaultLocale: string,
+): string | null {
   if (collection.routing === undefined) return null
   try {
     return buildPath(
@@ -255,6 +260,7 @@ function hrefOf(collection: CollectionDefinition, entry: ContentEntry): string |
         ),
       ),
       collection.routing.locale === true ? (entry.locale ?? undefined) : undefined,
+      { defaultLocale },
     )
   } catch (error) {
     if (isCogentaError(error) && error.code === 'CONTENT_ROUTE_INVALID') return null
@@ -319,6 +325,15 @@ export async function resolveWidgetAreas(
   const collectionsByName = new Map(
     deps.collections.map((collection) => [collection.name, collection]),
   )
+  // On a site with several languages, a list a widget draws is the page's own
+  // language: a French page's "latest pieces" are French pieces. Only for a
+  // collection routed by locale, whose languages have URLs of their own; one
+  // that is not keeps every language in the one list, as it always did.
+  const multilingual = deps.site.locales.length > 1
+  const inPageLocale = (collection: CollectionDefinition): { readonly locale?: string } =>
+    multilingual && collection.routing?.locale === true ? { locale } : {}
+  const isInPageLocale = (collection: CollectionDefinition, entry: ContentEntry): boolean =>
+    inPageLocale(collection).locale === undefined || entry.locale === locale
   const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
   const formatDate = (iso: string): string => {
     const parsed = new Date(iso)
@@ -348,7 +363,7 @@ export async function resolveWidgetAreas(
     if (imageId !== null) mediaIds.add(imageId)
     return () => ({
       title: titleOf(entry),
-      href: hrefOf(collection, entry),
+      href: hrefOf(collection, entry, deps.site.defaultLocale),
       date: show.date ? formatDate(dateOf(entry)) : null,
       datetime: show.date ? dateOf(entry) : null,
       excerpt: show.excerpt ? excerptOf(entry) : null,
@@ -365,7 +380,10 @@ export async function resolveWidgetAreas(
     }
   }
 
-  const archiveScan = async (collectionName: string): Promise<readonly ContentEntry[]> => {
+  const archiveScan = async (
+    collection: CollectionDefinition,
+  ): Promise<readonly ContentEntry[]> => {
+    const collectionName = collection.name
     const found: ContentEntry[] = []
     let cursor: string | undefined
     try {
@@ -374,6 +392,7 @@ export async function resolveWidgetAreas(
           {
             collection: collectionName,
             limit: 100,
+            ...inPageLocale(collection),
             sort: [{ field: 'createdAt', direction: 'desc' }],
             ...(cursor === undefined ? {} : { cursor }),
           },
@@ -434,7 +453,9 @@ export async function resolveWidgetAreas(
               const collection = collectionsByName.get(definition.collection)
               const target = await readEntry(definition.collection, definition.id)
               const href =
-                collection === undefined || target === null ? null : hrefOf(collection, target)
+                collection === undefined || target === null
+                  ? null
+                  : hrefOf(collection, target, deps.site.defaultLocale)
               if (href !== null)
                 markDefs.push({ _key: definition._key, _type: 'link' as const, href })
             }
@@ -537,7 +558,7 @@ export async function resolveWidgetAreas(
           for (const item of ids) {
             if (read.length >= value.count) break
             const found = await readEntry(item.collection, item.id)
-            if (found !== null) read.push(found)
+            if (found !== null && isInPageLocale(collection, found)) read.push(found)
           }
           entries = read
         } else {
@@ -547,6 +568,7 @@ export async function resolveWidgetAreas(
                 {
                   collection: collection.name,
                   limit: value.count + 1,
+                  ...inPageLocale(collection),
                   sort: [{ field: 'createdAt', direction: 'desc' }],
                 },
                 access,
@@ -598,6 +620,7 @@ export async function resolveWidgetAreas(
           const collection = collectionsByName.get(name)
           const found = await readEntry(name, id)
           if (collection === undefined || found === null) continue
+          if (!isInPageLocale(collection, found)) continue
           items.push(entryItem(collection, found, show))
         }
         if (items.length < value.count) {
@@ -607,6 +630,7 @@ export async function resolveWidgetAreas(
               {
                 collection: current.collection.name,
                 limit: value.count + 1,
+                ...inPageLocale(current.collection),
                 sort: [{ field: 'createdAt', direction: 'desc' }],
               },
               access,
@@ -655,6 +679,7 @@ export async function resolveWidgetAreas(
               {
                 collection: match.collection,
                 limit: 1,
+                ...inPageLocale(collection),
                 ...(conditions.length === 0
                   ? {}
                   : { filter: conditions.length === 1 ? conditions[0] : { and: conditions } }),
@@ -684,7 +709,7 @@ export async function resolveWidgetAreas(
         const taxonomy = deps.taxonomies.find((candidate) => candidate.name === value.taxonomy)
         if (taxonomy === undefined) return null
         const terms = await deps.terms(taxonomy)
-        const usage = await deps.termUsage(taxonomy, terms, access)
+        const usage = await deps.termUsage(taxonomy, terms, access, locale)
         const hrefFor = (term: TaxonomyTerm): string =>
           `/${encodeURIComponent(taxonomy.name)}/${encodeURIComponent(term.slug)}`
         const labelOf = (term: TaxonomyTerm): string =>
@@ -753,7 +778,7 @@ export async function resolveWidgetAreas(
         const value = settings as WidgetSettings<'archives'> & WidgetSettings<'calendar'>
         const collection = collectionsByName.get(value.collection)
         if (collection === undefined) return null
-        const entries = await archiveScan(collection.name)
+        const entries = await archiveScan(collection)
         if (entries.length === 0) return null
         if (widget.type === 'archives') {
           const buckets = new Map<string, number>()
@@ -872,7 +897,7 @@ export async function resolveWidgetAreas(
           const collection = collectionsByName.get(comment.collection)
           const entry = await readEntry(comment.collection, comment.entryId)
           if (collection === undefined || entry === null) continue
-          const href = hrefOf(collection, entry)
+          const href = hrefOf(collection, entry, deps.site.defaultLocale)
           const body = comment.body.replace(/\s+/gu, ' ').trim()
           items.push({
             author: comment.authorName,

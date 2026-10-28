@@ -64,6 +64,8 @@ export interface ContentLifecycleEvent {
 
 export interface LifecycleEventsOptions {
   readonly collection: CollectionDefinition
+  /** The locale the site serves without a prefix, so an event carries the public URL. */
+  readonly defaultLocale?: string
   /**
    * Receives every event. Awaited, so a caller may batch or await delivery —
    * but a rejection is caught and routed to `onError`, never propagated: an
@@ -74,14 +76,23 @@ export interface LifecycleEventsOptions {
   readonly onError?: (error: unknown) => void
 }
 
-function pathFor(collection: CollectionDefinition, entry: ContentEntry): string | null {
+function pathFor(
+  collection: CollectionDefinition,
+  entry: ContentEntry,
+  defaultLocale: string | undefined,
+): string | null {
   if (collection.routing === undefined) return null
   const params: Record<string, string> = {}
   for (const [field, value] of Object.entries(entry.values)) {
     if (typeof value === 'string') params[field] = value
   }
   try {
-    return buildPath(collection, params, entry.locale)
+    return buildPath(
+      collection,
+      params,
+      entry.locale,
+      defaultLocale === undefined ? {} : { defaultLocale },
+    )
   } catch {
     // A route whose parameters are not all present yet. `null` is the honest
     // answer — better than refusing the publish that just succeeded.
@@ -104,7 +115,7 @@ export function withLifecycleEvents<TValues extends ContentValues = ContentValue
         publishedAt: entry.publishedAt,
         updatedAt: entry.updatedAt,
         version: entry.version,
-        path: pathFor(options.collection, entry),
+        path: pathFor(options.collection, entry, options.defaultLocale),
       })
     } catch (error) {
       options.onError?.(error)

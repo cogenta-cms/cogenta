@@ -157,6 +157,12 @@ the theme to use, and leaves a `theme@1.3` theme rendering byte-for-byte as befo
 - `createThemeTranslator(locale)` / `THEME_STRINGS` — the visitor-facing strings
   `ctx.t` resolves (`collection.empty`, `entry.readingTime`, …), in English and French.
 
+- `ChromeInput.languages` (`theme@1.10`) — one `{ locale, label, href, current }` per
+  language of a multilingual site, already resolved to the translation of the page being
+  rendered (or to that language's home). `renderLanguageSwitcher(languages, { locale })`
+  draws it as a `<nav>` with `lang`/`hreflang` on each link; `null` on a single-language
+  site, so a theme can write it into its header unconditionally.
+
 Ten themes ship with Cogenta, one per site type (`packages/theme-*`); each is a complete,
 independent implementation of contract D, and `create-cogenta` activates the one matching
 the chosen blueprint. Two layout rules every one of them learned the hard way: give every

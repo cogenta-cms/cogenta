@@ -773,7 +773,7 @@ defineAgent({
 > `theme@1.5` le 2026-09-14 (L27, `PageEntryMeta.fields`), puis en `theme@1.6` le 2026-09-15
 > (L30, zones de widgets), puis en `theme@1.7` le 2026-09-16 (L32, blocs et widgets de
 > plugin, ADR-0036), puis en `theme@1.8` le 2026-09-17 (L37, archives d'auteur), puis en `theme@1.9` le même
-> jour (L38, aperçu des contenus intégrés).**
+> jour (L38, aperçu des contenus intégrés), puis en `theme@1.10` le 2026-10-28 (sélecteur de langue).**
 > Ajouter une entrée à `ctx` est mineur ; en modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
@@ -1339,6 +1339,39 @@ consentement** sans que le navigateur du visiteur contacte le service. `embedFra
 l'aperçu de la carte de consentement. Un thème qui ignore `embedPreview` rend le bloc comme
 avant `1.9` ; un hôte qui ne le fournit pas aussi.
 
+### Sélecteur de langue — `ChromeInput.languages` — theme@1.10
+
+Ajouté pour les sites publiés en plusieurs langues, **optionnel et additif**. L'hôte
+décrit les langues du site et où mène chacune ; le thème décide s'il les montre et où.
+
+```ts
+interface ChromeInput {
+  /* … */
+  languages?: readonly ChromeLanguage[]   // absent ou vide sur un site à une langue
+}
+
+interface ChromeLanguage {
+  readonly locale: string   // BCP 47, comme le déclare le site
+  readonly label: string    // la langue dans sa propre langue : « Français », « English »
+  readonly href: string     // la traduction de la page lue si elle est publiée, sinon l'accueil de cette langue
+  readonly current: boolean
+}
+```
+
+Un visiteur qui demande une autre langue n'arrive jamais sur un 404 : sans traduction de
+la page, le lien mène à l'accueil de cette langue (`/` pour la langue servie sans préfixe,
+`/<locale>/` pour les autres). Sur un site dont les collections ne sont pas routées par
+langue, une langue sans traduction de la page est omise plutôt que liée à une page d'une
+autre langue. `renderLanguageSwitcher` (`@cogenta/theme-kit`) rend la liste ; `theme-blog`
+l'utilise dans son en-tête, les neuf autres thèmes ne l'ont pas encore branché (un thème
+qui ignore `languages` rend exactement comme avant).
+
+Le modèle de routage, lui, ne change pas : `routing.locale: true` préfixe l'URL d'une
+collection par la langue (`/en/blog/hello`), la langue par défaut restant sans préfixe.
+`buildPath` accepte désormais `{ defaultLocale }` pour produire ce couple d'adresses que
+`matchPath` résout déjà et que la canonique du SEO nomme déjà ; sans l'option, il préfixe
+toutes les langues, comme avant.
+
 ### Versionnement
 
 `theme@1.x`. Ajouter une entrée à `ctx` est mineur. En modifier une est majeur.
@@ -1371,6 +1404,12 @@ exactement comme avant ; un hôte qui ne les renseigne pas produit le même rend
 **`theme@1.9` (L38, 2026-09-17)** — strictement additif : `RenderContext.embedPreview`,
 optionnel. Un thème `1.8` l'ignore et rend exactement comme avant. Test :
 `packages/cli/test/serve-embed-previews.test.ts`.
+
+**`theme@1.10` (2026-10-28)** — strictement additif : `ChromeInput.languages`, optionnel.
+Un thème `1.9` l'ignore et rend exactement comme avant ; un hôte à une seule langue ne le
+renseigne pas. Tests : `packages/theme-kit/test/language-switcher.test.ts`,
+`packages/theme-blog/test/chrome.test.ts`,
+`packages/create-cogenta/test/blog-bilingual.e2e.test.ts`.
 
 ---
 

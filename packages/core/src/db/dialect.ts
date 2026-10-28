@@ -148,6 +148,33 @@ export function compile(fragment: SqlFragment, dialect: DatabaseDialect): Compil
 }
 
 /**
+ * Makes the additive DDL of a startup reconciliation harmless to run twice, on
+ * Postgres: `alter table … add column` becomes `add column if not exists` and
+ * `create [unique] index` becomes `create [unique] index if not exists`.
+ *
+ * Every table module of this codebase adds a late column or an index by
+ * trying the statement and ignoring the "already exists" failure, because
+ * SQLite and MySQL have no portable `if not exists` for either. The ignored
+ * failure is still an `ERROR` line in the Postgres server log, repeated for
+ * every statement at every start (0.22.0 end-to-end campaign, D7): an operator
+ * reading the log for a real problem drowns in it. Postgres does have the
+ * clause, so the statement it receives says what the caller meant.
+ *
+ * Nothing but "already exists" changes: a column that exists is left exactly
+ * as it is (its type is never altered), an index that exists under the name is
+ * kept. Any other statement is returned untouched.
+ */
+export function withIdempotentDdl(text: string): string {
+  if (/^\s*alter\s+table\b/iu.test(text)) {
+    return text.replace(/\badd\s+column\s+(?!if\s+not\s+exists\b)/giu, 'add column if not exists ')
+  }
+  return text.replace(
+    /^(\s*create\s+(?:unique\s+)?index\s+(?:concurrently\s+)?)(?!if\s+not\s+exists\b|on\b)/iu,
+    '$1if not exists ',
+  )
+}
+
+/**
  * Statements that hand back rows: a read, or a write with `RETURNING`.
  *
  * Shared by every driver so `rows` and `rowsAffected` mean the same thing on all

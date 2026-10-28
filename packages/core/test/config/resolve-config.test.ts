@@ -813,3 +813,32 @@ describe('resolveConfig — security.trustProxyFrom', () => {
     },
   )
 })
+
+describe('resolveConfig — security.hstsMaxAge from the environment', () => {
+  it('reads COGENTA_SECURITY_HSTS_MAX_AGE as seconds, and lets it win over the file', () => {
+    expect(
+      resolveConfig(minimal, { COGENTA_SECURITY_HSTS_MAX_AGE: '31536000' }).security.hstsMaxAge,
+    ).toBe(31_536_000)
+    expect(
+      resolveConfig(
+        { ...minimal, security: { hstsMaxAge: 100 } },
+        { COGENTA_SECURITY_HSTS_MAX_AGE: '0' },
+      ).security.hstsMaxAge,
+    ).toBe(0)
+  })
+
+  it('treats an empty COGENTA_SECURITY_HSTS_MAX_AGE as unset', () => {
+    expect(resolveConfig(minimal, { COGENTA_SECURITY_HSTS_MAX_AGE: '' }).security.hstsMaxAge).toBe(
+      0,
+    )
+  })
+
+  it.each(['-1', '1.5', 'a year', '63072001'])(
+    'refuses COGENTA_SECURITY_HSTS_MAX_AGE=%s rather than guessing a lifetime',
+    (value) => {
+      expect(() => resolveConfig(minimal, { COGENTA_SECURITY_HSTS_MAX_AGE: value })).toThrow(
+        CogentaError,
+      )
+    },
+  )
+})

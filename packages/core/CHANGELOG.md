@@ -1,5 +1,13 @@
 # @cogenta/core
 
+## 0.14.3
+
+### Patch Changes
+
+- [#51](https://github.com/cogenta-cms/cogenta/pull/51) [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A NUL byte (`%00`) or another control character in a URL path is no longer a 500 on Postgres. `cogenta serve` answers 404 for a public path and 400 `QUERY_INVALID` for an API path before any lookup; `/_image?id=%00` is a 404; the content store (text filters and `locale`), the taxonomy store (`bySlug`) and the media store (`get`) answer "no row" for a value Postgres cannot hold instead of sending the statement.
+
+- [#51](https://github.com/cogenta-cms/cogenta/pull/51) [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The Postgres driver sends the additive DDL of the startup reconciliation with `if not exists` (`alter table … add column`, `create [unique] index`). Every table module adds a late column or an index by trying the statement and ignoring the "already exists" failure; each of those was an `ERROR` line in the Postgres server log at every start (about eighty per boot on the live blog). Nothing else changes: an existing column keeps its type, an existing index is kept.
+
 ## 0.14.2
 
 ### Patch Changes

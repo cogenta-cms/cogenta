@@ -1,5 +1,48 @@
 # @cogenta/cli
 
+## 0.22.1
+
+### Patch Changes
+
+- [#51](https://github.com/cogenta-cms/cogenta/pull/51) [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10) Thanks [@georgesmomo](https://github.com/georgesmomo)! - On a site with several languages, the pages the host draws itself follow the language of the address. `/en/search` is served (the search widget of an English page posts to it and the results are the English entries); the taxonomy archives exist per language (`/en/categorie/ia` lists the English entries with the English labels, links its hreflang pair, and the chips and the topics widget of an English page lead to it; the sitemap lists both); an unknown `/en/…` address is answered by the English 404 page with `lang="en"`; the archive no longer prints the taxonomy's machine name over its title. A page reached by anything but its one address now answers a permanent redirect to it, query string kept: `/en` to `/en/`, `/fr/…` (the default language) to the unprefixed address, `/home` and `/en/home` to the language's front door, and a trailing slash to none.
+
+- [#51](https://github.com/cogenta-cms/cogenta/pull/51) [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A NUL byte (`%00`) or another control character in a URL path is no longer a 500 on Postgres. `cogenta serve` answers 404 for a public path and 400 `QUERY_INVALID` for an API path before any lookup; `/_image?id=%00` is a 404; the content store (text filters and `locale`), the taxonomy store (`bySlug`) and the media store (`get`) answer "no row" for a value Postgres cannot hold instead of sending the statement.
+
+- [#51](https://github.com/cogenta-cms/cogenta/pull/51) [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A page links the theme stylesheet at an address carrying the sheet's own digest (`/_cogenta/styles.css?v=…`), as the plugin stylesheets already are, and the server keeps that address a year (`immutable`). Every other address, with no digest or an older one, is still revalidated and still serves the current sheet, so a skin or theme change shows on the next page. The render-blocking sheet no longer costs a revalidation round trip on each navigation. The page builder preview now links the live sheet like the published page, not the startup snapshot.
+- Updated dependencies [[`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`f8d694c`](https://github.com/cogenta-cms/cogenta/commit/f8d694c61833be5659ecd47bd65c915d9194c354)]:
+  - @cogenta/theme-blog@0.7.1
+  - @cogenta/schema@0.12.1
+  - @cogenta/core@0.14.3
+  - @cogenta/agents@0.11.3
+  - @cogenta/api@2.13.2
+  - @cogenta/auth@0.7.2
+  - @cogenta/blocks@1.2.3
+  - @cogenta/export@0.3.4
+  - @cogenta/import@0.2.19
+  - @cogenta/plugins@0.9.3
+  - @cogenta/seo@0.4.4
+  - @cogenta/starters@0.5.1
+  - @cogenta/widgets@0.2.11
+  - @cogenta/agents-builtin@0.7.5
+  - @cogenta/analytics@0.3.12
+  - @cogenta/channels@0.3.20
+  - @cogenta/comments@0.2.13
+  - @cogenta/commerce@0.5.15
+  - @cogenta/forms@0.2.20
+  - @cogenta/mcp@0.3.18
+  - @cogenta/observability@0.2.12
+  - @cogenta/render@0.6.4
+  - @cogenta/theme-association@0.6.4
+  - @cogenta/theme-canonical@1.4.4
+  - @cogenta/theme-docs@0.6.4
+  - @cogenta/theme-ecommerce@1.4.4
+  - @cogenta/theme-entreprise@1.5.4
+  - @cogenta/theme-kit@0.9.1
+  - @cogenta/theme-magazine@1.4.4
+  - @cogenta/theme-portfolio@1.4.4
+  - @cogenta/theme-restaurant@0.6.4
+  - @cogenta/theme-saas@0.6.4
+
 ## 0.22.0
 
 ### Minor Changes

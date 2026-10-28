@@ -1,5 +1,22 @@
 # @cogenta/api
 
+## 2.13.2
+
+### Patch Changes
+
+- Updated dependencies [[`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10)]:
+  - @cogenta/schema@0.12.1
+  - @cogenta/core@0.14.3
+  - @cogenta/auth@0.7.2
+  - @cogenta/blocks@1.2.3
+  - @cogenta/export@0.3.4
+  - @cogenta/seo@0.4.4
+  - @cogenta/widgets@0.2.11
+  - @cogenta/analytics@0.3.12
+  - @cogenta/channels@0.3.20
+  - @cogenta/forms@0.2.20
+  - @cogenta/mcp@0.3.18
+
 ## 2.13.1
 
 ### Patch Changes

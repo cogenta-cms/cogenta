@@ -1,5 +1,12 @@
 # @cogenta/comments
 
+## 0.2.13
+
+### Patch Changes
+
+- Updated dependencies [[`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10)]:
+  - @cogenta/core@0.14.3
+
 ## 0.2.12
 
 ### Patch Changes

@@ -43,6 +43,11 @@ done
 # node_modules next to the site is a symlink into the image, recreated at every
 # start: an upgraded image upgrades the code, the volume keeps only the site.
 link_runtime() {
+  # An empty site directory we cannot write was made by the container runtime
+  # (images up to 0.21.0 set it as the working directory): replace it.
+  if [ -d "$SITE_DIR" ] && [ ! -w "$SITE_DIR" ]; then
+    rmdir "$SITE_DIR" 2>/dev/null || true
+  fi
   mkdir -p "$SITE_DIR" || die "cannot create $SITE_DIR. Mount a writable volume on /data."
   ln -sfn "$RUNTIME_DIR/node_modules" "$SITE_DIR/node_modules" \
     || die "cannot write in $SITE_DIR. The volume must be writable by uid $(id -u)."

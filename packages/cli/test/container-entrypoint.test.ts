@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { lstat, mkdir, mkdtemp, readlink, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readlink, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -132,6 +132,22 @@ describe.skipIf(process.platform === 'win32')('docker/entrypoint.sh', () => {
     // loopback) and on the port the platform asked for.
     const seen = JSON.parse(result.stdout) as { argv: string[]; cwd: string }
     expect(seen.argv).toEqual(['serve', '--host', '0.0.0.0', '--port', '4321'])
+  })
+
+  it('replaces an empty site directory it cannot write, as a container runtime leaves it', async () => {
+    const { runtimeDir, siteDir } = await runtime()
+    await mkdir(siteDir, { recursive: true })
+    await chmod(siteDir, 0o555)
+
+    const result = entrypoint(['serve'], {
+      COGENTA_RUNTIME_DIR: runtimeDir,
+      COGENTA_SITE_DIR: siteDir,
+      COGENTA_AUTH_SIGNING_KEY: KEY,
+      COGENTA_PREVIEW_SIGNING_KEY: KEY,
+    })
+    expect(result.stderr).not.toContain('cannot write')
+    expect(result.stderr).toContain('no site in')
+    expect(await readlink(join(siteDir, 'node_modules'))).toBe(join(runtimeDir, 'node_modules'))
   })
 
   it('reads a secret from the file named by its _FILE variable and does not leave the pointer behind', async () => {

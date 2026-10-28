@@ -1522,13 +1522,16 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const taxonomies = options.taxonomies ?? []
   // Fiche 22 tâche 8, part 4: the one version number shown in the admin
   // footer/topbar and, if branding stays on, the public site footer.
+  // It is the product release — `@cogenta/cli`, the version the container
+  // image and the Helm chart carry — and not `@cogenta/core`, whose own
+  // number moves independently and reads as a stale install.
   // Resolved once per site assembly (cached after the first real read across
   // every site a multi-site process serves) and never allowed to fail
   // startup over a cosmetic label — a broken resolution falls back to an
   // honest placeholder instead of refusing to serve the site at all.
   let cogentaVersion: string
   try {
-    cogentaVersion = getCoreVersion()
+    cogentaVersion = getCliVersion()
   } catch {
     cogentaVersion = '0.0.0'
   }
@@ -9786,6 +9789,13 @@ export async function runServe(options: ServeOptions): Promise<number> {
     observabilityRuntime,
   )
   const server = createServer((req, res) => {
+    // RFC 9110 §9.3.2: HEAD is GET without the body. Node already withholds the
+    // body of a response to a HEAD request (decided when the response was
+    // created, from the request line) and keeps the headers a handler set,
+    // `content-length` included — so every route answers HEAD exactly as it
+    // answers GET once it is dispatched as one, instead of each of them having
+    // to remember to accept it.
+    if (req.method === 'HEAD') req.method = 'GET'
     void probes(req, res).then(
       (answered) => (answered ? undefined : siteListener(req, res)),
       () => undefined,

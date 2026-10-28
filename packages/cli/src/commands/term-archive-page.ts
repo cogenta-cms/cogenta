@@ -12,6 +12,12 @@ import {
   type TermArchiveIntro,
   type TermArchiveLabels,
 } from '@cogenta/theme-kit'
+import {
+  homePathFor,
+  isLocaleRouted,
+  languageSwitcher,
+  termArchivePathFor,
+} from './locale-paths.js'
 import type { SeoRenderDefaults } from './seo.js'
 import { resolveTheme, type ThemeModule } from './theme-registry.js'
 import type { BrandingSettings, ChromeExtras } from './theme-render.js'
@@ -49,6 +55,12 @@ export const ARCHIVE_PAGE_SIZE = 12
 /** What the host resolved out of the taxonomy store before any rendering happened. */
 export interface TermArchiveResolution {
   readonly taxonomyName: string
+  /**
+   * The taxonomy's name as a reader says it ("Catégorie"), in the page's
+   * language. What a theme shows over the term's title: the machine name
+   * (`categorie`) is an address, not a word.
+   */
+  readonly taxonomyLabel?: string
   /** The term's id, for the widgets whose visibility names terms (L30). Absent for a date archive. */
   readonly termId?: string
   /** A date archive's own base path (`/archive/article/2026`), where a term archive links `/{taxonomy}/{slug}`. */
@@ -95,6 +107,8 @@ export interface TermArchivePageOptions {
   readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
   /** Widget areas already resolved for this page (L30). */
   readonly widgets?: WidgetAreas
+  /** The language of this page (`/en/categorie/ia`): its labels, its entries, its chrome. The site's default when absent. */
+  readonly locale?: string
 }
 
 const LABELS: Record<string, TermArchiveLabels> = {
@@ -168,9 +182,15 @@ function hrefOf(
   }
 }
 
-/** `/{taxonomy}/{slug}`, and `?page=N` past the first. */
-function archiveHref(taxonomy: string, slug: string, page: number): string {
-  const path = `/${encodeURIComponent(taxonomy)}/${encodeURIComponent(slug)}`
+/** `/{taxonomy}/{slug}` in the page's language, and `?page=N` past the first. */
+function archiveHref(
+  taxonomy: string,
+  slug: string,
+  page: number,
+  locale: string,
+  options: TermArchivePageOptions,
+): string {
+  const path = termArchivePathFor(taxonomy, slug, locale, options.site, options.collections)
   return page <= 1 ? path : `${path}?page=${page}`
 }
 
@@ -204,14 +224,54 @@ function fallbackArchive(input: TermArchiveInput): HtmlElement {
   )
 }
 
-function headFor(input: TermArchiveInput, options: TermArchivePageOptions, page: number): string {
+function headFor(
+  input: TermArchiveInput,
+  options: TermArchivePageOptions,
+  page: number,
+  locale: string,
+  taxonomyName: string,
+  isTermArchive: boolean,
+): string {
   const title = `${input.term.label} — ${options.site.name}`
   const canonical = new URL(
     input.term.slug.startsWith('/')
       ? `${input.term.slug}${page <= 1 ? '' : `?page=${page}`}`
-      : archiveHref(input.taxonomyName, input.term.slug, page),
+      : archiveHref(taxonomyName, input.term.slug, page, locale, options),
     options.site.url,
   ).toString()
+  // The same archive in each language of the site (a term archive only: a date
+  // or author archive has one address), so a search engine pairs them.
+  const alternates =
+    isTermArchive && isLocaleRouted(options.site, options.collections)
+      ? [
+          ...options.site.locales.map((alternate) => ({
+            hreflang: alternate,
+            href: new URL(
+              termArchivePathFor(
+                taxonomyName,
+                input.term.slug,
+                alternate,
+                options.site,
+                options.collections,
+              ),
+              options.site.url,
+            ).toString(),
+          })),
+          {
+            hreflang: 'x-default',
+            href: new URL(
+              termArchivePathFor(
+                taxonomyName,
+                input.term.slug,
+                options.site.defaultLocale,
+                options.site,
+                options.collections,
+              ),
+              options.site.url,
+            ).toString(),
+          },
+        ]
+      : []
   // Page 2 and beyond are `noindex, follow`: they are the same set of entries
   // sliced differently, so indexing them competes with page 1 for the same
   // query while adding nothing — and `follow` still lets a crawler reach
@@ -221,6 +281,10 @@ function headFor(input: TermArchiveInput, options: TermArchivePageOptions, page:
     `<title>${escapeHtmlText(title)}</title>`,
     `<meta name="robots" content="${robots}">`,
     `<link rel="canonical" href="${escapeHtmlAttribute(canonical)}">`,
+    ...alternates.map(
+      (alternate) =>
+        `<link rel="alternate" hreflang="${escapeHtmlAttribute(alternate.hreflang)}" href="${escapeHtmlAttribute(alternate.href)}">`,
+    ),
     input.page.previousHref === null
       ? ''
       : `<link rel="prev" href="${escapeHtmlAttribute(new URL(input.page.previousHref, options.site.url).toString())}">`,
@@ -298,16 +362,21 @@ export async function renderTermArchivePage(
     })
   }
 
-  const locale = options.site.defaultLocale
+  const locale = options.locale ?? options.site.defaultLocale
   const taxonomy = resolution.taxonomyName
+  const isTermArchive = resolution.basePath === undefined && !resolution.term.slug.startsWith('/')
   // A date archive (L30) names its pages by path rather than by term slug.
   const hrefFor = (slug: string, target: number): string => {
-    if (resolution.basePath === undefined) return archiveHref(taxonomy, slug, target)
+    if (resolution.basePath === undefined) {
+      return archiveHref(taxonomy, slug, target, locale, options)
+    }
     const path = slug.startsWith('/') ? slug : resolution.basePath
     return target <= 1 ? path : `${path}?page=${target}`
   }
   const input: TermArchiveInput = {
-    taxonomyName: taxonomy,
+    // What a theme prints over the title: the reader's word for the taxonomy
+    // when the host has one, never the machine name that makes the URL.
+    taxonomyName: resolution.taxonomyLabel ?? taxonomy,
     term: resolution.term,
     ancestors: resolution.ancestors.map((ancestor) => ({
       label: ancestor.label,
@@ -341,7 +410,19 @@ export async function renderTermArchivePage(
       site: options.site,
       locale,
       styles: options.styles,
-      headHtml: headFor(input, options, page),
+      headHtml: headFor(input, options, page, locale, taxonomy, isTermArchive),
+      homeHref: homePathFor(locale, options.site, options.collections),
+      languages: isTermArchive
+        ? languageSwitcher(locale, options.site, options.collections, (target) =>
+            termArchivePathFor(
+              taxonomy,
+              resolution.term.slug,
+              target,
+              options.site,
+              options.collections,
+            ),
+          )
+        : [],
       bodyHtml: body,
       ...(options.menus === undefined ? {} : { menus: options.menus }),
       ...(options.branding === undefined ? {} : { branding: options.branding }),

@@ -70,6 +70,7 @@ import {
 import { DEFAULT_FAVICON_CONTENT_TYPE, DEFAULT_FAVICON_PATH } from './default-favicon.js'
 import { DEFAULT_LOGO_PATH } from './default-logo.js'
 import { renderPasswordForm, UNLOCK_FLOOR_CSS } from './entry-lock.js'
+import { languageLabel } from './locale-paths.js'
 import type { PluginBlockRenderer } from './plugin-block-render.js'
 import { pluginBlockFallback } from './plugin-blocks.js'
 import type { SeoRenderDefaults } from './seo.js'
@@ -860,16 +861,6 @@ function listLocale(
   return collection?.routing?.locale === true ? { locale: pageLocale } : {}
 }
 
-/** A language's own name — "Français", "English" — which is what a reader looks for. */
-function languageLabel(locale: string): string {
-  try {
-    const name = new Intl.DisplayNames([locale], { type: 'language' }).of(locale)
-    return name === undefined ? locale : name.charAt(0).toLocaleUpperCase(locale) + name.slice(1)
-  } catch {
-    return locale
-  }
-}
-
 /**
  * The language switcher's entries for one page (contract D `theme@1.10`): one
  * per language of the site, the page's own included, each pointing at the
@@ -1288,6 +1279,10 @@ export interface PageChromeOptions {
   readonly loadMedia?: (ids: readonly string[]) => Promise<ReadonlyMap<string, RenderMediaAsset>>
   /** Same live read `ThemeRenderOptions.chromeExtras` documents (contract D `theme@1.4`, L25 D2). Absent renders the pre-1.4 chrome. */
   readonly chromeExtras?: (locale: string) => Promise<ChromeExtras>
+  /** Where the site's front door is in this page's language (`/en/`); the root when absent. */
+  readonly homeHref?: string
+  /** The language switcher of a page the host draws itself (search, an archive, the 404). */
+  readonly languages?: readonly ChromeLanguage[]
 }
 
 /**
@@ -1349,14 +1344,14 @@ export async function renderPageChrome(
   const chrome = theme.renderChrome({
     site: options.site,
     locale: options.locale,
-    // Not locale-prefixed on purpose, matching this route's pre-existing
-    // behaviour — a genuine, pre-existing gap in a multi-locale deployment,
-    // tracked separately rather than folded into this change.
-    homeHref: '/',
+    homeHref: options.homeHref ?? '/',
     headerNav,
     footerNav,
     brandingHtml,
     brand: identity.brand,
+    ...(options.languages === undefined || options.languages.length < 2
+      ? {}
+      : { languages: options.languages }),
     ...chromeExtras,
     ...(placesFooter && hasAnyWidget(footerWidgets) ? { widgets: footerWidgets } : {}),
   })
@@ -1542,6 +1537,79 @@ export async function renderRequestedPage(
   const resolved = await resolveEntry(pathname, options, context)
   if (resolved === null) return null
   return renderEntryPage(pathname, resolved.collection, resolved.entry, options, context)
+}
+
+/** A requested path answered by a page, or by a redirect to the one address that page has. */
+export type RequestedPage =
+  | { readonly kind: 'page'; readonly html: string }
+  | { readonly kind: 'redirect'; readonly location: string }
+
+/** A path compared as the visitor's browser would: percent-escapes decoded, nothing else folded. */
+function comparablePath(path: string): string {
+  try {
+    return decodeURIComponent(path)
+  } catch {
+    return path
+  }
+}
+
+/**
+ * The one address an entry is served at: its route (unprefixed in the default
+ * language), or the front door of its language when it is the home page.
+ * `null` when the entry has no address yet (a route parameter is empty).
+ */
+async function canonicalPathOf(
+  collection: CollectionDefinition,
+  entry: ContentEntry,
+  options: ThemeRenderOptions,
+): Promise<string | null> {
+  let path: string
+  try {
+    path = buildPath(
+      collection,
+      Object.fromEntries(
+        Object.entries(entry.values).filter(
+          (pair): pair is [string, string] => typeof pair[1] === 'string',
+        ),
+      ),
+      entry.locale ?? undefined,
+      { defaultLocale: options.site.defaultLocale },
+    )
+  } catch (error) {
+    if (!isCogentaError(error) || error.code !== 'CONTENT_ROUTE_INVALID') throw error
+    return null
+  }
+  const locale = entry.locale ?? options.site.defaultLocale
+  const home = await homePathFor(options)
+  const homeAddress =
+    collection.routing?.locale === true && locale !== options.site.defaultLocale
+      ? `/${encodeURIComponent(locale)}${home}`
+      : home
+  return comparablePath(path) === comparablePath(homeAddress) ? homeHrefFor(locale, options) : path
+}
+
+/**
+ * `renderRequestedPage`, except that a page reached by anything but its one
+ * address — `/home`, `/fr/…` for the default language, `/en`, a trailing slash
+ * — answers with the redirect to that address (D16 of the 0.22.0 campaign):
+ * the same content under two URLs is crawl budget spent twice, and the
+ * canonical tag alone does not stop either of them being indexed.
+ */
+export async function renderRequestedPageOrRedirect(
+  pathname: string,
+  options: ThemeRenderOptions,
+  context: AccessContext,
+): Promise<RequestedPage | null> {
+  const resolved = await resolveEntry(pathname, options, context)
+  if (resolved === null) return null
+  const canonical = await canonicalPathOf(resolved.collection, resolved.entry, options)
+  if (canonical !== null && comparablePath(canonical) !== comparablePath(pathname)) {
+    return { kind: 'redirect', location: canonical }
+  }
+  return {
+    kind: 'page',
+    html: await renderEntryPage(pathname, resolved.collection, resolved.entry, options, context),
+  }
 }
 
 /**

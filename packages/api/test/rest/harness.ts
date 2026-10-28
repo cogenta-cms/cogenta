@@ -145,6 +145,8 @@ export interface Harness {
 export async function createHarness(
   options: {
     readonly siteUrl?: string
+    /** Tells the router which locale the site serves without a prefix, as `cogenta serve` does. */
+    readonly routerDefaultLocale?: string
     /** Overrides the fixture set — used by suites that need a collection the shared fixtures do not declare. */
     readonly collections?: readonly CollectionDefinition[]
     /** Extra role names, for a suite whose fixture grants a role outside the four shipped ones. */
@@ -187,6 +189,9 @@ export async function createHarness(
     router: createRestRouter({
       service,
       ...(options.siteUrl === undefined ? {} : { siteUrl: options.siteUrl }),
+      ...(options.routerDefaultLocale === undefined
+        ? {}
+        : { defaultLocale: options.routerDefaultLocale }),
     }),
     store,
     dispose: async () => {

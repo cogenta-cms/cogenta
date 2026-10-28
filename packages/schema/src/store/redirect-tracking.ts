@@ -30,6 +30,8 @@ import type { ContentValues } from './types.js'
 export interface RedirectTrackingOptions {
   readonly collection: CollectionDefinition
   readonly redirects: RedirectStore
+  /** The locale the site serves without a prefix; see `SlugChange.defaultLocale`. */
+  readonly defaultLocale?: string
   /**
    * Called when recording the redirect fails. Defaults to swallowing it.
    *
@@ -90,6 +92,7 @@ async function trackRename<TValues extends ContentValues>(
       nextSlug,
       slugParam: slugField,
       locale: after.locale,
+      ...(options.defaultLocale === undefined ? {} : { defaultLocale: options.defaultLocale }),
       ...(Object.keys(otherParams).length === 0 ? {} : { params: otherParams }),
     })
   } catch (error) {

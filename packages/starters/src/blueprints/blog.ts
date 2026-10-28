@@ -25,7 +25,7 @@ import {
   toBlockZoneEntry,
 } from './content-pack.js'
 import type { DemoMediaSpec } from './demo-media.js'
-import type { BlueprintMenus } from './menus.js'
+import type { BlueprintMenus, MenuItemSpec } from './menus.js'
 import { STARTING_SKINS } from './starting-skins.js'
 import type { BlueprintWidget } from './widgets.js'
 
@@ -183,6 +183,19 @@ export const BLOG_DEMO_POSTS: readonly BlogDemoPost[] = BLOG_COPY_EN.posts
 // Pages
 // ---------------------------------------------------------------------------
 
+/**
+ * Where a set of pages sits on a site with several languages. Everything is
+ * optional: a page set for the default language needs none of it.
+ */
+export interface BlogPagePlacement {
+  /** The URL prefix of the pages' language, `/en`, or none for the default language. */
+  readonly prefix?: string
+  /** The public path of the category taxonomy, which is named in the site's default language. */
+  readonly categoryPath?: string
+  /** The slug the site's term carries for a category of this copy. */
+  readonly termSlug?: (copySlug: string) => string
+}
+
 export interface BlogDemoPage {
   readonly title: string
   readonly slug: string
@@ -217,12 +230,18 @@ export function buildBlogDemoPages(
   media: Readonly<Record<string, string>>,
   siteName: string = DEFAULT_PUBLICATION_NAME,
   copy: BlogCopy = BLOG_COPY_EN,
+  placement: BlogPagePlacement = {},
 ): readonly BlogDemoPage[] {
   const featured = requiredPost(copy, copy.featuredSlug)
   const latestLetter = requiredPost(copy, copy.latestLetterSlug)
   const featuredCover = featured.cover === undefined ? undefined : media[featured.cover]
   const { home, about, archive, newsletter, credits, slugs } = copy
-  const categoryPath = `/${copy.schema.category.name}`
+  // Where the pages sit in a site that has several languages: a translation's
+  // links carry its language's prefix, and name the taxonomy and the terms the
+  // site really has — the site's collections come from its default language.
+  const prefix = placement.prefix ?? ''
+  const categoryPath = placement.categoryPath ?? `/${copy.schema.category.name}`
+  const termSlug = placement.termSlug ?? ((slug: string) => slug)
 
   return [
     {
@@ -238,7 +257,7 @@ export function buildBlogDemoPages(
           title: featured.title,
           subtitle: featured.excerpt,
           ...(featuredCover === undefined ? {} : { media: featuredCover }),
-          actions: [{ label: home.readEssay, target: { href: `/blog/${featured.slug}` } }],
+          actions: [{ label: home.readEssay, target: { href: `${prefix}/blog/${featured.slug}` } }],
         } as VocabularyBlock,
         {
           _key: 'demo-home-latest',
@@ -287,7 +306,7 @@ export function buildBlogDemoPages(
             _key: `demo-subject-${demo.slug}`,
             title: demo.name,
             text: demo.description,
-            link: { href: `${categoryPath}/${demo.slug}` },
+            link: { href: `${categoryPath}/${termSlug(demo.slug)}` },
           })),
         },
         {
@@ -299,10 +318,13 @@ export function buildBlogDemoPages(
           actions: [
             {
               label: home.letterFollow,
-              target: { href: `/${slugs.newsletter}` },
+              target: { href: `${prefix}/${slugs.newsletter}` },
               emphasis: 'primary',
             },
-            { label: home.letterLatest, target: { href: `/blog/${latestLetter.slug}` } },
+            {
+              label: home.letterLatest,
+              target: { href: `${prefix}/blog/${latestLetter.slug}` },
+            },
           ],
         },
       ],
@@ -371,7 +393,7 @@ export function buildBlogDemoPages(
             { label: newsletter.subscribe, target: { href: '/feed.xml' }, emphasis: 'primary' },
             {
               label: newsletter.past,
-              target: { href: `${categoryPath}/${copy.lettersCategorySlug}` },
+              target: { href: `${categoryPath}/${termSlug(copy.lettersCategorySlug)}` },
             },
           ],
         },
@@ -469,15 +491,26 @@ export const BLOG_SITE_SETTINGS: Readonly<Record<string, unknown>> = blogSiteSet
  * index, nor on About, Archive and the letter page, which say the same things
  * at length. Under an essay, the related pieces carry the reader on.
  */
-export function blogWidgets(copy: BlogCopy): readonly BlueprintWidget[] {
+export function blogWidgets(
+  copy: BlogCopy,
+  placement: BlogWidgetPlacement = {},
+): readonly BlueprintWidget[] {
   const w = copy.widgets
+  // The taxonomies are the site's, named in its default language; a widget in
+  // another language reads them by those names.
+  const { category, tag } = placement.taxonomies ?? copy.schema
+  // On a site with several languages each widget is shown on the pages of its
+  // own language only (`visibility.locales`).
+  const onlyInLocale = placement.locale === undefined ? {} : { locales: [placement.locale] }
+  const prefix = placement.prefix ?? ''
   const readingPages = {
+    ...onlyInLocale,
     pages: {
       mode: 'only',
       targets: [
         { kind: 'collection', collection: 'post' },
-        { kind: 'taxonomy', taxonomy: copy.schema.category.name },
-        { kind: 'taxonomy', taxonomy: copy.schema.tag.name },
+        { kind: 'taxonomy', taxonomy: category.name },
+        { kind: 'taxonomy', taxonomy: tag.name },
         { kind: 'dateArchive' },
         { kind: 'search' },
       ],
@@ -488,7 +521,10 @@ export function blogWidgets(copy: BlogCopy): readonly BlueprintWidget[] {
       area: 'sidebar',
       type: 'about',
       title: w.aboutTitle,
-      settings: { body: w.aboutBody, link: { label: w.aboutLink, href: `/${copy.slugs.about}` } },
+      settings: {
+        body: w.aboutBody,
+        link: { label: w.aboutLink, href: `${prefix}/${copy.slugs.about}` },
+      },
       visibility: readingPages,
     },
     {
@@ -510,7 +546,7 @@ export function blogWidgets(copy: BlogCopy): readonly BlueprintWidget[] {
       type: 'terms',
       title: w.subjectsTitle,
       settings: {
-        taxonomy: copy.schema.category.name,
+        taxonomy: category.name,
         showCounts: true,
         hierarchical: false,
         hideEmpty: true,
@@ -521,7 +557,7 @@ export function blogWidgets(copy: BlogCopy): readonly BlueprintWidget[] {
       area: 'sidebar',
       type: 'tagCloud',
       title: w.tagsTitle,
-      settings: { taxonomy: copy.schema.tag.name, maxTerms: 20, showCounts: false },
+      settings: { taxonomy: tag.name, maxTerms: 20, showCounts: false },
       visibility: readingPages,
     },
     {
@@ -537,6 +573,7 @@ export function blogWidgets(copy: BlogCopy): readonly BlueprintWidget[] {
       title: w.relatedTitle,
       settings: { count: 3, showDate: true, showImage: false },
       visibility: {
+        ...onlyInLocale,
         pages: { mode: 'only', targets: [{ kind: 'collection', collection: 'post' }] },
       },
     },
@@ -544,6 +581,16 @@ export function blogWidgets(copy: BlogCopy): readonly BlueprintWidget[] {
 }
 
 export const BLOG_WIDGETS: readonly BlueprintWidget[] = blogWidgets(BLOG_COPY_EN)
+
+/** Where a set of widgets sits on a site with several languages; none of it for a single-language site. */
+export interface BlogWidgetPlacement {
+  /** Show the widgets on the pages of this language only. */
+  readonly locale?: string
+  /** The URL prefix of that language, `/en`, or none for the default language. */
+  readonly prefix?: string
+  /** The site's taxonomies, which are named in its default language. */
+  readonly taxonomies?: Pick<BlogCopy['schema'], 'category' | 'tag'>
+}
 
 export const BLOG_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
   {
@@ -562,6 +609,41 @@ export const BLOG_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
 // Seeding
 // ---------------------------------------------------------------------------
 
+/** A language the site is published in besides its default one, with the words the blueprint ships for it. */
+export interface BlogTranslation {
+  /** The site's own locale code for it, `en` or `en-GB`. */
+  readonly locale: string
+  readonly copy: BlogCopy
+}
+
+/** `fr-CA` → `fr`. */
+function languageOf(locale: string): string {
+  return locale.toLowerCase().split(/[-_]/u)[0] ?? locale
+}
+
+/**
+ * The languages of a site that this blueprint has words for, besides its
+ * default one: a site in `fr` and `en` has English words to seed as
+ * translations, a site in `fr` and `de` has none for German and gets French
+ * only — a page of English under a German prefix would be worse than no page.
+ */
+export function blogTranslationsFor(
+  locale: string,
+  locales: readonly string[],
+): readonly BlogTranslation[] {
+  const seen = new Set<string>([languageOf(locale)])
+  const found: BlogTranslation[] = []
+  for (const other of locales) {
+    const language = languageOf(other)
+    if (seen.has(language)) continue
+    const copy = blogCopyFor(other)
+    if (copy.locale !== language) continue
+    seen.add(language)
+    found.push({ locale: other, copy })
+  }
+  return found
+}
+
 /**
  * Inserts the `blog` blueprint's demo content through the real
  * `ContentStore`, never mocked (house rule).
@@ -569,10 +651,18 @@ export const BLOG_RECOMMENDED_AGENTS: readonly RecommendedAgentHint[] = [
  * Posts are created oldest first, each with the date it was published, so
  * the `createdAt` ordering every `collectionList` sorts on agrees with the
  * dates a reader sees.
+ *
+ * On a site with several languages, every other language the blueprint has
+ * words for is then seeded as translations of the default language's pages
+ * and essays (ADR-0014: one entry per language, linked by `translationOf`).
+ * The two copies are written in the same order and share their pictures, so
+ * the n-th English essay is the translation of the n-th French one; their
+ * stories differ on purpose, and each reads as native rather than translated.
  */
 function seedBlogDemoContent(
   copy: BlogCopy,
   model: BlogSchema,
+  translations: readonly BlogTranslation[],
 ): (ctx: SeedContext) => Promise<void> {
   return async (ctx) => {
     const { db, defaultLocale, adminId, media } = ctx
@@ -583,71 +673,202 @@ function seedBlogDemoContent(
     const pageStore = createContentStore({ db, collection: model.page, defaultLocale })
 
     const categoryIdBySlug = new Map<string, string>()
-    for (const demo of copy.categories) {
+    const categoryIds: string[] = []
+    for (const [index, demo] of copy.categories.entries()) {
       const term = await categoryStore.create({
         slug: demo.slug,
-        labels: { [defaultLocale]: demo.name },
+        labels: {
+          [defaultLocale]: demo.name,
+          ...Object.fromEntries(
+            translations.flatMap(({ locale, copy: other }) => {
+              const name = other.categories[index]?.name
+              return name === undefined ? [] : [[locale, name] as const]
+            }),
+          ),
+        },
       })
       categoryIdBySlug.set(demo.slug, term.id)
+      categoryIds.push(term.id)
     }
 
     const tagIdBySlug = new Map<string, string>()
-    for (const demo of copy.tags) {
+    const tagIds: string[] = []
+    for (const [index, demo] of copy.tags.entries()) {
       const term = await tagStore.create({
         slug: demo.slug,
-        labels: { [defaultLocale]: demo.name },
+        labels: {
+          [defaultLocale]: demo.name,
+          ...Object.fromEntries(
+            translations.flatMap(({ locale, copy: other }) => {
+              const name = other.tags[index]?.name
+              return name === undefined ? [] : [[locale, name] as const]
+            }),
+          ),
+        },
       })
       tagIdBySlug.set(demo.slug, term.id)
+      tagIds.push(term.id)
     }
 
+    const posts = []
     for (const demo of copy.posts) {
       const cover = demo.cover === undefined ? undefined : media[demo.cover]
-      await postStore.create({
-        status: 'published',
-        createdBy: adminId,
-        values: {
-          title: demo.title,
-          slug: demo.slug,
-          excerpt: demo.excerpt,
-          body: demo.body({ siteName, media }),
-          publishedAt: demo.publishedAt,
-          category: categoryIdBySlug.get(demo.categorySlug) ?? null,
-          tags: demo.tagSlugs.map((slug) => tagIdBySlug.get(slug)).filter((id) => id !== undefined),
-          ...(demo.topic === undefined ? {} : { topic: demo.topic }),
-          ...(cover === undefined ? {} : { coverImage: cover }),
-        },
-      })
+      posts.push(
+        await postStore.create({
+          status: 'published',
+          createdBy: adminId,
+          values: {
+            title: demo.title,
+            slug: demo.slug,
+            excerpt: demo.excerpt,
+            body: demo.body({ siteName, media }),
+            publishedAt: demo.publishedAt,
+            category: categoryIdBySlug.get(demo.categorySlug) ?? null,
+            tags: demo.tagSlugs
+              .map((slug) => tagIdBySlug.get(slug))
+              .filter((id) => id !== undefined),
+            ...(demo.topic === undefined ? {} : { topic: demo.topic }),
+            ...(cover === undefined ? {} : { coverImage: cover }),
+          },
+        }),
+      )
     }
 
+    const pages = []
     for (const demo of buildBlogDemoPages(media, siteName, copy)) {
-      await pageStore.create({
-        status: 'published',
-        createdBy: adminId,
-        values: {
-          title: demo.title,
-          slug: demo.slug,
-          ...(demo.seoDescription === undefined ? {} : { seoDescription: demo.seoDescription }),
-        },
-        blocks: { blocks: demo.blocks.map(toBlockZoneEntry) },
+      pages.push(
+        await pageStore.create({
+          status: 'published',
+          createdBy: adminId,
+          values: {
+            title: demo.title,
+            slug: demo.slug,
+            ...(demo.seoDescription === undefined ? {} : { seoDescription: demo.seoDescription }),
+          },
+          blocks: { blocks: demo.blocks.map(toBlockZoneEntry) },
+        }),
+      )
+    }
+
+    for (const { locale, copy: other } of translations) {
+      const otherName = ctx.siteName?.trim() || other.defaultPublicationName
+      // The site's terms are the default language's: this language's category
+      // and tag slugs map onto them by position.
+      const termIdOf = (own: readonly { readonly slug: string }[], ids: readonly string[]) =>
+        new Map(own.map((term, index) => [term.slug, ids[index]] as const))
+      const otherCategoryIds = termIdOf(other.categories, categoryIds)
+      const otherTagIds = termIdOf(other.tags, tagIds)
+
+      for (const [index, demo] of other.posts.entries()) {
+        const source = posts[index]
+        if (source === undefined) continue
+        const cover = demo.cover === undefined ? undefined : media[demo.cover]
+        await postStore.create({
+          locale,
+          translationOf: source.id,
+          status: 'published',
+          createdBy: adminId,
+          values: {
+            title: demo.title,
+            slug: demo.slug,
+            excerpt: demo.excerpt,
+            body: demo.body({ siteName: otherName, media }),
+            publishedAt: demo.publishedAt,
+            category: otherCategoryIds.get(demo.categorySlug) ?? null,
+            tags: demo.tagSlugs
+              .map((slug) => otherTagIds.get(slug))
+              .filter((id): id is string => id !== undefined),
+            ...(demo.topic === undefined ? {} : { topic: demo.topic }),
+            ...(cover === undefined ? {} : { coverImage: cover }),
+          },
+        })
+      }
+
+      const termSlugs = new Map(
+        other.categories.map((term, index) => [term.slug, copy.categories[index]?.slug]),
+      )
+      const translatedPages = buildBlogDemoPages(media, otherName, other, {
+        prefix: `/${locale}`,
+        categoryPath: `/${copy.schema.category.name}`,
+        termSlug: (slug) => termSlugs.get(slug) ?? slug,
       })
+      for (const [index, demo] of translatedPages.entries()) {
+        const source = pages[index]
+        if (source === undefined) continue
+        await pageStore.create({
+          locale,
+          translationOf: source.id,
+          status: 'published',
+          createdBy: adminId,
+          values: {
+            title: demo.title,
+            slug: demo.slug,
+            ...(demo.seoDescription === undefined ? {} : { seoDescription: demo.seoDescription }),
+          },
+          blocks: { blocks: demo.blocks.map(toBlockZoneEntry) },
+        })
+      }
     }
   }
 }
 
-/** The whole blueprint, in one language. */
-export function createBlogContentPack(locale: string): BlueprintContentPack {
+/** A menu's internal paths under a language's URL prefix; the feed and anything external are the site's, not the language's. */
+function prefixMenus(menus: BlueprintMenus, prefix: string): BlueprintMenus {
+  const item = (entry: MenuItemSpec): MenuItemSpec =>
+    entry.url === undefined || !entry.url.startsWith('/') || entry.url === '/feed.xml'
+      ? entry
+      : { ...entry, url: `${prefix}${entry.url}` }
+  return {
+    header: menus.header.map(item),
+    footer: menus.footer.map(item),
+    ...(menus.headerAction === undefined ? {} : { headerAction: item(menus.headerAction) }),
+  }
+}
+
+/**
+ * The whole blueprint, in one language — or in several: on a site whose
+ * `locales` list more than the default language, the other languages the
+ * blueprint has words for come as translations with their own navigation,
+ * settings and widgets.
+ */
+export function createBlogContentPack(
+  locale: string,
+  locales: readonly string[] = [locale],
+): BlueprintContentPack {
   const copy = blogCopyFor(locale)
   const model = copy === BLOG_COPY_EN ? ENGLISH_SCHEMA : blogSchema(copy)
+  const translations = blogTranslationsFor(locale, locales)
+  const multilingual = translations.length > 0
   return {
     collections: model.collections,
     taxonomies: model.taxonomies,
     recommendedAgents: BLOG_RECOMMENDED_AGENTS,
-    seedDemoContent: seedBlogDemoContent(copy, model),
+    seedDemoContent: seedBlogDemoContent(copy, model, translations),
     defaultTheme: '@cogenta/theme-blog',
     menus: copy.menus,
-    widgets: blogWidgets(copy),
+    widgets: multilingual
+      ? [
+          ...blogWidgets(copy, { locale }),
+          ...translations.flatMap((translation) =>
+            blogWidgets(translation.copy, {
+              locale: translation.locale,
+              prefix: `/${translation.locale}`,
+              taxonomies: copy.schema,
+            }),
+          ),
+        ]
+      : blogWidgets(copy),
     siteSettings: blogSiteSettings(copy),
     mediaSpecs: blogMediaSpecs(copy),
+    ...(multilingual
+      ? {
+          additionalLocales: translations.map((translation) => ({
+            locale: translation.locale,
+            menus: prefixMenus(translation.copy.menus, `/${translation.locale}`),
+            siteSettings: blogSiteSettings(translation.copy),
+          })),
+        }
+      : {}),
   }
 }
 

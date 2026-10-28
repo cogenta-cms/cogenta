@@ -13,6 +13,7 @@ import { runMcp } from './commands/mcp.js'
 import { runMigrate } from './commands/migrate.js'
 import { runPluginCommand } from './commands/plugin.js'
 import { runRoles } from './commands/roles.js'
+import { runSchema } from './commands/schema-localize.js'
 import { runServe } from './commands/serve.js'
 import { runSkin } from './commands/skin.js'
 import { runUpdate } from './commands/update.js'
@@ -50,6 +51,8 @@ export type { PluginCommandOptions } from './commands/plugin.js'
 export { runPluginCommand } from './commands/plugin.js'
 export type { RolesOptions, RolesSubcommand } from './commands/roles.js'
 export { runRoles } from './commands/roles.js'
+export type { LocalizeSchemaOutcome, SchemaOptions } from './commands/schema-localize.js'
+export { localizeSchemaFile, runSchema } from './commands/schema-localize.js'
 export type { ServeOptions } from './commands/serve.js'
 export { loadCollections, runServe } from './commands/serve.js'
 export type { SkinOptions, SkinSubcommand } from './commands/skin.js'
@@ -82,6 +85,7 @@ Commands
   restore preview <file.zip>   Show what a backup would add or overwrite
   restore apply <file.zip>     Restore a backup — CLI only (fiche 26)
   generate types   Write TypeScript declarations for the content schema
+  schema localize-routes   Serve a multilingual site's collections by language (dry run unless --write)
   links check      Crawl published content and report links that lead nowhere
   plugin list      List the plugins this site has installed
   plugin check <name>           Validate one plugin's manifest and code
@@ -115,6 +119,7 @@ Options
   --cwd <path>            Run as if from this directory
   --no-color              Never colour the output (NO_COLOR is honoured too)
   --verbose               Send structured driver logs to stderr
+  --write                 schema localize-routes: edit cogenta.schema.mjs (a dry run otherwise)
   --out <path>            generate types: where to write the declarations;
                           roles export: where to write the file (default cogenta.role-permissions.json)
   --description <text>    skin generate: free text describing the site
@@ -218,6 +223,7 @@ export async function run(options: RunOptions): Promise<number> {
         overwrite: { type: 'boolean' },
         input: { type: 'string' },
         collection: { type: 'string' },
+        write: { type: 'boolean' },
       },
     })
   } catch (error) {
@@ -385,6 +391,18 @@ export async function run(options: RunOptions): Promise<number> {
       env,
       ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
       ...(typeof parsed.values.out === 'string' ? { outFile: parsed.values.out } : {}),
+      ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
+    })
+  }
+
+  if (command === 'schema') {
+    return runSchema({
+      subcommand: parsed.positionals[1],
+      out,
+      stderr,
+      env,
+      ...(typeof parsed.values.cwd === 'string' ? { cwd: parsed.values.cwd } : {}),
+      ...(parsed.values.write === true ? { write: true } : {}),
       ...(verboseLogger === undefined ? {} : { logger: verboseLogger }),
     })
   }

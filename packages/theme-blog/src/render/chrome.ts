@@ -6,6 +6,7 @@ import {
   escapeText,
   renderBrandMark,
   renderFooterWidgets,
+  renderLanguageSwitcher,
   renderSocialLinks,
   renderThemeToggle,
   serialize,
@@ -24,7 +25,9 @@ import {
  * panel opened by a CSS-only toggle, a visually hidden checkbox paired with
  * a `<label>`, no `<script>`. The label precedes the `<nav>` so the sibling
  * combinator in `base.css` reaches it; the theme toggle follows the `<nav>`,
- * outside the panel, so appearance can be switched without opening it.
+ * outside the panel, so appearance can be switched without opening it. On a site
+ * with several languages the language switcher (`theme@1.10`) sits just before
+ * that control, outside the panel for the same reason.
  *
  * Footer: the name and `tagline`, the `footerNote` beneath them, the footer
  * navigation, the social profiles with real icons (`renderSocialLinks`),
@@ -85,6 +88,14 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     renderBrandMark(input.brand, { className: 'cg-site-header__logo' }) ??
     `<span class="cg-site-header__name">${siteNameText}</span>`
   const themeToggle = serialize(renderThemeToggle(input.locale, { className: 'cg-theme-toggle' }))
+  // Several languages (`theme@1.10`): outside the collapsible panel, like the
+  // appearance control, so a reader can change language without opening it.
+  const switcher = renderLanguageSwitcher(input.languages, {
+    locale: input.locale,
+    className: 'cg-lang',
+    itemClassName: 'cg-lang__item',
+  })
+  const languageSwitcher = switcher === null ? '' : serialize(switcher)
 
   const menu = hasMenu
     ? `<input type="checkbox" id="cg-nav-toggle" class="cg-nav-toggle-input" aria-label="Menu">` +
@@ -100,6 +111,7 @@ export function renderChrome(input: ChromeInput): ChromeResult {
     `<header class="cg-site-header"><div class="cg-site-header__inner">` +
     `<a class="cg-site-header__home" href="${escapeAttribute(input.homeHref)}">${mark}</a>` +
     `${menu}` +
+    `${languageSwitcher}` +
     `${themeToggle}` +
     `</div></header>`
 

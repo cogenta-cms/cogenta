@@ -1154,6 +1154,7 @@ export interface Site {
   readonly resolveTaxonomyTerm: (
     taxonomyName: string,
     termId: string,
+    locale?: string,
   ) => Promise<{ readonly label: string; readonly route: string | null } | null>
   /** CORS, security headers and cache-control, applied to every response (L10 task 6). */
   readonly security: SecurityConfig
@@ -2358,7 +2359,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     let route: string | null = null
     if (collection.routing !== undefined) {
       try {
-        route = buildPath(collection, stringValues, entry.locale ?? undefined)
+        route = buildPath(collection, stringValues, entry.locale ?? undefined, {
+          defaultLocale: site.defaultLocale,
+        })
       } catch {
         // A route field is missing on this entry (e.g. an empty slug on a
         // draft). The item still resolves — with a label, no link — rather
@@ -2377,8 +2380,14 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   }
 
   /** A term's own label in the site's default locale — a term carries no request context of its own the way an entry's `locale` field does. */
-  const termLabel = (term: { labels: Record<string, string>; slug: string }): string =>
-    term.labels[site.defaultLocale] ?? Object.values(term.labels)[0] ?? term.slug
+  const termLabel = (
+    term: { labels: Record<string, string>; slug: string },
+    locale?: string,
+  ): string =>
+    (locale === undefined ? undefined : term.labels[locale]) ??
+    term.labels[site.defaultLocale] ??
+    Object.values(term.labels)[0] ??
+    term.slug
 
   // Resolves a `taxonomy`-kind menu item to a display label and a real route
   // (fiche 09 task 4; audit 2026-09-01, 04-taxonomies-menus.md T01).
@@ -2390,6 +2399,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const resolveMenuTerm = async (
     taxonomyName: string,
     termId: string,
+    locale?: string,
   ): Promise<{ readonly label: string; readonly route: string | null } | null> => {
     const taxonomy = taxonomies.find((candidate) => candidate.name === taxonomyName)
     if (taxonomy === undefined) return null
@@ -2398,7 +2408,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     if (term === null) return null
 
     return {
-      label: termLabel(term),
+      label: termLabel(term, locale),
       route: `/${encodeURIComponent(taxonomy.name)}/${encodeURIComponent(term.slug)}`,
     }
   }
@@ -2967,7 +2977,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     ...(mcpHttp === undefined ? {} : { mcpHttp }),
     ...(options.pluginWidgets === undefined ? {} : { pluginWidgets: options.pluginWidgets }),
     storeFor,
-    restRouter: createRestRouter({ service, siteUrl: site.url }),
+    restRouter: createRestRouter({
+      service,
+      siteUrl: site.url,
+      defaultLocale: site.defaultLocale,
+    }),
     authRouter: createAuthRouter({
       auth,
       ...(options.onForgotPassword == null ? {} : { onForgotPassword: options.onForgotPassword }),
@@ -3940,7 +3954,7 @@ async function widgetsForSite(
       gateway: site.gateway,
       ...(site.pluginWidgets === undefined ? {} : { pluginWidgets: site.pluginWidgets }),
       terms: site.taxonomyTerms,
-      termUsage: (taxonomy, terms, access) => {
+      termUsage: (taxonomy, terms, access, locale) => {
         const byName = new Map(site.collections.map((collection) => [collection.name, collection]))
         return countTaxonomyUsage({
           db: site.db,
@@ -3954,6 +3968,7 @@ async function widgetsForSite(
             )
           },
           includeDrafts: () => false,
+          ...(site.site.locales.length > 1 ? { locale } : {}),
         })
       },
       entriesForTerm: site.entriesForTerm,

@@ -33,7 +33,7 @@ export type {
 export { createRedirectStore, REDIRECT_REASONS, REDIRECTS_TABLE } from './redirects.js'
 export type { EntryLookup, ResolveUrlOptions, UrlResolution } from './resolve.js'
 export { resolveUrl } from './resolve.js'
-export type { RouteMatch, RouteOptions } from './router.js'
+export type { BuildPathOptions, RouteMatch, RouteOptions } from './router.js'
 export { buildPath, matchPath, normalisePath } from './router.js'
 export type {
   DeriveSlugInput,

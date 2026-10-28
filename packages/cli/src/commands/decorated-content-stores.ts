@@ -48,6 +48,7 @@ export function createDecoratedContentStores(options: DecoratedContentStoreOptio
     const tracked = withRedirectTracking(guarded, {
       collection,
       redirects: options.redirects,
+      defaultLocale: options.defaultLocale,
       onError: failure('redirect tracking failed'),
     })
     const scheduled = withScheduledPublishEnqueue(tracked, {
@@ -73,6 +74,7 @@ export function createDecoratedContentStores(options: DecoratedContentStoreOptio
         ? vectorIndexed
         : withLifecycleEvents(vectorIndexed, {
             collection,
+            defaultLocale: options.defaultLocale,
             emit: options.onContentEvent,
             onError: failure('content webhook emit failed'),
           })

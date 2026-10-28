@@ -87,6 +87,8 @@ export interface RestRouterOptions {
   readonly basePath?: string
   /** The site's public origin, used to turn a preview token into an absolute URL. Without it, `/preview` returns the token and path only. */
   readonly siteUrl?: string
+  /** The locale the site serves without a prefix, so a preview link names the address a visitor requests. */
+  readonly defaultLocale?: string
 }
 
 export interface RestRouter {
@@ -489,7 +491,7 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
           entryId: id,
           expiresIn: PREVIEW_LINK_LIFETIME_SECONDS,
         })
-        const path = previewPath(definition, entry)
+        const path = previewPath(definition, entry, options.defaultLocale)
         const query = `state=working&preview=${encodeURIComponent(token)}`
         const url =
           options.siteUrl === undefined || path === null
@@ -566,7 +568,11 @@ const PREVIEW_LINK_LIFETIME_SECONDS = 60 * 60
  * route at all (unrouted collections have nothing to preview *as a page*,
  * only the entry itself).
  */
-function previewPath(collection: CollectionDefinition, entry: SerialisedEntry): string | null {
+function previewPath(
+  collection: CollectionDefinition,
+  entry: SerialisedEntry,
+  defaultLocale: string | undefined,
+): string | null {
   if (collection.routing === undefined) return null
 
   const params: Record<string, string> = {}
@@ -574,7 +580,12 @@ function previewPath(collection: CollectionDefinition, entry: SerialisedEntry): 
     if (typeof value === 'string') params[key] = value
   }
 
-  return buildPath(collection, params, entry.locale)
+  return buildPath(
+    collection,
+    params,
+    entry.locale,
+    defaultLocale === undefined ? {} : { defaultLocale },
+  )
 }
 
 function methodNotAllowed(allowed: readonly string[]): RestResponse {

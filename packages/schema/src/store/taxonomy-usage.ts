@@ -36,6 +36,15 @@ export interface CountTaxonomyUsageOptions {
    * layer decides this, once, per collection — this function never guesses.
    */
   readonly includeDrafts: (collectionName: string) => boolean
+  /**
+   * Counts only the entries written in this locale, for the collections that
+   * are routed by locale (`routing.locale`). A translation family shares its
+   * terms, so without this a French page's "Reading (8)" counts the English
+   * translations of the same eight essays too. A collection that is not routed
+   * by locale keeps counting every entry: its locales share one URL space, and
+   * hiding the others would lose them from the page.
+   */
+  readonly locale?: string
 }
 
 function toNumber(value: unknown): number {
@@ -56,7 +65,7 @@ function toNumber(value: unknown): number {
 export async function countTaxonomyUsage(
   options: CountTaxonomyUsageOptions,
 ): Promise<ReadonlyMap<string, TermUsage>> {
-  const { db, taxonomy, terms, collections, readable, includeDrafts } = options
+  const { db, taxonomy, terms, collections, readable, includeDrafts, locale } = options
   const dialect = db.dialect
 
   const own = new Map<string, number>()
@@ -83,9 +92,13 @@ export async function countTaxonomyUsage(
     // Drafts count too only when this actor may read them on this very
     // collection — the same door `canReadUnpublished` guards everywhere else
     // (BLOCKERS.md: "le compteur peut fuiter").
-    const statusFilter = includeDrafts(collection.name)
+    const publishedFilter = includeDrafts(collection.name)
       ? sql``
       : sql` and ${statusColumn} = ${'published'}`
+    const statusFilter =
+      locale !== undefined && collection.routing?.locale === true
+        ? sql`${publishedFilter} and ${identifier('locale', dialect)} = ${locale}`
+        : publishedFilter
 
     for (const relation of relevant) {
       if (relation.many) {

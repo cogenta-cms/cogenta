@@ -1,5 +1,6 @@
 export type {
   BlueprintContentPack,
+  BlueprintLocaleSetup,
   RecommendedAgentHint,
   SeedContext,
   SeedDemoContent,

@@ -36,6 +36,7 @@ import type { SeoImage } from '@cogenta/seo'
 import {
   type ChromeBrand,
   type ChromeInput,
+  type ChromeLanguage,
   type ChromeLink,
   type ChromeNavLink,
   type CommentNotice,
@@ -72,7 +73,13 @@ import { renderPasswordForm, UNLOCK_FLOOR_CSS } from './entry-lock.js'
 import type { PluginBlockRenderer } from './plugin-block-render.js'
 import { pluginBlockFallback } from './plugin-blocks.js'
 import type { SeoRenderDefaults } from './seo.js'
-import { alternatesForEntry, renderSeoHead, seoSiteFor, siteVerificationMetaTags } from './seo.js'
+import {
+  alternatesForEntry,
+  renderSeoHead,
+  seoSiteFor,
+  siteVerificationMetaTags,
+  translationFamilyOf,
+} from './seo.js'
 import { minifyCss } from './theme-css.js'
 import { missingBundledFaceCss, remoteFontPreconnectTags, renderSiteSkin } from './theme-fonts.js'
 import { DEFAULT_THEME_NAME, resolveTheme, type ThemeModule } from './theme-registry.js'
@@ -170,8 +177,9 @@ async function listAsTheme(
   gateway: ContentGateway,
   request: ThemeQueryRequest,
   context: AccessContext,
+  scope: { readonly locale?: string } = {},
 ): Promise<ThemePage<ThemeContentEntry>> {
-  const page = await gateway.list(toApiQueryRequest(request), context)
+  const page = await gateway.list({ ...toApiQueryRequest(request), ...scope }, context)
   return {
     items: page.items.map((entry) => toThemeEntry(entry, request.collection)),
     nextCursor: page.nextCursor,
@@ -484,6 +492,8 @@ export interface ThemeRenderOptions {
   readonly resolveTerm?: (
     taxonomyName: string,
     termId: string,
+    /** The label is written in this language when the term has one; the site's default otherwise. */
+    locale?: string,
   ) => Promise<{ readonly label: string; readonly route: string | null } | null>
 }
 
@@ -800,6 +810,117 @@ async function homePathFor(options: ThemeRenderOptions): Promise<string> {
   if (options.homePath === undefined) return DEFAULT_HOME_PATH
   const configured = await options.homePath()
   return configured === null || configured === '' ? DEFAULT_HOME_PATH : configured
+}
+
+/**
+ * Whether some collection is served under a locale prefix — the only case in
+ * which `/en/` can be a page at all. On a site whose collections are not
+ * routed by locale, `/en` is an ordinary path (a page may even be called that).
+ */
+function hasLocalizedRoutes(options: Pick<ThemeRenderOptions, 'collections'>): boolean {
+  return options.collections.some((collection) => collection.routing?.locale === true)
+}
+
+/**
+ * The locale whose bare prefix `pathname` is — `/en` or `/en/` on a site with
+ * several languages and locale-routed collections — or `null`. That URL is the
+ * home page of that language, the one a language switcher links to.
+ */
+function localeHomeOf(
+  pathname: string,
+  options: Pick<ThemeRenderOptions, 'collections' | 'site'>,
+): string | null {
+  if (options.site.locales.length < 2 || !hasLocalizedRoutes(options)) return null
+  const segments = pathname.split('/').filter((segment) => segment !== '')
+  const only = segments.length === 1 ? segments[0] : undefined
+  return only !== undefined && options.site.locales.includes(only) ? only : null
+}
+
+/**
+ * Where the home page of `locale` lives for a visitor: `/` for the language
+ * served unprefixed, `/en/` for any other — and `/` on a site that does not
+ * route by locale, which has no per-language front door.
+ */
+function homeHrefFor(
+  locale: string,
+  options: Pick<ThemeRenderOptions, 'collections' | 'site'>,
+): string {
+  if (options.site.locales.length < 2 || !hasLocalizedRoutes(options)) return '/'
+  return locale === options.site.defaultLocale ? '/' : `/${encodeURIComponent(locale)}/`
+}
+
+/** The locale a list of `collection` is restricted to on a page in `pageLocale`, as a query fragment. */
+function listLocale(
+  options: Pick<ThemeRenderOptions, 'collections' | 'site'>,
+  collectionName: string,
+  pageLocale: string,
+): { readonly locale?: string } {
+  if (options.site.locales.length < 2) return {}
+  const collection = options.collections.find((candidate) => candidate.name === collectionName)
+  return collection?.routing?.locale === true ? { locale: pageLocale } : {}
+}
+
+/** A language's own name — "Français", "English" — which is what a reader looks for. */
+function languageLabel(locale: string): string {
+  try {
+    const name = new Intl.DisplayNames([locale], { type: 'language' }).of(locale)
+    return name === undefined ? locale : name.charAt(0).toLocaleUpperCase(locale) + name.slice(1)
+  } catch {
+    return locale
+  }
+}
+
+/**
+ * The language switcher's entries for one page (contract D `theme@1.10`): one
+ * per language of the site, the page's own included, each pointing at the
+ * translation of this page when it is published, and otherwise at the home
+ * page of that language. A home page always links to the other home pages.
+ *
+ * On a site whose collections are not routed by locale a translation has no
+ * language front door to fall back to, so a language with no translation of
+ * this page is left out rather than linked to a page in another language.
+ */
+function languagesFor(
+  collection: CollectionDefinition,
+  entry: ContentEntry,
+  family: readonly ContentEntry[],
+  options: Pick<ThemeRenderOptions, 'collections' | 'site'>,
+  atHome: boolean,
+): readonly ChromeLanguage[] {
+  if (options.site.locales.length < 2) return []
+  const localized = hasLocalizedRoutes(options)
+  const languages: ChromeLanguage[] = []
+  for (const locale of options.site.locales) {
+    const member =
+      locale === entry.locale ? entry : family.find((candidate) => candidate.locale === locale)
+    let href: string | null = null
+    if (member !== undefined && !atHome) {
+      try {
+        href = buildPath(
+          collection,
+          Object.fromEntries(
+            Object.entries(member.values).filter(
+              (pair): pair is [string, string] => typeof pair[1] === 'string',
+            ),
+          ),
+          member.locale ?? undefined,
+          { defaultLocale: options.site.defaultLocale },
+        )
+      } catch (error) {
+        // A translation saved without a slug has no address yet.
+        if (!isCogentaError(error) || error.code !== 'CONTENT_ROUTE_INVALID') throw error
+      }
+    }
+    if (href === null && localized) href = homeHrefFor(locale, options)
+    if (href === null) continue
+    languages.push({
+      locale,
+      label: languageLabel(locale),
+      href,
+      current: locale === entry.locale,
+    })
+  }
+  return languages.length < 2 ? [] : languages
 }
 
 /** This stand-in theme's own default header slot — see `ThemeRenderOptions.headerMenuLocation`. */
@@ -1364,7 +1485,15 @@ export async function resolveEntry(
   options: ThemeRenderOptions,
   context: AccessContext,
 ): Promise<{ readonly collection: CollectionDefinition; readonly entry: ContentEntry } | null> {
-  const effectivePath = pathname === '/' ? await homePathFor(options) : pathname
+  // `/` is the home page of the default language and `/en/` that of another:
+  // each is the site's home path, in its own language.
+  const localeHome = localeHomeOf(pathname, options)
+  const effectivePath =
+    pathname === '/'
+      ? await homePathFor(options)
+      : localeHome === null
+        ? pathname
+        : `/${encodeURIComponent(localeHome)}${await homePathFor(options)}`
   const match = matchPath(options.collections, effectivePath, {
     locales: options.site.locales,
     defaultLocale: options.site.defaultLocale,
@@ -1477,6 +1606,7 @@ export async function renderDraftPage(
       ),
     ),
     entry.locale ?? undefined,
+    { defaultLocale: options.site.defaultLocale },
   )
 
   try {
@@ -1618,7 +1748,7 @@ async function entryTerms(
     const ids = Array.isArray(raw) ? raw : typeof raw === 'string' && raw !== '' ? [raw] : []
     for (const id of ids) {
       if (typeof id !== 'string' || id === '') continue
-      const resolved = await resolveTerm(field.to, id)
+      const resolved = await resolveTerm(field.to, id, entry.locale)
       if (resolved === null) continue
       terms.push({ taxonomy: field.to, label: resolved.label, href: resolved.route })
     }
@@ -1687,6 +1817,19 @@ async function renderEntryPage(
   options: ThemeRenderOptions,
   context: AccessContext,
 ): Promise<string> {
+  // Whether this request is for the home page, in whichever language: `/`,
+  // the stored home path, `/en/` or `/en/home`. Read lazily and once — the
+  // home path is a live settings read.
+  let atHomeMemo: Promise<boolean> | undefined
+  const atHome = (): Promise<boolean> => {
+    atHomeMemo ??= (async () => {
+      if (pathname === '/' || localeHomeOf(pathname, options) !== null) return true
+      const homePath = await homePathFor(options)
+      return pathname === homePath || pathname === `/${entry.locale}${homePath}`
+    })()
+    return atHomeMemo
+  }
+
   // Both `let`: a media reference that no longer resolves is taken out of the
   // entry below, once this render knows which assets actually loaded, and the
   // blocks are then rebuilt from what is left (see `pruneMissingMedia`).
@@ -1721,7 +1864,13 @@ async function renderEntryPage(
         { collection: block.collection, sort: block.sort, filter: block.filter },
         options.collections,
       )
-      results = await options.gateway.list(toApiQueryRequest(themeQuery), context)
+      results = await options.gateway.list(
+        {
+          ...toApiQueryRequest(themeQuery),
+          ...listLocale(options, themeQuery.collection, entry.locale),
+        },
+        context,
+      )
     } catch (error) {
       if (
         !isCogentaError(error) ||
@@ -1869,6 +2018,7 @@ async function renderEntryPage(
           ),
         ),
         found.locale ?? undefined,
+        { defaultLocale: options.site.defaultLocale },
       )
     } catch (error) {
       // A route param can be missing on real content — a routed collection's
@@ -1944,7 +2094,13 @@ async function renderEntryPage(
         )
         return found === null ? null : toThemeEntry(found, match.collection)
       },
-      list: (request: ThemeQueryRequest) => listAsTheme(options.gateway, request, context),
+      list: (request: ThemeQueryRequest) =>
+        listAsTheme(
+          options.gateway,
+          request,
+          context,
+          listLocale(options, request.collection, entry.locale),
+        ),
     },
   }
 
@@ -2021,7 +2177,7 @@ async function renderEntryPage(
             // every visitor reaches first. Only read when widgets are
             // actually being resolved, since `homePath` is a live settings
             // read on every request by design.
-            kind: pathname === (await homePathFor(options)) || pathname === '/' ? 'home' : 'entry',
+            kind: (await atHome()) ? 'home' : 'entry',
             collection: collection.name,
             entryId: entry.id,
             locale: entry.locale,
@@ -2111,7 +2267,8 @@ async function renderEntryPage(
   // column as the article; the home page and a page opening on its own hero
   // keep their full width and take the sidebar as a band.
   const placement = {
-    aside: pathname !== '/' && !pageHasOwnHeading(blocks),
+    aside:
+      pathname !== '/' && localeHomeOf(pathname, options) === null && !pageHasOwnHeading(blocks),
     contentTail: commentsHtml,
   }
   const placedWidgets = placesWidgets ? hostWidgets : pageWidgets
@@ -2150,14 +2307,15 @@ async function renderEntryPage(
   // from the very fields the prune emptied, and a share card built from a
   // deleted asset is a broken share card.
   const resource = { collection, entry: renderEntry }
-  const alternates = await alternatesForEntry(
-    seoSite,
+  const family = await translationFamilyOf(
     collection,
     entry,
     options.gateway,
     context,
     options.site.locales,
   )
+  const alternates = alternatesForEntry(seoSite, collection, entry, family)
+  const languages = languagesFor(collection, entry, family, options, await atHome())
   // `og:image` and JSON-LD's `image` come from the same assets the page just
   // rendered, resolved to an absolute URL — a social crawler never sends a
   // session and never follows a relative path.
@@ -2257,15 +2415,16 @@ async function renderEntryPage(
   const chrome = theme.renderChrome({
     site: options.site,
     locale: themeContext.locale,
-    // Not locale-prefixed on purpose, matching this route's pre-existing
-    // behaviour — see `renderPageChrome`'s own identical comment.
-    homeHref: '/',
+    // The home page of the page's own language: `/`, or `/en/` for a
+    // language served under a prefix.
+    homeHref: homeHrefFor(themeContext.locale, options),
     headerNav: headerMenu ?? [],
     footerNav: footerMenu ?? [],
     brandingHtml,
     brand: identity.brand,
     ...chromeExtras,
     ...(placesWidgets && hasAnyWidget(footerWidgets) ? { widgets: footerWidgets } : {}),
+    ...(languages.length === 0 ? {} : { languages }),
   })
   const placedFooterWidgets = placesWidgets ? '' : footerWidgetsHtml(footerWidgets)
   const widgetFloor = hasAnyWidget(widgetAreas) ? `<style>${WIDGET_FLOOR_CSS}</style>\n` : ''

@@ -62,6 +62,14 @@ export interface SeedContext {
   readonly media: Readonly<Record<string, string>>
   /** The name the person gave their site, so demo copy names their business rather than the blueprint's fictional one. Absent outside a real scaffold. */
   readonly siteName?: string
+  /**
+   * Every language the site is set up with, the default one included. A
+   * blueprint written in more than one language seeds the others as
+   * translations of what it seeds in the default language (ADR-0014); one that
+   * is not simply seeds the default language. Absent or a single entry: the
+   * pre-translation behaviour.
+   */
+  readonly locales?: readonly string[]
 }
 
 export type SeedDemoContent = (ctx: SeedContext) => Promise<void>
@@ -107,6 +115,39 @@ export interface BlueprintContentPack {
    * collection level, the same switch the admin exposes. Absent: only `page`.
    */
   readonly commentsDisabledOn?: readonly string[]
+  /**
+   * What a site with several languages needs besides its entries, for each
+   * language other than the default: that language's navigation and site
+   * settings. Seeded like `menus` and `siteSettings`, which stay the default
+   * language's. Absent: the other languages get none, and fall back to the
+   * default language's wherever the host does.
+   */
+  readonly additionalLocales?: readonly BlueprintLocaleSetup[]
+}
+
+export interface BlueprintLocaleSetup {
+  readonly locale: string
+  readonly menus?: BlueprintMenus
+  readonly siteSettings?: Readonly<Record<string, unknown>>
+}
+
+/**
+ * The same pack for a site published in several languages: every routed
+ * collection is served under a locale prefix (`/en/blog/hello`), the default
+ * language staying unprefixed. Pure data — a collection is plain data
+ * (contract A) — so this changes nothing a seeder reads.
+ *
+ * A site with one language keeps the routes it always had.
+ */
+export function withLocalizedRouting(pack: BlueprintContentPack): BlueprintContentPack {
+  return {
+    ...pack,
+    collections: pack.collections.map((collection) =>
+      collection.routing === undefined || collection.routing.locale === true
+        ? collection
+        : { ...collection, routing: { ...collection.routing, locale: true } },
+    ),
+  }
 }
 
 /**

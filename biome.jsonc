@@ -122,6 +122,18 @@
       }
     },
     {
+      // The container image's own scripts (docker/): `bootstrap.mjs` is installed
+      // next to /opt/cogenta/node_modules and imports the workspace packages by
+      // name from there, and `pack-workspace.mjs` reports progress on stdout.
+      "includes": ["docker/*.mjs"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noConsole": "off" },
+          "correctness": { "noUndeclaredDependencies": "off" }
+        }
+      }
+    },
+    {
       "includes": [".claude/hooks/*.mjs"],
       "linter": { "rules": { "suspicious": { "noConsole": "off" } } }
     }

@@ -15,7 +15,12 @@ import {
 import { createUserStore, ensureAuthTables } from '@cogenta/auth'
 import { createOutput, runMigrate, runUsers, selectMediaImageProcessor } from '@cogenta/cli'
 import { createCommentSettingsStore, ensureCommentsTables } from '@cogenta/comments'
-import { createDatabaseRegistry, createLogger, createStorageRegistry } from '@cogenta/core'
+import {
+  createDatabaseRegistry,
+  createLogger,
+  createStorageRegistry,
+  loadConfig,
+} from '@cogenta/core'
 import type { SkinTokens } from '@cogenta/render'
 import {
   type CollectionDefinition,
@@ -54,6 +59,20 @@ export interface ScaffoldAnswers {
   readonly blueprintId?: string
   /** Already generated and validated by `chooseSkin` (L9 task 7). Absent: the theme's default `tokens.json` is copied, exactly as before this option existed. */
   readonly skinTokens?: SkinTokens
+  /**
+   * A password for the admin, instead of a generated one printed in
+   * `usersOutput`. For a caller that was handed one (a container's
+   * `COGENTA_ADMIN_PASSWORD`); the installer itself never sets it.
+   */
+  readonly adminPassword?: string
+  /**
+   * The database URL and the signing keys live in the process environment and
+   * nowhere on disk (a container with a mounted volume, a Kubernetes secret).
+   * `cogenta.config.mjs` then carries no server URL — `COGENTA_DATABASE_URL`
+   * supplies it at run time — and no `.env` is written. A SQLite path is not
+   * a secret and stays in the file. Absent: today's behaviour, byte for byte.
+   */
+  readonly secretsFromEnvironment?: boolean
   /** Every locale the site is set up with. Defaults to `[defaultLocale]` — the behaviour before L19. */
   readonly locales?: readonly string[]
   /** L19 task 8's confirmed per-site-type defaults. Absent: `@cogenta/core`'s own defaults apply, unchanged. */
@@ -134,6 +153,12 @@ function databaseUrlFor(answers: ScaffoldAnswers): string {
   return join(answers.targetDir, '.cogenta', 'site.db')
 }
 
+/** The `url:` line of the `database` section, or nothing when the environment carries the URL. */
+function databaseUrlLine(answers: ScaffoldAnswers): string {
+  if (answers.secretsFromEnvironment === true && answers.databaseDriver !== 'sqlite') return ''
+  return `    url: ${JSON.stringify(databaseUrlFor(answers))},\n`
+}
+
 /**
  * A hand-written `.mjs` — not a round trip through `defineConfig`'s TS
  * shape — for the same reason this project's own CLI tests generate
@@ -167,8 +192,7 @@ function configFileContents(answers: ScaffoldAnswers): string {
   },
   database: {
     driver: ${JSON.stringify(answers.databaseDriver)},
-    url: ${JSON.stringify(databaseUrlFor(answers))},
-  },
+${databaseUrlLine(answers)}  },
   cache: { path: ${JSON.stringify(join(answers.targetDir, '.cogenta', 'cache'))} },
   storage: { path: ${JSON.stringify(join(answers.targetDir, '.cogenta', 'media'))} },
 ${llmBlock}${securityBlock}}
@@ -359,12 +383,14 @@ export async function scaffoldSite(
   // as the auth key above: without it, "Prévisualiser"/"Preview" throws
   // `CONFIG_INVALID` on the very first click, a real onboarding trap found
   // by testing a freshly scaffolded site end to end.
-  await writeFile(
-    join(answers.targetDir, '.env'),
-    `COGENTA_AUTH_SIGNING_KEY=${randomBytes(32).toString('base64')}\n` +
-      `COGENTA_PREVIEW_SIGNING_KEY=${randomBytes(32).toString('base64')}\n`,
-    { encoding: 'utf8', mode: 0o600 },
-  )
+  if (answers.secretsFromEnvironment !== true) {
+    await writeFile(
+      join(answers.targetDir, '.env'),
+      `COGENTA_AUTH_SIGNING_KEY=${randomBytes(32).toString('base64')}\n` +
+        `COGENTA_PREVIEW_SIGNING_KEY=${randomBytes(32).toString('base64')}\n`,
+      { encoding: 'utf8', mode: 0o600 },
+    )
+  }
   await writeFile(
     join(answers.targetDir, '.gitignore'),
     ['node_modules/', '.env', '.cogenta/'].join('\n') + '\n',
@@ -457,6 +483,7 @@ export async function scaffoldSite(
     env,
     email: answers.adminEmail,
     admin: true,
+    ...(answers.adminPassword === undefined ? {} : { password: answers.adminPassword }),
     out: createOutput(usersCapture.write, false),
     stderr: usersStderr.write,
   })
@@ -539,9 +566,14 @@ export async function scaffoldSite(
         // real upload takes, so an installed site's `/_image?id=` URLs work
         // identically for a demo image and one an editor later uploads.
         if (pack.mediaSpecs !== undefined && pack.mediaSpecs.length > 0) {
-          const storageSelection = await createStorageRegistry({ logger }).select({
-            path: join(answers.targetDir, '.cogenta', 'media'),
-          })
+          // A site whose settings come from the environment may keep its
+          // media in S3: seed where `cogenta serve` will look, not in a local
+          // directory it will never read.
+          const storageConfig =
+            answers.secretsFromEnvironment === true
+              ? (await loadConfig({ cwd: answers.targetDir, env })).config.storage
+              : { path: join(answers.targetDir, '.cogenta', 'media') }
+          const storageSelection = await createStorageRegistry({ logger }).select(storageConfig)
           try {
             const imageSelection = await selectMediaImageProcessor(logger)
             media = await seedDemoMedia(

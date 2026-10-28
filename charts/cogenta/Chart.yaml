@@ -1,0 +1,12 @@
+apiVersion: v2
+name: cogenta
+description: The official Cogenta CMS chart with optional PostgreSQL and database backups.
+type: application
+version: 0.1.0
+# Image release placeholder; replace when publishing the matching container release.
+appVersion: "0.20.1"
+kubeVersion: ">=1.27.0-0"
+home: https://github.com/cogenta-cms/cogenta
+sources:
+  - https://github.com/cogenta-cms/cogenta
+keywords: [cogenta, cms]

@@ -405,6 +405,12 @@ import {
 import { type AssistantAssembly, buildAssistant, reindexKnowledgeIndex } from './assistant.js'
 import { sendAuditIntegrityAlert } from './audit-integrity-alert.js'
 import { readChannelsRunner } from './channels-status.js'
+import {
+  bindClientAddress,
+  clientAddressOf,
+  trustProxyWarning,
+  trustRuleFor,
+} from './client-address.js'
 import { createContentWebhookEmitter } from './content-webhooks.js'
 import { createDecoratedContentStores } from './decorated-content-stores.js'
 import {
@@ -468,6 +474,7 @@ import {
   writePluginSandboxFile,
 } from './plugin-sandbox.js'
 import { loadPluginStylesheets, pluginStylesheetPath } from './plugin-styles.js'
+import { createProbeHandler } from './probes.js'
 import { createSampleDataEngine } from './sample-data.js'
 import { renderSearchPage } from './search-page.js'
 import { createSecurityAlertWatch, type SecurityAlertWatch } from './security-alerts.js'
@@ -3701,7 +3708,7 @@ function toRestRequest(req: IncomingMessage, url: URL, body: unknown): RestReque
     query,
     headers,
     ...(body === undefined ? {} : { body }),
-    ...(req.socket.remoteAddress === undefined ? {} : { clientIp: req.socket.remoteAddress }),
+    clientIp: clientAddressOf(req),
   }
 }
 
@@ -4075,13 +4082,13 @@ export interface AuthorArchiveResolution {
 
 function toCommentsRequest(req: IncomingMessage, url: URL, body: unknown): CommentsRequest {
   const query = singleValuedQuery(url)
-  // The connecting socket's address only — never `x-forwarded-for`, a
-  // client-supplied header this server has no trusted-proxy list to
-  // validate. Trusting it here would let a single attacker rotate a
-  // fake IP per request to defeat the per-IP rate limit and, worse, the
-  // "already has an approved comment from this IP" auto-approve rule
-  // (`clientIpOf`'s own comment explains why analytics can afford to be
-  // wrong here and moderation cannot).
+  // The socket's address unless `security.trustProxy` names a proxy to
+  // believe (`client-address.ts`) — never a client-supplied
+  // `x-forwarded-for` taken at face value. Trusting that blindly would let
+  // a single attacker rotate a fake IP per request to defeat the per-IP
+  // rate limit and, worse, the "already has an approved comment from this
+  // IP" auto-approve rule (analytics can afford to be wrong here;
+  // moderation cannot).
   const ip = clientIpOf(req)
   const userAgent = req.headers['user-agent']
   return {
@@ -4119,8 +4126,13 @@ function isSameSitePath(target: string): boolean {
   )
 }
 
+/**
+ * The caller's address as `bindClientAddress` decided it at the top of the
+ * listener. Analytics hashes it, the login limiter keys on it, moderation
+ * compares it: all three get the same answer.
+ */
 function clientIpOf(req: IncomingMessage): string {
-  return req.socket.remoteAddress ?? 'unknown'
+  return clientAddressOf(req)
 }
 
 /**
@@ -5044,8 +5056,15 @@ export function createRequestListener(
   logger: Logger,
   extras?: RuntimeExtras,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
+  const trustRule = trustRuleFor(site.security.trustProxy, site.security.trustProxyFrom)
+
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
+
+    // The caller's address, decided once (`client-address.ts`): the socket's
+    // unless `security.trustProxy` names a proxy whose header to believe.
+    // Every rate limit, moderation rule and audit entry below reads this.
+    bindClientAddress(req, trustRule)
 
     // Before anything else, and once: CORS, the security headers and the
     // cache-control class of this path (L10 task 6). A preflight is answered
@@ -7685,7 +7704,7 @@ export function createRequestListener(
             'HttpOnly',
             'SameSite=Lax',
             `Max-Age=${DEFAULT_UNLOCK_LIFETIME_SECONDS}`,
-            ...(isSecure(req) ? ['Secure'] : []),
+            ...(isSecure(req, site.security) ? ['Secure'] : []),
           ].join('; '),
         })
         res.end()
@@ -8613,6 +8632,11 @@ export async function runServe(options: ServeOptions): Promise<number> {
     stderr('COGENTA_AUTH_SIGNING_KEY before running serve again.\n')
     return 1
   }
+
+  // Said on stderr, once, where an operator reading the container logs will
+  // see it: the default logger here is silent.
+  const proxyWarning = trustProxyWarning(loaded.config.security)
+  if (proxyWarning !== undefined) stderr(`warning: ${proxyWarning}\n`)
 
   let collections: readonly CollectionDefinition[]
   let taxonomies: readonly TaxonomyDefinition[]
@@ -9721,41 +9745,52 @@ export async function runServe(options: ServeOptions): Promise<number> {
   // would remember to set.
   const unlockTokens = createUnlockTokens({ signingKey: loaded.config.auth.signingKey })
 
-  const server = createServer(
-    withRequestTracing(
-      createRequestListener(site, logger, {
-        ...(pluginRuntime === null ? {} : { pluginRuntime }),
-        ...((pluginBlocks?.definitions.length ?? 0) === 0
-          ? {}
-          : { blockRegistry: siteBlockRegistry }),
-        ...(pluginBlockRenderer === null ? {} : { pluginBlockRenderer }),
-        ...(pluginWidgetRenderer === null ? {} : { pluginWidgetRenderer }),
-        ...(pluginStyleSheets.size === 0 ? {} : { pluginStyleSheets, pluginStyleHrefs }),
-        unlockTokens,
-        ...(pluginWidgets === null || pluginWidgets.descriptions.length === 0
-          ? {}
-          : { pluginWidgetDescriptions: pluginWidgets.descriptions }),
-        ...(pluginBlocks === null || pluginBlocks.definitions.length === 0
-          ? {}
-          : {
-              pluginBlockDescriptions: describePluginBlocks(
-                pluginRuntime?.plugins ?? [],
-                pluginBlocks,
-              ),
-            }),
-        pluginsDir: loaded.config.plugins.dir,
-        healthRouter,
-        toolsRouter,
-        scheduledTasksRouter,
-        maintenance: maintenanceStore,
-        errorLog,
-        siteName: loaded.config.site.name,
-        observabilityRouter,
-        projectRoot,
-      }),
-      observabilityRuntime,
-    ),
+  // `/livez` and `/readyz` answer before the listener, so they are never
+  // traced, rate limited, session-checked or counted as pages (`probes.ts`).
+  const probes = createProbeHandler({
+    ping: () => site.db.query(sql`select 1`),
+    logger,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+  const siteListener = withRequestTracing(
+    createRequestListener(site, logger, {
+      ...(pluginRuntime === null ? {} : { pluginRuntime }),
+      ...((pluginBlocks?.definitions.length ?? 0) === 0
+        ? {}
+        : { blockRegistry: siteBlockRegistry }),
+      ...(pluginBlockRenderer === null ? {} : { pluginBlockRenderer }),
+      ...(pluginWidgetRenderer === null ? {} : { pluginWidgetRenderer }),
+      ...(pluginStyleSheets.size === 0 ? {} : { pluginStyleSheets, pluginStyleHrefs }),
+      unlockTokens,
+      ...(pluginWidgets === null || pluginWidgets.descriptions.length === 0
+        ? {}
+        : { pluginWidgetDescriptions: pluginWidgets.descriptions }),
+      ...(pluginBlocks === null || pluginBlocks.definitions.length === 0
+        ? {}
+        : {
+            pluginBlockDescriptions: describePluginBlocks(
+              pluginRuntime?.plugins ?? [],
+              pluginBlocks,
+            ),
+          }),
+      pluginsDir: loaded.config.plugins.dir,
+      healthRouter,
+      toolsRouter,
+      scheduledTasksRouter,
+      maintenance: maintenanceStore,
+      errorLog,
+      siteName: loaded.config.site.name,
+      observabilityRouter,
+      projectRoot,
+    }),
+    observabilityRuntime,
   )
+  const server = createServer((req, res) => {
+    void probes(req, res).then(
+      (answered) => (answered ? undefined : siteListener(req, res)),
+      () => undefined,
+    )
+  })
   const port = options.port ?? DEFAULT_PORT
   const host = options.host ?? DEFAULT_HOST
 

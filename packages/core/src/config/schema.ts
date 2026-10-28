@@ -1,3 +1,4 @@
+import { isIP } from 'node:net'
 import { z } from 'zod'
 import {
   CACHE_DRIVERS,
@@ -122,6 +123,17 @@ const auditRetentionSchema = z.strictObject({
   retainDays: z.number().int().nonnegative().max(3650).optional(),
 })
 
+/** An IPv4 or IPv6 address, optionally with a `/prefix` no longer than the family allows. */
+function isAddressOrCidr(value: string): boolean {
+  const slash = value.indexOf('/')
+  const address = slash === -1 ? value : value.slice(0, slash)
+  const family = isIP(address)
+  if (family === 0) return false
+  if (slash === -1) return true
+  const prefix = value.slice(slash + 1)
+  return /^\d{1,3}$/u.test(prefix) && Number(prefix) <= (family === 4 ? 32 : 128)
+}
+
 const securitySchema = z.strictObject({
   cors: corsSchema.prefault({}),
   /**
@@ -154,6 +166,53 @@ const securitySchema = z.strictObject({
   hstsIncludeSubDomains: z.boolean().default(true),
   /** How long a public page may be cached, in seconds. */
   pageMaxAge: z.number().int().nonnegative().max(86_400).default(60),
+  /**
+   * Which forwarded information the server may believe (`false`: none).
+   *
+   * Off by default, and that is the safe direction: a header is typed by
+   * whoever sends the request, so honouring one when no proxy is in front
+   * lets any visitor choose the address the rate limiter and the audit trail
+   * see. Behind a proxy it is the opposite problem — every request comes
+   * from the proxy's address, so per-address limits become one global limit.
+   * A header name trusts exactly that header (a CDN that overwrites it); a
+   * number counts the proxies the operator controls and reads that far in
+   * from the right of `x-forwarded-for`, the only end an attacker cannot
+   * prepend to.
+   */
+  trustProxy: z
+    .union([
+      z.literal(false),
+      z.number().int().min(1).max(32),
+      z
+        .string()
+        .regex(
+          /^[A-Za-z0-9-]{1,64}$/u,
+          'must be a header name, "cloudflare", or a number of proxies',
+        )
+        .refine(
+          (value) => !['true', 'false', 'on', 'off', 'yes', 'no'].includes(value.toLowerCase()),
+          {
+            error:
+              'name the header to trust or the number of proxies — a bare yes/no does not say which',
+          },
+        ),
+    ])
+    .default(false),
+  /**
+   * The only sockets whose forwarded header `trustProxy` believes: addresses
+   * or CIDR blocks (`10.0.0.0/8`, `fd00::/8`), IPv4 or IPv6. Without it the
+   * header is believed from any socket, so a pod reachable around the proxy
+   * (a NodePort, a sidecar, another namespace) lets a caller choose the
+   * address the rate limiter and the audit trail see.
+   */
+  trustProxyFrom: z
+    .array(
+      z.string().refine(isAddressOrCidr, {
+        error: 'must be an IPv4 or IPv6 address, or a CIDR block such as 10.0.0.0/8',
+      }),
+    )
+    .max(64)
+    .default([]),
   audit: auditRetentionSchema.prefault({}),
 })
 

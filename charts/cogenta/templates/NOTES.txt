@@ -1,0 +1,22 @@
+Cogenta URL: {{ .Values.site.url }}
+Admin email: {{ .Values.site.adminEmail }}
+Get the initial admin password (protect the output):
+  kubectl get secret {{ include "cogenta.secretName" . }} -n {{ .Release.Namespace }} -o jsonpath='{.data.admin-password}' | base64 -d; echo
+
+The password seeds the first admin only. Changing this Secret later does not reset that account.
+The bootstrap initContainer scaffolds the site on first boot and migrates it on subsequent starts.
+Wait for readiness, then run:
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+Back up the database and /data before upgrading. Preserve your existing values:
+  helm upgrade {{ .Release.Name }} oci://ghcr.io/cogenta-cms/charts/cogenta -n {{ .Release.Namespace }} -f private-values.yaml --set image.tag=<release>
+Inspect history and roll back a compatible release:
+  helm history {{ .Release.Name }} -n {{ .Release.Namespace }}
+  helm rollback {{ .Release.Name }} <revision> -n {{ .Release.Namespace }} --wait
+Rollback does not undo database migrations. Restore a verified backup if required.
+
+PVCs and generated Secrets are kept on uninstall. Delete them manually only after verifying backups.
+Use existingSecret with GitOps/ArgoCD: lookup cannot preserve generated keys in offline rendering.
+{{- if .Values.ingress.enabled }}
+Ensure DNS points {{ .Values.ingress.host }} at your ingress controller and configure TLS/trusted proxy hops.
+{{- end }}

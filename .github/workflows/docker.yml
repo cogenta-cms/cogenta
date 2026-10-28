@@ -1,0 +1,204 @@
+name: Container image
+
+# Builds the official image from the checked-out commit and pushes it to GHCR,
+# multi-arch, scanned and signed.
+#
+#   - a `v*` tag: the version comes from the tag. (No `release` trigger: the
+#     release workflow publishes one GitHub release per npm package, tagged
+#     `@cogenta/<pkg>@x.y.z`, and each would start a failing build.)
+#   - a manual run: the version is the CLI's, from packages/cli/package.json.
+#     It pushes only from the default branch or a v* tag (anywhere else it
+#     builds and scans), and `latest` only moves from the default branch.
+#
+# Nothing here reads a long-lived secret: GHCR takes the job's own token, and
+# the signature is keyless (Sigstore, through the job's OIDC identity).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      push:
+        description: Push the image (otherwise build and scan only)
+        type: boolean
+        default: true
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/cogenta
+
+jobs:
+  image:
+    name: Build, scan, push, sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write # push to GHCR
+      id-token: write # keyless cosign signature
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Work out the version
+        id: version
+        run: |
+          set -euo pipefail
+          # A strict semantic version: no leading zeros, an optional
+          # pre-release, no build metadata (it is not a legal image tag).
+          semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          ref="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            case "$ref" in
+              v*) version="${ref#v}" ;;
+              *) echo "::error::the tag '$ref' does not start with v"; exit 1 ;;
+            esac
+          else
+            version="$(node -p "require('./packages/cli/package.json').version")"
+          fi
+          if ! [[ "$version" =~ $semver ]]; then
+            echo "::error::cannot derive a semantic version from '$version'"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "minor=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+          # A pre-release (1.2.3-rc.1) never becomes `latest`.
+          if [ -n "${BASH_REMATCH[4]}" ]; then
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The one place that decides whether anything leaves the runner. A v* tag
+      # always publishes; a manual run publishes only from the
+      # default branch or a v* tag, so a branch someone can push to cannot put
+      # an unreviewed image under a registry name users pull from.
+      - name: Decide whether to push
+        id: publish
+        env:
+          EVENT: ${{ github.event_name }}
+          REQUESTED: ${{ inputs.push }}
+          REF: ${{ github.ref }}
+          DEFAULT_REF: refs/heads/${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          push=true
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            if [ "$REQUESTED" != "true" ]; then
+              push=false
+            elif [ "$REF" != "$DEFAULT_REF" ] && [[ "$REF" != refs/tags/v* ]]; then
+              echo "::notice::manual runs push only from the default branch or a v* tag; '$REF' is built and scanned only."
+              push=false
+            fi
+          fi
+          echo "push=$push" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        if: steps.publish.outputs.push == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Docker Hub mirror — switched off until the repository has the two
+      # secrets it needs. To enable it:
+      #   1. create a Docker Hub access token with "Read & Write" scope for the
+      #      namespace that will hold `cogenta`;
+      #   2. add the repository secrets DOCKERHUB_USERNAME (the account or
+      #      organisation name) and DOCKERHUB_TOKEN (that token);
+      #   3. uncomment this step AND the `docker.io/...` line in the tags list
+      #      of the "Image tags" step below.
+      # - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+      #   if: steps.publish.outputs.push == 'true'
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: |
+            ${{ env.IMAGE }}
+            # docker.io/<DOCKERHUB_USERNAME>/cogenta
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.minor }},enable=${{ steps.version.outputs.stable == 'true' }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.stable == 'true' && (github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch) }}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      # Build and scan the image BEFORE it is pushed anywhere: a CRITICAL
+      # vulnerability that has a fix stops the release, it does not ship and
+      # get reported afterwards. The image is loaded into the local daemon for
+      # the scan (single platform; the pushed one is the same Dockerfile).
+      - name: Build (amd64) for the scan
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: cogenta:scan
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=cogenta-image
+          cache-to: type=gha,scope=cogenta-image,mode=max
+
+      # Every third-party action in this file is pinned to a full commit SHA:
+      # a tag can be moved after the fact, a commit cannot. The comment names
+      # the release the SHA is, so a bump is a deliberate, reviewable change.
+      - name: Scan for fixable critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: cogenta:scan
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          vuln-type: os,library
+
+      - name: Build and push (amd64, arm64)
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ steps.publish.outputs.push == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
+          # Build provenance and the software bill of materials, attached to
+          # the image in the registry.
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=cogenta-image
+          cache-to: type=gha,scope=cogenta-image,mode=max
+
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        if: steps.publish.outputs.push == 'true'
+
+      # Signs the digest, not a tag: a tag can be moved, a digest cannot. The
+      # certificate identity is this workflow, so `cosign verify` can pin it:
+      #   cosign verify ghcr.io/<owner>/cogenta:<version> \
+      #     --certificate-identity-regexp 'https://github.com/<owner>/cogenta/.github/workflows/docker.yml@refs/tags/v.*' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - name: Sign the image (keyless)
+        if: steps.publish.outputs.push == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { resolve } from 'node:path'
 import process from 'node:process'
+import { assertPasswordPolicy } from '@cogenta/api'
 import {
   createCredentialStore,
   createPasswordResetStore,
@@ -33,7 +34,13 @@ export interface UsersOptions {
   readonly admin?: boolean
   /** `reset-password`: the token from the mail, redeeming the reset. */
   readonly token?: string
-  /** `reset-password`: the new password. Generated and printed once when absent. */
+  /**
+   * `reset-password`: the new password. `create`: the first password, for a
+   * caller that already holds one (a container's `COGENTA_ADMIN_PASSWORD`) and
+   * must not have it echoed back. Generated and printed once when absent.
+   * The command line does not offer it for `create` — an argument is visible
+   * to every process on the machine.
+   */
   readonly password?: string
   /** Where the outgoing mail is written. Defaults to `.cogenta/mail` under the project. */
   readonly mailDir?: string
@@ -161,6 +168,9 @@ async function issueReset(options: UsersOptions, logger: Logger): Promise<number
 async function redeemReset(options: UsersOptions, logger: Logger): Promise<number> {
   const { out, stderr } = options
   const token = options.token as string
+  // Before the token is spent: a refused password must not cost the operator
+  // a single-use reset link. The generated one always clears the floor.
+  if (options.password !== undefined) assertPasswordPolicy(options.password)
   const password = options.password ?? generatePassword()
   const chosen = options.password !== undefined
 
@@ -259,9 +269,14 @@ export async function runUsers(options: UsersOptions): Promise<number> {
     return 2
   }
 
-  const password = generatePassword()
+  const chosen = options.password !== undefined
 
   try {
+    // The same floor the sign-in screens enforce (`assertPasswordPolicy`): an
+    // account created here must not be weaker than one reset from the admin.
+    // Checked before anything is written, and the message never echoes it.
+    if (options.password !== undefined) assertPasswordPolicy(options.password)
+    const password = options.password ?? generatePassword()
     return await withDatabase(options, logger, async (db) => {
       await ensureAuthTables(db)
       const users = createUserStore(db)
@@ -272,10 +287,12 @@ export async function runUsers(options: UsersOptions): Promise<number> {
 
       out.heading('User created')
       out.ok(`${user.email} — ${user.roles.join(', ')}`)
-      out.line()
-      out.line(`Password: ${password}`)
-      out.line()
-      out.warn('This password is shown once. It is stored only as a salted hash.')
+      if (!chosen) {
+        out.line()
+        out.line(`Password: ${password}`)
+        out.line()
+        out.warn('This password is shown once. It is stored only as a salted hash.')
+      }
       out.detail(
         'Sign in with it straight away — a second factor is recommended for a role that can publish, or admin, but never demanded at sign-in (ADR-0021). Turn it on from the profile screen in the admin.',
       )

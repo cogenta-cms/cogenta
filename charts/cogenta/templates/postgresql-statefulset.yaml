@@ -1,0 +1,83 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "cogenta.fullname" . }}-postgresql
+  labels:
+    {{- include "cogenta.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "cogenta.fullname" . }}-pg-headless
+  selector:
+    matchLabels:
+      {{- include "cogenta.postgresqlSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if not .Values.postgresql.existingSecret }}
+        checksum/secret: {{ include "cogenta.postgresqlSecretData" . | sha256sum }}
+        {{- end }}
+        checksum/existing-secret: {{ .Values.postgresql.secretChecksum | sha256sum }}
+      labels:
+        {{- include "cogenta.postgresqlSelectorLabels" . | nindent 8 }}
+        app.kubernetes.io/version: {{ last (splitList ":" .Values.postgresql.image) | quote }}
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/part-of: cogenta
+    spec:
+      serviceAccountName: {{ include "cogenta.fullname" . | quote }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "cogenta.podSecurityContext" 70 | nindent 8 }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: postgresql
+          image: {{ .Values.postgresql.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "cogenta.containerSecurityContext" 70 | nindent 12 }}
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          env:
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.username | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cogenta.postgresqlSecretName" . | quote }}
+                  key: postgres-password
+          ports:
+            - {name: postgresql, containerPort: 5432, protocol: TCP}
+          startupProbe:
+            exec:
+              command: [pg_isready, -h, "127.0.0.1", -U, {{ .Values.postgresql.username | quote }}, -d, {{ .Values.postgresql.database | quote }}]
+            periodSeconds: 5
+            failureThreshold: 60
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: [pg_isready, -h, "127.0.0.1", -U, {{ .Values.postgresql.username | quote }}, -d, {{ .Values.postgresql.database | quote }}]
+            periodSeconds: 10
+            failureThreshold: 6
+            timeoutSeconds: 3
+          readinessProbe:
+            exec:
+              command: [pg_isready, -h, "127.0.0.1", -U, {{ .Values.postgresql.username | quote }}, -d, {{ .Values.postgresql.database | quote }}]
+            periodSeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 3
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: socket, mountPath: /var/run/postgresql}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-postgresql" (include "cogenta.fullname" .)) .Values.postgresql.persistence.existingClaim | quote }}
+        - name: socket
+          emptyDir: {sizeLimit: 16Mi}
+        - name: tmp
+          emptyDir: {sizeLimit: 256Mi}
+{{- end }}

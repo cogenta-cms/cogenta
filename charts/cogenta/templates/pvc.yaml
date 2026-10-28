@@ -1,0 +1,32 @@
+{{- $root := . -}}
+{{- $claims := dict "" .Values.persistence -}}
+{{- if .Values.postgresql.enabled -}}
+{{- $_ := set $claims "-postgresql" .Values.postgresql.persistence -}}
+{{- end -}}
+{{- if .Values.backup.enabled -}}
+{{- $_ := set $claims "-backup" .Values.backup.persistence -}}
+{{- end -}}
+{{- range $suffix, $claim := $claims }}
+{{- if not $claim.existingClaim }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ printf "%s%s" (include "cogenta.fullname" $root) $suffix | quote }}
+  labels:
+    {{- include "cogenta.labels" $root | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - {{ if eq $suffix "" }}{{ $root.Values.persistence.accessMode }}{{ else }}ReadWriteOnce{{ end }}
+  {{- if eq $claim.storageClass "-" }}
+  storageClassName: ""
+  {{- else if $claim.storageClass }}
+  storageClassName: {{ $claim.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $claim.size }}
+{{- end }}
+{{- end }}

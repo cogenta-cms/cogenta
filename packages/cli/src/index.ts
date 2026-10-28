@@ -283,7 +283,10 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.roles === 'string' ? { roles: parsed.values.roles } : {}),
       ...(parsed.values.admin === true ? { admin: true } : {}),
       ...(typeof parsed.values.token === 'string' ? { token: parsed.values.token } : {}),
-      ...(typeof parsed.values.password === 'string' ? { password: parsed.values.password } : {}),
+      // `create` never takes a password from the command line (see `UsersOptions`).
+      ...(typeof parsed.values.password === 'string' && parsed.positionals[1] !== 'create'
+        ? { password: parsed.values.password }
+        : {}),
       ...(typeof parsed.values['mail-dir'] === 'string'
         ? { mailDir: parsed.values['mail-dir'] }
         : {}),

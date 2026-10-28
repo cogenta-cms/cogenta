@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cogenta.fullname" . | quote }}
+  labels:
+    {{- include "cogenta.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 3
+  strategy:
+    type: {{ .Values.strategy.type }}
+    {{- if eq .Values.strategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cogenta.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.existingSecret }}
+        checksum/secret: {{ include "cogenta.secretData" . | sha256sum }}
+        {{- end }}
+        {{- if and .Values.postgresql.enabled (not .Values.postgresql.existingSecret) }}
+        checksum/postgresql-secret: {{ include "cogenta.postgresqlSecretData" . | sha256sum }}
+        {{- end }}
+        checksum/existing-secret: {{ printf "%s:%s" .Values.secretChecksum .Values.postgresql.secretChecksum | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "cogenta.labels" . | nindent 8 }}
+        app.kubernetes.io/component: app
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "cogenta.fullname" . | quote }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "cogenta.podSecurityContext" 10001 | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
+      initContainers:
+        - name: bootstrap
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [cogenta-entrypoint, bootstrap]
+          securityContext:
+            {{- include "cogenta.containerSecurityContext" 10001 | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          envFrom:
+            {{- include "cogenta.appEnvFrom" . | nindent 12 }}
+          env:
+            {{- include "cogenta.appEnv" . | nindent 12 }}
+          volumeMounts:
+            {{- include "cogenta.appVolumeMounts" . | nindent 12 }}
+      containers:
+        - name: cogenta
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [cogenta-entrypoint, serve]
+          securityContext:
+            {{- include "cogenta.containerSecurityContext" 10001 | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          envFrom:
+            {{- include "cogenta.appEnvFrom" . | nindent 12 }}
+          env:
+            {{- include "cogenta.appEnv" . | nindent 12 }}
+          ports:
+            - {name: http, containerPort: 4000, protocol: TCP}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          volumeMounts:
+            {{- include "cogenta.appVolumeMounts" . | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "cogenta.dataClaim" . | quote }}
+        - name: tmp
+          emptyDir: {sizeLimit: 1Gi}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

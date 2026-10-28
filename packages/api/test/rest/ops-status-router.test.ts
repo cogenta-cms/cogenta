@@ -35,6 +35,8 @@ const SECURITY: CogentaConfig['security'] = {
   hstsMaxAge: 31536000,
   hstsIncludeSubDomains: true,
   pageMaxAge: 60,
+  trustProxy: false,
+  trustProxyFrom: [],
   audit: { retainDays: undefined },
 }
 

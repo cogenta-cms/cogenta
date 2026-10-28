@@ -43,6 +43,7 @@ export {
   integerColumn,
   isColumnless,
   isMintedId,
+  isStorableId,
   jsonColumn,
   onDeleteClause,
   textColumn,

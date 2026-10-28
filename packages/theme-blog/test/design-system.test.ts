@@ -367,3 +367,11 @@ describe('the reading typography', () => {
     expect(Number.parseFloat(CG.get('--cg-tracking-display') ?? '0')).toBeLessThan(0)
   })
 })
+
+describe('the Cogenta mark in the footer', () => {
+  it('is drawn as the panel foreground, since the artwork is dark blue on an ink panel', () => {
+    const rule = /\.cg-site-footer__brand-logo\s*\{([^}]*)\}/u.exec(CODE)
+    expect(rule, 'a rule for .cg-site-footer__brand-logo').not.toBeNull()
+    expect(rule?.[1]).toMatch(/filter:\s*brightness\(0\)\s*invert\(1\)/u)
+  })
+})

@@ -55,6 +55,9 @@ spec:
       initContainers:
         - name: bootstrap
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          # The volume root, which exists: a working directory inside the volume
+          # would be created by the container runtime, as root.
+          workingDir: /data
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: [cogenta-entrypoint, bootstrap]
           securityContext:
@@ -70,6 +73,9 @@ spec:
       containers:
         - name: cogenta
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          # The volume root, which exists: a working directory inside the volume
+          # would be created by the container runtime, as root.
+          workingDir: /data
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: [cogenta-entrypoint, serve]
           securityContext:

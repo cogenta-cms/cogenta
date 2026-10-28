@@ -1,6 +1,6 @@
 # Cogenta Helm chart
 
-The official Cogenta CMS chart. Chart version **0.1.0** is independent of the
+The official Cogenta CMS chart. Chart version **0.1.1** is independent of the
 application version; `appVersion` is the Cogenta release whose image the chart
 runs by default, and it moves with every Cogenta release. The image contract is `ghcr.io/cogenta-cms/cogenta:<appVersion>` with port 4000,
 `/livez`, `/readyz`, and `cogenta-entrypoint bootstrap|serve|cli`.
@@ -167,7 +167,7 @@ spec:
   source:
     repoURL: ghcr.io/cogenta-cms/charts
     chart: cogenta
-    targetRevision: 0.1.0
+    targetRevision: 0.1.1
     helm:
       releaseName: blog
       valuesObject:
@@ -214,7 +214,7 @@ drivers remain available without AI, S3 or Redis.
 ## Upgrades, scaling and rollback
 
 ```sh
-helm upgrade blog oci://ghcr.io/cogenta-cms/charts/cogenta --version 0.1.0 -f private-values.yaml --set image.tag=0.21.0 --wait --timeout 10m
+helm upgrade blog oci://ghcr.io/cogenta-cms/charts/cogenta --version 0.1.1 -f private-values.yaml --set image.tag=0.21.1 --wait --timeout 10m
 helm history blog
 helm rollback blog <revision> --wait --timeout 10m
 ```

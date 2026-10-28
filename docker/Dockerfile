@@ -108,7 +108,10 @@ ENV NODE_ENV=production \
     COGENTA_SITE_DIR=/data/site
 
 USER 10001:10001
-WORKDIR /data/site
+# The volume root, not the site directory: Kubernetes mounts an empty volume
+# over /data, and a working directory missing from it is created by the
+# container runtime as root, which then leaves the site unwritable.
+WORKDIR /data
 VOLUME ["/data"]
 EXPOSE 4000
 

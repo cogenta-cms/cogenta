@@ -1001,6 +1001,28 @@ describe('the theme stylesheet', () => {
     }
   })
 
+  it('keeps the sheet a year at the address a page names, and revalidates any other address', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      const page = await (await fetch(`${server.base}/`)).text()
+      const href = /href="(\/_cogenta\/styles\.css\?v=[0-9a-f]{8})"/u.exec(page)?.[1]
+      expect(href, 'the page links the sheet by its digest').toBeDefined()
+
+      const named = await fetch(`${server.base}${href}`)
+      expect(named.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+
+      const bare = await fetch(`${server.base}/_cogenta/styles.css`)
+      expect(bare.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
+      const stale = await fetch(`${server.base}/_cogenta/styles.css?v=00000000`)
+      expect(stale.headers.get('cache-control')).toBe('public, max-age=0, must-revalidate')
+      // A stale address still serves the current sheet: nothing is ever stuck on an old one.
+      expect(await stale.text()).toBe(await named.text())
+    } finally {
+      await server.stop()
+    }
+  })
+
   it('refuses a method that has no meaning for a stylesheet', async () => {
     const server = await startServer(await project())
     try {
@@ -1108,7 +1130,7 @@ describe('a themed page over HTTP', () => {
       expect(html).toContain('Two planes, one site')
       expect(html).toContain('cg-hero__eyebrow')
       // The document around it — none of which existed before L12.
-      expect(html).toContain(`<link rel="stylesheet" href="/_cogenta/styles.css">`)
+      expect(html).toMatch(/<link rel="stylesheet" href="\/_cogenta\/styles\.css\?v=[0-9a-f]{8}">/u)
       expect(html).toContain('<meta name="color-scheme" content="light dark">')
       expect(html).toContain('class="cg-skip-link"')
       expect(html).toContain('class="cg-site-header"')

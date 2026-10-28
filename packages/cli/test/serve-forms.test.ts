@@ -165,7 +165,7 @@ describe('cogenta serve — /api/forms and /forms/{name}', () => {
       expect(html).toContain('name="color-scheme"')
       expect(html).toContain('class="cg-site-header"')
       expect(html).toContain('class="cg-site-footer"')
-      expect(html).toContain('href="/_cogenta/styles.css"')
+      expect(html).toContain('href="/_cogenta/styles.css?v=')
     } finally {
       await server.stop()
     }

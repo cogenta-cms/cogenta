@@ -81,7 +81,7 @@ import {
   siteVerificationMetaTags,
   translationFamilyOf,
 } from './seo.js'
-import { minifyCss } from './theme-css.js'
+import { cssEtag, minifyCss } from './theme-css.js'
 import { missingBundledFaceCss, remoteFontPreconnectTags, renderSiteSkin } from './theme-fonts.js'
 import { DEFAULT_THEME_NAME, resolveTheme, type ThemeModule } from './theme-registry.js'
 import {
@@ -926,6 +926,29 @@ export const DEFAULT_FOOTER_MENU_LOCATION = 'footer'
  */
 export const STYLESHEET_PATH = '/_cogenta/styles.css'
 
+let lastStylesheet: { readonly css: string; readonly href: string } | undefined
+
+/**
+ * The address a page links the stylesheet at: the path with the sheet's own
+ * digest (`?v=`), exactly as the plugin stylesheets are. The route answers a
+ * request carrying the *current* digest with a year-long `immutable` cache and
+ * anything else with a revalidation, so a visitor's later pages pay no round
+ * trip for the render-blocking sheet and a changed skin still shows at once
+ * (the page names the new digest). The last sheet is remembered: every page
+ * request asks for the same one.
+ */
+export function stylesheetHref(css: string): string {
+  if (lastStylesheet?.css === css) return lastStylesheet.href
+  const href = `${STYLESHEET_PATH}?v=${stylesheetDigest(css)}`
+  lastStylesheet = { css, href }
+  return href
+}
+
+/** The digest `stylesheetHref` puts in the address, and the route compares against. */
+export function stylesheetDigest(css: string): string {
+  return cssEtag(css).replaceAll('"', '')
+}
+
 /**
  * An entry's header with everything that is *content* taken out, for a page
  * whose password has not been answered.
@@ -1373,7 +1396,7 @@ ${faviconLinkTag(identity.faviconHref, branding, DEFAULT_IMAGE_ENDPOINT)}
 ${feedLinkTags(options.site.name)}
 ${fontHeadTags()}
 ${options.headHtml}
-${verificationTags === '' ? '' : `${verificationTags}\n`}${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
+${verificationTags === '' ? '' : `${verificationTags}\n`}${options.styles === null ? '' : `<link rel="stylesheet" href="${stylesheetHref(options.styles)}">`}
 </head>
 <body>
 ${skipLinkHtml(options.locale)}
@@ -2513,7 +2536,7 @@ ${faviconLinkTag(identity.faviconHref, branding, imageEndpoint)}
 ${feedLinkTags(options.site.name)}
 ${fontHeadTags()}
 ${head}
-${options.styles === null ? '' : `<link rel="stylesheet" href="${STYLESHEET_PATH}">`}
+${options.styles === null ? '' : `<link rel="stylesheet" href="${stylesheetHref(options.styles)}">`}
 ${pluginStyleTags(options.pluginStyleHrefs)}
 </head>
 <body>

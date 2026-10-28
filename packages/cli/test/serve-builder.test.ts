@@ -212,7 +212,9 @@ describe('the page builder preview renders the real page, not a lookalike (L16 t
       // footer. Not "looks the same" — the same bytes.
       expect(bodyOf(preview.html ?? '')).toBe(bodyOf(published))
       // And the same stylesheet link, so the same CSS renders those bytes.
-      expect(preview.html).toContain('<link rel="stylesheet" href="/_cogenta/styles.css">')
+      expect(preview.html).toMatch(
+        /<link rel="stylesheet" href="\/_cogenta\/styles\.css\?v=[0-9a-f]{8}">/u,
+      )
     } finally {
       await server.stop()
     }

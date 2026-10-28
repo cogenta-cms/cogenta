@@ -324,7 +324,7 @@ describe('cogenta serve — GET /api/search (L10 task 3)', () => {
       expect(emptyHtml).toContain('name="color-scheme"')
       expect(emptyHtml).toContain('class="cg-site-header"')
       expect(emptyHtml).toContain('class="cg-site-footer"')
-      expect(emptyHtml).toContain('href="/_cogenta/styles.css"')
+      expect(emptyHtml).toContain('href="/_cogenta/styles.css?v=')
 
       const results = await fetch(`${server.base}/search?q=cathedral`)
       const html = await results.text()

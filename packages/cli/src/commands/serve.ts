@@ -535,6 +535,7 @@ import {
   resolveEntry,
   type SiteIdentityMedia,
   STYLESHEET_PATH,
+  stylesheetDigest,
 } from './theme-render.js'
 import {
   checkThemeDeployment,
@@ -5300,17 +5301,24 @@ export function createRequestListener(
           return
         }
         const etag = cssEtag(liveStyles)
+        // A page links the sheet by its own digest (`stylesheetHref`): the
+        // address that names the sheet being served can never change its
+        // bytes, so it is kept a year. Any other address (no digest, or an
+        // older page's) is revalidated every time — a skin swap must show up
+        // on the next request, which is the whole promise of contract D's hot
+        // swap — and the ETag makes that a 304 rather than a re-download.
+        const cacheControl =
+          url.searchParams.get('v') === stylesheetDigest(liveStyles)
+            ? 'public, max-age=31536000, immutable'
+            : 'public, max-age=0, must-revalidate'
         if (req.headers['if-none-match'] === etag) {
-          res.writeHead(304, { etag }).end()
+          res.writeHead(304, { etag, 'cache-control': cacheControl }).end()
           return
         }
         res.writeHead(200, {
           'content-type': 'text/css; charset=utf-8',
           etag,
-          // Revalidate every time: a skin swap must show up on the next
-          // request, which is the whole promise of contract D's hot swap. The
-          // ETag makes that revalidation a 304 rather than a re-download.
-          'cache-control': 'public, max-age=0, must-revalidate',
+          'cache-control': cacheControl,
         })
         res.end(liveStyles)
         return
@@ -7449,7 +7457,7 @@ export function createRequestListener(
               collections: site.collections,
               gateway: site.gateway,
               site: await renderSiteFor(site),
-              styles: site.styles,
+              styles: await site.resolveStyles(),
               loadMedia: (ids) => loadRenderMedia(site, ids),
               // Present so the preview's `<body>` stays byte-identical to the
               // published page's (the property `theme-render-fidelity`

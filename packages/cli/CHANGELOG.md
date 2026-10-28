@@ -1,5 +1,74 @@
 # @cogenta/cli
 
+## 0.21.0
+
+### Minor Changes
+
+- [#40](https://github.com/cogenta-cms/cogenta/pull/40) [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` now sends a blocking Content-Security-Policy by default (pentest F-04). It has no `'unsafe-inline'` for scripts: the two inline scripts the server itself writes (the light/dark toggle and a form's conditional fields) are allowed by their sha256 hash, computed from the same constants the page templates insert, so an injected script, an event handler or a `javascript:` link no longer runs. The policy varies by path (admin, public pages, form pages, JSON API) and opens Google Fonts only with `appearance.remoteWebFonts`. `security.csp` still replaces it verbatim; `security.csp: false` now documents turning it off. Sites that add their own inline or third-party scripts must set `security.csp`.
+
+### Patch Changes
+
+- [#40](https://github.com/cogenta-cms/cogenta/pull/40) [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Harden the second factor (pentest 2026-10-26, F-01 and F-03).
+  
+  - Starting, abandoning, letting expire or failing a TOTP re-enrolment no longer touches the active factor: the new secret waits as a pending enrolment (10 minutes) and replaces the active one only when its first code is confirmed, in one transaction that two simultaneous confirmations cannot both win. Changing or removing the factor also voids every sign-in ticket in flight.
+  - Changing or removing a confirmed factor now needs a fresh proof: `POST /api/auth/step-up` takes the current password or a current authenticator code and marks the session for five minutes. Turning TOTP off, starting a TOTP (re)enrolment, regenerating recovery codes and starting a passkey registration are refused with the new `AUTH_STEP_UP_REQUIRED` (403) until then, with no side effect. Adding the *first* authenticator or passkey to an account that has a password needs the same proof (a stolen session could otherwise plant a passkey backdoor or lock the owner out); an account with neither a password nor a factor needs only the session. MFA stays optional: this confirms identity, it never forces enrolment.
+  - A session created less than five minutes ago counts as stepped-up, so a passkey-only account (no password, no authenticator) signs in again with the passkey and then acts. `AuthService` gains `requiresStepUp(userId)`; `assertSteppedUp` now also reads `createdAt`. `GET /api/users` and `/api/users/me` expose `hasPassword`, and the admin's confirmation dialog tells such an account to sign in again.
+  - A sign-in ticket is single-use (new `cogenta_login_tickets` table) and a TOTP time step is accepted once per account, so a replayed ticket or code opens no second session. Passkey sign-in and passkey registration tickets are single-use too, spent before the assertion or attestation is checked, and the account is re-checked when a registration completes and at the final step of a sign-in.
+  - Additive schema: table `cogenta_login_tickets` and column `cogenta_sessions.step_up_until`, created by `ensureAuthTables`; roll back with `drop table` / `drop column`. `cogenta serve` now audits second-factor changes (`auth.totp_enabled`, `auth.totp_disabled`, `auth.recovery_codes_regenerated`, `auth.passkey_added`, `auth.step_up`, and `auth.step_up_failed` for a refused confirmation, never with the secret that was typed).
+
+- [#37](https://github.com/cogenta-cms/cogenta/pull/37) [`b37cb79`](https://github.com/cogenta-cms/cogenta/commit/b37cb79f464ed231e0e65e53d8e3013fa1295f8c) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Request query strings are parsed with `Object.fromEntries`, so no query key can reach an object prototype.
+
+- [#42](https://github.com/cogenta-cms/cogenta/pull/42) [`5c2f75a`](https://github.com/cogenta-cms/cogenta/commit/5c2f75a43d934265a4a8d98a1667ef90f75ac668) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Run behind a reverse proxy and in a container.
+  
+  - `cogenta serve` answers `GET /livez` (the process is up, no I/O) and `GET /readyz` (the database answers `select 1` within three seconds, and the server is not shutting down) for orchestrators. Both are anonymous, return a bare word with `cache-control: no-store`, and are handled before the security headers, the session lookup, the request quota, tracing and the page router: never rate limited, never a 404 in the log. `/api/health` stays admin-only. The two paths are reserved, so a page whose slug is `livez` or `readyz` is unreachable.
+  - New `security.trustProxy` (env `COGENTA_TRUST_PROXY`), off by default so nothing changes for a site that does not set it. `cloudflare` or a header name (`cf-connecting-ip`, `x-real-ip`…) trusts that one header for the client address; a number N reads the Nth entry from the right of `x-forwarded-for`, the end a visitor cannot prepend to. An address that is missing, malformed, or beyond the chain falls back to the socket's. One function decides the address and every consumer uses it: the login limiter, the comment, form and unlock limiters, comment moderation, analytics hashing. `x-forwarded-proto` keeps deciding whether a request is HTTPS, and with a hop count the entry for that hop is read. Behind an ingress and a CDN the per-address limits are per visitor again instead of one global limit; keep the pod reachable only through the proxy, because a header typed by a client cannot be told from the proxy's.
+  - `create-cogenta`'s `scaffoldSite` accepts `secretsFromEnvironment` (no `.env` is written, and a server database URL stays out of `cogenta.config.mjs`) and `adminPassword` (used instead of a generated one, and not echoed). `runUsers` accepts `password` for `create`; the command line still does not, since an argument is visible to every process on the machine.
+
+- [#40](https://github.com/cogenta-cms/cogenta/pull/40) [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Bound the work one GraphQL document can ask for (pentest 2026-10-26, O-01). Pagination and relation depth limited a single field, but nothing limited how many fields a document could repeat through aliases and fragments. `POST /api/graphql` now refuses, before validation and before any resolver or store read, a document with more than 20 root fields (aliases included), more than 1000 field selections after fragment expansion (a repeated spread counts each time), or a depth above 12; the refusal is a `GRAPHQL_QUERY_TOO_COMPLEX` error with HTTP 200, like a validation error. Introspection is exempt from the selection and depth limits and keeps a ceiling of its own. The numbers are measured defaults and can be changed with the new `graphql.limits` configuration section (`maxRootFields`, `maxSelections`, `maxDepth`). A client that sent a larger document must split it or raise the limits.
+
+- [#40](https://github.com/cogenta-cms/cogenta/pull/40) [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` no longer lets a `multipart/form-data` Content-Type raise the anonymous body limit on any route: the 26 MiB budget is reserved for the public form submission route, and `/api/auth/*` refuses a non-JSON body with 415 (`REQUEST_UNSUPPORTED_MEDIA_TYPE`, new in `@cogenta/core`). Malformed input is a client error instead of a 500: an incomplete percent-escape in a path and an unterminated JSON body answer 400 `QUERY_INVALID`, and any typed error with a 4xx status is no longer reported as an internal failure.
+
+- [#40](https://github.com/cogenta-cms/cogenta/pull/40) [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` serves `/.well-known/security.txt` (RFC 9116) as `text/plain` from the site's own `public/.well-known/security.txt`, or `security.txt` at the project root. A site without the file answers 404: Cogenta's own contact is never served on its behalf.
+
+- [#42](https://github.com/cogenta-cms/cogenta/pull/42) [`5c2f75a`](https://github.com/cogenta-cms/cogenta/commit/5c2f75a43d934265a4a8d98a1667ef90f75ac668) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Narrow what a reverse-proxy setting trusts, and protect the unauthenticated probe.
+  
+  - New `security.trustProxyFrom` (env `COGENTA_TRUST_PROXY_FROM`, comma-separated): the addresses or CIDR blocks, IPv4 or IPv6, the proxies connect from. With `security.trustProxy` on, the forwarded header is honoured only when the socket address is inside one of them (an IPv4-mapped IPv6 socket address such as `::ffff:10.0.0.7` matches its IPv4 block); a caller that reaches the server directly is attributed to its own address. An entry that is not an address or a valid CIDR is refused at start-up. When `trustProxy` is on and the list is empty, `cogenta serve` prints one warning on stderr at start-up: the header can be spoofed by anything that reaches the pod without going through the proxy.
+  - `GET /readyz` shares one in-flight database check between concurrent probes, reuses its answer for one second, and logs only when the state changes (failed, recovered) instead of on every probe.
+  - `cogenta users create` refuses a first password shorter than the sign-in floor (`assertPasswordPolicy`, now exported from `@cogenta/api`) before anything is written, without echoing it. The same check guards `COGENTA_ADMIN_PASSWORD` in the container's bootstrap.
+- Updated dependencies [[`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`5c2f75a`](https://github.com/cogenta-cms/cogenta/commit/5c2f75a43d934265a4a8d98a1667ef90f75ac668), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`5c2f75a`](https://github.com/cogenta-cms/cogenta/commit/5c2f75a43d934265a4a8d98a1667ef90f75ac668), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7)]:
+  - @cogenta/auth@0.7.0
+  - @cogenta/api@2.13.0
+  - @cogenta/core@0.14.1
+  - @cogenta/agents-builtin@0.7.3
+  - @cogenta/agents@0.11.1
+  - @cogenta/blocks@1.2.1
+  - @cogenta/schema@0.11.2
+  - @cogenta/mcp@0.3.16
+  - @cogenta/plugins@0.9.1
+  - @cogenta/render@0.6.2
+  - @cogenta/widgets@0.2.9
+  - @cogenta/export@0.3.2
+  - @cogenta/import@0.2.17
+  - @cogenta/starters@0.4.3
+  - @cogenta/analytics@0.3.10
+  - @cogenta/channels@0.3.18
+  - @cogenta/comments@0.2.11
+  - @cogenta/commerce@0.5.13
+  - @cogenta/forms@0.2.18
+  - @cogenta/observability@0.2.10
+  - @cogenta/seo@0.4.2
+  - @cogenta/theme-association@0.6.2
+  - @cogenta/theme-blog@0.6.2
+  - @cogenta/theme-canonical@1.4.2
+  - @cogenta/theme-docs@0.6.2
+  - @cogenta/theme-ecommerce@1.4.2
+  - @cogenta/theme-entreprise@1.5.2
+  - @cogenta/theme-kit@0.8.1
+  - @cogenta/theme-magazine@1.4.2
+  - @cogenta/theme-portfolio@1.4.2
+  - @cogenta/theme-restaurant@0.6.2
+  - @cogenta/theme-saas@0.6.2
+
 ## 0.20.1
 
 ### Patch Changes

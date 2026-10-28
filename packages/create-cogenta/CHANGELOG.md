@@ -1,5 +1,27 @@
 # create-cogenta
 
+## 0.7.7
+
+### Patch Changes
+
+- [#42](https://github.com/cogenta-cms/cogenta/pull/42) [`5c2f75a`](https://github.com/cogenta-cms/cogenta/commit/5c2f75a43d934265a4a8d98a1667ef90f75ac668) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Run behind a reverse proxy and in a container.
+  
+  - `cogenta serve` answers `GET /livez` (the process is up, no I/O) and `GET /readyz` (the database answers `select 1` within three seconds, and the server is not shutting down) for orchestrators. Both are anonymous, return a bare word with `cache-control: no-store`, and are handled before the security headers, the session lookup, the request quota, tracing and the page router: never rate limited, never a 404 in the log. `/api/health` stays admin-only. The two paths are reserved, so a page whose slug is `livez` or `readyz` is unreachable.
+  - New `security.trustProxy` (env `COGENTA_TRUST_PROXY`), off by default so nothing changes for a site that does not set it. `cloudflare` or a header name (`cf-connecting-ip`, `x-real-ip`…) trusts that one header for the client address; a number N reads the Nth entry from the right of `x-forwarded-for`, the end a visitor cannot prepend to. An address that is missing, malformed, or beyond the chain falls back to the socket's. One function decides the address and every consumer uses it: the login limiter, the comment, form and unlock limiters, comment moderation, analytics hashing. `x-forwarded-proto` keeps deciding whether a request is HTTPS, and with a hop count the entry for that hop is read. Behind an ingress and a CDN the per-address limits are per visitor again instead of one global limit; keep the pod reachable only through the proxy, because a header typed by a client cannot be told from the proxy's.
+  - `create-cogenta`'s `scaffoldSite` accepts `secretsFromEnvironment` (no `.env` is written, and a server database URL stays out of `cogenta.config.mjs`) and `adminPassword` (used instead of a generated one, and not echoed). `runUsers` accepts `password` for `create`; the command line still does not, since an argument is visible to every process on the machine.
+- Updated dependencies [[`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`b37cb79`](https://github.com/cogenta-cms/cogenta/commit/b37cb79f464ed231e0e65e53d8e3013fa1295f8c), [`5c2f75a`](https://github.com/cogenta-cms/cogenta/commit/5c2f75a43d934265a4a8d98a1667ef90f75ac668), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7), [`5c2f75a`](https://github.com/cogenta-cms/cogenta/commit/5c2f75a43d934265a4a8d98a1667ef90f75ac668), [`8b366d5`](https://github.com/cogenta-cms/cogenta/commit/8b366d5ef7aaab8051a3c827616c432d58541ac7)]:
+  - @cogenta/auth@0.7.0
+  - @cogenta/api@2.13.0
+  - @cogenta/core@0.14.1
+  - @cogenta/cli@0.21.0
+  - @cogenta/agents@0.11.1
+  - @cogenta/blocks@1.2.1
+  - @cogenta/schema@0.11.2
+  - @cogenta/render@0.6.2
+  - @cogenta/starters@0.4.3
+  - @cogenta/comments@0.2.11
+  - @cogenta/theme-canonical@1.4.2
+
 ## 0.7.6
 
 ### Patch Changes

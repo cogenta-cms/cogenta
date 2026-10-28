@@ -1,5 +1,13 @@
 # @cogenta/render
 
+## 0.6.4
+
+### Patch Changes
+
+- Updated dependencies [[`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10)]:
+  - @cogenta/core@0.14.3
+  - @cogenta/blocks@1.2.3
+
 ## 0.6.3
 
 ### Patch Changes

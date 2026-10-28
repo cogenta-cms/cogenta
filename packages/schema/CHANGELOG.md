@@ -1,5 +1,13 @@
 # @cogenta/schema
 
+## 0.12.1
+
+### Patch Changes
+
+- [#51](https://github.com/cogenta-cms/cogenta/pull/51) [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A NUL byte (`%00`) or another control character in a URL path is no longer a 500 on Postgres. `cogenta serve` answers 404 for a public path and 400 `QUERY_INVALID` for an API path before any lookup; `/_image?id=%00` is a 404; the content store (text filters and `locale`), the taxonomy store (`bySlug`) and the media store (`get`) answer "no row" for a value Postgres cannot hold instead of sending the statement.
+- Updated dependencies [[`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10)]:
+  - @cogenta/core@0.14.3
+
 ## 0.12.0
 
 ### Minor Changes

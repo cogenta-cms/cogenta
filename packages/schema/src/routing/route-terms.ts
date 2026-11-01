@@ -102,12 +102,24 @@ export async function routeParamsOf(
   entry: RouteSource,
   terms: TermSlugs | undefined,
 ): Promise<Record<string, string>> {
+  return routeParamsFrom(collection, entry, await termSegmentsOf(collection, entry, terms))
+}
+
+/**
+ * `routeParamsOf` for a caller that resolved the category segments already
+ * (`termSegmentsOf`) — a synchronous renderer that gathered them up front.
+ */
+export function routeParamsFrom(
+  collection: CollectionDefinition,
+  entry: RouteSource,
+  categories: Readonly<Record<string, string>>,
+): Record<string, string> {
   const params: Record<string, string> = {}
   for (const [name, value] of Object.entries(entry.values)) {
     if (typeof value === 'string') params[name] = value
   }
   for (const name of taxonomySegments(collection).keys()) delete params[name]
-  return { ...params, ...(await termSegmentsOf(collection, entry, terms)) }
+  return { ...params, ...categories }
 }
 
 /**

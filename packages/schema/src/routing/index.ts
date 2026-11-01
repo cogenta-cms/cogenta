@@ -38,6 +38,7 @@ export {
   isOptionalRouteParam,
   lookupParams,
   routeParameterNames,
+  routeParamsFrom,
   routeParamsOf,
   taxonomySegments,
   termSegmentsOf,

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
-import { matchPath } from '@cogenta/schema'
+import { buildPath, matchPath } from '@cogenta/schema'
 import { describe, expect, it } from 'vitest'
 import { contentPackFor } from '../src/blueprints/content-packs.js'
 import {
@@ -426,6 +426,12 @@ describe('magazine blueprint, content model and photographs', () => {
         expect.arrayContaining(['seoTitle', 'seoDescription', 'seoImage', 'seoNoindex']),
       )
     }
+  })
+
+  it('serves an article under its section', () => {
+    expect(article.routing?.pattern).toBe('/articles/:section/:slug')
+    expect(buildPath(article, { section: 'world', slug: 'a' })).toBe('/articles/world/a')
+    expect(buildPath(article, { slug: 'a' })).toBe('/articles/a')
   })
 
   it('resolves /articles/:slug and /:slug generically through @cogenta/schema routing', () => {

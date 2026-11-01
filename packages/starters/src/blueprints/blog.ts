@@ -112,7 +112,9 @@ export function blogSchema(copy: BlogCopy): BlogSchema {
   const post = defineCollection({
     name: 'post',
     labels: schema.post,
-    routing: { pattern: '/blog/:slug' },
+    // The category is part of the address (`schema@2.5`): /blog/devops/<slug>.
+    // An entry with no category is served at /blog/<slug>.
+    routing: { pattern: '/blog/:category/:slug' },
     versioning: { drafts: true, history: true },
     fields: {
       title: f.text({ required: true, max: 200 }),
@@ -242,6 +244,9 @@ export function buildBlogDemoPages(
   const prefix = placement.prefix ?? ''
   const categoryPath = placement.categoryPath ?? `/${copy.schema.category.name}`
   const termSlug = placement.termSlug ?? ((slug: string) => slug)
+  /** The address a post is served at: its category's slug, then its own. */
+  const postHref = (post: BlogDemoPost): string =>
+    `${prefix}/blog/${termSlug(post.categorySlug)}/${post.slug}`
 
   return [
     {
@@ -257,7 +262,7 @@ export function buildBlogDemoPages(
           title: featured.title,
           subtitle: featured.excerpt,
           ...(featuredCover === undefined ? {} : { media: featuredCover }),
-          actions: [{ label: home.readEssay, target: { href: `${prefix}/blog/${featured.slug}` } }],
+          actions: [{ label: home.readEssay, target: { href: postHref(featured) } }],
         } as VocabularyBlock,
         {
           _key: 'demo-home-latest',
@@ -324,7 +329,7 @@ export function buildBlogDemoPages(
             },
             {
               label: home.letterLatest,
-              target: { href: `${prefix}/blog/${latestLetter.slug}` },
+              target: { href: postHref(latestLetter) },
             },
           ],
         },

@@ -27,6 +27,7 @@ import {
   updateEntry,
 } from '../api/content-client.js'
 import { type ApiErrorDescription, describeApiError } from '../api/describe-error.js'
+import { listTerms } from '../api/taxonomy-client.js'
 import { type AdminUser, listUsers, readUser } from '../api/users-client.js'
 import { AssistantPanel, type AssistField } from '../assist/assistant-panel.js'
 import { ClassifyPanel } from '../assist/classify-panel.js'
@@ -55,7 +56,7 @@ import { useAutosave } from '../collections/use-autosave.js'
 import { validateEntry } from '../collections/validate-entry.js'
 import { EntryProductLinkCard } from '../commerce/entry-product-link-card.js'
 import { type EntryVisibility, VisibilityCard } from '../content/visibility-card.js'
-import { previewPermalink } from '../lib/permalink.js'
+import { categorySegments, previewPermalink } from '../lib/permalink.js'
 import { slugify } from '../lib/slugify.js'
 import { useDirtyGuard } from '../lib/use-dirty-guard.js'
 import { fieldLabel } from '../schema/field-label.js'
@@ -165,13 +166,15 @@ function routeParams(
   pattern: string | undefined,
   id: string | undefined,
   values: Readonly<Record<string, unknown>>,
+  categories: Readonly<Record<string, string>> = {},
 ): Record<string, string> {
   if (pattern === undefined) return {}
   const params: Record<string, string> = {}
   for (const segment of pattern.split('/')) {
     if (!segment.startsWith(':')) continue
     const name = segment.slice(1)
-    const value = name === 'id' ? id : values[name]
+    // A category segment is the slug of the term the field holds the id of.
+    const value = name === 'id' ? id : (categories[name] ?? values[name])
     if (typeof value === 'string' && value.length > 0) params[name] = value
   }
   return params
@@ -250,6 +253,35 @@ export function EntryEditRoute(): JSX.Element {
   useEffect(() => {
     if (isNew && newTranslation?.locale === undefined) setLocale(defaultLocale)
   }, [isNew, newTranslation?.locale, defaultLocale])
+  // The category segment of the permalink is the slug of the chosen term: the
+  // form holds its id, so the terms are read once the field has a value.
+  const [categorySlugs, setCategorySlugs] = useState<Record<string, string>>({})
+  const categoryTerms = (collection === undefined ? [] : categorySegments(collection)).map(
+    ({ param, taxonomy }) => `${param}:${taxonomy}:${String(values[param] ?? '')}`,
+  )
+  useEffect(() => {
+    if (token === null || collection === undefined) return
+    let cancelled = false
+    void (async () => {
+      const slugs: Record<string, string> = {}
+      for (const { param, taxonomy } of categorySegments(collection)) {
+        const termId = values[param]
+        if (typeof termId !== 'string' || termId.length === 0) continue
+        try {
+          const found = (await listTerms(token, taxonomy)).find((term) => term.id === termId)
+          if (found !== undefined) slugs[param] = found.slug
+        } catch {
+          // The permalink preview simply leaves the category out.
+        }
+      }
+      if (!cancelled) setCategorySlugs(slugs)
+    })()
+    return () => {
+      cancelled = true
+    }
+    // `categoryTerms` is exactly the part of `values` this reads.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
+  }, [token, collection, categoryTerms.join('|')])
   const [translationOf, setTranslationOf] = useState<string | null>(null)
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
@@ -1290,7 +1322,7 @@ export function EntryEditRoute(): JSX.Element {
     collection.routing !== undefined
       ? previewPermalink(
           collection,
-          routeParams(collection.routing.pattern, id, values),
+          routeParams(collection.routing.pattern, id, values, categorySlugs),
           collection.routing.locale === true ? locale : undefined,
         )
       : null

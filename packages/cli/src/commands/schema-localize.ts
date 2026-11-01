@@ -14,10 +14,14 @@ import {
   type CollectionDefinition,
   type ContentEntry,
   createContentStore,
+  createTaxonomyStore,
   routeParamsFrom,
+  routeParamsOf,
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
-import { loadCollections } from './serve.js'
+import { setRouteInSchemaFile } from './schema-set-route.js'
+import { loadCollections, loadSchemaModule } from './serve.js'
+import { createSiteTermSlugs } from './term-slugs.js'
 
 /**
  * `cogenta schema localize-routes` — brings the schema file of a site
@@ -160,10 +164,13 @@ export interface SchemaOptions {
   readonly stderr: Writer
   /** Edit the file. Without it the command only reports what it would do. */
   readonly write?: boolean
+  /** The words after the subcommand: `set-route <collection> "<pattern>"`. */
+  readonly args?: readonly string[]
 }
 
 const USAGE = `Usage
   cogenta schema localize-routes [--write]
+  cogenta schema set-route <collection> "<pattern>" [--write]
 
 For a site published in several languages (site.locales in cogenta.config) whose
 cogenta.schema.mjs was scaffolded before multilingual routing: serve every routed
@@ -179,6 +186,18 @@ cogenta.schema.mjs.before-locale-routing.
 The schema is read-only in production (ADR-0010, ADR-0023): run this on a
 development copy of the site, commit the file, deploy it, then add the printed
 redirects in the admin (Redirections). Nothing calls this command for you.
+
+set-route gives one collection another URL pattern in cogenta.schema.mjs. Its
+usual use is to put the category in the address of an entry:
+
+  cogenta schema set-route post "/blog/:category/:slug" --write
+
+":category" must be a single-valued taxonomy field of the collection; the
+address of an entry is then /blog/<slug of its category>/<slug>, and /blog/<slug>
+when it has none. Without --write it only shows the change and the addresses
+that move. Every address an entry had before keeps working: the site answers it
+with a 301 to the new one, so no redirect has to be added by hand. The original
+file is kept as cogenta.schema.mjs.before-set-route.
 `
 
 /**
@@ -246,7 +265,7 @@ async function movedAddresses(
 }
 
 /**
- * `cogenta schema` — only `localize-routes` exists. 0 done (or nothing to do).
+ * `cogenta schema` — `localize-routes` and `set-route` exist. 0 done (or nothing to do).
  * 1 the site could not be read or the edit was undone. 2 the command line was wrong.
  */
 export async function runSchema(options: SchemaOptions): Promise<number> {
@@ -258,8 +277,11 @@ export async function runSchema(options: SchemaOptions): Promise<number> {
     stderr(`cogenta schema needs a subcommand.\n\n${USAGE}`)
     return 2
   }
+  if (options.subcommand === 'set-route') return runSetRoute(options)
   if (options.subcommand !== 'localize-routes') {
-    stderr(`Unknown subcommand "${options.subcommand}". Only "localize-routes" exists.\n\n${USAGE}`)
+    stderr(
+      `Unknown subcommand "${options.subcommand}". "localize-routes" and "set-route" exist.\n\n${USAGE}`,
+    )
     return 2
   }
 
@@ -313,6 +335,140 @@ export async function runSchema(options: SchemaOptions): Promise<number> {
         `${moved.length} published entr${moved.length === 1 ? 'y' : 'ies'} in another language move. Add these 301 redirects (admin, Redirections):`,
       )
       for (const { from, to } of moved) out.detail(`301 ${from} -> ${to}`)
+    }
+    return 0
+  } catch (error) {
+    if (isCogentaError(error)) {
+      stderr(`${error.code}: ${error.message}\n`)
+      if (error.hint !== undefined) stderr(`${error.hint}\n`)
+    } else {
+      stderr(`${error instanceof Error ? error.stack : String(error)}\n`)
+    }
+    return 1
+  } finally {
+    await selection?.dispose()
+  }
+}
+
+const MOVED_EXAMPLES = 10
+
+/**
+ * `cogenta schema set-route`: shows (and with `--write` makes) the pattern
+ * change, then lists how many published entries get another address.
+ */
+async function runSetRoute(options: SchemaOptions): Promise<number> {
+  const { out, stderr } = options
+  const env = options.env ?? process.env
+  const logger = options.logger ?? createLogger({ level: 'silent' })
+  const [collectionName, pattern] = options.args ?? []
+  if (collectionName === undefined || pattern === undefined) {
+    stderr(`set-route needs a collection and a pattern.\n\n${USAGE}`)
+    return 2
+  }
+
+  let selection: Awaited<ReturnType<ReturnType<typeof createDatabaseRegistry>['select']>> | null =
+    null
+  try {
+    const loaded = await loadConfig({
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      env,
+    })
+    const projectRoot =
+      loaded.path === null ? resolvePath(options.cwd ?? process.cwd()) : dirname(loaded.path)
+    const { defaultLocale } = loaded.config.site
+
+    const schema = await loadSchemaModule(projectRoot)
+    const outcome = await setRouteInSchemaFile(projectRoot, collectionName, pattern, {
+      dryRun: options.write !== true,
+    })
+
+    switch (outcome.status) {
+      case 'unchanged':
+        out.ok(`Nothing to change: "${collectionName}" is already served at ${outcome.pattern}.`)
+        return 0
+      case 'skipped':
+        out.warn(
+          outcome.reason === 'no-schema-file'
+            ? 'No cogenta.schema.mjs in this project: nothing to change.'
+            : 'cogenta.schema.mjs is not the file the installer wrote, so it was left alone. Change the routing pattern by hand.',
+        )
+        return 0
+      case 'unknown-collection':
+        stderr(
+          `No collection "${collectionName}" in cogenta.schema.mjs. It declares: ${outcome.known.join(', ')}.\n`,
+        )
+        return 1
+      case 'no-route':
+        stderr(`"${outcome.collection}" has no route, so it has no pattern to change.\n`)
+        return 1
+      case 'refused':
+        stderr(`The pattern "${pattern}" is refused: ${outcome.reason}\n`)
+        return 1
+      case 'reverted':
+        stderr(`The edit did not load as expected and was undone: ${outcome.reason}\n`)
+        return 1
+      case 'updated':
+        out.ok(`${outcome.collection}: ${outcome.from} -> ${outcome.to}`)
+        out.detail(`The previous file is kept as ${outcome.backup}.`)
+        break
+      case 'would-update':
+        out.detail(
+          `Dry run: ${outcome.collection} would move from ${outcome.from} to ${outcome.to}. Pass --write to edit the file.`,
+        )
+        break
+    }
+
+    // The addresses that move, read from the live content with the pattern as
+    // it stands now and as it would be.
+    const current = schema.collections.find((candidate) => candidate.name === collectionName)
+    if (current?.routing === undefined) return 0
+    const next: CollectionDefinition = {
+      ...current,
+      routing: { ...current.routing, pattern },
+    }
+    selection = await createDatabaseRegistry({ logger }).select(loaded.config.database)
+    const db = selection.instance
+    const terms = createSiteTermSlugs(schema.taxonomies, (taxonomy) =>
+      createTaxonomyStore({ db, taxonomy }),
+    )
+    const store = createContentStore({ db, collection: current, defaultLocale })
+    const moved: { from: string; to: string }[] = []
+    let total = 0
+    for (const locale of loaded.config.site.locales) {
+      let cursor: string | undefined
+      do {
+        const page = await store.list({
+          locale,
+          state: 'published',
+          limit: 100,
+          ...(cursor === undefined ? {} : { cursor }),
+        })
+        for (const entry of page.items) {
+          total += 1
+          try {
+            const from = buildPath(current, routeParamsFrom(current, entry, {}), entry.locale, {
+              defaultLocale,
+            })
+            const to = buildPath(next, await routeParamsOf(next, entry, terms), entry.locale, {
+              defaultLocale,
+            })
+            if (from !== to) moved.push({ from, to })
+          } catch (error) {
+            // An entry saved without its slug was never served; nothing to move.
+            if (!isCogentaError(error) || error.code !== 'CONTENT_ROUTE_INVALID') throw error
+          }
+        }
+        cursor = page.nextCursor ?? undefined
+      } while (cursor !== undefined)
+    }
+    if (moved.length === 0) {
+      out.detail(`None of the ${total} published entries changes address.`)
+    } else {
+      out.warn(
+        `${moved.length} of ${total} published entries change address. The old address keeps working: the site answers it with a 301.`,
+      )
+      for (const { from, to } of moved.slice(0, MOVED_EXAMPLES)) out.detail(`${from} -> ${to}`)
+      if (moved.length > MOVED_EXAMPLES) out.detail(`… and ${moved.length - MOVED_EXAMPLES} more.`)
     }
     return 0
   } catch (error) {

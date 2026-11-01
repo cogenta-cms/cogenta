@@ -53,6 +53,7 @@ export type { RolesOptions, RolesSubcommand } from './commands/roles.js'
 export { runRoles } from './commands/roles.js'
 export type { LocalizeSchemaOutcome, SchemaOptions } from './commands/schema-localize.js'
 export { localizeSchemaFile, runSchema } from './commands/schema-localize.js'
+export { setRouteInSchemaFile } from './commands/schema-set-route.js'
 export type { ServeOptions } from './commands/serve.js'
 export { loadCollections, runServe } from './commands/serve.js'
 export type { SkinOptions, SkinSubcommand } from './commands/skin.js'
@@ -86,6 +87,7 @@ Commands
   restore apply <file.zip>     Restore a backup — CLI only (fiche 26)
   generate types   Write TypeScript declarations for the content schema
   schema localize-routes   Serve a multilingual site's collections by language (dry run unless --write)
+  schema set-route <collection> "<pattern>"   Change a collection's URL pattern, e.g. add its category (dry run unless --write)
   links check      Crawl published content and report links that lead nowhere
   plugin list      List the plugins this site has installed
   plugin check <name>           Validate one plugin's manifest and code
@@ -119,7 +121,7 @@ Options
   --cwd <path>            Run as if from this directory
   --no-color              Never colour the output (NO_COLOR is honoured too)
   --verbose               Send structured driver logs to stderr
-  --write                 schema localize-routes: edit cogenta.schema.mjs (a dry run otherwise)
+  --write                 schema localize-routes, schema set-route: edit cogenta.schema.mjs (a dry run otherwise)
   --out <path>            generate types: where to write the declarations;
                           roles export: where to write the file (default cogenta.role-permissions.json)
   --description <text>    skin generate: free text describing the site
@@ -398,6 +400,7 @@ export async function run(options: RunOptions): Promise<number> {
   if (command === 'schema') {
     return runSchema({
       subcommand: parsed.positionals[1],
+      args: parsed.positionals.slice(2),
       out,
       stderr,
       env,

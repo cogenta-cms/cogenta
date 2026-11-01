@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import type { VocabularyBlock } from '@cogenta/blocks'
 import { parseBlocks } from '@cogenta/blocks'
-import { matchPath } from '@cogenta/schema'
+import { buildPath, matchPath } from '@cogenta/schema'
 import { describe, expect, it } from 'vitest'
 import {
   BLOG_COLLECTIONS,
@@ -11,6 +11,7 @@ import {
   BLOG_MEDIA_SPECS,
   BLOG_MENUS,
   BLOG_SITE_SETTINGS,
+  blogCopyFor,
   buildBlogDemoPages,
   DEFAULT_PUBLICATION_NAME,
   page,
@@ -99,11 +100,36 @@ describe('blog blueprint, content model and demo writing', () => {
     }
   })
 
+  it('serves a post under its category, and one without a category at /blog/:slug', () => {
+    expect(post.routing?.pattern).toBe('/blog/:category/:slug')
+    expect(buildPath(post, { category: 'writing', slug: 'plain-text-editor' })).toBe(
+      '/blog/writing/plain-text-editor',
+    )
+    expect(buildPath(post, { slug: 'plain-text-editor' })).toBe('/blog/plain-text-editor')
+  })
+
+  it('links the home page to the featured post at its canonical address', () => {
+    const copy = blogCopyFor('en')
+    const featured = copy.posts.find((demo) => demo.slug === copy.featuredSlug)
+    const home = buildBlogDemoPages({}, DEFAULT_PUBLICATION_NAME, copy)[0]
+    const hero = home?.blocks.find((block) => block._type === 'hero') as
+      | { actions: { target: { href: string } }[] }
+      | undefined
+    expect(hero?.actions[0]?.target.href).toBe(
+      `/blog/${featured?.categorySlug}/${copy.featuredSlug}`,
+    )
+  })
+
   it('resolves /blog/:slug and /:slug generically through @cogenta/schema routing', () => {
     expect(matchPath(BLOG_COLLECTIONS, '/blog/plain-text-editor')).toEqual({
       collection: 'post',
       locale: null,
       params: { slug: 'plain-text-editor' },
+    })
+    expect(matchPath(BLOG_COLLECTIONS, '/blog/writing/plain-text-editor')).toEqual({
+      collection: 'post',
+      locale: null,
+      params: { category: 'writing', slug: 'plain-text-editor' },
     })
     expect(matchPath(BLOG_COLLECTIONS, '/archive')).toEqual({
       collection: 'page',

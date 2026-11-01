@@ -21,6 +21,13 @@ export interface ResolveUrlOptions extends RouteOptions {
   readonly collections: readonly CollectionDefinition[]
   readonly redirects: RedirectStore
   readonly lookup: EntryLookup
+  /**
+   * The address an entry is canonically served at, when the one requested is
+   * not it — a wrong or missing category segment (`schema@2.5`). Returning a
+   * path (only when it differs from the one requested) turns the match into a 301 to it; `null` accepts the request as it is.
+   * Asked only once an entry has been found, so an unknown slug stays a 404.
+   */
+  readonly canonicalPath?: (match: RouteMatch, entry: unknown) => Promise<string | null>
 }
 
 /**
@@ -37,7 +44,13 @@ export async function resolveUrl(path: string, options: ResolveUrlOptions): Prom
 
   if (match !== null) {
     const entry = await options.lookup(match)
-    if (entry !== null && entry !== undefined) return { kind: 'entry', match, entry }
+    if (entry !== null && entry !== undefined) {
+      const canonical = await options.canonicalPath?.(match, entry)
+      if (canonical !== null && canonical !== undefined) {
+        return { kind: 'redirect', to: canonical, status: 301 }
+      }
+      return { kind: 'entry', match, entry }
+    }
   }
 
   const redirect = await options.redirects.resolve(normalised)

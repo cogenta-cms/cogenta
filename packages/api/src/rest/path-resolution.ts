@@ -1,6 +1,11 @@
 import { CogentaError } from '@cogenta/core'
-import type { CollectionDefinition, RedirectStatus, RedirectStore } from '@cogenta/schema'
-import { isColumnless } from '@cogenta/schema'
+import type {
+  CollectionDefinition,
+  RedirectStatus,
+  RedirectStore,
+  TermSlugs,
+} from '@cogenta/schema'
+import { isColumnless, lookupParams } from '@cogenta/schema'
 import type { SerialisedEntry } from '../content/index.js'
 
 /**
@@ -31,6 +36,14 @@ export interface RoutingOptions {
    * or it is nothing.
    */
   readonly redirects?: RedirectStore
+  /**
+   * Where the slug of a category segment's term comes from (`schema@2.5`). A
+   * path whose category is wrong or missing then resolves to a 301 to the
+   * canonical address, as the rendered site does. Absent, the segment is not
+   * checked and any category resolves — the behaviour of a site that names no
+   * category in its routes.
+   */
+  readonly terms?: TermSlugs
 }
 
 /**
@@ -67,7 +80,7 @@ export function lookupFilter(
 ): Readonly<Record<string, unknown>> {
   const where: Record<string, unknown> = {}
 
-  for (const [name, value] of Object.entries(params)) {
+  for (const [name, value] of Object.entries(lookupParams(collection, params))) {
     const field = collection.fields[name]
     if (field === undefined || isColumnless(field)) {
       throw new CogentaError({

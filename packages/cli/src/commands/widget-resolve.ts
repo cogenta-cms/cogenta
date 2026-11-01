@@ -6,9 +6,14 @@ import {
   buildPath,
   type CollectionDefinition,
   type ContentEntry,
+  lookupParams,
   matchPath,
+  routeParamsFrom,
   type TaxonomyDefinition,
   type TaxonomyTerm,
+  type TermSlugs,
+  taxonomySegments,
+  termSegmentsOf,
 } from '@cogenta/schema'
 import {
   type ChromeLink,
@@ -98,6 +103,8 @@ export interface WidgetResolverDeps {
   readonly taxonomies: readonly TaxonomyDefinition[]
   readonly gateway: ContentGateway
   readonly terms: (taxonomy: TaxonomyDefinition) => Promise<readonly TaxonomyTerm[]>
+  /** The slug of a term, for the category segment of an entry's address (`schema@2.5`). */
+  readonly termSlugs?: TermSlugs
   readonly termUsage: (
     taxonomy: TaxonomyDefinition,
     terms: readonly TaxonomyTerm[],
@@ -250,16 +257,13 @@ function hrefOf(
   collection: CollectionDefinition,
   entry: ContentEntry,
   defaultLocale: string,
+  categories: Readonly<Record<string, string>> = {},
 ): string | null {
   if (collection.routing === undefined) return null
   try {
     return buildPath(
       collection,
-      Object.fromEntries(
-        Object.entries(entry.values).filter(
-          (pair): pair is [string, string] => typeof pair[1] === 'string',
-        ),
-      ),
+      routeParamsFrom(collection, entry, categories),
       collection.routing.locale === true ? (entry.locale ?? undefined) : undefined,
       { defaultLocale },
     )
@@ -355,6 +359,23 @@ export async function resolveWidgetAreas(
     )
   }
 
+  // The category segment of an entry's address is the slug of its term. An
+  // item is built synchronously after every widget has had its say, so the
+  // lookups are started as entries are met and awaited once, before that.
+  const categoryLookups: Promise<void>[] = []
+  const categoriesOf = new Map<string, Readonly<Record<string, string>>>()
+  const noteCategories = (collection: CollectionDefinition, entry: ContentEntry): void => {
+    if (deps.termSlugs === undefined || taxonomySegments(collection).size === 0) return
+    categoryLookups.push(
+      termSegmentsOf(collection, entry, deps.termSlugs).then(
+        (found) => {
+          categoriesOf.set(entry.id, found)
+        },
+        () => undefined,
+      ),
+    )
+  }
+
   const entryItem = (
     collection: CollectionDefinition,
     entry: ContentEntry,
@@ -362,9 +383,10 @@ export async function resolveWidgetAreas(
   ): (() => WidgetEntryItem) => {
     const imageId = show.image ? imageIdOf(entry) : null
     if (imageId !== null) mediaIds.add(imageId)
+    noteCategories(collection, entry)
     return () => ({
       title: titleOf(entry),
-      href: hrefOf(collection, entry, deps.site.defaultLocale),
+      href: hrefOf(collection, entry, deps.site.defaultLocale, categoriesOf.get(entry.id)),
       date: show.date ? formatDate(dateOf(entry)) : null,
       datetime: show.date ? dateOf(entry) : null,
       excerpt: show.excerpt ? excerptOf(entry) : null,
@@ -456,7 +478,12 @@ export async function resolveWidgetAreas(
               const href =
                 collection === undefined || target === null
                   ? null
-                  : hrefOf(collection, target, deps.site.defaultLocale)
+                  : hrefOf(
+                      collection,
+                      target,
+                      deps.site.defaultLocale,
+                      await termSegmentsOf(collection, target, deps.termSlugs),
+                    )
               if (href !== null)
                 markDefs.push({ _key: definition._key, _type: 'link' as const, href })
             }
@@ -670,11 +697,13 @@ export async function resolveWidgetAreas(
           if (value.collection !== undefined && match.collection !== value.collection) continue
           const collection = collectionsByName.get(match.collection)
           if (collection === undefined) continue
-          const conditions = Object.entries(match.params).map(([field, fieldValue]) => ({
-            field,
-            operator: 'eq' as const,
-            value: fieldValue,
-          }))
+          const conditions = Object.entries(lookupParams(collection, match.params)).map(
+            ([field, fieldValue]) => ({
+              field,
+              operator: 'eq' as const,
+              value: fieldValue,
+            }),
+          )
           try {
             const page = await deps.gateway.list(
               {
@@ -898,7 +927,12 @@ export async function resolveWidgetAreas(
           const collection = collectionsByName.get(comment.collection)
           const entry = await readEntry(comment.collection, comment.entryId)
           if (collection === undefined || entry === null) continue
-          const href = hrefOf(collection, entry, deps.site.defaultLocale)
+          const href = hrefOf(
+            collection,
+            entry,
+            deps.site.defaultLocale,
+            await termSegmentsOf(collection, entry, deps.termSlugs),
+          )
           const body = comment.body.replace(/\s+/gu, ' ').trim()
           items.push({
             author: comment.authorName,
@@ -1028,6 +1062,8 @@ export async function resolveWidgetAreas(
     const build = await resolveOne(widget).catch(() => null)
     if (build !== null) pending.push({ area: widget.area, build })
   }
+
+  await Promise.all(categoryLookups)
 
   if (mediaIds.size > 0 && deps.loadMedia !== undefined) {
     media = await deps.loadMedia([...mediaIds])

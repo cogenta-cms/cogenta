@@ -1,5 +1,12 @@
 import { CogentaError } from '@cogenta/core'
-import { buildPath, type CollectionDefinition, type ContentEntry } from '@cogenta/schema'
+import {
+  buildPath,
+  type CollectionDefinition,
+  type ContentEntry,
+  isOptionalRouteParam,
+  type TermSlugs,
+  termSegmentsOf,
+} from '@cogenta/schema'
 import type { SeoResource, SeoSite } from './types.js'
 
 /**
@@ -62,6 +69,7 @@ export function absoluteUrl(site: SeoSite, path: string): string {
 export function routeParams(
   collection: CollectionDefinition,
   entry: ContentEntry,
+  categories: Readonly<Record<string, string>> = {},
 ): Record<string, string> {
   const pattern = collection.routing?.pattern ?? ''
   const params: Record<string, string> = {}
@@ -72,6 +80,14 @@ export function routeParams(
 
     if (name === 'id') {
       params[name] = entry.id
+      continue
+    }
+
+    // A category segment is the slug of the term, which the entry only holds
+    // the id of: the caller resolves it (`SeoResource.categories`).
+    if (isOptionalRouteParam(collection, name)) {
+      const slug = categories[name]
+      if (slug !== undefined && slug.length > 0) params[name] = slug
       continue
     }
 
@@ -106,9 +122,12 @@ export function canonicalUrl(site: SeoSite, resource: SeoResource): string | nul
   const routing = collection.routing
   if (routing === undefined) return null
 
-  const params = routeParams(collection, entry)
+  const params = routeParams(collection, entry, resource.categories)
   for (const segment of routing.pattern.split('/')) {
-    if (segment.startsWith(':') && params[segment.slice(1)] === undefined) return null
+    if (!segment.startsWith(':')) continue
+    const name = segment.slice(1)
+    // A category segment is left out of the address of an entry that has none.
+    if (params[name] === undefined && !isOptionalRouteParam(collection, name)) return null
   }
 
   const localised = routing.locale === true
@@ -121,4 +140,21 @@ export function canonicalUrl(site: SeoSite, resource: SeoResource): string | nul
   }
 
   return absoluteUrl(site, path)
+}
+
+/**
+ * An entry and its collection as the SEO layer reads them, with the category
+ * segment of its URL resolved (`schema@2.5`). Every place that builds a
+ * `SeoResource` for a routed entry goes through this, so a canonical URL, a
+ * sitemap line and an `hreflang` alternate cannot disagree about the address.
+ */
+export async function seoResourceOf<TEntry extends ContentEntry>(
+  collection: CollectionDefinition,
+  entry: TEntry,
+  terms: TermSlugs | undefined,
+): Promise<SeoResource<TEntry>> {
+  const categories = await termSegmentsOf(collection, entry, terms)
+  return Object.keys(categories).length === 0
+    ? { collection, entry }
+    : { collection, entry, categories }
 }

@@ -33,6 +33,16 @@ export type {
 export { createRedirectStore, REDIRECT_REASONS, REDIRECTS_TABLE } from './redirects.js'
 export type { EntryLookup, ResolveUrlOptions, UrlResolution } from './resolve.js'
 export { resolveUrl } from './resolve.js'
+export type { TermSlugs } from './route-terms.js'
+export {
+  isOptionalRouteParam,
+  lookupParams,
+  routeParameterNames,
+  routeParamsFrom,
+  routeParamsOf,
+  taxonomySegments,
+  termSegmentsOf,
+} from './route-terms.js'
 export type { BuildPathOptions, RouteMatch, RouteOptions } from './router.js'
 export { buildPath, matchPath, normalisePath } from './router.js'
 export type {

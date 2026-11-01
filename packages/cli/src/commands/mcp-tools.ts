@@ -43,6 +43,8 @@ import {
   type FieldDefinition,
   fieldSchema,
   pruneEmptyBlockData,
+  routeParamsOf,
+  type TermSlugs,
 } from '@cogenta/schema'
 
 /**
@@ -135,6 +137,8 @@ export interface McpSiteToolsOptions {
   readonly auditLog: AuditLog
   readonly approvalQueue: ApprovalQueue
   readonly transport: 'stdio' | 'http'
+  /** The slug of a term, for the category segment of an entry's address (`schema@2.5`). */
+  readonly terms?: TermSlugs
   /** Where an administrator decides, named in what a waiting client is told. */
   readonly approvalsUrl?: string
   readonly now?: () => number
@@ -476,20 +480,19 @@ function browseServiceOf(
   permissions: PermissionLayer,
   collections: readonly CollectionDefinition[],
   defaultLocale: string,
+  terms: TermSlugs | undefined,
 ): ContentBrowseServiceLike {
   const byName = new Map(collections.map((collection) => [collection.name, collection]))
-  const pathOf = (
+  const pathOf = async (
     collection: CollectionDefinition,
     values: Readonly<Record<string, unknown>>,
     locale: string,
-  ): string | null => {
+  ): Promise<string | null> => {
     if (collection.routing === undefined) return null
-    const params: Record<string, string> = {}
-    for (const [key, value] of Object.entries(values)) {
-      if (typeof value === 'string') params[key] = value
-    }
     try {
-      return buildPath(collection, params, locale, { defaultLocale })
+      return buildPath(collection, await routeParamsOf(collection, { values }, terms), locale, {
+        defaultLocale,
+      })
     } catch {
       return null
     }
@@ -526,12 +529,14 @@ function browseServiceOf(
         depth: 0,
       })
       return {
-        items: page.items.map((item) => ({
-          id: item.id,
-          title: titleOf(item.values),
-          path: pathOf(collection, item.values, item.locale),
-          status: item.status,
-        })),
+        items: await Promise.all(
+          page.items.map(async (item) => ({
+            id: item.id,
+            title: titleOf(item.values),
+            path: await pathOf(collection, item.values, item.locale),
+            status: item.status,
+          })),
+        ),
       }
     },
   }
@@ -651,6 +656,7 @@ export function createMcpToolSource(
     options.permissions,
     options.collections,
     options.site.defaultLocale,
+    options.terms,
   )
   const schema = schemaServiceOf(options.contentService, options.collections)
   const search =

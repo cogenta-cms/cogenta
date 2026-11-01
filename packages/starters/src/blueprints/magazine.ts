@@ -100,7 +100,8 @@ export const article = defineCollection({
   name: 'article',
   versioning: { drafts: true, history: true },
   labels: { singular: 'Article', plural: 'Articles' },
-  routing: { pattern: '/articles/:slug' },
+  // The section is part of the address (`schema@2.5`): /articles/culture/<slug>.
+  routing: { pattern: '/articles/:section/:slug' },
   fields: {
     title: f.text({ required: true, max: 200 }),
     slug: f.slug({ from: 'title', unique: true }),

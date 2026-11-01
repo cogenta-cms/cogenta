@@ -19,7 +19,10 @@ every entry carries (`id`, `status`, `deletedAt`, `reviewState`,
 single multilingual record), rich text (a structured JSON document, never
 HTML), relations (with a real foreign key), and native taxonomies (a
 materialized-path tree). Two recent bumps: `2.0` added trash and taxonomies,
-`2.1` an optional editorial workflow and "owner-only" permissions.
+`2.1` an optional editorial workflow and "owner-only" permissions. `2.5` lets a
+route carry the category of an entry: a pattern parameter naming a single-valued
+taxonomy field (`/blog/:category/:slug`) is the slug of the assigned term, optional,
+and every other address of the entry answers with a 301 to the canonical one.
 
 ## Contract B — Block vocabulary (`blocks@1.0`, frozen)
 

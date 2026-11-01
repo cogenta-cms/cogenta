@@ -30,6 +30,7 @@ import {
   createRolePermissionStore,
   createSchemaTables,
   createSearchIndex,
+  createTaxonomyStore,
   type TaxonomyDefinition,
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
@@ -42,6 +43,7 @@ import {
   mcpServerInstructions,
 } from './mcp-tools.js'
 import { loadSchemaModule } from './serve.js'
+import { createSiteTermSlugs } from './term-slugs.js'
 
 export { MCP_API_KEY_ENV }
 
@@ -298,9 +300,13 @@ export async function runMcp(options: McpOptions): Promise<number> {
     const searchIndex = await createSearchIndex({ db })
     const redirects = createRedirectStore({ db })
     await redirects.ensureTable()
+    const termSlugs = createSiteTermSlugs(taxonomies, (taxonomy) =>
+      createTaxonomyStore({ db, taxonomy }),
+    )
     const { storeFor } = createDecoratedContentStores({
       db,
       collections,
+      terms: termSlugs,
       defaultLocale: loaded.config.site.defaultLocale,
       logger,
       searchIndex,
@@ -335,6 +341,7 @@ export async function runMcp(options: McpOptions): Promise<number> {
           defaultLocale: loaded.config.site.defaultLocale,
         }),
         blocks: vocabularyRegistry,
+        terms: termSlugs,
         site,
         logger,
         auditLog: createAuditLog(db),

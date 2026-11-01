@@ -36,6 +36,14 @@ export interface SeoSite {
 export interface SeoResource<TEntry extends ContentEntry = ContentEntry> {
   readonly collection: CollectionDefinition
   readonly entry: TEntry
+  /**
+   * The category segment of the entry's URL, resolved by the caller
+   * (`schema@2.5`): `{ category: 'devops' }` for a route
+   * `/blog/:category/:slug`. An entry holds the *id* of its term and this
+   * package reads no database, so the slug is handed in. Absent, the address
+   * is built without the segment — the address of an entry with no category.
+   */
+  readonly categories?: Readonly<Record<string, string>>
 }
 
 export interface SeoImage {

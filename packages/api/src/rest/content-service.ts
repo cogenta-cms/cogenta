@@ -2,6 +2,7 @@ import { hashPassword } from '@cogenta/auth'
 import { type BlockRegistry, safeParseBlock, vocabularyRegistry } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
 import {
+  buildPath,
   type CollectionDefinition,
   type ContentAction,
   type ContentDiff,
@@ -19,7 +20,9 @@ import {
   type ReplaceOptions,
   type RouteMatch,
   resolveUrl,
+  routeParamsOf,
   type SortOrder,
+  taxonomySegments,
   titleOf,
   type UpdateInput,
   type VersionSummary,
@@ -989,6 +992,24 @@ export function createContentService(options: ContentServiceOptions): ContentSer
         ...(routing.locales === undefined ? {} : { locales: routing.locales }),
         ...(routing.defaultLocale === undefined ? {} : { defaultLocale: routing.defaultLocale }),
         lookup: (match) => lookupRoute(context, match, readOptions.state),
+        // A category segment is a claim the entry settles: any address other
+        // than the canonical one is a 301, never a second 200 (`schema@2.5`).
+        canonicalPath: async (match, found) => {
+          const target = collection(match.collection)
+          if (taxonomySegments(target).size === 0 || routing.terms === undefined) return null
+          const entry = found as ContentEntry
+          const params = await routeParamsOf(target, entry, routing.terms)
+          const categories = taxonomySegments(target)
+          if ([...categories.keys()].every((name) => match.params[name] === params[name])) {
+            return null
+          }
+          return buildPath(
+            target,
+            params,
+            match.locale ?? undefined,
+            routing.defaultLocale === undefined ? {} : { defaultLocale: routing.defaultLocale },
+          )
+        },
       })
 
       if (resolution.kind === 'redirect') {

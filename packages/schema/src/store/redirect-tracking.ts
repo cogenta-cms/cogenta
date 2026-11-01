@@ -1,4 +1,11 @@
-import { type RedirectStore, recordSlugChange } from '../routing/index.js'
+import {
+  type RedirectStore,
+  recordSlugChange,
+  routeParameterNames,
+  type TermSlugs,
+  taxonomySegments,
+  termSegmentsOf,
+} from '../routing/index.js'
 import type { CollectionDefinition } from '../types.js'
 import type { ContentStore } from './store.js'
 import type { ContentValues } from './types.js'
@@ -33,6 +40,12 @@ export interface RedirectTrackingOptions {
   /** The locale the site serves without a prefix; see `SlugChange.defaultLocale`. */
   readonly defaultLocale?: string
   /**
+   * Where the slug of a category segment's term comes from (`schema@2.5`).
+   * Without it a route carrying a category cannot tell which category an entry
+   * was in, so only a slug rename is tracked, exactly as before.
+   */
+  readonly terms?: TermSlugs
+  /**
    * Called when recording the redirect fails. Defaults to swallowing it.
    *
    * A failed redirect write must never fail the content save that triggered
@@ -48,12 +61,13 @@ function slugFieldOf(collection: CollectionDefinition): string | null {
   return found === undefined ? null : found[0]
 }
 
-/** The `:name` segments of a route pattern, in order. */
-function routeParamNames(pattern: string): readonly string[] {
-  return pattern
-    .split('/')
-    .filter((segment) => segment.startsWith(':'))
-    .map((segment) => segment.slice(1))
+function sameParams(
+  left: Readonly<Record<string, string>>,
+  right: Readonly<Record<string, string>>,
+): boolean {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  for (const key of keys) if (left[key] !== right[key]) return false
+  return true
 }
 
 async function trackRename<TValues extends ContentValues>(
@@ -72,17 +86,25 @@ async function trackRename<TValues extends ContentValues>(
     const previousSlug = before.values[slugField]
     const nextSlug = after.values[slugField]
     if (typeof previousSlug !== 'string' || typeof nextSlug !== 'string') return
-    if (previousSlug === nextSlug) return
 
     const pattern = options.collection.routing?.pattern
     const otherParams: Record<string, string> = {}
+    const previousParams: Record<string, string> = {}
     if (pattern !== undefined) {
-      for (const name of routeParamNames(pattern)) {
-        if (name === slugField) continue
+      const categories = taxonomySegments(options.collection)
+      for (const name of routeParameterNames(pattern)) {
+        if (name === slugField || categories.has(name)) continue
         const value = after.values[name]
         if (typeof value === 'string') otherParams[name] = value
+        const earlier = before.values[name]
+        if (typeof earlier === 'string') previousParams[name] = earlier
       }
+      // The category segment is the slug of the term, before and after.
+      Object.assign(otherParams, await termSegmentsOf(options.collection, after, options.terms))
+      Object.assign(previousParams, await termSegmentsOf(options.collection, before, options.terms))
     }
+    const categoryMoved = !sameParams(previousParams, otherParams)
+    if (previousSlug === nextSlug && !categoryMoved) return
 
     await recordSlugChange(options.redirects, {
       collection: options.collection,
@@ -94,6 +116,7 @@ async function trackRename<TValues extends ContentValues>(
       locale: after.locale,
       ...(options.defaultLocale === undefined ? {} : { defaultLocale: options.defaultLocale }),
       ...(Object.keys(otherParams).length === 0 ? {} : { params: otherParams }),
+      ...(categoryMoved ? { previousParams } : {}),
     })
   } catch (error) {
     options.onError?.(error)

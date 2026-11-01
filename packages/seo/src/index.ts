@@ -85,7 +85,14 @@ export {
   sitemapUrlsFor,
 } from './sitemap.js'
 export type { SeoImage, SeoReference, SeoResolvers, SeoResource, SeoSite } from './types.js'
-export { absoluteUrl, canonicalUrl, hasRoute, normaliseBaseUrl, routeParams } from './url.js'
+export {
+  absoluteUrl,
+  canonicalUrl,
+  hasRoute,
+  normaliseBaseUrl,
+  routeParams,
+  seoResourceOf,
+} from './url.js'
 export type { XmlAttributes, XmlElement } from './xml.js'
 export {
   escapeXmlAttribute,

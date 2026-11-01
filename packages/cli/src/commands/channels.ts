@@ -34,6 +34,7 @@ import {
   createRolePermissionStore,
   createSchemaTables,
   createSiteSettingsStore,
+  createTaxonomyStore,
   ensureSiteSettingsTables,
   type SiteSettingsStore,
   type TaxonomyDefinition,
@@ -46,6 +47,7 @@ import {
   writeChannelsStatus,
 } from './channels-status.js'
 import { loadSchemaModule } from './serve.js'
+import { createSiteTermSlugs } from './term-slugs.js'
 
 /**
  * `cogenta channels` — L22 task 2's answer to "constructor cette contrainte
@@ -344,6 +346,7 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
         defaultLocale: loaded.config.site.defaultLocale,
       },
       contentService,
+      terms: createSiteTermSlugs(taxonomies, (taxonomy) => createTaxonomyStore({ db, taxonomy })),
       mediaStore,
       auditLog,
       logger,

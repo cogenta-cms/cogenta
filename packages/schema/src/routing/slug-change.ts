@@ -4,7 +4,8 @@ import { buildPath } from './router.js'
 
 /**
  * The acceptance criterion of L1, in one function: *changing the slug of a
- * published entry creates a 301 with no intervention.*
+ * published entry creates a 301 with no intervention.* Moving it to another
+ * category does the same when the route carries one (`schema@2.5`).
  *
  * It is a free function taking a store rather than a method on the store so the
  * persistence layer can call it inside the same transaction as the save. A
@@ -24,6 +25,12 @@ export interface SlugChange {
    * `/blog/:year/:slug`. The slug parameter is filled in from the two above.
    */
   readonly params?: Readonly<Record<string, string>>
+  /**
+   * The other parameters the entry had **before** the save, when they differ
+   * from `params` — its category segment (`schema@2.5`), whose term may have
+   * changed along with, or instead of, the slug. Defaults to `params`.
+   */
+  readonly previousParams?: Readonly<Record<string, string>>
   /** The pattern parameter carrying the slug. Rarely anything but `slug`. */
   readonly slugParam?: string
   /**
@@ -49,7 +56,8 @@ export async function recordSlugChange(
   store: RedirectStore,
   change: SlugChange,
 ): Promise<RedirectRecord | null> {
-  if (change.previousSlug === change.nextSlug) return null
+  const moved = change.previousParams !== undefined
+  if (change.previousSlug === change.nextSlug && !moved) return null
   if (change.collection.routing === undefined) return null
   if (!isServed(change.status)) return null
 
@@ -60,7 +68,7 @@ export async function recordSlugChange(
     change.defaultLocale === undefined ? {} : { defaultLocale: change.defaultLocale }
   const from = buildPath(
     change.collection,
-    { ...base, [slugParam]: change.previousSlug },
+    { ...(change.previousParams ?? base), [slugParam]: change.previousSlug },
     change.locale,
     pathOptions,
   )

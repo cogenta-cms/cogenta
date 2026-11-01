@@ -343,6 +343,7 @@ import {
   registerScheduledPublishing,
   relationsOf,
   relationTable,
+  routeParamsOf,
   type ScheduledTaskRegistry,
   type SchemaDocument,
   type SearchConsoleConnectionStore,
@@ -353,6 +354,7 @@ import {
   type TaxonomyDefinition,
   type TaxonomyStore,
   type TaxonomyTerm,
+  type TermSlugs,
 } from '@cogenta/schema'
 import {
   canonicalUrl,
@@ -364,6 +366,7 @@ import {
   renderLlmsTxt,
   renderRssFeed,
   type SitemapUrl,
+  seoResourceOf,
 } from '@cogenta/seo'
 import type { PublicComment } from '@cogenta/theme-canonical'
 import { type ChromeLink, commentNoticeFor, type WidgetAreas } from '@cogenta/theme-kit'
@@ -507,6 +510,7 @@ import {
   renderTermArchivePage,
   type TermArchiveResolution,
 } from './term-archive-page.js'
+import { createSiteTermSlugs } from './term-slugs.js'
 import { createTextProviderSource } from './text-provider-source.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
 import { exportThemeZip, importThemeZip } from './theme-export.js'
@@ -1170,6 +1174,8 @@ export interface Site {
     termId: string,
     locale?: string,
   ) => Promise<{ readonly label: string; readonly route: string | null } | null>
+  /** The slug of a term, for the category segment of an entry's URL (`schema@2.5`). */
+  readonly termSlugs: TermSlugs
   /** CORS, security headers and cache-control, applied to every response (L10 task 6). */
   readonly security: SecurityConfig
   /** Live, not cached: a driver that just went down must show as down the next time this is called, not until the process restarts. */
@@ -1640,9 +1646,42 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const scheduledPublishFailures = createScheduledPublishFailureStore(db)
   await scheduledPublishFailures.ensureTable()
 
+  // One store per taxonomy, made once: a term store holds no state beyond its
+  // table, but re-deriving it per request would re-resolve every identifier.
+  // Built ahead of the content stores because the category segment of an
+  // entry's URL (`schema@2.5`) is the slug of a term, and the redirect and
+  // webhook decorators below have to read it.
+  const taxonomyStores = new Map<string, TaxonomyStore>()
+  // The slug of a term, for the category segment of an entry's URL. Every
+  // write to a term drops the copy, so a renamed term is served under its new
+  // slug on the very next request.
+  const termSlugs = createSiteTermSlugs(taxonomies, (taxonomy) => taxonomyStoreFor(taxonomy))
+  const taxonomyStoreFor = (taxonomy: TaxonomyDefinition): TaxonomyStore => {
+    const existing = taxonomyStores.get(taxonomy.name)
+    if (existing !== undefined) return existing
+    const plain = createTaxonomyStore({ db, taxonomy })
+    const forget = async <T>(run: () => Promise<T>): Promise<T> => {
+      try {
+        return await run()
+      } finally {
+        termSlugs.invalidate(taxonomy.name)
+      }
+    }
+    const created: TaxonomyStore = {
+      ...plain,
+      create: (input) => forget(() => plain.create(input)),
+      update: (id, input) => forget(() => plain.update(id, input)),
+      move: (id, parent) => forget(() => plain.move(id, parent)),
+      delete: (id, deleteOptions) => forget(() => plain.delete(id, deleteOptions)),
+    }
+    taxonomyStores.set(taxonomy.name, created)
+    return created
+  }
+
   const { stores, storeFor } = createDecoratedContentStores({
     db,
     collections,
+    terms: termSlugs,
     defaultLocale: site.defaultLocale,
     logger,
     readOnly,
@@ -2002,7 +2041,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     collections,
     permissions,
     storeFor,
-    routing: { locales: site.locales, defaultLocale: site.defaultLocale, redirects },
+    routing: {
+      locales: site.locales,
+      defaultLocale: site.defaultLocale,
+      redirects,
+      terms: termSlugs,
+    },
     // L32 — the same registry the renderer resolves against, so a page can
     // never be saved holding a block the renderer would refuse, and a block
     // a plugin provides is accepted on write exactly as a vocabulary one is.
@@ -2016,17 +2060,6 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     issuer: site.name,
     webauthn: webauthnConfigFor(site),
   })
-
-  // One store per taxonomy, made once: a term store holds no state beyond its
-  // table, but re-deriving it per request would re-resolve every identifier.
-  const taxonomyStores = new Map<string, TaxonomyStore>()
-  const taxonomyStoreFor = (taxonomy: TaxonomyDefinition): TaxonomyStore => {
-    const existing = taxonomyStores.get(taxonomy.name)
-    if (existing !== undefined) return existing
-    const created = createTaxonomyStore({ db, taxonomy })
-    taxonomyStores.set(taxonomy.name, created)
-    return created
-  }
 
   const mediaStore = createDatabaseMediaStore({ db })
 
@@ -2098,6 +2131,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             defaultLocale: site.defaultLocale,
           },
           contentService: service,
+          terms: termSlugs,
           mediaStore,
           // The host side of `media.store_generated_image`: this is the only
           // place both a storage driver and a media store are in scope, and
@@ -2359,11 +2393,6 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       (await gateway.read(collectionName, entryId, { actor: { id: null, roles: ['public'] } }))
     if (entry === null) return null
 
-    const stringValues = Object.fromEntries(
-      Object.entries(entry.values).filter(
-        (pair): pair is [string, string] => typeof pair[1] === 'string',
-      ),
-    )
     const label =
       typeof entry.values.title === 'string'
         ? entry.values.title
@@ -2373,9 +2402,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     let route: string | null = null
     if (collection.routing !== undefined) {
       try {
-        route = buildPath(collection, stringValues, entry.locale ?? undefined, {
-          defaultLocale: site.defaultLocale,
-        })
+        route = buildPath(
+          collection,
+          await routeParamsOf(collection, entry, termSlugs),
+          entry.locale ?? undefined,
+          { defaultLocale: site.defaultLocale },
+        )
       } catch {
         // A route field is missing on this entry (e.g. an empty slug on a
         // draft). The item still resolves — with a label, no link — rather
@@ -3017,6 +3049,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             permissions,
             refreshPermissions: () => rolePermissionOverlay.refresh(),
             mediaStore,
+            terms: termSlugs,
             search: searchRouter,
             blocks: options.blocks ?? vocabularyRegistry,
             site: {
@@ -3043,6 +3076,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       service,
       siteUrl: site.url,
       defaultLocale: site.defaultLocale,
+      terms: termSlugs,
     }),
     authRouter: createAuthRouter({
       auth,
@@ -3239,6 +3273,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       collections,
       gateway,
       permissions,
+      terms: termSlugs,
       site: seoSiteFor(site),
       // Read fresh on every diagnostic scan / preview (fiche 21 task 3) —
       // see `SeoRouterOptions.titleDefaults`'s own doc comment for why this
@@ -3531,6 +3566,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     resolveAuthorArchive,
     authorArchiveHref,
     resolveTaxonomyTerm: resolveMenuTerm,
+    termSlugs,
     termSitemapUrls: async () => [...(await termSitemapUrls()), ...(await authorSitemapUrls())],
     security: options.security,
     health: options.health,
@@ -4024,6 +4060,7 @@ async function widgetsForSite(
       gateway: site.gateway,
       ...(site.pluginWidgets === undefined ? {} : { pluginWidgets: site.pluginWidgets }),
       terms: site.taxonomyTerms,
+      termSlugs: site.termSlugs,
       termUsage: (taxonomy, terms, access, locale) => {
         const byName = new Map(site.collections.map((collection) => [collection.name, collection]))
         return countTaxonomyUsage({
@@ -4272,7 +4309,7 @@ async function notifyIndexNowOnContentChange(
     if (entry === null) return
 
     const seoSite = seoSiteFor(site.site, await readSeoRenderDefaults(site.siteSettingsStore))
-    const url = canonicalUrl(seoSite, { collection, entry })
+    const url = canonicalUrl(seoSite, await seoResourceOf(collection, entry, site.termSlugs))
     if (url === null) return
 
     const result = await pingIndexNow({
@@ -6424,6 +6461,7 @@ export function createRequestListener(
             authorFor: (userId) => authorForSite(site, userId),
             embedPreviews: embedPreviewsForSite(site),
             resolveTerm: site.resolveTaxonomyTerm,
+            terms: site.termSlugs,
             // L32 — the appearance preview shows the real page, plugin
             // blocks included, or it is not a preview of the real page.
             ...(extras?.blockRegistry === undefined ? {} : { blocks: extras.blockRegistry }),
@@ -7498,6 +7536,7 @@ export function createRequestListener(
               authorFor: (userId) => authorForSite(site, userId),
               embedPreviews: embedPreviewsForSite(site),
               resolveTerm: site.resolveTaxonomyTerm,
+              terms: site.termSlugs,
               // L32 — a preview that did not render a plugin's block would
               // show a person editing it nothing at all, which is the one
               // thing this preview exists not to do. Same registry, same
@@ -7639,7 +7678,7 @@ export function createRequestListener(
         const seoSite = seoSiteFor(site.site, seoDefaults)
         const items = feedItemsFor(
           seoSite,
-          await collectRoutedResources(site.collections, site.gateway),
+          await collectRoutedResources(site.collections, site.gateway, site.termSlugs),
         )
         const input = {
           site: seoSite,
@@ -7675,7 +7714,11 @@ export function createRequestListener(
         }
         const seoDefaults = await readSeoRenderDefaults(site.siteSettingsStore)
         const seoSite = seoSiteFor(site.site, seoDefaults)
-        const resources = await collectRoutedResources(site.collections, site.gateway)
+        const resources = await collectRoutedResources(
+          site.collections,
+          site.gateway,
+          site.termSlugs,
+        )
         res.writeHead(200, {
           'content-type': 'text/markdown; charset=utf-8',
           'cache-control': 'public, max-age=600',
@@ -7714,7 +7757,7 @@ export function createRequestListener(
         const seoSite = seoSiteFor(site.site, seoDefaults)
         const files = buildSitemapFiles(
           seoSite,
-          await collectRoutedResources(site.collections, site.gateway),
+          await collectRoutedResources(site.collections, site.gateway, site.termSlugs),
           seoDefaults.sitemapCollectionSettings,
           await site.termSitemapUrls(),
         )
@@ -7911,6 +7954,7 @@ export function createRequestListener(
             router: site.searchRouter,
             gateway: site.gateway,
             collections: site.collections,
+            terms: site.termSlugs,
             site: await renderSiteFor(site),
             styles: await site.resolveStyles(),
             menus: { menuRouter: site.menuRouter },
@@ -7995,6 +8039,7 @@ export function createRequestListener(
           },
           collections: site.collections,
           gateway: site.gateway,
+          terms: site.termSlugs,
           site: await renderSiteFor(site),
           // Live, not the startup snapshot — a saved appearance override
           // must show up on the very next page view (fiche 14).
@@ -8166,6 +8211,7 @@ export function createRequestListener(
                   locale: archiveAddress.locale,
                   collections: site.collections,
                   gateway: site.gateway,
+                  terms: site.termSlugs,
                   site: await renderSiteFor(site),
                   styles: await site.resolveStyles(),
                   menus: { menuRouter: site.menuRouter },
@@ -8241,6 +8287,7 @@ export function createRequestListener(
                   {
                     collections: site.collections,
                     gateway: site.gateway,
+                    terms: site.termSlugs,
                     site: await renderSiteFor(site),
                     styles: await site.resolveStyles(),
                     menus: { menuRouter: site.menuRouter },
@@ -8343,6 +8390,7 @@ export function createRequestListener(
               {
                 collections: site.collections,
                 gateway: site.gateway,
+                terms: site.termSlugs,
                 site: await renderSiteFor(site),
                 styles: await site.resolveStyles(),
                 menus: { menuRouter: site.menuRouter },

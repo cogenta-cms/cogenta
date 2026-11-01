@@ -1,3 +1,4 @@
+import { lookupParams } from '../routing/route-terms.js'
 import { matchPath } from '../routing/router.js'
 import type { ContentStore } from '../store/store.js'
 import type { ContentEntry } from '../store/types.js'
@@ -165,7 +166,7 @@ export async function checkLinks(options: LinkCheckOptions): Promise<LinkCheckRe
     const target = byName.get(match.collection)
     if (target === undefined) return 'unknown_collection'
 
-    const where: Record<string, unknown> = { ...match.params }
+    const where: Record<string, unknown> = { ...lookupParams(target, match.params) }
     const page = await storeFor(target).list({
       state: 'published',
       where,

@@ -5,6 +5,7 @@ import {
   type ContentEntry,
   SITE_SETTINGS_SITE_SCOPE,
   type SiteSettingsStore,
+  type TermSlugs,
 } from '@cogenta/schema'
 import {
   absoluteUrl,
@@ -25,6 +26,7 @@ import {
   type SitemapCollectionOverride,
   type SitemapFile,
   type SitemapUrl,
+  seoResourceOf,
   sitemapUrlsFor,
 } from '@cogenta/seo'
 
@@ -339,6 +341,7 @@ const SCAN_PAGE = 100
 export async function collectRoutedResources(
   collections: readonly CollectionDefinition[],
   gateway: ContentGateway,
+  terms?: TermSlugs,
 ): Promise<readonly SeoResource[]> {
   const context: AccessContext = { actor: ANONYMOUS }
   const resources: SeoResource[] = []
@@ -370,7 +373,7 @@ export async function collectRoutedResources(
           // read it (`schema@2.3`, ADR-0037). A private one never reaches
           // here at all — the gateway filtered it for `ANONYMOUS` already.
           if (entry.visibility === 'password') continue
-          resources.push({ collection, entry })
+          resources.push(await seoResourceOf(collection, entry, terms))
         }
         read += page.items.length
 
@@ -431,16 +434,19 @@ export async function translationFamilyOf(
  * `family` is `translationFamilyOf`'s answer, read once per page and shared
  * with the language switcher.
  */
-export function alternatesForEntry(
+export async function alternatesForEntry(
   site: SeoSite,
   collection: CollectionDefinition,
   entry: ContentEntry,
   family: readonly ContentEntry[],
-): readonly HreflangAlternate[] {
+  terms?: TermSlugs,
+): Promise<readonly HreflangAlternate[]> {
   if (family.length === 0) return []
 
   const sourceId = entry.translationOf ?? entry.id
-  const resources = family.map((found) => ({ collection, entry: found }))
+  const resources = await Promise.all(
+    family.map((found) => seoResourceOf(collection, found, terms)),
+  )
   const grouped = groupTranslationFamilies(site, resources).find(
     (candidate) => candidate.sourceId === sourceId,
   )

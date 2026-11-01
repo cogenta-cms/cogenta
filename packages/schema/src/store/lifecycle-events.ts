@@ -1,3 +1,4 @@
+import { routeParamsOf, type TermSlugs } from '../routing/route-terms.js'
 import { buildPath } from '../routing/router.js'
 import type { CollectionDefinition, ContentStatus } from '../types.js'
 import type { ContentStore } from './store.js'
@@ -66,6 +67,8 @@ export interface LifecycleEventsOptions {
   readonly collection: CollectionDefinition
   /** The locale the site serves without a prefix, so an event carries the public URL. */
   readonly defaultLocale?: string
+  /** Where the slug of a category segment's term comes from (`schema@2.5`). */
+  readonly terms?: TermSlugs
   /**
    * Receives every event. Awaited, so a caller may batch or await delivery —
    * but a rejection is caught and routed to `onError`, never propagated: an
@@ -76,17 +79,15 @@ export interface LifecycleEventsOptions {
   readonly onError?: (error: unknown) => void
 }
 
-function pathFor(
+async function pathFor(
   collection: CollectionDefinition,
   entry: ContentEntry,
   defaultLocale: string | undefined,
-): string | null {
+  terms: TermSlugs | undefined,
+): Promise<string | null> {
   if (collection.routing === undefined) return null
-  const params: Record<string, string> = {}
-  for (const [field, value] of Object.entries(entry.values)) {
-    if (typeof value === 'string') params[field] = value
-  }
   try {
+    const params = await routeParamsOf(collection, entry, terms)
     return buildPath(
       collection,
       params,
@@ -115,7 +116,7 @@ export function withLifecycleEvents<TValues extends ContentValues = ContentValue
         publishedAt: entry.publishedAt,
         updatedAt: entry.updatedAt,
         version: entry.version,
-        path: pathFor(options.collection, entry, options.defaultLocale),
+        path: await pathFor(options.collection, entry, options.defaultLocale, options.terms),
       })
     } catch (error) {
       options.onError?.(error)

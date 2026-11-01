@@ -17,13 +17,12 @@ import {
   canPageBy,
   cursorFor,
   entryState,
+  entryViewFor,
   grantedEntryId,
   matchesFilter,
   resolveRelativeFilter,
   roleState,
   scanPages,
-  visibilityGateFor,
-  visibleToActor,
 } from '../content/index.js'
 import type {
   AccessContext,
@@ -196,10 +195,16 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
       )
     }
 
-    const visible = visibilityGateFor(permissions, collection, context)
+    // What this actor is shown of each row — whole, locked or absent — decided
+    // once, and the filter below runs on *that*: a query on a hidden field of a
+    // protected entry must not be able to confirm a guess by what comes back.
+    const view = entryViewFor(permissions, collection, context)
     const scan = await scanPages<ContentEntry>({
       limit,
-      accept: (entry) => visible(entry) && (filter === undefined || matchesFilter(filter, entry)),
+      accept: (entry) => {
+        const shown = view(entry)
+        return shown !== null && (filter === undefined || matchesFilter(filter, shown))
+      },
       startCursor: request.after,
       maxFetches: MAX_SCANS,
       fetch: (cursor) => {
@@ -217,7 +222,12 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
 
     const overflowed = scan.overflowed
     const paged = scan.items
-    let items: readonly ContentEntry[] = paged
+    // The cursor below is taken from the stored rows (`paged`); what leaves
+    // is the viewed copy, so a locked entry never carries its content out.
+    let items: readonly ContentEntry[] = paged.flatMap((entry) => {
+      const shown = view(entry)
+      return shown === null ? [] : [shown]
+    })
 
     /*
      * The preview overlay.
@@ -236,13 +246,18 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
       const grantedId = grantedEntryId(permissions, collection, context)
       if (grantedId !== undefined) {
         const previewed = await store.read(grantedId, { state: 'working' })
-        if (previewed !== null && (filter === undefined || matchesFilter(filter, previewed))) {
+        const shownPreview = previewed === null ? null : view(previewed)
+        if (
+          previewed !== null &&
+          shownPreview !== null &&
+          (filter === undefined || matchesFilter(filter, shownPreview))
+        ) {
           const at = items.findIndex((entry) => entry.id === grantedId)
-          if (at >= 0) items = items.map((entry, index) => (index === at ? previewed : entry))
+          if (at >= 0) items = items.map((entry, index) => (index === at ? shownPreview : entry))
           // Prepended without dropping anything: the page may hold one entry
           // more than asked for during a preview, which is a great deal less
           // surprising than a published entry silently falling off the end.
-          else if (request.after === undefined) items = [previewed, ...items]
+          else if (request.after === undefined) items = [shownPreview, ...items]
         }
       }
     }
@@ -273,15 +288,15 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
       // A restricted entry is `null` here, not an error: to an actor who may
       // not see it, it does not exist (`schema@2.3`, ADR-0037), and the
       // transport above turns that into the same answer as a wrong id.
-      if (entry === null || !visibleToActor(permissions, collection, context, entry)) return null
-      return entry
+      if (entry === null) return null
+      return entryViewFor(permissions, collection, context)(entry)
     },
 
     readMany: async (name, ids, context) => {
       const collection = definitionOf(name)
       const found = new Map<string, ContentEntry>()
       const store = storeOf(name)
-      const visible = visibilityGateFor(permissions, collection, context)
+      const view = entryViewFor(permissions, collection, context)
 
       // De-duplicated: twenty articles by three authors is three reads, which
       // is the N+1 the spec asks to prevent. The loop itself is the store's
@@ -292,7 +307,8 @@ export function createContentGateway(options: ContentGatewayOptions): ContentGat
         const entry = await store.read(id, { state: stateForEntry(collection, id, context) })
         // The batched loader is exactly where a relation would otherwise
         // expose what a direct read refuses.
-        if (entry !== null && visible(entry)) found.set(id, entry)
+        const shown = entry === null ? null : view(entry)
+        if (shown !== null) found.set(id, shown)
       }
       return found
     },

@@ -258,6 +258,96 @@ describe('a page that is not simply public', () => {
     }
   }, 120_000)
 
+  it('keeps a protected page out of every API response until its password is answered', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      const lockedA = await publish(server.base, token, 'Dossier A', 'dossier-a')
+      const lockedB = await publish(server.base, token, 'Dossier B', 'dossier-b')
+      for (const [id, password] of [
+        [lockedA, 'sésame A'],
+        [lockedB, 'sésame B'],
+      ] as const) {
+        const response = await fetch(`${server.base}/api/content/page/${id}/visibility`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ visibility: 'password', password }),
+        })
+        expect(response.status).toBe(200)
+      }
+
+      // Not the HTML only: every transport answers the same question the same
+      // way. The title is listed, the excerpt and the blocks are not.
+      for (const path of [
+        `/api/content/page/${lockedA}`,
+        '/api/content/page',
+        '/api/content/-/by-path?path=/dossier-a',
+        '/api/search?q=Dossier',
+        '/feed.xml',
+      ]) {
+        const response = await fetch(`${server.base}${path}`)
+        const text = await response.text()
+        expect(text, path).not.toContain('Le contenu secret.')
+        expect(text, path).not.toContain('Ce que cette page raconte')
+      }
+      const read = (await (await fetch(`${server.base}/api/content/page/${lockedA}`)).json()) as {
+        data: { values: Record<string, unknown>; blocks: unknown; visibility: string }
+      }
+      expect(read.data.visibility).toBe('password')
+      expect(read.data.values['title']).toBe('Dossier A')
+      expect(read.data.blocks).toEqual({})
+
+      // The editor reads it whole.
+      const asEditor = await fetch(`${server.base}/api/content/page/${lockedA}`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(await asEditor.text()).toContain('Le contenu secret.')
+
+      const unlock = async (id: string, password: string, next: string): Promise<string> => {
+        const opened = await fetch(`${server.base}/_cogenta/unlock`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ entry: id, password, next }),
+          redirect: 'manual',
+        })
+        expect(opened.status).toBe(303)
+        return (opened.headers.get('set-cookie') ?? '').split(';')[0] ?? ''
+      }
+      const cookieA = await unlock(lockedA, 'sésame A', '/dossier-a')
+      const cookieB = await unlock(lockedB, 'sésame B', '/dossier-b')
+
+      // The proof for A opens A...
+      const pageA = await (
+        await fetch(`${server.base}/dossier-a`, { headers: { cookie: cookieA } })
+      ).text()
+      expect(pageA).toContain('Le contenu secret.')
+      expect(pageA).not.toContain('cg-unlock__form')
+
+      // ...and nothing else: not B with A's cookie alone, not B with A's
+      // proof written under B's cookie name.
+      const nameB = cookieB.slice(0, cookieB.indexOf('='))
+      const valueA = cookieA.slice(cookieA.indexOf('=') + 1)
+      for (const cookie of [cookieA, `${nameB}=${valueA}`]) {
+        const pageB = await (
+          await fetch(`${server.base}/dossier-b`, { headers: { cookie } })
+        ).text()
+        expect(pageB).toContain('cg-unlock__form')
+        expect(pageB).not.toContain('Le contenu secret.')
+      }
+
+      // A cookie is a page-render proof, not an API credential: the same
+      // request to the API with the cookie is still locked.
+      const api = await fetch(`${server.base}/api/content/page/${lockedA}`, {
+        headers: { cookie: cookieA },
+      })
+      expect(await api.text()).not.toContain('Le contenu secret.')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
   it('refuses an open redirect, and keeps a protected page out of the sitemap', async () => {
     const root = await project()
     await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])

@@ -38,6 +38,18 @@ export interface PreviewGrant {
 export interface AccessContext {
   readonly actor: Actor
   readonly preview?: PreviewGrant | undefined
+  /**
+   * Whether this request has already answered the password of one
+   * password-protected entry (`schema@2.3`, ADR-0037).
+   *
+   * Set only by a host that has itself checked the unlock proof **for that
+   * entry id** — the page renderer, from the signed cookie. It is a predicate
+   * over the entry, never a flag: a proof for entry A must not open entry B,
+   * so the caller is asked per id and has to answer per id. No transport
+   * builds it from a request header or a query parameter, which is what keeps
+   * "I say I have the password" from being something a client can claim.
+   */
+  readonly unlocked?: ((entryId: string) => boolean) | undefined
 }
 
 export type AccessDecision =

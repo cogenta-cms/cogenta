@@ -36,4 +36,11 @@ export type {
   SerialisedEntry,
 } from './serialise.js'
 export { serialiseEntry } from './serialise.js'
-export { visibilityGateFor, visibleToActor } from './visibility.js'
+export type { EntryView } from './visibility.js'
+export {
+  entryViewFor,
+  listableFieldsOf,
+  lockEntry,
+  visibilityGateFor,
+  visibleToActor,
+} from './visibility.js'

@@ -2,6 +2,7 @@ import { CogentaError } from '@cogenta/core'
 import type {
   CollectionDefinition,
   ContentAction,
+  ContentEntry,
   ContentStore,
   ReviewState,
 } from '@cogenta/schema'
@@ -149,6 +150,11 @@ export function createReviewRouter(options: ReviewRouterOptions): ReviewRouter {
       canRead: () => true,
       canReadUnpublished: () => true,
       canSeeEntry: () => true,
+      // Everyone listed here holds `publish` (`scopeCollections`), the very
+      // action that changes an entry's visibility: a reviewer who could
+      // remove a page's password reads its content in the queue to decide
+      // on it, so nothing is narrowed for them.
+      viewOf: (_collection: CollectionDefinition, entry: ContentEntry) => entry,
     }
 
     const serialised: ReviewQueueItem[] = []

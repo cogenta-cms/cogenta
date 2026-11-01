@@ -190,9 +190,10 @@ export function buildContentSchema(options: ContentSchemaOptions): GraphQLSchema
       return relationField(name, field, target)
     }
 
+    const type = nonNullable(field, outputTypeOf(field))
     return {
-      type: nonNullable(field, outputTypeOf(field)),
-      resolve: (node) => node.entry.values[name] ?? null,
+      type,
+      resolve: (node) => node.entry.values[name] ?? emptyForLocked(type, node.entry),
     }
   }
 
@@ -516,6 +517,31 @@ function nonNullable(field: FieldDefinition, type: GraphQLNullableOutputType): G
   const many = field.options['many'] === true
   if (many) return new GraphQLNonNull(type)
   return field.required === true ? new GraphQLNonNull(type) : type
+}
+
+/**
+ * What a non-null field answers for a password-protected entry whose content
+ * the reader may not have (`schema@2.3`, ADR-0037).
+ *
+ * The gateway already removed the value; the schema, however, promised a
+ * `String!` or a `[X!]!`, and answering `null` there would fail the field and
+ * — through GraphQL's null propagation — the whole list the entry sits in.
+ * One protected page would then blank a public query for everyone. So the
+ * field answers the neutral value of its type: empty, zero, false, no items.
+ * Anything without a neutral value is left `null` and fails alone.
+ *
+ * Applies only to a locked row and only to a non-null type; an unprotected
+ * entry's missing optional field stays `null`, as before.
+ */
+function emptyForLocked(type: GraphQLOutputType, entry: ContentEntry): unknown {
+  if (entry.visibility !== 'password' || !(type instanceof GraphQLNonNull)) return null
+  const inner = type.ofType
+  if (inner instanceof GraphQLList) return []
+  if (inner === JSONScalar) return {}
+  if (inner === GraphQLBoolean) return false
+  if (inner === GraphQLInt || inner === GraphQLFloat) return 0
+  if (inner === GraphQLString || inner === GraphQLID) return ''
+  return null
 }
 
 function isNonEmptyString(value: unknown): value is string {

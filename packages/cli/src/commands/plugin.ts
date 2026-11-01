@@ -305,7 +305,11 @@ export async function runPluginCommand(options: PluginCommandOptions): Promise<n
       })
       // The published face, never a draft: a plugin reads what the site
       // shows, and an unpublished entry simply does not exist for it.
-      handlers['content.read'] = createContentReadHandler(async (id) => store.read(id))
+      handlers['content.read'] = createContentReadHandler(async (id) => {
+        const entry = await store.read(id)
+        // A private or protected entry is not what the site shows (ADR-0037).
+        return entry !== null && entry.visibility === 'public' ? entry : null
+      })
       handlers['content.write_draft'] = createContentWriteDraftHandler(async (input) => {
         if (input.id === undefined) {
           const created = await store.create({ values: input.values })

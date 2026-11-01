@@ -61,17 +61,128 @@ describe('an entry marked private', () => {
     expect(listed.items.map((entry) => entry.values['title'])).toContain('Note interne')
   })
 
-  it('does not hide a password-protected entry: it is listed, its content is what is gated', async () => {
+  const SECRET_BLOCK = {
+    key: 'b1',
+    type: 'richText',
+    data: { text: 'The vault combination is 12-34-56.' },
+  }
+
+  async function protectedArticle(title: string): Promise<string> {
     const store = harness.stores.get(ARTICLE.name)
     if (store === undefined) throw new Error('no store')
-    const locked = await publishedArticle('Dossier de presse')
-    await store.setVisibility(locked, 'password', { passwordHash: 'not-a-real-hash' })
+    const entry = await store.create({
+      values: { title, views: 4242, featured: true },
+      blocks: { body: [SECRET_BLOCK] },
+      status: 'published',
+    })
+    await store.publish(entry.id)
+    await store.setVisibility(entry.id, 'password', { passwordHash: 'not-a-real-hash' })
+    return entry.id
+  }
 
-    // Deliberately visible: a protected page exists and can be linked to.
-    // What the password gates is the rendered content, not the row.
-    expect(await harness.gateway.read(ARTICLE.name, locked, asPublic())).not.toBeNull()
+  it('lists a password-protected entry and shows its title, nothing else of it', async () => {
+    const locked = await protectedArticle('Dossier de presse')
+
+    // A protected page exists and can be linked to — but what the password
+    // gates is its content, on every transport and not only in the renderer.
+    const read = await harness.gateway.read(ARTICLE.name, locked, asPublic())
+    expect(read).not.toBeNull()
+    expect(read?.visibility).toBe('password')
+    expect(read?.values['title']).toBe('Dossier de presse')
+    expect(read?.values['views']).toBeUndefined()
+    expect(read?.values['featured']).toBeUndefined()
+    expect(read?.blocks).toEqual({})
+
     const listed = await harness.gateway.list({ collection: ARTICLE.name }, asPublic())
     expect(listed.items.map((entry) => entry.values['title'])).toContain('Dossier de presse')
+    expect(JSON.stringify(listed.items)).not.toContain('12-34-56')
+    expect(JSON.stringify(listed.items)).not.toContain('4242')
+  })
+
+  it('keeps the content of a protected entry out of a batched relation read', async () => {
+    const locked = await protectedArticle('Dossier de presse')
+
+    const batched = await harness.gateway.readMany(ARTICLE.name, [locked], asPublic())
+
+    const entry = batched.get(locked)
+    expect(entry?.values['title']).toBe('Dossier de presse')
+    expect(JSON.stringify(entry)).not.toContain('12-34-56')
+    expect(entry?.values['views']).toBeUndefined()
+  })
+
+  it('does not let a filter on a hidden field reveal what a protected entry holds', async () => {
+    await protectedArticle('Dossier de presse')
+
+    const guessed = await harness.gateway.list(
+      {
+        collection: ARTICLE.name,
+        filter: { field: 'views', operator: 'eq', value: 4242 },
+      },
+      asPublic(),
+    )
+
+    expect(guessed.items).toEqual([])
+  })
+
+  it('shows the whole protected entry to someone who may edit the collection', async () => {
+    const locked = await protectedArticle('Dossier de presse')
+
+    const read = await harness.gateway.read(ARTICLE.name, locked, asEditor())
+    expect(read?.values['views']).toBe(4242)
+    expect(JSON.stringify(read?.blocks)).toContain('12-34-56')
+  })
+
+  it('shows the whole protected entry to a visitor who has proved the password for that entry only', async () => {
+    const unlocked = await protectedArticle('Dossier A')
+    const other = await protectedArticle('Dossier B')
+    const context = { ...asPublic(), unlocked: (id: string) => id === unlocked }
+
+    const opened = await harness.gateway.read(ARTICLE.name, unlocked, context)
+    const stillLocked = await harness.gateway.read(ARTICLE.name, other, context)
+    const listed = await harness.gateway.list({ collection: ARTICLE.name }, context)
+
+    expect(opened?.values['views']).toBe(4242)
+    expect(JSON.stringify(opened?.blocks)).toContain('12-34-56')
+    expect(stillLocked?.values['views']).toBeUndefined()
+    expect(stillLocked?.blocks).toEqual({})
+    const byTitle = new Map(listed.items.map((entry) => [entry.values['title'], entry]))
+    expect(byTitle.get('Dossier A')?.values['views']).toBe(4242)
+    expect(byTitle.get('Dossier B')?.values['views']).toBeUndefined()
+  })
+
+  it('returns no content of a protected entry through a GraphQL query, even for required fields', async () => {
+    await protectedArticle('Dossier de presse')
+
+    const response = await harness.run(
+      `query { gqlArticles { edges { node { title views featured body { type data } } } } }`,
+      asPublic(),
+    )
+
+    expect(response.errors).toBeUndefined()
+    const text = JSON.stringify(response.data)
+    expect(text).toContain('Dossier de presse')
+    expect(text).not.toContain('12-34-56')
+    expect(text).not.toContain('4242')
+  })
+
+  it('returns no content of a protected entry through a GraphQL relation', async () => {
+    const store = harness.stores.get(ARTICLE.name)
+    if (store === undefined) throw new Error('no store')
+    const locked = await protectedArticle('Dossier de presse')
+    const host = await publishedArticle('Hôte')
+    await store.update(host, { values: { related: [locked] } })
+    await store.publish(host)
+
+    const response = await harness.run(
+      `query { gqlArticles { edges { node { title related { title views body { data } } } } } }`,
+      asPublic(),
+    )
+
+    expect(response.errors).toBeUndefined()
+    const text = JSON.stringify(response.data)
+    expect(text).toContain('Dossier de presse')
+    expect(text).not.toContain('12-34-56')
+    expect(text).not.toContain('4242')
   })
 
   it('never leaks through GraphQL either — the same gate, the other transport', async () => {

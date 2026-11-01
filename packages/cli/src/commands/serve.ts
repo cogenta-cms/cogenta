@@ -8028,6 +8028,27 @@ export function createRequestListener(
       // (no Astro build, one theme, no image pipeline). GET only: rendering
       // a page has no meaningful response to any other method.
       if (req.method === 'GET') {
+        // Which protected pages this visitor has already answered
+        // (`schema@2.3`). Read from the request's own cookies, never from a
+        // query parameter: a link carrying an unlock would be a link that
+        // shares the page with whoever it is forwarded to. The proof is
+        // checked **per entry id** — a cookie earned on page A says nothing
+        // about page B.
+        const unlockedByCookie =
+          extras?.unlockTokens === undefined
+            ? undefined
+            : (entryId: string): boolean =>
+                extras.unlockTokens?.accepts(
+                  entryId,
+                  parseCookies(req.headers.cookie).get(extras.unlockTokens.cookieName(entryId)),
+                ) === true
+        // The context the *page* reads content through: it carries the unlock
+        // check down to the gateway, which is what hands a protected entry's
+        // content to the renderer — and only for the entries that were
+        // unlocked. Every other transport (`/api/*`, GraphQL, search) keeps
+        // the plain `context`, so a cookie never widens an API read.
+        const pageContext: AccessContext =
+          unlockedByCookie === undefined ? context : { ...context, unlocked: unlockedByCookie }
         const renderOptions = {
           onInvalidCollectionList: (report: {
             readonly path: string
@@ -8119,18 +8140,10 @@ export function createRequestListener(
           ...(extras?.pluginStyleHrefs === undefined
             ? {}
             : { pluginStyleHrefs: extras.pluginStyleHrefs }),
-          // Which protected pages this visitor has already answered
-          // (`schema@2.3`). Read from the request's own cookies, never from a
-          // query parameter: a link carrying an unlock would be a link that
-          // shares the page with whoever it is forwarded to.
-          ...(extras?.unlockTokens === undefined
+          ...(unlockedByCookie === undefined
             ? {}
             : {
-                unlocked: (entryId: string) =>
-                  extras.unlockTokens?.accepts(
-                    entryId,
-                    parseCookies(req.headers.cookie).get(extras.unlockTokens.cookieName(entryId)),
-                  ) === true,
+                unlocked: unlockedByCookie,
                 unlockFailed: url.searchParams.get('unlock') === 'failed',
                 unlockThrottled: url.searchParams.get('unlock') === 'slow',
               }),
@@ -8149,7 +8162,7 @@ export function createRequestListener(
               clockDependent = true
             },
           },
-          context,
+          pageContext,
         )
         // A duplicate address of a page (`/home`, `/fr/…`, a trailing slash)
         // moves permanently to the one it has, query string kept.
@@ -8919,7 +8932,12 @@ export async function runServe(options: ServeOptions): Promise<number> {
         // a plugin reading drafts would be reading something no reader can.
         readEntry: async (collectionName, id) => {
           const store = pluginContentStore(collectionName)
-          return store === null ? null : store.read(id)
+          if (store === null) return null
+          const entry = await store.read(id)
+          // A private or password-protected entry is not what a visitor
+          // sees, and a plugin can hand whatever it reads to a public route
+          // of its own (`schema@2.3`, ADR-0037).
+          return entry !== null && entry.visibility === 'public' ? entry : null
         },
         // A draft, never a publication: what a plugin writes stays invisible
         // until a human publishes it (L31 step 3). `state: 'working'` is the

@@ -452,14 +452,27 @@ export function AgentDetailRoute(): JSX.Element {
   const turnCount = conversation.turns.length
   useEffect(() => {
     if (token === null || selectedAgent === null || turnCount === 0) return
+    let cancelled = false
     void Promise.all([
-      listAgentTraces(token, selectedAgent.name).then(setTraces),
-      listAgentHistory(token, selectedAgent.name).then(setHistory),
+      listAgentTraces(token, selectedAgent.name),
+      listAgentHistory(token, selectedAgent.name),
     ])
+      .then(([foundTraces, foundHistory]) => {
+        if (cancelled) return
+        setTraces(foundTraces)
+        setHistory(foundHistory)
+      })
+      // A failed refresh keeps the log already shown: the conversation itself
+      // reports a failed run, and an unhandled rejection here crashed nothing
+      // but left the promise dangling past unmount.
+      .catch(() => undefined)
     // `turnCount` (a number), not `conversation.turns` (a new array
     // reference every load): using the array itself would refire this on
     // every render the hook re-resolves the same thread to an equal-length
     // array, which is harmless but pointless.
+    return () => {
+      cancelled = true
+    }
   }, [turnCount, token, selectedAgent])
 
   if (!isAdmin) {

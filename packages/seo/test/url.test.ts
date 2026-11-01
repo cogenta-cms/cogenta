@@ -1,3 +1,4 @@
+import { defineCollection, f } from '@cogenta/schema'
 import { describe, expect, it } from 'vitest'
 import { isIndexable, isPublished } from '../src/indexable.js'
 import { absoluteUrl, canonicalUrl, normaliseBaseUrl } from '../src/url.js'
@@ -89,5 +90,39 @@ describe('the publication gate', () => {
   it('requires a URL on top of publication', () => {
     expect(isIndexable(site, makeAuthor())).toBe(false)
     expect(isIndexable(site, makeArticle())).toBe(true)
+  })
+})
+
+describe('canonical URLs with a category segment', () => {
+  const categorised = defineCollection({
+    name: 'categorised_article',
+    labels: { singular: 'Article', plural: 'Articles' },
+    routing: { pattern: '/blog/:category/:slug', locale: true },
+    fields: {
+      slug: f.slug({}),
+      category: f.taxonomy({ of: 'topic', many: false }),
+    },
+    permissions: { read: ['public'] },
+  })
+  const resource = (categories?: Record<string, string>, term?: string) => ({
+    collection: categorised,
+    entry: makeEntry({
+      values: { slug: 'hello', ...(term === undefined ? {} : { category: term }) },
+    }),
+    ...(categories === undefined ? {} : { categories }),
+  })
+
+  it('names the term slug the caller resolved, never the term id', () => {
+    expect(canonicalUrl(site, resource({ category: 'devops' }, 'term-id-7'))).toBe(
+      'https://example.com/en/blog/devops/hello',
+    )
+  })
+
+  it('leaves the segment out of an entry that has no category', () => {
+    expect(canonicalUrl(site, resource())).toBe('https://example.com/en/blog/hello')
+    // An id the caller could not resolve must not leak into the address.
+    expect(canonicalUrl(site, resource(undefined, 'term-id-7'))).toBe(
+      'https://example.com/en/blog/hello',
+    )
   })
 })

@@ -3,6 +3,7 @@ import { CogentaError } from '../errors/index.js'
 import {
   type CompiledQuery,
   compile,
+  isConcurrentCreateRace,
   isWrite,
   returnsRows,
   type SqlFragment,
@@ -100,6 +101,7 @@ function executorFor(connection: PostgresSql): SqlExecutor {
           rowsAffected: isWrite(text) ? result.count : 0,
         }
       } catch (error) {
+        if (isConcurrentCreateRace(error, text)) return { rows: [], rowsAffected: 0 }
         throw fail(error, text)
       }
     },

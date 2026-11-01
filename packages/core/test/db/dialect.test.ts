@@ -3,6 +3,7 @@ import {
   compile,
   encodeValue,
   identifier,
+  isConcurrentCreateRace,
   sql,
   unsafeRaw,
   withIdempotentDdl,
@@ -140,5 +141,27 @@ describe('withIdempotentDdl — additive DDL that may already have run', () => {
       "select 'create index i on t (a)'",
     ]
     for (const text of untouched) expect(withIdempotentDdl(text)).toBe(text)
+  })
+})
+
+describe('isConcurrentCreateRace — two replicas creating the same table at once', () => {
+  const create =
+    'create table if not exists "cogenta_scheduled_task_claims" (task_name varchar(255))'
+
+  it('treats the duplicate-object failure of an if-not-exists create as success', () => {
+    expect(isConcurrentCreateRace({ code: '42710' }, create)).toBe(true)
+    expect(isConcurrentCreateRace({ code: '42P07' }, create)).toBe(true)
+    expect(isConcurrentCreateRace({ code: '23505' }, `\n  ${create}`)).toBe(true)
+    expect(
+      isConcurrentCreateRace({ code: '42P07' }, 'create index if not exists "i" on "t" ("a")'),
+    ).toBe(true)
+  })
+
+  it('keeps every other failure an error', () => {
+    expect(isConcurrentCreateRace({ code: '42P07' }, 'create table "t" (a int)')).toBe(false)
+    expect(isConcurrentCreateRace({ code: '23505' }, 'insert into "t" values (1)')).toBe(false)
+    expect(isConcurrentCreateRace({ code: '42601' }, create)).toBe(false)
+    expect(isConcurrentCreateRace(new Error('boom'), create)).toBe(false)
+    expect(isConcurrentCreateRace(null, create)).toBe(false)
   })
 })

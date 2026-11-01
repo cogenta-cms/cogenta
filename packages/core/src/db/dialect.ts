@@ -175,6 +175,31 @@ export function withIdempotentDdl(text: string): string {
 }
 
 /**
+ * Whether a Postgres failure is the losing side of two concurrent
+ * `create … if not exists` statements for the same object.
+ *
+ * `if not exists` is checked before the catalogue row is written, so two
+ * connections creating the same table at the same instant can both pass the
+ * check and the second fails on the catalogue's unique index (`42P07`
+ * duplicate table, `42710` duplicate object — a table's row type — or `23505`
+ * on `pg_type`). The statement asked for the object to exist and it does: the
+ * failure is the outcome the caller asked for, not an error (#52). Only a
+ * statement that itself carries `if not exists` qualifies.
+ */
+export function isConcurrentCreateRace(error: unknown, text: string): boolean {
+  if (
+    !/^\s*create\s+(?:unique\s+)?(?:table|index|sequence|type)\b[^;]*?\bif\s+not\s+exists\b/iu.test(
+      text,
+    )
+  ) {
+    return false
+  }
+  if (typeof error !== 'object' || error === null) return false
+  const code = (error as { readonly code?: unknown }).code
+  return code === '42P07' || code === '42710' || code === '23505'
+}
+
+/**
  * Statements that hand back rows: a read, or a write with `RETURNING`.
  *
  * Shared by every driver so `rows` and `rowsAffected` mean the same thing on all

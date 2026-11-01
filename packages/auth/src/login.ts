@@ -334,6 +334,15 @@ export interface AuthService {
    */
   disableTotp(userId: string): Promise<void>
   /**
+   * Voids every sign-in step this account has in flight: second-factor login
+   * tickets and passkey registration tickets (pentest 2026-11-01, AUTH-01).
+   * Call it whenever the proof those tickets stand for stops being valid — a
+   * password reset or change, a disabled account. A ticket is signed
+   * and so stateless, but spending it needs its row in `cogenta_login_tickets`;
+   * deleting the rows is what makes it unspendable.
+   */
+  revokeSignInTickets(userId: string): Promise<void>
+  /**
    * Replaces this account's recovery codes with a fresh batch, invalidating
    * every code from the previous one (fiche 18 task 1). Requires a confirmed
    * TOTP factor — a recovery code with nothing to recover from is not a
@@ -410,6 +419,15 @@ function webauthnNotConfigured(): CogentaError {
     message: 'Passkeys are not configured for this site.',
     hint: 'Set relyingPartyName, relyingPartyId and origin when creating the auth service.',
   })
+}
+
+/**
+ * `AuthService.revokeSignInTickets` without a service — for a caller that has
+ * a database and no signing key, such as `cogenta users reset-password --token`.
+ */
+export async function revokeSignInTickets(db: DatabaseHandle, userId: string): Promise<void> {
+  const tickets = identifier(TABLES.loginTickets, db.dialect)
+  await db.query(sql`delete from ${tickets} where user_id = ${userId}`)
 }
 
 export function createAuthService(options: AuthServiceOptions): AuthService {
@@ -491,7 +509,7 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
 
   /** A change of second factor voids every sign-in step already in flight. */
   async function revokeLoginTickets(userId: string): Promise<void> {
-    await db.query(sql`delete from ${tickets} where user_id = ${userId}`)
+    await revokeSignInTickets(db, userId)
   }
 
   async function issueSession(
@@ -838,6 +856,8 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       await credentials.removeRecoveryCodes(userId)
       await revokeLoginTickets(userId)
     },
+
+    revokeSignInTickets: revokeLoginTickets,
 
     regenerateRecoveryCodes: async (userId) => {
       const totp = await credentials.totpSecret(userId)

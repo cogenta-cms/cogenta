@@ -651,7 +651,12 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
       // is belt and braces — but a revoked row is the thing an operator can
       // actually see, and "disabled" that leaves live sessions listed reads
       // like the revocation did not happen.
-      if (changes.status === 'disabled') await auth.sessions.revokeAll(user.id)
+      if (changes.status === 'disabled') {
+        await auth.sessions.revokeAll(user.id)
+        // Sign-in steps already in flight die with the account's sessions, so
+        // enabling it again does not bring them back to life (AUTH-01).
+        await auth.login.revokeSignInTickets(user.id)
+      }
     }
 
     // Fiche 61 task 1 — the gap this fiche exists to close: every account
@@ -1130,6 +1135,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     const anonymized = await auth.users.anonymize(user.id)
     await auth.sessions.revokeAll(user.id)
     await auth.resets.revokeAllFor(user.id)
+    await auth.login.revokeSignInTickets(user.id)
 
     // The one user-lifecycle action this file writes to the audit log
     // (nothing else here does, today — see the report this fiche shipped
@@ -1246,6 +1252,9 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     const current = await currentSession(request)
     if (current !== null) await auth.sessions.revokeAllExcept(userId, current.id)
     else await auth.sessions.revokeAll(userId)
+    // A ticket obtained with the old password (second factor, passkey
+    // registration) must not outlive the password it vouched for (AUTH-01).
+    await auth.login.revokeSignInTickets(userId)
 
     // T09-05 — direct write at the point of mutation; neither password ever
     // enters `diff`.

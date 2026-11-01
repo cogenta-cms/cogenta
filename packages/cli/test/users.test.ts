@@ -308,6 +308,29 @@ describe('users reset-password', () => {
     await db.close()
   })
 
+  it('voids the sign-in tickets issued with the old password', async () => {
+    const root = await project()
+    const token = await accountWithReset(root)
+
+    const before = await createSqliteHandle({ url: join(root, 'site.db') })
+    const userRow = await before.query<{ id: string }>(sql`select id from cogenta_users limit 1`)
+    const userId = userRow.rows[0]?.id as string
+    const expiresAt = new Date(Date.now() + 60_000).toISOString()
+    await before.query(sql`
+      insert into cogenta_login_tickets (id, user_id, expires_at, used_at)
+      values (${'ticket-from-old-password'}, ${userId}, ${expiresAt}, ${null})`)
+    await before.close()
+
+    expect(await users(root, 'reset-password', '--token', token)).toBe(0)
+
+    const after = await createSqliteHandle({ url: join(root, 'site.db') })
+    const left = await after.query<{ id: string }>(sql`select id from cogenta_login_tickets`)
+    // An MFA or passkey-registration ticket vouching for the old password must
+    // not be spendable once it is gone (pentest 2026-11-01, AUTH-01).
+    expect(left.rows).toEqual([])
+    await after.close()
+  })
+
   it('signs out every session opened with the old password', async () => {
     const root = await project()
     const token = await accountWithReset(root)

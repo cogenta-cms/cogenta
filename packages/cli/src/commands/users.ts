@@ -8,6 +8,7 @@ import {
   createSessionStore,
   createUserStore,
   ensureAuthTables,
+  revokeSignInTickets,
 } from '@cogenta/auth'
 import {
   createDatabaseRegistry,
@@ -203,6 +204,9 @@ async function redeemReset(options: UsersOptions, logger: Logger): Promise<numbe
     // reset is composed here rather than being a single store call: the store
     // owns tokens, not sessions.
     await createSessionStore(db).revokeAll(user.id)
+    // Second-factor and passkey-registration tickets issued with the old
+    // password go the same way (pentest 2026-11-01, AUTH-01).
+    await revokeSignInTickets(db, user.id)
 
     out.heading('Password reset')
     out.ok(`${user.email} — every existing session was signed out`)

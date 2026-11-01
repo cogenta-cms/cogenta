@@ -50,6 +50,34 @@ brouillon, pas de traduction séparée par langue, juste un libellé par langue
 sur le même terme (« Cuisine » et « Cooking » sont un seul concept, pas deux
 entrées liées).
 
+### La catégorie dans l'adresse d'un article
+
+Pour le référencement, un article classé dans la catégorie « DevOps » est servi à
+`/blog/devops/<titre>` (`/en/blog/devops/<titre>` en anglais) : le modèle Blog (et le
+Magazine, avec sa rubrique) le fait pour tout nouveau site. Le segment est le slug du
+terme ; un article sans catégorie reste à `/blog/<titre>`.
+
+- Toute autre adresse du même article répond par une **redirection permanente (301)**
+  vers la bonne : l'ancienne adresse sans catégorie, une catégorie qui a été renommée, un
+  article déplacé dans une autre catégorie. Une catégorie fausse n'affiche jamais la
+  page deux fois.
+- Le plan du site, le lien canonique et les alternatives de langue utilisent la nouvelle
+  adresse.
+- Changer la catégorie d'un article publié enregistre la redirection de l'ancienne
+  adresse, sans rien à faire.
+
+Un site créé avant ce changement garde son fichier `cogenta.schema.mjs` (le schéma est en
+lecture seule en production, ADR-0010). Sur une copie de développement :
+
+1. `cogenta schema set-route post "/blog/:category/:slug"` : simulation seule. Elle
+   affiche le changement et le nombre d'articles publiés qui changent d'adresse.
+2. `cogenta schema set-route post "/blog/:category/:slug" --write` modifie
+   `cogenta.schema.mjs` (l'original reste à côté, en `cogenta.schema.mjs.before-set-route`).
+3. Commitez le fichier et déployez-le. Les anciennes adresses répondent en 301 : aucune
+   redirection à ajouter à la main.
+
+Le motif ne peut nommer qu'un champ de classement à **un seul** terme (`many: false`).
+
 ## Intégrer une vidéo, un son ou une publication
 
 Le bloc **Contenu externe** affiche une vidéo YouTube, Vimeo ou Dailymotion, un titre Spotify

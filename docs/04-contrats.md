@@ -26,6 +26,9 @@
 > montée **mineure et strictement additive** : `SortOrder.field` accepte en plus le
 > nom d'un champ `date`/`datetime` déclaré par la collection, voir « Tri et
 > pagination » ci-dessous.
+> **Monté en `schema@2.5`** (la catégorie dans l'adresse d'une entrée), montée
+> **mineure et strictement additive**, sans ADR dédiée — même traitement que
+> `schema@2.2` : voir « La catégorie dans l'adresse » ci-dessous.
 
 ### Définition d'un type
 
@@ -304,6 +307,38 @@ Ceci ne change ni la forme de `CollectionDefinition.permissions` ni celle de
 version — c'est le point de décision de `PermissionLayer`, pas le vocabulaire du
 schéma, qui gagne une seconde source.
 
+### La catégorie dans l'adresse (`schema@2.5`)
+
+Un paramètre de `routing.pattern` qui nomme un champ `taxonomy` à valeur unique
+(`many: false`) n'est pas la valeur brute du champ — un identifiant de terme, qui ne dit
+rien dans une URL — mais le **slug du terme assigné** : `/blog/:category/:slug` sert un
+article classé « DevOps » à `/blog/devops/<slug>` (`/en/blog/devops/<slug>` en anglais).
+Le slug d'un terme est unique dans sa taxonomie et n'est pas traduit (les libellés le
+sont), donc le segment est le même dans toutes les langues d'une famille de traductions.
+Pour une taxonomie hiérarchique, c'est le slug du terme assigné, pas son chemin.
+
+- **Le segment est facultatif.** Une entrée sans terme a pour adresse canonique celle
+  qui l'omet (`/blog/<slug>`) ; `buildPath` le laisse de côté, `matchPath` accepte le
+  chemin avec et sans lui (même collection, mêmes autres paramètres).
+- **Une seule adresse par entrée.** L'entrée est cherchée par ses autres paramètres (le
+  slug), puis l'adresse demandée est comparée à l'adresse canonique : toute autre —
+  ancienne adresse `/blog/<slug>`, terme renommé ou déplacé, mauvaise catégorie — répond
+  **301** vers la canonique, query string conservée. Une catégorie erronée ne répond
+  jamais 200 (contenu dupliqué). Un slug inconnu reste 404.
+- **Validation** (`defineCollection`) : un paramètre qui nomme un champ `taxonomy` à
+  plusieurs termes est refusé (une URL ne peut pas nommer plusieurs catégories) ; une
+  route porte au plus un segment de catégorie.
+- **Une seule dérivation des paramètres.** `routeParamsOf(collection, entry, terms)`
+  (`@cogenta/schema`) est l'unique endroit où les paramètres de route se déduisent d'une
+  entrée ; `lookupParams` retire le segment des paramètres qui servent à chercher
+  l'entrée. `buildPath`/`matchPath` gardent leur signature.
+- **Changer de catégorie** (ou de slug) d'une entrée publiée enregistre le 301 de
+  l'ancienne adresse vers la nouvelle (`withRedirectTracking`).
+- **Un site existant** garde son schéma (ADR-0010) : `cogenta schema set-route post
+  "/blog/:category/:slug" [--write]` change le motif d'une collection dans
+  `cogenta.schema.mjs` (simulation par défaut, ne touche rien d'autre). Les anciennes
+  adresses continuent de répondre, en 301.
+
 ### Tri et pagination (`schema@2.4`, ADR-0038)
 
 La pagination est **par curseur, jamais par offset** : un curseur est une position
@@ -376,6 +411,14 @@ champ `date`/`datetime` déclaré, en plus de `id`/`createdAt`/`updatedAt` ; le 
 porte une valeur `string | null`. **Strictement additive** : un appelant qui trie par
 une des trois colonnes système obtient exactement le même ordre et le même curseur
 qu'avant. Aucune migration : rien n'est ajouté au schéma physique.
+
+`schema@2.4 → 2.5` (2026-11-01) : un paramètre de route qui nomme un champ `taxonomy` à
+valeur unique est le slug du terme assigné, et facultatif (`buildPath`/`matchPath`) ;
+nouveaux exports `routeParamsOf`/`routeParamsFrom`/`termSegmentsOf`/`lookupParams`/
+`taxonomySegments`/`createTermSlugResolver`. **Strictement additive** pour tout site dont
+les routes ne nomment pas un tel champ — le seul cas qui change de sens est un motif qui
+nommait déjà un champ `taxonomy` (l'adresse portait alors un identifiant de terme).
+Aucune migration : rien n'est ajouté au schéma physique.
 
 `schema@2.2 → 2.3` (ADR-0037, 2026-09-16) : ajout du champ système `visibility`
 (orthogonal à `status`) et de l'empreinte de mot de passe, jamais lisible ; nouvelles

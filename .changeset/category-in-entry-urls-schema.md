@@ -1,0 +1,5 @@
+---
+'@cogenta/schema': minor
+---
+
+A route can carry the category of an entry (`schema@2.5`, additive). A pattern parameter that names a single-valued `taxonomy` field — `/blog/:category/:slug` — is the slug of the assigned term, and is optional: `buildPath` leaves it out for an entry that has no term, `matchPath` accepts the address with and without it. New exports: `routeParamsOf`, `routeParamsFrom`, `termSegmentsOf`, `lookupParams`, `taxonomySegments`, `routeParameterNames`, `isOptionalRouteParam`, `createTermSlugResolver` (a short-lived, per-taxonomy copy of the term slugs, so a page of twelve cards costs one read) and `fixedTermSlugs`. `defineCollection` refuses a pattern naming a taxonomy field that takes several terms, and a route with two category segments. `withRedirectTracking` and `withLifecycleEvents` take the term slugs, and a published entry that changes category now gets the 301 from its old address, alone or together with a slug change. `resolveUrl` accepts `canonicalPath`, which turns a match on a non-canonical address into a 301. A route that already named a `taxonomy` field used to put the term's id in the address; it now puts its slug.

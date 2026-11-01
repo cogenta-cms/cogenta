@@ -9,6 +9,10 @@ import { f } from '../../src/fields.js'
 import { createRedirectStore, type RedirectStore } from '../../src/routing/redirects.js'
 import { routeParamsOf, taxonomySegments, termSegmentsOf } from '../../src/routing/route-terms.js'
 import { buildPath, matchPath } from '../../src/routing/router.js'
+import {
+  type ContentLifecycleEvent,
+  withLifecycleEvents,
+} from '../../src/store/lifecycle-events.js'
 import { withRedirectTracking } from '../../src/store/redirect-tracking.js'
 import { createContentStore } from '../../src/store/store.js'
 import { createSchemaTables, dropSchemaTables } from '../../src/store/tables.js'
@@ -286,5 +290,30 @@ describe('routeParamsOf and the term slug resolver', () => {
       to: '/blog/hello',
       status: 301,
     })
+  })
+
+  it('names the canonical address, category included, in the event a publication fires', async () => {
+    const terms = createTaxonomyStore({ db, taxonomy: category })
+    const devops = await terms.create({ slug: 'devops', labels: { en: 'DevOps' } })
+    const events: ContentLifecycleEvent[] = []
+    const store = withLifecycleEvents(
+      createContentStore({ db, collection: post, defaultLocale: 'fr' }),
+      {
+        collection: post,
+        defaultLocale: 'fr',
+        terms: resolverOver(terms),
+        emit: (event) => {
+          events.push(event)
+        },
+      },
+    )
+
+    await store.create({
+      status: 'published',
+      locale: 'fr',
+      values: { title: 'Hello', slug: 'hello', category: devops.id },
+    })
+
+    expect(events.map((event) => event.path)).toEqual(['/blog/devops/hello'])
   })
 })

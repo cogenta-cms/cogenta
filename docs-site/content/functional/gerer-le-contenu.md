@@ -73,8 +73,10 @@ lecture seule en production, ADR-0010). Sur une copie de développement :
    affiche le changement et le nombre d'articles publiés qui changent d'adresse.
 2. `cogenta schema set-route post "/blog/:category/:slug" --write` modifie
    `cogenta.schema.mjs` (l'original reste à côté, en `cogenta.schema.mjs.before-set-route`).
-3. Commitez le fichier et déployez-le. Les anciennes adresses répondent en 301 : aucune
-   redirection à ajouter à la main.
+3. Commitez le fichier et déployez-le. Quand le changement ne fait qu'ajouter la
+   catégorie, les anciennes adresses répondent en 301 d'elles-mêmes : aucune redirection à
+   ajouter à la main. Pour tout autre changement de motif, la commande liste les
+   redirections `301 ancienne -> nouvelle` à ajouter dans l'écran Redirections.
 
 Le motif ne peut nommer qu'un champ de classement à **un seul** terme (`many: false`).
 

@@ -209,9 +209,23 @@ describe('cogenta schema set-route', () => {
     expect(result.stdout).toContain('Dry run')
     expect(result.stdout).toContain('1 of 2 published entries change address')
     expect(result.stdout).toContain('/blog/bonjour -> /blog/devops/bonjour')
+    // Only a category is added: the site answers the old address by itself, so
+    // nothing is asked of the operator.
+    expect(result.stdout).not.toContain('301 /blog/bonjour')
     // An entry with no category keeps its address.
     expect(result.stdout).not.toContain('/blog/seul')
     expect(await readFile(join(dir, 'cogenta.schema.mjs'), 'utf8')).toBe(before)
+  })
+
+  it('prints the redirects to add when the new pattern no longer recognises the old address', async () => {
+    const dir = await siteWithEntries()
+
+    const result = await run(dir, ['post', '/journal/:category/:slug'])
+
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('2 of 2 published entries change address')
+    expect(result.stdout).toContain('301 /blog/bonjour -> /journal/devops/bonjour')
+    expect(result.stdout).toContain('301 /blog/seul -> /journal/seul')
   })
 
   it('edits the file with --write', async () => {

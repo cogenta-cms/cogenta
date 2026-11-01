@@ -27,8 +27,11 @@
 > nom d'un champ `date`/`datetime` déclaré par la collection, voir « Tri et
 > pagination » ci-dessous.
 > **Monté en `schema@2.5`** (la catégorie dans l'adresse d'une entrée), montée
-> **mineure et strictement additive**, sans ADR dédiée — même traitement que
-> `schema@2.2` : voir « La catégorie dans l'adresse » ci-dessous.
+> **mineure**, sans ADR dédiée : additive pour tout site dont les routes ne nomment
+> pas de champ `taxonomy`, avec deux changements de comportement pour celles qui le
+> font, listés dans « Versionnement » (aucun site ni modèle connu n'est concerné ; le
+> choix mineur plutôt que majeur est à confirmer par l'humain). Voir « La catégorie
+> dans l'adresse » ci-dessous.
 
 ### Définition d'un type
 
@@ -336,8 +339,11 @@ Pour une taxonomie hiérarchique, c'est le slug du terme assigné, pas son chemi
   l'ancienne adresse vers la nouvelle (`withRedirectTracking`).
 - **Un site existant** garde son schéma (ADR-0010) : `cogenta schema set-route post
   "/blog/:category/:slug" [--write]` change le motif d'une collection dans
-  `cogenta.schema.mjs` (simulation par défaut, ne touche rien d'autre). Les anciennes
-  adresses continuent de répondre, en 301.
+  `cogenta.schema.mjs` (simulation par défaut, ne touche rien d'autre). Quand le nouveau
+  motif ne fait qu'ajouter la catégorie, les anciennes adresses continuent de répondre,
+  en 301. Pour tout autre changement de motif, l'ancienne adresse n'est plus reconnue :
+  la commande imprime les 301 à ajouter dans l'admin (Redirections), comme
+  `localize-routes`.
 
 ### Tri et pagination (`schema@2.4`, ADR-0038)
 
@@ -415,10 +421,16 @@ qu'avant. Aucune migration : rien n'est ajouté au schéma physique.
 `schema@2.4 → 2.5` (2026-11-01) : un paramètre de route qui nomme un champ `taxonomy` à
 valeur unique est le slug du terme assigné, et facultatif (`buildPath`/`matchPath`) ;
 nouveaux exports `routeParamsOf`/`routeParamsFrom`/`termSegmentsOf`/`lookupParams`/
-`taxonomySegments`/`createTermSlugResolver`. **Strictement additive** pour tout site dont
-les routes ne nomment pas un tel champ — le seul cas qui change de sens est un motif qui
-nommait déjà un champ `taxonomy` (l'adresse portait alors un identifiant de terme).
-Aucune migration : rien n'est ajouté au schéma physique.
+`taxonomySegments`/`createTermSlugResolver` ; paramètres optionnels
+`SlugChange.previousParams`, `ResolveUrlOptions.canonicalPath`, `SeoResource.categories`.
+Aucune signature existante ne change et rien n'est ajouté au schéma physique (aucune
+migration). **Deux comportements changent pour un motif qui nomme déjà un champ
+`taxonomy`** — un cas sans modèle ni site connu, l'adresse portait alors un identifiant
+de terme, donc inutilisable : (1) le paramètre vaut le slug du terme (et `RouteMatch.params`
+le porte, y compris dans la réponse de `/-/by-path`), plus l'identifiant ; (2)
+`defineCollection` refuse un champ `taxonomy` à plusieurs termes (le défaut de
+`f.taxonomy`, `many: true`) et deux segments de catégorie dans une route, au chargement
+du schéma (`SCHEMA_INVALID`) au lieu d'échouer page par page (`CONTENT_ROUTE_INVALID`).
 
 `schema@2.2 → 2.3` (ADR-0037, 2026-09-16) : ajout du champ système `visibility`
 (orthogonal à `status`) et de l'empreinte de mot de passe, jamais lisible ; nouvelles

@@ -18,8 +18,9 @@ import { scaffoldSite } from '../src/scaffold.js'
  * a real `cogenta serve` on SQLite — what a visitor's browser would receive.
  */
 
-const FR_ARTICLE = '/blog/pourquoi-jecris-en-texte-brut'
-const EN_ARTICLE = '/en/blog/plain-text-editor'
+// The category is part of the address of a post (`schema@2.5`).
+const FR_ARTICLE = '/blog/ecriture/pourquoi-jecris-en-texte-brut'
+const EN_ARTICLE = '/en/blog/ecriture/plain-text-editor'
 
 let targetDir = ''
 let base = ''
@@ -183,6 +184,21 @@ describe('a blog scaffolded in French and English', () => {
     expect(switcherOf(credits.html)).toContain('href="/en/photo-credits" lang="en"')
     // A page that does not exist in the other language is not a dead link.
     expect((await get('/en/credits-photo')).status).toBe(404)
+  })
+
+  it('sends the address an essay had before the category joined it to the one it has now', async () => {
+    const moved = async (path: string) => {
+      const response = await fetch(`${base}${path}`, { redirect: 'manual' })
+      return { status: response.status, location: response.headers.get('location') }
+    }
+    expect(await moved('/blog/pourquoi-jecris-en-texte-brut')).toEqual({
+      status: 301,
+      location: FR_ARTICLE,
+    })
+    expect(await moved('/en/blog/plain-text-editor')).toEqual({
+      status: 301,
+      location: EN_ARTICLE,
+    })
   })
 
   it('does not serve an essay under the other language', async () => {

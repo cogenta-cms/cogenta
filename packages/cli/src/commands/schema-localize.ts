@@ -15,6 +15,7 @@ import {
   type ContentEntry,
   createContentStore,
   createTaxonomyStore,
+  matchPath,
   routeParamsFrom,
   routeParamsOf,
 } from '@cogenta/schema'
@@ -195,9 +196,11 @@ usual use is to put the category in the address of an entry:
 ":category" must be a single-valued taxonomy field of the collection; the
 address of an entry is then /blog/<slug of its category>/<slug>, and /blog/<slug>
 when it has none. Without --write it only shows the change and the addresses
-that move. Every address an entry had before keeps working: the site answers it
-with a 301 to the new one, so no redirect has to be added by hand. The original
-file is kept as cogenta.schema.mjs.before-set-route.
+that move. When the new pattern only adds the category, every address an entry had
+before keeps working: the site answers it with a 301 to the new one. For any other
+change the old addresses are not recognised any more, and the command prints the
+301 redirects to add in the admin (Redirections). The original file is kept as
+cogenta.schema.mjs.before-set-route.
 `
 
 /**
@@ -433,6 +436,7 @@ async function runSetRoute(options: SchemaOptions): Promise<number> {
     )
     const store = createContentStore({ db, collection: current, defaultLocale })
     const moved: { from: string; to: string }[] = []
+    const unrecognised: { from: string; to: string }[] = []
     let total = 0
     for (const locale of loaded.config.site.locales) {
       let cursor: string | undefined
@@ -446,13 +450,29 @@ async function runSetRoute(options: SchemaOptions): Promise<number> {
         for (const entry of page.items) {
           total += 1
           try {
-            const from = buildPath(current, routeParamsFrom(current, entry, {}), entry.locale, {
-              defaultLocale,
-            })
+            const from = buildPath(
+              current,
+              await routeParamsOf(current, entry, terms),
+              entry.locale,
+              {
+                defaultLocale,
+              },
+            )
             const to = buildPath(next, await routeParamsOf(next, entry, terms), entry.locale, {
               defaultLocale,
             })
             if (from !== to) moved.push({ from, to })
+            // The new pattern recognises the old address when they differ only
+            // by a category segment; the site then answers it with a 301 by
+            // itself. Any other change leaves it unknown (a 404), and that
+            // redirect has to be added by hand.
+            if (
+              from !== to &&
+              matchPath([next], from, { locales: loaded.config.site.locales, defaultLocale }) ===
+                null
+            ) {
+              unrecognised.push({ from, to })
+            }
           } catch (error) {
             // An entry saved without its slug was never served; nothing to move.
             if (!isCogentaError(error) || error.code !== 'CONTENT_ROUTE_INVALID') throw error
@@ -465,10 +485,20 @@ async function runSetRoute(options: SchemaOptions): Promise<number> {
       out.detail(`None of the ${total} published entries changes address.`)
     } else {
       out.warn(
-        `${moved.length} of ${total} published entries change address. The old address keeps working: the site answers it with a 301.`,
+        `${moved.length} of ${total} published entries change address.${
+          unrecognised.length === moved.length
+            ? ''
+            : ' Where the new pattern only adds a category, the site answers the old address with a 301 by itself.'
+        }`,
       )
       for (const { from, to } of moved.slice(0, MOVED_EXAMPLES)) out.detail(`${from} -> ${to}`)
       if (moved.length > MOVED_EXAMPLES) out.detail(`… and ${moved.length - MOVED_EXAMPLES} more.`)
+    }
+    if (unrecognised.length > 0) {
+      out.warn(
+        `${unrecognised.length} old address${unrecognised.length === 1 ? ' is' : 'es are'} not recognised by the new pattern. Add these 301 redirects (admin, Redirections):`,
+      )
+      for (const { from, to } of unrecognised) out.detail(`301 ${from} -> ${to}`)
     }
     return 0
   } catch (error) {

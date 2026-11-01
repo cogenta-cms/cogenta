@@ -1,5 +1,17 @@
 # @cogenta/theme-blog
 
+## 0.7.1
+
+### Patch Changes
+
+- [#51](https://github.com/cogenta-cms/cogenta/pull/51) [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The Cogenta mark in the footer is drawn in the panel's foreground colour. The artwork is dark blue and the footer is an ink panel in both schemes, so in dark mode it was nearly invisible.
+
+- [#49](https://github.com/cogenta-cms/cogenta/pull/49) [`f8d694c`](https://github.com/cogenta-cms/cogenta/commit/f8d694c61833be5659ecd47bd65c915d9194c354) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A long channel name in the section bar ("Cloud & DevOps") no longer breaks over two or three lines on a phone; the bar scrolls sideways instead, as designed.
+- Updated dependencies []:
+  - @cogenta/blocks@1.2.3
+  - @cogenta/render@0.6.4
+  - @cogenta/theme-kit@0.9.1
+
 ## 0.7.0
 
 ### Minor Changes

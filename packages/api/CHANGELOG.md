@@ -1,5 +1,26 @@
 # @cogenta/api
 
+## 2.14.0
+
+### Minor Changes
+
+- [#58](https://github.com/cogenta-cms/cogenta/pull/58) [`61455df`](https://github.com/cogenta-cms/cogenta/commit/61455dfd9a5808b3cdb2dba557d2923c29c8e9c1) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `GET /api/content/-/by-path` answers an address with a wrong or missing category segment (`schema@2.5`) with a 301 to the canonical one instead of a second 200, looks the entry up by its other route parameters, and the preview link and the SEO router name the canonical address. `ContentServiceOptions.routing`, `RestRouterOptions` and `SeoRouterOptions` take `terms`.
+
+### Patch Changes
+
+- Updated dependencies [[`61455df`](https://github.com/cogenta-cms/cogenta/commit/61455dfd9a5808b3cdb2dba557d2923c29c8e9c1), [`61455df`](https://github.com/cogenta-cms/cogenta/commit/61455dfd9a5808b3cdb2dba557d2923c29c8e9c1), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`46609d7`](https://github.com/cogenta-cms/cogenta/commit/46609d7bd77f08332a8c8e04f9ff0caafcfca290), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10)]:
+  - @cogenta/schema@0.13.0
+  - @cogenta/seo@0.5.0
+  - @cogenta/core@0.14.3
+  - @cogenta/auth@0.7.2
+  - @cogenta/blocks@1.2.3
+  - @cogenta/export@0.3.4
+  - @cogenta/widgets@0.2.11
+  - @cogenta/analytics@0.3.12
+  - @cogenta/channels@0.3.20
+  - @cogenta/forms@0.2.20
+  - @cogenta/mcp@0.3.18
+
 ## 2.13.1
 
 ### Patch Changes

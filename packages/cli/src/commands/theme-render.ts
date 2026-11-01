@@ -1096,6 +1096,18 @@ function collectRichTextAssets(blocks: readonly VocabularyBlock[]): RichTextAsse
   const media = new Set<string>()
   const links: { collection: string; id: string }[] = []
   for (const block of blocks) {
+    // A `hero` or `cta` action may target an entry rather than a URL
+    // (contract B, "Actions") — the form that survives a slug or category
+    // change. `link()` cannot fetch it once rendering starts, so it is
+    // gathered here with the rich-text links; otherwise it rendered as `#`.
+    if (block._type === 'hero' || block._type === 'cta') {
+      for (const action of block.actions ?? []) {
+        if ('collection' in action.target) {
+          links.push({ collection: action.target.collection, id: action.target.id })
+        }
+      }
+      continue
+    }
     if (block._type !== 'prose') continue
     const refs = richTextRefs(block.body)
     for (const id of refs.media) media.add(id)

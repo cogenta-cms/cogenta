@@ -4,6 +4,8 @@ import {
   type CollectionDefinition,
   type ContentEntry,
   isOptionalRouteParam,
+  type TermSlugs,
+  termSegmentsOf,
 } from '@cogenta/schema'
 import type { SeoResource, SeoSite } from './types.js'
 
@@ -138,4 +140,21 @@ export function canonicalUrl(site: SeoSite, resource: SeoResource): string | nul
   }
 
   return absoluteUrl(site, path)
+}
+
+/**
+ * An entry and its collection as the SEO layer reads them, with the category
+ * segment of its URL resolved (`schema@2.5`). Every place that builds a
+ * `SeoResource` for a routed entry goes through this, so a canonical URL, a
+ * sitemap line and an `hreflang` alternate cannot disagree about the address.
+ */
+export async function seoResourceOf<TEntry extends ContentEntry>(
+  collection: CollectionDefinition,
+  entry: TEntry,
+  terms: TermSlugs | undefined,
+): Promise<SeoResource<TEntry>> {
+  const categories = await termSegmentsOf(collection, entry, terms)
+  return Object.keys(categories).length === 0
+    ? { collection, entry }
+    : { collection, entry, categories }
 }

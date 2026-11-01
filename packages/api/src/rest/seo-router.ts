@@ -1,5 +1,5 @@
 import { CogentaError, isCogentaError } from '@cogenta/core'
-import type { CollectionDefinition, ContentEntry } from '@cogenta/schema'
+import type { CollectionDefinition, ContentEntry, TermSlugs } from '@cogenta/schema'
 import { titleOf } from '@cogenta/schema'
 import {
   analyseInternalLinks,
@@ -17,6 +17,7 @@ import {
   type SeoImage,
   type SeoResource,
   type SeoSite,
+  seoResourceOf,
 } from '@cogenta/seo'
 import type { ContentGateway } from '../graphql/gateway.js'
 import type { AccessContext, PermissionLayer } from '../types.js'
@@ -88,6 +89,8 @@ export interface SeoRouterOptions {
   readonly basePath?: string
   /** How many entries a diagnostic scan reads per collection before it stops counting. */
   readonly maxScanPerCollection?: number
+  /** Where the slug of a category segment's term comes from (`schema@2.5`), so every URL here names the canonical address. */
+  readonly terms?: TermSlugs
 }
 
 export interface SeoRouter {
@@ -362,7 +365,7 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
       ...stored,
       values: { ...stored.values, ...((overrides as Record<string, unknown> | undefined) ?? {}) },
     }
-    const resource: SeoResource = { collection, entry }
+    const resource: SeoResource = await seoResourceOf(collection, entry, options.terms)
     const tags = buildMetaTags(options.site, resource, await metadataOptions())
 
     const title = tagTitle(tags)
@@ -420,7 +423,9 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
           },
           context,
         )
-        for (const entry of page.items) resources.push({ collection, entry })
+        for (const entry of page.items) {
+          resources.push(await seoResourceOf(collection, entry, options.terms))
+        }
         read += page.items.length
 
         const next = page.nextCursor
@@ -469,7 +474,9 @@ export function createSeoRouter(options: SeoRouterOptions): SeoRouter {
           },
           context,
         )
-        for (const entry of page.items) resources.push({ collection, entry })
+        for (const entry of page.items) {
+          resources.push(await seoResourceOf(collection, entry, options.terms))
+        }
         read += page.items.length
 
         const next = page.nextCursor

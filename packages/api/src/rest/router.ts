@@ -1,6 +1,11 @@
 import type { BlockRegistry } from '@cogenta/blocks'
 import { CogentaError } from '@cogenta/core'
-import { buildPath, type CollectionDefinition } from '@cogenta/schema'
+import {
+  buildPath,
+  type CollectionDefinition,
+  routeParamsOf,
+  type TermSlugs,
+} from '@cogenta/schema'
 import { createPreviewTokens } from '../access/preview-token.js'
 import type { SerialisedEntry } from '../content/index.js'
 import type { AccessContext } from '../types.js'
@@ -89,6 +94,8 @@ export interface RestRouterOptions {
   readonly siteUrl?: string
   /** The locale the site serves without a prefix, so a preview link names the address a visitor requests. */
   readonly defaultLocale?: string
+  /** Where the slug of a category segment's term comes from (`schema@2.5`), so a preview link names the canonical address. */
+  readonly terms?: TermSlugs
 }
 
 export interface RestRouter {
@@ -491,7 +498,7 @@ export function createRestRouter(options: RestRouterOptions): RestRouter {
           entryId: id,
           expiresIn: PREVIEW_LINK_LIFETIME_SECONDS,
         })
-        const path = previewPath(definition, entry, options.defaultLocale)
+        const path = await previewPath(definition, entry, options.defaultLocale, options.terms)
         const query = `state=working&preview=${encodeURIComponent(token)}`
         const url =
           options.siteUrl === undefined || path === null
@@ -568,17 +575,15 @@ const PREVIEW_LINK_LIFETIME_SECONDS = 60 * 60
  * route at all (unrouted collections have nothing to preview *as a page*,
  * only the entry itself).
  */
-function previewPath(
+async function previewPath(
   collection: CollectionDefinition,
   entry: SerialisedEntry,
   defaultLocale: string | undefined,
-): string | null {
+  terms: TermSlugs | undefined,
+): Promise<string | null> {
   if (collection.routing === undefined) return null
 
-  const params: Record<string, string> = {}
-  for (const [key, value] of Object.entries(entry.values)) {
-    if (typeof value === 'string') params[key] = value
-  }
+  const params = await routeParamsOf(collection, entry, terms)
 
   return buildPath(
     collection,

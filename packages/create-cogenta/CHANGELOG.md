@@ -1,5 +1,22 @@
 # create-cogenta
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [[`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`61455df`](https://github.com/cogenta-cms/cogenta/commit/61455dfd9a5808b3cdb2dba557d2923c29c8e9c1), [`61455df`](https://github.com/cogenta-cms/cogenta/commit/61455dfd9a5808b3cdb2dba557d2923c29c8e9c1), [`61455df`](https://github.com/cogenta-cms/cogenta/commit/61455dfd9a5808b3cdb2dba557d2923c29c8e9c1), [`61455df`](https://github.com/cogenta-cms/cogenta/commit/61455dfd9a5808b3cdb2dba557d2923c29c8e9c1), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`46609d7`](https://github.com/cogenta-cms/cogenta/commit/46609d7bd77f08332a8c8e04f9ff0caafcfca290), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10)]:
+  - @cogenta/cli@0.23.0
+  - @cogenta/api@2.14.0
+  - @cogenta/schema@0.13.0
+  - @cogenta/starters@0.6.0
+  - @cogenta/core@0.14.3
+  - @cogenta/agents@0.11.3
+  - @cogenta/auth@0.7.2
+  - @cogenta/blocks@1.2.3
+  - @cogenta/comments@0.2.13
+  - @cogenta/render@0.6.4
+  - @cogenta/theme-canonical@1.4.4
+
 ## 0.8.0
 
 ### Minor Changes

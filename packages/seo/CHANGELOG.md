@@ -1,5 +1,17 @@
 # @cogenta/seo
 
+## 0.5.0
+
+### Minor Changes
+
+- [#58](https://github.com/cogenta-cms/cogenta/pull/58) [`61455df`](https://github.com/cogenta-cms/cogenta/commit/61455dfd9a5808b3cdb2dba557d2923c29c8e9c1) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `SeoResource` takes an optional `categories` map (the slug of the entry's category term, resolved by the caller) so the canonical URL, the sitemap and the hreflang alternates name the category segment of the address (`schema@2.5`); `seoResourceOf` builds a resource with it. `canonicalUrl` no longer refuses an entry that has no category.
+
+### Patch Changes
+
+- Updated dependencies [[`61455df`](https://github.com/cogenta-cms/cogenta/commit/61455dfd9a5808b3cdb2dba557d2923c29c8e9c1), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`46609d7`](https://github.com/cogenta-cms/cogenta/commit/46609d7bd77f08332a8c8e04f9ff0caafcfca290), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10)]:
+  - @cogenta/schema@0.13.0
+  - @cogenta/core@0.14.3
+
 ## 0.4.3
 
 ### Patch Changes

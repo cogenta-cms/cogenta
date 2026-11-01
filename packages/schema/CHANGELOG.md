@@ -1,5 +1,17 @@
 # @cogenta/schema
 
+## 0.13.0
+
+### Minor Changes
+
+- [#58](https://github.com/cogenta-cms/cogenta/pull/58) [`61455df`](https://github.com/cogenta-cms/cogenta/commit/61455dfd9a5808b3cdb2dba557d2923c29c8e9c1) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A route can carry the category of an entry (`schema@2.5`). A pattern parameter that names a single-valued `taxonomy` field — `/blog/:category/:slug` — is the slug of the assigned term, and is optional: `buildPath` leaves it out for an entry that has no term, `matchPath` accepts the address with and without it. New exports: `routeParamsOf`, `routeParamsFrom`, `termSegmentsOf`, `lookupParams`, `taxonomySegments`, `routeParameterNames`, `isOptionalRouteParam`, `createTermSlugResolver` (a short-lived, per-taxonomy copy of the term slugs, so a page of twelve cards costs one read) and `fixedTermSlugs`. `defineCollection` refuses a pattern naming a taxonomy field that takes several terms, and a route with two category segments. `withRedirectTracking` and `withLifecycleEvents` take the term slugs, and a published entry that changes category now gets the 301 from its old address, alone or together with a slug change. `resolveUrl` accepts `canonicalPath`, which turns a match on a non-canonical address into a 301. Two behaviours change for a route that already names a `taxonomy` field (no known site or model does): the address carries the term's slug instead of its id, and `defineCollection` refuses, at load time, a taxonomy field that takes several terms (the `f.taxonomy` default) or a second category segment.
+
+### Patch Changes
+
+- [#51](https://github.com/cogenta-cms/cogenta/pull/51) [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A NUL byte (`%00`) or another control character in a URL path is no longer a 500 on Postgres. `cogenta serve` answers 404 for a public path and 400 `QUERY_INVALID` for an API path before any lookup; `/_image?id=%00` is a 404; the content store (text filters and `locale`), the taxonomy store (`bySlug`) and the media store (`get`) answer "no row" for a value Postgres cannot hold instead of sending the statement.
+- Updated dependencies [[`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10), [`46609d7`](https://github.com/cogenta-cms/cogenta/commit/46609d7bd77f08332a8c8e04f9ff0caafcfca290), [`888ad6c`](https://github.com/cogenta-cms/cogenta/commit/888ad6cb175db45f122b31b06257857ee870ea10)]:
+  - @cogenta/core@0.14.3
+
 ## 0.12.0
 
 ### Minor Changes

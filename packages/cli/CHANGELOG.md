@@ -1,5 +1,11 @@
 # @cogenta/cli
 
+## 0.23.1
+
+### Patch Changes
+
+- [#60](https://github.com/cogenta-cms/cogenta/pull/60) [`4e912d3`](https://github.com/cogenta-cms/cogenta/commit/4e912d3f0664cf5ad86d0944effd930b38844932) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A `hero` or `cta` action that targets an entry (`{ collection, id }`) now links to that entry instead of rendering `#`.
+
 ## 0.23.0
 
 ### Minor Changes

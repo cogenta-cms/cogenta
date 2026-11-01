@@ -1,5 +1,12 @@
 # create-cogenta
 
+## 0.8.2
+
+### Patch Changes
+
+- Updated dependencies [[`4e912d3`](https://github.com/cogenta-cms/cogenta/commit/4e912d3f0664cf5ad86d0944effd930b38844932)]:
+  - @cogenta/cli@0.23.1
+
 ## 0.8.1
 
 ### Patch Changes

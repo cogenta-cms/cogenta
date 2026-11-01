@@ -1,5 +1,6 @@
 import { CogentaError } from '@cogenta/core'
 import type { CollectionDefinition } from '../types.js'
+import { taxonomySegments } from './route-terms.js'
 
 /**
  * Turning a URL into "which collection, which locale, which entry" and back.
@@ -86,11 +87,14 @@ export function buildPath(
     })
   }
 
-  const rendered = segmentsOf(routing.pattern).map((segment) => {
-    if (!segment.startsWith(':')) return segment
+  // A category segment (`schema@2.5`) is left out when the entry has no term.
+  const optional = taxonomySegments(collection)
+  const rendered = segmentsOf(routing.pattern).flatMap((segment) => {
+    if (!segment.startsWith(':')) return [segment]
 
     const name = segment.slice(1)
     const value = params[name]
+    if ((value === undefined || value.length === 0) && optional.has(name)) return []
     if (value === undefined || value.length === 0) {
       throw new CogentaError({
         code: 'CONTENT_ROUTE_INVALID',
@@ -99,7 +103,7 @@ export function buildPath(
         details: { collection: collection.name, pattern: routing.pattern, missing: name },
       })
     }
-    return encodeURIComponent(value)
+    return [encodeURIComponent(value)]
   })
 
   if (routing.locale === true) {
@@ -147,26 +151,56 @@ function matchCollection(
   const routing = collection.routing
   if (routing === undefined) return null
 
-  const pattern = segmentsOf(routing.pattern)
+  const patterns = patternVariants(collection, segmentsOf(routing.pattern))
 
   if (routing.locale !== true) {
-    const params = matchSegments(pattern, segments)
+    const params = matchAny(patterns, segments)
     return params === null ? null : { collection: collection.name, locale: null, params }
   }
 
   const prefix = segments[0]
   if (prefix !== undefined && isLocale(prefix, options)) {
-    const params = matchSegments(pattern, segments.slice(1))
+    const params = matchAny(patterns, segments.slice(1))
     if (params !== null) return { collection: collection.name, locale: prefix, params }
   }
 
   // No prefix: only a site that serves a default locale unprefixed can answer.
   if (options.defaultLocale === undefined) return null
 
-  const params = matchSegments(pattern, segments)
+  const params = matchAny(patterns, segments)
   return params === null
     ? null
     : { collection: collection.name, locale: options.defaultLocale, params }
+}
+
+/**
+ * The shapes a pattern answers to: the full pattern, then — when it carries a
+ * category segment (`schema@2.5`) — the same pattern without it, so an entry
+ * with no category and every address minted before the segment existed still
+ * resolve. The full shape is tried first, and the two have different lengths, so
+ * a path can only ever match one of them.
+ */
+function patternVariants(
+  collection: CollectionDefinition,
+  pattern: readonly string[],
+): readonly (readonly string[])[] {
+  const optional = taxonomySegments(collection)
+  if (optional.size === 0) return [pattern]
+  const without = pattern.filter(
+    (segment) => !(segment.startsWith(':') && optional.has(segment.slice(1))),
+  )
+  return [pattern, without]
+}
+
+function matchAny(
+  patterns: readonly (readonly string[])[],
+  segments: readonly string[],
+): Record<string, string> | null {
+  for (const pattern of patterns) {
+    const params = matchSegments(pattern, segments)
+    if (params !== null) return params
+  }
+  return null
 }
 
 function matchSegments(

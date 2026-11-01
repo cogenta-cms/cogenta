@@ -1,5 +1,6 @@
 import { type SchemaIssue, schemaError } from './errors.js'
 import { MEDIA_ACCEPT_KINDS } from './fields.js'
+import { taxonomySegments } from './routing/route-terms.js'
 import { isSystemFieldName } from './system-fields.js'
 import {
   CONTENT_ACTIONS,
@@ -279,10 +280,28 @@ function checkRouting(
     if (parameter === undefined) continue
     // `:locale` is served by the system field of the same name; anything else
     // has to come from a declared field, or the route can never be built.
-    if (parameter === 'locale' || fieldNames.includes(parameter)) continue
+    if (parameter === 'locale' || fieldNames.includes(parameter)) {
+      const field = definition.fields[parameter]
+      // A category segment (`schema@2.5`) is the slug of the one term an entry
+      // is in. An entry in several terms has no single category to name.
+      if (field?.kind === 'taxonomy' && field.options.many !== false) {
+        issues.push({
+          path: 'routing.pattern',
+          message: `":${parameter}" is a taxonomy field that takes several terms, and a URL cannot name several categories`,
+        })
+      }
+      continue
+    }
     issues.push({
       path: 'routing.pattern',
       message: `":${parameter}" does not match any field of this collection`,
+    })
+  }
+
+  if (taxonomySegments(definition).size > 1) {
+    issues.push({
+      path: 'routing.pattern',
+      message: 'a route can carry at most one category segment (one single-valued taxonomy field)',
     })
   }
 }

@@ -3,9 +3,12 @@ import type { MediaAsset } from '@cogenta/render'
 import {
   buildPath,
   type CollectionDefinition,
+  isOptionalRouteParam,
   MIN_TOKEN_LENGTH,
   queryTokens,
+  routeParamsOf,
   type SearchHit,
+  type TermSlugs,
 } from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
 import type { WidgetAreas } from '@cogenta/theme-kit'
@@ -51,6 +54,8 @@ export interface SearchPageOptions {
   }
   /** The joined skin+theme stylesheet `cogenta serve` serves at `STYLESHEET_PATH` (`theme-render.ts`'s `joinStyles`). `null` when neither could be loaded — served unstyled rather than refused. */
   readonly styles: string | null
+  /** The slug of a term, for the category segment of an entry's address (`schema@2.5`). */
+  readonly terms?: TermSlugs
   /** Same menu wiring the rest of the public site uses (`theme-render.ts`). Absent renders an empty header/footer nav. */
   readonly menus?: PageChromeMenus
   /** Same live branding read the rest of the public site uses (`theme-render.ts`). Absent means full Cogenta credit. */
@@ -113,15 +118,16 @@ async function resolveHits(
     const entry = await options.gateway.read(hit.collection, hit.id, context)
     if (collection.routing !== undefined) {
       if (entry !== null) {
-        const params = Object.fromEntries(
-          Object.entries(entry.values).filter(
-            (pair): pair is [string, string] => typeof pair[1] === 'string',
-          ),
-        )
+        const params = await routeParamsOf(collection, entry, options.terms)
         const complete = collection.routing.pattern
           .split('/')
           .filter((segment) => segment.startsWith(':'))
-          .every((segment) => params[segment.slice(1)] !== undefined || segment === ':id')
+          .every(
+            (segment) =>
+              params[segment.slice(1)] !== undefined ||
+              segment === ':id' ||
+              isOptionalRouteParam(collection, segment.slice(1)),
+          )
         if (complete) {
           href = buildPath(
             collection,

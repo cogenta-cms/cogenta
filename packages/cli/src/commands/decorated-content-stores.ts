@@ -6,6 +6,7 @@ import {
   createContentStore,
   type RedirectStore,
   type SearchDriver,
+  type TermSlugs,
   withLifecycleEvents,
   withReadOnlyStore,
   withRedirectTracking,
@@ -20,6 +21,8 @@ export interface DecoratedContentStoreOptions {
   readonly defaultLocale: string
   readonly logger: Logger
   readonly readOnly?: boolean
+  /** Where the slug of a category segment's term comes from (`schema@2.5`). */
+  readonly terms?: TermSlugs
   readonly redirects: RedirectStore
   readonly scheduledPublishQueue: QueueDriver
   readonly searchIndex: SearchDriver
@@ -49,6 +52,7 @@ export function createDecoratedContentStores(options: DecoratedContentStoreOptio
       collection,
       redirects: options.redirects,
       defaultLocale: options.defaultLocale,
+      ...(options.terms === undefined ? {} : { terms: options.terms }),
       onError: failure('redirect tracking failed'),
     })
     const scheduled = withScheduledPublishEnqueue(tracked, {
@@ -75,6 +79,7 @@ export function createDecoratedContentStores(options: DecoratedContentStoreOptio
         : withLifecycleEvents(vectorIndexed, {
             collection,
             defaultLocale: options.defaultLocale,
+            ...(options.terms === undefined ? {} : { terms: options.terms }),
             emit: options.onContentEvent,
             onError: failure('content webhook emit failed'),
           })

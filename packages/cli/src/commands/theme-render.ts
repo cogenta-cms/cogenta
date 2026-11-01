@@ -28,11 +28,16 @@ import {
   type CollectionDefinition,
   type ContentEntry,
   isSafeMenuUrl,
+  lookupParams,
   matchPath,
   pruneEmptyBlockData,
   relationsOf,
+  routeParamsFrom,
+  routeParamsOf,
+  type TermSlugs,
+  termSegmentsOf,
 } from '@cogenta/schema'
-import type { SeoImage } from '@cogenta/seo'
+import { type SeoImage, seoResourceOf } from '@cogenta/seo'
 import {
   type ChromeBrand,
   type ChromeInput,
@@ -241,6 +246,13 @@ export interface ThemeRenderOptions {
   readonly widgets?: (request: WidgetRenderRequest) => Promise<WidgetAreas>
   readonly collections: readonly CollectionDefinition[]
   readonly gateway: ContentGateway
+  /**
+   * The slug of a term, for the category segment of an entry's address
+   * (`schema@2.5`): `/blog/devops/hello`, where `devops` is the slug of the
+   * term the entry is filed under. Absent, no address carries a category —
+   * which is also the address of an entry that has none.
+   */
+  readonly terms?: TermSlugs
   readonly site: {
     readonly name: string
     readonly url: string
@@ -871,13 +883,13 @@ function listLocale(
  * language front door to fall back to, so a language with no translation of
  * this page is left out rather than linked to a page in another language.
  */
-function languagesFor(
+async function languagesFor(
   collection: CollectionDefinition,
   entry: ContentEntry,
   family: readonly ContentEntry[],
-  options: Pick<ThemeRenderOptions, 'collections' | 'site'>,
+  options: Pick<ThemeRenderOptions, 'collections' | 'site' | 'terms'>,
   atHome: boolean,
-): readonly ChromeLanguage[] {
+): Promise<readonly ChromeLanguage[]> {
   if (options.site.locales.length < 2) return []
   const localized = hasLocalizedRoutes(options)
   const languages: ChromeLanguage[] = []
@@ -889,11 +901,7 @@ function languagesFor(
       try {
         href = buildPath(
           collection,
-          Object.fromEntries(
-            Object.entries(member.values).filter(
-              (pair): pair is [string, string] => typeof pair[1] === 'string',
-            ),
-          ),
+          await routeParamsOf(collection, member, options.terms),
           member.locale ?? undefined,
           { defaultLocale: options.site.defaultLocale },
         )
@@ -1521,11 +1529,15 @@ export async function resolveEntry(
   const collection = options.collections.find((entry) => entry.name === match.collection)
   if (collection === undefined) return null
 
-  const conditions = Object.entries(match.params).map(([field, value]) => ({
-    field,
-    operator: 'eq' as const,
-    value,
-  }))
+  // The category segment is a claim about where the entry lives, not a field
+  // to find it by: the address is compared with the canonical one afterwards.
+  const conditions = Object.entries(lookupParams(collection, match.params)).map(
+    ([field, value]) => ({
+      field,
+      operator: 'eq' as const,
+      value,
+    }),
+  )
   const filter: Filter | undefined =
     conditions.length === 1
       ? conditions[0]
@@ -1590,11 +1602,7 @@ async function canonicalPathOf(
   try {
     path = buildPath(
       collection,
-      Object.fromEntries(
-        Object.entries(entry.values).filter(
-          (pair): pair is [string, string] => typeof pair[1] === 'string',
-        ),
-      ),
+      await routeParamsOf(collection, entry, options.terms),
       entry.locale ?? undefined,
       { defaultLocale: options.site.defaultLocale },
     )
@@ -1691,11 +1699,7 @@ export async function renderDraftPage(
   // from this one string.
   const pathname = buildPath(
     collection,
-    Object.fromEntries(
-      Object.entries(entry.values).filter(
-        (pair): pair is [string, string] => typeof pair[1] === 'string',
-      ),
-    ),
+    await routeParamsOf(collection, entry, options.terms),
     entry.locale ?? undefined,
     { defaultLocale: options.site.defaultLocale },
   )
@@ -2088,6 +2092,15 @@ async function renderEntryPage(
     options.embedPreviews.refreshInBackground?.(embedUrls)
   }
 
+  // Each known entry's category segment, resolved here because `link()` below
+  // is synchronous (contract D) and a term's slug is a lookup.
+  const categoriesById = new Map<string, Readonly<Record<string, string>>>()
+  for (const [id, found] of knownEntries) {
+    const owner = collectionsByName.get(entryCollections.get(id) ?? collection.name)
+    if (owner === undefined) continue
+    categoriesById.set(id, await termSegmentsOf(owner, found, options.terms))
+  }
+
   const link = (target: LinkTargetInput): string => {
     if (typeof target === 'string') return target
     if ('path' in target) return target.path
@@ -2103,11 +2116,7 @@ async function renderEntryPage(
     try {
       return buildPath(
         targetCollection,
-        Object.fromEntries(
-          Object.entries(found.values).filter(
-            (pair): pair is [string, string] => typeof pair[1] === 'string',
-          ),
-        ),
+        routeParamsFrom(targetCollection, found, categoriesById.get(found.id) ?? {}),
         found.locale ?? undefined,
         { defaultLocale: options.site.defaultLocale },
       )
@@ -2167,7 +2176,10 @@ async function renderEntryPage(
           defaultLocale: options.site.defaultLocale,
         })
         if (match === null) return null
-        const conditions = Object.entries(match.params).map(([field, value]) => ({
+        const target = options.collections.find((candidate) => candidate.name === match.collection)
+        const conditions = Object.entries(
+          target === undefined ? match.params : lookupParams(target, match.params),
+        ).map(([field, value]) => ({
           field,
           operator: 'eq' as const,
           value,
@@ -2397,7 +2409,7 @@ async function renderEntryPage(
   // The pruned entry here too: `og:image` and the JSON-LD `image` are derived
   // from the very fields the prune emptied, and a share card built from a
   // deleted asset is a broken share card.
-  const resource = { collection, entry: renderEntry }
+  const resource = await seoResourceOf(collection, renderEntry, options.terms)
   const family = await translationFamilyOf(
     collection,
     entry,
@@ -2405,8 +2417,8 @@ async function renderEntryPage(
     context,
     options.site.locales,
   )
-  const alternates = alternatesForEntry(seoSite, collection, entry, family)
-  const languages = languagesFor(collection, entry, family, options, await atHome())
+  const alternates = await alternatesForEntry(seoSite, collection, entry, family, options.terms)
+  const languages = await languagesFor(collection, entry, family, options, await atHome())
   // `og:image` and JSON-LD's `image` come from the same assets the page just
   // rendered, resolved to an absolute URL — a social crawler never sends a
   // session and never follows a relative path.
@@ -2433,7 +2445,10 @@ async function renderEntryPage(
   // the entry with those fields removed — the title and the dates stay, being
   // public by design.
   const lockedResource = locked
-    ? { collection, entry: { ...renderEntry, values: publicValuesOf(collection, renderEntry) } }
+    ? {
+        ...resource,
+        entry: { ...renderEntry, values: publicValuesOf(collection, renderEntry) },
+      }
     : resource
 
   // `head` already carries a real `<title>` (`renderSeoHead`, above) — no

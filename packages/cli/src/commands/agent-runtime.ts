@@ -81,7 +81,13 @@ import type {
 import type { AuditLog } from '@cogenta/auth'
 import { CogentaError, type Logger, type MediaStore } from '@cogenta/core'
 import { buildMcpToolDefinitions, type McpConnectionStore } from '@cogenta/mcp'
-import { buildPath, type CollectionDefinition, type SiteSettingsStore } from '@cogenta/schema'
+import {
+  buildPath,
+  type CollectionDefinition,
+  routeParamsOf,
+  type SiteSettingsStore,
+  type TermSlugs,
+} from '@cogenta/schema'
 
 /**
  * L22 tasks 1/1bis — where the runtime `@cogenta/agents` provides finally
@@ -148,6 +154,8 @@ export interface BuildAgentRuntimeOptions {
     readonly defaultLocale: string
   }
   readonly contentService: ContentService
+  /** The slug of a term, for the category segment of an entry's address (`schema@2.5`). */
+  readonly terms?: TermSlugs
   readonly mediaStore: MediaStore
   /**
    * L5 task 10 — the moderation queue and the audience figures, as ports
@@ -372,20 +380,19 @@ function contentBrowseServiceLikeOf(
   service: ContentService,
   collections: readonly CollectionDefinition[],
   defaultLocale: string,
+  terms: TermSlugs | undefined,
 ): ContentBrowseServiceLike {
   const byName = new Map(collections.map((collection) => [collection.name, collection]))
 
-  function pathOf(
+  async function pathOf(
     collection: CollectionDefinition,
     entry: { readonly values: Readonly<Record<string, unknown>>; readonly locale: string },
-  ): string | null {
+  ): Promise<string | null> {
     if (collection.routing === undefined) return null
-    const params: Record<string, string> = {}
-    for (const [key, value] of Object.entries(entry.values)) {
-      if (typeof value === 'string') params[key] = value
-    }
     try {
-      return buildPath(collection, params, entry.locale, { defaultLocale })
+      return buildPath(collection, await routeParamsOf(collection, entry, terms), entry.locale, {
+        defaultLocale,
+      })
     } catch {
       return null
     }
@@ -416,12 +423,14 @@ function contentBrowseServiceLikeOf(
         depth: 0,
       })
       return {
-        items: page.items.map((item) => ({
-          id: item.id,
-          title: titleOf(item.values),
-          path: pathOf(collection, { values: item.values, locale: item.locale }),
-          status: item.status,
-        })),
+        items: await Promise.all(
+          page.items.map(async (item) => ({
+            id: item.id,
+            title: titleOf(item.values),
+            path: await pathOf(collection, { values: item.values, locale: item.locale }),
+            status: item.status,
+          })),
+        ),
       }
     },
   }
@@ -517,6 +526,8 @@ function createLiveProviderRegistry(
 }
 
 function buildToolRegistry(options: {
+  /** The slug of a term, for the category segment of an entry's address (`schema@2.5`). */
+  readonly terms?: TermSlugs
   readonly siteUrl?: string
   /** The locale the site serves without a prefix, so a redirect target names the address a visitor requests. */
   readonly defaultLocale: string
@@ -594,6 +605,7 @@ function buildToolRegistry(options: {
     options.contentService,
     options.collections,
     options.defaultLocale,
+    options.terms,
   )
   const contentSchemaServiceLike = contentSchemaServiceLikeOf(
     options.contentService,
@@ -933,6 +945,7 @@ export async function buildAgentRuntime(
     defaultLocale: options.site.defaultLocale,
     ...(options.site.url === undefined ? {} : { siteUrl: options.site.url }),
     contentService: options.contentService,
+    ...(options.terms === undefined ? {} : { terms: options.terms }),
     mediaStore: options.mediaStore,
     projectRoot: options.projectRoot,
     collections: options.collections,

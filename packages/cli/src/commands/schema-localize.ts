@@ -14,6 +14,7 @@ import {
   type CollectionDefinition,
   type ContentEntry,
   createContentStore,
+  routeParamsFrom,
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
 import { loadCollections } from './serve.js'
@@ -180,13 +181,16 @@ development copy of the site, commit the file, deploy it, then add the printed
 redirects in the admin (Redirections). Nothing calls this command for you.
 `
 
-/** The params a route pattern reads: the entry's string values. */
-function routeParams(entry: ContentEntry): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(entry.values).filter(
-      (pair): pair is [string, string] => typeof pair[1] === 'string',
-    ),
-  )
+/**
+ * The params a route pattern reads: the entry's string values. A category
+ * segment (`schema@2.5`) is left out of both addresses compared here: it is
+ * the same before and after, and its term id must never be mistaken for it.
+ */
+function routeParams(
+  collection: CollectionDefinition,
+  entry: ContentEntry,
+): Record<string, string> {
+  return routeParamsFrom(collection, entry, {})
 }
 
 /**
@@ -225,7 +229,7 @@ async function movedAddresses(
         })
         for (const entry of page.items) {
           try {
-            const params = routeParams(entry)
+            const params = routeParams(collection, entry)
             const from = buildPath(collection, params)
             const to = buildPath(localised, params, locale, { defaultLocale: config.defaultLocale })
             if (from !== to) moved.push({ from, to })

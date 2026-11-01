@@ -1,6 +1,12 @@
 import type { AccessContext, ContentGateway } from '@cogenta/api'
 import { describeMedia, type MediaAsset } from '@cogenta/render'
-import { buildPath, type CollectionDefinition, type ContentEntry } from '@cogenta/schema'
+import {
+  buildPath,
+  type CollectionDefinition,
+  type ContentEntry,
+  routeParamsOf,
+  type TermSlugs,
+} from '@cogenta/schema'
 import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
 import type { WidgetAreas } from '@cogenta/theme-kit'
 import {
@@ -97,6 +103,8 @@ export interface TermArchivePageOptions {
     readonly defaultLocale: string
   }
   readonly styles: string | null
+  /** The slug of a term, for the category segment of an entry's address (`schema@2.5`). */
+  readonly terms?: TermSlugs
   readonly menus?: PageChromeMenus
   readonly branding?: () => Promise<BrandingSettings>
   readonly activeTheme?: () => Promise<string | null>
@@ -157,20 +165,17 @@ function summaryOf(collection: CollectionDefinition, entry: ContentEntry): strin
   return null
 }
 
-function hrefOf(
+async function hrefOf(
   collection: CollectionDefinition,
   entry: ContentEntry,
   defaultLocale: string,
-): string | null {
+  terms: TermSlugs | undefined,
+): Promise<string | null> {
   if (collection.routing === undefined) return null
   try {
     return buildPath(
       collection,
-      Object.fromEntries(
-        Object.entries(entry.values).filter(
-          (pair): pair is [string, string] => typeof pair[1] === 'string',
-        ),
-      ),
+      await routeParamsOf(collection, entry, terms),
       entry.locale ?? undefined,
       { defaultLocale },
     )
@@ -355,7 +360,7 @@ export async function renderTermArchivePage(
     if (entry === null) continue
     entries.push({
       title: entryTitle(entry),
-      href: hrefOf(collection, entry, options.site.defaultLocale),
+      href: await hrefOf(collection, entry, options.site.defaultLocale, options.terms),
       summary: summaryOf(collection, entry),
       collection: collection.name,
       publishedAt: entry.publishedAt ?? null,

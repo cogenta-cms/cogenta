@@ -338,6 +338,38 @@ describe('a page that is not simply public', () => {
     }
   }, 120_000)
 
+  it('throttles an address that names a new entry on every guess', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const attempt = (entry: string): Promise<Response> =>
+        fetch(`${server.base}/_cogenta/unlock`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ entry, password: 'guess', next: '/' }),
+          redirect: 'manual',
+        })
+
+      // Fresh ids each time — well-formed and not — so no per-entry budget is
+      // ever spent twice. Only the address-wide one can stop this.
+      let throttledAfter: number | null = null
+      for (let tries = 0; tries < 40; tries += 1) {
+        const entry = tries % 2 === 0 ? crypto.randomUUID() : `not-an-id-${tries}`
+        const response = await attempt(entry)
+        expect(response.status).toBe(303)
+        if (response.headers.get('location')?.includes('unlock=slow') === true) {
+          throttledAfter = tries
+          break
+        }
+        expect(response.headers.get('location')).toBe('/?unlock=failed')
+      }
+      expect(throttledAfter).not.toBeNull()
+      expect(throttledAfter).toBeLessThanOrEqual(30)
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
   it('records who changed a visibility, and who ran a replacement, in the audit log', async () => {
     const root = await project()
     await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])

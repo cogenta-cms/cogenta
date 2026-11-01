@@ -38,6 +38,18 @@ export const UNLOCK_WINDOW_MS = 10 * 60 * 1000
  * proxy (one address for everybody) one guesser locked every reader out.
  */
 export const UNLOCK_ATTEMPTS_PER_ENTRY_PER_WINDOW = 100
+/**
+ * One address across every entry, counted before anything else: the two
+ * budgets above are keyed by the entry id the request names, so without this
+ * one a caller could name a new id on every request, never run out, and leave
+ * two fresh counters behind each time.
+ */
+export const UNLOCK_ATTEMPTS_PER_ADDRESS_PER_WINDOW = 30
+
+/** Entry ids are UUIDs; anything else cannot name an entry and is answered as a wrong password. */
+export function isUnlockableEntryId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(value)
+}
 
 export interface PasswordFormStrings {
   readonly heading: string

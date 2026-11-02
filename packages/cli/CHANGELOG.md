@@ -1,5 +1,70 @@
 # @cogenta/cli
 
+## 0.23.2
+
+### Patch Changes
+
+- [#64](https://github.com/cogenta-cms/cogenta/pull/64) [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A second-factor sign-in ticket or passkey-registration ticket issued with an old password no longer survives a password reset, a voluntary password change, `cogenta users reset-password --token`, an account being disabled or anonymized: the new `AuthService.revokeSignInTickets(userId)` (and the standalone `revokeSignInTickets(db, userId)`) voids every ticket the account has in flight, so revoking the sessions can no longer be undone with a ticket and a valid code.
+
+- [#62](https://github.com/cogenta-cms/cogenta/pull/62) [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The in-process rate limiter no longer keeps every key it has ever seen: expired buckets are swept as it runs and the number of live buckets is capped (`maxKeys`, 100 000 by default). `POST /_cogenta/unlock` now spends an address-wide budget before any per-entry one and never creates a counter for an id that cannot name an entry, so naming a new entry on every guess no longer escapes the ceiling or grows memory.
+
+- [#64](https://github.com/cogenta-cms/cogenta/pull/64) [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta backup` no longer includes the `cogenta_auth_locks` table (the last-admin guard's seeded lock row): restoring it into a site that had already seeded its own failed with `RESTORE_CONFLICT`. Backups taken on earlier versions restore as before. `cogenta restore apply` now reminds you, when accounts are restored, that authenticator secrets are encrypted with `COGENTA_AUTH_SIGNING_KEY` and that `cogenta users reset-mfa` is the recovery under a different key.
+
+- [#64](https://github.com/cogenta-cms/cogenta/pull/64) [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - New operator command `cogenta users reset-mfa --email <address> [--passkeys]`: deletes the account's authenticator, any pending enrolment and its recovery codes without reading them (so it works after `COGENTA_AUTH_SIGNING_KEY` was rotated and the stored secrets no longer decrypt), signs the account out, voids its sign-in tickets and writes a `user.mfa_reset` audit entry. Passkeys are kept unless `--passkeys` is given. `CredentialStore` gains `removeWebAuthnCredentials(userId)`.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The audit entry for a failed sign-in keeps at most 254 characters of the attempted email.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `GET /api/plugins/blocks` and `GET /api/plugins/widgets` answer 401 to an anonymous request instead of listing what the site's plugins provide.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Content a plugin writes, publishes or trashes now goes through the site's own stores, so it reaches the search and vector indexes, redirect tracking and webhooks like an editor's change, and each write is recorded in the audit log as `plugin:<name>`.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A password-protected page no longer shows its approved comments or the comment form while locked, the "recent comments" widget skips comments on any page that is not public, and `POST /api/comments` answers 404 for a private page or a protected page the visitor has not opened.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` passes the visitor's unlock proof to the content layer per entry, so a protected page renders its content only after a valid unlock cookie for that very entry (a proof for one page never opens another, and a cookie never widens an API read), and a plugin's `content.read` no longer returns private or password-protected entries.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `cogenta serve` and `cogenta channels` give the agents' `redirects.create` a check for live pages, so an agent can no longer redirect a published page away from its visitors.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `@cogenta/import` now takes its SSRF guard from `@cogenta/core` (same exported names, same `IMPORT_MEDIA_URL_UNSAFE` error). `cogenta links check` reports links into private networks as "points into a private network and was not requested", and the plugin runtime uses the guarded `http.fetch` transport by default.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The agent `http.fetch` tool keeps the site's own configured origin (scheme, host and port, exactly) reachable even on a loopback or private address, through a new `trustedOrigins` option set from `config.site.url` by `cogenta serve`; every other non-public address is still refused. `resolvePublicTarget` and `fetchPublicOnce` gain an `allowPrivate` option for a caller that vouches for one exact URL.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - An unlock cookie stops opening a protected page as soon as the page's password changes, and a malformed cookie value no longer fails the request.
+
+- [#62](https://github.com/cogenta-cms/cogenta/pull/62) [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The theme sandbox, deploy, restore, version and delete routes now refuse a sandbox id, theme name or version that is not a plain directory name (`THEME_SANDBOX_PATH_ESCAPE`, 400). A body field such as `{"themeName": "../x"}` could previously make an admin request create, overwrite or delete a directory outside `themes/`.
+- Updated dependencies [[`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75)]:
+  - @cogenta/auth@0.7.3
+  - @cogenta/api@2.14.1
+  - @cogenta/core@0.14.4
+  - @cogenta/agents@0.11.4
+  - @cogenta/import@0.2.20
+  - @cogenta/plugins@0.9.4
+  - @cogenta/export@0.3.5
+  - @cogenta/channels@0.3.21
+  - @cogenta/comments@0.2.14
+  - @cogenta/schema@0.13.1
+  - @cogenta/starters@0.6.1
+  - @cogenta/agents-builtin@0.7.6
+  - @cogenta/analytics@0.3.13
+  - @cogenta/blocks@1.2.4
+  - @cogenta/commerce@0.5.16
+  - @cogenta/forms@0.2.21
+  - @cogenta/mcp@0.3.19
+  - @cogenta/observability@0.2.13
+  - @cogenta/render@0.6.5
+  - @cogenta/seo@0.5.1
+  - @cogenta/widgets@0.2.12
+  - @cogenta/theme-association@0.6.5
+  - @cogenta/theme-blog@0.7.2
+  - @cogenta/theme-canonical@1.4.5
+  - @cogenta/theme-docs@0.6.5
+  - @cogenta/theme-ecommerce@1.4.5
+  - @cogenta/theme-entreprise@1.5.5
+  - @cogenta/theme-kit@0.9.2
+  - @cogenta/theme-magazine@1.4.5
+  - @cogenta/theme-portfolio@1.4.5
+  - @cogenta/theme-restaurant@0.6.5
+  - @cogenta/theme-saas@0.6.5
+
 ## 0.23.1
 
 ### Patch Changes

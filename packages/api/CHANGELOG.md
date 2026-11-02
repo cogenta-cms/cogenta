@@ -1,5 +1,35 @@
 # @cogenta/api
 
+## 2.14.1
+
+### Patch Changes
+
+- [#64](https://github.com/cogenta-cms/cogenta/pull/64) [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - "At least one active admin" is now enforced atomically. `UserStore.setRoles`, `setStatus` and `anonymize` take an admin-guard lock and re-count the other active admins inside the same transaction as the write, so a bulk disable naming every admin, or two simultaneous changes, can no longer leave the site with nobody able to administer it (`FORBIDDEN` for the refused one); `POST /api/users/bulk` also applies its changes in order. The SQLite handle now tells a transaction nested in the caller's own from another caller's by async call chain rather than by a per-handle counter, so two requests on one handle no longer share a transaction (and its rollback). Adds the `cogenta_auth_locks` table.
+
+- [#64](https://github.com/cogenta-cms/cogenta/pull/64) [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A second-factor sign-in ticket or passkey-registration ticket issued with an old password no longer survives a password reset, a voluntary password change, `cogenta users reset-password --token`, an account being disabled or anonymized: the new `AuthService.revokeSignInTickets(userId)` (and the standalone `revokeSignInTickets(db, userId)`) voids every ticket the account has in flight, so revoking the sessions can no longer be undone with a ticket and a valid code.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `POST /api/auth/forgot-password` answers an address longer than 254 characters exactly as it answers an unknown one, without counting or storing it.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A password-protected entry no longer hands its content to anyone who asks the API. REST (direct read, list, URL lookup, expanded relations, history, translations) and GraphQL (direct, list and batched relation reads) now return only its listable metadata — title, slug and route fields, system fields — and no other value or block, for any actor who may not edit the collection and has not proved the password for that entry; a filter can no longer confirm a guess about a hidden field. A private published entry reached through a REST relation is now treated as absent in every state, as a direct read already did. `AccessContext` gains an optional `unlocked(entryId)` predicate for a host that has itself verified an unlock proof.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `GET /api/settings` returns, to a signed-in caller, the public settings, the few that shape the admin for every role, and the settings whose `writeRoles` the caller holds, instead of the whole registry. `updatedBy` (the internal id of the last editor) is only shown to those who may write the setting.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The unlock proof of a password-protected page carries a keyed marker of the stored password hash: `UnlockTokenService.issue` and `accepts` take the current marker (`stampOf(lockDigest)`), so a cookie earned with a password that has since been changed no longer opens the page. Cookies issued before this release are refused once.
+
+- [#62](https://github.com/cogenta-cms/cogenta/pull/62) [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The theme sandbox, deploy, restore, version and delete routes now refuse a sandbox id, theme name or version that is not a plain directory name (`THEME_SANDBOX_PATH_ESCAPE`, 400). A body field such as `{"themeName": "../x"}` could previously make an admin request create, overwrite or delete a directory outside `themes/`.
+- Updated dependencies [[`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78)]:
+  - @cogenta/auth@0.7.3
+  - @cogenta/core@0.14.4
+  - @cogenta/export@0.3.5
+  - @cogenta/channels@0.3.21
+  - @cogenta/schema@0.13.1
+  - @cogenta/analytics@0.3.13
+  - @cogenta/blocks@1.2.4
+  - @cogenta/forms@0.2.21
+  - @cogenta/mcp@0.3.19
+  - @cogenta/seo@0.5.1
+  - @cogenta/widgets@0.2.12
+
 ## 2.14.0
 
 ### Minor Changes

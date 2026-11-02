@@ -1,5 +1,14 @@
 # @cogenta/theme-blog
 
+## 0.7.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/blocks@1.2.4
+  - @cogenta/render@0.6.5
+  - @cogenta/theme-kit@0.9.2
+
 ## 0.7.1
 
 ### Patch Changes

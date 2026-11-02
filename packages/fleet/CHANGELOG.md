@@ -1,5 +1,16 @@
 # @cogenta/fleet
 
+## 0.1.27
+
+### Patch Changes
+
+- Updated dependencies [[`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78)]:
+  - @cogenta/auth@0.7.3
+  - @cogenta/core@0.14.4
+  - @cogenta/plugins@0.9.4
+  - @cogenta/channels@0.3.21
+  - @cogenta/agents-builtin@0.7.6
+
 ## 0.1.26
 
 ### Patch Changes

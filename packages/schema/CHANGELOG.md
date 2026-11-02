@@ -1,5 +1,13 @@
 # @cogenta/schema
 
+## 0.13.1
+
+### Patch Changes
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The link checker no longer probes the server's own network: an external link is resolved first, a loopback, private, link-local or otherwise non-public target is reported as the new `blocked_target` reason and never requested, redirects are followed by hand and judged hop by hop, requests go to the validated address, and response bodies are cancelled unread. `checkLinks` gains `allowPrivateTargets` (off by default, for tests or a development site only).
+- Updated dependencies [[`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78)]:
+  - @cogenta/core@0.14.4
+
 ## 0.13.0
 
 ### Minor Changes

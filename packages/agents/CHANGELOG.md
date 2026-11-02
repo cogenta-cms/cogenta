@@ -1,5 +1,22 @@
 # @cogenta/agents
 
+## 0.11.4
+
+### Patch Changes
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The `http.fetch` tool reads at most about 400 KB of a response and cancels the transfer there, applies a body timeout, and stops when the run is cancelled, instead of loading the whole body before truncating it to 100 000 characters.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `redirects.create` accepts an `isLivePath` check and refuses (`REDIRECT_FROM_LIVE_PATH`) to redirect a path where a published page answers, since a redirect is applied before routing and would take the page down.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The agent `http.fetch` tool and the plugin `http.fetch` capability now resolve the host, refuse loopback, private, link-local and other non-public addresses, and connect to the address they checked, so a granted or allowed host name no longer reaches the internal network. No configuration option for internal hosts exists, so there is no opt-in: private targets are always refused. A site served only from a private address (for example a development site on localhost) can therefore no longer be fetched by the agent tool.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The agent `http.fetch` tool keeps the site's own configured origin (scheme, host and port, exactly) reachable even on a loopback or private address, through a new `trustedOrigins` option set from `config.site.url` by `cogenta serve`; every other non-public address is still refused. `resolvePublicTarget` and `fetchPublicOnce` gain an `allowPrivate` option for a caller that vouches for one exact URL.
+- Updated dependencies [[`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78)]:
+  - @cogenta/core@0.14.4
+  - @cogenta/schema@0.13.1
+  - @cogenta/blocks@1.2.4
+  - @cogenta/render@0.6.5
+
 ## 0.11.3
 
 ### Patch Changes

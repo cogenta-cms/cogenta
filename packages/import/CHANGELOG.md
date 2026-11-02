@@ -1,5 +1,23 @@
 # @cogenta/import
 
+## 0.2.20
+
+### Patch Changes
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The WordPress media download now enforces its 50 MiB limit while the body streams (and cancels the transfer there) instead of after the whole file was in memory, and its per-file timeout keeps running until the body is fully read rather than being cleared when the headers arrive.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The WordPress XML reader reads an out-of-range numeric character reference as U+FFFD instead of throwing a `RangeError`, and refuses a document nested more than 256 levels deep with `IMPORT_WXR_PARSE_FAILED` instead of overflowing the stack.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - `@cogenta/import` now takes its SSRF guard from `@cogenta/core` (same exported names, same `IMPORT_MEDIA_URL_UNSAFE` error). `cogenta links check` reports links into private networks as "points into a private network and was not requested", and the plugin runtime uses the guarded `http.fetch` transport by default.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The WordPress import's SSRF guard now classifies IPv4 and IPv6 addresses by their bytes against explicit ranges (loopback, private, carrier-grade NAT, link-local `fe80::/10`, unique-local, site-local, multicast, unspecified, documentation and benchmarking blocks, IPv4-mapped, NAT64 and 6to4 judged by their embedded IPv4 address) instead of text prefixes, and connects to the address it validated (`resolvePublicTarget` + `createPinnedFetch`, keeping the original host name for `Host`, SNI and certificate checks) so a DNS answer that changes between the check and the connection no longer bypasses it. Every redirect hop is re-resolved and re-pinned.
+- Updated dependencies [[`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78)]:
+  - @cogenta/auth@0.7.3
+  - @cogenta/core@0.14.4
+  - @cogenta/comments@0.2.14
+  - @cogenta/schema@0.13.1
+  - @cogenta/blocks@1.2.4
+
 ## 0.2.19
 
 ### Patch Changes

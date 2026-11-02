@@ -37,28 +37,26 @@ export interface UnlockTokenOptions {
 
 export interface UnlockTokenService {
   /**
-   * `passwordVersion` is `versionOf` the stored password hash of the entry at
+   * `lockStamp` is `stampOf` the stored password hash of the entry at
    * the moment it was answered: changing the password changes the version, so
    * a proof earned with the old one stops opening the page.
    */
-  issue(entryId: string, passwordVersion: string): string
+  issue(entryId: string, lockStamp: string): string
   /**
    * A short, stable marker of one stored password hash. It is keyed with the
    * signing key and truncated, so the cookie that carries it reveals nothing
    * about the hash it stands for.
    */
-  versionOf(passwordHash: string): string
+  stampOf(lockDigest: string): string
   /** `false` for anything that is not a valid, unexpired token for this entry and password. Never throws. */
-  accepts(entryId: string, token: string | undefined, passwordVersion: string): boolean
+  accepts(entryId: string, token: string | undefined, lockStamp: string): boolean
   /**
    * What a signed, unexpired token claims — the entry it was issued for and
    * the password version it was issued under — so a caller can look up the
    * current version of *that* entry and then ask `accepts`. `null` for
    * anything else. The claim is not a grant: only `accepts` is.
    */
-  claims(
-    token: string | undefined,
-  ): { readonly entryId: string; readonly passwordVersion: string } | null
+  claims(token: string | undefined): { readonly entryId: string; readonly lockStamp: string } | null
   /**
    * The cookie this entry's proof travels in.
    *
@@ -73,7 +71,7 @@ export interface UnlockTokenService {
 interface UnlockPayload {
   readonly v: string
   readonly entryId: string
-  readonly pw: string
+  readonly ls: string
   readonly expiresAt: number
 }
 
@@ -87,9 +85,9 @@ export function createUnlockTokens(options: UnlockTokenOptions): UnlockTokenServ
   const sign = (encoded: string): string =>
     createHmac('sha256', options.signingKey).update(`${TOKEN_VERSION}.${encoded}`).digest('hex')
 
-  const versionOf = (passwordHash: string): string =>
+  const stampOf = (lockDigest: string): string =>
     createHmac('sha256', options.signingKey)
-      .update(`${TOKEN_VERSION}.password.${passwordHash}`)
+      .update(`${TOKEN_VERSION}.lock.${lockDigest}`)
       .digest('hex')
       .slice(0, 16)
 
@@ -115,7 +113,7 @@ export function createUnlockTokens(options: UnlockTokenOptions): UnlockTokenServ
       return null
     }
     if (payload.v !== TOKEN_VERSION) return null
-    if (typeof payload.entryId !== 'string' || typeof payload.pw !== 'string') return null
+    if (typeof payload.entryId !== 'string' || typeof payload.ls !== 'string') return null
     if (typeof payload.expiresAt !== 'number' || payload.expiresAt <= now()) return null
     return payload
   }
@@ -124,13 +122,13 @@ export function createUnlockTokens(options: UnlockTokenOptions): UnlockTokenServ
     cookieName: (entryId) =>
       `cg_unlock_${createHash('sha256').update(entryId).digest('hex').slice(0, 16)}`,
 
-    versionOf,
+    stampOf,
 
-    issue: (entryId, passwordVersion) => {
+    issue: (entryId, lockStamp) => {
       const payload: UnlockPayload = {
         v: TOKEN_VERSION,
         entryId,
-        pw: passwordVersion,
+        ls: lockStamp,
         expiresAt: now() + lifetime * 1000,
       }
       const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
@@ -139,12 +137,12 @@ export function createUnlockTokens(options: UnlockTokenOptions): UnlockTokenServ
 
     claims: (token) => {
       const payload = verified(token)
-      return payload === null ? null : { entryId: payload.entryId, passwordVersion: payload.pw }
+      return payload === null ? null : { entryId: payload.entryId, lockStamp: payload.ls }
     },
 
-    accepts: (entryId, token, passwordVersion) => {
+    accepts: (entryId, token, lockStamp) => {
       const payload = verified(token)
-      return payload !== null && payload.entryId === entryId && payload.pw === passwordVersion
+      return payload !== null && payload.entryId === entryId && payload.ls === lockStamp
     },
   }
 }

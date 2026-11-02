@@ -44,7 +44,7 @@ describe('an unlock token', () => {
       JSON.stringify({
         v: 'unlock.v2',
         entryId: 'entry-b',
-        pw: PW,
+        ls: PW,
         expiresAt: Date.now() + 60_000,
       }),
       'utf8',
@@ -65,8 +65,8 @@ describe('an unlock token', () => {
 
   it('stops opening the entry once the password it was earned with has changed', () => {
     const tokens = createUnlockTokens({ signingKey: KEY })
-    const before = tokens.versionOf('scrypt$old-hash')
-    const after = tokens.versionOf('scrypt$new-hash')
+    const before = tokens.stampOf('scrypt$old-hash')
+    const after = tokens.stampOf('scrypt$new-hash')
     const token = tokens.issue('entry-a', before)
 
     expect(before).not.toBe(after)
@@ -76,13 +76,13 @@ describe('an unlock token', () => {
 
   it('carries a version that does not reveal the stored hash', () => {
     const tokens = createUnlockTokens({ signingKey: KEY })
-    const version = tokens.versionOf('scrypt$secret-hash-material')
+    const version = tokens.stampOf('scrypt$secret-hash-material')
 
     expect(version).toMatch(/^[0-9a-f]{16}$/u)
     expect(tokens.issue('entry-a', version)).not.toContain('secret-hash-material')
     // Keyed: another site derives another version from the same hash.
     expect(
-      createUnlockTokens({ signingKey: 'b'.repeat(48) }).versionOf('scrypt$secret-hash-material'),
+      createUnlockTokens({ signingKey: 'b'.repeat(48) }).stampOf('scrypt$secret-hash-material'),
     ).not.toBe(version)
   })
 
@@ -91,7 +91,7 @@ describe('an unlock token', () => {
 
     expect(tokens.claims(tokens.issue('entry-a', PW))).toEqual({
       entryId: 'entry-a',
-      passwordVersion: PW,
+      lockStamp: PW,
     })
     expect(tokens.claims('forged.payload')).toBeNull()
     expect(tokens.claims(undefined)).toBeNull()

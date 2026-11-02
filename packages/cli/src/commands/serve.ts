@@ -4068,7 +4068,7 @@ async function unlockEntry(
       let version: string | null = null
       const opened = await store.verifyEntryPassword(entryId, async (hash: string) => {
         const matches = await verifyPassword(password, hash)
-        if (matches) version = tokens.versionOf(hash)
+        if (matches) version = tokens.stampOf(hash)
         return matches
       })
       if (opened && version !== null) return version
@@ -4101,9 +4101,9 @@ async function cookieOpensEntry(
         .storeFor(collection)
         .verifyEntryPassword(
           entryId,
-          async (hash: string) => tokens.versionOf(hash) === claims.passwordVersion,
+          async (hash: string) => tokens.stampOf(hash) === claims.lockStamp,
         )
-      if (current) return tokens.accepts(entryId, token, claims.passwordVersion)
+      if (current) return tokens.accepts(entryId, token, claims.lockStamp)
     } catch {
       // Not this collection's entry.
     }

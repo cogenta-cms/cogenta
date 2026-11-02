@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash } from 'node:crypto'
 import { mkdtemp, open, readFile, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
@@ -8963,6 +8964,36 @@ export async function runServe(options: ServeOptions): Promise<number> {
     pluginStores.set(collectionName, store)
     return store
   }
+  // Marks the writes a plugin makes so that the event they raise is not handed
+  // back to plugins: a plugin that reacts to a publication by publishing
+  // another entry would otherwise answer its own writes for ever. Webhooks and
+  // every other listener still hear about the write.
+  const pluginWrites = new AsyncLocalStorage<true>()
+  /** The site's own store for a collection, for a plugin's writes; `null` for a name the site does not have. */
+  const pluginWriteStore = (collectionName: string): ContentStore | null => {
+    const collection = site.collections.find((item) => item.name === collectionName)
+    return collection === undefined ? null : site.storeFor(collection)
+  }
+  const auditPluginWrite = async (
+    plugin: string,
+    action: string,
+    target: {
+      readonly collection: string
+      readonly entryId: string
+      readonly diff?: Record<string, unknown>
+    },
+  ): Promise<void> => {
+    await site.auth.audit
+      .record({
+        actorId: `plugin:${plugin}`,
+        actorRoles: [],
+        action,
+        collection: target.collection,
+        entryId: target.entryId,
+        ...(target.diff === undefined ? {} : { diff: target.diff }),
+      })
+      .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+  }
   const pluginRuntime = loaded.config.plugins.enabled
     ? await createPluginRuntime({
         projectRoot,
@@ -8984,28 +9015,45 @@ export async function runServe(options: ServeOptions): Promise<number> {
         // A draft, never a publication: what a plugin writes stays invisible
         // until a human publishes it (L31 step 3). `state: 'working'` is the
         // same face the admin's own editor writes to.
-        writeDraft: async ({ collection: collectionName, id, values }) => {
-          const store = pluginContentStore(collectionName)
+        //
+        // Writes go through the site's own decorated stores, the ones the REST
+        // routes use: the search and vector indexes, redirect tracking, the
+        // scheduled-publication queue and the webhooks all see a plugin's
+        // write exactly as they see an editor's, and each write is audited
+        // under `plugin:<name>`.
+        writeDraft: async ({ collection: collectionName, id, values, plugin }) => {
+          const store = pluginWriteStore(collectionName)
           if (store === null) return null
-          if (id === undefined) {
-            const created = await store.create({ values })
-            return { id: created.id, status: created.status }
-          }
-          const updated = await store.update(id, { values })
-          return { id: updated.id, status: updated.status }
+          const written = await pluginWrites.run(true, () =>
+            id === undefined ? store.create({ values }) : store.update(id, { values }),
+          )
+          await auditPluginWrite(plugin, id === undefined ? 'content.create' : 'content.update', {
+            collection: collectionName,
+            entryId: written.id,
+            diff: values,
+          })
+          return { id: written.id, status: written.status }
         },
-        publishEntry: async (collectionName, id) => {
-          const store = pluginContentStore(collectionName)
+        publishEntry: async (collectionName, id, plugin) => {
+          const store = pluginWriteStore(collectionName)
           if (store === null) return null
-          const published = await store.publish(id)
+          const published = await pluginWrites.run(true, () => store.publish(id))
+          await auditPluginWrite(plugin, 'content.publish', {
+            collection: collectionName,
+            entryId: id,
+          })
           return { id: published.id, status: published.status }
         },
         // The trash, not a purge: reversible since schema@2.0 (ADR-0022),
         // which is exactly what makes this safe to hand a plugin at all.
-        trashEntry: async (collectionName, id) => {
-          const store = pluginContentStore(collectionName)
+        trashEntry: async (collectionName, id, plugin) => {
+          const store = pluginWriteStore(collectionName)
           if (store === null) return null
-          await store.delete(id)
+          await pluginWrites.run(true, () => store.delete(id))
+          await auditPluginWrite(plugin, 'content.delete', {
+            collection: collectionName,
+            entryId: id,
+          })
           return { id, trashed: true }
         },
         readSchema: async () =>
@@ -9178,7 +9226,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
   const contentEventSinks = [
     webhooks.emit,
     pluginRuntime !== null && pluginRuntime.subscribers > 0
-      ? pluginRuntime.dispatchContentEvent
+      ? async (event: ContentLifecycleEvent): Promise<void> => {
+          if (pluginWrites.getStore() === true) return
+          await pluginRuntime.dispatchContentEvent(event)
+        }
       : null,
   ].filter((sink): sink is (event: ContentLifecycleEvent) => Promise<void> => sink !== null)
   const onContentEvent =

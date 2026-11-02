@@ -4046,21 +4046,86 @@ function isStoredSocialLinkList(value: unknown): value is readonly StoredSocialL
  * an entry that is not protected at all — the caller must not be able to tell
  * those apart, and neither must a visitor.
  */
-async function unlockEntry(site: Site, entryId: string, password: string): Promise<boolean> {
-  if (entryId === '' || password === '') return false
+async function unlockEntry(
+  site: Site,
+  entryId: string,
+  password: string,
+  tokens: UnlockTokenService,
+): Promise<string | null> {
+  if (entryId === '' || password === '') return null
   for (const collection of site.collections) {
     const store = site.storeFor(collection)
     try {
-      const opened = await store.verifyEntryPassword(entryId, (hash: string) =>
-        verifyPassword(password, hash),
-      )
-      if (opened) return true
+      // The proof is bound to the password it was earned with: the version is
+      // taken from the very hash the answer was compared against, inside the
+      // store, so the hash itself never leaves it.
+      let version: string | null = null
+      const opened = await store.verifyEntryPassword(entryId, async (hash: string) => {
+        const matches = await verifyPassword(password, hash)
+        if (matches) version = tokens.versionOf(hash)
+        return matches
+      })
+      if (opened && version !== null) return version
     } catch {
       // A collection whose table does not hold this entry: not an error, just
       // the wrong place to look.
     }
   }
+  return null
+}
+
+/**
+ * Whether the cookies of a request still open `entryId`: the proof must be
+ * signed, unexpired, issued for this entry and — the part a signature alone
+ * cannot say — issued under the password the entry has *now*. A page whose
+ * password was changed stops honouring every earlier answer.
+ */
+async function cookieOpensEntry(
+  site: Site,
+  tokens: UnlockTokenService,
+  cookies: ReadonlyMap<string, string>,
+  entryId: string,
+): Promise<boolean> {
+  const token = cookies.get(tokens.cookieName(entryId))
+  const claims = tokens.claims(token)
+  if (claims === null || claims.entryId !== entryId) return false
+  for (const collection of site.collections) {
+    try {
+      const current = await site
+        .storeFor(collection)
+        .verifyEntryPassword(
+          entryId,
+          async (hash: string) => tokens.versionOf(hash) === claims.passwordVersion,
+        )
+      if (current) return tokens.accepts(entryId, token, claims.passwordVersion)
+    } catch {
+      // Not this collection's entry.
+    }
+  }
   return false
+}
+
+/** The most unlock cookies one request is asked to check — a page lists few. */
+const MAX_UNLOCK_COOKIES_CHECKED = 16
+
+/** Every entry whose unlock cookie in this request is still good. */
+async function unlockedEntryIds(
+  site: Site,
+  tokens: UnlockTokenService,
+  cookieHeader: string | undefined,
+): Promise<ReadonlySet<string>> {
+  const cookies = parseCookies(cookieHeader)
+  const open = new Set<string>()
+  let checked = 0
+  for (const [name, value] of cookies) {
+    if (!name.startsWith('cg_unlock_')) continue
+    if (checked >= MAX_UNLOCK_COOKIES_CHECKED) break
+    checked += 1
+    const claims = tokens.claims(value)
+    if (claims === null || open.has(claims.entryId)) continue
+    if (await cookieOpensEntry(site, tokens, cookies, claims.entryId)) open.add(claims.entryId)
+  }
+  return open
 }
 
 async function widgetsForSite(
@@ -5712,17 +5777,15 @@ export function createRequestListener(
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const unlockTokens = extras?.unlockTokens
+        const unlockedIds =
+          unlockTokens === undefined || req.method !== 'POST'
+            ? undefined
+            : await unlockedEntryIds(site, unlockTokens, req.headers.cookie)
         const request = {
           ...toCommentsRequest(req, url, body),
-          ...(unlockTokens === undefined
+          ...(unlockedIds === undefined
             ? {}
-            : {
-                unlocked: (entryId: string): boolean =>
-                  unlockTokens.accepts(
-                    entryId,
-                    parseCookies(req.headers.cookie).get(unlockTokens.cookieName(entryId)),
-                  ),
-              }),
+            : { unlocked: (entryId: string): boolean => unlockedIds.has(entryId) }),
         }
         const response = await site.commentsRouter.handle(request, context.actor)
         // The one shape besides JSON this router ever answers with: a 303
@@ -7882,8 +7945,10 @@ export function createRequestListener(
           }
         }
 
-        const opened = wellFormed && (await unlockEntry(site, entryId, password))
-        if (!opened) {
+        const version = wellFormed
+          ? await unlockEntry(site, entryId, password, extras.unlockTokens)
+          : null
+        if (version === null) {
           // The same answer whatever went wrong — wrong password, unknown
           // entry, an entry that is not protected at all: a different one
           // would tell a stranger which pages exist and which are locked.
@@ -7902,7 +7967,7 @@ export function createRequestListener(
           ?.reset(`unlock:${clientIpOf(req)}:${entryId}`, UNLOCK_WINDOW_MS)
           .catch(() => undefined)
 
-        const token = extras.unlockTokens.issue(entryId)
+        const token = extras.unlockTokens.issue(entryId, version)
         res.writeHead(303, {
           location: back,
           'cache-control': 'no-store',
@@ -8077,14 +8142,14 @@ export function createRequestListener(
         // shares the page with whoever it is forwarded to. The proof is
         // checked **per entry id** — a cookie earned on page A says nothing
         // about page B.
-        const unlockedByCookie =
+        const unlockedIds =
           extras?.unlockTokens === undefined
             ? undefined
-            : (entryId: string): boolean =>
-                extras.unlockTokens?.accepts(
-                  entryId,
-                  parseCookies(req.headers.cookie).get(extras.unlockTokens.cookieName(entryId)),
-                ) === true
+            : await unlockedEntryIds(site, extras.unlockTokens, req.headers.cookie)
+        const unlockedByCookie =
+          unlockedIds === undefined
+            ? undefined
+            : (entryId: string): boolean => unlockedIds.has(entryId)
         // The context the *page* reads content through: it carries the unlock
         // check down to the gateway, which is what hands a protected entry's
         // content to the renderer — and only for the entries that were

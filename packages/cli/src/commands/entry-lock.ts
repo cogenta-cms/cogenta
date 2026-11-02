@@ -152,7 +152,12 @@ export function parseCookies(header: string | undefined): ReadonlyMap<string, st
     if (at <= 0) continue
     const name = part.slice(0, at).trim()
     if (name === '') continue
-    found.set(name, decodeURIComponent(part.slice(at + 1).trim()))
+    try {
+      found.set(name, decodeURIComponent(part.slice(at + 1).trim()))
+    } catch {
+      // A malformed escape is a cookie we did not write: skip it rather than
+      // fail the whole request.
+    }
   }
   return found
 }

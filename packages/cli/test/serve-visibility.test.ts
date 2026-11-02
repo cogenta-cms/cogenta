@@ -258,6 +258,56 @@ describe('a page that is not simply public', () => {
     }
   }, 120_000)
 
+  it('stops honouring an unlock cookie once the page has a new password', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+      const id = await publish(server.base, token, 'Dossier de presse', 'dossier')
+      const protect = async (password: string): Promise<void> => {
+        const response = await fetch(`${server.base}/api/content/page/${id}/visibility`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ visibility: 'password', password }),
+        })
+        expect(response.status).toBe(200)
+      }
+      const unlock = async (password: string): Promise<string> => {
+        const opened = await fetch(`${server.base}/_cogenta/unlock`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ entry: id, password, next: '/dossier' }),
+          redirect: 'manual',
+        })
+        return (opened.headers.get('set-cookie') ?? '').split(';')[0] ?? ''
+      }
+
+      await protect('premier mot de passe')
+      const oldCookie = await unlock('premier mot de passe')
+      expect(
+        await (await fetch(`${server.base}/dossier`, { headers: { cookie: oldCookie } })).text(),
+      ).toContain('Le contenu secret.')
+
+      // The owner changes the password because the old one leaked.
+      await protect('second mot de passe')
+      const afterChange = await (
+        await fetch(`${server.base}/dossier`, { headers: { cookie: oldCookie } })
+      ).text()
+      expect(afterChange).not.toContain('Le contenu secret.')
+      expect(afterChange).toContain('cg-unlock__form')
+
+      // The new password opens it, with a fresh proof.
+      const newCookie = await unlock('second mot de passe')
+      expect(
+        await (await fetch(`${server.base}/dossier`, { headers: { cookie: newCookie } })).text(),
+      ).toContain('Le contenu secret.')
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
   it('keeps the comments of a protected page behind its password, in the page, the widget and the form', async () => {
     const root = await project()
     await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])

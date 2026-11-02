@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createZipWriter, openZip } from '@cogenta/export'
@@ -192,6 +192,45 @@ describe('cogenta serve — theme sandbox routes (fiche 73 tasks 4-8)', () => {
     }
     expect(deployBody.data.ok).toBe(true)
     expect(deployBody.data.previousVersionDirectory).toBeNull()
+  })
+
+  it('never deploys, restores or creates outside themes/ for a name that is a path', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    const token = await adminToken(root, server.base)
+    const headers = { 'content-type': 'application/json', authorization: `Bearer ${token}` }
+
+    await fetch(`${server.base}/api/theme/sandbox`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id: 'sbx-escape' }),
+    })
+    await writeSandboxFixture(root, 'sbx-escape')
+
+    const deploy = await fetch(`${server.base}/api/theme/sandbox/sbx-escape/deploy`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ themeName: '../escaped' }),
+    })
+    expect(deploy.status).toBe(400)
+    expect(((await deploy.json()) as { error: { code: string } }).error.code).toBe(
+      'THEME_SANDBOX_PATH_ESCAPE',
+    )
+    await expect(access(join(root, 'escaped'))).rejects.toThrow()
+
+    const created = await fetch(`${server.base}/api/theme/sandbox`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id: '../../outside' }),
+    })
+    expect(created.status).toBe(400)
+    await expect(access(join(root, 'outside'))).rejects.toThrow()
+
+    const restore = await fetch(
+      `${server.base}/api/theme/wired/versions/..%2F..%2F..%2Fcache/restore`,
+      { method: 'POST', headers },
+    )
+    expect(restore.status).toBe(400)
   })
 
   it('the check route reports a real refusal reason for an incomplete theme, without deploying it', async () => {

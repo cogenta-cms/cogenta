@@ -9,7 +9,7 @@ import {
   type StorageDriver,
   sniffImageFormat,
 } from '@cogenta/core'
-import { assertPublicUrl } from '../ssrf.js'
+import { createPinnedFetch, type PinnedFetch, resolvePublicTarget } from '../ssrf.js'
 
 export interface MediaDownloadFailure {
   readonly url: string
@@ -36,8 +36,14 @@ export interface DownloadAndStoreMediaOptions {
   readonly mediaStore: MediaStore
   readonly storage: StorageDriver
   readonly createdBy: string | null
-  /** Injected for tests — real `fetch` by default. */
+  /**
+   * Injected for tests — by default requests go through the address-pinned
+   * transport. A `fetchImpl` here is called with the validated URL and gets
+   * no pinning of its own.
+   */
   readonly fetchImpl?: typeof fetch
+  /** Injected for tests — replaces the address-pinned transport. Takes precedence over `fetchImpl`. */
+  readonly pinnedFetchImpl?: PinnedFetch
   /** Injected for tests — real `dns.lookup` by default. */
   readonly lookupImpl?: typeof lookup
   /** Time allowed per file, headers and body together. Defaults to 15 seconds. */
@@ -66,16 +72,20 @@ const MAX_REDIRECTS = 5
  */
 async function fetchPublic(
   url: string,
-  doFetch: typeof fetch,
+  fetchPinned: PinnedFetch,
   lookupImpl: typeof lookup,
   signal: AbortSignal,
 ): Promise<Response> {
   let current = url
   for (let hop = 0; ; hop++) {
-    await assertPublicUrl(current, { lookupImpl })
-    const response = await doFetch(current, { signal, redirect: 'manual' })
+    // Resolved and judged once; the connection below is made to this very
+    // address, so a DNS answer that changes in between changes nothing.
+    const target = await resolvePublicTarget(current, { lookupImpl })
+    const response = await fetchPinned(target, { signal })
     const location = response.headers.get('location')
     if (response.status < 300 || response.status >= 400 || location === null) return response
+    // The redirect response has no use for its body.
+    void response.body?.cancel().catch(() => undefined)
     if (hop >= MAX_REDIRECTS) throw new Error(`More than ${MAX_REDIRECTS} redirects.`)
     current = new URL(location, current).toString()
   }
@@ -132,7 +142,15 @@ export async function downloadAndStoreMedia(
   urls: readonly string[],
   options: DownloadAndStoreMediaOptions,
 ): Promise<MediaImportResult> {
-  const doFetch = options.fetchImpl ?? fetch
+  const fetchPinned: PinnedFetch =
+    options.pinnedFetchImpl ??
+    (options.fetchImpl === undefined
+      ? createPinnedFetch()
+      : (target, init) =>
+          (options.fetchImpl as typeof fetch)(target.url.toString(), {
+            signal: init.signal ?? null,
+            redirect: 'manual',
+          }))
   const urlToMediaId = new Map<string, string>()
   const imported: MediaAsset[] = []
   const failed: MediaDownloadFailure[] = []
@@ -156,7 +174,7 @@ export async function downloadAndStoreMedia(
     try {
       const response = await fetchPublic(
         url,
-        doFetch,
+        fetchPinned,
         options.lookupImpl ?? lookup,
         controller.signal,
       )

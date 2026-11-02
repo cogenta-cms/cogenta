@@ -5,6 +5,7 @@ import { createAuthService } from '../src/login.js'
 import { createSessionStore } from '../src/sessions.js'
 import { ensureAuthTables, TABLES } from '../src/tables.js'
 import { createUserStore } from '../src/users.js'
+import { TEST_SIGNING_KEY } from './helpers/db.js'
 import { codeFor } from './helpers/totp-code.js'
 
 export interface TotpStorageHarness {
@@ -84,7 +85,7 @@ export function runTotpStorageContract(
 
     it('keeps a pending secret beside the active factor and never over it', async () => {
       const userId = await account()
-      const credentials = createCredentialStore(db, now)
+      const credentials = createCredentialStore(db, now, { signingKey: TEST_SIGNING_KEY })
       await credentials.setTotpSecret(userId, SECRET)
       await credentials.confirmTotp(userId)
 
@@ -102,7 +103,7 @@ export function runTotpStorageContract(
 
     it('promotes the pending secret once, whatever the number of simultaneous claimants', async () => {
       const userId = await account()
-      const credentials = createCredentialStore(db, now)
+      const credentials = createCredentialStore(db, now, { signingKey: TEST_SIGNING_KEY })
       await credentials.setTotpSecret(userId, SECRET)
       await credentials.confirmTotp(userId)
       await credentials.setPendingTotp(userId, OTHER_SECRET, T0 + 600_000)
@@ -118,7 +119,7 @@ export function runTotpStorageContract(
 
     it('does not promote a pending secret other than the one that was verified', async () => {
       const userId = await account()
-      const credentials = createCredentialStore(db, now)
+      const credentials = createCredentialStore(db, now, { signingKey: TEST_SIGNING_KEY })
       await credentials.setPendingTotp(userId, OTHER_SECRET, T0 + 600_000)
 
       expect(await credentials.promotePendingTotp(userId, SECRET, 7)).toBe(false)
@@ -128,7 +129,7 @@ export function runTotpStorageContract(
 
     it('accepts a time step once and refuses it, and anything older, afterwards', async () => {
       const userId = await account()
-      const credentials = createCredentialStore(db, now)
+      const credentials = createCredentialStore(db, now, { signingKey: TEST_SIGNING_KEY })
       await credentials.setTotpSecret(userId, SECRET)
       await credentials.confirmTotp(userId)
 
@@ -140,7 +141,7 @@ export function runTotpStorageContract(
 
     it('accepts one of several simultaneous claims of the same time step', async () => {
       const userId = await account()
-      const credentials = createCredentialStore(db, now)
+      const credentials = createCredentialStore(db, now, { signingKey: TEST_SIGNING_KEY })
       await credentials.setTotpSecret(userId, SECRET)
       await credentials.confirmTotp(userId)
 
@@ -153,7 +154,7 @@ export function runTotpStorageContract(
 
     it('turns one sign-in ticket into one session when it is presented several times at once', async () => {
       const userId = await account()
-      const credentials = createCredentialStore(db, now)
+      const credentials = createCredentialStore(db, now, { signingKey: TEST_SIGNING_KEY })
       await credentials.setPassword(userId, 'correct horse battery staple')
       await credentials.setTotpSecret(userId, SECRET)
       await credentials.confirmTotp(userId)

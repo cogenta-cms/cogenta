@@ -45,7 +45,7 @@ export async function createAuthStore(options: AuthStoreOptions): Promise<AuthSt
 
   return {
     users: createUserStore(options.db, now),
-    credentials: createCredentialStore(options.db, now),
+    credentials: createCredentialStore(options.db, now, { signingKey: options.signingKey }),
     sessions: createSessionStore(options.db, now),
     audit,
     auditIntegrity: createAuditIntegrityStore(options.db, audit, { now }),

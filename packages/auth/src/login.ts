@@ -439,7 +439,7 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
   const issuer = options.issuer ?? 'Cogenta'
   const now = options.now ?? Date.now
   const users = createUserStore(db, now)
-  const credentials = createCredentialStore(db, now)
+  const credentials = createCredentialStore(db, now, { signingKey })
   const sessions = createSessionStore(db, now)
   const rateLimit = createRateLimiter(db, now)
   const tickets = identifier(TABLES.loginTickets, db.dialect)

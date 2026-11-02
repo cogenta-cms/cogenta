@@ -5,7 +5,7 @@ import { createCredentialStore } from '../src/credentials.js'
 import { type AuthService, createAuthService } from '../src/login.js'
 import { createSessionStore } from '../src/sessions.js'
 import { createUserStore } from '../src/users.js'
-import { type FileDb, testDb, testFileDb } from './helpers/db.js'
+import { type FileDb, TEST_SIGNING_KEY, testDb, testFileDb } from './helpers/db.js'
 import { codeFor } from './helpers/totp-code.js'
 
 /**
@@ -27,7 +27,7 @@ async function fixture() {
   const now = () => time
   const db = await testDb()
   const users = createUserStore(db, now)
-  const credentials = createCredentialStore(db, now)
+  const credentials = createCredentialStore(db, now, { signingKey: TEST_SIGNING_KEY })
   const sessions = createSessionStore(db, now)
   const auth = createAuthService({ db, signingKey: SIGNING_KEY, collections: [], now })
   const user = await users.create({ email: 'admin@example.com', roles: ['admin'] })
@@ -214,7 +214,7 @@ describe('two simultaneous confirmations of one re-enrolment (F-01)', () => {
     const now = () => T0
     const first = createAuthService({ db: file.db, signingKey: SIGNING_KEY, collections: [], now })
     const other = createAuthService({ db: second, signingKey: SIGNING_KEY, collections: [], now })
-    const credentials = createCredentialStore(file.db, now)
+    const credentials = createCredentialStore(file.db, now, { signingKey: TEST_SIGNING_KEY })
     const user = await createUserStore(file.db, now).create({
       email: 'admin@example.com',
       roles: ['admin'],
@@ -440,7 +440,7 @@ describe('two simultaneous identical sign-ins (F-03)', () => {
     const now = () => T0
     const first = createAuthService({ db: file.db, signingKey: SIGNING_KEY, collections: [], now })
     const other = createAuthService({ db: second, signingKey: SIGNING_KEY, collections: [], now })
-    const credentials = createCredentialStore(file.db, now)
+    const credentials = createCredentialStore(file.db, now, { signingKey: TEST_SIGNING_KEY })
     const user = await createUserStore(file.db, now).create({
       email: 'admin@example.com',
       roles: ['admin'],
@@ -508,7 +508,7 @@ describe('which accounts a step-up guards (first factor included)', () => {
   it('guards a passkey-only account, which can only pass by signing in again', async () => {
     const db = await testDb()
     const users = createUserStore(db, () => T0)
-    const credentials = createCredentialStore(db, () => T0)
+    const credentials = createCredentialStore(db, () => T0, { signingKey: TEST_SIGNING_KEY })
     const auth = createAuthService({ db, signingKey: SIGNING_KEY, collections: [], now: () => T0 })
     const user = await users.create({ email: 'key@example.com', roles: ['admin'] })
     await credentials.addWebAuthnCredential(user.id, passkey)

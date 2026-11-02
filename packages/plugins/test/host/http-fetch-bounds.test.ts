@@ -104,17 +104,26 @@ describe('the plugin http.fetch capability, body bounds', () => {
 
     const result = await runIsolated(`sdk.http.fetch({ url: 'https://api.example.com/x' })`, {
       isolation: 'worker',
-      timeoutMs: 400,
+      // Long enough for a slow runner (Windows CI) to start the worker and
+      // reach the fetch before the deadline; the body never ends, so the run
+      // still times out.
+      timeoutMs: 3_000,
       grantedCapabilities: ['http.fetch:api.example.com'],
       handlers: { 'http.fetch': createHttpFetchHandler(fetchImpl) },
     })
 
     expect(result).toMatchObject({ ok: false, reason: 'timeout' })
-    // Give the host a tick to propagate the end of the run.
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // The host propagates the end of the run asynchronously.
+    for (
+      let waited = 0;
+      waited < 2_000 && !(signal?.aborted === true && stats.cancelled);
+      waited += 25
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
     expect(signal?.aborted).toBe(true)
     expect(stats.cancelled).toBe(true)
-  })
+  }, 15_000)
 
   // Pentest 2026-11-01, C-04: a granted *name* is not a granted *address*.
   describe('the default transport', () => {

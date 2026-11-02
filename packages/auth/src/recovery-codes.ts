@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto'
-import { hashPassword, verifyPassword } from './password.js'
+import { hashRandomSecret, verifyPassword } from './password.js'
 
 /**
  * TOTP recovery codes (fiche 18 task 1) — the way back in for an account that
@@ -55,7 +55,7 @@ export function normaliseRecoveryCode(input: string): string {
 }
 
 export function hashRecoveryCode(code: string): Promise<string> {
-  return hashPassword(normaliseRecoveryCode(code))
+  return hashRandomSecret(normaliseRecoveryCode(code))
 }
 
 export function verifyRecoveryCode(code: string, hash: string): Promise<boolean> {

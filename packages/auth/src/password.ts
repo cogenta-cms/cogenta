@@ -47,17 +47,32 @@ const SALT_LENGTH = 16
 // 2026-11-01, AUTH-04; the old comment called p=1 the OWASP floor, which it is
 // not); hashes written before keep verifying and are upgraded by `needsRehash`.
 const SCRYPT_PARAMS = { N: 2 ** 15, r: 8, p: 3 } as const
+// What a TOTP recovery code is hashed with: the cost passwords had before
+// AUTH-04. A recovery code is 50 random bits, not something a person chose, so
+// offline guessing is bounded by its entropy and a heavier KDF buys little;
+// and checking one means hashing against every unused code (ten), so tripling
+// the cost would triple the sign-in latency for nothing.
+const RECOVERY_SCRYPT_PARAMS = { N: 2 ** 15, r: 8, p: 1 } as const
 const MAX_INPUT_LENGTH = 512
 
 export async function hashPassword(password: string): Promise<string> {
+  return hashWith(password, SCRYPT_PARAMS)
+}
+
+/** Hash for a random, high-entropy secret (a recovery code) — see `RECOVERY_SCRYPT_PARAMS`. Verifies with `verifyPassword`. */
+export async function hashRandomSecret(secret: string): Promise<string> {
+  return hashWith(secret, RECOVERY_SCRYPT_PARAMS)
+}
+
+async function hashWith(password: string, params: ScryptParams): Promise<string> {
   assertLength(password)
   const salt = randomBytes(SALT_LENGTH)
-  const derived = await scrypt(password.normalize('NFKC'), salt, KEY_LENGTH, SCRYPT_PARAMS)
+  const derived = await scrypt(password.normalize('NFKC'), salt, KEY_LENGTH, params)
 
   // Parameters travel with the hash, the way bcrypt embeds its cost factor.
   // Raising SCRYPT_PARAMS later must not invalidate every password already
   // stored — it invalidates none, because each hash carries what made it.
-  const { N, r, p } = SCRYPT_PARAMS
+  const { N, r, p } = params
   return `scrypt$${N}$${r}$${p}$${salt.toString('base64url')}$${derived.toString('base64url')}`
 }
 

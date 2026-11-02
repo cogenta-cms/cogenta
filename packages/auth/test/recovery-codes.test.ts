@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { hashPassword } from '../src/password.js'
 import {
   generateRecoveryCodes,
   hashRecoveryCode,
@@ -59,5 +60,20 @@ describe('hashRecoveryCode / verifyRecoveryCode', () => {
     const a = await hashRecoveryCode('ABCDE-FGHJK')
     const b = await hashRecoveryCode('ABCDE-FGHJK')
     expect(a).not.toBe(b)
+  })
+})
+
+describe('recovery code hashing cost', () => {
+  it('keeps the previous scrypt cost (p=1): a code is a random secret, and a sign-in tries every unused one', async () => {
+    const hash = await hashRecoveryCode('ABCDE-FGHJK')
+
+    expect(hash.split('$').slice(1, 4)).toEqual(['32768', '8', '1'])
+    expect(await verifyRecoveryCode('abcde fghjk', hash)).toBe(true)
+  })
+
+  it('still verifies a code hashed with the password-grade parameters', async () => {
+    const hash = await hashPassword('ABCDEFGHJK')
+
+    expect(await verifyRecoveryCode('ABCDE-FGHJK', hash)).toBe(true)
   })
 })

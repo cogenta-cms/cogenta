@@ -39,6 +39,11 @@ passkeys sont conservées, sauf avec `--passkeys`. Le compte se connecte ensuite
 avec son seul mot de passe et peut réactiver la double authentification depuis
 son profil.
 
+La même règle vaut après une **restauration de sauvegarde** : si le site de destination
+utilise une autre `COGENTA_AUTH_SIGNING_KEY` que la source, les secrets TOTP restaurés
+sont illisibles ; réutilisez la clé d'origine ou lancez `reset-mfa` pour chaque compte
+(la commande de restauration le rappelle).
+
 Dans **Mon profil**, les sessions actives sont affichées par pages de dix,
 avec leur appareil, leur dernière activité et l’indication de la session actuelle.
 « Précédent » et « Suivant » donnent accès aux autres sessions. Révoquer une session

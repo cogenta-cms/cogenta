@@ -603,7 +603,10 @@ export { createMediaListTool } from './tools/core/media-list.js'
 export type { NotFoundLogReader } from './tools/core/not-found-log.js'
 export { createNotFoundLogReadTool } from './tools/core/not-found-log.js'
 export type { RedirectWriter } from './tools/core/redirects.js'
-export { createRedirectCreateTool } from './tools/core/redirects.js'
+export {
+  createRedirectCreateTool,
+  type RedirectCreateOptions,
+} from './tools/core/redirects.js'
 export type { SiteConfig } from './tools/core/site-config.js'
 export { createSiteConfigReadTool } from './tools/core/site-config.js'
 export { defineTool } from './tools/define.js'

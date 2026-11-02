@@ -448,6 +448,7 @@ import {
   type SecurityConfig,
 } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
+import { createLivePathCheck } from './live-path.js'
 import {
   homePathFor,
   isLocaleRouted,
@@ -2156,6 +2157,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           collections,
           notFoundLog,
           redirects,
+          // A redirect may not take a live page away from its visitors.
+          isLivePath: (path) => isLivePath(path),
           // L5 task 10 — the moderation queue and the audience figures, as
           // the narrow ports `@cogenta/agents` describes. Built from the
           // very stores the comment router and the analytics router already
@@ -2354,6 +2357,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const adminThemeStore: AdminThemeStore = createAdminThemeStore({ db })
 
   const gateway = createContentGateway({ collections, stores, permissions })
+  // Asked by the agents' `redirects.create`, built here because it needs the
+  // gateway; the agent runtime above only calls it long after this line ran.
+  const isLivePath = createLivePathCheck({ collections, gateway, site, terms: termSlugs })
 
   // Resolves an `entry`-kind menu item to a display label, public route and
   // — for an actor entitled to see it — a health status (fiche 09, task 4).

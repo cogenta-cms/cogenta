@@ -112,7 +112,7 @@ async function startFakeAnthropic(
 }
 
 /** The four tool calls the Site Monitor's identity asks for, then a final report. */
-function monitoringScript(): readonly AnthropicScriptedResponse[] {
+function monitoringScript(redirectFrom = '/old-guide'): readonly AnthropicScriptedResponse[] {
   const usage = { input_tokens: 10, output_tokens: 5 }
   return [
     {
@@ -143,7 +143,10 @@ function monitoringScript(): readonly AnthropicScriptedResponse[] {
           type: 'tool_use',
           id: 'call-4',
           name: 'redirects.create',
-          input: { from: '/old-guide', to: '/new-guide' },
+          input: {
+            from: redirectFrom,
+            to: redirectFrom === '/old-guide' ? '/new-guide' : '/old-guide',
+          },
         },
       ],
       stop_reason: 'tool_use',
@@ -232,8 +235,9 @@ async function configureProvider(
   base: string,
   adminToken: string,
   apiKey: string,
+  redirectFrom?: string,
 ): Promise<FakeAnthropic> {
-  const fake = await startFakeAnthropic(monitoringScript())
+  const fake = await startFakeAnthropic(monitoringScript(redirectFrom))
   fakeProviders.push(fake)
   const configured = await fetch(`${base}/api/providers`, {
     method: 'POST',
@@ -363,5 +367,31 @@ describe('cogenta serve — the Site Monitor agent (L22 task 3)', () => {
     expect(
       noticesBody.data.some((notice) => notice.code === 'monitoring.redirect-suggestion'),
     ).toBe(false)
+  })
+
+  it('under autopilot: refuses to redirect a page that is live away from its visitors', async () => {
+    const { base, adminToken } = await setUpSiteWithABrokenLink()
+    await fetch(`${base}/api/agents/${encodeURIComponent('Site Monitor')}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ autonomy: { default: 'autonomous' } }),
+    })
+    // The model, steered by something it read, asks to redirect a page that exists.
+    await configureProvider(base, adminToken, 'sk-ant-test-live-page', '/new-guide')
+
+    await fetch(`${base}/api/agents/${encodeURIComponent('Site Monitor')}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ instruction: 'Check the 404 log for anything worth fixing.' }),
+    })
+
+    const redirects = await fetch(`${base}/api/redirects`, {
+      headers: { authorization: `Bearer ${adminToken}` },
+    })
+    const body = (await redirects.json()) as { data: readonly { from: string }[] }
+    expect(body.data.some((redirect) => redirect.from === '/new-guide')).toBe(false)
+    const visit = await fetch(`${base}/new-guide`, { redirect: 'manual' })
+    expect(visit.status).toBe(200)
+    await visit.arrayBuffer()
   })
 })

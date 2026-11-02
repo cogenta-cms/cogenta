@@ -1,3 +1,4 @@
+import { CogentaError } from '@cogenta/core'
 import { z } from 'zod'
 import { defineTool } from '../define.js'
 import type { ToolDefinition } from '../types.js'
@@ -35,6 +36,17 @@ export interface RedirectWriter {
   remove(from: string): Promise<boolean>
 }
 
+export interface RedirectCreateOptions {
+  /**
+   * Whether a published page lives at this path (no query string). A redirect
+   * is applied to every public request before routing, so one created *from*
+   * a live page would take that page down: an agent steered by a comment or an
+   * imported text could send a visitor of the home page anywhere. Absent means
+   * the host has no way to tell, and nothing is refused on that ground.
+   */
+  readonly isLivePath?: (path: string) => Promise<boolean>
+}
+
 const InputSchema = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
@@ -54,7 +66,10 @@ const OutputSchema = z.object({
 })
 type Output = z.infer<typeof OutputSchema>
 
-export function createRedirectCreateTool(store: RedirectWriter): ToolDefinition<Input, Output> {
+export function createRedirectCreateTool(
+  store: RedirectWriter,
+  options: RedirectCreateOptions = {},
+): ToolDefinition<Input, Output> {
   return defineTool({
     name: 'redirects.create',
     version: '1.0.0',
@@ -68,6 +83,15 @@ export function createRedirectCreateTool(store: RedirectWriter): ToolDefinition<
     cost: 'low',
     rateLimit: { perHour: 30 },
     async execute(input) {
+      const path = input.from.split(/[?#]/u)[0] ?? input.from
+      if (options.isLivePath !== undefined && (await options.isLivePath(path))) {
+        throw new CogentaError({
+          code: 'REDIRECT_FROM_LIVE_PATH',
+          message: `"${path}" is a page that exists, so it cannot be redirected away.`,
+          hint: 'A redirect is for a path that no longer leads anywhere. Redirecting a live page is a decision for a person, made in the Redirections screen.',
+          details: { from: path },
+        })
+      }
       const record = await store.add({
         from: input.from,
         to: input.to,

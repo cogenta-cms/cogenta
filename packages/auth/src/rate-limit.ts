@@ -22,6 +22,9 @@ import { TABLES } from './tables.js'
 const WINDOW_MS = 15 * 60 * 1000
 const ATTEMPTS_BEFORE_REFUSAL = 5
 
+/** How often a write sweeps the rows that have left the window. */
+const PRUNE_INTERVAL_MS = 60 * 1000
+
 /** How long failed attempts keep counting. Exported so a reader shares the exact window. */
 export const LOGIN_ATTEMPT_WINDOW_MS = WINDOW_MS
 
@@ -197,7 +200,20 @@ export function createRateLimiter(db: DatabaseHandle, now: () => number = Date.n
     )
   }
 
+  // Failures older than the window can never change an answer, and a script
+  // that never signs in successfully is never `clear`ed, so each write checks
+  // — at most once a minute per process — whether anything has aged out.
+  let lastPrunedAt = 0
+  async function pruneExpired(): Promise<void> {
+    const at = now()
+    if (at - lastPrunedAt < PRUNE_INTERVAL_MS) return
+    lastPrunedAt = at
+    const since = new Date(at - WINDOW_MS).toISOString()
+    await db.query(sql`delete from ${table} where at < ${since}`).catch(() => undefined)
+  }
+
   async function insertAttempt(subject: string): Promise<void> {
+    await pruneExpired()
     await db.query(sql`
       insert into ${table} (id, subject, at) values (${newId(now)}, ${subject}, ${new Date(now()).toISOString()})`)
   }

@@ -432,3 +432,40 @@ describe('AuditLog.prune (fiche 21 task 5)', () => {
     expect(result.entriesChecked).toBe(1) // "third" is the one surviving entry after the genesis
   })
 })
+
+describe('AuditLog diff bound', () => {
+  it('replaces an oversized diff by a marker and keeps the chain verifiable', async () => {
+    const db = await testDb()
+    const audit = createAuditLog(db)
+
+    await audit.record({ actorId: null, actorRoles: [], action: 'before' })
+    const entry = await audit.record({
+      actorId: null,
+      actorRoles: [],
+      action: 'auth.login_failed',
+      diff: { email: 'a'.repeat(1_000_000) },
+    })
+    await audit.record({ actorId: null, actorRoles: [], action: 'after' })
+
+    expect(entry.diff).toMatchObject({ truncated: true })
+    const stored = await db.query<{ diff: string }>(
+      sql`select diff from cogenta_audit_log where id = ${entry.id}`,
+    )
+    expect((stored.rows[0]?.diff ?? '').length).toBeLessThan(200)
+    await expect(audit.verify()).resolves.toBeUndefined()
+  })
+
+  it('keeps an ordinary diff untouched', async () => {
+    const db = await testDb()
+    const audit = createAuditLog(db)
+
+    const entry = await audit.record({
+      actorId: 'u',
+      actorRoles: [],
+      action: 'content.update',
+      diff: { title: 'x'.repeat(20_000) },
+    })
+
+    expect(entry.diff).toEqual({ title: 'x'.repeat(20_000) })
+  })
+})

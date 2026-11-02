@@ -40,7 +40,7 @@ export type {
   LoginResult,
   RecoveryCodesIssued,
 } from './login.js'
-export { createAuthService, revokeSignInTickets } from './login.js'
+export { createAuthService, MAX_EMAIL_LENGTH, revokeSignInTickets } from './login.js'
 export { requiresMfa, sensitiveRoles } from './mfa.js'
 export { hashPassword, verifyPassword } from './password.js'
 export type { LoginAttemptSummary, RateLimiter } from './rate-limit.js'

@@ -34,6 +34,26 @@ import type { AuditActorKind, AuditEntry, RecordAuditInput } from './types.js'
  * module has ever produced still recomputes to the same value.
  */
 
+/**
+ * The most a serialised diff may weigh in the log. A content edit records the
+ * values it wrote, so the bound has to leave room for a long article; what it
+ * must stop is a diff of arbitrary size (an email field of a failed sign-in was
+ * the case that mattered). Past this, the row keeps a marker saying how much
+ * was dropped — the row itself, and the chain it is part of, stay valid because
+ * the hash covers what is stored. The version history still holds the content.
+ */
+export const AUDIT_DIFF_MAX_BYTES = 64 * 1024
+
+function boundedDiff(diff: unknown): string | null {
+  if (diff === undefined) return null
+  const text = JSON.stringify(diff)
+  // `JSON.stringify(undefined-ish)` is `undefined` for a function or symbol;
+  // there is nothing to keep then.
+  if (text === undefined) return null
+  if (Buffer.byteLength(text, 'utf8') <= AUDIT_DIFF_MAX_BYTES) return text
+  return JSON.stringify({ truncated: true, originalBytes: Buffer.byteLength(text, 'utf8') })
+}
+
 interface AuditRow {
   id: string
   at: string
@@ -330,7 +350,7 @@ export function createAuditLog(db: DatabaseHandle, now: () => number = Date.now)
           action: input.action,
           collection_name: input.collection ?? null,
           entry_id: input.entryId ?? null,
-          diff: input.diff === undefined ? null : JSON.stringify(input.diff),
+          diff: boundedDiff(input.diff),
           previous_hash: previousHash,
         }
         const hash = computeHash(previousHash, base)

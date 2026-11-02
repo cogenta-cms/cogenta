@@ -1,4 +1,4 @@
-import { isCogentaError } from '@cogenta/core'
+import { isCogentaError, sql } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
 import { describe, expect, it } from 'vitest'
 import { createCredentialStore } from '../src/credentials.js'
@@ -67,6 +67,21 @@ describe('passwordLogin', () => {
     await expect(
       auth.passwordLogin('nobody@example.com', 'whatever-password'),
     ).rejects.toMatchObject({ code: 'AUTH_INVALID_CREDENTIALS' })
+  })
+
+  it('refuses an over-long email like any wrong credential, leaving no attempt row behind', async () => {
+    const { db, auth } = await setup(NO_MFA_COLLECTIONS)
+
+    await expect(
+      auth.passwordLogin(`${'a'.repeat(300)}@example.com`, 'whatever-password', {
+        ip: '203.0.113.9',
+      }),
+    ).rejects.toMatchObject({ code: 'AUTH_INVALID_CREDENTIALS' })
+
+    const rows = await db.query<{ n: number }>(
+      sql`select count(*) as n from cogenta_login_attempts`,
+    )
+    expect(Number(rows.rows[0]?.n)).toBe(0)
   })
 
   it('rejects a disabled account even with the correct password', async () => {

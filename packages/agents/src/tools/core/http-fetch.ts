@@ -1,9 +1,17 @@
-import { CogentaError } from '@cogenta/core'
+import { CogentaError, readBoundedText } from '@cogenta/core'
 import { z } from 'zod'
 import { defineTool } from '../define.js'
 import type { ToolDefinition } from '../types.js'
 
 const MAX_BODY_LENGTH = 100_000
+/**
+ * What is read off the wire before the text is cut to {@link MAX_BODY_LENGTH}
+ * characters: four bytes per character is the most UTF-8 spends on one, so a
+ * body of 100 000 characters always fits.
+ */
+const MAX_BODY_BYTES = MAX_BODY_LENGTH * 4
+/** How long reading one body may take, from the first read. */
+const BODY_TIMEOUT_MS = 30_000
 
 export interface HttpFetchToolOptions {
   /** Exact hostnames this instance may reach — `http.fetch(domains[])` in the Contract C taxonomy is the permission this list backs. */
@@ -11,6 +19,8 @@ export interface HttpFetchToolOptions {
   /** Optional structural restriction to a site's own scheme, host and port. */
   readonly allowedOrigins?: readonly string[]
   readonly fetchImpl?: typeof fetch
+  /** Time allowed for reading one response body. Defaults to 30 seconds. */
+  readonly bodyTimeoutMs?: number
 }
 
 const HttpFetchInputSchema = z.object({
@@ -79,7 +89,16 @@ export function createHttpFetchTool(
         // through a new, independently checked call.
         redirect: 'manual',
       })
-      const text = await response.text()
+      // Read as a stream and stopped at the limit: `response.text()` first and
+      // truncating after would have held the whole body in memory (pentest
+      // 2026-11-01, C-03). The cap is a prefix, as it always was.
+      const read = await readBoundedText(response, {
+        maxBytes: MAX_BODY_BYTES,
+        onLimit: 'truncate',
+        timeoutMs: options.bodyTimeoutMs ?? BODY_TIMEOUT_MS,
+        signal: ctx.signal,
+      })
+      const text = read.text
       const headers: Record<string, string> = {}
       response.headers.forEach((value, key) => {
         headers[key] = value
@@ -88,7 +107,10 @@ export function createHttpFetchTool(
       return {
         status: response.status,
         headers,
-        body: text.length > MAX_BODY_LENGTH ? `${text.slice(0, MAX_BODY_LENGTH)}…` : text,
+        body:
+          read.truncated || text.length > MAX_BODY_LENGTH
+            ? `${text.slice(0, MAX_BODY_LENGTH)}…`
+            : text,
       }
     },
   })

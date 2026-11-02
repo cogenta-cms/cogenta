@@ -92,9 +92,13 @@ export function runInPermissionedProcess(
 
     let settled = false
     let stderr = ''
+    // Aborted with the run, so a host-side request the plugin left in flight
+    // (an `http.fetch` still reading) stops with it.
+    const runEnded = new AbortController()
     const finish = (result: ProcessRunResult): void => {
       if (settled) return
       settled = true
+      runEnded.abort()
       clearTimeout(timer)
       child.kill('SIGKILL')
       resolve(result)
@@ -152,7 +156,10 @@ export function runInPermissionedProcess(
       }
       if (message.type === 'sdk-call') {
         const handler = options.handlers[message.method]
-        const context = { grantedCapabilities: options.grantedCapabilities }
+        const context = {
+          grantedCapabilities: options.grantedCapabilities,
+          signal: runEnded.signal,
+        }
         const reply = (payload: Record<string, unknown>): void => {
           if (!settled) child.send({ callId: message.callId, ...payload })
         }

@@ -2,8 +2,10 @@ import { lookup } from 'node:dns/promises'
 import { basename } from 'node:path'
 import {
   type CreateMediaInput,
+  isCogentaError,
   type MediaAsset,
   type MediaStore,
+  readBoundedBody,
   type StorageDriver,
   sniffImageFormat,
 } from '@cogenta/core'
@@ -38,6 +40,8 @@ export interface DownloadAndStoreMediaOptions {
   readonly fetchImpl?: typeof fetch
   /** Injected for tests — real `dns.lookup` by default. */
   readonly lookupImpl?: typeof lookup
+  /** Time allowed per file, headers and body together. Defaults to 15 seconds. */
+  readonly fetchTimeoutMs?: number
 }
 
 function filenameFrom(url: string): string {
@@ -108,6 +112,14 @@ function kindFor(mimeType: string): CreateMediaInput['kind'] {
   return 'file'
 }
 
+function failureReason(error: unknown, signal: AbortSignal, timeoutMs: number): string {
+  if (signal.aborted) return `Timed out after ${timeoutMs}ms.`
+  if (isCogentaError(error) && error.code === 'HTTP_BODY_TOO_LARGE') {
+    return `Larger than the ${MAX_MEDIA_BYTES} byte limit.`
+  }
+  return error instanceof Error ? error.message : String(error)
+}
+
 /**
  * Downloads every distinct media URL a WXR import references and stores it
  * for real (rule: no mocking the storage layer — the fetch boundary is the
@@ -135,15 +147,19 @@ export async function downloadAndStoreMedia(
   }
 
   for (const url of distinct.slice(0, MAX_MEDIA_ITEMS)) {
+    // One deadline for the whole file — the redirects, the headers and the
+    // body. It used to be cleared when the headers arrived, which left a
+    // server free to send the body at a byte a minute.
+    const controller = new AbortController()
+    const timeoutMs = options.fetchTimeoutMs ?? FETCH_TIMEOUT_MS
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
     try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-      let response: Response
-      try {
-        response = await fetchPublic(url, doFetch, options.lookupImpl ?? lookup, controller.signal)
-      } finally {
-        clearTimeout(timeout)
-      }
+      const response = await fetchPublic(
+        url,
+        doFetch,
+        options.lookupImpl ?? lookup,
+        controller.signal,
+      )
       if (!response.ok) {
         failed.push({ url, reason: `HTTP ${response.status}` })
         continue
@@ -158,11 +174,14 @@ export async function downloadAndStoreMedia(
       const declaredType =
         response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ??
         'application/octet-stream'
-      const buffer = Buffer.from(await response.arrayBuffer())
-      if (buffer.byteLength > MAX_MEDIA_BYTES) {
-        failed.push({ url, reason: `Larger than the ${MAX_MEDIA_BYTES} byte limit.` })
-        continue
-      }
+      // The header is the remote end's word; the limit is enforced on the
+      // bytes that actually arrive, and the transfer is cancelled there.
+      const { bytes } = await readBoundedBody(response, {
+        maxBytes: MAX_MEDIA_BYTES,
+        onLimit: 'throw',
+        signal: controller.signal,
+      })
+      const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
       const mimeType = storedTypeOf(declaredType, buffer)
       const filename = filenameFrom(url)
       const storageKey = `imports/wordpress/${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`
@@ -186,7 +205,9 @@ export async function downloadAndStoreMedia(
       urlToMediaId.set(url, asset.id)
       imported.push(asset)
     } catch (error) {
-      failed.push({ url, reason: error instanceof Error ? error.message : String(error) })
+      failed.push({ url, reason: failureReason(error, controller.signal, timeoutMs) })
+    } finally {
+      clearTimeout(timeout)
     }
   }
 

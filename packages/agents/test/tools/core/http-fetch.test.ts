@@ -97,4 +97,91 @@ describe('http.fetch', () => {
     expect(init.redirect).toBe('manual')
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
+
+  // Pentest 2026-11-01, C-03: the text was read in full and cut afterwards, so
+  // the cap bounded what the model saw and nothing about what the host held.
+  describe('a response body that is large or slow', () => {
+    it('stops reading an endless body at the limit and cancels the stream', async () => {
+      const stats = { pulled: 0, cancelled: false }
+      const fetchImpl = vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull(controller) {
+                stats.pulled += 1
+                controller.enqueue(new Uint8Array(64 * 1024).fill(120))
+              },
+              cancel() {
+                stats.cancelled = true
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'text/plain' } },
+          ),
+      )
+      const tool = createHttpFetchTool({ allowedDomains: ['api.example.com'], fetchImpl })
+
+      const result = await tool.execute({ url: 'https://api.example.com/endless' }, CTX)
+
+      expect(result.body.length).toBe(100_001)
+      expect(result.body.endsWith('…')).toBe(true)
+      expect(stats.cancelled).toBe(true)
+      // 100 000 characters need a few hundred KiB at most, not a stream's worth.
+      expect(stats.pulled).toBeLessThan(30)
+    })
+
+    it('gives up on a body that stalls after its first bytes', async () => {
+      const stats = { cancelled: false }
+      const fetchImpl = vi.fn(async () => {
+        let sent = false
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (!sent) {
+                sent = true
+                controller.enqueue(new TextEncoder().encode('partial'))
+                return
+              }
+              return new Promise<void>(() => undefined)
+            },
+            cancel() {
+              stats.cancelled = true
+            },
+          }),
+          { status: 200 },
+        )
+      })
+      const tool = createHttpFetchTool({
+        allowedDomains: ['api.example.com'],
+        fetchImpl,
+        bodyTimeoutMs: 40,
+      })
+
+      await expect(
+        tool.execute({ url: 'https://api.example.com/slow' }, CTX),
+      ).rejects.toMatchObject({ code: 'HTTP_BODY_TIMEOUT' })
+      expect(stats.cancelled).toBe(true)
+    })
+
+    it('stops when the run is cancelled while the server is silent', async () => {
+      const controller = new AbortController()
+      const fetchImpl = vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull: () => new Promise<void>(() => undefined),
+            }),
+            { status: 200 },
+          ),
+      )
+      const tool = createHttpFetchTool({ allowedDomains: ['api.example.com'], fetchImpl })
+      setTimeout(() => controller.abort(), 20)
+
+      await expect(
+        tool.execute(
+          { url: 'https://api.example.com/silent' },
+          { ...CTX, signal: controller.signal },
+        ),
+      ).rejects.toMatchObject({ code: 'HTTP_BODY_ABORTED' })
+    })
+  })
 })

@@ -398,6 +398,8 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // so there is no "not found" resource sense to reach for here.
   ADMIN_THEME_TEMPLATE_UNKNOWN: 400,
   ADMIN_THEME_INVALID: 400,
+  // A sandbox id, theme name or version that is a path rather than a name.
+  THEME_SANDBOX_PATH_ESCAPE: 400,
 
   // Migrations, surfaced through the health screen (fiche 24 task 2). A
   // destructive/checksum/lock refusal is a conflict with the database's own

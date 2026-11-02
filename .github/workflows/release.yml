@@ -20,12 +20,12 @@ jobs:
       pull-requests: write
       id-token: write # npm provenance via OIDC — no long-lived token
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -37,14 +37,16 @@ jobs:
       # instead of failing loudly, and the registry answers that with a
       # confusing 404 rather than a 401/403. Upgrading only the CLI here
       # keeps the pinned Node runtime version untouched everywhere else.
-      - run: npm install -g npm@latest
+      # An exact version, not `latest`: this job holds the OIDC identity that
+      # publishes to npm, so what runs in it is pinned like every action here.
+      - run: npm install -g npm@11.21.1
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
       # Opens or updates a "Version Packages" PR while changesets are pending;
       # publishes to npm once that PR is merged.
-      - uses: changesets/action@v1
+      - uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
           version: pnpm version-packages
           publish: pnpm release

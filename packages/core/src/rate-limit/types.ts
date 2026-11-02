@@ -52,4 +52,10 @@ export interface RateLimitConfig {
 export interface RateLimitDriverOptions {
   /** Injected so tests can move the window without waiting. Milliseconds. */
   readonly now?: () => number
+  /**
+   * Memory driver only: the most buckets kept at once. Keys are built from
+   * request data, so without a ceiling a stream of new keys grows the process
+   * without bound. Defaults to `DEFAULT_MAX_RATE_LIMIT_KEYS`.
+   */
+  readonly maxKeys?: number
 }

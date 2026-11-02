@@ -4,7 +4,11 @@ import { memoryRateLimitDriver } from './memory.js'
 import { redisRateLimitDriver } from './redis.js'
 import type { RateLimitConfig, RateLimitDriver, RateLimitDriverOptions } from './types.js'
 
-export { createMemoryRateLimiter, memoryRateLimitDriver } from './memory.js'
+export {
+  createMemoryRateLimiter,
+  DEFAULT_MAX_RATE_LIMIT_KEYS,
+  memoryRateLimitDriver,
+} from './memory.js'
 export type { RedisRateLimitOptions } from './redis.js'
 export { createRedisRateLimiter, loadRateLimitRedisModule, redisRateLimitDriver } from './redis.js'
 export type {

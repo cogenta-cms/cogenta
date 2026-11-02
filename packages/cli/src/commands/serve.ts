@@ -424,7 +424,9 @@ import {
 import { DEFAULT_LOGO_CONTENT_TYPE, DEFAULT_LOGO_PATH, defaultLogoBytes } from './default-logo.js'
 import { runDoctor } from './doctor.js'
 import {
+  isUnlockableEntryId,
   parseCookies,
+  UNLOCK_ATTEMPTS_PER_ADDRESS_PER_WINDOW,
   UNLOCK_ATTEMPTS_PER_ENTRY_PER_WINDOW,
   UNLOCK_ATTEMPTS_PER_WINDOW,
   UNLOCK_PATH,
@@ -7815,18 +7817,30 @@ export function createRequestListener(
         // which ids are real. Keyed by address *and* entry, so an attacker
         // spends only their own budget on the page they are attacking rather
         // than locking every reader out of every protected page.
+        // The address-wide budget comes first and an id that cannot name an
+        // entry never gets a counter of its own: the two per-entry keys are
+        // built from the request, so neither may be created at will.
         const quota = site.requestQuota
+        const wellFormed = isUnlockableEntryId(entryId)
         if (quota !== undefined) {
-          const fromAddress = await quota.consume(`unlock:${clientIpOf(req)}:${entryId}`, {
-            limit: UNLOCK_ATTEMPTS_PER_WINDOW,
+          const overall = await quota.consume(`unlock-address:${clientIpOf(req)}`, {
+            limit: UNLOCK_ATTEMPTS_PER_ADDRESS_PER_WINDOW,
             windowMs: UNLOCK_WINDOW_MS,
           })
-          const attempt = fromAddress.allowed
-            ? await quota.consume(`unlock-entry:${entryId}`, {
-                limit: UNLOCK_ATTEMPTS_PER_ENTRY_PER_WINDOW,
-                windowMs: UNLOCK_WINDOW_MS,
-              })
-            : fromAddress
+          const fromAddress =
+            overall.allowed && wellFormed
+              ? await quota.consume(`unlock:${clientIpOf(req)}:${entryId}`, {
+                  limit: UNLOCK_ATTEMPTS_PER_WINDOW,
+                  windowMs: UNLOCK_WINDOW_MS,
+                })
+              : overall
+          const attempt =
+            fromAddress.allowed && wellFormed
+              ? await quota.consume(`unlock-entry:${entryId}`, {
+                  limit: UNLOCK_ATTEMPTS_PER_ENTRY_PER_WINDOW,
+                  windowMs: UNLOCK_WINDOW_MS,
+                })
+              : fromAddress
           if (!attempt.allowed) {
             logger.warn('unlock attempts throttled', { path: back })
             res.writeHead(303, {
@@ -7839,7 +7853,7 @@ export function createRequestListener(
           }
         }
 
-        const opened = await unlockEntry(site, entryId, password)
+        const opened = wellFormed && (await unlockEntry(site, entryId, password))
         if (!opened) {
           // The same answer whatever went wrong — wrong password, unknown
           // entry, an entry that is not protected at all: a different one

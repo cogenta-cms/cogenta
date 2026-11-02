@@ -56,9 +56,14 @@ COPY --from=build /opt/cogenta/package.json ./package.json
 # Peer dependencies are not installed (--legacy-peer-deps): the themes name
 # `astro` as a peer for a build pipeline this runtime does not use, and it
 # weighs hundreds of megabytes.
+# npm cannot read pnpm-lock.yaml, so pack-workspace.mjs pins every external
+# package to the version it locks, and verify-runtime-lock.mjs then fails the
+# build if anything installed is at a version CI never tested nor audited.
+COPY docker/verify-runtime-lock.mjs /tmp/verify-runtime-lock.mjs
 RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
     npm install --omit=dev --legacy-peer-deps --no-audit --no-fund --no-update-notifier \
- && rm -rf /tarballs
+ && node /tmp/verify-runtime-lock.mjs /tarballs/locked-versions.json /opt/cogenta/node_modules \
+ && rm -rf /tarballs /tmp/verify-runtime-lock.mjs
 COPY docker/bootstrap.mjs ./bootstrap.mjs
 # A missing peer shows up as ERR_MODULE_NOT_FOUND the first time a request
 # needs it. Loading the entry points and the optional native path here turns

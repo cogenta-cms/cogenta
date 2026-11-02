@@ -95,19 +95,78 @@ for (const name of RUNTIME_EXTRAS) {
   dependencies[name] = range
 }
 
+// Every external version pnpm-lock.yaml resolved — the graph CI tested and
+// `pnpm audit` checked. npm has no way to read that lockfile, so without this
+// it would resolve every range afresh and the image could run versions nobody
+// tested. A package locked at a single version is pinned to it through
+// `overrides`; the few the workspace holds at several versions keep their
+// ranges, and docker/verify-runtime-lock.mjs then refuses an image holding any
+// version the lockfile does not list.
+const lockedVersions = new Map()
+{
+  let inPackages = false
+  for (const line of readFileSync('pnpm-lock.yaml', 'utf8').split('\n')) {
+    if (/^packages:/u.test(line)) {
+      inPackages = true
+      continue
+    }
+    if (inPackages && /^\S/u.test(line)) break
+    const match = /^ {2}'?((?:@[^@/']+\/)?[^@']+)@([^(':]+)/u.exec(line)
+    if (!inPackages || match === null) continue
+    const versions = lockedVersions.get(match[1]) ?? new Set()
+    versions.add(match[2])
+    lockedVersions.set(match[1], versions)
+  }
+}
+const lockedSingle = (name) => {
+  const versions = lockedVersions.get(name)
+  return versions?.size === 1 ? [...versions][0] : undefined
+}
+
+for (const name of RUNTIME_EXTRAS) {
+  dependencies[name] = lockedSingle(name) ?? dependencies[name]
+}
+
 // `@langchain/langgraph` (the agent loop) lists `@langchain/core` as a required
 // peer. npm would normally install it for us, but peers are skipped on purpose
 // (the Dockerfile explains why), so it is named here at the exact version the
 // lockfile — and therefore the test suites — resolved.
 {
-  const locked = /^ {2}'@langchain\/core@(\d+\.\d+\.\d+)':/mu.exec(
-    readFileSync('pnpm-lock.yaml', 'utf8'),
-  )
-  if (locked === null) throw new Error('@langchain/core is not in pnpm-lock.yaml')
-  dependencies['@langchain/core'] = locked[1]
+  const locked = lockedSingle('@langchain/core')
+  if (locked === undefined)
+    throw new Error('@langchain/core is not locked at one version in pnpm-lock.yaml')
+  dependencies['@langchain/core'] = locked
 }
 
 const overrides = Object.fromEntries([...closure].sort().map((name) => [name, `$${name}`]))
+/** The caret range a version belongs to — what one dependent's `^x.y.z` would accept. */
+const lineOf = (version) => {
+  const [major, minor] = version.split('.')
+  return major === '0' ? `^0.${minor}` : `^${major}`
+}
+const newest = (versions) =>
+  [...versions].sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).at(-1)
+for (const [name, versions] of [...lockedVersions].sort(([a], [b]) => a.localeCompare(b))) {
+  if (workspace.has(name)) continue
+  if (versions.size === 1) {
+    // A direct dependency must be overridden by reference, or npm refuses the
+    // override as conflicting with the dependency's own spec.
+    overrides[name] = name in dependencies ? `$${name}` : [...versions][0]
+    continue
+  }
+  // Held at several versions: one override per release line (`p-queue@^6`,
+  // `p-queue@^9`), each pinned to the newest version locked on that line.
+  const lines = new Map()
+  for (const version of versions) {
+    lines.set(lineOf(version), [...(lines.get(lineOf(version)) ?? []), version])
+  }
+  for (const [line, onLine] of lines) overrides[`${name}@${line}`] = newest(onLine)
+}
+
+writeFileSync(
+  join(tarballDir, 'locked-versions.json'),
+  `${JSON.stringify(Object.fromEntries([...lockedVersions].map(([name, versions]) => [name, [...versions]])))}\n`,
+)
 
 mkdirSync(installDir, { recursive: true })
 writeFileSync(

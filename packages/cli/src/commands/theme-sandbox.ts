@@ -21,9 +21,33 @@ const SANDBOX_DIRECTORY = join('.cogenta', 'theme-sandbox')
 const RENDER_MODULE_CANDIDATES = ['theme.render.js', 'theme.render.mjs', 'theme.render.ts'] as const
 const PREVIEW_ADAPTER_FILE = '.cogenta-preview-adapter.mjs'
 
+/**
+ * A sandbox id, a local theme's name and an archived version's timestamp all
+ * become one directory name, and all three arrive from a request: a body, a
+ * query parameter or a percent-decoded path segment. Anything but a plain name
+ * is refused here, the one place every path below is built, so `"../../x"`
+ * can never place, copy over or delete a directory outside `themes/` and the
+ * sandbox root.
+ */
+const PLAIN_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u
+
+export function assertPlainName(value: string, what: string): string {
+  if (PLAIN_NAME.test(value) && !value.includes('..')) return value
+  throw new CogentaError({
+    code: 'THEME_SANDBOX_PATH_ESCAPE',
+    message: `The ${what} "${value}" is not a plain name.`,
+    hint: 'Use letters, digits, ".", "_" or "-", starting with a letter or digit, and never "..".',
+  })
+}
+
 /** `<projectRoot>/.cogenta/theme-sandbox/<id>/` — never inside `themes/` itself (§ 3.3). */
 export function sandboxDirectory(projectRoot: string, id: string): string {
-  return join(projectRoot, SANDBOX_DIRECTORY, id)
+  return join(projectRoot, SANDBOX_DIRECTORY, assertPlainName(id, 'sandbox id'))
+}
+
+/** `<projectRoot>/themes/<name>/`, for a name that is a single plain directory name. */
+function themeDirectory(projectRoot: string, themeName: string): string {
+  return join(projectRoot, THEMES_DIRECTORY, assertPlainName(themeName, 'theme name'))
 }
 
 /** A fresh, empty working directory — the "new theme" case (§ 3.3). Idempotent: re-running against an already-created id is a no-op, not an error. */
@@ -53,7 +77,7 @@ export async function cloneThemeIntoSandbox(
   themeName: string,
   id: string,
 ): Promise<string> {
-  const source = join(projectRoot, 'themes', themeName)
+  const source = themeDirectory(projectRoot, themeName)
   try {
     await access(source)
   } catch {
@@ -582,7 +606,7 @@ export async function deployThemeFromSandbox(
   if (!check.ok) return { ok: false, reasons: check.reasons }
 
   const sandboxDir = sandboxDirectory(projectRoot, id)
-  const destination = join(projectRoot, THEMES_DIRECTORY, themeName)
+  const destination = themeDirectory(projectRoot, themeName)
 
   const previousVersionDirectory = await archiveCurrentVersion(projectRoot, themeName)
 
@@ -633,10 +657,15 @@ async function archiveCurrentVersion(
   projectRoot: string,
   themeName: string,
 ): Promise<string | null> {
-  const destination = join(projectRoot, THEMES_DIRECTORY, themeName)
+  const destination = themeDirectory(projectRoot, themeName)
   if (!(await pathExists(destination))) return null
 
-  const archived = join(projectRoot, THEME_VERSIONS_DIRECTORY, themeName, versionTimestamp())
+  const archived = join(
+    projectRoot,
+    THEME_VERSIONS_DIRECTORY,
+    assertPlainName(themeName, 'theme name'),
+    versionTimestamp(),
+  )
   await mkdir(archived, { recursive: true })
   await cp(destination, archived, { recursive: true })
   await rm(destination, { recursive: true, force: true })
@@ -658,7 +687,7 @@ export async function listThemeVersions(
   projectRoot: string,
   themeName: string,
 ): Promise<readonly ThemeVersionInfo[]> {
-  const dir = join(projectRoot, THEME_VERSIONS_DIRECTORY, themeName)
+  const dir = join(projectRoot, THEME_VERSIONS_DIRECTORY, assertPlainName(themeName, 'theme name'))
   try {
     const entries = await readdir(dir, { withFileTypes: true })
     return entries
@@ -695,7 +724,12 @@ export async function restoreThemeVersion(
   themeName: string,
   timestamp: string,
 ): Promise<ThemeRestoreResult> {
-  const versionDir = join(projectRoot, THEME_VERSIONS_DIRECTORY, themeName, timestamp)
+  const versionDir = join(
+    projectRoot,
+    THEME_VERSIONS_DIRECTORY,
+    assertPlainName(themeName, 'theme name'),
+    assertPlainName(timestamp, 'version'),
+  )
   if (!(await pathExists(versionDir))) {
     return {
       ok: false,
@@ -705,7 +739,7 @@ export async function restoreThemeVersion(
 
   const archivedCurrentDirectory = await archiveCurrentVersion(projectRoot, themeName)
 
-  const destination = join(projectRoot, THEMES_DIRECTORY, themeName)
+  const destination = themeDirectory(projectRoot, themeName)
   await mkdir(destination, { recursive: true })
   await cp(versionDir, destination, { recursive: true })
   // Same real bug `deployThemeFromSandbox` closes above — a restore changes
@@ -741,7 +775,15 @@ export type ThemeDeleteResult =
  * boundary every other function in this file already keeps.
  */
 export async function deleteTheme(projectRoot: string, name: string): Promise<ThemeDeleteResult> {
-  const destination = join(projectRoot, THEMES_DIRECTORY, name)
+  // A packaged theme (`@cogenta/theme-canonical`) or a path is never a folder
+  // of themes/: the same "nothing to delete" answer, without building a path.
+  if (!PLAIN_NAME.test(name) || name.includes('..')) {
+    return {
+      ok: false,
+      reasons: [`No local theme named "${name}" exists in this project's themes/ folder.`],
+    }
+  }
+  const destination = themeDirectory(projectRoot, name)
   if (!(await pathExists(destination))) {
     return {
       ok: false,
@@ -750,7 +792,10 @@ export async function deleteTheme(projectRoot: string, name: string): Promise<Th
   }
 
   await rm(destination, { recursive: true, force: true })
-  await rm(join(projectRoot, THEME_VERSIONS_DIRECTORY, name), { recursive: true, force: true })
+  await rm(join(projectRoot, THEME_VERSIONS_DIRECTORY, assertPlainName(name, 'theme name')), {
+    recursive: true,
+    force: true,
+  })
   // Same live-process-cache bug class as a deploy/restore — a name this
   // process already resolved (even to "found") must not keep answering that
   // way once the folder behind it is gone.

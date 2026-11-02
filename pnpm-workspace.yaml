@@ -42,8 +42,8 @@ catalog:
   tailwindcss: ^4.3.3
   'tailwind-merge': ^3.6.0
   typescript: ^7.0.2
-  vite: ^8.2.1
-  vitest: ^4.1.11
+  vite: ^8.2.4
+  vitest: ^4.1.12
   wasm-vips: ^0.0.18
   zod: ^4.6.7
 
@@ -61,7 +61,15 @@ onlyBuiltDependencies:
 #   shell-quote: GHSA-pqg4-j6r4-53mv
 #   zod: GHSA-mrhx-c7xc-m3w5 (fixed in 4.6.6) — @langchain/core and astro pin an
 #   exact zod 4.6.5, so the catalog bump alone leaves a second, vulnerable copy.
+#   launch-editor: GHSA-587h-7wmj-h5pm (fixed in 2.14.2, via changesets)
+#   undici: GHSA-qrxm-fqhp-jwvm (fixed in 8.12.2, via astro > unifont)
+#   fast-uri: GHSA-w74x-v6f9-j3xg (fixed in 3.1.9, via commitlint > ajv)
+#   vite: six advisories fixed in 8.2.4 — astro resolves its own copy below that
 overrides:
+  launch-editor: ^2.14.2
+  undici: ^8.12.2
+  fast-uri: ^3.1.9
+  vite: ^8.2.4
   http-cache-semantics: ^4.3.0
   smol-toml: ^1.9.1
   source-map-js: ^1.2.2

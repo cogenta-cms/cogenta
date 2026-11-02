@@ -120,11 +120,52 @@ describe('the site settings transport', () => {
       expect(signedIn.map((setting) => setting.key)).toContain('general.adminEmail')
     })
 
-    it('shows an editor the whole registry too: the line is signed in or not, not which role', async () => {
-      const response = await router.handle(request('GET'), asEditor)
-      expect(dataOf<readonly SerialisedSiteSetting[]>(response).length).toBe(
-        SITE_SETTINGS_REGISTRY.length,
+    it('keeps from an editor the settings only an administrator may change', async () => {
+      const keys = dataOf<readonly SerialisedSiteSetting[]>(
+        await router.handle(request('GET'), asEditor),
+      ).map((setting) => setting.key)
+
+      for (const secret of [
+        'general.adminEmail',
+        'seo.indexNowKey',
+        'seo.googleSiteVerification',
+        'updates.autoUpdatePolicy',
+        'channels.telegramBotName',
+      ]) {
+        expect(keys).not.toContain(secret)
+      }
+      // What every role's admin screen needs stays readable.
+      expect(keys).toEqual(
+        expect.arrayContaining([
+          'general.title',
+          'navigation.hiddenSections',
+          'content.newEntryDefaultBlocks',
+        ]),
       )
+    })
+
+    it('treats an API key as the roles it carries, not as a signed-in user with the run of the registry', async () => {
+      const apiKey: AccessContext = { actor: { id: 'apikey:k1', roles: ['viewer'] } }
+      const keys = dataOf<readonly SerialisedSiteSetting[]>(
+        await router.handle(request('GET'), apiKey),
+      ).map((setting) => setting.key)
+
+      expect(keys).not.toContain('general.adminEmail')
+    })
+
+    it('names who last edited a setting only to those who may write it', async () => {
+      await router.handle(
+        request('PATCH', { body: { key: 'general.tagline', value: 'A new line' } }),
+        asAdmin,
+      )
+      const updatedBy = async (context: AccessContext): Promise<string | null | undefined> =>
+        dataOf<readonly SerialisedSiteSetting[]>(await router.handle(request('GET'), context)).find(
+          (setting) => setting.key === 'general.tagline',
+        )?.updatedBy
+
+      expect(await updatedBy(asAdmin)).toBe('user-admin')
+      expect(await updatedBy(asEditor)).toBeNull()
+      expect(await updatedBy(asPublic)).toBeNull()
     })
 
     it('lists every registered setting with its default, before anything is written', async () => {
@@ -204,7 +245,12 @@ describe('the site settings transport', () => {
       expect(homePath?.value).toBe('/welcome')
       expect(homePath?.isDefault).toBe(false)
       expect(homePath?.updatedAt).not.toBeNull()
-      expect(homePath?.updatedBy).toBe('user-admin')
+      // The id of the last editor is for those who may change the setting.
+      expect(homePath?.updatedBy).toBeNull()
+      const asOwner = dataOf<readonly SerialisedSiteSetting[]>(
+        await router.handle(request('GET'), asAdmin),
+      ).find((setting) => setting.key === 'reading.homePath')
+      expect(asOwner?.updatedBy).toBe('user-admin')
     })
 
     it('overwrites a previously written value rather than duplicating a row', async () => {

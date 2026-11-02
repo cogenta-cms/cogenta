@@ -133,6 +133,40 @@ describe('CommentsRouter — public POST /api/comments', () => {
     expect((blocked.body as { error: { code: string } }).error.code).toBe('COMMENT_RATE_LIMITED')
   })
 
+  it('answers not-found, storing nothing, when the target is one the visitor may not see', async () => {
+    const guarded = createCommentsRouter({
+      store: createCommentStore({ db, now: () => new Date(now) }),
+      settings: createCommentSettingsStore(db, () => new Date(now)),
+      rateLimiter: createCommentRateLimiter(db, () => now),
+      permissions: createCommentPermissions(),
+      siteDefaults: async () => ({ enabled: true, moderationRequired: true }),
+      ipHashSecret: 'test-secret',
+      now: () => new Date(now),
+      canComment: async (target, request) =>
+        target.entryId === 'visible' || request.unlocked?.(target.entryId) === true,
+    })
+
+    const hidden = await guarded.handle(
+      baseRequest({ body: validForm({ entryId: 'secret' }), ip: '203.0.113.5' }),
+    )
+    const visible = await guarded.handle(
+      baseRequest({ body: validForm({ entryId: 'visible' }), ip: '203.0.113.5' }),
+    )
+    const unlocked = await guarded.handle(
+      baseRequest({
+        body: validForm({ entryId: 'secret' }),
+        ip: '203.0.113.6',
+        unlocked: (entryId) => entryId === 'secret',
+      }),
+    )
+
+    expect(hidden.status).toBe(404)
+    expect((hidden.body as { error: { code: string } }).error.code).toBe('COMMENT_NOT_FOUND')
+    expect(visible.status).toBe(201)
+    expect(unlocked.status).toBe(201)
+    expect((await createCommentStore({ db }).list({})).items).toHaveLength(2)
+  })
+
   it('refuses a comment on an entry with comments disabled', async () => {
     const settings = createCommentSettingsStore(db, () => new Date(now))
     await settings.setCollection('post', { enabled: false })

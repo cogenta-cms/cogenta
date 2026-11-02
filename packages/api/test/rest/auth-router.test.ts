@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto'
 import { type AuthStore, createAuthStore } from '@cogenta/auth'
-import { createSqliteHandle, type DatabaseHandle } from '@cogenta/core'
+import { createSqliteHandle, type DatabaseHandle, sql } from '@cogenta/core'
 import type { CollectionDefinition } from '@cogenta/schema'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createAuthRouter, resolveActor } from '../../src/rest/auth-router.js'
@@ -823,6 +823,24 @@ describe('POST /api/auth/forgot-password', () => {
     expect(forReal.status).toBe(forGhost.status)
     expect(forReal.body).toEqual(forGhost.body)
     expect(forReal.status).toBe(200)
+  })
+
+  it('answers an over-long address like any unknown one and records nothing about it', async () => {
+    const router = createAuthRouter({ auth })
+    const known = await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: 'ghost@example.com' } }),
+    )
+
+    const huge = await router.handle(
+      request('POST', '/api/auth/forgot-password', { body: { email: `${'a'.repeat(5000)}@x.io` } }),
+    )
+
+    expect(huge.status).toBe(200)
+    expect(huge.body).toEqual(known.body)
+    const rows = await db.query<{ subject: string }>(
+      sql`select subject from cogenta_login_attempts where subject like ${'%aaaa%'}`,
+    )
+    expect(rows.rows).toEqual([])
   })
 
   it('issues a real, redeemable token only for the real account, delivered through onForgotPassword', async () => {

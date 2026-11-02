@@ -26,10 +26,16 @@ const MANIFEST = `${JSON.stringify(
     name: 'watcher',
     version: '1.0.0',
     engine: '^1.0.0',
-    capabilities: ['storage.write:plugins/watcher', 'content.write_draft:article', 'schema.read'],
+    capabilities: [
+      'storage.write:plugins/watcher',
+      'content.write_draft:article',
+      'content.publish:article',
+      'content.delete:article',
+      'schema.read',
+    ],
     provides: {
       eventSubscriptions: ['content.publish'],
-      routes: ['/hello', '/echo'],
+      routes: ['/hello', '/echo', '/ship'],
       schedules: [{ name: 'sweep', everyMinutes: 60 }],
     },
     runtime: 'server',
@@ -59,7 +65,18 @@ const CODE = `({
     })
     return 'swept ' + input.name + ' (' + written.status + ')'
   },
-  onRequest: (request) => {
+  onRequest: async (request) => {
+    if (request.path === '/ship') {
+      const draft = await sdk.content.write_draft({
+        collection: 'article',
+        values: { title: 'Shipped by a plugin', slug: 'shipped-by-a-plugin' },
+      })
+      await sdk.content.publish({ collection: 'article', id: draft.id })
+      if (request.query.trash === 'yes') {
+        await sdk.content.delete({ collection: 'article', id: draft.id })
+      }
+      return { status: 200, contentType: 'application/json', body: JSON.stringify(draft) }
+    }
     if (request.path === '/echo') {
       return { status: 201, contentType: 'application/json', body: request.body }
     }
@@ -185,7 +202,7 @@ describe('a plugin on a running site', () => {
     await writeFile(
       join(root, 'plugins', 'watcher', 'plugin.js'),
       CODE.replace(
-        'onRequest: (request) => {',
+        'onRequest: async (request) => {',
         `onRequest: async (request) => {
         await sdk.storage.write({ key: 'plugins/watcher/route-started.json', content: '{"started":true}' })
         // Host-side work that is genuinely still in flight when the uninstall
@@ -573,6 +590,45 @@ describe('a plugin writing content', () => {
       // Written, and invisible: a plugin drafts, a human publishes.
       expect(items.some((item) => item.status === 'published')).toBe(false)
       expect((await fetch(`${server.base}/blog/a-plugin-draft`)).status).toBe(404)
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+})
+
+describe('a plugin publishing content', () => {
+  it('is searchable like any publication and leaves an audit trail naming the plugin', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    await ensurePluginTables(db)
+    const grants = createPluginGrantStore(db)
+    await grants.grant('watcher', 'content.write_draft:article')
+    await grants.grant('watcher', 'content.publish:article')
+    await db.close()
+
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const shipped = await fetch(`${server.base}/_cogenta/plugins/watcher/ship`)
+      expect(shipped.status).toBe(200)
+      const shippedId = ((await shipped.json()) as { id: string }).id
+
+      // Reached by the search index, as a page published by an editor is.
+      const found = await fetch(`${server.base}/api/search?q=Shipped`)
+      expect(JSON.stringify(await found.json())).toContain('Shipped by a plugin')
+      expect((await fetch(`${server.base}/blog/shipped-by-a-plugin`)).status).toBe(200)
+
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      const audit = await fetch(`${server.base}/api/audit?limit=50`, { headers: auth(token) })
+      const entries = (
+        (await audit.json()) as {
+          data: { actorId: string | null; action: string; entryId: string | null }[]
+        }
+      ).data.filter((entry) => entry.actorId === 'plugin:watcher' && entry.entryId === shippedId)
+      expect(entries.map((entry) => entry.action).sort()).toEqual([
+        'content.create',
+        'content.publish',
+      ])
     } finally {
       await server.stop()
     }

@@ -126,11 +126,13 @@ export interface PluginRuntimeOptions {
     readonly collection: string
     readonly id?: string
     readonly values: Record<string, unknown>
+    /** The plugin that asked, for the audit trail. */
+    readonly plugin: string
   }) => Promise<unknown>
-  /** Publishes an existing entry — `content.publish`. */
-  readonly publishEntry?: (collection: string, id: string) => Promise<unknown>
+  /** Publishes an existing entry — `content.publish`. `plugin` is the one that asked. */
+  readonly publishEntry?: (collection: string, id: string, plugin: string) => Promise<unknown>
   /** Moves an entry to the trash — `content.delete`, reversible since schema@2.0. */
-  readonly trashEntry?: (collection: string, id: string) => Promise<unknown>
+  readonly trashEntry?: (collection: string, id: string, plugin: string) => Promise<unknown>
   /** One media item's metadata — `media.read`. */
   readonly readMedia?: (id: string) => Promise<unknown>
   /** The site's content model — `schema.read`. */
@@ -282,7 +284,10 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     await Promise.allSettled(activeRuns.get(name) ?? [])
   }
 
-  function handlersFor(collection: string | null): Record<string, CapabilityHandler> {
+  function handlersFor(
+    collection: string | null,
+    plugin: string,
+  ): Record<string, CapabilityHandler> {
     const handlers: Record<string, CapabilityHandler> = {
       'storage.read': createStorageReadHandler(storage),
       'storage.write': createStorageWriteHandler(storage),
@@ -294,18 +299,20 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     }
     const writeDraft = options.writeDraft
     if (writeDraft !== undefined) {
-      handlers['content.write_draft'] = createContentWriteDraftHandler(writeDraft)
+      handlers['content.write_draft'] = createContentWriteDraftHandler((input) =>
+        writeDraft({ ...input, plugin }),
+      )
     }
     const publishEntry = options.publishEntry
     if (publishEntry !== undefined) {
       handlers['content.publish'] = createContentPublishHandler((input) =>
-        publishEntry(input.collection, input.id),
+        publishEntry(input.collection, input.id, plugin),
       )
     }
     const trashEntry = options.trashEntry
     if (trashEntry !== undefined) {
       handlers['content.delete'] = createContentDeleteHandler((input) =>
-        trashEntry(input.collection, input.id),
+        trashEntry(input.collection, input.id, plugin),
       )
     }
     const readMedia = options.readMedia
@@ -322,7 +329,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
       if (unloaded.has(name)) continue
       try {
         const grants = await grantStore.listGrants(name)
-        const handlers = handlersFor(event.collection)
+        const handlers = handlersFor(event.collection, name)
         const result = await executeLoadedPlugin(plugin, code, grants, {
           onLog: (line) => logger.info('plugin log', { plugin: name, line }),
           invoke: PLUGIN_EVENT_HANDLER,
@@ -391,7 +398,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
         onLog: (line) => logger.info('plugin log', { plugin: name, line }),
         invoke: PLUGIN_REQUEST_HANDLER,
         input: { ...request, path: found.path },
-        handlers: handlersFor(null),
+        handlers: handlersFor(null, name),
         disableStore,
         usageStore,
         onPluginDisabled: (disabled) =>
@@ -439,7 +446,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
               onLog: (line) => logger.info('plugin log', { plugin: pluginName, line }),
               invoke: PLUGIN_SCHEDULE_HANDLER,
               input: { name: schedule.name },
-              handlers: handlersFor(null),
+              handlers: handlersFor(null, pluginName),
               disableStore,
               usageStore,
               onPluginDisabled: (disabled) =>
@@ -487,7 +494,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
         onLog: (line) => logger.info('plugin log', { plugin: pluginName, line }),
         invoke: handler,
         input,
-        handlers: handlersFor(null),
+        handlers: handlersFor(null, pluginName),
         disableStore,
         usageStore,
         onPluginDisabled: (disabled) =>

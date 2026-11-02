@@ -2348,7 +2348,10 @@ async function renderEntryPage(
   // not of the page's own blocks, so it is appended after `<main>` rather
   // than folded into `renderPage`'s tree (see `ThemeRenderOptions.comments`'s
   // own comment for why that also keeps the L16 fidelity test true).
-  const commentsOptions = options.comments
+  //
+  // Not on a locked page: the thread is part of what the password keeps, and
+  // the form would invite a comment on a page the visitor cannot read.
+  const commentsOptions = locked ? undefined : options.comments
   let commentsHtml = ''
   if (commentsOptions !== undefined) {
     const data = await commentsOptions.forEntry(collection.name, entry.id, entry.locale)

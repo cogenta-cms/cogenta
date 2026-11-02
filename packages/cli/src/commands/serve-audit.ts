@@ -1,4 +1,5 @@
 import type { AccessContext, RestResponse } from '@cogenta/api'
+import { MAX_EMAIL_LENGTH } from '@cogenta/auth'
 import type { Logger } from '@cogenta/core'
 import type { Site } from './serve.js'
 
@@ -142,7 +143,7 @@ export async function recordAuthAudit(
         body !== null &&
         typeof body === 'object' &&
         typeof (body as { email?: unknown }).email === 'string'
-          ? (body as { email: string }).email
+          ? (body as { email: string }).email.slice(0, MAX_EMAIL_LENGTH)
           : null
       await site.auth.audit
         .record({

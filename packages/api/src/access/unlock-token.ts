@@ -21,7 +21,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
  * separated by the payload's own version prefix, not by the key.
  */
 
-const TOKEN_VERSION = 'unlock.v1'
+const TOKEN_VERSION = 'unlock.v2'
 
 /** A day. Long enough that reading a protected page is not a chore, short enough that a shared computer forgets. */
 export const DEFAULT_UNLOCK_LIFETIME_SECONDS = 24 * 60 * 60
@@ -36,9 +36,27 @@ export interface UnlockTokenOptions {
 }
 
 export interface UnlockTokenService {
-  issue(entryId: string): string
-  /** `false` for anything that is not a valid, unexpired token for this entry. Never throws. */
-  accepts(entryId: string, token: string | undefined): boolean
+  /**
+   * `lockStamp` is `stampOf` the stored password hash of the entry at
+   * the moment it was answered: changing the password changes the version, so
+   * a proof earned with the old one stops opening the page.
+   */
+  issue(entryId: string, lockStamp: string): string
+  /**
+   * A short, stable marker of one stored password hash. It is keyed with the
+   * signing key and truncated, so the cookie that carries it reveals nothing
+   * about the hash it stands for.
+   */
+  stampOf(lockDigest: string): string
+  /** `false` for anything that is not a valid, unexpired token for this entry and password. Never throws. */
+  accepts(entryId: string, token: string | undefined, lockStamp: string): boolean
+  /**
+   * What a signed, unexpired token claims — the entry it was issued for and
+   * the password version it was issued under — so a caller can look up the
+   * current version of *that* entry and then ask `accepts`. `null` for
+   * anything else. The claim is not a grant: only `accepts` is.
+   */
+  claims(token: string | undefined): { readonly entryId: string; readonly lockStamp: string } | null
   /**
    * The cookie this entry's proof travels in.
    *
@@ -53,6 +71,7 @@ export interface UnlockTokenService {
 interface UnlockPayload {
   readonly v: string
   readonly entryId: string
+  readonly ls: string
   readonly expiresAt: number
 }
 
@@ -66,43 +85,64 @@ export function createUnlockTokens(options: UnlockTokenOptions): UnlockTokenServ
   const sign = (encoded: string): string =>
     createHmac('sha256', options.signingKey).update(`${TOKEN_VERSION}.${encoded}`).digest('hex')
 
+  const stampOf = (lockDigest: string): string =>
+    createHmac('sha256', options.signingKey)
+      .update(`${TOKEN_VERSION}.lock.${lockDigest}`)
+      .digest('hex')
+      .slice(0, 16)
+
+  /** The payload of a token that is signed and not expired, or `null`. */
+  const verified = (token: string | undefined): UnlockPayload | null => {
+    if (token === undefined || token === '') return null
+    const separator = token.lastIndexOf('.')
+    if (separator <= 0 || separator === token.length - 1) return null
+
+    const encoded = token.slice(0, separator)
+    const received = Buffer.from(token.slice(separator + 1), 'utf8')
+    const expected = Buffer.from(sign(encoded), 'utf8')
+    // Signature first, always: nothing inside an unsigned token is data, it
+    // is a claim by a stranger. The length guard comes first because
+    // `timingSafeEqual` throws on a mismatch.
+    if (received.length !== expected.length) return null
+    if (!timingSafeEqual(expected, received)) return null
+
+    let payload: UnlockPayload
+    try {
+      payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as UnlockPayload
+    } catch {
+      return null
+    }
+    if (payload.v !== TOKEN_VERSION) return null
+    if (typeof payload.entryId !== 'string' || typeof payload.ls !== 'string') return null
+    if (typeof payload.expiresAt !== 'number' || payload.expiresAt <= now()) return null
+    return payload
+  }
+
   return {
     cookieName: (entryId) =>
       `cg_unlock_${createHash('sha256').update(entryId).digest('hex').slice(0, 16)}`,
 
-    issue: (entryId) => {
+    stampOf,
+
+    issue: (entryId, lockStamp) => {
       const payload: UnlockPayload = {
         v: TOKEN_VERSION,
         entryId,
+        ls: lockStamp,
         expiresAt: now() + lifetime * 1000,
       }
       const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
       return `${encoded}.${sign(encoded)}`
     },
 
-    accepts: (entryId, token) => {
-      if (token === undefined || token === '') return false
-      const separator = token.lastIndexOf('.')
-      if (separator <= 0 || separator === token.length - 1) return false
+    claims: (token) => {
+      const payload = verified(token)
+      return payload === null ? null : { entryId: payload.entryId, lockStamp: payload.ls }
+    },
 
-      const encoded = token.slice(0, separator)
-      const received = Buffer.from(token.slice(separator + 1), 'utf8')
-      const expected = Buffer.from(sign(encoded), 'utf8')
-      // Signature first, always: nothing inside an unsigned token is data, it
-      // is a claim by a stranger. The length guard comes first because
-      // `timingSafeEqual` throws on a mismatch.
-      if (received.length !== expected.length) return false
-      if (!timingSafeEqual(expected, received)) return false
-
-      let payload: UnlockPayload
-      try {
-        payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as UnlockPayload
-      } catch {
-        return false
-      }
-      if (payload.v !== TOKEN_VERSION) return false
-      if (payload.entryId !== entryId) return false
-      return typeof payload.expiresAt === 'number' && payload.expiresAt > now()
+    accepts: (entryId, token, lockStamp) => {
+      const payload = verified(token)
+      return payload !== null && payload.entryId === entryId && payload.ls === lockStamp
     },
   }
 }

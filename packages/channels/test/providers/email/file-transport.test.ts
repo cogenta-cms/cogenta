@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import { chmod, mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -58,4 +58,33 @@ describe('createFileEmailTransport', () => {
     const files = await readdir(dir)
     expect(files).toHaveLength(2)
   })
+
+  // A reset link or an invitation is a bearer credential, and this directory
+  // is where a development site (or a small host) keeps every one it sends.
+  it.skipIf(process.platform === 'win32')(
+    'keeps the messages readable by their owner only, the directory and each file',
+    async () => {
+      const dir = join(await tempDir(), 'mail')
+      const transport = createFileEmailTransport({ directory: dir })
+
+      await transport.send({ to: 'a@example.com', subject: 's', text: 't', html: '<p>t</p>' })
+
+      const [name] = await readdir(dir)
+      expect((await stat(dir)).mode & 0o777).toBe(0o700)
+      expect((await stat(join(dir, name as string))).mode & 0o777).toBe(0o600)
+    },
+  )
+
+  it.skipIf(process.platform === 'win32')(
+    'tightens a directory that already exists with looser permissions',
+    async () => {
+      const dir = await tempDir()
+      await chmod(dir, 0o755)
+      const transport = createFileEmailTransport({ directory: dir })
+
+      await transport.send({ to: 'a@example.com', subject: 's', text: 't', html: '<p>t</p>' })
+
+      expect((await stat(dir)).mode & 0o777).toBe(0o700)
+    },
+  )
 })

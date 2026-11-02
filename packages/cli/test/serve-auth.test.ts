@@ -415,6 +415,41 @@ describe('cogenta serve — failed sign-ins are audited', () => {
   })
 })
 
+describe('cogenta serve — a failed sign-in cannot grow the logs without bound', () => {
+  it('refuses a megabyte-long email without journalling it or counting it', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      await createUser(root, 'admin@example.com', 'correct horse battery staple', ['admin'])
+
+      const refused = await fetch(`${server.base}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: `${'a'.repeat(900_000)}@example.com`, password: 'x' }),
+      })
+      expect(refused.status).toBe(401)
+
+      const admin = await passwordLogin(
+        server.base,
+        'admin@example.com',
+        'correct horse battery staple',
+      )
+      const adminToken = admin.data.session?.token
+      if (adminToken === undefined) throw new Error('expected a real admin session')
+      const audit = await fetch(`${server.base}/api/audit?action=auth.login_failed`, {
+        headers: { authorization: `Bearer ${adminToken}` },
+      })
+      const body = (await audit.json()) as {
+        data: readonly { diff: { email?: string } | null }[]
+      }
+      // The attempt is still recorded, but what is kept of the address is bounded.
+      for (const entry of body.data) expect(entry.diff?.email?.length ?? 0).toBeLessThanOrEqual(254)
+    } finally {
+      await server.stop()
+    }
+  })
+})
+
 describe('cogenta serve — my activity (fiche 18 task 4)', () => {
   it('ignores any actor id supplied by the client and only ever shows the caller’s own activity', async () => {
     const root = await project()

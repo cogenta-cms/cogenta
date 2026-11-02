@@ -926,7 +926,9 @@ export async function resolveWidgetAreas(
           if (items.length >= value.count) break
           const collection = collectionsByName.get(comment.collection)
           const entry = await readEntry(comment.collection, comment.entryId)
-          if (collection === undefined || entry === null) continue
+          // A comment on a protected page is part of what its password keeps: the
+          // excerpt would hand the discussion to a visitor who never opened it.
+          if (collection === undefined || entry === null || entry.visibility !== 'public') continue
           const href = hrefOf(
             collection,
             entry,

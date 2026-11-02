@@ -99,3 +99,20 @@ describe('recentFailures', () => {
     ])
   })
 })
+
+describe('pruning on write', () => {
+  it('drops rows that left the window when a later attempt is recorded, without anyone reading the failures', async () => {
+    let clock = 1_000_000
+    const db = await testDb()
+    const limiter = createRateLimiter(db, () => clock)
+    for (let i = 0; i < 10; i += 1) await limiter.record(`attacker-${i}@example.com`)
+
+    clock += 16 * 60 * 1000
+    await limiter.record('someone@example.com')
+
+    const rows = await db.query<{ n: number }>(
+      sql`select count(*) as n from cogenta_login_attempts`,
+    )
+    expect(Number(rows.rows[0]?.n)).toBe(1)
+  })
+})

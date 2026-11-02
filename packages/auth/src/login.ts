@@ -430,6 +430,18 @@ export async function revokeSignInTickets(db: DatabaseHandle, userId: string): P
   await db.query(sql`delete from ${tickets} where user_id = ${userId}`)
 }
 
+/** An address short enough to be a rate-limit subject as it is; longer ones are hashed. */
+const LIMITER_SUBJECT_MAX = 160
+
+function limiterSubject(subject: string): string {
+  return subject.length <= LIMITER_SUBJECT_MAX
+    ? subject
+    : `h:${createHash('sha256').update(subject).digest('base64url')}`
+}
+
+/** The longest address that can exist (RFC 5321 section 4.5.3.1.3). */
+export const MAX_EMAIL_LENGTH = 254
+
 export function createAuthService(options: AuthServiceOptions): AuthService {
   // `options.collections` is deliberately not read here any more: since
   // ADR-0021 the second-factor challenge follows what a person enrolled, not
@@ -590,6 +602,14 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
     }
   }
 
+  function invalidCredentials(): CogentaError {
+    return new CogentaError({
+      code: 'AUTH_INVALID_CREDENTIALS',
+      message: 'Incorrect email or password.',
+      hint: 'Check the email and password. Repeated failures are rate-limited.',
+    })
+  }
+
   function accountGone(): CogentaError {
     return new CogentaError({
       code: 'AUTH_USER_NOT_FOUND',
@@ -622,12 +642,20 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
 
   return {
     passwordLogin: async (email, password, context) => {
+      // No address is longer than 254 characters (RFC 5321), so nothing here
+      // can match one; refusing early keeps a megabyte-long "email" out of the
+      // limiter's table and the audit log, with the answer any other wrong
+      // credential gets.
+      if (email.length > MAX_EMAIL_LENGTH) throw invalidCredentials()
       const subject = email.trim().toLowerCase()
+      // The limiter's column is 255 characters wide and a scoped subject adds a
+      // place to the address; a long address is counted under its digest.
+      const limited = limiterSubject(subject)
       if (context?.ip === undefined || context.ip === '') {
-        await rateLimit.reserve(subject)
+        await rateLimit.reserve(limited)
       } else {
         const place = `ip:${createHash('sha256').update(context.ip).digest('base64url').slice(0, 16)}`
-        await rateLimit.reserveScoped(subject, place, ACCOUNT_WIDE_SCALE)
+        await rateLimit.reserveScoped(limited, place, ACCOUNT_WIDE_SCALE)
       }
 
       const user = await users.byEmail(subject)
@@ -635,15 +663,9 @@ export function createAuthService(options: AuthServiceOptions): AuthService {
       if (user === null) await spendOnePasswordCheck(password)
       else valid = await credentials.verifyPassword(user.id, password)
 
-      if (!valid || user === null || user.status !== 'active') {
-        throw new CogentaError({
-          code: 'AUTH_INVALID_CREDENTIALS',
-          message: 'Incorrect email or password.',
-          hint: 'Check the email and password. Repeated failures are rate-limited.',
-        })
-      }
+      if (!valid || user === null || user.status !== 'active') throw invalidCredentials()
 
-      await rateLimit.clear(subject)
+      await rateLimit.clear(limited)
       // What decides the challenge is what this person enrolled, not what
       // their role is (ADR-0021). A brand-new admin signs straight in; an
       // account that turned TOTP on still has to produce a code, because

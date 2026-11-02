@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash } from 'node:crypto'
 import { mkdtemp, open, readFile, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
@@ -301,6 +302,7 @@ import {
   buildPath,
   buildSchemaDocument,
   type CollectionDefinition,
+  type ContentEntry,
   type ContentLifecycleEvent,
   type ContentStore,
   columnFor,
@@ -446,6 +448,7 @@ import {
   type SecurityConfig,
 } from './http-security.js'
 import { createImageLibrary, resolveImageClient } from './image-library.js'
+import { createLivePathCheck } from './live-path.js'
 import {
   homePathFor,
   isLocaleRouted,
@@ -2154,6 +2157,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           collections,
           notFoundLog,
           redirects,
+          // A redirect may not take a live page away from its visitors.
+          isLivePath: (path) => isLivePath(path),
           // L5 task 10 — the moderation queue and the audience figures, as
           // the narrow ports `@cogenta/agents` describes. Built from the
           // very stores the comment router and the analytics router already
@@ -2352,6 +2357,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   const adminThemeStore: AdminThemeStore = createAdminThemeStore({ db })
 
   const gateway = createContentGateway({ collections, stores, permissions })
+  // Asked by the agents' `redirects.create`, built here because it needs the
+  // gateway; the agent runtime above only calls it long after this line ran.
+  const isLivePath = createLivePathCheck({ collections, gateway, site, terms: termSlugs })
 
   // Resolves an `entry`-kind menu item to a display label, public route and
   // — for an actor entitled to see it — a health status (fiche 09, task 4).
@@ -2975,6 +2983,21 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     rateLimiter: commentsRateLimiter,
     permissions: commentsPermissions,
     ipHashSecret: commentsIpHashSecret,
+    // A private page is not told apart from a missing one, and a protected
+    // page takes comments from the visitors who opened it. An entry that is not
+    // found at all is left to the discussion settings, as it always was.
+    canComment: async ({ collection, entryId }, request) => {
+      const store = storeForName(collection)
+      if (store === undefined) return true
+      let entry: ContentEntry | null = null
+      try {
+        entry = (await store.read(entryId, { state: 'working' })) ?? (await store.read(entryId))
+      } catch {
+        return true
+      }
+      if (entry === null || entry.visibility === 'public') return true
+      return entry.visibility === 'password' && request.unlocked?.(entryId) === true
+    },
     siteDefaults: async () => {
       const [enabledSetting, moderationSetting] = await Promise.all([
         siteSettingsStore.get('discussion.enabled', SITE_SETTINGS_SITE_SCOPE),
@@ -4029,21 +4052,86 @@ function isStoredSocialLinkList(value: unknown): value is readonly StoredSocialL
  * an entry that is not protected at all — the caller must not be able to tell
  * those apart, and neither must a visitor.
  */
-async function unlockEntry(site: Site, entryId: string, password: string): Promise<boolean> {
-  if (entryId === '' || password === '') return false
+async function unlockEntry(
+  site: Site,
+  entryId: string,
+  password: string,
+  tokens: UnlockTokenService,
+): Promise<string | null> {
+  if (entryId === '' || password === '') return null
   for (const collection of site.collections) {
     const store = site.storeFor(collection)
     try {
-      const opened = await store.verifyEntryPassword(entryId, (hash: string) =>
-        verifyPassword(password, hash),
-      )
-      if (opened) return true
+      // The proof is bound to the password it was earned with: the version is
+      // taken from the very hash the answer was compared against, inside the
+      // store, so the hash itself never leaves it.
+      let version: string | null = null
+      const opened = await store.verifyEntryPassword(entryId, async (hash: string) => {
+        const matches = await verifyPassword(password, hash)
+        if (matches) version = tokens.stampOf(hash)
+        return matches
+      })
+      if (opened && version !== null) return version
     } catch {
       // A collection whose table does not hold this entry: not an error, just
       // the wrong place to look.
     }
   }
+  return null
+}
+
+/**
+ * Whether the cookies of a request still open `entryId`: the proof must be
+ * signed, unexpired, issued for this entry and — the part a signature alone
+ * cannot say — issued under the password the entry has *now*. A page whose
+ * password was changed stops honouring every earlier answer.
+ */
+async function cookieOpensEntry(
+  site: Site,
+  tokens: UnlockTokenService,
+  cookies: ReadonlyMap<string, string>,
+  entryId: string,
+): Promise<boolean> {
+  const token = cookies.get(tokens.cookieName(entryId))
+  const claims = tokens.claims(token)
+  if (claims === null || claims.entryId !== entryId) return false
+  for (const collection of site.collections) {
+    try {
+      const current = await site
+        .storeFor(collection)
+        .verifyEntryPassword(
+          entryId,
+          async (hash: string) => tokens.stampOf(hash) === claims.lockStamp,
+        )
+      if (current) return tokens.accepts(entryId, token, claims.lockStamp)
+    } catch {
+      // Not this collection's entry.
+    }
+  }
   return false
+}
+
+/** The most unlock cookies one request is asked to check — a page lists few. */
+const MAX_UNLOCK_COOKIES_CHECKED = 16
+
+/** Every entry whose unlock cookie in this request is still good. */
+async function unlockedEntryIds(
+  site: Site,
+  tokens: UnlockTokenService,
+  cookieHeader: string | undefined,
+): Promise<ReadonlySet<string>> {
+  const cookies = parseCookies(cookieHeader)
+  const open = new Set<string>()
+  let checked = 0
+  for (const [name, value] of cookies) {
+    if (!name.startsWith('cg_unlock_')) continue
+    if (checked >= MAX_UNLOCK_COOKIES_CHECKED) break
+    checked += 1
+    const claims = tokens.claims(value)
+    if (claims === null || open.has(claims.entryId)) continue
+    if (await cookieOpensEntry(site, tokens, cookies, claims.entryId)) open.add(claims.entryId)
+  }
+  return open
 }
 
 async function widgetsForSite(
@@ -5694,7 +5782,17 @@ export function createRequestListener(
       if (url.pathname.startsWith('/api/comments')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
-        const request = toCommentsRequest(req, url, body)
+        const unlockTokens = extras?.unlockTokens
+        const unlockedIds =
+          unlockTokens === undefined || req.method !== 'POST'
+            ? undefined
+            : await unlockedEntryIds(site, unlockTokens, req.headers.cookie)
+        const request = {
+          ...toCommentsRequest(req, url, body),
+          ...(unlockedIds === undefined
+            ? {}
+            : { unlocked: (entryId: string): boolean => unlockedIds.has(entryId) }),
+        }
         const response = await site.commentsRouter.handle(request, context.actor)
         // The one shape besides JSON this router ever answers with: a 303
         // redirect back to the page a no-JS `<form>` posted from
@@ -6598,11 +6696,17 @@ export function createRequestListener(
         // label and no fields. It says what a block is called and what fields
         // it holds — the same kind of thing `/api/schema` already tells any
         // signed-in actor — and nothing about a plugin's code, grants or
-        // state.
+        // state. Signed-in actors only: the admin sends its token for it.
         if (
           (url.pathname === '/api/plugins/blocks' || url.pathname === '/api/plugins/widgets') &&
           req.method === 'GET'
         ) {
+          // The editor needs it; a stranger has no use for it and gets no
+          // inventory of what this site's plugins are or provide.
+          if (context.actor.id === null) {
+            jsonError(res, 401, 'UNAUTHENTICATED', 'Sign in to see what plugins provide.')
+            return
+          }
           const widgets = url.pathname.endsWith('/widgets')
           res.writeHead(200, {
             'content-type': 'application/json; charset=utf-8',
@@ -7853,8 +7957,10 @@ export function createRequestListener(
           }
         }
 
-        const opened = wellFormed && (await unlockEntry(site, entryId, password))
-        if (!opened) {
+        const version = wellFormed
+          ? await unlockEntry(site, entryId, password, extras.unlockTokens)
+          : null
+        if (version === null) {
           // The same answer whatever went wrong — wrong password, unknown
           // entry, an entry that is not protected at all: a different one
           // would tell a stranger which pages exist and which are locked.
@@ -7873,7 +7979,7 @@ export function createRequestListener(
           ?.reset(`unlock:${clientIpOf(req)}:${entryId}`, UNLOCK_WINDOW_MS)
           .catch(() => undefined)
 
-        const token = extras.unlockTokens.issue(entryId)
+        const token = extras.unlockTokens.issue(entryId, version)
         res.writeHead(303, {
           location: back,
           'cache-control': 'no-store',
@@ -8048,14 +8154,14 @@ export function createRequestListener(
         // shares the page with whoever it is forwarded to. The proof is
         // checked **per entry id** — a cookie earned on page A says nothing
         // about page B.
-        const unlockedByCookie =
+        const unlockedIds =
           extras?.unlockTokens === undefined
             ? undefined
-            : (entryId: string): boolean =>
-                extras.unlockTokens?.accepts(
-                  entryId,
-                  parseCookies(req.headers.cookie).get(extras.unlockTokens.cookieName(entryId)),
-                ) === true
+            : await unlockedEntryIds(site, extras.unlockTokens, req.headers.cookie)
+        const unlockedByCookie =
+          unlockedIds === undefined
+            ? undefined
+            : (entryId: string): boolean => unlockedIds.has(entryId)
         // The context the *page* reads content through: it carries the unlock
         // check down to the gateway, which is what hands a protected entry's
         // content to the renderer — and only for the entries that were
@@ -8935,6 +9041,36 @@ export async function runServe(options: ServeOptions): Promise<number> {
     pluginStores.set(collectionName, store)
     return store
   }
+  // Marks the writes a plugin makes so that the event they raise is not handed
+  // back to plugins: a plugin that reacts to a publication by publishing
+  // another entry would otherwise answer its own writes for ever. Webhooks and
+  // every other listener still hear about the write.
+  const pluginWrites = new AsyncLocalStorage<true>()
+  /** The site's own store for a collection, for a plugin's writes; `null` for a name the site does not have. */
+  const pluginWriteStore = (collectionName: string): ContentStore | null => {
+    const collection = site.collections.find((item) => item.name === collectionName)
+    return collection === undefined ? null : site.storeFor(collection)
+  }
+  const auditPluginWrite = async (
+    plugin: string,
+    action: string,
+    target: {
+      readonly collection: string
+      readonly entryId: string
+      readonly diff?: Record<string, unknown>
+    },
+  ): Promise<void> => {
+    await site.auth.audit
+      .record({
+        actorId: `plugin:${plugin}`,
+        actorRoles: [],
+        action,
+        collection: target.collection,
+        entryId: target.entryId,
+        ...(target.diff === undefined ? {} : { diff: target.diff }),
+      })
+      .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
+  }
   const pluginRuntime = loaded.config.plugins.enabled
     ? await createPluginRuntime({
         projectRoot,
@@ -8956,28 +9092,45 @@ export async function runServe(options: ServeOptions): Promise<number> {
         // A draft, never a publication: what a plugin writes stays invisible
         // until a human publishes it (L31 step 3). `state: 'working'` is the
         // same face the admin's own editor writes to.
-        writeDraft: async ({ collection: collectionName, id, values }) => {
-          const store = pluginContentStore(collectionName)
+        //
+        // Writes go through the site's own decorated stores, the ones the REST
+        // routes use: the search and vector indexes, redirect tracking, the
+        // scheduled-publication queue and the webhooks all see a plugin's
+        // write exactly as they see an editor's, and each write is audited
+        // under `plugin:<name>`.
+        writeDraft: async ({ collection: collectionName, id, values, plugin }) => {
+          const store = pluginWriteStore(collectionName)
           if (store === null) return null
-          if (id === undefined) {
-            const created = await store.create({ values })
-            return { id: created.id, status: created.status }
-          }
-          const updated = await store.update(id, { values })
-          return { id: updated.id, status: updated.status }
+          const written = await pluginWrites.run(true, () =>
+            id === undefined ? store.create({ values }) : store.update(id, { values }),
+          )
+          await auditPluginWrite(plugin, id === undefined ? 'content.create' : 'content.update', {
+            collection: collectionName,
+            entryId: written.id,
+            diff: values,
+          })
+          return { id: written.id, status: written.status }
         },
-        publishEntry: async (collectionName, id) => {
-          const store = pluginContentStore(collectionName)
+        publishEntry: async (collectionName, id, plugin) => {
+          const store = pluginWriteStore(collectionName)
           if (store === null) return null
-          const published = await store.publish(id)
+          const published = await pluginWrites.run(true, () => store.publish(id))
+          await auditPluginWrite(plugin, 'content.publish', {
+            collection: collectionName,
+            entryId: id,
+          })
           return { id: published.id, status: published.status }
         },
         // The trash, not a purge: reversible since schema@2.0 (ADR-0022),
         // which is exactly what makes this safe to hand a plugin at all.
-        trashEntry: async (collectionName, id) => {
-          const store = pluginContentStore(collectionName)
+        trashEntry: async (collectionName, id, plugin) => {
+          const store = pluginWriteStore(collectionName)
           if (store === null) return null
-          await store.delete(id)
+          await pluginWrites.run(true, () => store.delete(id))
+          await auditPluginWrite(plugin, 'content.delete', {
+            collection: collectionName,
+            entryId: id,
+          })
           return { id, trashed: true }
         },
         readSchema: async () =>
@@ -9150,7 +9303,10 @@ export async function runServe(options: ServeOptions): Promise<number> {
   const contentEventSinks = [
     webhooks.emit,
     pluginRuntime !== null && pluginRuntime.subscribers > 0
-      ? pluginRuntime.dispatchContentEvent
+      ? async (event: ContentLifecycleEvent): Promise<void> => {
+          if (pluginWrites.getStore() === true) return
+          await pluginRuntime.dispatchContentEvent(event)
+        }
       : null,
   ].filter((sink): sink is (event: ContentLifecycleEvent) => Promise<void> => sink !== null)
   const onContentEvent =

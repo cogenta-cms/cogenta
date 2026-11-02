@@ -195,6 +195,8 @@ export interface BuildAgentRuntimeOptions {
   readonly notFoundLog: NotFoundLogReader
   /** For `redirects.create` (L22 task 3). */
   readonly redirects: RedirectWriter
+  /** Whether a published page answers at a path; `redirects.create` refuses to take such a path away. Absent, nothing is refused on that ground. */
+  readonly isLivePath?: (path: string) => Promise<boolean>
   /**
    * Injectable for tests — defaults to a fresh `createMemoryApprovalQueue()`.
    * A non-reversible, side-effecting tool call (every core content/media
@@ -551,6 +553,7 @@ function buildToolRegistry(options: {
   readonly collections: readonly CollectionDefinition[]
   readonly notFoundLog: NotFoundLogReader
   readonly redirects: RedirectWriter
+  readonly isLivePath?: (path: string) => Promise<boolean>
   /** Fiche 58 task 4 — every checked remote tool of every enabled MCP connection, already wrapped as a Contract C `ToolDefinition` by `buildMcpToolDefinitions`. Merged in exactly like every core tool above: an agent grants itself one by naming it in its own `tools` list, same as `content.read`. */
   readonly mcpDefinitions: readonly ToolDefinition[]
   /** L26 task 5 — see `BuildAgentRuntimeOptions.themeCreator`. Absent means `theme.propose_theme` is not registered at all (R2). */
@@ -653,7 +656,10 @@ function buildToolRegistry(options: {
     // The missing half of the browse pair — a collection's field shape,
     // not just its entries.
     createContentSchemaTool(contentSchemaServiceLike),
-    createRedirectCreateTool(options.redirects),
+    createRedirectCreateTool(
+      options.redirects,
+      options.isLivePath === undefined ? {} : { isLivePath: options.isLivePath },
+    ),
     // L5 task 10 — the Modération and Analytics agents. Registered only when
     // the host really has a queue / a measurement to offer.
     ...(options.comments === undefined
@@ -953,6 +959,7 @@ export async function buildAgentRuntime(
     collections: options.collections,
     notFoundLog: options.notFoundLog,
     redirects: options.redirects,
+    ...(options.isLivePath === undefined ? {} : { isLivePath: options.isLivePath }),
     ...(options.comments === undefined ? {} : { comments: options.comments }),
     ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
     ...(options.themeCreator === undefined ? {} : { themeCreator: options.themeCreator }),

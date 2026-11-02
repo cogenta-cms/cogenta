@@ -77,4 +77,65 @@ describe('the streaming ZIP writer/reader', () => {
     }
     expect(count).toBe(2)
   })
+
+  describe('on a file whose declared sizes are not true', () => {
+    async function archive(): Promise<Buffer> {
+      const chunks: Buffer[] = []
+      const zip = createZipWriter({ write: (chunk) => void chunks.push(chunk) })
+      await zip.addFile('a.txt', Buffer.from('hello', 'utf8'))
+      await zip.finish()
+      return Buffer.concat(chunks)
+    }
+
+    /** The end-of-central-directory record sits in the last 22 bytes (no comment). */
+    function eocd(file: Buffer): number {
+      return file.length - 22
+    }
+
+    async function opened(file: Buffer): Promise<ReturnType<typeof openZip>> {
+      const path = join(directory, 'crafted.zip')
+      await writeFile(path, file)
+      return openZip(path)
+    }
+
+    it('refuses a central directory declared larger than the file instead of allocating it', async () => {
+      const file = await archive()
+      file.writeUInt32LE(0xffffffff, eocd(file) + 12)
+
+      await expect(opened(file)).rejects.toMatchObject({ code: 'EXPORT_FORMAT_INVALID' })
+    })
+
+    it('refuses a central directory that starts past the end of the file', async () => {
+      const file = await archive()
+      file.writeUInt32LE(file.length + 1000, eocd(file) + 16)
+
+      await expect(opened(file)).rejects.toMatchObject({ code: 'EXPORT_FORMAT_INVALID' })
+    })
+
+    it('refuses more entries than the central directory can hold', async () => {
+      const file = await archive()
+      file.writeUInt16LE(60_000, eocd(file) + 10)
+
+      await expect(opened(file)).rejects.toMatchObject({ code: 'EXPORT_FORMAT_INVALID' })
+    })
+
+    it('refuses an entry that claims more bytes than the whole file holds', async () => {
+      const file = await archive()
+      // The size field of the first (and only) central directory entry.
+      const centralStart = file.readUInt32LE(eocd(file) + 16)
+      file.writeUInt32LE(0x7fffffff, centralStart + 24)
+
+      await expect(opened(file)).rejects.toMatchObject({ code: 'EXPORT_FORMAT_INVALID' })
+    })
+
+    it('refuses an entry count above the cap the caller sets', async () => {
+      const file = await archive()
+      const path = join(directory, 'capped.zip')
+      await writeFile(path, file)
+
+      await expect(openZip(path, { maxEntries: 0 })).rejects.toMatchObject({
+        code: 'EXPORT_FORMAT_INVALID',
+      })
+    })
+  })
 })

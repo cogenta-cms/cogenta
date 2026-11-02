@@ -221,6 +221,13 @@ describe('a block a plugin provides, on a real page', () => {
         }
       }
       expect(described.data.blocks).toHaveLength(1)
+
+      // What a plugin adds to the editor is for people who are signed in.
+      for (const path of ['/api/plugins/blocks', '/api/plugins/widgets']) {
+        const anonymous = await fetch(`${server.base}${path}`)
+        expect(anonymous.status, path).toBe(401)
+        expect(await anonymous.text(), path).not.toContain('callout')
+      }
       expect(described.data.blocks[0]).toMatchObject({
         name: 'callout',
         label: 'Encadré',

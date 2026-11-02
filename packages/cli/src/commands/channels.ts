@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { SUPERAGENT_NAME } from '@cogenta/agents'
-import { createContentService, createPermissionLayer } from '@cogenta/api'
+import { createContentGateway, createContentService, createPermissionLayer } from '@cogenta/api'
 import { createAuditLog, createUserStore } from '@cogenta/auth'
 import {
   type ChannelAdapter,
@@ -46,6 +46,7 @@ import {
   clearChannelsStatus,
   writeChannelsStatus,
 } from './channels-status.js'
+import { createLivePathCheck } from './live-path.js'
 import { loadSchemaModule } from './serve.js'
 import { createSiteTermSlugs } from './term-slugs.js'
 
@@ -318,6 +319,24 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
       rolePermissionOverrides: rolePermissionOverlay,
     })
     const storeFor = storeForFactory(db, collections)
+    const termSlugs = createSiteTermSlugs(taxonomies, (taxonomy) =>
+      createTaxonomyStore({ db, taxonomy }),
+    )
+    const isLivePath = createLivePathCheck({
+      collections,
+      gateway: createContentGateway({
+        collections,
+        stores: new Map(collections.map((collection) => [collection.name, storeFor(collection)])),
+        permissions,
+      }),
+      site: {
+        name: loaded.config.site.name,
+        url: loaded.config.site.url ?? 'http://localhost',
+        locales: loaded.config.site.locales,
+        defaultLocale: loaded.config.site.defaultLocale,
+      },
+      terms: termSlugs,
+    })
     const contentService = createContentService({ collections, permissions, storeFor })
     const mediaStore = createDatabaseMediaStore({ db })
     const auditLog = createAuditLog(db)
@@ -346,13 +365,14 @@ export async function runChannels(options: ChannelsOptions): Promise<number> {
         defaultLocale: loaded.config.site.defaultLocale,
       },
       contentService,
-      terms: createSiteTermSlugs(taxonomies, (taxonomy) => createTaxonomyStore({ db, taxonomy })),
+      terms: termSlugs,
       mediaStore,
       auditLog,
       logger,
       collections,
       notFoundLog,
       redirects,
+      isLivePath,
     })
 
     const getUserRoles = async (userId: string): Promise<readonly string[]> => {

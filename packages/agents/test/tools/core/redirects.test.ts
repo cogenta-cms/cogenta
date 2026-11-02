@@ -59,6 +59,36 @@ describe('redirects.create', () => {
     expect(() => tool.input.parse({ from: '/a', to: '/b', status: 410 })).toThrow()
   })
 
+  it('refuses to redirect away a page that is live, writing nothing', async () => {
+    const store = fakeStore()
+    const tool = createRedirectCreateTool(store, {
+      isLivePath: async (path) => path === '/about',
+    })
+
+    await expect(
+      tool.execute({ from: '/about', to: 'https://evil.example' }, CTX),
+    ).rejects.toMatchObject({
+      code: 'REDIRECT_FROM_LIVE_PATH',
+    })
+    expect(store.add).not.toHaveBeenCalled()
+  })
+
+  it('still redirects a path nothing lives at, and judges the path without its query string', async () => {
+    const store = fakeStore()
+    const checked: string[] = []
+    const tool = createRedirectCreateTool(store, {
+      isLivePath: async (path) => {
+        checked.push(path)
+        return false
+      },
+    })
+
+    await tool.execute({ from: '/old-guide?utm=1', to: '/guides/new-guide' }, CTX)
+
+    expect(checked).toEqual(['/old-guide'])
+    expect(store.add).toHaveBeenCalledTimes(1)
+  })
+
   it('reverts by removing the redirect it created', async () => {
     const store = fakeStore()
     const tool = createRedirectCreateTool(store)

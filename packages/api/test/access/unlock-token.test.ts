@@ -7,16 +7,17 @@ import { createUnlockTokens, MAX_UNLOCK_LIFETIME_SECONDS } from '../../src/acces
  */
 
 const KEY = 'a'.repeat(48)
+const PW = 'ffffffffffffffff'
 
 describe('an unlock token', () => {
   it('opens the entry it was issued for, and only that one', () => {
     const tokens = createUnlockTokens({ signingKey: KEY })
-    const token = tokens.issue('entry-a')
+    const token = tokens.issue('entry-a', PW)
 
-    expect(tokens.accepts('entry-a', token)).toBe(true)
+    expect(tokens.accepts('entry-a', token, PW)).toBe(true)
     // The whole point: answering one page's password is not answering every
     // password on the site.
-    expect(tokens.accepts('entry-b', token)).toBe(false)
+    expect(tokens.accepts('entry-b', token, PW)).toBe(false)
   })
 
   it('is refused once it has expired', () => {
@@ -26,35 +27,74 @@ describe('an unlock token', () => {
       lifetimeSeconds: 60,
       now: () => clock,
     })
-    const token = tokens.issue('entry-a')
+    const token = tokens.issue('entry-a', PW)
 
-    expect(tokens.accepts('entry-a', token)).toBe(true)
+    expect(tokens.accepts('entry-a', token, PW)).toBe(true)
     clock += 61_000
-    expect(tokens.accepts('entry-a', token)).toBe(false)
+    expect(tokens.accepts('entry-a', token, PW)).toBe(false)
   })
 
   it('cannot be forged, edited or replayed from another site', () => {
     const tokens = createUnlockTokens({ signingKey: KEY })
-    const token = tokens.issue('entry-a')
+    const token = tokens.issue('entry-a', PW)
     const [payload = '', signature = ''] = token.split('.')
 
     // A payload changed to name another entry, keeping the old signature.
     const swapped = Buffer.from(
-      JSON.stringify({ v: 'unlock.v1', entryId: 'entry-b', expiresAt: Date.now() + 60_000 }),
+      JSON.stringify({
+        v: 'unlock.v2',
+        entryId: 'entry-b',
+        ls: PW,
+        expiresAt: Date.now() + 60_000,
+      }),
       'utf8',
     ).toString('base64url')
-    expect(tokens.accepts('entry-b', `${swapped}.${signature}`)).toBe(false)
+    expect(tokens.accepts('entry-b', `${swapped}.${signature}`, PW)).toBe(false)
 
     // A signature from a different key: another Cogenta site's token is not a
     // key to this one.
     const elsewhere = createUnlockTokens({ signingKey: 'b'.repeat(48) })
-    expect(tokens.accepts('entry-a', elsewhere.issue('entry-a'))).toBe(false)
+    expect(tokens.accepts('entry-a', elsewhere.issue('entry-a', PW), PW)).toBe(false)
 
     // Truncated, empty, and plain nonsense.
-    expect(tokens.accepts('entry-a', payload)).toBe(false)
-    expect(tokens.accepts('entry-a', '')).toBe(false)
-    expect(tokens.accepts('entry-a', undefined)).toBe(false)
-    expect(tokens.accepts('entry-a', 'not-a-token')).toBe(false)
+    expect(tokens.accepts('entry-a', payload, PW)).toBe(false)
+    expect(tokens.accepts('entry-a', '', PW)).toBe(false)
+    expect(tokens.accepts('entry-a', undefined, PW)).toBe(false)
+    expect(tokens.accepts('entry-a', 'not-a-token', PW)).toBe(false)
+  })
+
+  it('stops opening the entry once the password it was earned with has changed', () => {
+    const tokens = createUnlockTokens({ signingKey: KEY })
+    const before = tokens.stampOf('scrypt$old-hash')
+    const after = tokens.stampOf('scrypt$new-hash')
+    const token = tokens.issue('entry-a', before)
+
+    expect(before).not.toBe(after)
+    expect(tokens.accepts('entry-a', token, before)).toBe(true)
+    expect(tokens.accepts('entry-a', token, after)).toBe(false)
+  })
+
+  it('carries a version that does not reveal the stored hash', () => {
+    const tokens = createUnlockTokens({ signingKey: KEY })
+    const version = tokens.stampOf('scrypt$secret-hash-material')
+
+    expect(version).toMatch(/^[0-9a-f]{16}$/u)
+    expect(tokens.issue('entry-a', version)).not.toContain('secret-hash-material')
+    // Keyed: another site derives another version from the same hash.
+    expect(
+      createUnlockTokens({ signingKey: 'b'.repeat(48) }).stampOf('scrypt$secret-hash-material'),
+    ).not.toBe(version)
+  })
+
+  it('reports what a valid token claims, and nothing for a forged one', () => {
+    const tokens = createUnlockTokens({ signingKey: KEY })
+
+    expect(tokens.claims(tokens.issue('entry-a', PW))).toEqual({
+      entryId: 'entry-a',
+      lockStamp: PW,
+    })
+    expect(tokens.claims('forged.payload')).toBeNull()
+    expect(tokens.claims(undefined)).toBeNull()
   })
 
   it('names its cookie after a digest, never after the entry id', () => {
@@ -74,9 +114,9 @@ describe('an unlock token', () => {
       lifetimeSeconds: MAX_UNLOCK_LIFETIME_SECONDS * 10,
       now: () => clock,
     })
-    const token = tokens.issue('entry-a')
+    const token = tokens.issue('entry-a', PW)
 
     clock = MAX_UNLOCK_LIFETIME_SECONDS * 1000 + 1
-    expect(tokens.accepts('entry-a', token)).toBe(false)
+    expect(tokens.accepts('entry-a', token, PW)).toBe(false)
   })
 })

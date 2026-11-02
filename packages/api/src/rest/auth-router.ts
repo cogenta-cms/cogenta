@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { AuthStore, LoginResult, Session, User } from '@cogenta/auth'
-import { looksLikeApiKey } from '@cogenta/auth'
+import { looksLikeApiKey, MAX_EMAIL_LENGTH } from '@cogenta/auth'
 import { CogentaError, type RateLimitDriver } from '@cogenta/core'
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server'
 import type { Actor } from '../types.js'
@@ -427,7 +427,12 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
    * response will be, so nothing downstream of it can leak into this response.
    */
   async function forgotPassword(body: Record<string, unknown>): Promise<RestResponse> {
-    const email = stringField(body, 'email').trim().toLowerCase()
+    const raw = stringField(body, 'email')
+    // No address is longer than 254 characters, so none of these names an
+    // account; answering as for any unknown address keeps an arbitrarily long
+    // string out of the limiter's table.
+    if (raw.length > MAX_EMAIL_LENGTH) return forgotPasswordAnswer()
+    const email = raw.trim().toLowerCase()
     const subject = `forgot-password:${email}`
 
     await auth.rateLimit.check(subject)
@@ -447,6 +452,10 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
         .catch(() => undefined)
     }
 
+    return forgotPasswordAnswer()
+  }
+
+  function forgotPasswordAnswer(): RestResponse {
     return jsonResponse(200, {
       data: {
         message: 'If an account exists for this address, a reset link has been sent to it.',

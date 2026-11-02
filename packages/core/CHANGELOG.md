@@ -1,5 +1,23 @@
 # @cogenta/core
 
+## 0.14.4
+
+### Patch Changes
+
+- [#64](https://github.com/cogenta-cms/cogenta/pull/64) [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - "At least one active admin" is now enforced atomically. `UserStore.setRoles`, `setStatus` and `anonymize` take an admin-guard lock and re-count the other active admins inside the same transaction as the write, so a bulk disable naming every admin, or two simultaneous changes, can no longer leave the site with nobody able to administer it (`FORBIDDEN` for the refused one); `POST /api/users/bulk` also applies its changes in order. The SQLite handle now tells a transaction nested in the caller's own from another caller's by async call chain rather than by a per-handle counter, so two requests on one handle no longer share a transaction (and its rollback). Adds the `cogenta_auth_locks` table.
+
+- [#64](https://github.com/cogenta-cms/cogenta/pull/64) [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - TOTP secrets, active and pending, are no longer stored in clear text in `cogenta_credentials`: they are sealed with AES-256-GCM under a key derived (HKDF) from `COGENTA_AUTH_SIGNING_KEY`, bound to their account, in a versioned `enc:v1:` form. Legacy plaintext rows still read and are encrypted the next time they are read. A secret that cannot be decrypted (wrong or missing key) fails closed with the new `AUTH_CREDENTIAL_KEY_INVALID` code instead of reading as "no second factor"; `createCredentialStore` takes the key as `{ signingKey }` and refuses to store a TOTP secret without one. Rotating the signing key now also makes enrolled authenticators unreadable.
+
+- [#62](https://github.com/cogenta-cms/cogenta/pull/62) [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The in-process rate limiter no longer keeps every key it has ever seen: expired buckets are swept as it runs and the number of live buckets is capped (`maxKeys`, 100 000 by default). `POST /_cogenta/unlock` now spends an address-wide budget before any per-entry one and never creates a counter for an id that cannot name an entry, so naming a new entry on every guess no longer escapes the ceiling or grows memory.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - New `readBoundedBody` / `readBoundedText` helpers read the body of a response someone else controls as a stream: bytes are counted as they arrive, the transfer is cancelled at the limit (throwing `HTTP_BODY_TOO_LARGE` or truncating, as asked), and a deadline and the caller's abort signal stay active until the last byte. Adds the error codes `HTTP_BODY_TOO_LARGE`, `HTTP_BODY_TIMEOUT` and `HTTP_BODY_ABORTED`.
+
+- [#66](https://github.com/cogenta-cms/cogenta/pull/66) [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - New error code `REDIRECT_FROM_LIVE_PATH`.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The SSRF guard moves into core (`src/http/ssrf.ts`): `isPrivateAddress` (byte-based IPv4/IPv6 classifier), `resolvePublicTarget`, `assertPublicUrl`, `createPinnedFetch` (connects to the validated address only, keeping the host name for `Host`, SNI and certificate checks) and `fetchPublicOnce`. Adds the error code `HTTP_TARGET_UNSAFE`.
+
+- [#63](https://github.com/cogenta-cms/cogenta/pull/63) [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The agent `http.fetch` tool keeps the site's own configured origin (scheme, host and port, exactly) reachable even on a loopback or private address, through a new `trustedOrigins` option set from `config.site.url` by `cogenta serve`; every other non-public address is still refused. `resolvePublicTarget` and `fetchPublicOnce` gain an `allowPrivate` option for a caller that vouches for one exact URL.
+
 ## 0.14.3
 
 ### Patch Changes

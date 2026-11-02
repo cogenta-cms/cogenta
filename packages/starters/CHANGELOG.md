@@ -1,5 +1,18 @@
 # @cogenta/starters
 
+## 0.6.1
+
+### Patch Changes
+
+- Updated dependencies [[`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`c49ac14`](https://github.com/cogenta-cms/cogenta/commit/c49ac14ff306c450e79ec7633958d59959d5066d), [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`fa456a6`](https://github.com/cogenta-cms/cogenta/commit/fa456a6505b00dc64fe55a3970aa1637893d1a78), [`4c77f27`](https://github.com/cogenta-cms/cogenta/commit/4c77f27ca0f3f01946a840dc991754cb02be2cb2), [`aa45232`](https://github.com/cogenta-cms/cogenta/commit/aa4523234087a1ac9a3150dfd7d674941065bb75)]:
+  - @cogenta/api@2.14.1
+  - @cogenta/core@0.14.4
+  - @cogenta/schema@0.13.1
+  - @cogenta/blocks@1.2.4
+  - @cogenta/render@0.6.5
+  - @cogenta/widgets@0.2.12
+  - @cogenta/theme-kit@0.9.2
+
 ## 0.6.0
 
 ### Minor Changes

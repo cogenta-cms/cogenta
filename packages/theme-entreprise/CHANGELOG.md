@@ -1,5 +1,14 @@
 # @cogenta/theme-entreprise
 
+## 1.5.5
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @cogenta/blocks@1.2.4
+  - @cogenta/render@0.6.5
+  - @cogenta/theme-kit@0.9.2
+
 ## 1.5.4
 
 ### Patch Changes

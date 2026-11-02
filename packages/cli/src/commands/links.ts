@@ -51,6 +51,7 @@ const REASON_TEXT: Record<BrokenLink['reason'], string> = {
   unroutable_path: 'is a path no route can serve',
   http_error: 'answered with an error status',
   unreachable: 'could not be reached',
+  blocked_target: 'points into a private network and was not requested',
 }
 
 function describe(broken: BrokenLink): string {

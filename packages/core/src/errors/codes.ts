@@ -230,6 +230,7 @@ export const ERROR_CODES = [
   'HTTP_BODY_TOO_LARGE',
   'HTTP_BODY_TIMEOUT',
   'HTTP_BODY_ABORTED',
+  'HTTP_TARGET_UNSAFE',
 
   // Agents — autonomy and approval (L4)
   'APPROVAL_REQUEST_UNKNOWN',

@@ -291,8 +291,11 @@ describe('checkLinks against a real external server', () => {
   let db: DatabaseHandle
   let store: ContentStore
 
+  let hits = 0
+
   beforeAll(async () => {
     server = createServer((req, res) => {
+      hits += 1
       if (req.url === '/ok') {
         res.writeHead(200).end()
         return
@@ -347,6 +350,7 @@ describe('checkLinks against a real external server', () => {
       collections: [page],
       storeFor: () => store,
       checkExternal: true,
+      allowPrivateTargets: true,
     })
 
     expect(report.broken).toHaveLength(1)
@@ -360,6 +364,7 @@ describe('checkLinks against a real external server', () => {
       collections: [page],
       storeFor: () => store,
       checkExternal: true,
+      allowPrivateTargets: true,
     })
 
     expect(report.broken).toEqual([])
@@ -372,9 +377,136 @@ describe('checkLinks against a real external server', () => {
       collections: [page],
       storeFor: () => store,
       checkExternal: true,
+      allowPrivateTargets: true,
       timeoutMs: 2_000,
     })
 
     expect(report.broken[0]?.reason).toBe('unreachable')
+  })
+
+  // Pentest 2026-11-01: an editor-authored URL was fetched from the server's
+  // own network position, so a link to the cloud metadata address or an
+  // internal service was a blind SSRF probe whose answer (ok / error /
+  // unreachable) ended up in the report.
+  describe("an external link that leads into the server's own network", () => {
+    it('is reported as a blocked target and never requested', async () => {
+      hits = 0
+      await publishWith([`${base}/ok`])
+
+      const report = await checkLinks({
+        collections: [page],
+        storeFor: () => store,
+        checkExternal: true,
+      })
+
+      expect(hits).toBe(0)
+      expect(report.broken).toHaveLength(1)
+      expect(report.broken[0]).toMatchObject({ reason: 'blocked_target' })
+    })
+
+    it.each([
+      'http://169.254.169.254/latest/meta-data/',
+      'http://[::1]/admin',
+      'http://[fe90::1]/',
+      'http://localhost:5432/',
+    ])('reports %s as a blocked target without any lookup or request', async (href) => {
+      await publishWith([href])
+      const requested: string[] = []
+
+      const report = await checkLinks({
+        collections: [page],
+        storeFor: () => store,
+        checkExternal: true,
+        pinnedFetchImpl: async (target) => {
+          requested.push(target.address)
+          return new Response(null, { status: 200 })
+        },
+      })
+
+      expect(requested).toEqual([])
+      expect(report.broken[0]?.reason).toBe('blocked_target')
+    })
+
+    it('checks every redirect hop and refuses one that lands on a private address', async () => {
+      await publishWith(['http://public.example/start'])
+      const lookupImpl = (async (host: string) => [
+        { address: host === 'public.example' ? '93.184.216.34' : '10.0.0.5', family: 4 },
+      ]) as never
+      const requested: string[] = []
+
+      const report = await checkLinks({
+        collections: [page],
+        storeFor: () => store,
+        checkExternal: true,
+        lookupImpl,
+        pinnedFetchImpl: async (target) => {
+          requested.push(target.url.hostname)
+          return new Response(null, {
+            status: 302,
+            headers: { location: 'http://internal.example/secret' },
+          })
+        },
+      })
+
+      expect(requested).toEqual(['public.example'])
+      expect(report.broken[0]?.reason).toBe('blocked_target')
+    })
+
+    it('connects to the address it validated, however DNS answers the second time', async () => {
+      await publishWith(['http://rebind.example/page'])
+      let lookups = 0
+      const lookupImpl = (async () => {
+        lookups += 1
+        return [{ address: lookups === 1 ? '93.184.216.34' : '127.0.0.1', family: 4 }]
+      }) as never
+      const connectedTo: string[] = []
+
+      const report = await checkLinks({
+        collections: [page],
+        storeFor: () => store,
+        checkExternal: true,
+        lookupImpl,
+        pinnedFetchImpl: async (target) => {
+          connectedTo.push(target.address)
+          return new Response(null, { status: 200 })
+        },
+      })
+
+      expect(report.broken).toEqual([])
+      expect(connectedTo).toEqual(['93.184.216.34'])
+      expect(lookups).toBe(1)
+    })
+
+    it('never reads the body of the GET it falls back to', async () => {
+      await publishWith(['http://public.example/head-refused'])
+      const lookupImpl = (async () => [{ address: '93.184.216.34', family: 4 }]) as never
+      const stats = { pulled: 0, cancelled: false }
+
+      const report = await checkLinks({
+        collections: [page],
+        storeFor: () => store,
+        checkExternal: true,
+        lookupImpl,
+        pinnedFetchImpl: async (_target, init) => {
+          if (init.method === 'HEAD') return new Response(null, { status: 405 })
+          return new Response(
+            new ReadableStream<Uint8Array>({
+              pull(controller) {
+                stats.pulled += 1
+                controller.enqueue(new Uint8Array(64 * 1024))
+              },
+              cancel() {
+                stats.cancelled = true
+              },
+            }),
+            { status: 200 },
+          )
+        },
+      })
+
+      expect(report.broken).toEqual([])
+      expect(stats.cancelled).toBe(true)
+      expect(stats.pulled).toBeLessThan(5)
+    })
   })
 })

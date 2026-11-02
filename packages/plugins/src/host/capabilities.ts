@@ -1,5 +1,12 @@
 import type { StorageDriver } from '@cogenta/core'
-import { CogentaError, readBoundedText } from '@cogenta/core'
+import {
+  CogentaError,
+  type FetchPublicOptions,
+  fetchPublicOnce,
+  isCogentaError,
+  type PinnedFetch,
+  readBoundedText,
+} from '@cogenta/core'
 
 /**
  * Host-side implementations of the SDK methods a sandboxed plugin can call.
@@ -87,11 +94,38 @@ export function createContentReadHandler(
  * exists.
  */
 export function createHttpFetchHandler(
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl?: typeof fetch,
   limits: HttpFetchLimits = {},
 ): CapabilityHandler {
   const maxBodyBytes = limits.maxBodyBytes ?? MAX_HTTP_BODY_BYTES
   const bodyTimeoutMs = limits.bodyTimeoutMs ?? HTTP_BODY_TIMEOUT_MS
+
+  /**
+   * One hop. A host-provided `fetchImpl` replaces the transport (tests); the
+   * default resolves the host, refuses a loopback, private or link-local
+   * address and connects to the address it checked — a granted *name* is not
+   * a granted *address*. There is no switch to allow internal hosts.
+   */
+  async function requestHop(target: string, signal: AbortSignal | undefined): Promise<Response> {
+    if (fetchImpl !== undefined) {
+      return fetchImpl(target, { redirect: 'manual', ...(signal === undefined ? {} : { signal }) })
+    }
+    try {
+      return await fetchPublicOnce(target, {
+        ...(signal === undefined ? {} : { signal }),
+        ...(limits.lookupImpl === undefined ? {} : { lookupImpl: limits.lookupImpl }),
+        ...(limits.pinnedFetchImpl === undefined ? {} : { pinnedFetch: limits.pinnedFetchImpl }),
+      })
+    } catch (error) {
+      if (isCogentaError(error) && error.code === 'HTTP_TARGET_UNSAFE') {
+        refused(
+          `"http.fetch" will not reach "${new URL(target).hostname}": it is not a public address`,
+        )
+      }
+      throw error
+    }
+  }
+
   return async (args, context) => {
     const allowedDomains = grantedParameters('http.fetch', context)
     let target = asString(asRecord(args).url, 'url')
@@ -106,10 +140,7 @@ export function createHttpFetchHandler(
       if (!allowedDomains.includes(hostname)) {
         refused(`"http.fetch" was not granted for domain "${hostname}"`)
       }
-      const response = await fetchImpl(target, {
-        redirect: 'manual',
-        ...(context.signal === undefined ? {} : { signal: context.signal }),
-      })
+      const response = await requestHop(target, context.signal)
       const location = response.headers.get('location')
       if (response.status >= 300 && response.status < 400 && location !== null) {
         target = new URL(location, target).toString()
@@ -140,6 +171,10 @@ const HTTP_BODY_TIMEOUT_MS = 15_000
 export interface HttpFetchLimits {
   readonly maxBodyBytes?: number
   readonly bodyTimeoutMs?: number
+  /** Overridable for tests — real `dns.lookup` by default. */
+  readonly lookupImpl?: FetchPublicOptions['lookupImpl']
+  /** Overridable for tests — the address-pinned transport by default. */
+  readonly pinnedFetchImpl?: PinnedFetch
 }
 
 function isWithinGrantedPrefix(path: string, prefixes: readonly string[]): boolean {

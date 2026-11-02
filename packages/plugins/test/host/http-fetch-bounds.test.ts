@@ -115,4 +115,46 @@ describe('the plugin http.fetch capability, body bounds', () => {
     expect(signal?.aborted).toBe(true)
     expect(stats.cancelled).toBe(true)
   })
+
+  // Pentest 2026-11-01, C-04: a granted *name* is not a granted *address*.
+  describe('the default transport', () => {
+    it('refuses a granted domain that resolves to a private address, without connecting', async () => {
+      const pinnedFetchImpl = vi.fn(async () => new Response('secret'))
+      const handler = createHttpFetchHandler(undefined, {
+        lookupImpl: (async () => [{ address: '10.0.0.7', family: 4 }]) as never,
+        pinnedFetchImpl,
+      })
+
+      await expect(handler({ url: 'https://api.example.com/x' }, granted)).rejects.toMatchObject({
+        code: 'PLUGIN_CAPABILITY_REFUSED',
+      })
+      expect(pinnedFetchImpl).not.toHaveBeenCalled()
+    })
+
+    it('connects to the address it validated and re-judges a redirect hop', async () => {
+      let lookups = 0
+      const lookupImpl = (async (host: string) => {
+        lookups += 1
+        return [{ address: host === 'api.example.com' ? '93.184.216.34' : '127.0.0.1', family: 4 }]
+      }) as never
+      const connectedTo: string[] = []
+      const handler = createHttpFetchHandler(undefined, {
+        lookupImpl,
+        pinnedFetchImpl: async (target) => {
+          connectedTo.push(target.address)
+          return new Response(null, {
+            status: 302,
+            headers: { location: 'https://api.example.com/next' },
+          })
+        },
+      })
+
+      await expect(handler({ url: 'https://api.example.com/x' }, granted)).rejects.toThrow()
+
+      // Each hop is resolved and pinned on its own; the loop ends on the
+      // redirect cap, never on a connection to the rebinding answer.
+      expect(connectedTo.every((address) => address === '93.184.216.34')).toBe(true)
+      expect(lookups).toBeGreaterThan(1)
+    })
+  })
 })

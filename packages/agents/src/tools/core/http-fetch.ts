@@ -1,4 +1,11 @@
-import { CogentaError, readBoundedText } from '@cogenta/core'
+import {
+  CogentaError,
+  type FetchPublicOptions,
+  fetchPublicOnce,
+  isCogentaError,
+  type PinnedFetch,
+  readBoundedText,
+} from '@cogenta/core'
 import { z } from 'zod'
 import { defineTool } from '../define.js'
 import type { ToolDefinition } from '../types.js'
@@ -18,7 +25,17 @@ export interface HttpFetchToolOptions {
   readonly allowedDomains: readonly string[]
   /** Optional structural restriction to a site's own scheme, host and port. */
   readonly allowedOrigins?: readonly string[]
+  /**
+   * Replaces the transport entirely — **no address check, no pinning**. A test
+   * seam: production code leaves it out, and then every request resolves the
+   * host, refuses a loopback, private or link-local address and connects to
+   * the address it checked. There is no switch to allow internal hosts.
+   */
   readonly fetchImpl?: typeof fetch
+  /** Overridable for tests — real `dns.lookup` by default. */
+  readonly lookupImpl?: FetchPublicOptions['lookupImpl']
+  /** Overridable for tests — the address-pinned transport by default. */
+  readonly pinnedFetchImpl?: PinnedFetch
   /** Time allowed for reading one response body. Defaults to 30 seconds. */
   readonly bodyTimeoutMs?: number
 }
@@ -48,7 +65,6 @@ export type HttpFetchOutput = z.infer<typeof HttpFetchOutputSchema>
 export function createHttpFetchTool(
   options: HttpFetchToolOptions,
 ): ToolDefinition<HttpFetchInput, HttpFetchOutput> {
-  const doFetch = options.fetchImpl ?? fetch
   const allowed = new Set(options.allowedDomains)
   const origins = options.allowedOrigins === undefined ? undefined : new Set(options.allowedOrigins)
 
@@ -81,14 +97,43 @@ export function createHttpFetchTool(
         })
       }
 
-      const response = await doFetch(parsed, {
-        method: input.method ?? 'GET',
-        signal: ctx.signal,
-        // Never let an allowed page redirect this client to an ungranted host.
-        // A redirect is returned as data for the auditor to report or follow
-        // through a new, independently checked call.
-        redirect: 'manual',
-      })
+      // Never let an allowed page redirect this client to an ungranted host.
+      // A redirect is returned as data for the auditor to report or follow
+      // through a new, independently checked call.
+      const method = input.method ?? 'GET'
+      let response: Response
+      if (options.fetchImpl !== undefined) {
+        response = await options.fetchImpl(parsed, {
+          method,
+          signal: ctx.signal,
+          redirect: 'manual',
+        })
+      } else {
+        try {
+          // An allowed *name* is not an allowed *address*: the host is
+          // resolved, judged public, and the connection is made to that very
+          // address (pentest 2026-11-01, C-04).
+          response = await fetchPublicOnce(parsed.toString(), {
+            method,
+            signal: ctx.signal,
+            ...(options.lookupImpl === undefined ? {} : { lookupImpl: options.lookupImpl }),
+            ...(options.pinnedFetchImpl === undefined
+              ? {}
+              : { pinnedFetch: options.pinnedFetchImpl }),
+          })
+        } catch (error) {
+          if (isCogentaError(error) && error.code === 'HTTP_TARGET_UNSAFE') {
+            throw new CogentaError({
+              code: 'HTTP_FETCH_DOMAIN_DENIED',
+              message: `"${parsed.hostname}" resolves to an address this tool will not reach.`,
+              hint: 'Only public addresses are fetched; loopback, private and link-local ranges are refused.',
+              details: { hostname: parsed.hostname },
+              cause: error,
+            })
+          }
+          throw error
+        }
+      }
       // Read as a stream and stopped at the limit: `response.text()` first and
       // truncating after would have held the whole body in memory (pentest
       // 2026-11-01, C-03). The cap is a prefix, as it always was.

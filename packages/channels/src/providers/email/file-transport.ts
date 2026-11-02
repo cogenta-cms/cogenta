@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { EmailTransport, OutgoingEmail, SentEmail } from './transport.js'
 
@@ -18,7 +18,13 @@ export interface FileEmailTransportOptions {
 export function createFileEmailTransport(options: FileEmailTransportOptions): EmailTransport {
   return {
     async send(email: OutgoingEmail): Promise<SentEmail> {
-      await mkdir(options.directory, { recursive: true })
+      // A reset link or an invitation in these files is a credential: the
+      // directory and each message are the owner's alone. `mkdir` does not
+      // touch a directory that exists already, hence the explicit `chmod`
+      // (it can refuse on a directory someone else owns; the files are then
+      // still private on their own).
+      await mkdir(options.directory, { recursive: true, mode: 0o700 })
+      await chmod(options.directory, 0o700).catch(() => undefined)
       const messageId = randomUUID()
       const contents = [
         `To: ${email.to}`,
@@ -32,7 +38,10 @@ export function createFileEmailTransport(options: FileEmailTransportOptions): Em
         email.html,
         '',
       ].join('\n')
-      await writeFile(join(options.directory, `${messageId}.eml.txt`), contents, 'utf8')
+      await writeFile(join(options.directory, `${messageId}.eml.txt`), contents, {
+        encoding: 'utf8',
+        mode: 0o600,
+      })
       return { messageId }
     },
   }

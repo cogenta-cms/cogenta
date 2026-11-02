@@ -73,5 +73,11 @@ export {
   verifyBackup,
 } from './restore.js'
 export { type BuildBackupTablesOptions, buildBackupTables } from './tables.js'
-export { openZip, type ZipEntry, type ZipReader } from './zip-reader.js'
+export {
+  type OpenZipOptions,
+  openZip,
+  ZIP_MAX_ENTRIES,
+  type ZipEntry,
+  type ZipReader,
+} from './zip-reader.js'
 export { type CreateZipWriterOptions, createZipWriter, type ZipWriter } from './zip-writer.js'

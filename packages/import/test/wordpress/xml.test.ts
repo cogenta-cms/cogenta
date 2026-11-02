@@ -69,3 +69,27 @@ describe('parseXmlDocument', () => {
     expect(() => parseXmlDocument('<a><b></a></b>')).toThrow()
   })
 })
+
+describe('the WXR XML reader on hostile input', () => {
+  it('reads an out-of-range character reference as the replacement character instead of throwing', () => {
+    const root = parseXmlDocument('<a>x&#99999999999;y&#x110000;z&#xD800;w&#233;</a>')
+
+    expect(textOf(root)).toBe('x�y�z�wé')
+  })
+
+  it('refuses a document nested deeper than any export is', () => {
+    const depth = 20_000
+    const source = `${'<a>'.repeat(depth)}${'</a>'.repeat(depth)}`
+
+    expect(() => parseXmlDocument(source)).toThrowError(
+      expect.objectContaining({ code: 'IMPORT_WXR_PARSE_FAILED' }),
+    )
+  })
+
+  it('still reads a document nested well inside the cap', () => {
+    const depth = 100
+    const root = parseXmlDocument(`${'<a>'.repeat(depth)}ok${'</a>'.repeat(depth)}`)
+
+    expect(root.name).toBe('a')
+  })
+})

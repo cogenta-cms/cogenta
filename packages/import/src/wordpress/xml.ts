@@ -46,16 +46,25 @@ function parseFailure(message: string, position: number): CogentaError {
   })
 }
 
+/**
+ * A numeric reference past U+10FFFF, or naming a lone surrogate, is not a
+ * character; `String.fromCodePoint` throws a `RangeError` on the first, so the
+ * reference reads as the replacement character, as a browser does.
+ */
+function fromReference(code: number, match: string): string {
+  if (!Number.isFinite(code)) return match
+  if (code > 0x10ffff || code < 0 || (code >= 0xd800 && code <= 0xdfff)) return '\uFFFD'
+  return String.fromCodePoint(code)
+}
+
 /** Standard entities and `&#NNN;` / `&#xHEX;` references. No DTD-declared entity is ever resolved. */
 function decodeEntities(text: string): string {
   return text.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, body: string) => {
     if (body.startsWith('#x') || body.startsWith('#X')) {
-      const code = Number.parseInt(body.slice(2), 16)
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match
+      return fromReference(Number.parseInt(body.slice(2), 16), match)
     }
     if (body.startsWith('#')) {
-      const code = Number.parseInt(body.slice(1), 10)
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match
+      return fromReference(Number.parseInt(body.slice(1), 10), match)
     }
     return NAMED_ENTITIES[body] ?? match
   })
@@ -196,7 +205,16 @@ function skipMisc(reader: Reader): boolean {
   return false
 }
 
-function parseElement(reader: Reader): XmlElement {
+/** A WXR export nests a handful of levels; this is far past any real one and far short of the stack. */
+const MAX_ELEMENT_DEPTH = 256
+
+function parseElement(reader: Reader, depth = 0): XmlElement {
+  if (depth >= MAX_ELEMENT_DEPTH) {
+    throw parseFailure(
+      `Elements are nested more than ${MAX_ELEMENT_DEPTH} levels deep`,
+      reader.position,
+    )
+  }
   if (reader.peek() !== '<') throw parseFailure('Expected "<"', reader.position)
   reader.advance()
   const name = readTagName(reader)
@@ -252,7 +270,7 @@ function parseElement(reader: Reader): XmlElement {
 
     if (reader.peek() === '<') {
       flushText()
-      children.push(parseElement(reader))
+      children.push(parseElement(reader, depth + 1))
       continue
     }
 

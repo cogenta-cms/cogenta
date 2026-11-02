@@ -33,6 +33,12 @@ export interface CommentsRequest {
   /** The caller's IP, as the transport saw it — hashed here, never stored raw (RGPD). `null` when unknown (a unit test, an internal call). */
   readonly ip?: string | null
   readonly userAgent?: string | null
+  /**
+   * Whether this visitor has answered the password of that entry, as the
+   * transport can tell (a signed cookie). Handed to `canComment`; the router
+   * itself never reads it.
+   */
+  readonly unlocked?: (entryId: string) => boolean
 }
 
 export interface CommentsResponse {
@@ -59,6 +65,17 @@ export interface CommentsRouterOptions {
     readonly enabled: boolean
     readonly moderationRequired: boolean
   }>
+  /**
+   * Whether an anonymous visitor may add a comment to this entry at all: it
+   * must exist and be one the visitor can see. Absent means every target is
+   * accepted, which is only right for a router with no hidden entries.
+   * `false` answers `COMMENT_NOT_FOUND`, the answer for an entry that does not
+   * exist, so a private page is not told apart from a missing one.
+   */
+  readonly canComment?: (
+    target: { readonly collection: string; readonly entryId: string },
+    request: CommentsRequest,
+  ) => Promise<boolean>
   /** Secret for `hashIp` (R7: read once by the caller, never by this router from the environment). */
   readonly ipHashSecret: string
   /** The hidden field a bot fills and a human never sees. Defaults to `website`. */
@@ -256,6 +273,18 @@ export function createCommentsRouter(options: CommentsRouterOptions): CommentsRo
     const email = readString(body, 'email')
     const authorUrl = readOptionalString(body, 'authorUrl') ?? null
     const commentBody = readString(body, 'body')
+
+    // ---- the target must be one this visitor can see --------------------
+    if (
+      options.canComment !== undefined &&
+      !(await options.canComment({ collection, entryId }, request))
+    ) {
+      throw new CogentaError({
+        code: 'COMMENT_NOT_FOUND',
+        message: 'There is nothing to comment on here.',
+        hint: 'Check the page you are commenting on still exists.',
+      })
+    }
 
     // ---- discussion policy ----------------------------------------------
     const [entrySettings, collectionSettings, defaults] = await Promise.all([

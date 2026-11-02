@@ -258,6 +258,110 @@ describe('a page that is not simply public', () => {
     }
   }, 120_000)
 
+  it('keeps the comments of a protected page behind its password, in the page, the widget and the form', async () => {
+    const root = await project()
+    await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await loginWithMfaSetup(server.base, 'admin@example.com', 'sup3r-secret-pass')
+      const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+      const locked = await publish(server.base, token, 'Dossier de presse', 'dossier')
+      await publish(server.base, token, 'Page ouverte', 'ouverte')
+      await fetch(`${server.base}/api/widgets`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          area: 'sidebar',
+          type: 'recentComments',
+          title: 'Derniers commentaires',
+          settings: { count: 5 },
+        }),
+      })
+
+      const comment = async (entryId: string, text: string, cookie?: string) =>
+        fetch(`${server.base}/api/comments`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(cookie === undefined ? {} : { cookie }),
+          },
+          body: JSON.stringify({
+            collection: 'page',
+            entryId,
+            name: 'Visiteur',
+            email: 'visiteur@example.com',
+            body: text,
+            website: '',
+            _ts: String(Date.now() - 5_000),
+          }),
+        })
+      const approve = async (response: Response): Promise<void> => {
+        expect(response.status).toBe(201)
+        const { id } = (await response.json()) as { id: string }
+        expect(
+          (
+            await fetch(`${server.base}/api/comments/${id}/status`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ status: 'approved' }),
+            })
+          ).status,
+        ).toBe(200)
+      }
+
+      // Written while the page was still public, then the page is locked.
+      await approve(await comment(locked, 'Un avis confidentiel sur le dossier.'))
+      expect(
+        (
+          await fetch(`${server.base}/api/content/page/${locked}/visibility`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ visibility: 'password', password: 'sésame ouvre-toi' }),
+          })
+        ).status,
+      ).toBe(200)
+
+      const lockedHtml = await (await fetch(`${server.base}/dossier`)).text()
+      expect(lockedHtml).toContain('cg-unlock__form')
+      expect(lockedHtml).not.toContain('Un avis confidentiel')
+      expect(lockedHtml).not.toContain('cg-comments')
+
+      // The widget on another page lists no comment of a protected page.
+      const elsewhere = await (await fetch(`${server.base}/ouverte`)).text()
+      expect(elsewhere).not.toContain('Un avis confidentiel')
+
+      // A stranger cannot add to the thread of a page they cannot open.
+      const refused = await comment(locked, 'Je commente sans avoir ouvert la page.')
+      expect(refused.status).toBe(404)
+
+      const opened = await fetch(`${server.base}/_cogenta/unlock`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          entry: locked,
+          password: 'sésame ouvre-toi',
+          next: '/dossier',
+        }),
+        redirect: 'manual',
+      })
+      const cookie = (opened.headers.get('set-cookie') ?? '').split(';')[0] ?? ''
+
+      // Opened, the page shows its thread and takes a comment from its reader.
+      const unlockedHtml = await (
+        await fetch(`${server.base}/dossier`, { headers: { cookie } })
+      ).text()
+      expect(unlockedHtml).toContain('Un avis confidentiel')
+      expect((await comment(locked, 'Ouvert avec le mot de passe.', cookie)).status).toBe(201)
+
+      // Still never in the widget of another page.
+      expect(await (await fetch(`${server.base}/ouverte`)).text()).not.toContain(
+        'Un avis confidentiel',
+      )
+    } finally {
+      await server.stop()
+    }
+  }, 120_000)
+
   it('keeps a protected page out of every API response until its password is answered', async () => {
     const root = await project()
     await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])

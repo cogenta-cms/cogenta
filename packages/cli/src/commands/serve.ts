@@ -301,6 +301,7 @@ import {
   buildPath,
   buildSchemaDocument,
   type CollectionDefinition,
+  type ContentEntry,
   type ContentLifecycleEvent,
   type ContentStore,
   columnFor,
@@ -2975,6 +2976,21 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     rateLimiter: commentsRateLimiter,
     permissions: commentsPermissions,
     ipHashSecret: commentsIpHashSecret,
+    // A private page is not told apart from a missing one, and a protected
+    // page takes comments from the visitors who opened it. An entry that is not
+    // found at all is left to the discussion settings, as it always was.
+    canComment: async ({ collection, entryId }, request) => {
+      const store = storeForName(collection)
+      if (store === undefined) return true
+      let entry: ContentEntry | null = null
+      try {
+        entry = (await store.read(entryId, { state: 'working' })) ?? (await store.read(entryId))
+      } catch {
+        return true
+      }
+      if (entry === null || entry.visibility === 'public') return true
+      return entry.visibility === 'password' && request.unlocked?.(entryId) === true
+    },
     siteDefaults: async () => {
       const [enabledSetting, moderationSetting] = await Promise.all([
         siteSettingsStore.get('discussion.enabled', SITE_SETTINGS_SITE_SCOPE),
@@ -5694,7 +5710,19 @@ export function createRequestListener(
       if (url.pathname.startsWith('/api/comments')) {
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
-        const request = toCommentsRequest(req, url, body)
+        const unlockTokens = extras?.unlockTokens
+        const request = {
+          ...toCommentsRequest(req, url, body),
+          ...(unlockTokens === undefined
+            ? {}
+            : {
+                unlocked: (entryId: string): boolean =>
+                  unlockTokens.accepts(
+                    entryId,
+                    parseCookies(req.headers.cookie).get(unlockTokens.cookieName(entryId)),
+                  ),
+              }),
+        }
         const response = await site.commentsRouter.handle(request, context.actor)
         // The one shape besides JSON this router ever answers with: a 303
         // redirect back to the page a no-JS `<form>` posted from

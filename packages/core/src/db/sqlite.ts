@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -146,6 +147,12 @@ function toValues(row: unknown): unknown[] {
   return Object.values(row as Record<string, unknown>)
 }
 
+/** The outermost transaction an async call chain is running in. */
+interface TransactionScope {
+  depth: number
+  open: boolean
+}
+
 export interface SqliteHandleOptions {
   readonly url: string
 }
@@ -175,7 +182,14 @@ export async function createSqliteHandle(options: SqliteHandleOptions): Promise<
   database.exec('PRAGMA busy_timeout = 5000')
   database.exec('PRAGMA foreign_keys = ON')
 
-  let depth = 0
+  // Which transaction, if any, the *calling async chain* is inside. A counter on
+  // the handle cannot tell "a transaction nested in mine" from "another
+  // request's transaction that happens to start while mine is open": the second
+  // would share the first's transaction through a savepoint, and a rollback of
+  // either would undo the other's writes (pentest 2026-11-01, AUTH-02). An
+  // unrelated caller has no scope, so it queues on the file lock like any other.
+  const scope = new AsyncLocalStorage<TransactionScope>()
+  const insideTransaction = (): boolean => scope.getStore()?.open === true
 
   return {
     dialect: 'sqlite',
@@ -186,7 +200,7 @@ export async function createSqliteHandle(options: SqliteHandleOptions): Promise<
     // transaction it is waiting on can never commit. A statement issued from
     // inside our own transaction already holds the lock and must not re-take it.
     query: async <TRow>(fragment: SqlFragment): Promise<QueryResult<TRow>> =>
-      depth > 0
+      insideTransaction()
         ? executor.query<TRow>(fragment)
         : withFileLock(lockKey, () => executor.query<TRow>(fragment)),
 
@@ -194,7 +208,7 @@ export async function createSqliteHandle(options: SqliteHandleOptions): Promise<
       query: CompiledQuery,
       executeOptions?: ExecuteOptions,
     ): Promise<QueryResult<TRow>> =>
-      depth > 0
+      insideTransaction()
         ? executor.execute<TRow>(query, executeOptions)
         : withFileLock(lockKey, () => executor.execute<TRow>(query, executeOptions)),
 
@@ -204,8 +218,13 @@ export async function createSqliteHandle(options: SqliteHandleOptions): Promise<
     ): Promise<T> => {
       // A nested call is already inside the lock; taking it again would wait on
       // itself forever.
-      if (depth > 0) return runTransaction(run, transactionOptions)
-      return withFileLock(lockKey, () => runTransaction(run, transactionOptions))
+      const current = scope.getStore()
+      if (current?.open === true) return runTransaction(current, run, transactionOptions)
+      return withFileLock(lockKey, () =>
+        scope.run({ depth: 0, open: true }, () =>
+          runTransaction(scope.getStore() as TransactionScope, run, transactionOptions),
+        ),
+      )
     },
 
     close: async () => {
@@ -214,20 +233,21 @@ export async function createSqliteHandle(options: SqliteHandleOptions): Promise<
   }
 
   async function runTransaction<T>(
+    state: TransactionScope,
     run: (tx: SqlExecutor) => Promise<T>,
     transactionOptions?: TransactionOptions,
   ): Promise<T> {
     // SQLite has no nested transactions; savepoints stand in for them so a
     // caller can compose two functions that each want a transaction.
-    const nested = depth > 0
-    const savepoint = `cogenta_sp_${depth}`
+    const nested = state.depth > 0
+    const savepoint = `cogenta_sp_${state.depth}`
 
     if (nested) {
       database.exec(`SAVEPOINT ${savepoint}`)
     } else {
       database.exec(transactionOptions?.immediate === true ? 'BEGIN IMMEDIATE' : 'BEGIN')
     }
-    depth += 1
+    state.depth += 1
 
     try {
       const result = await run(executor)
@@ -242,7 +262,10 @@ export async function createSqliteHandle(options: SqliteHandleOptions): Promise<
       }
       throw error
     } finally {
-      depth -= 1
+      state.depth -= 1
+      // The scope outlives the transaction in any continuation that was started
+      // inside it; once it is over, that continuation is a stranger again.
+      if (state.depth === 0) state.open = false
     }
   }
 }

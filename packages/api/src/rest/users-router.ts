@@ -935,27 +935,27 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
         ? { roles: rolesField(body, 'roles') }
         : { status: action === 'disable' ? 'disabled' : 'active' }
 
-    // `Promise.allSettled`, not `Promise.all`: one account rejecting (the
-    // last admin, an anonymized row, an id nobody recognises) must never
-    // undo — or block — what already succeeded for the others. The report
-    // names every failure instead of the caller finding out by re-reading
-    // the list afterwards.
-    const results = await Promise.allSettled(
-      ids.map(async (id) => {
+    // One account at a time, each settled on its own: one rejecting (the last
+    // admin, an anonymized row, an id nobody recognises) must never undo — or
+    // block — what already succeeded for the others, and the report names
+    // every failure instead of the caller finding out by re-reading the list.
+    // Sequential on purpose (pentest 2026-11-01, AUTH-02): the changes used to
+    // run side by side, so a batch naming every admin saw each of them still
+    // standing. The store re-checks "one active admin remains" atomically per
+    // write; running them in order is what makes the *batch* answer "which of
+    // these is refused" deterministically (the last one, not a coin toss).
+    const succeeded: string[] = []
+    const failed: { id: string; error: string; code: string | undefined }[] = []
+    for (const id of ids) {
+      try {
         const user = await auth.users.byId(id)
         if (user === null) throw userNotFound()
         await applyUserChange(actor, user, changes)
-        return id
-      }),
-    )
-
-    const succeeded: string[] = []
-    const failed: { id: string; error: string; code: string | undefined }[] = []
-    results.forEach((result, index) => {
-      const id = ids[index] as string
-      if (result.status === 'fulfilled') succeeded.push(result.value)
-      else failed.push({ id, error: errorMessage(result.reason), code: errorCode(result.reason) })
-    })
+        succeeded.push(id)
+      } catch (error) {
+        failed.push({ id, error: errorMessage(error), code: errorCode(error) })
+      }
+    }
 
     return jsonResponse(200, { data: { succeeded, failed } })
   }

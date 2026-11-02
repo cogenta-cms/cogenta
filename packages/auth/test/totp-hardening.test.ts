@@ -31,6 +31,9 @@ async function fixture() {
   const sessions = createSessionStore(db, now)
   const auth = createAuthService({ db, signingKey: SIGNING_KEY, collections: [], now })
   const user = await users.create({ email: 'admin@example.com', roles: ['admin'] })
+  // A second admin, so a test may disable the first without tripping the
+  // last-admin guard (AUTH-02) that is not what it is about.
+  await users.create({ email: 'spare-admin@example.com', roles: ['admin'] })
   await credentials.setPassword(user.id, PASSWORD)
   return {
     db,

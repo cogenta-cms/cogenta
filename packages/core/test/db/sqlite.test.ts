@@ -110,6 +110,83 @@ describe('sqlite driver', () => {
   })
 })
 
+/**
+ * Pentest 2026-11-01 (AUTH-02, found while fixing it): the handle used to tell
+ * "a transaction nested in mine" from "a different caller's transaction" with
+ * one counter per handle. Two requests running on the same handle at the same
+ * moment therefore saw each other as nested — the second shared the first's
+ * transaction through a savepoint, and rolling it back undid the first's
+ * writes. Nesting is now a property of the async call chain, not of the handle.
+ */
+describe('sqlite driver, concurrent callers on one handle', () => {
+  async function counterTable() {
+    const db = await createSqliteHandle({ url: ':memory:' })
+    await db.query(sql`create table t (a text)`)
+    return db
+  }
+
+  const rows = async (db: Awaited<ReturnType<typeof counterTable>>): Promise<string[]> =>
+    (await db.query<{ a: string }>(sql`select a from t order by a`)).rows.map((row) => row.a)
+
+  it('keeps a transaction that committed when a concurrent transaction rolls back', async () => {
+    const db = await counterTable()
+    const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+    const committed = db.transaction(async (tx) => {
+      await tx.query(sql`insert into t (a) values (${'kept'})`)
+      await pause(3)
+      await tx.query(sql`insert into t (a) values (${'kept too'})`)
+      await pause(15)
+    })
+    // Called while the first transaction is already open: this is the moment the
+    // handle used to mistake it for a nested one.
+    await pause(1)
+    const rolledBack = db.transaction(async (tx) => {
+      await pause(8)
+      await tx.query(sql`insert into t (a) values (${'discarded'})`)
+      throw new Error('refused')
+    })
+
+    const [first, second] = await Promise.allSettled([committed, rolledBack])
+    expect(first.status).toBe('fulfilled')
+    expect(second.status).toBe('rejected')
+    expect(await rows(db)).toEqual(['kept', 'kept too'])
+    await db.close()
+  })
+
+  it('does not drag an unrelated write into a transaction that rolls back', async () => {
+    const db = await counterTable()
+
+    const failing = db.transaction(async (tx) => {
+      await tx.query(sql`insert into t (a) values (${'inside'})`)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      throw new Error('refused')
+    })
+    // Issued on the handle while the transaction above is open, from another
+    // call chain: it has to wait its turn, not join the transaction.
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    const unrelated = db.query(sql`insert into t (a) values (${'outside'})`)
+
+    await Promise.allSettled([failing, unrelated])
+    expect(await rows(db)).toEqual(['outside'])
+    await db.close()
+  })
+
+  it('still lets code inside a transaction use the handle and nest a transaction', async () => {
+    const db = await counterTable()
+
+    await db.transaction(async () => {
+      await db.query(sql`insert into t (a) values (${'via handle'})`)
+      await db.transaction(async (inner) => {
+        await inner.query(sql`insert into t (a) values (${'nested'})`)
+      })
+    })
+
+    expect(await rows(db)).toEqual(['nested', 'via handle'])
+    await db.close()
+  })
+})
+
 describe('database registry', () => {
   it('selects SQLite when nothing else is installed', async () => {
     const selection = await createDatabaseRegistry({ logger: silent }).select({ url: ':memory:' })

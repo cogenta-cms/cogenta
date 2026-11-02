@@ -39,7 +39,18 @@ export const TABLES = {
    * spent yet. Owned by `login.ts`.
    */
   loginTickets: 'cogenta_login_tickets',
+  /**
+   * Pentest 2026-11-01 AUTH-02: named single-row locks. Writing a row is the
+   * one way to serialise a read-decide-write across concurrent transactions on
+   * all three dialects (SQLite's write lock, a row lock on Postgres and MySQL),
+   * which is how "keep one active admin" holds when two changes are in flight.
+   * Owned by `users.ts`.
+   */
+  authLocks: 'cogenta_auth_locks',
 } as const
+
+/** The lock every change that could remove an active admin takes first. */
+export const ADMIN_GUARD_LOCK = 'admin-guard'
 
 /** `varchar` on Postgres/MySQL, `text` on SQLite — encapsulated once, here. */
 function textColumn(dialect: DatabaseDialect, length: number): SqlFragment {
@@ -70,6 +81,7 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
   const auditGenesis = identifier(TABLES.auditGenesis, d)
   const auditIntegrity = identifier(TABLES.auditIntegrity, d)
   const loginTickets = identifier(TABLES.loginTickets, d)
+  const authLocks = identifier(TABLES.authLocks, d)
   const t512 = textColumn(d, 512)
   const t255 = textColumn(d, 255)
   const t64 = textColumn(d, 64)
@@ -280,6 +292,17 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
       used_at ${t64}
     )`)
   await createIndexIfMissing(db, 'cogenta_login_tickets_user', loginTickets, sql`(user_id)`)
+
+  // Pentest 2026-11-01 AUTH-02: one row per named lock, seeded once. Additive;
+  // rolling back is `drop table`.
+  await db.query(sql`
+    create table if not exists ${authLocks} (
+      id ${t64} not null primary key,
+      counter integer not null
+    )`)
+  await db
+    .query(sql`insert into ${authLocks} (id, counter) values (${ADMIN_GUARD_LOCK}, ${0})`)
+    .catch(() => undefined) // already seeded
 
   // Session device metadata (fiche 18 task 2): additive for a database that
   // already had this table before this fiche — there is no portable "add

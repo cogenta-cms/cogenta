@@ -7,7 +7,7 @@ import {
   limit as sqlLimit,
 } from '@cogenta/core'
 import { type CredentialSealer, createCredentialSealer } from './credential-sealer.js'
-import { hashPassword, verifyPassword } from './password.js'
+import { hashPassword, needsRehash, verifyPassword } from './password.js'
 import { verifyRecoveryCode } from './recovery-codes.js'
 import { TABLES } from './tables.js'
 import type { CredentialKind } from './types.js'
@@ -209,7 +209,21 @@ export function createCredentialStore(
       const row = await findOne(userId, 'password')
       if (row === undefined) return false
       const { hash } = JSON.parse(row.data) as { hash: string }
-      return verifyPassword(password, hash)
+      if (!(await verifyPassword(password, hash))) return false
+      // We hold the plaintext only now: upgrade a hash written with weaker scrypt
+      // parameters (AUTH-04). Guarded on the bytes read, so a password changed
+      // meanwhile is never overwritten; best effort, the old hash stays valid.
+      if (needsRehash(hash)) {
+        try {
+          await db.query(
+            sql`update ${table} set data = ${JSON.stringify({ hash: await hashPassword(password) })}
+                where id = ${row.id} and data = ${row.data}`,
+          )
+        } catch {
+          // The password verified; failing to upgrade its hash must not fail the login.
+        }
+      }
+      return true
     },
 
     hasPassword: async (userId) => (await findOne(userId, 'password')) !== undefined,

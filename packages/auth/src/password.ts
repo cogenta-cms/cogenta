@@ -18,9 +18,9 @@ function scrypt(
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     // Node refuses to run scrypt above its default 32MB `maxmem` ceiling, and
-    // the OWASP-floor cost below (N=2^15, r=8) needs `128 * N * r` = exactly
-    // that many bytes before OpenSSL's own overhead — so the default clips
-    // it. Raise the ceiling instead of lowering the cost.
+    // the cost below (N=2^15, r=8) needs `128 * N * r` = exactly that many
+    // bytes before OpenSSL's own overhead — so the default clips it. Raise the
+    // ceiling instead of lowering the cost. `p` adds CPU, not memory.
     const maxmem = 128 * params.N * params.r * 2
     scryptCallback(password, salt, keyLength, { ...params, maxmem }, (error, derived) => {
       if (error) reject(error)
@@ -38,10 +38,15 @@ function scrypt(
  */
 const KEY_LENGTH = 64
 const SALT_LENGTH = 16
-// N=2^15 costs roughly 100ms on ordinary hardware. Doubling it doubles login
-// latency for everyone to make one offline attacker's job twice as hard; this
-// is the OWASP-recommended floor for scrypt, not a guess.
-const SCRYPT_PARAMS = { N: 2 ** 15, r: 8, p: 1 } as const
+// OWASP's Password Storage Cheat Sheet lists, for scrypt, N=2^17,r=8,p=1 or
+// N=2^16,r=8,p=2 or N=2^15,r=8,p=3 (and weaker ones as minimums). This is the
+// last of them: the same 32 MiB per hash as before, three times the CPU. The
+// 128 MiB profile was passed over on purpose — a login holds its memory for the
+// whole derivation, and the target pods (512Mi-1Gi) and shared hosting cannot
+// afford several concurrent logins at that size. Raised from p=1 (pentest
+// 2026-11-01, AUTH-04; the old comment called p=1 the OWASP floor, which it is
+// not); hashes written before keep verifying and are upgraded by `needsRehash`.
+const SCRYPT_PARAMS = { N: 2 ** 15, r: 8, p: 3 } as const
 const MAX_INPUT_LENGTH = 512
 
 export async function hashPassword(password: string): Promise<string> {
@@ -76,6 +81,17 @@ export async function verifyPassword(password: string, stored: string): Promise<
   })
 
   return derived.length === parsed.expected.length && timingSafeEqual(derived, parsed.expected)
+}
+
+/**
+ * True when `stored` is a well-formed hash written with weaker parameters than
+ * the current ones — the caller, holding the plaintext after a successful
+ * verification, should store `hashPassword(password)` in its place.
+ */
+export function needsRehash(stored: string): boolean {
+  const parsed = parseHash(stored)
+  if (parsed === null) return false
+  return parsed.N < SCRYPT_PARAMS.N || parsed.r < SCRYPT_PARAMS.r || parsed.p < SCRYPT_PARAMS.p
 }
 
 interface ParsedHash {

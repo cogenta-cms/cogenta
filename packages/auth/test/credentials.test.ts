@@ -1,7 +1,9 @@
-import { CogentaError } from '@cogenta/core'
+import { randomBytes, scryptSync } from 'node:crypto'
+import { CogentaError, identifier, sql } from '@cogenta/core'
 import { describe, expect, it } from 'vitest'
 import { createCredentialStore, type WebAuthnCredentialData } from '../src/credentials.js'
 import { hashRecoveryCode } from '../src/recovery-codes.js'
+import { TABLES } from '../src/tables.js'
 import { TEST_SIGNING_KEY, testDb } from './helpers/db.js'
 
 const PASSKEY: WebAuthnCredentialData = {
@@ -11,6 +13,49 @@ const PASSKEY: WebAuthnCredentialData = {
   transports: ['internal'],
   label: 'YubiKey',
 }
+
+describe('CredentialStore — password cost upgrade (AUTH-04)', () => {
+  const PASSWORD = 'correct horse battery staple'
+
+  async function legacyRow(db: Awaited<ReturnType<typeof testDb>>): Promise<string> {
+    const salt = randomBytes(16)
+    const derived = scryptSync(PASSWORD, salt, 64, { N: 2 ** 15, r: 8, p: 1, maxmem: 2 ** 27 })
+    const hash = `scrypt$32768$8$1$${salt.toString('base64url')}$${derived.toString('base64url')}`
+    await db.query(sql`
+      insert into ${identifier(TABLES.credentials, db.dialect)} (id, user_id, kind, data, created_at)
+      values (${'pw'}, ${'user-1'}, ${'password'}, ${JSON.stringify({ hash })}, ${new Date().toISOString()})`)
+    return hash
+  }
+
+  async function storedHash(db: Awaited<ReturnType<typeof testDb>>): Promise<string> {
+    const result = await db.query<{ data: string }>(
+      sql`select data from ${identifier(TABLES.credentials, db.dialect)} where id = ${'pw'}`,
+    )
+    return (JSON.parse(result.rows[0]?.data as string) as { hash: string }).hash
+  }
+
+  it('rehashes a password stored with the previous parameters after a successful verification', async () => {
+    const db = await testDb()
+    const before = await legacyRow(db)
+    const credentials = createCredentialStore(db)
+
+    expect(await credentials.verifyPassword('user-1', PASSWORD)).toBe(true)
+
+    const after = await storedHash(db)
+    expect(after).not.toBe(before)
+    expect(after.split('$').slice(1, 4)).toEqual(['32768', '8', '3'])
+    expect(await credentials.verifyPassword('user-1', PASSWORD)).toBe(true)
+  })
+
+  it('leaves the stored hash alone when the password is wrong', async () => {
+    const db = await testDb()
+    const before = await legacyRow(db)
+
+    expect(await createCredentialStore(db).verifyPassword('user-1', 'not it')).toBe(false)
+
+    expect(await storedHash(db)).toBe(before)
+  })
+})
 
 describe('CredentialStore — password', () => {
   it('sets and verifies a password', async () => {

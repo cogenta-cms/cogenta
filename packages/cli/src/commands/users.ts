@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import process from 'node:process'
 import { assertPasswordPolicy } from '@cogenta/api'
 import {
+  createAuditLog,
   createCredentialStore,
   createPasswordResetStore,
   createSessionStore,
@@ -21,7 +22,7 @@ import {
 import type { Output, Writer } from '../output.js'
 import { sendResetMail as sendResetMailShared } from '../reset-mail.js'
 
-export type UsersSubcommand = 'create' | 'reset-password'
+export type UsersSubcommand = 'create' | 'reset-password' | 'reset-mfa'
 
 export interface UsersOptions {
   readonly subcommand: string | undefined
@@ -33,6 +34,8 @@ export interface UsersOptions {
   readonly email?: string
   readonly roles?: string
   readonly admin?: boolean
+  /** `reset-mfa`: remove the account's passkeys as well as its authenticator. */
+  readonly passkeys?: boolean
   /** `reset-password`: the token from the mail, redeeming the reset. */
   readonly token?: string
   /**
@@ -51,6 +54,7 @@ const USAGE = `Usage
   cogenta users create --email <email> [--roles <role,role>] [--admin]
   cogenta users reset-password --email <email>
   cogenta users reset-password --token <token> [--password <password>]
+  cogenta users reset-mfa --email <email> [--passkeys]
 
 The very first admin account is created this way — there is no other way in,
 since the admin UI needs one to sign in to. A random password is generated and
@@ -60,9 +64,17 @@ printed once; it is never stored anywhere but the credential table's hash.
 address. "reset-password --token" redeems it: the password is replaced and
 every session opened with the old one is signed out.
 
+"reset-mfa" is the operator's way back in for an account that lost its second
+factor, or whose authenticator can no longer be read because
+COGENTA_AUTH_SIGNING_KEY was rotated. It deletes the authenticator, any
+pending enrolment and the recovery codes (without reading them), signs the
+account out and voids its sign-in tickets; passkeys stay unless --passkeys is
+given. The account then signs in with its password alone and can enrol again.
+
 Options
   --admin              Shorthand for --roles admin
   --password <text>    reset-password: the new password (generated if absent)
+  --passkeys           reset-mfa: also remove the account's passkeys
   --mail-dir <path>    Where the outgoing mail is written (default .cogenta/mail)
 `
 
@@ -221,6 +233,76 @@ async function redeemReset(options: UsersOptions, logger: Logger): Promise<numbe
 }
 
 /**
+ * Operator recovery for a lost second factor — and for a signing-key rotation,
+ * after which the stored authenticator secrets no longer decrypt. Everything is
+ * deleted by `user_id` and `kind`, never read: the point is that it works when
+ * the secret cannot be opened.
+ */
+async function resetMfa(options: UsersOptions, logger: Logger): Promise<number> {
+  const { out, stderr } = options
+  const address = options.email as string
+
+  return withDatabase(options, logger, async (db) => {
+    await ensureAuthTables(db)
+    const users = createUserStore(db)
+    const user = await users.byEmail(address)
+    if (user === null) {
+      stderr(`AUTH_USER_NOT_FOUND: No account for ${address}.\n`)
+      stderr('Check the address, or create the account with `cogenta users create`.\n')
+      return 1
+    }
+
+    const credentials = createCredentialStore(db)
+    // Only the `kind` column is read, so this works whatever state the secrets are in.
+    const before = await credentials.kinds(user.id)
+    const removed: string[] = []
+    if (before.includes('totp')) removed.push('authenticator')
+    if (before.includes('recovery_codes')) removed.push('recovery codes')
+
+    await credentials.removeTotp(user.id) // the active factor and any pending enrolment
+    await credentials.removeRecoveryCodes(user.id)
+    if (options.passkeys === true) {
+      await credentials.removeWebAuthnCredentials(user.id)
+      if (before.includes('webauthn')) removed.push('passkeys')
+    }
+    await createSessionStore(db).revokeAll(user.id)
+    await revokeSignInTickets(db, user.id)
+
+    await createAuditLog(db).record({
+      actorId: null,
+      actorRoles: [],
+      action: 'user.mfa_reset',
+      entryId: user.id,
+      diff: {
+        removed: removed.map((name) =>
+          name === 'authenticator'
+            ? 'totp'
+            : name === 'recovery codes'
+              ? 'recovery_codes'
+              : 'webauthn',
+        ),
+        via: 'cli',
+      },
+    })
+
+    out.heading('Second factor reset')
+    out.ok(`${user.email} — every existing session was signed out`)
+    out.detail(
+      removed.length === 0
+        ? 'Nothing to remove: this account had no authenticator or recovery codes (any pending enrolment was dropped).'
+        : `Removed: ${removed.join(', ')} (and any pending enrolment).`,
+    )
+    if (options.passkeys !== true && before.includes('webauthn')) {
+      out.detail('Passkeys were kept. Add --passkeys to remove them too.')
+    }
+    out.detail(
+      'The account signs in with its password alone until it enrols again from the profile screen.',
+    )
+    return 0
+  })
+}
+
+/**
  * Runs one `users` subcommand and returns its exit code.
  *
  * 0 succeeded, 1 the database or the store said no, 2 the command line was
@@ -233,12 +315,28 @@ export async function runUsers(options: UsersOptions): Promise<number> {
     stderr(`cogenta users needs a subcommand.\n\n${USAGE}`)
     return 2
   }
-  if (options.subcommand !== 'create' && options.subcommand !== 'reset-password') {
+  if (
+    options.subcommand !== 'create' &&
+    options.subcommand !== 'reset-password' &&
+    options.subcommand !== 'reset-mfa'
+  ) {
     stderr(`Unknown subcommand "${options.subcommand}".\n\n${USAGE}`)
     return 2
   }
 
   const logger = options.logger ?? createLogger({ level: 'silent' })
+
+  if (options.subcommand === 'reset-mfa') {
+    if (options.email === undefined || options.email.trim().length === 0) {
+      stderr(`reset-mfa needs --email.\n\n${USAGE}`)
+      return 2
+    }
+    try {
+      return await resetMfa(options, logger)
+    } catch (error) {
+      return reportFailure(stderr, error)
+    }
+  }
 
   if (options.subcommand === 'reset-password') {
     const hasEmail = options.email !== undefined && options.email.trim().length > 0

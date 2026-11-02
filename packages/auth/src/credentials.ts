@@ -74,6 +74,8 @@ export interface CredentialStore {
     credentialId: string,
   ): Promise<{ userId: string; data: WebAuthnCredentialData } | null>
   updateWebAuthnCounter(credentialId: string, counter: number): Promise<void>
+  /** Deletes every passkey of this account without reading them — the operator recovery path (`cogenta users reset-mfa --passkeys`). */
+  removeWebAuthnCredentials(userId: string): Promise<void>
 
   /**
    * Replaces this account's recovery codes wholesale with `hashes` — already
@@ -382,6 +384,10 @@ export function createCredentialStore(
           return
         }
       }
+    },
+
+    removeWebAuthnCredentials: async (userId) => {
+      await db.query(sql`delete from ${table} where user_id = ${userId} and kind = ${'webauthn'}`)
     },
 
     kinds: async (userId) => {

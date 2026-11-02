@@ -22,6 +22,23 @@ visibles dans l'admin (inspiré de la manière dont WordPress affiche ses
 notices) encourage l'activation de la double authentification sans jamais
 empêcher de travailler tant qu'elle n'est pas activée.
 
+Les secrets d'authentificateur (TOTP) sont chiffrés en base avec une clé dérivée
+de `COGENTA_AUTH_SIGNING_KEY`. **Changer cette clé les rend illisibles** : la
+connexion des comptes concernés échoue plutôt que de se passer de leur second
+facteur. Il en va de même d'un compte qui a perdu son appareil. Dans les deux
+cas, l'exploitant le remet en état en ligne de commande :
+
+```sh
+cogenta users reset-mfa --email <adresse>
+```
+
+La commande supprime l'authentificateur, l'enrôlement en cours et les codes de
+secours (sans les lire, donc même si la clé a changé), déconnecte le compte,
+annule ses connexions en cours et écrit une entrée dans le journal d'audit. Les
+passkeys sont conservées, sauf avec `--passkeys`. Le compte se connecte ensuite
+avec son seul mot de passe et peut réactiver la double authentification depuis
+son profil.
+
 Dans **Mon profil**, les sessions actives sont affichées par pages de dix,
 avec leur appareil, leur dernière activité et l’indication de la session actuelle.
 « Précédent » et « Suivant » donnent accès aux autres sessions. Révoquer une session

@@ -78,6 +78,7 @@ Commands
   migrate down     Revert applied migrations
   users create     Create a user — the first admin account is made this way
   users reset-password   Send a single-use reset token, or redeem one
+  users reset-mfa  Remove an account's second factor (lost device, rotated signing key)
   import wordpress <file.xml>   Import a WordPress WXR export, with a report
   export <file.ndjson>   Export content — entries, terms, menus, redirects
   import content <file.ndjson>   Re-import an export produced by "export"
@@ -149,6 +150,7 @@ User options
   --admin                 Shorthand for --roles admin
   --token <token>         reset-password: the token from the mail
   --password <text>       reset-password: the new password (generated if absent)
+  --passkeys              reset-mfa: also remove the account's passkeys
   --mail-dir <path>       Where outgoing mail is written (default .cogenta/mail)
 
 Serve options
@@ -209,6 +211,7 @@ export async function run(options: RunOptions): Promise<number> {
         admin: { type: 'boolean' },
         token: { type: 'string' },
         password: { type: 'string' },
+        passkeys: { type: 'boolean' },
         'mail-dir': { type: 'string' },
         port: { type: 'string' },
         host: { type: 'string' },
@@ -290,6 +293,7 @@ export async function run(options: RunOptions): Promise<number> {
       ...(typeof parsed.values.email === 'string' ? { email: parsed.values.email } : {}),
       ...(typeof parsed.values.roles === 'string' ? { roles: parsed.values.roles } : {}),
       ...(parsed.values.admin === true ? { admin: true } : {}),
+      ...(parsed.values.passkeys === true ? { passkeys: true } : {}),
       ...(typeof parsed.values.token === 'string' ? { token: parsed.values.token } : {}),
       // `create` never takes a password from the command line (see `UsersOptions`).
       ...(typeof parsed.values.password === 'string' && parsed.positionals[1] !== 'create'

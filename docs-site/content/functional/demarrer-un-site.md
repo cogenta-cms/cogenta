@@ -10,7 +10,9 @@ order: 1
 `npm create cogenta` scaffold un site complet — schéma de contenu, thème,
 base de données (SQLite par défaut, Postgres/MySQL/MariaDB toujours proposés
 même sans serveur local détecté), une clé de signature d'authentification
-générée automatiquement dans `.env`.
+générée automatiquement dans `.env` (la changer rend les secrets
+d'authentificateur déjà enregistrés illisibles ; voir `cogenta users reset-mfa`
+dans « Comptes et accès »).
 
 Un cahier des charges peut être téléversé pendant l'installation : un agent
 en extrait un modèle de contenu et deux à cinq gabarits visuels, que vous

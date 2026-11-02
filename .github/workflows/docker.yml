@@ -138,8 +138,8 @@ jobs:
           labels: |
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
 
-      # Build and scan the image BEFORE it is pushed anywhere: a CRITICAL
-      # vulnerability that has a fix stops the release, it does not ship and
+      # Build and scan the image BEFORE it is pushed anywhere: a HIGH or
+      # CRITICAL vulnerability that has a fix stops the release, it does not ship and
       # get reported afterwards. The image is loaded into the local daemon for
       # the scan (single platform; the pushed one is the same Dockerfile).
       - name: Build (amd64) for the scan
@@ -160,14 +160,18 @@ jobs:
       # Every third-party action in this file is pinned to a full commit SHA:
       # a tag can be moved after the fact, a commit cannot. The comment names
       # the release the SHA is, so a bump is a deliberate, reviewable change.
-      - name: Scan for fixable critical vulnerabilities
+      # HIGH and CRITICAL with a published fix stop the release. An exception
+      # goes in .trivyignore with its reason and an expiry date, so it is a
+      # reviewed, temporary decision rather than a silent one.
+      - name: Scan for fixable high and critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: cogenta:scan
-          severity: CRITICAL
+          severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
           vuln-type: os,library
+          trivyignores: .trivyignore
 
       - name: Build and push (amd64, arm64)
         id: build
@@ -177,7 +181,10 @@ jobs:
           file: docker/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ steps.publish.outputs.push == 'true' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          # Pushed under its commit tag only: the release tags (version,
+          # minor, latest) move once each platform of THIS digest has passed
+          # its own scan, below.
+          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
@@ -188,6 +195,63 @@ jobs:
           sbom: true
           cache-from: type=gha,scope=cogenta-image
           cache-to: type=gha,scope=cogenta-image,mode=max
+
+      # The scan above ran on a local amd64 build. The image that ships is the
+      # multi-arch digest just pushed, so each of its platforms is scanned by
+      # digest before any user-facing tag points at it.
+      - name: Scan the pushed digest (amd64)
+        if: steps.publish.outputs.push == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/amd64
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          vuln-type: os,library
+          trivyignores: .trivyignore
+
+      - name: Scan the pushed digest (arm64)
+        if: steps.publish.outputs.push == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          vuln-type: os,library
+          trivyignores: .trivyignore
+
+      # Promotion: the release tags are pointed at the scanned digest. With a
+      # single source, imagetools copies the index as is, so the digest users
+      # pull, the one scanned and the one signed below are the same.
+      - name: Promote the scanned digest to the release tags
+        if: steps.publish.outputs.push == 'true'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && args+=(--tag "$tag")
+          done <<< "$TAGS"
+          docker buildx imagetools create "${args[@]}" "${IMAGE}@${DIGEST}"
+          for tag in "${args[@]}"; do
+            [ "$tag" = "--tag" ] && continue
+            promoted="sha256:$(docker buildx imagetools inspect "$tag" --raw | sha256sum | cut -d' ' -f1)"
+            if [ "$promoted" != "$DIGEST" ]; then
+              echo "::error::$tag points at $promoted, not the scanned $DIGEST"
+              exit 1
+            fi
+          done
 
       - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
         if: steps.publish.outputs.push == 'true'

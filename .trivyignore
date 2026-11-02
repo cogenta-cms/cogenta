@@ -1,0 +1,9 @@
+# Accepted vulnerabilities for the container image, read by .github/workflows/docker.yml.
+#
+# Only for a finding that has a fix the image cannot take yet. Each line is the
+# vulnerability id, preceded by a comment giving the reason, who decided, and
+# the date it must be reviewed again. Trivy also understands `exp:YYYY-MM-DD`
+# after the id, which turns an expired exception back into a failure:
+#
+#   # node:22-bookworm-slim ships libfoo 1.2; fix only in trixie. Reviewed 2026-11-02.
+#   CVE-2026-00000 exp:2026-12-31

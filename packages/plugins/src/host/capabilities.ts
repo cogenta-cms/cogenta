@@ -1,5 +1,12 @@
 import type { StorageDriver } from '@cogenta/core'
-import { CogentaError } from '@cogenta/core'
+import {
+  CogentaError,
+  type FetchPublicOptions,
+  fetchPublicOnce,
+  isCogentaError,
+  type PinnedFetch,
+  readBoundedText,
+} from '@cogenta/core'
 
 /**
  * Host-side implementations of the SDK methods a sandboxed plugin can call.
@@ -24,6 +31,11 @@ import { CogentaError } from '@cogenta/core'
 export interface CapabilityCallContext {
   /** The full manifest-shaped capability strings actually granted, e.g. `["http.fetch:api.example.com"]`. */
   readonly grantedCapabilities: readonly string[]
+  /**
+   * Aborted when the run that made the call is over — finished, timed out or
+   * killed. A host-side request a plugin started must not outlive it.
+   */
+  readonly signal?: AbortSignal
 }
 
 export type CapabilityHandler = (args: unknown, context: CapabilityCallContext) => Promise<unknown>
@@ -81,7 +93,39 @@ export function createContentReadHandler(
  * request, not merely against the fact that *some* `http.fetch` capability
  * exists.
  */
-export function createHttpFetchHandler(fetchImpl: typeof fetch = fetch): CapabilityHandler {
+export function createHttpFetchHandler(
+  fetchImpl?: typeof fetch,
+  limits: HttpFetchLimits = {},
+): CapabilityHandler {
+  const maxBodyBytes = limits.maxBodyBytes ?? MAX_HTTP_BODY_BYTES
+  const bodyTimeoutMs = limits.bodyTimeoutMs ?? HTTP_BODY_TIMEOUT_MS
+
+  /**
+   * One hop. A host-provided `fetchImpl` replaces the transport (tests); the
+   * default resolves the host, refuses a loopback, private or link-local
+   * address and connects to the address it checked — a granted *name* is not
+   * a granted *address*. There is no switch to allow internal hosts.
+   */
+  async function requestHop(target: string, signal: AbortSignal | undefined): Promise<Response> {
+    if (fetchImpl !== undefined) {
+      return fetchImpl(target, { redirect: 'manual', ...(signal === undefined ? {} : { signal }) })
+    }
+    try {
+      return await fetchPublicOnce(target, {
+        ...(signal === undefined ? {} : { signal }),
+        ...(limits.lookupImpl === undefined ? {} : { lookupImpl: limits.lookupImpl }),
+        ...(limits.pinnedFetchImpl === undefined ? {} : { pinnedFetch: limits.pinnedFetchImpl }),
+      })
+    } catch (error) {
+      if (isCogentaError(error) && error.code === 'HTTP_TARGET_UNSAFE') {
+        refused(
+          `"http.fetch" will not reach "${new URL(target).hostname}": it is not a public address`,
+        )
+      }
+      throw error
+    }
+  }
+
   return async (args, context) => {
     const allowedDomains = grantedParameters('http.fetch', context)
     let target = asString(asRecord(args).url, 'url')
@@ -96,13 +140,21 @@ export function createHttpFetchHandler(fetchImpl: typeof fetch = fetch): Capabil
       if (!allowedDomains.includes(hostname)) {
         refused(`"http.fetch" was not granted for domain "${hostname}"`)
       }
-      const response = await fetchImpl(target, { redirect: 'manual' })
+      const response = await requestHop(target, context.signal)
       const location = response.headers.get('location')
       if (response.status >= 300 && response.status < 400 && location !== null) {
         target = new URL(location, target).toString()
         continue
       }
-      return { status: response.status, body: await response.text() }
+      // Counted while it arrives: a plugin handed half a document would parse
+      // it as a whole one, so a body past the limit is an error, not a prefix.
+      const { text } = await readBoundedText(response, {
+        maxBytes: maxBodyBytes,
+        onLimit: 'throw',
+        timeoutMs: bodyTimeoutMs,
+        ...(context.signal === undefined ? {} : { signal: context.signal }),
+      })
+      return { status: response.status, body: text }
     }
     refused('"http.fetch" followed too many redirects')
   }
@@ -110,6 +162,20 @@ export function createHttpFetchHandler(fetchImpl: typeof fetch = fetch): Capabil
 
 /** Beyond this, a chain of redirects is a loop, not a destination. */
 const MAX_HTTP_REDIRECTS = 5
+
+/** The most a plugin's `http.fetch` reads from one response. */
+const MAX_HTTP_BODY_BYTES = 1024 * 1024
+/** How long reading one response body may take, from the first read. */
+const HTTP_BODY_TIMEOUT_MS = 15_000
+
+export interface HttpFetchLimits {
+  readonly maxBodyBytes?: number
+  readonly bodyTimeoutMs?: number
+  /** Overridable for tests — real `dns.lookup` by default. */
+  readonly lookupImpl?: FetchPublicOptions['lookupImpl']
+  /** Overridable for tests — the address-pinned transport by default. */
+  readonly pinnedFetchImpl?: PinnedFetch
+}
 
 function isWithinGrantedPrefix(path: string, prefixes: readonly string[]): boolean {
   return prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))

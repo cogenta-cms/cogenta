@@ -286,7 +286,7 @@ export async function createPluginRuntime(options: PluginRuntimeOptions): Promis
     const handlers: Record<string, CapabilityHandler> = {
       'storage.read': createStorageReadHandler(storage),
       'storage.write': createStorageWriteHandler(storage),
-      'http.fetch': createHttpFetchHandler(options.fetchImpl ?? fetch),
+      'http.fetch': createHttpFetchHandler(options.fetchImpl),
     }
     const readEntry = options.readEntry
     if (readEntry !== undefined && collection !== null) {

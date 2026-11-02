@@ -97,4 +97,191 @@ describe('http.fetch', () => {
     expect(init.redirect).toBe('manual')
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
+
+  // Pentest 2026-11-01, C-03: the text was read in full and cut afterwards, so
+  // the cap bounded what the model saw and nothing about what the host held.
+  describe('a response body that is large or slow', () => {
+    it('stops reading an endless body at the limit and cancels the stream', async () => {
+      const stats = { pulled: 0, cancelled: false }
+      const fetchImpl = vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull(controller) {
+                stats.pulled += 1
+                controller.enqueue(new Uint8Array(64 * 1024).fill(120))
+              },
+              cancel() {
+                stats.cancelled = true
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'text/plain' } },
+          ),
+      )
+      const tool = createHttpFetchTool({ allowedDomains: ['api.example.com'], fetchImpl })
+
+      const result = await tool.execute({ url: 'https://api.example.com/endless' }, CTX)
+
+      expect(result.body.length).toBe(100_001)
+      expect(result.body.endsWith('…')).toBe(true)
+      expect(stats.cancelled).toBe(true)
+      // 100 000 characters need a few hundred KiB at most, not a stream's worth.
+      expect(stats.pulled).toBeLessThan(30)
+    })
+
+    it('gives up on a body that stalls after its first bytes', async () => {
+      const stats = { cancelled: false }
+      const fetchImpl = vi.fn(async () => {
+        let sent = false
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (!sent) {
+                sent = true
+                controller.enqueue(new TextEncoder().encode('partial'))
+                return
+              }
+              return new Promise<void>(() => undefined)
+            },
+            cancel() {
+              stats.cancelled = true
+            },
+          }),
+          { status: 200 },
+        )
+      })
+      const tool = createHttpFetchTool({
+        allowedDomains: ['api.example.com'],
+        fetchImpl,
+        bodyTimeoutMs: 40,
+      })
+
+      await expect(
+        tool.execute({ url: 'https://api.example.com/slow' }, CTX),
+      ).rejects.toMatchObject({ code: 'HTTP_BODY_TIMEOUT' })
+      expect(stats.cancelled).toBe(true)
+    })
+
+    it('stops when the run is cancelled while the server is silent', async () => {
+      const controller = new AbortController()
+      const fetchImpl = vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull: () => new Promise<void>(() => undefined),
+            }),
+            { status: 200 },
+          ),
+      )
+      const tool = createHttpFetchTool({ allowedDomains: ['api.example.com'], fetchImpl })
+      setTimeout(() => controller.abort(), 20)
+
+      await expect(
+        tool.execute(
+          { url: 'https://api.example.com/silent' },
+          { ...CTX, signal: controller.signal },
+        ),
+      ).rejects.toMatchObject({ code: 'HTTP_BODY_ABORTED' })
+    })
+  })
+
+  // Pentest 2026-11-01, C-04: an allowed *name* is not an allowed *address*.
+  describe('the default transport', () => {
+    const publicLookup = (async () => [{ address: '93.184.216.34', family: 4 }]) as never
+
+    it.each([
+      ['127.0.0.1', '127.0.0.1'],
+      ['10.1.2.3', '10.1.2.3'],
+      ['fe90::1', '[fe90::1]'],
+    ])(
+      'refuses an allowed domain that resolves to %s, without connecting',
+      async (address, host) => {
+        const pinnedFetchImpl = vi.fn(async () => new Response('secret'))
+        const tool = createHttpFetchTool({
+          allowedDomains: ['intranet.example.com'],
+          lookupImpl: (async () => [{ address, family: host.startsWith('[') ? 6 : 4 }]) as never,
+          pinnedFetchImpl,
+        })
+
+        await expect(
+          tool.execute({ url: 'https://intranet.example.com/admin' }, CTX),
+        ).rejects.toMatchObject({ code: 'HTTP_FETCH_DOMAIN_DENIED' })
+        expect(pinnedFetchImpl).not.toHaveBeenCalled()
+      },
+    )
+
+    it('refuses an allowed literal metadata address', async () => {
+      const pinnedFetchImpl = vi.fn(async () => new Response('secret'))
+      const tool = createHttpFetchTool({
+        allowedDomains: ['169.254.169.254'],
+        pinnedFetchImpl,
+      })
+
+      await expect(
+        tool.execute({ url: 'http://169.254.169.254/latest/meta-data/' }, CTX),
+      ).rejects.toMatchObject({ code: 'HTTP_FETCH_DOMAIN_DENIED' })
+      expect(pinnedFetchImpl).not.toHaveBeenCalled()
+    })
+
+    it('connects to the address it validated, resolving the name once', async () => {
+      let lookups = 0
+      const lookupImpl = (async () => {
+        lookups += 1
+        return [{ address: lookups === 1 ? '93.184.216.34' : '127.0.0.1', family: 4 }]
+      }) as never
+      const connectedTo: string[] = []
+      const tool = createHttpFetchTool({
+        allowedDomains: ['api.example.com'],
+        lookupImpl,
+        pinnedFetchImpl: async (target) => {
+          connectedTo.push(target.address)
+          return new Response('ok', { status: 200 })
+        },
+      })
+
+      const result = await tool.execute({ url: 'https://api.example.com/x' }, CTX)
+
+      expect(result.body).toBe('ok')
+      expect(connectedTo).toEqual(['93.184.216.34'])
+      expect(lookups).toBe(1)
+    })
+
+    it('keeps the configured site origin reachable on a private address, and only that origin', async () => {
+      const connectedTo: string[] = []
+      const tool = createHttpFetchTool({
+        allowedDomains: ['127.0.0.1'],
+        trustedOrigins: ['http://127.0.0.1:4000'],
+        pinnedFetchImpl: async (target) => {
+          connectedTo.push(`${target.address}:${target.url.port}`)
+          return new Response('own page', { status: 200 })
+        },
+      })
+
+      const own = await tool.execute({ url: 'http://127.0.0.1:4000/' }, CTX)
+      expect(own.body).toBe('own page')
+
+      // Same host, another port: another origin, still refused.
+      await expect(tool.execute({ url: 'http://127.0.0.1:4001/' }, CTX)).rejects.toMatchObject({
+        code: 'HTTP_FETCH_DOMAIN_DENIED',
+      })
+      // Same host and port, other scheme: another origin too.
+      await expect(tool.execute({ url: 'https://127.0.0.1:4000/' }, CTX)).rejects.toMatchObject({
+        code: 'HTTP_FETCH_DOMAIN_DENIED',
+      })
+      expect(connectedTo).toEqual(['127.0.0.1:4000'])
+    })
+
+    it('does not follow a redirect into a private address', async () => {
+      const tool = createHttpFetchTool({
+        allowedDomains: ['api.example.com'],
+        lookupImpl: publicLookup,
+        pinnedFetchImpl: async () =>
+          new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/' } }),
+      })
+
+      const result = await tool.execute({ url: 'https://api.example.com/x' }, CTX)
+
+      expect(result.status).toBe(302)
+    })
+  })
 })

@@ -640,6 +640,8 @@ function buildToolRegistry(options: {
           createHttpFetchTool({
             allowedDomains: [new URL(options.siteUrl).hostname],
             allowedOrigins: [new URL(options.siteUrl).origin],
+            // The operator's own site stays reachable on a private address.
+            trustedOrigins: [new URL(options.siteUrl).origin],
           }),
         ]),
     createDocumentExtractTool(),

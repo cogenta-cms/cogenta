@@ -33,6 +33,7 @@ import {
   cursorFor,
   draftGateFor,
   type ExpansionSource,
+  entryViewFor,
   entryVisible,
   matchesFilter,
   resolveRelativeFilter,
@@ -601,13 +602,18 @@ export function createContentService(options: ContentServiceOptions): ContentSer
    * reading the row (history, diff). A grant for another entry must not open
    * them, and the answer is the same 404 a stranger gets.
    */
-  function assertEntryDraftAccess(
+  async function assertEntryDraftAccess(
     target: CollectionDefinition,
     context: AccessContext,
     id: string,
-  ): void {
-    if (entryVisible(permissions, target, context, 'working', id)) return
-    throw notFound()
+  ): Promise<void> {
+    if (!entryVisible(permissions, target, context, 'working', id)) throw notFound()
+    // The versions of a restricted entry are its content under another name:
+    // they stay with whoever may edit the collection, whatever else that
+    // actor may read (`schema@2.3`).
+    if (permissions.can('update', target, context).allowed) return
+    const current = await store(target).read(id, { state: 'working' })
+    if (current !== null && current.visibility !== 'public') throw notFound()
   }
 
   /**
@@ -653,6 +659,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       canRead: (target) => permissions.can('read', target, context).allowed,
       canReadUnpublished: (target) => permissions.canReadUnpublished(target, context).allowed,
       canSeeEntry: (target, entry) => draftGate(target, context, 'working')(entry),
+      viewOf: (target, entry) => entryViewFor(permissions, target, context)(entry),
     }
   }
 
@@ -662,7 +669,12 @@ export function createContentService(options: ContentServiceOptions): ContentSer
     entry: ContentEntry,
     options_: ReadOptions,
   ): Promise<SerialisedEntry> {
-    return serialiseEntry(entry, target, expansionSource(context), {
+    // The entry as this actor may see it: whole, locked (a protected page
+    // keeps its title and loses its content), or — for a row a gate let
+    // through by mistake — not at all.
+    const shown = entryViewFor(permissions, target, context)(entry)
+    if (shown === null) throw notFound()
+    return serialiseEntry(shown, target, expansionSource(context), {
       depth: Math.min(Math.max(options_.depth, 0), limits.maxDepth),
       state: options_.state,
     })
@@ -712,8 +724,16 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       // instant and its last rows against another (ADR-0038).
       const filter =
         query.filter === undefined ? undefined : resolveRelativeFilter(query.filter, new Date())
-      const accept = (entry: ContentEntry): boolean =>
-        gate(entry) && (filter === undefined || matchesFilter(filter, entry))
+      // The filter looks at the entry **as this actor is shown it**: a query
+      // that matches a protected entry's hidden field would otherwise confirm
+      // a guess about content the response itself withholds.
+      const view = entryViewFor(permissions, target, context)
+      const accept = (entry: ContentEntry): boolean => {
+        if (!gate(entry)) return false
+        if (filter === undefined) return true
+        const shown = view(entry)
+        return shown !== null && matchesFilter(filter, shown)
+      }
 
       const entries = store(target)
       const scan = await scanPages<ContentEntry>({
@@ -1193,7 +1213,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       // History is the list of drafts by another name, so it needs the same
       // permission a draft read needs — including the entry-level half of it.
       stateFor(target, context, 'working')
-      assertEntryDraftAccess(target, context, id)
+      await assertEntryDraftAccess(target, context, id)
 
       return store(target).history(id)
     },
@@ -1204,11 +1224,15 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       // Same gate as history: the family of an entry an actor may not see the
       // draft of is not theirs to enumerate either.
       stateFor(target, context, 'working')
-      assertEntryDraftAccess(target, context, id)
+      await assertEntryDraftAccess(target, context, id)
 
       const all = await store(target).translations(id)
+      // A private sibling does not exist for this actor, here as anywhere.
+      const view = entryViewFor(permissions, target, context)
       return Promise.all(
-        all.map((entry) => serialise(context, target, entry, { state: 'working', depth: 0 })),
+        all
+          .filter((entry) => view(entry) !== null)
+          .map((entry) => serialise(context, target, entry, { state: 'working', depth: 0 })),
       )
     },
 
@@ -1216,7 +1240,7 @@ export function createContentService(options: ContentServiceOptions): ContentSer
       const target = collection(name)
       permissions.assert('read', target, context)
       stateFor(target, context, 'working')
-      assertEntryDraftAccess(target, context, id)
+      await assertEntryDraftAccess(target, context, id)
 
       // Task 06-3: a corrected word must show as a corrected word, not
       // "changed" — computed here rather than inside `ContentStore.diff`, so

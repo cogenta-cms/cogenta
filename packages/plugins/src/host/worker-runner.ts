@@ -162,6 +162,7 @@ async function handleSdkCall(
   handlers: Readonly<Record<string, CapabilityHandler>>,
   grantedCapabilities: readonly string[],
   worker: Worker,
+  signal: AbortSignal,
 ): Promise<void> {
   const handler = handlers[message.method]
   if (handler === undefined) {
@@ -174,7 +175,7 @@ async function handleSdkCall(
     return
   }
   try {
-    const value = await handler(message.args, { grantedCapabilities })
+    const value = await handler(message.args, { grantedCapabilities, signal })
     const reply: WorkerHostReplyMessage = { type: 'sdk-result', callId: message.callId, value }
     worker.postMessage(reply)
   } catch (error) {
@@ -253,9 +254,12 @@ export async function runIsolated(
 
   return await new Promise<IsolatedRunResult>((resolve) => {
     let settled = false
+    // Aborted with the run: a request the plugin started stops with it.
+    const runEnded = new AbortController()
     const finish = (result: Omit<IsolatedRunResult, 'durationMs' | 'isolation'>): void => {
       if (settled) return
       settled = true
+      runEnded.abort()
       clearTimeout(timer)
       void worker.terminate()
       resolve({ ...result, isolation: 'worker', durationMs: Date.now() - startedAt })
@@ -301,7 +305,7 @@ export async function runIsolated(
       // `guest-ready` belongs to the forked-process guest, which waits for
       // its `run`; a worker gets one at spawn and never sends it.
       if (message.type === 'guest-ready') return
-      void handleSdkCall(message, handlers, grantedCapabilities, worker)
+      void handleSdkCall(message, handlers, grantedCapabilities, worker, runEnded.signal)
     })
 
     worker.once('error', (error) => {

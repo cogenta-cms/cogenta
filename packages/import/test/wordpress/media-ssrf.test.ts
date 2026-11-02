@@ -85,6 +85,73 @@ describe('downloadAndStoreMedia — SSRF and size guards', () => {
     }
   })
 
+  // Pentest 2026-11-01, C-04: the host name was resolved to check it and then
+  // resolved again by `fetch` to connect, so an answer that changed in
+  // between (DNS rebinding) walked past the check.
+  it('connects to the address it validated, even when DNS would now answer differently', async () => {
+    const { mediaStore, storage, dispose } = await withSite()
+    try {
+      let lookups = 0
+      const lookupImpl = (async () => {
+        lookups += 1
+        // Public for the check; loopback for anything that asks again.
+        return [{ address: lookups === 1 ? '93.184.216.34' : '127.0.0.1', family: 4 }]
+      }) as never
+      const connectedTo: string[] = []
+      const pinnedFetchImpl = async (target: { address: string }) => {
+        connectedTo.push(target.address)
+        return new Response(new Uint8Array([0xff, 0xd8, 0xff]), {
+          status: 200,
+          headers: { 'content-type': 'image/jpeg' },
+        })
+      }
+
+      await downloadAndStoreMedia(['http://rebind.example/a.jpg'], {
+        mediaStore,
+        storage,
+        createdBy: null,
+        lookupImpl,
+        pinnedFetchImpl,
+      })
+
+      expect(connectedTo).toEqual(['93.184.216.34'])
+      expect(lookups).toBe(1)
+    } finally {
+      await dispose()
+    }
+  })
+
+  it('re-resolves and re-pins every redirect hop', async () => {
+    const { mediaStore, storage, dispose } = await withSite()
+    try {
+      const answers: Record<string, string> = {
+        'first.example': '93.184.216.34',
+        'second.example': '198.51.100.7', // documentation range: not public
+      }
+      const lookupImpl = (async (host: string) => [
+        { address: answers[host] ?? '93.184.216.34', family: 4 },
+      ]) as never
+      const connectedTo: string[] = []
+      const pinnedFetchImpl = async (target: { address: string }) => {
+        connectedTo.push(target.address)
+        return new Response(null, { status: 302, headers: { location: 'http://second.example/b' } })
+      }
+
+      const result = await downloadAndStoreMedia(['http://first.example/a'], {
+        mediaStore,
+        storage,
+        createdBy: null,
+        lookupImpl,
+        pinnedFetchImpl,
+      })
+
+      expect(connectedTo).toEqual(['93.184.216.34'])
+      expect(result.failed[0]?.reason).toContain('private')
+    } finally {
+      await dispose()
+    }
+  })
+
   // Security review of 2026-10-21: `fetch` followed redirects on its own,
   // so a public host answering 302 to the metadata address was fetched.
   it('refuses a public URL that redirects to a private address', async () => {

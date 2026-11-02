@@ -78,6 +78,17 @@ export interface ExpansionSource {
    * one entry would unlock every draft it relates to.
    */
   canSeeEntry(collection: CollectionDefinition, entry: ContentEntry): boolean
+  /**
+   * What this actor is shown of an entry that is published but restricted
+   * (`schema@2.3`, ADR-0037): the entry, a locked copy of it, or `null` when
+   * for them it does not exist.
+   *
+   * Asked of **every** expanded entry, whatever the state — `canSeeEntry` is
+   * the draft half of the question and only means anything in the working
+   * state, but a published entry can be private, and a related entry must not
+   * come out whole where a direct read of it would be a 404 or a locked page.
+   */
+  viewOf(collection: CollectionDefinition, entry: ContentEntry): ContentEntry | null
 }
 
 export interface ExpansionOptions {
@@ -205,10 +216,14 @@ async function one(
   // And the entry-level check, for the draft a preview grant does not cover.
   // Only in the working state: a published read cannot have produced a draft.
   if (options.state === 'working' && !source.canSeeEntry(target, found)) return id
+  // The visibility half, in every state: a private entry is as absent here as
+  // it is to a direct read, and a protected one arrives locked.
+  const shown = source.viewOf(target, found)
+  if (shown === null) return id
 
   const inner = new Set(seen)
-  inner.add(`${target.name}:${found.id}`)
-  const values = await expand(found, target, source, options, inner)
+  inner.add(`${target.name}:${shown.id}`)
+  const values = await expand(shown, target, source, options, inner)
 
-  return { ...projectionOf(found, target.name), values } satisfies SerialisedEntry
+  return { ...projectionOf(shown, target.name), values } satisfies SerialisedEntry
 }

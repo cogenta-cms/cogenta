@@ -226,6 +226,12 @@ export const ERROR_CODES = [
   // Agents — core tools (L4)
   'HTTP_FETCH_DOMAIN_DENIED',
 
+  // Outbound HTTP — bounded response bodies
+  'HTTP_BODY_TOO_LARGE',
+  'HTTP_BODY_TIMEOUT',
+  'HTTP_BODY_ABORTED',
+  'HTTP_TARGET_UNSAFE',
+
   // Agents — autonomy and approval (L4)
   'APPROVAL_REQUEST_UNKNOWN',
   'APPROVAL_REQUEST_INVALID',

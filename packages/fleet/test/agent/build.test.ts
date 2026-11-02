@@ -23,7 +23,9 @@ describe('summarizeAdminAccounts', () => {
     const db = await createSqliteHandle({ url: ':memory:' })
     await ensureAuthTables(db)
     const users = createUserStore(db)
-    const credentials = createCredentialStore(db)
+    const credentials = createCredentialStore(db, Date.now, {
+      signingKey: 'fleet-test-signing-key',
+    })
 
     const admin1 = await users.create({ email: 'a@example.com', roles: ['admin'] })
     const admin2 = await users.create({ email: 'b@example.com', roles: ['admin'] })

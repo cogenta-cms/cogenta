@@ -496,6 +496,10 @@ export function createAuthRouter(options: AuthRouterOptions): AuthRouter {
     // reset that leaves them signed in has reset nothing — the same reasoning
     // `cogenta users reset-password --token` already follows.
     await auth.sessions.revokeAll(user.id)
+    // The same goes for a second-factor or passkey-registration ticket handed
+    // out against the old password: a session revoked here must not be
+    // re-mintable by presenting one of those plus a valid code (AUTH-01).
+    await auth.login.revokeSignInTickets(user.id)
     // A successful reset is proof of legitimate access; nothing left over
     // from a stranger's guessing should still count against this account.
     await auth.rateLimit.clear(`forgot-password:${user.email.toLowerCase()}`)

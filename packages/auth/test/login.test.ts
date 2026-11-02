@@ -5,7 +5,7 @@ import { createCredentialStore } from '../src/credentials.js'
 import { createAuthService } from '../src/login.js'
 import { hashRecoveryCode } from '../src/recovery-codes.js'
 import { createUserStore } from '../src/users.js'
-import { testDb } from './helpers/db.js'
+import { TEST_SIGNING_KEY, testDb } from './helpers/db.js'
 import { codeFor } from './helpers/totp-code.js'
 
 const SIGNING_KEY = 'test-signing-key-not-a-real-secret'
@@ -31,7 +31,7 @@ async function setup(
 ) {
   const db = await testDb()
   const users = createUserStore(db, now)
-  const credentials = createCredentialStore(db, now)
+  const credentials = createCredentialStore(db, now, { signingKey: TEST_SIGNING_KEY })
   const auth = createAuthService({
     db,
     signingKey: SIGNING_KEY,
@@ -295,8 +295,13 @@ describe('totpLogin', () => {
     const bundle = await setup(PUBLISH_COLLECTIONS)
     const user = await bundle.users.create({ email: 'ed@example.com', roles: ['editor'] })
     await bundle.credentials.setPassword(user.id, 'correct horse battery staple')
-    await bundle.credentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
-    await bundle.credentials.confirmTotp(user.id)
+    // Written under the other key too, so the other service can read it: this
+    // test is about the *ticket* being signed with a key this one does not hold.
+    const otherCredentials = createCredentialStore(bundle.db, Date.now, {
+      signingKey: 'a-completely-different-key',
+    })
+    await otherCredentials.setTotpSecret(user.id, 'JBSWY3DPEHPK3PXP')
+    await otherCredentials.confirmTotp(user.id)
 
     const otherAuth = createAuthService({
       db: bundle.db,

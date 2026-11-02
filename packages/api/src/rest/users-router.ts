@@ -651,7 +651,12 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
       // is belt and braces — but a revoked row is the thing an operator can
       // actually see, and "disabled" that leaves live sessions listed reads
       // like the revocation did not happen.
-      if (changes.status === 'disabled') await auth.sessions.revokeAll(user.id)
+      if (changes.status === 'disabled') {
+        await auth.sessions.revokeAll(user.id)
+        // Sign-in steps already in flight die with the account's sessions, so
+        // enabling it again does not bring them back to life (AUTH-01).
+        await auth.login.revokeSignInTickets(user.id)
+      }
     }
 
     // Fiche 61 task 1 — the gap this fiche exists to close: every account
@@ -930,27 +935,27 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
         ? { roles: rolesField(body, 'roles') }
         : { status: action === 'disable' ? 'disabled' : 'active' }
 
-    // `Promise.allSettled`, not `Promise.all`: one account rejecting (the
-    // last admin, an anonymized row, an id nobody recognises) must never
-    // undo — or block — what already succeeded for the others. The report
-    // names every failure instead of the caller finding out by re-reading
-    // the list afterwards.
-    const results = await Promise.allSettled(
-      ids.map(async (id) => {
+    // One account at a time, each settled on its own: one rejecting (the last
+    // admin, an anonymized row, an id nobody recognises) must never undo — or
+    // block — what already succeeded for the others, and the report names
+    // every failure instead of the caller finding out by re-reading the list.
+    // Sequential on purpose (pentest 2026-11-01, AUTH-02): the changes used to
+    // run side by side, so a batch naming every admin saw each of them still
+    // standing. The store re-checks "one active admin remains" atomically per
+    // write; running them in order is what makes the *batch* answer "which of
+    // these is refused" deterministically (the last one, not a coin toss).
+    const succeeded: string[] = []
+    const failed: { id: string; error: string; code: string | undefined }[] = []
+    for (const id of ids) {
+      try {
         const user = await auth.users.byId(id)
         if (user === null) throw userNotFound()
         await applyUserChange(actor, user, changes)
-        return id
-      }),
-    )
-
-    const succeeded: string[] = []
-    const failed: { id: string; error: string; code: string | undefined }[] = []
-    results.forEach((result, index) => {
-      const id = ids[index] as string
-      if (result.status === 'fulfilled') succeeded.push(result.value)
-      else failed.push({ id, error: errorMessage(result.reason), code: errorCode(result.reason) })
-    })
+        succeeded.push(id)
+      } catch (error) {
+        failed.push({ id, error: errorMessage(error), code: errorCode(error) })
+      }
+    }
 
     return jsonResponse(200, { data: { succeeded, failed } })
   }
@@ -1130,6 +1135,7 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     const anonymized = await auth.users.anonymize(user.id)
     await auth.sessions.revokeAll(user.id)
     await auth.resets.revokeAllFor(user.id)
+    await auth.login.revokeSignInTickets(user.id)
 
     // The one user-lifecycle action this file writes to the audit log
     // (nothing else here does, today — see the report this fiche shipped
@@ -1246,6 +1252,9 @@ export function createUsersRouter(options: UsersRouterOptions): UsersRouter {
     const current = await currentSession(request)
     if (current !== null) await auth.sessions.revokeAllExcept(userId, current.id)
     else await auth.sessions.revokeAll(userId)
+    // A ticket obtained with the old password (second factor, passkey
+    // registration) must not outlive the password it vouched for (AUTH-01).
+    await auth.login.revokeSignInTickets(userId)
 
     // T09-05 — direct write at the point of mutation; neither password ever
     // enters `diff`.

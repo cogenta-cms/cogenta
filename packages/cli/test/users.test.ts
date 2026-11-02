@@ -308,6 +308,29 @@ describe('users reset-password', () => {
     await db.close()
   })
 
+  it('voids the sign-in tickets issued with the old password', async () => {
+    const root = await project()
+    const token = await accountWithReset(root)
+
+    const before = await createSqliteHandle({ url: join(root, 'site.db') })
+    const userRow = await before.query<{ id: string }>(sql`select id from cogenta_users limit 1`)
+    const userId = userRow.rows[0]?.id as string
+    const expiresAt = new Date(Date.now() + 60_000).toISOString()
+    await before.query(sql`
+      insert into cogenta_login_tickets (id, user_id, expires_at, used_at)
+      values (${'ticket-from-old-password'}, ${userId}, ${expiresAt}, ${null})`)
+    await before.close()
+
+    expect(await users(root, 'reset-password', '--token', token)).toBe(0)
+
+    const after = await createSqliteHandle({ url: join(root, 'site.db') })
+    const left = await after.query<{ id: string }>(sql`select id from cogenta_login_tickets`)
+    // An MFA or passkey-registration ticket vouching for the old password must
+    // not be spendable once it is gone (pentest 2026-11-01, AUTH-01).
+    expect(left.rows).toEqual([])
+    await after.close()
+  })
+
   it('signs out every session opened with the old password', async () => {
     const root = await project()
     const token = await accountWithReset(root)
@@ -379,5 +402,137 @@ describe('users reset-password', () => {
       2,
     )
     expect(errors()).toContain('only means something together with --token')
+  })
+})
+
+describe('users reset-mfa', () => {
+  const PASSWORD = 'correct horse battery staple'
+  const SECRET = 'JBSWY3DPEHPK3PXP'
+  const KEY_BEFORE = 'signing-key-before-the-rotation'
+  const KEY_AFTER = 'signing-key-after-the-rotation'
+
+  /** An admin with a password and a confirmed authenticator, enrolled under `KEY_BEFORE`. */
+  async function enrolledAccount(root: string, withPasskey = true) {
+    await users(root, 'create', '--email', 'lost@example.com', '--admin')
+    out = []
+    const db = await createSqliteHandle({ url: join(root, 'site.db') })
+    const { createCredentialStore, createUserStore } = await import('@cogenta/auth')
+    const user = await createUserStore(db).byEmail('lost@example.com')
+    const userId = user?.id as string
+    const credentials = createCredentialStore(db, Date.now, { signingKey: KEY_BEFORE })
+    await credentials.setPassword(userId, PASSWORD)
+    await credentials.setTotpSecret(userId, SECRET)
+    await credentials.confirmTotp(userId)
+    await credentials.setRecoveryCodes(userId, ['not-a-real-hash'])
+    if (withPasskey) {
+      await credentials.addWebAuthnCredential(userId, {
+        credentialId: 'passkey-1',
+        publicKey: 'public-key',
+        counter: 0,
+        transports: [],
+        label: 'Laptop',
+      })
+    }
+    return { db, userId, credentials }
+  }
+
+  async function signInWith(db: Awaited<ReturnType<typeof createSqliteHandle>>, key: string) {
+    const { createAuthService } = await import('@cogenta/auth')
+    return createAuthService({ db, signingKey: key, collections: [] }).passwordLogin(
+      'lost@example.com',
+      PASSWORD,
+    )
+  }
+
+  it('lets an account in again after the signing key was rotated and its authenticator became unreadable', async () => {
+    const root = await project()
+    const { db } = await enrolledAccount(root, false)
+
+    // The rotation: the stored secret no longer opens, and sign-in fails closed.
+    await expect(signInWith(db, KEY_AFTER)).rejects.toMatchObject({
+      code: 'AUTH_CREDENTIAL_KEY_INVALID',
+    })
+
+    expect(await users(root, 'reset-mfa', '--email', 'lost@example.com')).toBe(0)
+    expect(output()).toContain('lost@example.com')
+
+    const result = await signInWith(db, KEY_AFTER)
+    expect(result.status).toBe('session')
+    await db.close()
+  })
+
+  it('removes the authenticator, a pending enrolment and the recovery codes, and keeps the passkeys', async () => {
+    const root = await project()
+    const { db, userId, credentials } = await enrolledAccount(root)
+    await credentials.setPendingTotp(userId, 'KRSXG5CTMVRXEZLU', Date.now() + 60_000)
+
+    expect(await users(root, 'reset-mfa', '--email', 'lost@example.com')).toBe(0)
+
+    const rows = await db.query<{ kind: string }>(
+      sql`select kind from cogenta_credentials where user_id = ${userId} order by kind`,
+    )
+    expect(rows.rows.map((row) => row.kind)).toEqual(['password', 'webauthn'])
+    expect(output()).toContain('authenticator')
+    expect(output()).toContain('recovery codes')
+    await db.close()
+  })
+
+  it('removes the passkeys too when --passkeys is given', async () => {
+    const root = await project()
+    const { db, userId } = await enrolledAccount(root)
+
+    expect(await users(root, 'reset-mfa', '--email', 'lost@example.com', '--passkeys')).toBe(0)
+
+    const rows = await db.query<{ kind: string }>(
+      sql`select kind from cogenta_credentials where user_id = ${userId}`,
+    )
+    expect(rows.rows.map((row) => row.kind)).toEqual(['password'])
+    await db.close()
+  })
+
+  it('signs the account out and voids its sign-in tickets', async () => {
+    const root = await project()
+    const { db, userId } = await enrolledAccount(root)
+    const { createSessionStore } = await import('@cogenta/auth')
+    const session = await createSessionStore(db).create(userId)
+    await db.query(sql`
+      insert into cogenta_login_tickets (id, user_id, expires_at, used_at)
+      values (${'pending'}, ${userId}, ${new Date(Date.now() + 60_000).toISOString()}, ${null})`)
+
+    expect(await users(root, 'reset-mfa', '--email', 'lost@example.com')).toBe(0)
+
+    expect(await createSessionStore(db).resolve(session.token)).toBeNull()
+    expect((await db.query(sql`select id from cogenta_login_tickets`)).rows).toEqual([])
+    await db.close()
+  })
+
+  it('writes an audit entry naming the account and what was removed', async () => {
+    const root = await project()
+    const { db, userId } = await enrolledAccount(root)
+
+    expect(await users(root, 'reset-mfa', '--email', 'lost@example.com')).toBe(0)
+
+    const entries = await db.query<{ action: string; entry_id: string; diff: string }>(
+      sql`select action, entry_id, diff from cogenta_audit_log where action = ${'user.mfa_reset'}`,
+    )
+    expect(entries.rows).toHaveLength(1)
+    expect(entries.rows[0]?.entry_id).toBe(userId)
+    expect(entries.rows[0]?.diff).toContain('totp')
+    expect(entries.rows[0]?.diff).not.toContain(SECRET)
+    await db.close()
+  })
+
+  it('refuses an address that has no account', async () => {
+    const root = await project()
+    await users(root, 'create', '--email', 'someone@example.com', '--admin')
+
+    expect(await users(root, 'reset-mfa', '--email', 'nobody@example.com')).toBe(1)
+    expect(errors()).toContain('AUTH_USER_NOT_FOUND')
+  })
+
+  it('needs --email', async () => {
+    const root = await project()
+    expect(await users(root, 'reset-mfa')).toBe(2)
+    expect(errors()).toContain('--email')
   })
 })

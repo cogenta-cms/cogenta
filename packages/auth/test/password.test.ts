@@ -1,6 +1,7 @@
+import { randomBytes, scryptSync } from 'node:crypto'
 import { isCogentaError } from '@cogenta/core'
 import { describe, expect, it } from 'vitest'
-import { hashPassword, verifyPassword } from '../src/password.js'
+import { hashPassword, needsRehash, verifyPassword } from '../src/password.js'
 
 describe('hashPassword / verifyPassword', () => {
   it('verifies a password against its own hash', async () => {
@@ -54,5 +55,42 @@ describe('hashPassword / verifyPassword', () => {
     const hash = await hashPassword('x')
     expect(await verifyPassword('', hash)).toBe(false)
     expect(await verifyPassword('y'.repeat(600), hash)).toBe(false)
+  })
+})
+
+/** A hash written the way `hashPassword` did before AUTH-04 (N=2^15, r=8, p=1). */
+function legacyHash(password: string): string {
+  const salt = randomBytes(16)
+  const derived = scryptSync(password.normalize('NFKC'), salt, 64, {
+    N: 2 ** 15,
+    r: 8,
+    p: 1,
+    maxmem: 128 * 2 ** 15 * 8 * 2,
+  })
+  return `scrypt$32768$8$1$${salt.toString('base64url')}$${derived.toString('base64url')}`
+}
+
+describe('scrypt cost (pentest 2026-11-01, AUTH-04)', () => {
+  it('hashes new passwords at the OWASP profile N=2^15, r=8, p=3', async () => {
+    const [, N, r, p] = (await hashPassword('correct horse battery staple')).split('$')
+    expect([Number(N), Number(r), Number(p)]).toEqual([32768, 8, 3])
+  })
+
+  it('still verifies a hash written with the previous parameters', async () => {
+    expect(
+      await verifyPassword(
+        'correct horse battery staple',
+        legacyHash('correct horse battery staple'),
+      ),
+    ).toBe(true)
+  })
+
+  it('asks for a rehash of a hash below the current parameters, and of nothing else', async () => {
+    expect(needsRehash(legacyHash('x'))).toBe(true)
+    expect(needsRehash(await hashPassword('x'))).toBe(false)
+  })
+
+  it('does not ask to rehash something that is not a hash at all', () => {
+    expect(needsRehash('not-a-hash')).toBe(false)
   })
 })

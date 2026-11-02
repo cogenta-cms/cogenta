@@ -4,10 +4,11 @@ import {
   type DatabaseHandle,
   identifier,
   newId,
+  type SqlExecutor,
   type SqlFragment,
   sql,
 } from '@cogenta/core'
-import { TABLES } from './tables.js'
+import { ADMIN_GUARD_LOCK, TABLES } from './tables.js'
 import type { CreateUserInput, UpdateProfileInput, User } from './types.js'
 
 interface UserRow {
@@ -58,7 +59,14 @@ export interface UserStore {
   create(input: CreateUserInput): Promise<User>
   byEmail(email: string): Promise<User | null>
   byId(id: string): Promise<User | null>
+  /**
+   * Throws `FORBIDDEN`, having written nothing, when this would leave the site
+   * with no active admin — the check and the write share one serialised
+   * transaction (see `guardedChange`), so two simultaneous changes cannot each
+   * see the other admin still standing.
+   */
   setRoles(id: string, roles: readonly string[]): Promise<void>
+  /** Same last-admin guarantee as `setRoles`. Leaving `disabled` or `invited` for `active` never takes it. */
   setStatus(id: string, status: User['status']): Promise<void>
   list(): Promise<readonly User[]>
   /** Self-service profile fields (fiche 17 task 3) — see `UpdateProfileInput`'s doc comment. */
@@ -81,13 +89,79 @@ export interface UserStore {
    * the original email is never stored anywhere, hashed or otherwise — there
    * is nothing left in this table (or this process) that could reconstruct
    * it. Returns the updated row so the caller can build one response instead
-   * of anonymizing and then re-reading.
+   * of anonymizing and then re-reading. Same last-admin guarantee as `setRoles`.
    */
   anonymize(id: string): Promise<User>
 }
 
+function isActiveAdmin(user: Pick<User, 'roles' | 'status'>): boolean {
+  return user.status === 'active' && user.roles.includes('admin')
+}
+
+function lastAdminError(): CogentaError {
+  return new CogentaError({
+    code: 'FORBIDDEN',
+    message: 'This is the only active admin account: the change would lock everyone out.',
+    hint: 'Give another account the admin role first, then come back to this one.',
+  })
+}
+
 export function createUserStore(db: DatabaseHandle, now: () => number = Date.now): UserStore {
   const table = identifier(TABLES.users, db.dialect)
+  const locks = identifier(TABLES.authLocks, db.dialect)
+
+  /**
+   * Takes the admin-guard lock: writes its row, which on SQLite is the
+   * database write lock (the transaction is `immediate`) and on Postgres and
+   * MySQL is a row lock held until commit. Whoever holds it is the only change
+   * that can remove an admin, and every read made *after* this statement sees
+   * the previous holder's commit — the property a bare "count the others"
+   * lacked (pentest 2026-11-01, AUTH-02). It has to be the transaction's first
+   * statement: a snapshot taken by an earlier read would predate that commit.
+   */
+  async function takeAdminGuard(tx: SqlExecutor): Promise<void> {
+    const bump = sql`update ${locks} set counter = counter + 1 where id = ${ADMIN_GUARD_LOCK}`
+    if ((await tx.query(bump)).rowsAffected > 0) return
+    // A database upgraded in place whose seed row is missing: create it. A
+    // concurrent creator may win the insert; the update that follows settles it.
+    await tx
+      .query(sql`insert into ${locks} (id, counter) values (${ADMIN_GUARD_LOCK}, ${0})`)
+      .catch(() => undefined)
+    await tx.query(bump)
+  }
+
+  /**
+   * Runs `write` only if, with `after` applied to `id`, at least one other
+   * active admin still exists whenever `id` is an active admin to begin with —
+   * the check and the write in one transaction, under the admin-guard lock.
+   */
+  async function guardedChange(
+    id: string,
+    after: (current: User) => Pick<User, 'roles' | 'status'>,
+    write: (tx: SqlExecutor) => Promise<void>,
+  ): Promise<void> {
+    await db.transaction(
+      async (tx) => {
+        await takeAdminGuard(tx)
+        const found = await tx.query<UserRow>(sql`select * from ${table} where id = ${id}`)
+        const row = found.rows[0]
+        if (row !== undefined) {
+          const current = fromRow(row)
+          if (isActiveAdmin(current) && !isActiveAdmin(after(current))) {
+            const active = await tx.query<UserRow>(
+              sql`select * from ${table} where status = ${'active'}`,
+            )
+            const others = active.rows
+              .map(fromRow)
+              .filter((user) => user.id !== id && isActiveAdmin(user))
+            if (others.length === 0) throw lastAdminError()
+          }
+        }
+        await write(tx)
+      },
+      { immediate: true },
+    )
+  }
 
   return {
     create: async (input) => {
@@ -139,15 +213,26 @@ export function createUserStore(db: DatabaseHandle, now: () => number = Date.now
     },
 
     setRoles: async (id, roles) => {
-      await db.query(sql`
-        update ${table} set roles = ${JSON.stringify(roles)}, updated_at = ${new Date(now()).toISOString()}
-        where id = ${id}`)
+      await guardedChange(
+        id,
+        (current) => ({ roles, status: current.status }),
+        async (tx) => {
+          await tx.query(sql`
+            update ${table} set roles = ${JSON.stringify(roles)}, updated_at = ${new Date(now()).toISOString()}
+            where id = ${id}`)
+        },
+      )
     },
 
     setStatus: async (id, status) => {
-      await db.query(sql`
-        update ${table} set status = ${status}, updated_at = ${new Date(now()).toISOString()}
-        where id = ${id}`)
+      const write = async (executor: SqlExecutor): Promise<void> => {
+        await executor.query(sql`
+          update ${table} set status = ${status}, updated_at = ${new Date(now()).toISOString()}
+          where id = ${id}`)
+      }
+      // Activating an account can only add an admin, never remove one.
+      if (status === 'active') return write(db)
+      await guardedChange(id, (current) => ({ roles: current.roles, status }), write)
     },
 
     list: async () => {
@@ -192,12 +277,18 @@ export function createUserStore(db: DatabaseHandle, now: () => number = Date.now
     anonymize: async (id) => {
       const timestamp = new Date(now()).toISOString()
       const email = anonymizedEmail()
-      await db.query(sql`
-        update ${table}
-        set email = ${email}, status = ${'anonymized'},
-            display_name = ${null}, avatar_media_id = ${null}, bio = ${null}, locale = ${null},
-            updated_at = ${timestamp}
-        where id = ${id}`)
+      await guardedChange(
+        id,
+        (current) => ({ roles: current.roles, status: 'anonymized' }),
+        async (tx) => {
+          await tx.query(sql`
+            update ${table}
+            set email = ${email}, status = ${'anonymized'},
+                display_name = ${null}, avatar_media_id = ${null}, bio = ${null}, locale = ${null},
+                updated_at = ${timestamp}
+            where id = ${id}`)
+        },
+      )
 
       const result = await db.query<UserRow>(sql`select * from ${table} where id = ${id}`)
       const row = result.rows[0]

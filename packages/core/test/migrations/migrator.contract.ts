@@ -241,26 +241,29 @@ export function runMigratorContract(
 
     describe('locking', () => {
       it('refuses a second run while one is in progress', async () => {
-        // The lock is taken and held by a migration that never finishes, which
-        // is what a long deployment looks like from another process.
-        let release = (): void => undefined
-        const blocked = new Promise<void>((resolve) => {
-          release = resolve
-        })
-
+        // A second run is attempted from inside a migration of the first, so it
+        // starts while the first still holds its lock — which is what a long
+        // deployment looks like from another process. It has to be attempted
+        // from inside rather than beside: on SQLite one handle runs one
+        // transaction at a time, so a caller outside the running migration waits
+        // for it (correctly) instead of seeing its lock.
+        let refusal: unknown
         const slow: Migration = {
           id: '0001_slow',
-          up: async () => blocked,
+          up: async () => {
+            refusal = await migrator([alpha()])
+              .up()
+              .then(
+                () => undefined,
+                (error: unknown) => error,
+              )
+          },
           down: async () => undefined,
         }
 
-        const running = migrator([slow]).up()
-        await new Promise((resolve) => setTimeout(resolve, 50))
+        await migrator([slow]).up()
 
-        await expect(migrator([alpha()]).up()).rejects.toMatchObject({ code: 'MIGRATION_LOCKED' })
-
-        release()
-        await running
+        expect(refusal).toMatchObject({ code: 'MIGRATION_LOCKED' })
       })
 
       it('releases the lock even when a migration fails', async () => {

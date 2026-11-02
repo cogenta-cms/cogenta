@@ -6,7 +6,8 @@ import {
   sql,
   limit as sqlLimit,
 } from '@cogenta/core'
-import { hashPassword, verifyPassword } from './password.js'
+import { type CredentialSealer, createCredentialSealer } from './credential-sealer.js'
+import { hashPassword, needsRehash, verifyPassword } from './password.js'
 import { verifyRecoveryCode } from './recovery-codes.js'
 import { TABLES } from './tables.js'
 import type { CredentialKind } from './types.js'
@@ -73,6 +74,8 @@ export interface CredentialStore {
     credentialId: string,
   ): Promise<{ userId: string; data: WebAuthnCredentialData } | null>
   updateWebAuthnCounter(credentialId: string, counter: number): Promise<void>
+  /** Deletes every passkey of this account without reading them — the operator recovery path (`cogenta users reset-mfa --passkeys`). */
+  removeWebAuthnCredentials(userId: string): Promise<void>
 
   /**
    * Replaces this account's recovery codes wholesale with `hashes` — already
@@ -113,11 +116,72 @@ interface RecoveryCodeEntry {
 /** Retries for `consumeRecoveryCode`'s compare-and-set — covers a genuine concurrent race, not a hostile client (see that function's own comment). */
 const CONSUME_ATTEMPTS = 5
 
+export interface CredentialStoreOptions {
+  /**
+   * `COGENTA_AUTH_SIGNING_KEY`. The key that encrypts authenticator secrets at
+   * rest is derived from it (pentest 2026-11-01, AUTH-03). Without it the store
+   * still reads and writes passwords and passkeys, and *refuses* anything that
+   * would put a TOTP secret in the database — it never falls back to clear text.
+   */
+  readonly signingKey?: string
+}
+
+/** The kinds whose `data` is itself a secret and is therefore encrypted. */
+const SEALED_KINDS: ReadonlySet<string> = new Set(['totp', 'totp_pending'])
+
 export function createCredentialStore(
   db: DatabaseHandle,
   now: () => number = Date.now,
+  options: CredentialStoreOptions = {},
 ): CredentialStore {
   const table = identifier(TABLES.credentials, db.dialect)
+  const sealer: CredentialSealer | null =
+    options.signingKey === undefined || options.signingKey === ''
+      ? null
+      : createCredentialSealer(options.signingKey)
+
+  function requireSealer(): CredentialSealer {
+    if (sealer !== null) return sealer
+    throw new CogentaError({
+      code: 'AUTH_CREDENTIAL_KEY_INVALID',
+      message: 'This credential store has no key to encrypt authenticator secrets with.',
+      hint: 'Create it with the site signing key: createCredentialStore(db, now, { signingKey }). COGENTA_AUTH_SIGNING_KEY is what `cogenta serve` passes.',
+    })
+  }
+
+  const contextOf = (userId: string, kind: string): string => `${userId}/${kind}`
+
+  /** What goes into the `data` column: encrypted for a secret-bearing kind, JSON otherwise. */
+  function encode(userId: string, kind: CredentialKind, data: unknown): string {
+    const json = JSON.stringify(data)
+    return SEALED_KINDS.has(kind) ? requireSealer().seal(json, contextOf(userId, kind)) : json
+  }
+
+  /**
+   * The JSON a row holds. A legacy plaintext row (written before AUTH-03) reads
+   * as it always did; a sealed one needs the key and fails closed without it.
+   */
+  function decode(row: CredentialRow): string {
+    if (!SEALED_KINDS.has(row.kind) || !row.data.startsWith('enc:')) return row.data
+    return requireSealer().open(row.data, contextOf(row.user_id, row.kind))
+  }
+
+  /**
+   * Opportunistic migration: a legacy plaintext secret is encrypted the next
+   * time it is read, guarded on the exact bytes read so it can never overwrite
+   * a newer write. Best effort — a failure leaves the row readable as before.
+   */
+  async function sealIfLegacy(row: CredentialRow): Promise<void> {
+    if (sealer === null || !SEALED_KINDS.has(row.kind) || sealer.isSealed(row.data)) return
+    try {
+      await db.query(
+        sql`update ${table} set data = ${sealer.seal(row.data, contextOf(row.user_id, row.kind))}
+            where id = ${row.id} and data = ${row.data}`,
+      )
+    } catch {
+      // Still readable in clear text; the next read tries again.
+    }
+  }
 
   async function findOne(userId: string, kind: CredentialKind): Promise<CredentialRow | undefined> {
     const result = await db.query<CredentialRow>(
@@ -128,7 +192,7 @@ export function createCredentialStore(
 
   async function upsert(userId: string, kind: CredentialKind, data: unknown): Promise<void> {
     const existing = await findOne(userId, kind)
-    const payload = JSON.stringify(data)
+    const payload = encode(userId, kind, data)
     if (existing === undefined) {
       await db.query(sql`
         insert into ${table} (id, user_id, kind, data, created_at)
@@ -147,7 +211,21 @@ export function createCredentialStore(
       const row = await findOne(userId, 'password')
       if (row === undefined) return false
       const { hash } = JSON.parse(row.data) as { hash: string }
-      return verifyPassword(password, hash)
+      if (!(await verifyPassword(password, hash))) return false
+      // We hold the plaintext only now: upgrade a hash written with weaker scrypt
+      // parameters (AUTH-04). Guarded on the bytes read, so a password changed
+      // meanwhile is never overwritten; best effort, the old hash stays valid.
+      if (needsRehash(hash)) {
+        try {
+          await db.query(
+            sql`update ${table} set data = ${JSON.stringify({ hash: await hashPassword(password) })}
+                where id = ${row.id} and data = ${row.data}`,
+          )
+        } catch {
+          // The password verified; failing to upgrade its hash must not fail the login.
+        }
+      }
+      return true
     },
 
     hasPassword: async (userId) => (await findOne(userId, 'password')) !== undefined,
@@ -159,7 +237,8 @@ export function createCredentialStore(
     totpSecret: async (userId) => {
       const row = await findOne(userId, 'totp')
       if (row === undefined) return null
-      const parsed = JSON.parse(row.data) as { secret: string; verified: boolean }
+      const parsed = JSON.parse(decode(row)) as { secret: string; verified: boolean }
+      await sealIfLegacy(row)
       return { secret: parsed.secret, verified: parsed.verified }
     },
 
@@ -172,9 +251,9 @@ export function createCredentialStore(
           hint: 'Call setTotpSecret before confirmTotp — there is nothing to confirm yet.',
         })
       }
-      const current = JSON.parse(row.data) as { secret: string }
+      const current = JSON.parse(decode(row)) as { secret: string }
       await db.query(
-        sql`update ${table} set data = ${JSON.stringify({ ...current, verified: true })} where id = ${row.id}`,
+        sql`update ${table} set data = ${encode(userId, 'totp', { ...current, verified: true })} where id = ${row.id}`,
       )
     },
 
@@ -191,8 +270,9 @@ export function createCredentialStore(
     pendingTotp: async (userId) => {
       const row = await findOne(userId, 'totp_pending')
       if (row === undefined) return null
-      const parsed = JSON.parse(row.data) as { secret: string; expiresAt: number }
+      const parsed = JSON.parse(decode(row)) as { secret: string; expiresAt: number }
       if (parsed.expiresAt <= now()) return null
+      await sealIfLegacy(row)
       return { secret: parsed.secret, expiresAt: parsed.expiresAt }
     },
 
@@ -211,7 +291,7 @@ export function createCredentialStore(
       // error instead of a clean "zero rows".
       const row = await findOne(userId, 'totp_pending')
       if (row === undefined) return false
-      const parsed = JSON.parse(row.data) as { secret: string; expiresAt: number }
+      const parsed = JSON.parse(decode(row)) as { secret: string; expiresAt: number }
       if (parsed.secret !== expectedSecret || parsed.expiresAt <= now()) return false
 
       return db.transaction(
@@ -223,7 +303,11 @@ export function createCredentialStore(
           )
           if (claimed.rowsAffected === 0) return false
 
-          const payload = JSON.stringify({ secret: expectedSecret, verified: true, lastStep: step })
+          const payload = encode(userId, 'totp', {
+            secret: expectedSecret,
+            verified: true,
+            lastStep: step,
+          })
           const active = await tx.query<CredentialRow>(
             sql`select * from ${table} where user_id = ${userId} and kind = ${'totp'} limit ${sqlLimit(1)}`,
           )
@@ -248,10 +332,10 @@ export function createCredentialStore(
       for (let attempt = 0; attempt < CONSUME_ATTEMPTS; attempt += 1) {
         const row = await findOne(userId, 'totp')
         if (row === undefined) return false
-        const parsed = JSON.parse(row.data) as { lastStep?: number }
+        const parsed = JSON.parse(decode(row)) as { lastStep?: number }
         if (parsed.lastStep !== undefined && step <= parsed.lastStep) return false
 
-        const updated = JSON.stringify({ ...parsed, lastStep: step })
+        const updated = encode(userId, 'totp', { ...parsed, lastStep: step })
         const result = await db.query(
           sql`update ${table} set data = ${updated} where id = ${row.id} and data = ${row.data}`,
         )
@@ -300,6 +384,10 @@ export function createCredentialStore(
           return
         }
       }
+    },
+
+    removeWebAuthnCredentials: async (userId) => {
+      await db.query(sql`delete from ${table} where user_id = ${userId} and kind = ${'webauthn'}`)
     },
 
     kinds: async (userId) => {

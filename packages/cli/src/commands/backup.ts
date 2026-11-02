@@ -137,6 +137,11 @@ never a whole-database backup.
 Restoring writes real rows: run "preview" first to see what already exists in
 the target, and restore only into a database you mean to overwrite (a freshly
 created one, in the common case — a moved-to or migrated-to engine).
+
+Authenticator (TOTP) secrets in the backup are encrypted with a key derived
+from COGENTA_AUTH_SIGNING_KEY. Restoring under a different key leaves them
+unreadable: use the original key, or run "cogenta users reset-mfa --email
+<address>" for each affected account.
 `
 
 /** Exported for `update/` (L22 task 9) — the same default directory, never a second one to keep in sync. */
@@ -204,6 +209,8 @@ export const BACKUP_EXCLUDED_TABLES: Readonly<Record<string, string>> = {
     'The rotating per-day salt that makes an analytics session hash unlinkable. It is key material, it expires daily, and keeping it next to the events it salts is exactly what the privacy design avoids.',
   cogenta_migrations:
     "The target database's own ledger of which migrations it has applied. Overwriting it with the source's would make the target lie about its own shape.",
+  [AUTH_TABLES.authLocks]:
+    'Named serialisation locks (the last-admin guard) whose single row is seeded by `ensureAuthTables` in every database. It holds no data, and restoring a copy into a site that already seeded its own is a duplicate-key conflict.',
   cogenta_migrations_lock:
     'Migration mutex — held only while a migration is running, meaningless outside that process.',
 }
@@ -234,7 +241,7 @@ export async function backupTables(cwd: string): Promise<readonly string[]> {
     before: [
       // Accounts first: `users` before the credentials, sessions and audit
       // rows that name a user id.
-      ...Object.values(AUTH_TABLES),
+      ...Object.values(AUTH_TABLES).filter((table) => !(table in BACKUP_EXCLUDED_TABLES)),
       // A folder before the media it holds, and media before the entries
       // whose `f.media()` fields name an asset id.
       MEDIA_FOLDER_TABLE,
@@ -501,6 +508,13 @@ export async function runRestore(options: RestoreOptions): Promise<number> {
       })
       out.heading('Restore applied')
       for (const table of report.tables) out.line(`${table.name}: ${table.rows} rows restored`)
+      if (report.tables.some((table) => table.name === 'cogenta_credentials' && table.rows > 0)) {
+        // Authenticator secrets are encrypted with a key derived from
+        // COGENTA_AUTH_SIGNING_KEY; passwords and passkeys are not.
+        out.warn(
+          'Authenticator (TOTP) secrets are encrypted with COGENTA_AUTH_SIGNING_KEY. If this site uses a different key than the one that wrote the backup, those accounts cannot sign in until you run `cogenta users reset-mfa --email <address>` for each (or restore the original key).',
+        )
+      }
       return 0
     } finally {
       await dispose()

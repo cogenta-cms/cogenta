@@ -16,6 +16,9 @@ export async function testDb(): Promise<DatabaseHandle> {
   return db
 }
 
+/** The site signing key the auth fixtures share; the credential store derives its key from it. */
+export const TEST_SIGNING_KEY = 'test-signing-key-not-a-real-secret'
+
 export interface FileDb {
   readonly db: DatabaseHandle
   readonly path: string

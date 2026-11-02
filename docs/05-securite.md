@@ -69,6 +69,12 @@ construction.
 - **MFA fortement recommandée** pour tout rôle disposant de `content.publish` ou `site.config_write` :
   une notice persistante de l'admin la réclame, mais elle ne bloque jamais la connexion
   (ADR-0021, qui remplace l'obligation d'origine)
+- Les secrets TOTP sont chiffrés au repos (AES-256-GCM, clé dérivée de
+  `COGENTA_AUTH_SIGNING_KEY` par HKDF). Faire tourner cette clé les rend
+  illisibles et la connexion des comptes concernés échoue (`AUTH_CREDENTIAL_KEY_INVALID`) ;
+  `cogenta users reset-mfa --email <adresse>` est la récupération (supprime TOTP,
+  enrôlement en attente et codes de secours sans les lire ; `--passkeys` pour les
+  passkeys ; sessions et tickets révoqués, entrée d'audit `user.mfa_reset`)
 - Sessions révocables individuellement, liste des sessions actives visible
 - Limitation de débit et backoff progressif sur l'authentification
 - Allowlist IP optionnelle sur l'admin

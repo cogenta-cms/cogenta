@@ -163,6 +163,10 @@ export const ERROR_CODES = [
   // changes or removes a second factor; the caller must have just proved the
   // current password or a current authenticator code.
   'AUTH_STEP_UP_REQUIRED',
+  // Auth — authenticator secrets at rest (pentest 2026-11-01, AUTH-03): a stored
+  // TOTP secret that cannot be opened (wrong or missing signing key). Fails
+  // closed — never read as "no second factor".
+  'AUTH_CREDENTIAL_KEY_INVALID',
 
   // Auth — account lifecycle (fiche 17: invitations and anonymization)
   // The invitation reuses AUTH_RESET_TOKEN_INVALID for the token itself

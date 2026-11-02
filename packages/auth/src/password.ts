@@ -18,9 +18,9 @@ function scrypt(
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     // Node refuses to run scrypt above its default 32MB `maxmem` ceiling, and
-    // the OWASP-floor cost below (N=2^15, r=8) needs `128 * N * r` = exactly
-    // that many bytes before OpenSSL's own overhead — so the default clips
-    // it. Raise the ceiling instead of lowering the cost.
+    // the cost below (N=2^15, r=8) needs `128 * N * r` = exactly that many
+    // bytes before OpenSSL's own overhead — so the default clips it. Raise the
+    // ceiling instead of lowering the cost. `p` adds CPU, not memory.
     const maxmem = 128 * params.N * params.r * 2
     scryptCallback(password, salt, keyLength, { ...params, maxmem }, (error, derived) => {
       if (error) reject(error)
@@ -38,21 +38,41 @@ function scrypt(
  */
 const KEY_LENGTH = 64
 const SALT_LENGTH = 16
-// N=2^15 costs roughly 100ms on ordinary hardware. Doubling it doubles login
-// latency for everyone to make one offline attacker's job twice as hard; this
-// is the OWASP-recommended floor for scrypt, not a guess.
-const SCRYPT_PARAMS = { N: 2 ** 15, r: 8, p: 1 } as const
+// OWASP's Password Storage Cheat Sheet lists, for scrypt, N=2^17,r=8,p=1 or
+// N=2^16,r=8,p=2 or N=2^15,r=8,p=3 (and weaker ones as minimums). This is the
+// last of them: the same 32 MiB per hash as before, three times the CPU. The
+// 128 MiB profile was passed over on purpose — a login holds its memory for the
+// whole derivation, and the target pods (512Mi-1Gi) and shared hosting cannot
+// afford several concurrent logins at that size. Raised from p=1 (pentest
+// 2026-11-01, AUTH-04; the old comment called p=1 the OWASP floor, which it is
+// not); hashes written before keep verifying and are upgraded by `needsRehash`.
+const SCRYPT_PARAMS = { N: 2 ** 15, r: 8, p: 3 } as const
+// What a TOTP recovery code is hashed with: the cost passwords had before
+// AUTH-04. A recovery code is 50 random bits, not something a person chose, so
+// offline guessing is bounded by its entropy and a heavier KDF buys little;
+// and checking one means hashing against every unused code (ten), so tripling
+// the cost would triple the sign-in latency for nothing.
+const RECOVERY_SCRYPT_PARAMS = { N: 2 ** 15, r: 8, p: 1 } as const
 const MAX_INPUT_LENGTH = 512
 
 export async function hashPassword(password: string): Promise<string> {
+  return hashWith(password, SCRYPT_PARAMS)
+}
+
+/** Hash for a random, high-entropy secret (a recovery code) — see `RECOVERY_SCRYPT_PARAMS`. Verifies with `verifyPassword`. */
+export async function hashRandomSecret(secret: string): Promise<string> {
+  return hashWith(secret, RECOVERY_SCRYPT_PARAMS)
+}
+
+async function hashWith(password: string, params: ScryptParams): Promise<string> {
   assertLength(password)
   const salt = randomBytes(SALT_LENGTH)
-  const derived = await scrypt(password.normalize('NFKC'), salt, KEY_LENGTH, SCRYPT_PARAMS)
+  const derived = await scrypt(password.normalize('NFKC'), salt, KEY_LENGTH, params)
 
   // Parameters travel with the hash, the way bcrypt embeds its cost factor.
   // Raising SCRYPT_PARAMS later must not invalidate every password already
   // stored — it invalidates none, because each hash carries what made it.
-  const { N, r, p } = SCRYPT_PARAMS
+  const { N, r, p } = params
   return `scrypt$${N}$${r}$${p}$${salt.toString('base64url')}$${derived.toString('base64url')}`
 }
 
@@ -76,6 +96,17 @@ export async function verifyPassword(password: string, stored: string): Promise<
   })
 
   return derived.length === parsed.expected.length && timingSafeEqual(derived, parsed.expected)
+}
+
+/**
+ * True when `stored` is a well-formed hash written with weaker parameters than
+ * the current ones — the caller, holding the plaintext after a successful
+ * verification, should store `hashPassword(password)` in its place.
+ */
+export function needsRehash(stored: string): boolean {
+  const parsed = parseHash(stored)
+  if (parsed === null) return false
+  return parsed.N < SCRYPT_PARAMS.N || parsed.r < SCRYPT_PARAMS.r || parsed.p < SCRYPT_PARAMS.p
 }
 
 interface ParsedHash {

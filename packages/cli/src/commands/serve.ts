@@ -6690,11 +6690,17 @@ export function createRequestListener(
         // label and no fields. It says what a block is called and what fields
         // it holds — the same kind of thing `/api/schema` already tells any
         // signed-in actor — and nothing about a plugin's code, grants or
-        // state.
+        // state. Signed-in actors only: the admin sends its token for it.
         if (
           (url.pathname === '/api/plugins/blocks' || url.pathname === '/api/plugins/widgets') &&
           req.method === 'GET'
         ) {
+          // The editor needs it; a stranger has no use for it and gets no
+          // inventory of what this site's plugins are or provide.
+          if (context.actor.id === null) {
+            jsonError(res, 401, 'UNAUTHENTICATED', 'Sign in to see what plugins provide.')
+            return
+          }
           const widgets = url.pathname.endsWith('/widgets')
           res.writeHead(200, {
             'content-type': 'application/json; charset=utf-8',

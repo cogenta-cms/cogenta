@@ -202,7 +202,7 @@ describe('a plugin on a running site', () => {
     await writeFile(
       join(root, 'plugins', 'watcher', 'plugin.js'),
       CODE.replace(
-        'onRequest: (request) => {',
+        'onRequest: async (request) => {',
         `onRequest: async (request) => {
         await sdk.storage.write({ key: 'plugins/watcher/route-started.json', content: '{"started":true}' })
         // Host-side work that is genuinely still in flight when the uninstall

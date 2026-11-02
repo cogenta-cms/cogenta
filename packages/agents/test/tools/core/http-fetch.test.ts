@@ -246,6 +246,31 @@ describe('http.fetch', () => {
       expect(lookups).toBe(1)
     })
 
+    it('keeps the configured site origin reachable on a private address, and only that origin', async () => {
+      const connectedTo: string[] = []
+      const tool = createHttpFetchTool({
+        allowedDomains: ['127.0.0.1'],
+        trustedOrigins: ['http://127.0.0.1:4000'],
+        pinnedFetchImpl: async (target) => {
+          connectedTo.push(`${target.address}:${target.url.port}`)
+          return new Response('own page', { status: 200 })
+        },
+      })
+
+      const own = await tool.execute({ url: 'http://127.0.0.1:4000/' }, CTX)
+      expect(own.body).toBe('own page')
+
+      // Same host, another port: another origin, still refused.
+      await expect(tool.execute({ url: 'http://127.0.0.1:4001/' }, CTX)).rejects.toMatchObject({
+        code: 'HTTP_FETCH_DOMAIN_DENIED',
+      })
+      // Same host and port, other scheme: another origin too.
+      await expect(tool.execute({ url: 'https://127.0.0.1:4000/' }, CTX)).rejects.toMatchObject({
+        code: 'HTTP_FETCH_DOMAIN_DENIED',
+      })
+      expect(connectedTo).toEqual(['127.0.0.1:4000'])
+    })
+
     it('does not follow a redirect into a private address', async () => {
       const tool = createHttpFetchTool({
         allowedDomains: ['api.example.com'],

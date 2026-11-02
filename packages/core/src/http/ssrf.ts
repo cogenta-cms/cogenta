@@ -191,8 +191,13 @@ type LookupFn = (
  */
 export async function resolvePublicTarget(
   url: string,
-  options: { readonly lookupImpl?: typeof lookup } = {},
+  options: { readonly lookupImpl?: typeof lookup; readonly allowPrivate?: boolean } = {},
 ): Promise<PublicTarget> {
+  // `allowPrivate` is the caller vouching for this very URL (the operator's
+  // own configured site origin, never text from content or a model): the host
+  // is still resolved once and pinned, only the "public address" verdict is
+  // waived.
+  const allowPrivate = options.allowPrivate === true
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -209,13 +214,15 @@ export async function resolvePublicTarget(
     parsed.hostname.startsWith('[') && parsed.hostname.endsWith(']')
       ? parsed.hostname.slice(1, -1)
       : parsed.hostname
-  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+  if (!allowPrivate && (hostname === 'localhost' || hostname.endsWith('.localhost'))) {
     throw unsafeUrl(url, 'localhost is not a public address', 'private')
   }
 
   const literal = isIP(hostname)
   if (literal !== 0) {
-    if (isPrivateAddress(hostname)) throw unsafeUrl(url, 'resolves to a private address', 'private')
+    if (!allowPrivate && isPrivateAddress(hostname)) {
+      throw unsafeUrl(url, 'resolves to a private address', 'private')
+    }
     return { url: parsed, address: hostname, family: literal === 6 ? 6 : 4 }
   }
 
@@ -231,7 +238,8 @@ export async function resolvePublicTarget(
   if (addresses.length === 0)
     throw unsafeUrl(url, 'the host name resolved to nothing', 'unresolved')
   for (const { address } of addresses) {
-    if (isPrivateAddress(address)) throw unsafeUrl(url, 'resolves to a private address', 'private')
+    if (!allowPrivate && isPrivateAddress(address))
+      throw unsafeUrl(url, 'resolves to a private address', 'private')
   }
   const first = addresses[0]
   if (first === undefined) throw unsafeUrl(url, 'the host name resolved to nothing', 'unresolved')
@@ -326,6 +334,8 @@ export interface FetchPublicOptions {
   readonly lookupImpl?: typeof lookup
   /** Injected for tests — the address-pinned transport by default. */
   readonly pinnedFetch?: PinnedFetch
+  /** See `resolvePublicTarget`: the caller vouches for this exact URL. Default `false`. */
+  readonly allowPrivate?: boolean
 }
 
 /**
@@ -339,6 +349,7 @@ export async function fetchPublicOnce(
 ): Promise<Response> {
   const target = await resolvePublicTarget(url, {
     ...(options.lookupImpl === undefined ? {} : { lookupImpl: options.lookupImpl }),
+    ...(options.allowPrivate === true ? { allowPrivate: true } : {}),
   })
   const send = options.pinnedFetch ?? createPinnedFetch()
   return send(target, {

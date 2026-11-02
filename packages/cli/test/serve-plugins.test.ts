@@ -1,5 +1,4 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSqliteHandle } from '@cogenta/core'
@@ -183,34 +182,21 @@ describe('a plugin on a running site', () => {
   it('waits for an already running plugin before acknowledging its uninstall', async () => {
     const root = await project({ grant: true })
     await createUser(root, 'admin@example.com', 'sup3r-secret-pass', ['admin'])
-    const delayedResponse = createServer((_request, response) => {
-      setTimeout(() => response.end('{}'), 400)
-    })
-    await new Promise<void>((resolve) => delayedResponse.listen(0, '127.0.0.1', resolve))
-    const address = delayedResponse.address()
-    expect(address).not.toBeNull()
-    if (address === null || typeof address === 'string') throw new Error('No QA HTTP address')
-    const manifest = JSON.parse(MANIFEST) as { capabilities: string[] }
-    await writeFile(
-      join(root, 'plugins', 'watcher', 'plugin.manifest.json'),
-      JSON.stringify({
-        ...manifest,
-        capabilities: [...manifest.capabilities, 'http.fetch:127.0.0.1'],
-      }),
-    )
-    const db = await createSqliteHandle({ url: join(root, 'site.db') })
-    try {
-      await createPluginGrantStore(db).grant('watcher', 'http.fetch:127.0.0.1')
-    } finally {
-      await db.close()
-    }
     await writeFile(
       join(root, 'plugins', 'watcher', 'plugin.js'),
       CODE.replace(
         'onRequest: (request) => {',
         `onRequest: async (request) => {
         await sdk.storage.write({ key: 'plugins/watcher/route-started.json', content: '{"started":true}' })
-        await sdk.http.fetch({ url: 'http://127.0.0.1:${address.port}/slow' })
+        // Host-side work that is genuinely still in flight when the uninstall
+        // arrives. It used to be an \`http.fetch\` to a local server, which the
+        // plugin capability now refuses by design (loopback is not a public
+        // address); a stream of storage writes is the same shape — the plugin is
+        // mid-run, waiting on the host — without leaving the machine.
+        const until = Date.now() + 600
+        while (Date.now() < until) {
+          await sdk.storage.write({ key: 'plugins/watcher/tick.json', content: '{}' })
+        }
         await sdk.storage.write({ key: 'plugins/watcher/route-finished.json', content: '{"finished":true}' })`,
       ),
     )
@@ -234,9 +220,6 @@ describe('a plugin on a running site', () => {
       expect((await fetch(`${server.base}/_cogenta/plugins/watcher/hello`)).status).toBe(404)
     } finally {
       await server.stop()
-      await new Promise<void>((resolve, reject) =>
-        delayedResponse.close((error) => (error ? reject(error) : resolve())),
-      )
     }
   }, 120_000)
 

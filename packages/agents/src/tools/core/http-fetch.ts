@@ -32,6 +32,14 @@ export interface HttpFetchToolOptions {
    * the address it checked. There is no switch to allow internal hosts.
    */
   readonly fetchImpl?: typeof fetch
+  /**
+   * Origins (scheme + host + port, exactly) the operator configured as the
+   * site's own, which stay reachable even when they sit on a loopback or
+   * private address — a development site, an intranet deployment. Never
+   * built from content or model output. Every other origin is refused when it
+   * resolves to a non-public address.
+   */
+  readonly trustedOrigins?: readonly string[]
   /** Overridable for tests — real `dns.lookup` by default. */
   readonly lookupImpl?: FetchPublicOptions['lookupImpl']
   /** Overridable for tests — the address-pinned transport by default. */
@@ -116,6 +124,9 @@ export function createHttpFetchTool(
           response = await fetchPublicOnce(parsed.toString(), {
             method,
             signal: ctx.signal,
+            ...(options.trustedOrigins?.includes(parsed.origin) === true
+              ? { allowPrivate: true }
+              : {}),
             ...(options.lookupImpl === undefined ? {} : { lookupImpl: options.lookupImpl }),
             ...(options.pinnedFetchImpl === undefined
               ? {}

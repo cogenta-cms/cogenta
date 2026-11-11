@@ -319,6 +319,25 @@ class ChartBehavior(unittest.TestCase):
         self.assertEqual(spec["serviceAccountName"], "true")
         self.assertEqual(spec["containers"][0]["env"][0]["valueFrom"]["secretKeyRef"]["name"], "null")
 
+    def test_chart_renders_as_a_dependency_of_a_parent_chart(self):
+        # Helm injects `global` into every subchart's values; a schema that
+        # rejects unknown keys must still accept it, or no parent chart can
+        # depend on this one.
+        import shutil
+        with tempfile.TemporaryDirectory(prefix="cogenta-parent-") as directory:
+            parent = Path(directory) / "parent"
+            (parent / "charts").mkdir(parents=True)
+            shutil.copytree(CHART, parent / "charts" / "cogenta")
+            (parent / "Chart.yaml").write_text(
+                "apiVersion: v2\nname: parent\nversion: 0.0.1\n"
+                "dependencies:\n  - name: cogenta\n    version: '>=0.0.0'\n"
+            )
+            (parent / "values.yaml").write_text("global:\n  team: web\n")
+            command = [HELM, "template", "test", str(parent), "--kube-version", "1.34.0"]
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("kind: Deployment", result.stdout)
+
     def test_maximum_length_release_names_still_leave_cronjob_suffix_room(self):
         # Helm limits release names to 53 chars; CronJob names must be <= 52.
         command = [HELM, "template", "r" * 53, str(CHART), "--set", "backup.enabled=true"]

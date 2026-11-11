@@ -646,6 +646,10 @@
         }
       },
       "required": ["image"]
+    },
+    "global": {
+      "type": "object",
+      "description": "Helm global values. Helm injects this key into every subchart's values, so a parent chart that depends on this one must be allowed to pass it."
     }
   },
   "required": [

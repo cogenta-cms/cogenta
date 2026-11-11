@@ -19,7 +19,7 @@ catalog:
   '@testing-library/dom': ^10.4.1
   '@testing-library/react': ^16.3.2
   '@types/react': ^19.2.18
-  '@types/react-dom': ^19.2.4
+  '@types/react-dom': ^19.3.0
   '@vitejs/plugin-react': ^6.0.5
   bullmq: ^6.3.5
   'class-variance-authority': ^0.7.1
@@ -31,7 +31,7 @@ catalog:
   mysql2: ^3.23.3
   postgres: ^3.4.9
   react: ^19.2.8
-  react-dom: ^19.2.8
+  react-dom: ^19.3.1
   react-i18next: ^17.0.11
   react-router: ^8.3.0
   sharp: ^0.35.4

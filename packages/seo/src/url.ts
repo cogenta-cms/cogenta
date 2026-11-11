@@ -150,15 +150,16 @@ export function canonicalUrl(site: SeoSite, resource: SeoResource): string | nul
 function homeAddress(site: SeoSite, path: string): string {
   const home = site.homePath
   if (home === undefined || home === '' || home === '/') return path
-  const trimmed = path.replace(/\/+$/u, '')
+  // Index arithmetic rather than a pattern: a path is caller input, and a
+  // regular expression over runs of `/` backtracks polynomially.
+  let end = path.length
+  while (end > 1 && path[end - 1] === '/') end -= 1
+  const trimmed = path.slice(0, end)
   if (trimmed === home) return '/'
-  const match = /^\/([^/]+)(\/.*)$/u.exec(trimmed)
-  if (
-    match !== null &&
-    match[2] === home &&
-    (site.locales ?? []).includes(decodeURIComponent(match[1] ?? ''))
-  ) {
-    return `/${match[1]}/`
+  const slash = trimmed.indexOf('/', 1)
+  if (trimmed.startsWith('/') && slash > 1 && trimmed.slice(slash) === home) {
+    const locale = trimmed.slice(1, slash)
+    if ((site.locales ?? []).includes(decodeURIComponent(locale))) return `/${locale}/`
   }
   return path
 }

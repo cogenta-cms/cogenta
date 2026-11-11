@@ -85,6 +85,15 @@ describe('renderPage', () => {
     )
   })
 
+  it('keeps the title for assistive technology only when the page opens on the news front', () => {
+    const { title: _title, ...front } = { ...BLOCKS.collectionList, layout: 'grid' as const }
+    const html = page([front, ...ALL_BLOCKS.filter((candidate) => candidate._type !== 'hero')])
+    expect(headingLevels(html).filter((level) => level === 1)).toHaveLength(1)
+    expect(html).toContain(
+      '<header class="cg-page-head cg-visually-hidden"><div class="cg-container"><h1 class="cg-page__title">What the second draft is for</h1>',
+    )
+  })
+
   it('never skips a heading level across the whole page', () => {
     const levels = headingLevels(FULL_PAGE)
     expect(levels.length).toBeGreaterThan(1)

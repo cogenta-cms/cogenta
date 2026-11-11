@@ -14,7 +14,7 @@ import {
   renderImageSource,
   type TermArchiveEntry,
 } from '@cogenta/theme-kit'
-import { dayMonth, entryTopic, longDate } from './layout.js'
+import { dayMonth, entryTopic, longDate, withAttributes } from './layout.js'
 
 /**
  * One story as a listing sets it: a topic label, a headline, a standfirst, a
@@ -45,6 +45,8 @@ export interface StoryOptions {
   readonly date?: boolean
   readonly sizes?: string
   readonly loading?: 'eager' | 'lazy'
+  /** The page's largest paint: loaded eagerly and fetched with high priority. */
+  readonly priority?: boolean
 }
 
 /**
@@ -111,6 +113,11 @@ export function renderStory(story: Story, options: StoryOptions): HtmlElement {
     className: 'cg-story__image',
     ...(options.sizes === undefined ? {} : { sizes: options.sizes }),
     ...(options.loading === undefined ? {} : { loading: options.loading }),
+    ...(options.priority === true ? { loading: 'eager' as const } : {}),
+  }
+  const picture = (source: ImageSource): HtmlElement => {
+    const node = renderImageSource(source, imageOptions)
+    return options.priority === true ? withAttributes(node, { fetchpriority: 'high' }) : node
   }
   const showImage = options.image === true && story.image !== undefined
   const titleNode =
@@ -129,7 +136,7 @@ export function renderStory(story: Story, options: StoryOptions): HtmlElement {
     },
     showImage && story.image !== undefined
       ? story.href === null
-        ? h('div', { class: 'cg-story__media' }, renderImageSource(story.image, imageOptions))
+        ? h('div', { class: 'cg-story__media' }, picture(story.image))
         : h(
             'a',
             {
@@ -138,7 +145,7 @@ export function renderStory(story: Story, options: StoryOptions): HtmlElement {
               tabindex: '-1',
               'aria-hidden': 'true',
             },
-            renderImageSource(story.image, imageOptions),
+            picture(story.image),
           )
       : null,
     story.topic === undefined ? null : h('p', { class: 'cg-story__topic cg-label' }, story.topic),

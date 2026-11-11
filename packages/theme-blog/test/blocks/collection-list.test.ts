@@ -182,12 +182,12 @@ describe('collectionList, list layout with a title on a muted background: the ra
 describe('collectionList, grid layout with no title: the front', () => {
   it('sets the newest essay as a lead, and the rest in a row of secondaries', () => {
     const out = front()
-    expect(out).toContain('<div class="cg-front" data-secondaries="3">')
+    expect(out).toContain('<div class="cg-front" data-secondaries="3" data-mosaic="true">')
     expect(out.match(/cg-story--lead/g)).toHaveLength(1)
     expect(out.match(/<li class="cg-front__item">/g)).toHaveLength(3)
   })
 
-  it('caps the row at three secondaries, whatever the list holds', () => {
+  it('caps the secondaries at four, whatever the list holds', () => {
     const five = [
       ...YEARS,
       {
@@ -199,13 +199,30 @@ describe('collectionList, grid layout with no title: the front', () => {
         publishedAt: '2024-01-01T00:00:00.000Z',
       },
     ]
-    expect(front(five)).toContain('data-secondaries="3"')
+    const six = [
+      ...five,
+      {
+        id: 'e5',
+        collection: 'post',
+        locale: 'en',
+        status: 'published' as const,
+        title: 'A sixth essay',
+        publishedAt: '2023-01-01T00:00:00.000Z',
+      },
+    ]
+    expect(front(five)).toContain('data-secondaries="4"')
+    expect(front(six)).toContain('data-secondaries="4"')
   })
 
-  it('gives the lead a topic, its picture and the standfirst; the picture is lazy, the hero owns the first paint', () => {
+  it('gives the lead a topic, its picture and the standfirst; the lead picture is the first paint, the rest are lazy', () => {
     const out = front()
     expect(out).toMatch(/<p class="cg-story__topic cg-label">Trains<\/p>/)
-    expect(out).toMatch(/<img class="cg-story__image"[^>]*loading="lazy"/)
+    const lead = out.slice(out.indexOf('cg-front__lead'), out.indexOf('cg-front__secondaries'))
+    const rest = out.slice(out.indexOf('cg-front__secondaries'))
+    expect(lead).toMatch(
+      /<img class="cg-story__image"[^>]*loading="eager"[^>]*fetchpriority="high"/,
+    )
+    expect(rest).not.toContain('loading="eager"')
     expect(out).toContain('<p class="cg-story__standfirst">A standfirst.</p>')
   })
 

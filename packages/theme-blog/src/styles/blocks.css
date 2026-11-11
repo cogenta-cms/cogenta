@@ -98,17 +98,34 @@
     align-items: stretch;
   }
 
+  /* The picture sets the height (3:2 on seven columns, about half a laptop
+     screen); the panel's headline is sized for the five columns beside it,
+     not for the full width, so a long headline never makes the lead taller
+     than the screen. */
   .cg-hero[data-media="present"] .cg-hero__media {
     grid-column: 1 / span 7;
     grid-row: 1;
-    aspect-ratio: auto;
-    min-block-size: 30rem;
+    aspect-ratio: 3 / 2;
+    max-block-size: 70vh;
   }
 
   .cg-hero[data-media="present"] .cg-hero__panel {
     grid-column: 8 / -1;
     grid-row: 1;
-    padding: var(--cg-s10) var(--cg-s10) var(--cg-s10) var(--cg-s8);
+    gap: var(--cg-s4);
+    padding: var(--cg-s8);
+  }
+
+  .cg-hero[data-media="present"] .cg-hero__title {
+    font-size: var(--cg-size-heading);
+  }
+
+  .cg-hero[data-media="present"] .cg-hero__subtitle {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    font-size: var(--cg-text-ui);
   }
 
   .cg-hero[data-media="none"] .cg-hero__panel {
@@ -633,6 +650,168 @@ a.cg-article-head__author:hover {
 }
 
 /* --------------------------------------------------------------------------
+   The mosaic: a front whose lead has a picture. The lead and four tiles, each
+   a picture over a flat ink band that carries the topic as a chip in the
+   accent, the headline and the date. No gradient scrim: the band is solid, so
+   the headline's contrast is the panel's, whatever the picture.
+   -------------------------------------------------------------------------- */
+
+.cg-front[data-mosaic="true"],
+.cg-front[data-mosaic="true"] .cg-front__secondaries {
+  gap: var(--cg-s2);
+}
+
+.cg-front[data-mosaic="true"] .cg-front__item {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
+.cg-front[data-mosaic="true"] .cg-story[data-media="image"] {
+  gap: 0;
+  block-size: 100%;
+  min-block-size: 16rem;
+  padding-block-end: var(--cg-s4);
+  overflow: hidden;
+  background: var(--cg-panel);
+  color: var(--cg-panel-muted);
+}
+
+/* The picture takes whatever height the band leaves. */
+.cg-front[data-mosaic="true"] .cg-story[data-media="image"] > .cg-story__media {
+  flex: 1 1 auto;
+  min-block-size: 9rem;
+  margin: 0;
+  aspect-ratio: auto;
+}
+
+.cg-front[data-mosaic="true"] .cg-story[data-media="image"] .cg-story__image {
+  position: absolute;
+  inset: 0;
+}
+
+.cg-front[data-mosaic="true"] .cg-story[data-media="image"] > :not(.cg-story__media) {
+  margin: 0;
+  padding: var(--cg-s2) var(--cg-s4) 0;
+}
+
+.cg-front[data-mosaic="true"] .cg-story[data-media="image"] > .cg-story__topic {
+  align-self: flex-start;
+  margin: var(--cg-s3) var(--cg-s4) 0;
+  padding: var(--cg-s1) var(--cg-s2);
+  background: var(--cg-accent);
+  color: var(--cg-accent-fg);
+}
+
+.cg-front[data-mosaic="true"] .cg-story__link,
+.cg-front[data-mosaic="true"] .cg-story__link:hover {
+  color: var(--cg-panel-fg);
+}
+
+.cg-front[data-mosaic="true"] .cg-story__link:hover {
+  text-decoration-color: var(--cg-panel-accent);
+}
+
+.cg-front[data-mosaic="true"] .cg-story__meta {
+  color: var(--cg-panel-muted);
+}
+
+.cg-front[data-mosaic="true"] .cg-story__title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.cg-front[data-mosaic="true"] .cg-story--secondary .cg-story__title {
+  font-size: var(--cg-text-lg);
+  line-height: var(--cg-leading-heading);
+}
+
+.cg-front[data-mosaic="true"] .cg-story--secondary .cg-story__standfirst {
+  display: none;
+}
+
+.cg-front[data-mosaic="true"] .cg-story--lead {
+  min-block-size: 26rem;
+}
+
+.cg-front[data-mosaic="true"] .cg-story--lead .cg-story__title {
+  max-inline-size: 30ch;
+  font-size: var(--cg-size-subheading);
+  text-wrap: balance;
+}
+
+.cg-front[data-mosaic="true"] .cg-story--lead .cg-story__standfirst {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  max-inline-size: 60ch;
+  font-size: var(--cg-text-ui);
+}
+
+/* Below the wide breakpoint the tiles stack: each picture keeps a 16:9
+   frame instead of sharing a fixed height with its band. */
+@media (max-width: 63.99rem) {
+  .cg-front[data-mosaic="true"] .cg-story[data-media="image"],
+  .cg-front[data-mosaic="true"] .cg-story--lead {
+    min-block-size: 0;
+  }
+
+  .cg-front[data-mosaic="true"] .cg-story[data-media="image"] > .cg-story__media {
+    flex: none;
+    aspect-ratio: 16 / 9;
+  }
+}
+
+@media (min-width: 40rem) {
+  .cg-front[data-mosaic="true"] .cg-front__secondaries {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .cg-front[data-mosaic="true"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    block-size: clamp(30rem, 62vh, 38rem);
+  }
+
+  .cg-front[data-mosaic="true"] .cg-front__lead,
+  .cg-front[data-mosaic="true"] .cg-front__secondaries {
+    min-block-size: 0;
+  }
+
+  .cg-front[data-mosaic="true"] .cg-front__secondaries {
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .cg-front[data-mosaic="true"][data-secondaries="1"] .cg-front__secondaries,
+  .cg-front[data-mosaic="true"][data-secondaries="2"] .cg-front__secondaries {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cg-front[data-mosaic="true"] .cg-story[data-media="image"] {
+    min-block-size: 0;
+  }
+
+  /* The lead keeps the stacked card layout of the plain front's rule above:
+     reset it to the tile. */
+  .cg-front[data-mosaic="true"] .cg-front__lead .cg-story--lead[data-media="image"] {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .cg-front[data-mosaic="true"] .cg-front__lead .cg-story--lead[data-media="image"] > * {
+    grid-column: auto;
+  }
+
+  .cg-front[data-mosaic="true"] .cg-story--secondary .cg-story__meta {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
    The rail: the newest story large beside a stack of the others.
    -------------------------------------------------------------------------- */
 
@@ -691,6 +870,24 @@ a.cg-article-head__author:hover {
 
   .cg-rail[data-count="1"] {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* A rail with one story sets it as the plain front does, picture beside
+     its words, rather than as a full-width picture taller than the screen. */
+  .cg-rail[data-count="1"] .cg-story--lead[data-media="image"] {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    column-gap: var(--cg-s12);
+    align-content: start;
+  }
+
+  .cg-rail[data-count="1"] .cg-story--lead[data-media="image"] > .cg-story__media {
+    grid-row: 1 / span 5;
+    margin: 0;
+  }
+
+  .cg-rail[data-count="1"] .cg-story--lead[data-media="image"] > :not(.cg-story__media) {
+    grid-column: 2;
   }
 }
 
@@ -806,6 +1003,9 @@ a.cg-article-head__author:hover {
 .cg-river__media,
 .cg-index__media {
   display: block;
+  /* The row is a grid: a stretched frame would grow to the text's height and
+     show its ground under the picture. The frame keeps to the picture. */
+  align-self: start;
   overflow: hidden;
   background: var(--cg-image-ground);
 }

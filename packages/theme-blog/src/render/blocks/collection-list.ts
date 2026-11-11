@@ -192,15 +192,25 @@ function rankedRow(
   )
 }
 
-const FRONT_SECONDARIES = 3
+const FRONT_SECONDARIES = 4
 
-/** The front: the newest essay large, the next few underneath in a row. */
+/**
+ * The front: the newest story large, the next four beside it. With pictures
+ * it is set as a mosaic, the lead and four tiles with their headline over the
+ * picture on a flat ink band; without, the lead and a row of cards. A front
+ * with no title opens the page it sits on, so its lead picture is the page's
+ * largest paint and is fetched first.
+ */
 function frontStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
   const [lead, ...rest] = stories
   const secondaries = rest.slice(0, FRONT_SECONDARIES)
   return h(
     'div',
-    { class: 'cg-front', 'data-secondaries': String(secondaries.length) },
+    {
+      class: 'cg-front',
+      'data-secondaries': String(secondaries.length),
+      'data-mosaic': lead?.image === undefined ? 'false' : 'true',
+    },
     lead === undefined
       ? null
       : h(
@@ -212,7 +222,8 @@ function frontStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
             image: true,
             standfirst: true,
             date: true,
-            sizes: '(min-width: 80rem) 46rem, (min-width: 64rem) 58vw, 100vw',
+            priority: true,
+            sizes: '(min-width: 80rem) 40rem, (min-width: 64rem) 50vw, 100vw',
           }),
         ),
     secondaries.length === 0
@@ -230,7 +241,7 @@ function frontStories(stories: readonly Story[], tag: HeadingTag): HtmlElement {
                 image: true,
                 standfirst: true,
                 date: true,
-                sizes: '(min-width: 64rem) 25rem, (min-width: 40rem) 45vw, 100vw',
+                sizes: '(min-width: 64rem) 20rem, (min-width: 40rem) 50vw, 100vw',
               }),
             ),
           ),

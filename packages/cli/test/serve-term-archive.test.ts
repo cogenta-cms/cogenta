@@ -177,6 +177,10 @@ describe('the public term archive (audit T01)', () => {
       expect(html).toContain('cg-skip-link')
       expect(html).toContain('<link rel="canonical" href="https://example.com/topic/cuisine">')
       expect(html).toContain('content="index, follow"')
+      // Described by its name and its headlines, and typed as a listing.
+      expect(html).toMatch(/<meta name="description" content="Cooking: Braising, slowly/)
+      expect(html).toContain('<meta property="og:url" content="https://example.com/topic/cuisine">')
+      expect(html).toContain('"@type":"CollectionPage"')
     } finally {
       await server.stop()
     }

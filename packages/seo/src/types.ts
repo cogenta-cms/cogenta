@@ -30,6 +30,14 @@ export interface SeoSite {
   readonly unprefixedDefaultLocale?: boolean
   /** `@handle` for `twitter:site`. */
   readonly twitterSite?: string
+  /**
+   * The path of the entry served at the site root (`/home` on every
+   * `create-cogenta` blueprint). The server answers `/` with it and
+   * redirects the path itself to `/`, so a canonical, an `hreflang` or a
+   * sitemap entry naming the path would point crawlers at a redirect. Its
+   * address is written `/` instead, and `/<locale>/` in another language.
+   */
+  readonly homePath?: string
 }
 
 /** An entry together with the collection that describes it. */
@@ -60,6 +68,8 @@ export interface SeoReference {
   readonly url?: string
   /** schema.org type, when the caller knows it. `Person` for an author. */
   readonly type?: string
+  /** An organisation's logo: Google reads it from an article's `publisher`. */
+  readonly logo?: SeoImage
 }
 
 /**

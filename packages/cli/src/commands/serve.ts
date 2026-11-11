@@ -4398,7 +4398,11 @@ async function notifyIndexNowOnContentChange(
     const entry = await site.gateway.read(collectionName, entryId, { actor })
     if (entry === null) return
 
-    const seoSite = seoSiteFor(site.site, await readSeoRenderDefaults(site.siteSettingsStore))
+    const seoSite = seoSiteFor(
+      site.site,
+      await readSeoRenderDefaults(site.siteSettingsStore),
+      await readHomePath(site),
+    )
     const url = canonicalUrl(seoSite, await seoResourceOf(collection, entry, site.termSlugs))
     if (url === null) return
 
@@ -7781,7 +7785,7 @@ export function createRequestListener(
           return
         }
         const seoDefaults = await readSeoRenderDefaults(site.siteSettingsStore)
-        const seoSite = seoSiteFor(site.site, seoDefaults)
+        const seoSite = seoSiteFor(site.site, seoDefaults, await readHomePath(site))
         const items = feedItemsFor(
           seoSite,
           await collectRoutedResources(site.collections, site.gateway, site.termSlugs),
@@ -7819,7 +7823,7 @@ export function createRequestListener(
           return
         }
         const seoDefaults = await readSeoRenderDefaults(site.siteSettingsStore)
-        const seoSite = seoSiteFor(site.site, seoDefaults)
+        const seoSite = seoSiteFor(site.site, seoDefaults, await readHomePath(site))
         const resources = await collectRoutedResources(
           site.collections,
           site.gateway,
@@ -7860,7 +7864,7 @@ export function createRequestListener(
           return
         }
         const seoDefaults = await readSeoRenderDefaults(site.siteSettingsStore)
-        const seoSite = seoSiteFor(site.site, seoDefaults)
+        const seoSite = seoSiteFor(site.site, seoDefaults, await readHomePath(site))
         const files = buildSitemapFiles(
           seoSite,
           await collectRoutedResources(site.collections, site.gateway, site.termSlugs),
@@ -10296,4 +10300,16 @@ export async function runServe(options: ServeOptions): Promise<number> {
   await site.dispose().catch(() => undefined) // selection.dispose() already closed the same handle
 
   return 0
+}
+
+/**
+ * The `reading.homePath` setting, or `/home`: the path of the entry served at
+ * `/`. Read per request, like every other use of the setting, so the SEO
+ * addresses follow a change made in the admin without a restart.
+ */
+async function readHomePath(site: {
+  readonly siteSettingsStore: SiteSettingsStore
+}): Promise<string> {
+  const setting = await site.siteSettingsStore.get('reading.homePath', SITE_SETTINGS_SITE_SCOPE)
+  return typeof setting?.value === 'string' && setting.value !== '' ? setting.value : '/home'
 }

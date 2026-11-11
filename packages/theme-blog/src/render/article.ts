@@ -143,11 +143,14 @@ export function renderArticleFooter(entry: PageEntryMeta): HtmlElement | null {
   )
 }
 
-/** The title of a page that is not an essay: set on the text line, at the display size. */
-export function renderPageHeader(page: PageContent): HtmlElement {
+/**
+ * The title of a page that is not an essay: set on the text line, at the
+ * display size, or kept for assistive technology only (`hidden`).
+ */
+export function renderPageHeader(page: PageContent, hidden = false): HtmlElement {
   return h(
     'header',
-    { class: 'cg-page-head' },
+    { class: hidden ? 'cg-page-head cg-visually-hidden' : 'cg-page-head' },
     h('div', { class: 'cg-container' }, h('h1', { class: 'cg-page__title' }, page.title)),
   )
 }

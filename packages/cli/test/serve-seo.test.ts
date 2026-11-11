@@ -210,6 +210,25 @@ describe('cogenta serve — SEO in the rendered page (L10 task 1)', () => {
     }
   }, 90_000)
 
+  it('gives the home page the site root as its address, in the head and in the sitemap, and describes the site', async () => {
+    const root = await project()
+    const server = await startServer(root)
+    try {
+      await seed(root, [{ title: 'Home', slug: 'home' }])
+      const html = await (await fetch(`${server.base}/`)).text()
+      expect(html).toContain('<link rel="canonical" href="https://example.com/" />')
+      expect(html).toContain('<meta property="og:url" content="https://example.com/" />')
+      expect(html).not.toContain('https://example.com/home')
+      expect(html).toContain('"@type":"WebSite"')
+      expect(html).toContain('"urlTemplate":"https://example.com/search?q={search_term_string}"')
+      const sitemap = await (await fetch(`${server.base}/sitemap.xml`)).text()
+      expect(sitemap).toContain('<loc>https://example.com/</loc>')
+      expect(sitemap).not.toContain('<loc>https://example.com/home</loc>')
+    } finally {
+      await server.stop()
+    }
+  }, 90_000)
+
   it('a rendered page carries a real title, description, canonical, Open Graph and JSON-LD derived from the entry', async () => {
     const root = await project()
     const server = await startServer(root)
@@ -278,8 +297,8 @@ describe('cogenta serve — SEO in the rendered page (L10 task 1)', () => {
       // The skip link follows the page's language, not the theme's default.
       expect(french).toContain('>Aller au contenu</a>')
       expect(english).toContain('>Skip to content</a>')
-      expect(english).toContain('<meta property="og:locale:alternate" content="fr" />')
-      expect(french).toContain('<meta property="og:locale:alternate" content="en" />')
+      expect(english).toContain('<meta property="og:locale:alternate" content="fr_FR" />')
+      expect(french).toContain('<meta property="og:locale:alternate" content="en_US" />')
     } finally {
       await server.stop()
     }

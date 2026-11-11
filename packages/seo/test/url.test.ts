@@ -126,3 +126,36 @@ describe('canonical URLs with a category segment', () => {
     )
   })
 })
+
+describe('the address of the home page', () => {
+  const pages = defineCollection({
+    name: 'home_page',
+    labels: { singular: 'Page', plural: 'Pages' },
+    routing: { pattern: '/:slug', locale: true },
+    fields: { slug: f.slug({}) },
+    permissions: { read: ['public'] },
+  })
+  const home = { ...site, unprefixedDefaultLocale: true, homePath: '/home' }
+  const page = (locale: string, slug: string) => ({
+    collection: pages,
+    entry: makeEntry({ locale, values: { slug } }),
+  })
+
+  it('is the site root, not the path the server redirects from', () => {
+    expect(canonicalUrl(home, page('en', 'home'))).toBe('https://example.com/')
+  })
+
+  it('is the language root in another language', () => {
+    expect(canonicalUrl(home, page('fr', 'home'))).toBe('https://example.com/fr/')
+  })
+
+  it('leaves every other page where it is', () => {
+    expect(canonicalUrl(home, page('en', 'about'))).toBe('https://example.com/about')
+    expect(canonicalUrl(home, page('fr', 'homes'))).toBe('https://example.com/fr/homes')
+  })
+
+  it('is the path itself when the site names no home path', () => {
+    const { homePath: _homePath, ...unnamed } = home
+    expect(canonicalUrl(unnamed, page('en', 'home'))).toBe('https://example.com/home')
+  })
+})

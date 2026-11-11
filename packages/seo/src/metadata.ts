@@ -248,7 +248,11 @@ export function buildMetaTags(
   tags.push({ kind: 'property', property: 'og:type', content: openGraphType(schemaType) })
   tags.push({ kind: 'property', property: 'og:title', content: title })
   tags.push({ kind: 'property', property: 'og:site_name', content: site.name })
-  tags.push({ kind: 'property', property: 'og:locale', content: resource.entry.locale })
+  tags.push({
+    kind: 'property',
+    property: 'og:locale',
+    content: openGraphLocale(resource.entry.locale),
+  })
   if (url !== null) tags.push({ kind: 'property', property: 'og:url', content: url })
   if (description !== undefined) {
     tags.push({ kind: 'property', property: 'og:description', content: description })
@@ -271,7 +275,11 @@ export function buildMetaTags(
   for (const alternate of options.alternates ?? []) {
     if (alternate.hreflang === 'x-default') continue
     if (alternate.hreflang === resource.entry.locale) continue
-    tags.push({ kind: 'property', property: 'og:locale:alternate', content: alternate.hreflang })
+    tags.push({
+      kind: 'property',
+      property: 'og:locale:alternate',
+      content: openGraphLocale(alternate.hreflang),
+    })
   }
 
   if (openGraphType(schemaType) === 'article') {
@@ -357,4 +365,35 @@ function renderMetaTag(tag: MetaTag): string {
 /** The tags as HTML, one per line, ready to drop into `<head>`. */
 export function renderMetaTags(tags: readonly MetaTag[]): string {
   return tags.map(renderMetaTag).join('\n')
+}
+
+/**
+ * The territory a bare language gets in Open Graph, which spells a locale
+ * `language_TERRITORY` (`fr_FR`) and reads a bare `fr` as nothing. A language
+ * absent here, or one already carrying a region, is written as given.
+ */
+const OPEN_GRAPH_TERRITORY: Readonly<Record<string, string>> = {
+  ar: 'AR',
+  de: 'DE',
+  en: 'US',
+  es: 'ES',
+  fr: 'FR',
+  it: 'IT',
+  ja: 'JP',
+  ko: 'KR',
+  nl: 'NL',
+  pl: 'PL',
+  pt: 'PT',
+  ru: 'RU',
+  sv: 'SE',
+  tr: 'TR',
+  zh: 'CN',
+}
+
+export function openGraphLocale(locale: string): string {
+  const [language = '', region] = locale.split(/[-_]/u)
+  if (region !== undefined && region !== '')
+    return `${language.toLowerCase()}_${region.toUpperCase()}`
+  const territory = OPEN_GRAPH_TERRITORY[language.toLowerCase()]
+  return territory === undefined ? locale : `${language.toLowerCase()}_${territory}`
 }

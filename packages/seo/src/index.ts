@@ -54,6 +54,7 @@ export {
   buildMetaTags,
   escapeHtmlAttribute,
   escapeHtmlText,
+  openGraphLocale,
   renderMetaTags,
 } from './metadata.js'
 export type { RobotsGroup, RobotsOptions } from './robots.js'

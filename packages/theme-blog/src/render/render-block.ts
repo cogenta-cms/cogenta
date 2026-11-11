@@ -119,6 +119,17 @@ function renderKnownBlock(
  * `withBlockKey` stamps every rendered block with its contract-B `_key`, so
  * the visual page builder (L16) can map a clicked element back to its block.
  */
+/**
+ * A page that opens on the front (an untitled grid listing: its news front)
+ * sets its stories at the top, the way a news site's home does: its title is
+ * still the page's one `h1`, for a screen reader and a search engine, but it
+ * is not printed above the stories.
+ */
+function opensOnFront(page: PageContent): boolean {
+  const [first] = page.blocks
+  return first?._type === 'collectionList' && first.layout === 'grid' && first.title === undefined
+}
+
 export function renderPage(
   page: PageContent,
   ctx: RenderContext,
@@ -130,7 +141,7 @@ export function renderPage(
   const opening = ownHeading
     ? null
     : article === undefined
-      ? renderPageHeader(page)
+      ? renderPageHeader(page, opensOnFront(page))
       : renderArticleHeader(page, article, ctx)
 
   return h(

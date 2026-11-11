@@ -199,3 +199,40 @@ describe('rendering JSON-LD into a script element', () => {
     expect((JSON.parse(rendered) as Record<string, string>).name).toBe(`line${separator}break`)
   })
 })
+
+describe('an article credited to its publisher', () => {
+  const publisher = {
+    name: 'Example',
+    url: 'https://example.com/',
+    logo: { url: 'https://example.com/logo.png', width: 600, height: 120 },
+  }
+
+  it('names the publisher with its logo, and the page the article is the subject of', () => {
+    const graph = buildJsonLd(site, makeArticle(), { publisher })
+    expect(graph?.publisher).toEqual({
+      '@type': 'Organization',
+      name: 'Example',
+      url: 'https://example.com/',
+      logo: {
+        '@type': 'ImageObject',
+        url: 'https://example.com/logo.png',
+        width: 600,
+        height: 120,
+      },
+    })
+    expect(graph?.mainEntityOfPage).toEqual({ '@type': 'WebPage', '@id': graph?.url })
+  })
+
+  it('credits an article with no author to the publishing organisation', () => {
+    const graph = buildJsonLd(site, makeArticle(), { publisher })
+    expect(graph?.author).toEqual({
+      '@type': 'Organization',
+      name: 'Example',
+      url: 'https://example.com/',
+    })
+  })
+
+  it('leaves the author out when there is neither an author nor a publisher', () => {
+    expect(buildJsonLd(site, makeArticle())?.author).toBeUndefined()
+  })
+})

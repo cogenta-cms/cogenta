@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildHreflangMap } from '../src/hreflang.js'
-import { buildMetaTags, type MetaTag, renderMetaTags } from '../src/metadata.js'
+import { buildMetaTags, type MetaTag, openGraphLocale, renderMetaTags } from '../src/metadata.js'
 import type { SeoResolvers } from '../src/types.js'
 import { makeArticle, makeAuthor, makePage, site } from './fixtures.js'
 
@@ -68,7 +68,7 @@ describe('Open Graph and Twitter Card', () => {
     expect(contentOf(tags, 'og:title')).toBe('Hello world')
     expect(contentOf(tags, 'og:description')).toBe('A short summary.')
     expect(contentOf(tags, 'og:url')).toBe('https://example.com/en/blog/hello-world')
-    expect(contentOf(tags, 'og:locale')).toBe('en')
+    expect(contentOf(tags, 'og:locale')).toBe('en_US')
     expect(contentOf(tags, 'og:site_name')).toBe('Example')
   })
 
@@ -135,7 +135,7 @@ describe('Open Graph and Twitter Card', () => {
       .filter((tag) => tag.kind === 'property' && tag.property === 'og:locale:alternate')
       .map((tag) => (tag.kind === 'property' ? tag.content : ''))
 
-    expect(listed).toEqual(['fr'])
+    expect(listed).toEqual(['fr_FR'])
   })
 })
 
@@ -183,5 +183,18 @@ describe('rendering tags to HTML', () => {
     ])
 
     expect(html).toContain('&amp;y=2')
+  })
+})
+
+describe('openGraphLocale', () => {
+  it('spells a locale as Open Graph does, language_TERRITORY', () => {
+    expect(openGraphLocale('fr')).toBe('fr_FR')
+    expect(openGraphLocale('en')).toBe('en_US')
+    expect(openGraphLocale('en-GB')).toBe('en_GB')
+    expect(openGraphLocale('pt_br')).toBe('pt_BR')
+  })
+
+  it('leaves a language it has no territory for as given', () => {
+    expect(openGraphLocale('eo')).toBe('eo')
   })
 })

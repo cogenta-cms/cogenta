@@ -161,8 +161,12 @@ function referenceValue(reference: SeoReference): JsonLdObject {
     '@type': reference.type ?? 'Thing',
     name: reference.name,
     url: reference.url,
+    logo: reference.logo === undefined ? undefined : imageValue(reference.logo),
   }
 }
+
+/** Plain-text fields a listing sets above the headline: the article's section. */
+const SECTION_FIELDS = ['topic', 'section', 'kicker']
 
 function resolveMedia(value: unknown, resolvers: SeoResolvers | undefined): readonly SeoImage[] {
   const ids = (Array.isArray(value) ? value : [value]).filter(
@@ -326,6 +330,23 @@ export function buildJsonLd(
   }
   if (keywords.length > 0) graph.keywords = keywords.join(', ')
   if (sections.length > 0) graph.articleSection = sections[0] as string
+  if (graph.articleSection === undefined && ARTICLE_TYPES.has(type)) {
+    const section = firstStringValue(resource, SECTION_FIELDS, ['text'])
+    if (section !== undefined) graph.articleSection = section
+  }
+  // Google's article rich result asks for the page the article is the main
+  // subject of, and for an author: with no author relation, the article is
+  // credited to the publishing organisation rather than left anonymous.
+  if (ARTICLE_TYPES.has(type)) {
+    graph.mainEntityOfPage = { '@type': 'WebPage', '@id': url }
+    if (graph.author === undefined && options.publisher !== undefined) {
+      graph.author = referenceValue({
+        type: 'Organization',
+        name: options.publisher.name,
+        ...(options.publisher.url === undefined ? {} : { url: options.publisher.url }),
+      })
+    }
+  }
 
   // The system fields are authoritative for dates: a collection may have no
   // `publishedAt` of its own, and every entry has these two (contract A).

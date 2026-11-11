@@ -136,10 +136,31 @@ export function canonicalUrl(site: SeoSite, resource: SeoResource): string | nul
   if (localised && site.unprefixedDefaultLocale === true && entry.locale === site.defaultLocale) {
     const prefix = `/${encodeURIComponent(entry.locale)}`
     const stripped = path.slice(prefix.length)
-    return absoluteUrl(site, stripped.length === 0 ? '/' : stripped)
+    return absoluteUrl(site, homeAddress(site, stripped.length === 0 ? '/' : stripped))
   }
 
-  return absoluteUrl(site, path)
+  return absoluteUrl(site, homeAddress(site, path))
+}
+
+/**
+ * `/` for the site's home path, `/<locale>/` for its translation: the
+ * addresses the server answers the home page at, rather than the path it
+ * redirects from.
+ */
+function homeAddress(site: SeoSite, path: string): string {
+  const home = site.homePath
+  if (home === undefined || home === '' || home === '/') return path
+  const trimmed = path.replace(/\/+$/u, '')
+  if (trimmed === home) return '/'
+  const match = /^\/([^/]+)(\/.*)$/u.exec(trimmed)
+  if (
+    match !== null &&
+    match[2] === home &&
+    (site.locales ?? []).includes(decodeURIComponent(match[1] ?? ''))
+  ) {
+    return `/${match[1]}/`
+  }
+  return path
 }
 
 /**

@@ -7,7 +7,12 @@ import {
   routeParamsOf,
   type TermSlugs,
 } from '@cogenta/schema'
-import { escapeHtmlAttribute, escapeHtmlText } from '@cogenta/seo'
+import {
+  escapeHtmlAttribute,
+  escapeHtmlText,
+  openGraphLocale,
+  renderJsonLdScript,
+} from '@cogenta/seo'
 import type { WidgetAreas } from '@cogenta/theme-kit'
 import {
   type HtmlElement,
@@ -282,10 +287,39 @@ function headFor(
   // query while adding nothing — and `follow` still lets a crawler reach
   // every entry they link to, which is the whole reason they exist.
   const robots = page > 1 ? 'noindex, follow' : 'index, follow'
+  const description = archiveDescription(input)
+  // A listing is a `CollectionPage` of the site: what a search engine reads
+  // to tell a section front from an article.
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    '@id': canonical,
+    url: canonical,
+    name: input.term.label,
+    inLanguage: locale,
+    ...(description === '' ? {} : { description }),
+    isPartOf: {
+      '@type': 'WebSite',
+      name: options.site.name,
+      url: new URL('/', options.site.url).toString(),
+    },
+  }
   return [
     `<title>${escapeHtmlText(title)}</title>`,
+    description === ''
+      ? ''
+      : `<meta name="description" content="${escapeHtmlAttribute(description)}">`,
     `<meta name="robots" content="${robots}">`,
     `<link rel="canonical" href="${escapeHtmlAttribute(canonical)}">`,
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:title" content="${escapeHtmlAttribute(title)}">`,
+    `<meta property="og:site_name" content="${escapeHtmlAttribute(options.site.name)}">`,
+    `<meta property="og:url" content="${escapeHtmlAttribute(canonical)}">`,
+    `<meta property="og:locale" content="${escapeHtmlAttribute(openGraphLocale(locale))}">`,
+    description === ''
+      ? ''
+      : `<meta property="og:description" content="${escapeHtmlAttribute(description)}">`,
+    page > 1 ? '' : `<script type="application/ld+json">${renderJsonLdScript(jsonLd)}</script>`,
     ...alternates.map(
       (alternate) =>
         `<link rel="alternate" hreflang="${escapeHtmlAttribute(alternate.hreflang)}" href="${escapeHtmlAttribute(alternate.href)}">`,
@@ -299,6 +333,29 @@ function headFor(
   ]
     .filter((part) => part !== '')
     .join('\n')
+}
+
+/**
+ * What the archive is about, for its `description`: the intro an author wrote
+ * when there is one, otherwise the archive's name and its newest headlines —
+ * words a reader recognises, in the page's own language, never a template
+ * sentence in a language the site may not speak.
+ */
+function archiveDescription(input: TermArchiveInput): string {
+  const intro = input.intro?.text?.replace(/\s+/gu, ' ').trim()
+  const text =
+    intro !== undefined && intro !== ''
+      ? intro
+      : input.entries.length === 0
+        ? ''
+        : `${input.term.label}: ${input.entries
+            .slice(0, 4)
+            .map((entry) => entry.title)
+            .join(' · ')}`
+  if (text.length <= 160) return text
+  const cut = text.slice(0, 159)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > 100 ? cut.slice(0, space) : cut).trimEnd()}…`
 }
 
 async function introFor(

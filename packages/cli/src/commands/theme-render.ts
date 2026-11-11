@@ -37,7 +37,7 @@ import {
   type TermSlugs,
   termSegmentsOf,
 } from '@cogenta/schema'
-import { type SeoImage, seoResourceOf } from '@cogenta/seo'
+import { type SeoImage, type SeoReference, seoResourceOf } from '@cogenta/seo'
 import {
   type ChromeBrand,
   type ChromeInput,
@@ -601,6 +601,29 @@ async function resolveIdentity(
     },
     faviconHref: favicon === null ? null : favicon.src,
     shareImageUrl: share === null ? null : share.src,
+  }
+}
+
+/**
+ * The site as the publisher of its pages, for the JSON-LD: its name, its
+ * address and the logo the appearance screen chose (absolute, as a crawler
+ * fetches it without a session), when there is one.
+ */
+function publisherOf(site: ThemeRenderOptions['site'], logo: ImageSource | null): SeoReference {
+  const root = new URL('/', site.url).toString()
+  return {
+    type: 'Organization',
+    name: site.name,
+    url: root,
+    ...(logo === null || logo.kind !== 'image'
+      ? {}
+      : {
+          logo: {
+            url: new URL(logo.src, root).toString(),
+            ...(logo.width === undefined ? {} : { width: logo.width }),
+            ...(logo.height === undefined ? {} : { height: logo.height }),
+          },
+        }),
   }
 }
 
@@ -2420,7 +2443,7 @@ async function renderEntryPage(
     identity.shareImageUrl === null || storedSeoSettings === null
       ? storedSeoSettings
       : { ...storedSeoSettings, defaultSocialImageUrl: identity.shareImageUrl }
-  const seoSite = seoSiteFor(options.site, seoSettings)
+  const seoSite = seoSiteFor(options.site, seoSettings, await homePathFor(options))
   // The pruned entry here too: `og:image` and the JSON-LD `image` are derived
   // from the very fields the prune emptied, and a share card built from a
   // deleted asset is a broken share card.
@@ -2473,6 +2496,8 @@ async function renderEntryPage(
       ...(alternates.length === 0 ? {} : { alternates }),
       ...(mediaAssets.size === 0 ? {} : { media: seoMedia }),
       ...(seoSettings === null ? {} : { seo: seoSettings }),
+      publisher: publisherOf(options.site, identity.brand.logo),
+      home: await atHome(),
       // A page nobody can read without a password has nothing to offer a
       // crawler, and its own summary in a `description` or a JSON-LD block
       // would answer the password for whoever asks. It is already out of the

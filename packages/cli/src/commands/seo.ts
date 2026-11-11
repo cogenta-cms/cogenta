@@ -17,10 +17,12 @@ import {
   escapeHtmlAttribute,
   groupTranslationFamilies,
   type HreflangAlternate,
+  type JsonLdObject,
   renderJsonLdScript,
   renderMetaTags,
   renderRobotsTxt,
   type SeoImage,
+  type SeoReference,
   type SeoResource,
   type SeoSite,
   type SitemapCollectionOverride,
@@ -100,8 +102,13 @@ export interface SeoRenderDefaults {
  * that supplies its own description or the Twitter Card's absence is never
  * overridden by a setting nobody actually set.
  */
-export function seoSiteFor(site: SiteIdentity, seo?: SeoRenderDefaults | null): SeoSite {
+export function seoSiteFor(
+  site: SiteIdentity,
+  seo?: SeoRenderDefaults | null,
+  homePath?: string,
+): SeoSite {
   return {
+    ...(homePath === undefined ? {} : { homePath }),
     baseUrl: site.url,
     name: site.name,
     defaultLocale: site.defaultLocale,
@@ -466,6 +473,13 @@ export interface HeadOptions {
   readonly title?: string
   /** The admin-editable title templates and default social image (fiche 21 task 3). Absent behaves exactly as before that fiche. */
   readonly seo?: SeoRenderDefaults | null
+  /** The organisation that publishes the site: an article's `publisher`, with its logo. */
+  readonly publisher?: SeoReference
+  /**
+   * The page is the site's home page: it also describes the site itself, as a
+   * `WebSite` with the search the site answers at `/search?q=`.
+   */
+  readonly home?: boolean
 }
 
 /**
@@ -501,12 +515,70 @@ export function renderSeoHead(
 
   const graph = buildJsonLd(site, resource, {
     ...(options.media === undefined ? {} : { resolvers: { media: options.media } }),
+    ...(options.publisher === undefined ? {} : { publisher: options.publisher }),
   })
   if (graph !== null && options.noindex !== true) {
-    parts.push(`<script type="application/ld+json">${renderJsonLdScript(graph)}</script>`)
+    const graphs =
+      options.home === true ? [websiteJsonLd(site, resource, options.publisher), graph] : [graph]
+    parts.push(
+      `<script type="application/ld+json">${renderJsonLdScript(graphs.length === 1 ? graph : graphs)}</script>`,
+    )
   }
 
   return parts.join('\n')
+}
+
+/**
+ * The site as a schema.org `WebSite`, for its home page: its name, its
+ * language, the organisation behind it and the search it answers, which is
+ * what lets a search engine offer a search box for the site.
+ */
+function websiteJsonLd(
+  site: SeoSite,
+  resource: SeoResource,
+  publisher: SeoReference | undefined,
+): JsonLdObject {
+  const root = absoluteUrl(site, '/')
+  const searchPrefix =
+    resource.entry.locale === site.defaultLocale ? '' : `/${resource.entry.locale}`
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    '@id': `${root}#website`,
+    url: root,
+    name: site.name,
+    inLanguage: resource.entry.locale,
+    ...(site.description === undefined ? {} : { description: site.description }),
+    ...(publisher === undefined
+      ? {}
+      : {
+          publisher: {
+            '@type': 'Organization',
+            name: publisher.name,
+            ...(publisher.url === undefined ? {} : { url: publisher.url }),
+            ...(publisher.logo === undefined
+              ? {}
+              : {
+                  logo: {
+                    '@type': 'ImageObject',
+                    url: publisher.logo.url,
+                    ...(publisher.logo.width === undefined ? {} : { width: publisher.logo.width }),
+                    ...(publisher.logo.height === undefined
+                      ? {}
+                      : { height: publisher.logo.height }),
+                  },
+                }),
+          },
+        }),
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: `${absoluteUrl(site, `${searchPrefix}/search`)}?q={search_term_string}`,
+      },
+      'query-input': 'required name=search_term_string',
+    },
+  }
 }
 
 /**

@@ -4,7 +4,7 @@ description: The official Cogenta CMS chart with optional PostgreSQL and databas
 type: application
 version: 0.1.3
 # The Cogenta release; kept equal to @cogenta/cli by scripts/sync-chart-version.mjs.
-appVersion: "0.23.2"
+appVersion: "0.23.3"
 kubeVersion: ">=1.27.0-0"
 home: https://github.com/cogenta-cms/cogenta
 sources:

@@ -1,5 +1,11 @@
 # @cogenta/import
 
+## 0.2.21
+
+### Patch Changes
+
+- [#67](https://github.com/cogenta-cms/cogenta/pull/67) [`8623181`](https://github.com/cogenta-cms/cogenta/commit/8623181ee4001341cd9a7d42cec915954e9cd31d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - The WordPress import keeps bold, italic and inline code. A closing `</strong>`, `</em>` or `</code>` removed the mark before the words it wrapped were written out, so every imported article lost its emphasis; a stray closing tag could also remove the wrong mark.
+
 ## 0.2.20
 
 ### Patch Changes

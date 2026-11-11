@@ -1,5 +1,12 @@
 # @cogenta/api
 
+## 2.14.2
+
+### Patch Changes
+
+- Updated dependencies [[`f35ca69`](https://github.com/cogenta-cms/cogenta/commit/f35ca691d1d74ad857f85af53b80e24a92054ee2)]:
+  - @cogenta/seo@0.6.0
+
 ## 2.14.1
 
 ### Patch Changes

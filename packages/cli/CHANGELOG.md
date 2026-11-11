@@ -1,5 +1,22 @@
 # @cogenta/cli
 
+## 0.23.3
+
+### Patch Changes
+
+- [#67](https://github.com/cogenta-cms/cogenta/pull/67) [`f35ca69`](https://github.com/cogenta-cms/cogenta/commit/f35ca691d1d74ad857f85af53b80e24a92054ee2) Thanks [@georgesmomo](https://github.com/georgesmomo)! - SEO fixes found on a live site:
+  
+  - The home page's canonical, `og:url`, `hreflang` and sitemap entry named `/home` (and `/fr/home`), which the server redirects to `/`: crawlers were sent to a redirect. They now name `/` and `/<locale>/` (`SeoSite.homePath`).
+  - An article's JSON-LD names its publisher with the site's logo, the page it is the main subject of, its section, and credits the organisation when the article has no author. The home page also describes the site as a `WebSite` with its search action.
+  - `og:locale` is written as Open Graph spells it (`en_US`, `fr_FR`), not as a bare language (`openGraphLocale`).
+  - Taxonomy archives get a `description` (the intro, or the archive's name and newest headlines), Open Graph tags and a `CollectionPage` JSON-LD.
+- Updated dependencies [[`8623181`](https://github.com/cogenta-cms/cogenta/commit/8623181ee4001341cd9a7d42cec915954e9cd31d), [`f35ca69`](https://github.com/cogenta-cms/cogenta/commit/f35ca691d1d74ad857f85af53b80e24a92054ee2), [`32ed90c`](https://github.com/cogenta-cms/cogenta/commit/32ed90c53317bb2938e5df3c9834614ec21e4844)]:
+  - @cogenta/import@0.2.21
+  - @cogenta/seo@0.6.0
+  - @cogenta/theme-blog@0.8.0
+  - @cogenta/api@2.14.2
+  - @cogenta/starters@0.6.2
+
 ## 0.23.2
 
 ### Patch Changes

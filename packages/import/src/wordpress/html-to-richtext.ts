@@ -35,6 +35,15 @@ const HEADING_STYLE: Readonly<Record<string, RichTextStyle>> = {
 
 const TRANSPARENT_TAGS = new Set(['p', 'div', 'span', 'figure', 'figcaption'])
 
+/** Inline tags that map to a contract A mark, legacy spellings included. */
+const MARK_TAGS: Readonly<Record<string, string>> = {
+  strong: 'strong',
+  b: 'strong',
+  em: 'em',
+  i: 'em',
+  code: 'code',
+}
+
 interface InlineSpan {
   readonly text: string
   readonly marks: readonly string[]
@@ -63,23 +72,17 @@ function inlineToSpans(html: string, unknownTags: Set<string>): InlineSpan[] {
     const tag = (match[1] ?? '').toLowerCase()
     const attrs = match[2] ?? ''
 
-    if (tag === 'strong' || tag === 'b') {
-      if (isClose) markStack.splice(markStack.indexOf('strong'), 1)
+    const mark = MARK_TAGS[tag]
+    if (mark !== undefined) {
+      // The text read so far belongs to the marks open before this tag:
+      // flush it first, on a close as on an open, or a closing `</strong>`
+      // strips the mark from the very words it wrapped.
+      flush()
+      if (!isClose) markStack.push(mark)
       else {
-        flush()
-        markStack.push('strong')
-      }
-    } else if (tag === 'em' || tag === 'i') {
-      if (isClose) markStack.splice(markStack.indexOf('em'), 1)
-      else {
-        flush()
-        markStack.push('em')
-      }
-    } else if (tag === 'code') {
-      if (isClose) markStack.splice(markStack.indexOf('code'), 1)
-      else {
-        flush()
-        markStack.push('code')
+        // A stray close tag (no matching open) closes nothing.
+        const open = markStack.lastIndexOf(mark)
+        if (open !== -1) markStack.splice(open, 1)
       }
     } else if (tag === 'a') {
       if (isClose) {

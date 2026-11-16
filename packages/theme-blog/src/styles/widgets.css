@@ -674,12 +674,25 @@
   column-gap: var(--cg-col-gap);
 }
 
-@media (min-width: 64rem) {
-  .cg-widget-area:is([data-area="content-before"], [data-area="content-after"])
-    > .cg-widget--entries
-    .cg-widget__entry-image {
-    display: none;
-  }
+/* On the text line the row is wide, so the thumbnail leads, beside the
+   title it belongs to, instead of sitting alone at the far edge. Whether a
+   widget shows one at all is its own "showImage" setting. */
+.cg-widget-area:is([data-area="content-before"], [data-area="content-after"])
+.cg-widget__entry[data-image="image"] {
+  grid-template-columns: 6rem minmax(0, 1fr);
+  align-items: center;
+}
+
+.cg-widget-area:is([data-area="content-before"], [data-area="content-after"])
+  .cg-widget__entry-image {
+  grid-column: 1;
+  aspect-ratio: 3 / 2;
+}
+
+.cg-widget-area:is([data-area="content-before"], [data-area="content-after"])
+  .cg-widget__entry[data-image="image"]
+  .cg-widget__entry-text {
+  grid-column: 2;
 }
 
 /* --------------------------------------------------------------------------

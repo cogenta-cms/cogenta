@@ -1,5 +1,13 @@
 # @cogenta/cli
 
+## 0.23.4
+
+### Patch Changes
+
+- [#69](https://github.com/cogenta-cms/cogenta/pull/69) [`3ca74df`](https://github.com/cogenta-cms/cogenta/commit/3ca74dffd007083fc5dd01cfaded582bf24ee15e) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Fix date archives on sites with more than 100 entries. The archives widget and the `/archive/{collection}/{year}` page asked the gateway for the next page under `cursor`, which it ignores (it reads `after`), so every page was the first one again: the widget counted up to its 1000 scan cap and the archive page listed each entry several times.
+- Updated dependencies [[`e2c2c8e`](https://github.com/cogenta-cms/cogenta/commit/e2c2c8ecec5e631b03790924f1159ef47ee903e8)]:
+  - @cogenta/theme-blog@0.8.1
+
 ## 0.23.3
 
 ### Patch Changes

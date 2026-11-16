@@ -1,5 +1,11 @@
 # @cogenta/theme-blog
 
+## 0.8.1
+
+### Patch Changes
+
+- [#69](https://github.com/cogenta-cms/cogenta/pull/69) [`e2c2c8e`](https://github.com/cogenta-cms/cogenta/commit/e2c2c8ecec5e631b03790924f1159ef47ee903e8) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Show entry thumbnails in the "Read next" band after an essay on wide screens too. They were hidden there from 64rem up, so a related-entries widget with "Show the thumbnail" on displayed none on desktop. On the text line the thumbnail now sits before the title, at 6rem and 3:2; the widget's own setting still turns it off.
+
 ## 0.8.0
 
 ### Minor Changes

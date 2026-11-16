@@ -417,7 +417,7 @@ export async function resolveWidgetAreas(
             limit: 100,
             ...inPageLocale(collection),
             sort: [{ field: 'createdAt', direction: 'desc' }],
-            ...(cursor === undefined ? {} : { cursor }),
+            ...(cursor === undefined ? {} : { after: cursor }),
           },
           access,
         )

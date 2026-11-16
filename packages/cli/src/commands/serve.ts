@@ -8484,7 +8484,7 @@ export function createRequestListener(
                   collection: dateCollection.name,
                   limit: 100,
                   sort: [{ field: 'createdAt', direction: 'desc' }],
-                  ...(cursor === undefined ? {} : { cursor }),
+                  ...(cursor === undefined ? {} : { after: cursor }),
                 },
                 context,
               )

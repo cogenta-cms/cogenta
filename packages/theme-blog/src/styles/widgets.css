@@ -678,7 +678,7 @@
    title it belongs to, instead of sitting alone at the far edge. Whether a
    widget shows one at all is its own "showImage" setting. */
 .cg-widget-area:is([data-area="content-before"], [data-area="content-after"])
-  .cg-widget__entry[data-image="image"] {
+.cg-widget__entry[data-image="image"] {
   grid-template-columns: 6rem minmax(0, 1fr);
   align-items: center;
 }

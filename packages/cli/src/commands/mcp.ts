@@ -347,6 +347,22 @@ export async function runMcp(options: McpOptions): Promise<number> {
         auditLog: createAuditLog(db),
         approvalQueue,
         transport: 'stdio',
+        taxonomies,
+        // A new term must be served under its slug at once: drop the cached
+        // slugs of its taxonomy, as `cogenta serve` does on every term write.
+        taxonomyStoreFor: (taxonomy) => {
+          const store = createTaxonomyStore({ db, taxonomy })
+          return {
+            ...store,
+            create: async (input) => {
+              try {
+                return await store.create(input)
+              } finally {
+                termSlugs.invalidate(taxonomy.name)
+              }
+            },
+          }
+        },
         ...(loaded.config.site.url === undefined
           ? {}
           : { approvalsUrl: `${loaded.config.site.url.replace(/\/+$/u, '')}/admin/agents` }),

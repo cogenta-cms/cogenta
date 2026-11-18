@@ -461,6 +461,7 @@ import {
 import { createMcpHttpEndpoint, type McpHttpEndpoint, mcpConnectionInfo } from './mcp-http.js'
 import { MCP_API_KEY_ENV } from './mcp-tools.js'
 import { selectMediaImageProcessor } from './media-images.js'
+import { createUrlImageImporter } from './media-import.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
 import { createPluginBlockRenderer, type PluginBlockRenderer } from './plugin-block-render.js'
 import {
@@ -3087,6 +3088,17 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             auditLog: auth.audit,
             approvalQueue: agentsRuntime.approvalQueue,
             approvalsUrl: `${site.url.replace(/\/+$/u, '')}/admin/agents`,
+            taxonomies,
+            taxonomyStoreFor,
+            // `media.import_url`: the same storage and image processor as
+            // `POST /api/media`, behind the outbound guard.
+            importImage: createUrlImageImporter({
+              mediaStore,
+              storage,
+              ...(options.images === null || options.images === undefined
+                ? {}
+                : { images: options.images }),
+            }),
           },
         })
 

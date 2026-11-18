@@ -558,6 +558,7 @@ export {
   createContentPublishTool,
   createContentReadTool,
   createContentWriteDraftTool,
+  createContentWriteTranslationTool,
 } from './tools/core/content.js'
 export type {
   ContentBrowseAccessContext,
@@ -598,6 +599,14 @@ export {
   createMediaStoreImageTool,
   createMediaWriteTool,
 } from './tools/core/media.js'
+export type {
+  MediaImportCredit,
+  MediaImportResult,
+  MediaImportUrlInput,
+  MediaImportUrlOutput,
+  MediaImportUrlToolOptions,
+} from './tools/core/media-import.js'
+export { createMediaImportUrlTool } from './tools/core/media-import.js'
 export type { MediaListOutput } from './tools/core/media-list.js'
 export { createMediaListTool } from './tools/core/media-list.js'
 export type { NotFoundLogReader } from './tools/core/not-found-log.js'
@@ -609,6 +618,11 @@ export {
 } from './tools/core/redirects.js'
 export type { SiteConfig } from './tools/core/site-config.js'
 export { createSiteConfigReadTool } from './tools/core/site-config.js'
+export type { TaxonomyServiceLike, TaxonomyTermLike } from './tools/core/taxonomy.js'
+export {
+  createTaxonomyCreateTermTool,
+  createTaxonomyListTermsTool,
+} from './tools/core/taxonomy.js'
 export { defineTool } from './tools/define.js'
 export { buildManifest } from './tools/manifest.js'
 export type { ToolRegistry } from './tools/registry.js'

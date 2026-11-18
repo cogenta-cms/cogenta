@@ -712,6 +712,8 @@ mcp.external:<connexionId>.<nomOutilDistant>
 theme.customize
 theme.write_sandbox
 plugin.write_sandbox
+comments.moderate · analytics.read
+taxonomy.read · taxonomy.write
 ```
 
 `document.extract` (ajoutée en `tools@1.1`, L19 tâche 1) autorise la lecture du texte
@@ -773,6 +775,30 @@ permissions existantes.
 
 Aucune signature d'outil existante n'est touchée : un ajout par le bas, mineur au même
 titre que `document.extract` en `tools@1.1`.
+
+**`tools@1.9` le 2026-11-18** (L41, publier par MCP seul) : la taxonomie gagne
+`taxonomy.read` et `taxonomy.write`, et quatre outils s'ajoutent. Un client MCP qui publiait
+un article bilingue devait encore passer par REST pour trois étapes : les tags, l'image de
+couverture et le lien entre la version traduite et l'originale.
+
+| Outil | Permission | Effets |
+|---|---|---|
+| `content.write_translation` | `content.write_draft` (existante) | `sideEffects: true`, `reversible: false` — crée le brouillon d'une entrée dans une autre langue du site, rattaché à l'entrée source (`translationOf` du contrat A). Un outil à part plutôt qu'un champ ajouté à `content.write_draft`, dont la signature reste figée. Refusé avant toute approbation si la langue n'est pas celle du site, si c'est la langue de la source, ou si la famille a déjà cette langue. |
+| `taxonomy.list_terms` | `taxonomy.read` (**nouvelle**) | `sideEffects: false` — les termes d'une taxonomie (identifiant, slug, parent, libellé par langue), que prend un champ `taxonomy`. |
+| `taxonomy.create_term` | `taxonomy.write` (**nouvelle**) | `sideEffects: true`, `reversible: false` — crée un terme, ou rend le terme existant si le slug est déjà pris (`created: false`, libellés inchangés) : un appel répété ne crée jamais de doublon. |
+| `media.import_url` | `media.write` (existante) | `sideEffects: true`, `reversible: false` — copie une image depuis une adresse `https:` publique dans la médiathèque, par la garde sortante de `@cogenta/core` (chaque saut résolu et épinglé sur une adresse publique, redirection vers `http:` refusée, 15 Mio, 20 s) puis par l'ingestion d'un envoi humain (type réel lu dans les octets). Avant qu'un humain soit sollicité, l'adresse n'est jugée que sur son texte (https, sans identifiants, ni `localhost` ni adresse privée littérale) : aucune résolution DNS avant l'approbation. L'auteur et la licence sont conservés avec le fichier, l'adresse source sans requête ni identifiants, et la provenance est `assisted`. |
+
+L'hôte reste la porte (R4) : `PermissionLayer.assertTerm` pour les termes, les mêmes
+contrôles que REST pour le contenu et la médiathèque. `taxonomy.write` suppose la lecture : `taxonomy.create_term`
+lit les termes existants pour rester idempotent, et n'est offert qu'à qui peut aussi les
+lire. Disponibilité : les outils `taxonomy.*` ne sont offerts que si le site déclare des
+taxonomies, et `media.import_url` seulement sur `cogenta serve` (`cogenta mcp` n'a pas de
+pilote de stockage). `content.write_translation` rattache toujours la traduction à la
+racine de la famille, même si `sourceId` désigne une traduction : la famille du contrat A
+reste à plat. La règle « une langue par famille » est vérifiée avant l'approbation et de
+nouveau au moment d'écrire. Aucune signature d'outil existante
+n'est touchée : un ajout par le bas, mineur au même titre que `document.extract` en
+`tools@1.1`.
 
 `theme.write_sandbox` (ajoutée en `tools@1.6`, fiche 73 tâche 7) autorise un agent à
 écrire un fichier de code de thème réel — mais seulement dans un bac à sable isolé

@@ -275,6 +275,7 @@ describe('cogenta mcp', () => {
         'content.schema',
         'content.search',
         'content.write_draft',
+        'content.write_translation',
         'media.list',
         'media.read',
         'media.write',

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { isIP } from 'node:net'
 import {
   type ApprovalQueue,
   buildManifest,
@@ -14,12 +15,19 @@ import {
   createContentSchemaTool,
   createContentSearchTool,
   createContentWriteDraftTool,
+  createContentWriteTranslationTool,
+  createMediaImportUrlTool,
   createMediaListTool,
   createMediaReadTool,
   createMediaWriteTool,
   createSiteConfigReadTool,
+  createTaxonomyCreateTermTool,
+  createTaxonomyListTermsTool,
   createToolRegistry,
   type ExecutableTool,
+  type MediaImportCredit,
+  type MediaImportResult,
+  type TaxonomyServiceLike,
   type ToolDefinition,
   withAudit,
   withAutonomy,
@@ -33,7 +41,13 @@ import {
 } from '@cogenta/api'
 import type { ApiKey, ApiKeyStore, AuditLog } from '@cogenta/auth'
 import { type BlockRegistry, safeParseBlock } from '@cogenta/blocks'
-import { CogentaError, isCogentaError, type Logger, type MediaStore } from '@cogenta/core'
+import {
+  CogentaError,
+  isCogentaError,
+  isPrivateAddress,
+  type Logger,
+  type MediaStore,
+} from '@cogenta/core'
 import type { McpCallContext, McpTool, McpToolAnnotations } from '@cogenta/mcp'
 import {
   type BlockZones,
@@ -44,6 +58,8 @@ import {
   fieldSchema,
   pruneEmptyBlockData,
   routeParamsOf,
+  type TaxonomyDefinition,
+  type TaxonomyStore,
   type TermSlugs,
 } from '@cogenta/schema'
 
@@ -141,6 +157,23 @@ export interface McpSiteToolsOptions {
   readonly terms?: TermSlugs
   /** Where an administrator decides, named in what a waiting client is told. */
   readonly approvalsUrl?: string
+  /** The site's taxonomies (tags, categories). Absent, the taxonomy tools are not offered. */
+  readonly taxonomies?: readonly TaxonomyDefinition[]
+  readonly taxonomyStoreFor?: (taxonomy: TaxonomyDefinition) => TaxonomyStore
+  /**
+   * Copies an image from a public https address into the library, through
+   * the host's outbound guard and media ingest. Absent, `media.import_url`
+   * is not offered.
+   */
+  readonly importImage?: (input: {
+    readonly url: string
+    readonly alt: string
+    readonly filename?: string
+    readonly credit?: MediaImportCredit
+    readonly actorId: string | null
+    /** Who asked, recorded in the file's provenance: `mcp:key "…"`. */
+    readonly agent: string
+  }) => Promise<MediaImportResult>
   readonly now?: () => number
 }
 
@@ -186,6 +219,15 @@ const PRESENTATION: Readonly<
       openWorldHint: false,
     },
   },
+  'content.write_translation': {
+    title: 'Write a translation',
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+  },
   'content.publish': {
     title: 'Publish an entry',
     annotations: {
@@ -221,6 +263,28 @@ const PRESENTATION: Readonly<
       openWorldHint: false,
     },
   },
+  'media.import_url': {
+    title: 'Import an image from a URL',
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  },
+  'taxonomy.list_terms': {
+    title: 'List tags or categories',
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  'taxonomy.create_term': {
+    title: 'Create a tag or category',
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
   'site.config_read': {
     title: 'Read site settings',
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -246,6 +310,43 @@ export function mcpServerInstructions(site: McpToolSite): string {
     'Page-builder zones (fields of kind "blocks") are written inside values, as an array of { "type": "<block type>", "data": { …block fields } } that replaces the whole zone. Rich-text fields take Portable Text.',
     `Every write waits for a human approval in ${APPROVALS_PLACE}: tell the user to approve it there, and do not resend a request that is still waiting — that would ask twice.`,
   ].join('\n')
+}
+
+/**
+ * The checks on an image address that need no network: https only, no
+ * credentials in it, no `localhost`, no literal private address. The rest —
+ * what the host name resolves to — is judged by the fetch itself.
+ */
+function assertImportableAddress(raw: string): void {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    throw invalid('This is not a valid address.', 'Pass the https address of the image file.')
+  }
+  if (parsed.protocol !== 'https:') {
+    throw invalid(
+      `Only https addresses are imported, not "${parsed.protocol}".`,
+      'Use the https address of the image file.',
+    )
+  }
+  if (parsed.username !== '' || parsed.password !== '') {
+    throw invalid(
+      'An image address may not carry a user name or password.',
+      'Use a public address of the image file.',
+    )
+  }
+  const host = parsed.hostname.replace(/^\[|\]$/gu, '')
+  if (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    (isIP(host) !== 0 && isPrivateAddress(host))
+  ) {
+    throw invalid(
+      'This address points inside a private network.',
+      'Only public addresses are imported.',
+    )
+  }
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -436,6 +537,7 @@ function contentServiceLikeOf(
           values: split.values,
           ...(split.blocks === undefined ? {} : { blocks: split.blocks }),
           locale: input.locale ?? options.defaultLocale,
+          ...(input.translationOf === undefined ? {} : { translationOf: input.translationOf }),
           createdBy: context.actor.id,
           provenance: 'generated',
           provenanceDetail: provenanceDetail(),
@@ -630,6 +732,7 @@ function actionsFor(
   name: string,
 ): readonly ('read' | 'create' | 'update' | 'publish' | 'delete')[] {
   if (name === 'content.write_draft') return ['create', 'update']
+  if (name === 'content.write_translation') return ['create']
   if (name === 'content.publish') return ['publish']
   if (name === 'content.delete') return ['delete']
   return name.startsWith('content.') ? ['read'] : []
@@ -674,6 +777,88 @@ export function createMcpToolSource(
       })
     }
     return collection
+  }
+
+  /**
+   * The entry a new translation must point at, after checking the slot is
+   * free. Contract A's family is flat — every translation points at the
+   * root, which itself points at nothing (ADR-0014) — so translating a
+   * translation (the French version of an English story) attaches the new
+   * entry to the root, never to the French one: a chain would split the
+   * family and give each language a different hreflang set.
+   *
+   * Run before a person is asked, and again when the approved call runs:
+   * the store keeps no (family, locale) uniqueness of its own, so a second
+   * translation in the same language approved meanwhile must not slip in.
+   */
+  async function translationRoot(
+    actor: Actor,
+    collection: string,
+    sourceId: string,
+    locale: string,
+  ): Promise<string> {
+    const family = await options.contentService.translations({ actor }, collection, sourceId)
+    const source = family.find((entry) => entry.id === sourceId)
+    if (source === undefined) {
+      throw new CogentaError({
+        code: 'CONTENT_NOT_FOUND',
+        message: `No "${collection}" entry with id "${sourceId}" to translate.`,
+        hint: 'content.list or content.search give the ids of existing entries.',
+      })
+    }
+    const taken = family.find((entry) => entry.locale === locale)
+    if (taken !== undefined) {
+      throw invalid(
+        taken.id === sourceId
+          ? `Entry "${sourceId}" is itself written in "${locale}".`
+          : `Entry "${sourceId}" already has a "${locale}" version (${taken.id}).`,
+        taken.id === sourceId
+          ? 'Pick another site language for the translation.'
+          : 'Update that entry with content.write_draft instead of creating a second one.',
+        { existing: taken.id },
+      )
+    }
+    return source.translationOf ?? source.id
+  }
+
+  function taxonomyOf(name: unknown): TaxonomyDefinition {
+    const found = (options.taxonomies ?? []).find((taxonomy) => taxonomy.name === name)
+    if (found === undefined) {
+      const known = (options.taxonomies ?? []).map((taxonomy) => taxonomy.name)
+      throw invalid(
+        `This site has no taxonomy named "${String(name)}".`,
+        known.length === 0
+          ? 'This site declares no taxonomy.'
+          : `Taxonomies of this site: ${known.join(', ')}.`,
+        { taxonomies: known },
+      )
+    }
+    return found
+  }
+
+  /** The terms a caller may read or create, through the same gate as the REST taxonomy routes. */
+  function taxonomyServiceFor(actor: Actor): TaxonomyServiceLike | undefined {
+    const storeFor = options.taxonomyStoreFor
+    if (storeFor === undefined || (options.taxonomies ?? []).length === 0) return undefined
+    const context = { actor }
+    return {
+      async list(name) {
+        const taxonomy = taxonomyOf(name)
+        options.permissions.assertTerm('read', taxonomy, context)
+        return storeFor(taxonomy).list()
+      },
+      async create(name, input) {
+        const taxonomy = taxonomyOf(name)
+        options.permissions.assertTerm('create', taxonomy, context)
+        return storeFor(taxonomy).create(input)
+      },
+    }
+  }
+
+  function canUseTaxonomies(actor: Actor, action: 'read' | 'create'): boolean {
+    return (options.taxonomies ?? []).some(
+      (taxonomy) => options.permissions.canTerm(action, taxonomy, { actor }).allowed,
+    )
   }
 
   function assertAllowed(
@@ -753,6 +938,43 @@ export function createMcpToolSource(
           )
         }
       }
+      return
+    }
+    if (tool === 'content.write_translation') {
+      const collection = collectionOf(input['collection'])
+      const raw = isRecord(input['values']) ? input['values'] : {}
+      const split = splitBlockZones(collection, raw)
+      assertValuesValid(collection, split.values)
+      if (split.blocks !== undefined) assertBlocksValid(collection, split.blocks, options.blocks)
+      assertAllowed('create', collection, actor)
+      const locale = input['locale']
+      if (typeof locale !== 'string' || !options.site.locales.includes(locale)) {
+        throw invalid(
+          `"${String(locale)}" is not a language of this site.`,
+          `Use one of: ${options.site.locales.join(', ')}.`,
+          { locales: options.site.locales },
+        )
+      }
+      const sourceId = input['sourceId']
+      if (typeof sourceId !== 'string') return
+      await translationRoot(actor, collection.name, sourceId, locale)
+      return
+    }
+    if (tool === 'media.import_url' && typeof input['url'] === 'string') {
+      // Only what the text of the address says, before a person is asked: no
+      // DNS lookup here, which a caller could aim at a slow name server to
+      // tie up the server, or use to learn which internal names exist. The
+      // fetch, after approval, resolves and judges every hop.
+      assertImportableAddress(input['url'])
+      return
+    }
+    if (tool === 'taxonomy.list_terms' || tool === 'taxonomy.create_term') {
+      const taxonomy = taxonomyOf(input['taxonomy'])
+      options.permissions.assertTerm(
+        tool === 'taxonomy.create_term' ? 'create' : 'read',
+        taxonomy,
+        context,
+      )
       return
     }
     if (tool === 'media.write' && typeof input['id'] === 'string') {
@@ -880,7 +1102,23 @@ export function createMcpToolSource(
                 hint: 'Send it again: it will be checked against the current roles.',
               })
             }
-            if (name.startsWith('content.')) await options.refreshPermissions?.()
+            if (name.startsWith('content.') || name.startsWith('taxonomy.')) {
+              await options.refreshPermissions?.()
+            }
+            if (
+              name === 'content.write_translation' &&
+              typeof toolInput['collection'] === 'string' &&
+              typeof toolInput['sourceId'] === 'string' &&
+              typeof toolInput['locale'] === 'string'
+            ) {
+              const root = await translationRoot(
+                current.actor,
+                toolInput['collection'],
+                toolInput['sourceId'],
+                toolInput['locale'],
+              )
+              return tool.execute({ ...toolInput, sourceId: root }, toolContext)
+            }
             return tool.execute(toolInput, toolContext)
           },
         }
@@ -942,6 +1180,7 @@ export function createMcpToolSource(
       createContentListTool(browse),
       createContentSchemaTool(schema),
       createContentWriteDraftTool(content),
+      createContentWriteTranslationTool(content),
       createContentPublishTool(content),
       createContentDeleteTool(content),
     ]
@@ -953,6 +1192,22 @@ export function createMcpToolSource(
     }
     if (authenticated && canAccessMedia(actor, 'media.write')) {
       definitions.push(createMediaWriteTool(options.mediaStore))
+      const importImage = options.importImage
+      if (importImage !== undefined) {
+        definitions.push(
+          createMediaImportUrlTool({
+            importImage: (input) =>
+              importImage({ ...input, actorId: actor.id, agent: `mcp:${identity.label}` }),
+          }),
+        )
+      }
+    }
+    const taxonomyService = taxonomyServiceFor(actor)
+    if (taxonomyService !== undefined && canUseTaxonomies(actor, 'read')) {
+      definitions.push(createTaxonomyListTermsTool(taxonomyService))
+      if (canUseTaxonomies(actor, 'create')) {
+        definitions.push(createTaxonomyCreateTermTool(taxonomyService))
+      }
     }
     if (authenticated) definitions.push(createSiteConfigReadTool())
 

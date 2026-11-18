@@ -30,7 +30,12 @@ export interface ContentServiceLike {
   create(
     context: ContentAccessContext,
     collection: string,
-    input: { readonly values: Readonly<Record<string, unknown>>; readonly locale?: string },
+    input: {
+      readonly values: Readonly<Record<string, unknown>>
+      readonly locale?: string
+      /** The entry this one translates — set only by `content.write_translation`. */
+      readonly translationOf?: string
+    },
     options: ContentReadOptions,
   ): Promise<Record<string, unknown>>
   update(
@@ -146,6 +151,54 @@ export function createContentWriteDraftTool(
         context,
         input.collection,
         { values: input.values, ...(input.locale === undefined ? {} : { locale: input.locale }) },
+        DEFAULT_READ_OPTIONS,
+      )
+    },
+  })
+}
+
+const WriteTranslationInputSchema = z.object({
+  collection: z.string(),
+  /** The entry being translated, in the site's language it was written in. */
+  sourceId: z.string().min(1),
+  locale: z.string().min(1),
+  values: z.record(z.string(), z.unknown()),
+})
+type WriteTranslationInput = z.infer<typeof WriteTranslationInputSchema>
+
+/**
+ * `content.write_translation` — creates the draft of an entry in another
+ * language, linked to the entry it translates (contract A's
+ * `translationOf`), so the site serves both as one family: one hreflang set,
+ * one language switcher.
+ *
+ * A separate tool rather than a `translationOf` field on
+ * `content.write_draft`, because contract C freezes the signature of a tool
+ * already shipped (`docs/04-contrats.md`): a new tool is a minor, additive
+ * change; a new field on an old one is not.
+ *
+ * Not reversible for the same reason `content.write_draft` is not: undoing a
+ * create is a deletion, which a human approves (R6).
+ */
+export function createContentWriteTranslationTool(
+  service: ContentServiceLike,
+): ToolDefinition<WriteTranslationInput, Record<string, unknown>> {
+  return defineTool({
+    name: 'content.write_translation',
+    version: '1.0.0',
+    description:
+      'Create the draft of an existing entry in another language, linked to it as its translation; never publishes. `sourceId` is the entry being translated, `locale` one of the site languages it does not exist in yet, `values` the translated field values (same keys as content.write_draft — call content.schema first). Publish it afterwards with content.publish.',
+    input: WriteTranslationInputSchema,
+    output: EntrySchema,
+    permissions: ['content.write_draft'],
+    sideEffects: true,
+    reversible: false,
+    cost: 'low',
+    async execute(input, ctx) {
+      return service.create(
+        accessContextOf(ctx.actor),
+        input.collection,
+        { values: input.values, locale: input.locale, translationOf: input.sourceId },
         DEFAULT_READ_OPTIONS,
       )
     },

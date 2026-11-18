@@ -41,6 +41,7 @@ export const KNOWN_AUDIT_ACTIONS: readonly string[] = [
   'apikey.rotate',
   'apikey.revoke',
   'apikey.recover',
+  'apikey.update',
   'apikey.purge',
   'site_setting.update',
   'admin_theme.update',

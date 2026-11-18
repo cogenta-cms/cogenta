@@ -776,6 +776,11 @@ export function ApiKeysRoute(): JSX.Element {
               </Select>
             )}
           </Field>
+          {newAutonomy === 'autonomous' && newScope.has('admin') && (
+            <Notice tone="warning" live="off">
+              {t('apiKeys.autonomyAdminWarning')}
+            </Notice>
+          )}
         </form>
       </Modal>
 
@@ -859,6 +864,11 @@ export function ApiKeysRoute(): JSX.Element {
               </Select>
             )}
           </Field>
+          {editAutonomy === 'autonomous' && editScope.has('admin') && (
+            <Notice tone="warning" live="off">
+              {t('apiKeys.autonomyAdminWarning')}
+            </Notice>
+          )}
         </form>
       </Modal>
 

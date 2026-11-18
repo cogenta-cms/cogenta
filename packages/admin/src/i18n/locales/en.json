@@ -1836,6 +1836,7 @@
       "apikey.rotate": "API key renewed",
       "apikey.purge": "API key removed from the list",
       "apikey.recover": "API key recovered",
+      "apikey.update": "API key changed",
       "audit.prune": "Audit log purged",
       "content.replace": "Find and replace applied",
       "content.visibility": "Content visibility changed",

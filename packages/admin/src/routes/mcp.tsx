@@ -646,6 +646,11 @@ export function McpRoute(): JSX.Element {
                   </Select>
                 )}
               </Field>
+              {newAutonomy === 'autonomous' && newScope.has('admin') && (
+                <Notice tone="warning" live="off">
+                  {t('apiKeys.autonomyAdminWarning')}
+                </Notice>
+              )}
             </>
           )}
           <Field

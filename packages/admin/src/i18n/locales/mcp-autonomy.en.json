@@ -17,6 +17,7 @@
     "autonomyAutonomous": "Autonomous (reversible actions run without approval; the others always wait)",
     "autonomyManualShort": "Manual",
     "autonomyAutonomousShort": "Autonomous",
-    "autonomyAutonomousWarning": "With an autonomous key the assistant can publish without review. Every action is journalled and can be undone from the audit log; a deletion always waits for your approval."
+    "autonomyAutonomousWarning": "With an autonomous key the assistant can publish without review. Every action is journalled and can be undone from the audit log; a deletion always waits for your approval.",
+    "autonomyAdminWarning": "A key that is autonomous and holds the admin role can also read the visitors' comments and the 404 log, which anyone can fill with text, and publish without review. Use a separate key, without the admin role, for publishing."
   }
 }

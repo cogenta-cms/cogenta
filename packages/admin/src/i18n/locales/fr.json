@@ -1836,6 +1836,7 @@
       "apikey.rotate": "Clé API renouvelée",
       "apikey.purge": "Clé API supprimée de la liste",
       "apikey.recover": "Clé API récupérée",
+      "apikey.update": "Clé API modifiée",
       "audit.prune": "Journal d'audit purgé",
       "content.replace": "Rechercher et remplacer appliqué",
       "content.visibility": "Visibilité d'un contenu modifiée",

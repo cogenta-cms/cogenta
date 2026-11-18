@@ -7,7 +7,7 @@
     "autonomyAutonomous": "Autonomous (reversible actions run without approval; the others always wait)",
     "autonomyManualShort": "Manual",
     "autonomyAutonomousShort": "Autonomous",
-    "autonomyAutonomousWarning": "With an autonomous key the assistant can publish without review. Every action is still journalled; a deletion always waits for your approval."
+    "autonomyAutonomousWarning": "With an autonomous key the assistant can publish without review. Every action is journalled and can be undone from the audit log; a deletion always waits for your approval."
   },
   "apiKeys": {
     "autonomyColumn": "Autonomy (MCP)",
@@ -17,6 +17,6 @@
     "autonomyAutonomous": "Autonomous (reversible actions run without approval; the others always wait)",
     "autonomyManualShort": "Manual",
     "autonomyAutonomousShort": "Autonomous",
-    "autonomyAutonomousWarning": "With an autonomous key the assistant can publish without review. Every action is still journalled; a deletion always waits for your approval."
+    "autonomyAutonomousWarning": "With an autonomous key the assistant can publish without review. Every action is journalled and can be undone from the audit log; a deletion always waits for your approval."
   }
 }

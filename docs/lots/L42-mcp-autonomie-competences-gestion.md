@@ -28,6 +28,21 @@ Tout est dans Cogenta (aucun code propre à un site), puis le site est mis à jo
   (suppression du fichier importé, seulement s'il est encore inutilisé). Ce qui ne peut pas
   être défait proprement reste non réversible, et le dit.
 - Toute action autonome est journalisée et visible dans l'Historique (audit `origin: mcp`).
+- **Annuler depuis le journal.** `GET /api/mcp/actions/{auditId}` (annulable, déjà annulée,
+  impossible) et `POST /api/mcp/actions/{auditId}/revert` (`packages/cli/src/commands/mcp-undo.ts`) :
+  session d'**administrateur** uniquement — une clé d'API est refusée, quel que soit son rôle,
+  pour qu'un agent ne défasse ni ne refasse rien par lui-même. L'annulation passe par le
+  `revert` de l'outil avec l'identité de l'administrateur (les permissions de l'hôte
+  s'appliquent) et le reçu gardé dans l'entrée d'audit (la sortie de l'outil ; allégée à ses
+  champs scalaires et à `undo` quand l'entrée dépasserait la borne de 64 Kio du journal,
+  `mcp-receipt.ts`). Elle s'inscrit comme **sa propre entrée**
+  `agent.tool.<outil>.revert` (`revertOf: <auditId>`) ; une seconde annulation de la même
+  entrée est refusée (`RECEIPT_ALREADY_REVERTED`, 409), un refus de l'outil
+  (`TOOL_REVERT_REFUSED`, 409 : contenu modifié depuis) est renvoyé tel quel avec son
+  indice et inscrit avec `ok: false` sans compter comme annulation. Écran : bouton
+  « Annuler cette action » (avec confirmation dans la page) dans le détail d'une entrée du
+  journal d'audit. Limite : le verrou « déjà annulée » est un verrou de processus plus la
+  lecture du journal, pas une garantie entre plusieurs réplicas.
 
 ## 2. Les compétences du site par le MCP
 

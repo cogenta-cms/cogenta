@@ -77,6 +77,7 @@ import {
   type TaxonomyStore,
   type TermSlugs,
 } from '@cogenta/schema'
+import { boundedMcpDiff } from './mcp-receipt.js'
 
 /**
  * The tools an MCP client gets, for one caller, built the same way for both
@@ -937,6 +938,8 @@ function assertRedirectPath(value: unknown, field: 'from' | 'to'): void {
 
 export type McpToolSourceWithRevert = (() => Promise<readonly McpTool[]>) & {
   revert(toolName: string, receipt: unknown, signal?: AbortSignal): Promise<void>
+  /** Whether `toolName` can be undone by the caller `resolveIdentity` names, on this site's wiring. */
+  canRevert(toolName: string): Promise<boolean>
 }
 
 export function createMcpToolSource(
@@ -1479,7 +1482,7 @@ export function createMcpToolSource(
                 return options.auditLog.record({
                   ...record,
                   ...(entryId === undefined ? {} : { entryId }),
-                  diff: {
+                  diff: boundedMcpDiff({
                     ...record.diff,
                     origin: 'mcp',
                     // The key's mode for this call; `autonomy` above is the level
@@ -1487,7 +1490,7 @@ export function createMcpToolSource(
                     autonomyMode: autonomous ? 'autonomous' : 'manual',
                     transport: options.transport,
                     client: identity.label,
-                  },
+                  }),
                 })
               },
             },
@@ -1590,8 +1593,8 @@ export function createMcpToolSource(
    * as whoever `resolveIdentity` names now (an administrator, in practice),
    * through the same service and permission checks as any other call, and
    * the tool itself refuses (`TOOL_REVERT_REFUSED`) rather than guess when
-   * what it would undo has changed since (R6). Nothing in the admin calls
-   * this yet: it is the seam such a screen would use.
+   * what it would undo has changed since (R6). `POST /api/mcp/actions/{id}/revert`
+   * (`mcp-undo.ts`) is what calls it.
    */
   async function revert(
     toolName: string,
@@ -1611,5 +1614,11 @@ export function createMcpToolSource(
     await tool.revert(receipt, { signal })
   }
 
-  return Object.assign(source, { revert })
+  async function canRevert(toolName: string): Promise<boolean> {
+    const identity = await resolveIdentity()
+    const tool = (await manifestFor(identity)).find((candidate) => candidate.spec.name === toolName)
+    return tool?.revert !== undefined
+  }
+
+  return Object.assign(source, { revert, canRevert })
 }

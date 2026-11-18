@@ -235,6 +235,12 @@ describe('classifyAuditActor', () => {
   it('reads human from everything else', () => {
     expect(classifyAuditActor({ actorId: 'user-1', action: 'content.update' })).toBe('human')
   })
+
+  it('reads an undo of an agent action, recorded by a signed-in person, as human', () => {
+    expect(
+      classifyAuditActor({ actorId: 'user-1', action: 'agent.tool.content.publish.revert' }),
+    ).toBe('human')
+  })
 })
 
 describe('AuditLog — actorKind and date-range filters (fiche 21 task 2/4)', () => {
@@ -245,8 +251,16 @@ describe('AuditLog — actorKind and date-range filters (fiche 21 task 2/4)', ()
     await audit.record({ actorId: null, actorRoles: [], action: 'system.migrate' })
     await audit.record({ actorId: 'apikey:abc', actorRoles: ['editor'], action: 'content.create' })
     await audit.record({ actorId: 'user-1', actorRoles: [], action: 'agent.tool.content.publish' })
+    await audit.record({
+      actorId: 'user-2',
+      actorRoles: ['admin'],
+      action: 'agent.tool.content.publish.revert',
+    })
 
-    expect((await audit.list({ actorKind: 'human' })).length).toBe(1)
+    expect((await audit.list({ actorKind: 'human' })).map((entry) => entry.action).sort()).toEqual([
+      'agent.tool.content.publish.revert',
+      'content.update',
+    ])
     expect((await audit.list({ actorKind: 'system' })).length).toBe(1)
     expect((await audit.list({ actorKind: 'api_key' })).length).toBe(1)
     expect((await audit.list({ actorKind: 'agent' })).length).toBe(1)

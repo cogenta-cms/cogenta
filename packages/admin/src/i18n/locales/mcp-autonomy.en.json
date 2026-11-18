@@ -1,0 +1,22 @@
+{
+  "mcp": {
+    "autonomyColumn": "Autonomy",
+    "autonomyLabel": "Assistant autonomy",
+    "autonomyHint": "What an AI assistant connected with this key may do without your approval. You can change it later from \"API keys\".",
+    "autonomyManual": "Manual approval (every write waits for your approval)",
+    "autonomyAutonomous": "Autonomous (reversible actions run without approval; the others always wait)",
+    "autonomyManualShort": "Manual",
+    "autonomyAutonomousShort": "Autonomous",
+    "autonomyAutonomousWarning": "With an autonomous key the assistant can publish without review. Every action is still journalled; a deletion always waits for your approval."
+  },
+  "apiKeys": {
+    "autonomyColumn": "Autonomy (MCP)",
+    "autonomyLabel": "Autonomy of an assistant connected over MCP",
+    "autonomyHint": "No effect on the REST API: it only concerns AI assistants connected with this key.",
+    "autonomyManual": "Manual approval (every write waits for your approval)",
+    "autonomyAutonomous": "Autonomous (reversible actions run without approval; the others always wait)",
+    "autonomyManualShort": "Manual",
+    "autonomyAutonomousShort": "Autonomous",
+    "autonomyAutonomousWarning": "With an autonomous key the assistant can publish without review. Every action is still journalled; a deletion always waits for your approval."
+  }
+}

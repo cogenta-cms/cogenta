@@ -259,7 +259,7 @@ export type {
 } from './taxonomy-store.js'
 export { createTaxonomyStore } from './taxonomy-store.js'
 export type { CountTaxonomyUsageOptions, TermUsage } from './taxonomy-usage.js'
-export { countTaxonomyUsage } from './taxonomy-usage.js'
+export { countTaxonomyUsage, countTermReferences } from './taxonomy-usage.js'
 export type { TermSlugResolver, TermSlugResolverOptions } from './term-slugs.js'
 export { createTermSlugResolver, DEFAULT_TERM_SLUG_TTL_MS, fixedTermSlugs } from './term-slugs.js'
 export type {

@@ -344,6 +344,8 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   TOOL_UNKNOWN: 404,
   TOOL_INPUT_INVALID: 400,
   TOOL_CALL_REJECTED: 403,
+  // The thing a revert would undo changed since the action, or is now in use (L42).
+  TOOL_REVERT_REFUSED: 409,
   PROVIDER_UNKNOWN: 503,
   PROVIDER_REQUEST_FAILED: 502,
   PROVIDER_RESPONSE_INVALID: 502,

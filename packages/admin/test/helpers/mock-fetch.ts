@@ -2584,6 +2584,7 @@ export function installMockFetch(
     lastUsedAt: string | null
     rateLimitPerMinute: number
     supersededBy: string | null
+    autonomy: 'manual' | 'autonomous'
   }[] = [
     {
       id: 'key-1',
@@ -2597,6 +2598,7 @@ export function installMockFetch(
       lastUsedAt: '2026-03-05T00:00:00.000Z',
       rateLimitPerMinute: 600,
       supersededBy: null,
+      autonomy: 'manual' as const,
     },
     // Fiche 62 task 2: revoked well outside `MIN_PURGE_AFTER_REVOKED_DAYS`
     // (30 days) of the real wall clock, so the "purge" screen tests do not
@@ -2614,6 +2616,7 @@ export function installMockFetch(
       lastUsedAt: null,
       rateLimitPerMinute: 600,
       supersededBy: null,
+      autonomy: 'manual' as const,
     },
   ]
 
@@ -3436,6 +3439,8 @@ export function installMockFetch(
             rateLimitPerMinute:
               typeof body.rateLimitPerMinute === 'number' ? body.rateLimitPerMinute : 600,
             supersededBy: null,
+            autonomy:
+              body.autonomy === 'autonomous' ? ('autonomous' as const) : ('manual' as const),
           }
           apiKeys.push(record)
           return json(201, {
@@ -3465,6 +3470,7 @@ export function installMockFetch(
             lastUsedAt: null,
             rateLimitPerMinute: found.rateLimitPerMinute,
             supersededBy: null,
+            autonomy: found.autonomy,
           }
           found.supersededBy = issued.id
           // Far in the future on purpose: this only has to outlive whatever
@@ -3509,6 +3515,9 @@ export function installMockFetch(
           }
           if (typeof body.name === 'string') found.name = body.name
           if (Array.isArray(body.scope)) found.scope = body.scope as readonly string[]
+          if (body.autonomy === 'manual' || body.autonomy === 'autonomous') {
+            found.autonomy = body.autonomy
+          }
           if (body.rateLimitPerMinute === null) found.rateLimitPerMinute = 600
           else if (typeof body.rateLimitPerMinute === 'number') {
             found.rateLimitPerMinute = body.rateLimitPerMinute
@@ -3589,6 +3598,7 @@ export function installMockFetch(
             lastUsedAt: null,
             rateLimitPerMinute: found.rateLimitPerMinute,
             supersededBy: null,
+            autonomy: found.autonomy,
           }
           found.supersededBy = issued.id
           apiKeys.push(issued)

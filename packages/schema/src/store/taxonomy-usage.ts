@@ -159,3 +159,58 @@ export async function countTaxonomyUsage(
   }
   return result
 }
+
+export interface CountTermReferencesOptions {
+  readonly db: DatabaseHandle
+  readonly taxonomy: TaxonomyDefinition
+  /** Every collection the site declares; only the ones referencing this taxonomy are queried. */
+  readonly collections: readonly CollectionDefinition[]
+  readonly termId: string
+}
+
+/**
+ * How many entries still reference one term, **whatever their state** —
+ * published, draft, archived or in the trash.
+ *
+ * `countTaxonomyUsage` answers a display question for one actor and so
+ * skips trashed entries and what the actor may not read. This answers a
+ * safety one: deleting a term cascades its join rows (and empties a
+ * single-valued column), which would silently unclassify an entry that is
+ * only in the trash and would come back unclassified when restored. A caller
+ * deciding whether a term can go must therefore count everything.
+ */
+export async function countTermReferences(options: CountTermReferencesOptions): Promise<number> {
+  const { db, taxonomy, collections, termId } = options
+  const dialect = db.dialect
+  const idColumn = identifier('id', dialect)
+  const cntAlias = identifier('cnt', dialect)
+  let total = 0
+
+  for (const collection of collections) {
+    const relevant = relationsOf(collection).filter(
+      (relation) => relation.kind === 'taxonomy' && relation.to === taxonomy.name,
+    )
+    const entries = identifier(entriesTable(collection.name), dialect)
+
+    for (const relation of relevant) {
+      if (relation.many) {
+        const join = identifier(relationTable(collection.name, relation.field), dialect)
+        const entryIdColumn = identifier('entry_id', dialect)
+        const found = await db.query<{ cnt: unknown }>(
+          sql`select count(distinct jt.${entryIdColumn}) as ${cntAlias}
+              from ${join} jt
+              join ${entries} e on e.${idColumn} = jt.${entryIdColumn}
+              where jt.${identifier('target_id', dialect)} = ${termId}`,
+        )
+        total += toNumber(found.rows[0]?.cnt)
+      } else {
+        const column = identifier(columnFor(relation.field), dialect)
+        const found = await db.query<{ cnt: unknown }>(
+          sql`select count(*) as ${cntAlias} from ${entries} where ${column} = ${termId}`,
+        )
+        total += toNumber(found.rows[0]?.cnt)
+      }
+    }
+  }
+  return total
+}

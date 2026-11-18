@@ -801,6 +801,39 @@ nouveau au moment d'écrire. Aucune signature d'outil existante
 n'est touchée : un ajout par le bas, mineur au même titre que `document.extract` en
 `tools@1.1`.
 
+**`tools@1.10` le 2026-11-18** (L42, autonomie réglable par clé MCP) : cinq outils
+d'écriture passent de `reversible: false` à `reversible: true`, **avec un vrai `revert`**
+(la règle du contrat l'autorise : « implémenter `revert` ou rester `reversible: false` »,
+R6). Aucun nom, aucune entrée, aucune permission ne change. Une clé d'API MCP en mode
+`autonomous` exécute sans approbation un outil réversible ; un outil non réversible attend
+toujours un humain, quel que soit le mode (`manual`, le défaut, fait attendre tout outil à
+effet de bord, comme avant).
+
+| Outil | Ce que fait `revert` | Il refuse (`TOOL_REVERT_REFUSED`, 409) quand |
+|---|---|---|
+| `content.write_draft` | Création : l'entrée va à la **corbeille** (restaurable). Mise à jour : la version de travail **remplacée** redevient courante, comme *nouvelle* version (l'historique reste en ajout seul). | l'entrée a été modifiée depuis (sa version de travail n'est plus celle que l'appel a produite), ou n'existe plus. N'est pas restauré : le libellé `provenance`, qui n'appartient pas à une version. |
+| `content.write_translation` | La traduction créée va à la corbeille ; la source n'est pas touchée. | la traduction a été modifiée depuis. |
+| `content.publish` | Jamais publiée avant : `unpublish` vers le statut d'avant (`draft`, `archived`, `scheduled` avec sa date). Déjà publiée avant : la version qui était publique redevient courante puis est republiée ; le brouillon en attente reste dans l'historique. | l'entrée a été modifiée ou republiée depuis, la version publique d'avant n'est plus conservée par l'historique de la collection, ou son statut d'avant est inconnu. N'est pas défait : la date de publication posée par une première publication, et le brouillon qu'une republication avait en attente (il reste dans l'historique). |
+| `taxonomy.create_term` | Supprime le terme, **seulement** s'il a été créé par cet appel (`created: true`) et qu'aucune entrée (corbeille et brouillons compris) ne le porte encore. | le terme existait déjà, est utilisé, ou a des termes enfants. |
+| `media.import_url` | Supprime le fichier importé et ses déclinaisons, **seulement** s'il a été importé depuis une adresse et qu'aucune entrée ne le référence (face de travail et face publiée, corbeille comprise ; un balayage incomplet compte comme « utilisé »). | le fichier est référencé, n'a pas été importé par cet outil, ou n'a pas pu être vérifié en entier. Non balayés : réglages du site, menus, avatars. |
+
+Pour qu'un `revert` n'ait besoin de rien d'autre que le reçu, la **sortie** de ces outils
+porte ce qu'il faut : une clé `undo` ajoutée à l'entrée sérialisée (`content.*` : le genre
+d'annulation, la version produite, la version remplacée ou l'état public d'avant) et une
+clé `taxonomy` à la sortie de `taxonomy.create_term`. Ce sont des ajouts à des sorties
+ouvertes ou lues par clé : un consommateur qui les ignore est inchangé.
+
+Un outil n'est réversible **que si son hôte fournit les opérations d'annulation**
+(`ContentServiceLike.restore`/`unpublish`, `TaxonomyServiceLike.usage`/`delete`,
+`MediaImportUrlToolOptions.removeImage`). Sans elles — c'est le cas du runtime d'agents
+interne (`agent-runtime.ts`) — l'outil reste `reversible: false` et attend un humain,
+comme avant : un agent interne ne gagne aucune autonomie par ce changement. `cogenta
+serve` les fournit tous ; `cogenta mcp` (stdio) ne fournit que ceux du contenu — il n'a ni
+pilote de stockage ni comptage d'usage des termes, donc `taxonomy.create_term` y reste
+non réversible. `content.delete` reste non réversible (le
+contrat ne dit pas à quel moment « mettre à la corbeille » devient une annulation), de
+même que `media.write` et `media.store_generated_image`.
+
 `theme.write_sandbox` (ajoutée en `tools@1.6`, fiche 73 tâche 7) autorise un agent à
 écrire un fichier de code de thème réel — mais seulement dans un bac à sable isolé
 (`<projectRoot>/.cogenta/theme-sandbox/<id>/`), jamais dans `themes/`. Aucun outil ne

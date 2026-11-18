@@ -1,4 +1,4 @@
-import { ingestMediaUpload, type MediaImageProcessor } from '@cogenta/api'
+import { ingestMediaUpload, type MediaImageProcessor, removeMediaAsset } from '@cogenta/api'
 import {
   CogentaError,
   type FetchPublicOptions,
@@ -9,6 +9,7 @@ import {
   readBoundedBody,
   type StorageDriver,
 } from '@cogenta/core'
+import { type CollectionDefinition, type ContentStore, findMediaUsage } from '@cogenta/schema'
 
 /**
  * The host side of `media.import_url`: fetch one image from a public https
@@ -216,5 +217,80 @@ export function createUrlImageImporter(
       width: asset.width,
       height: asset.height,
     }
+  }
+}
+
+export interface UrlImageRemoverOptions {
+  readonly mediaStore: MediaStore
+  readonly storage: StorageDriver
+  readonly images?: MediaImageProcessor
+  /** The site's content, scanned for references before anything is deleted. */
+  readonly collections: readonly CollectionDefinition[]
+  readonly storeFor: (collection: CollectionDefinition) => ContentStore
+}
+
+/**
+ * The host side of undoing `media.import_url`: delete the imported file, but
+ * only if the site's content no longer references it. A deleted file cannot
+ * come back, so unlike the trash this undo is guarded, not merely reported.
+ *
+ * "References" means: the working *and* the published face of every entry,
+ * the trash included (a restored entry would otherwise point at nothing),
+ * and a scan that could not cover everything counts as "in use". Not
+ * scanned: references from outside content (site settings such as a logo,
+ * menus, a user's avatar) — a file nobody asked to keep, imported moments
+ * ago, is unlikely to be there, and the plain delete route does not look at
+ * all. Only an asset that records where it was imported from is accepted, so
+ * this undo cannot be aimed at a file a person uploaded.
+ */
+export function createUrlImageRemover(
+  options: UrlImageRemoverOptions,
+): (input: { readonly id: string }) => Promise<void> {
+  const everything = (
+    collection: CollectionDefinition,
+    state: 'working' | 'published',
+  ): ContentStore => {
+    const store = options.storeFor(collection)
+    return {
+      ...store,
+      list: (listOptions = {}) => store.list({ ...listOptions, state, trashed: 'include' }),
+    }
+  }
+  return async ({ id }) => {
+    const asset = await options.mediaStore.get(id)
+    // Already gone: the state this undo aims for.
+    if (asset === null) return
+    if (typeof asset.provenanceDetail?.['importedFrom'] !== 'string') {
+      throw new CogentaError({
+        code: 'TOOL_REVERT_REFUSED',
+        message: `"${asset.filename}" was not imported from an address, so this undo does not delete it.`,
+        hint: 'Delete it from the media library if it is really unwanted.',
+        details: { id },
+      })
+    }
+    for (const state of ['working', 'published'] as const) {
+      const usage = await findMediaUsage(id, {
+        collections: options.collections,
+        storeFor: (collection) => everything(collection, state),
+      })
+      if (usage.matches.length > 0 || usage.truncated) {
+        throw new CogentaError({
+          code: 'TOOL_REVERT_REFUSED',
+          message: usage.truncated
+            ? `"${asset.filename}" could not be checked against all the content, so it was not deleted.`
+            : `"${asset.filename}" is used by ${usage.matches.length} place(s) in the content; it was not deleted.`,
+          hint: 'Remove it from those entries first, or keep the file.',
+          details: { id, uses: usage.matches.length },
+        })
+      }
+    }
+    await removeMediaAsset(
+      {
+        store: options.mediaStore,
+        storage: options.storage,
+        ...(options.images === undefined ? {} : { images: options.images }),
+      },
+      id,
+    )
   }
 }

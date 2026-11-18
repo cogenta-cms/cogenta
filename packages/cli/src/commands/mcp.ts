@@ -440,7 +440,7 @@ export async function runMcp(options: McpOptions): Promise<number> {
     const server = createMcpServer({
       name: 'cogenta',
       version: '1.1.0',
-      instructions: mcpServerInstructions(site),
+      instructions: mcpServerInstructions(site, firstIdentity.autonomy),
       tools: tracked,
       prompts: createSkillPromptSource(skills, resolveIdentity),
       onInternalError: (error) => {

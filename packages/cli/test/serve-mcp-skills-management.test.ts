@@ -455,6 +455,7 @@ describe('site management over MCP', () => {
       status: 'approved',
       previousStatus: 'pending',
     })
+    expect(decided.approvedByHuman).toBe(true)
 
     const approved = await fetch(`${base}/api/comments?status=approved`, {
       headers: bearer(adminToken),
@@ -512,6 +513,8 @@ describe('site management over MCP', () => {
     })
     expect(done.reply.result, textOf(done.reply)).toMatchObject({ isError: false })
     expect(JSON.parse(textOf(done.reply))).toMatchObject({ from: '/old-welcome', to: '/welcome' })
+    // A key is manual by default: even a reversible write waits for a person.
+    expect(done.approvedByHuman).toBe(true)
 
     const followed = await fetch(`${base}/old-welcome`, { redirect: 'manual' })
     expect(followed.status).toBe(301)

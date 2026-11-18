@@ -220,7 +220,11 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
       -- id of the new key. expires_at is what actually ends this key's
       -- grace window — this column only makes that window visible as
       -- "superseded", rather than indistinguishable from an ordinary expiry.
-      superseded_by ${t64}
+      superseded_by ${t64},
+      -- 'manual' | 'autonomous' (L42). Nullable so a row written before the
+      -- column existed still parses: fromRow() reads null as 'manual', the
+      -- behaviour every key had until then.
+      autonomy ${t64}
     )`)
 
   // Both columns above are additive for a database that already had this
@@ -230,6 +234,7 @@ export async function ensureAuthTables(db: DatabaseHandle): Promise<void> {
   // catch-and-ignore) — the failure this swallows is exactly "already there".
   await addColumnIfMissing(db, apiKeys, 'rate_limit_per_minute', sql`integer`)
   await addColumnIfMissing(db, apiKeys, 'superseded_by', sql`${t64}`)
+  await addColumnIfMissing(db, apiKeys, 'autonomy', sql`${t64}`)
 
   await db.query(sql`
     create table if not exists ${apiKeyUsage} (

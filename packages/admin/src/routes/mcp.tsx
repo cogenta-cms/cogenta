@@ -5,6 +5,7 @@ import type { AgentSummary } from '../api/agents-client.js'
 import { listAgents } from '../api/agents-client.js'
 import {
   type AdminApiKey,
+  type ApiKeyAutonomy,
   type CreatedApiKey,
   createApiKey,
   listApiKeyRoles,
@@ -238,6 +239,7 @@ export function McpRoute(): JSX.Element {
   const [newName, setNewName] = useState('')
   const [newScope, setNewScope] = useState<ReadonlySet<string>>(() => new Set(['editor']))
   const [newExpiry, setNewExpiry] = useState<ExpiryChoice>('90d')
+  const [newAutonomy, setNewAutonomy] = useState<ApiKeyAutonomy>('manual')
   const [createError, setCreateError] = useState<string | null>(null)
   const [created, setCreated] = useState<CreatedApiKey | null>(null)
   const [createdPurpose, setCreatedPurpose] = useState<KeyPurpose>('mcp')
@@ -321,6 +323,8 @@ export function McpRoute(): JSX.Element {
         name: newName,
         scope: purpose === 'chat' ? ['admin'] : [...newScope],
         ...expiryFieldsFor(newExpiry),
+        // Only an MCP key has an autonomy to choose: a chat key never goes through MCP.
+        ...(purpose === 'mcp' ? { autonomy: newAutonomy } : {}),
       })
       setCreated(result)
       setCreatedPurpose(purpose)
@@ -328,6 +332,7 @@ export function McpRoute(): JSX.Element {
       setNewName('')
       setNewScope(new Set(['editor']))
       setNewExpiry('90d')
+      setNewAutonomy('manual')
       setPurpose('mcp')
       await load()
     } catch (caught) {
@@ -498,6 +503,7 @@ export function McpRoute(): JSX.Element {
                       <TableHeader>{t('mcp.nameColumn')}</TableHeader>
                       <TableHeader>{t('mcp.prefixColumn')}</TableHeader>
                       <TableHeader>{t('mcp.scopeColumn')}</TableHeader>
+                      <TableHeader>{t('mcp.autonomyColumn')}</TableHeader>
                       <TableHeader>{t('mcp.lastUsedColumn')}</TableHeader>
                       <TableHeader>{t('mcp.statusColumn')}</TableHeader>
                       <TableHeader>{t('mcp.actionsColumn')}</TableHeader>
@@ -512,6 +518,11 @@ export function McpRoute(): JSX.Element {
                         </TableCell>
                         <TableCell label={t('mcp.scopeColumn')}>
                           {key.scope.map((role) => roleLabel(t, role)).join(', ')}
+                        </TableCell>
+                        <TableCell label={t('mcp.autonomyColumn')}>
+                          {key.autonomy === 'autonomous'
+                            ? t('mcp.autonomyAutonomousShort')
+                            : t('mcp.autonomyManualShort')}
                         </TableCell>
                         <TableCell label={t('mcp.lastUsedColumn')}>
                           {key.lastUsedAt === null ? t('mcp.never') : formatWhen(key.lastUsedAt)}
@@ -541,7 +552,7 @@ export function McpRoute(): JSX.Element {
                       </TableRow>
                     ))}
                     {shownKeys.length === 0 && (
-                      <TableEmpty colSpan={6}>{t('mcp.empty')}</TableEmpty>
+                      <TableEmpty colSpan={7}>{t('mcp.empty')}</TableEmpty>
                     )}
                   </TableBody>
                 </Table>
@@ -616,6 +627,25 @@ export function McpRoute(): JSX.Element {
                 }
               />
               <RoleGrantsSummary roles={[...newScope]} schema={schema} locale={i18n.language} />
+              <Field
+                label={t('mcp.autonomyLabel')}
+                description={
+                  newAutonomy === 'autonomous'
+                    ? t('mcp.autonomyAutonomousWarning')
+                    : t('mcp.autonomyHint')
+                }
+              >
+                {(control) => (
+                  <Select
+                    {...control}
+                    value={newAutonomy}
+                    onChange={(event) => setNewAutonomy(event.target.value as ApiKeyAutonomy)}
+                  >
+                    <option value="manual">{t('mcp.autonomyManual')}</option>
+                    <option value="autonomous">{t('mcp.autonomyAutonomous')}</option>
+                  </Select>
+                )}
+              </Field>
             </>
           )}
           <Field

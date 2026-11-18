@@ -141,6 +141,13 @@ async function auditRows(base: string, token: string, action: string): Promise<A
   return ((await response.json()) as { data: AuditRow[] }).data
 }
 
+/** The entries that say how an undo ended (`ok`), not the one written before it ran (`phase: 'started'`). */
+async function outcomes(base: string, token: string, action: string): Promise<AuditRow[]> {
+  return (await auditRows(base, token, action)).filter(
+    (row) => typeof row.diff?.['ok'] === 'boolean',
+  )
+}
+
 async function firstRow(base: string, token: string, action: string): Promise<AuditRow> {
   const row = (await auditRows(base, token, action))[0]
   if (row === undefined) throw new Error(`no audit entry for ${action}`)
@@ -221,8 +228,10 @@ describe('undoing what an autonomous MCP key did', () => {
     expect((await page(s.base, 'agents-ship')).status).toBe(404)
 
     // The undo is its own entry, linked to the call and written by the person.
-    const undone = await auditRows(s.base, s.admin, 'agent.tool.content.publish.revert')
+    const undone = await outcomes(s.base, s.admin, 'agent.tool.content.publish.revert')
     expect(undone).toHaveLength(1)
+    // ...and was written before it ran: one intent entry, then one outcome.
+    expect(await auditRows(s.base, s.admin, 'agent.tool.content.publish.revert')).toHaveLength(2)
     expect(undone[0]?.diff).toMatchObject({ revertOf: publishRow.id, ok: true })
     expect(undone[0]?.actorId).not.toMatch(/^apikey:/u)
 
@@ -233,7 +242,7 @@ describe('undoing what an autonomous MCP key did', () => {
       'RECEIPT_ALREADY_REVERTED',
     )
     expect(await stateOf(s.base, s.admin, publishRow.id)).toMatchObject({ state: 'reverted' })
-    expect(await auditRows(s.base, s.admin, 'agent.tool.content.publish.revert')).toHaveLength(1)
+    expect(await outcomes(s.base, s.admin, 'agent.tool.content.publish.revert')).toHaveLength(1)
   }, 120_000)
 
   it('refuses an API key, whatever its scope, so an agent cannot undo through itself', async () => {
@@ -297,7 +306,7 @@ describe('undoing what an autonomous MCP key did', () => {
     expect(body.error.hint).toBeTruthy()
 
     // The refusal is journalled, does not count as an undo, and the edit is intact.
-    const attempts = await auditRows(s.base, s.admin, 'agent.tool.content.write_draft.revert')
+    const attempts = await outcomes(s.base, s.admin, 'agent.tool.content.write_draft.revert')
     expect(attempts).toHaveLength(1)
     expect(attempts[0]?.diff).toMatchObject({ ok: false, revertOf: row.id })
     expect(await stateOf(s.base, s.admin, row.id)).toMatchObject({ state: 'available' })

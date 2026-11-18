@@ -29,11 +29,18 @@ import { createMcpToolSource, type McpIdentity, type McpSiteToolsOptions } from 
  *   the host's rules still apply, and the tool itself refuses
  *   (`TOOL_REVERT_REFUSED`, 409) rather than guess when what it would undo was
  *   edited since.
- * - **Journalled, once.** The undo is its own audit entry
- *   (`agent.tool.<tool>.revert`, `revertOf` naming the original). An entry
- *   already undone is refused (`RECEIPT_ALREADY_REVERTED`), so a double click or
- *   a second administrator cannot undo twice. A refused undo is journalled too,
- *   with `ok: false`, and does not count as undone.
+ * - **Journalled, once, intent first.** The undo is its own audit entry
+ *   (`agent.tool.<tool>.revert`, `revertOf` naming the original). The journal
+ *   is written *before* the undo runs (`phase: 'started'`): if it cannot be
+ *   written, nothing is undone (`AUDIT_WRITE_FAILED`, 503) — an undo nobody
+ *   could trace is worse than an undo that did not happen. The outcome follows
+ *   as a second entry (`ok: true` / `ok: false`); an entry already undone is
+ *   refused (`RECEIPT_ALREADY_REVERTED`), so a double click or a second
+ *   administrator cannot undo twice. A refused undo is journalled with
+ *   `ok: false` and does not count as undone. If the outcome entry itself
+ *   cannot be written after a successful undo, the response is an error that
+ *   says so (the undo ran; do not repeat it) and this process remembers the
+ *   entry as undone.
  */
 
 type Actor = AccessContext['actor']
@@ -133,6 +140,9 @@ export function createMcpUndoRouter(options: McpUndoOptions): McpUndoRouter {
   // One undo of one entry at a time in this process: the "already undone"
   // check reads the journal, so two requests racing would both pass it.
   const inFlight = new Set<string>()
+  // Entries undone whose outcome could not be written to the journal: the
+  // journal cannot say so, this process can, until it restarts.
+  const undoneUnjournalled = new Map<string, string>()
 
   function sourceFor(administrator: Actor) {
     const identity: McpIdentity = {
@@ -181,6 +191,18 @@ export function createMcpUndoRouter(options: McpUndoOptions): McpUndoRouter {
     if (!isRecord(entry.diff['output'])) {
       return { tool, state: { state: 'unavailable', reason: 'no-receipt' } }
     }
+    const unjournalled = undoneUnjournalled.get(entry.id)
+    if (unjournalled !== undefined) {
+      return {
+        tool,
+        state: {
+          state: 'reverted',
+          revertedAt: new Date().toISOString(),
+          revertAuditId: unjournalled,
+          revertedBy: null,
+        },
+      }
+    }
     const done = await revertOf(entry, tool)
     if (done !== null) {
       return {
@@ -203,7 +225,10 @@ export function createMcpUndoRouter(options: McpUndoOptions): McpUndoRouter {
     entry: AuditEntry,
     tool: string,
     administrator: Actor,
-    outcome: { readonly ok: true } | { readonly ok: false; readonly error: string },
+    outcome:
+      | { readonly phase: 'started' }
+      | { readonly ok: true }
+      | { readonly ok: false; readonly error: string },
   ): Promise<AuditEntry | null> {
     try {
       return await auditLog.record({
@@ -215,8 +240,6 @@ export function createMcpUndoRouter(options: McpUndoOptions): McpUndoRouter {
         diff: { origin: 'mcp-undo', tool, revertOf: entry.id, ...outcome },
       })
     } catch (error) {
-      // The undo itself is done (or refused) either way; a failed write of its
-      // record must not turn that into an error the person would retry.
       logger.error('MCP undo audit write failed', { error: String(error), revertOf: entry.id })
       return null
     }
@@ -263,6 +286,17 @@ export function createMcpUndoRouter(options: McpUndoOptions): McpUndoRouter {
         })
       }
 
+      // Intent first: the undo changes the site, so the journal must be able
+      // to say who asked before it happens. No record, no undo.
+      const started = await recordUndo(entry, tool, administrator, { phase: 'started' })
+      if (started === null) {
+        throw new CogentaError({
+          code: 'AUDIT_WRITE_FAILED',
+          message: 'The audit log could not be written, so the action was not undone.',
+          hint: 'Nothing was changed. Check the database and the disk space of the site, then try again.',
+        })
+      }
+
       const receipt = entry.diff?.['output']
       try {
         await source.revert(tool, receipt)
@@ -279,8 +313,20 @@ export function createMcpUndoRouter(options: McpUndoOptions): McpUndoRouter {
         revertOf: entry.id,
         by: administrator.id,
       })
+      if (recorded === null) {
+        undoneUnjournalled.set(entry.id, started.id)
+        throw new CogentaError({
+          code: 'AUDIT_WRITE_FAILED',
+          message: 'The action was undone, but the audit log could not record the outcome.',
+          hint:
+            'Do not undo it again: it is done. The intent was journalled (entry ' +
+            started.id +
+            '). Check the database and the disk space of the site.',
+          details: { id: entry.id, startedAuditId: started.id },
+        })
+      }
       return jsonResponse(200, {
-        data: { id: entry.id, tool, state: 'reverted', revertAuditId: recorded?.id ?? null },
+        data: { id: entry.id, tool, state: 'reverted', revertAuditId: recorded.id },
       })
     } finally {
       inFlight.delete(id)

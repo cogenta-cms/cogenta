@@ -3036,7 +3036,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             },
             analytics: createAnalyticsSummaryPort(() => analyticsStore),
             notFoundLog,
-            redirects: { writer: redirects, isLivePath },
+            redirects: {
+              writer: redirects,
+              isLivePath,
+              exists: async (path) => (await redirects.resolve(path)) !== null,
+            },
           },
           // `media.import_url`: the same storage and image processor as
           // `POST /api/media`, behind the outbound guard.
@@ -4562,6 +4566,34 @@ async function recordImportAudit(
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 
+/** The scope and autonomy of a key as its public representation states them. */
+function apiKeyPowers(
+  key: { readonly [field: string]: unknown } | undefined,
+): { readonly scope: unknown; readonly autonomy: unknown } | undefined {
+  if (key === undefined) return undefined
+  return { scope: key['scope'], autonomy: key['autonomy'] }
+}
+
+/**
+ * What a `PATCH` of a key changed, `{ from, to }` for each of its scope, its
+ * autonomy, its name and its quota that differ — a key that may now publish
+ * without a person, or that gained the `admin` role, must leave a trace in the
+ * journal. Only fields that changed; never any key material.
+ */
+function apiKeyChanges(
+  before: { readonly [field: string]: unknown } | null,
+  after: { readonly [field: string]: unknown } | undefined,
+): Record<string, { readonly from: unknown; readonly to: unknown }> | undefined {
+  if (before === null || after === undefined) return undefined
+  const changes: Record<string, { readonly from: unknown; readonly to: unknown }> = {}
+  for (const field of ['autonomy', 'scope', 'name', 'rateLimitPerMinute']) {
+    if (JSON.stringify(before[field]) !== JSON.stringify(after[field])) {
+      changes[field] = { from: before[field], to: after[field] }
+    }
+  }
+  return changes
+}
+
 /**
  * Who minted, rotated, revoked, purged or recovered a machine credential, in
  * the same append-only log as every other account action (L13 task 8;
@@ -4579,6 +4611,8 @@ async function recordApiKeyAudit(
   pathname: string,
   response: RestResponse,
   logger: Logger,
+  /** The key as it was before a `PATCH`, read before the router changed it. */
+  before: { readonly [field: string]: unknown } | null = null,
 ): Promise<void> {
   if (response.status < 200 || response.status >= 300) return
 
@@ -4594,15 +4628,21 @@ async function recordApiKeyAudit(
         ? 'apikey.rotate'
         : method === 'POST' && target !== undefined && sub === 'recover'
           ? 'apikey.recover'
-          : method === 'DELETE' && target !== undefined && sub === 'purge'
-            ? 'apikey.purge'
-            : method === 'DELETE' && target !== undefined && sub === undefined
-              ? 'apikey.revoke'
-              : null
+          : method === 'PATCH' && target !== undefined && sub === undefined
+            ? 'apikey.update'
+            : method === 'DELETE' && target !== undefined && sub === 'purge'
+              ? 'apikey.purge'
+              : method === 'DELETE' && target !== undefined && sub === undefined
+                ? 'apikey.revoke'
+                : null
   if (action === null) return
 
   const body = response.body as {
-    readonly data?: { readonly id?: unknown; readonly issued?: { readonly id?: unknown } }
+    readonly data?: {
+      readonly id?: unknown
+      readonly issued?: { readonly id?: unknown }
+      readonly [field: string]: unknown
+    }
   } | null
   const subjectId =
     action === 'apikey.rotate'
@@ -4620,7 +4660,13 @@ async function recordApiKeyAudit(
       ? { rotatedFrom: target }
       : action === 'apikey.recover' && target !== undefined
         ? { recoveredFrom: target }
-        : undefined
+        : action === 'apikey.create'
+          ? // What the key can do — its roles and whether it acts without a
+            // person — is exactly what a reviewer of the journal needs.
+            apiKeyPowers(body?.data)
+          : action === 'apikey.update'
+            ? apiKeyChanges(before, body?.data)
+            : undefined
 
   await site.auth.audit
     .record({
@@ -6453,9 +6499,23 @@ export function createRequestListener(
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
+        // A PATCH is journalled with what it changed, so the key is read first.
+        const patchedId =
+          req.method === 'PATCH' ? (url.pathname.split('/').filter(Boolean)[2] ?? null) : null
+        const keyBefore =
+          patchedId === null ? null : await site.auth.apiKeys.getById(patchedId).catch(() => null)
+        const before = keyBefore === null ? null : { ...keyBefore }
         const response = await site.apiKeysRouter.handle(request, context.actor)
         writeRestResponse(res, response)
-        await recordApiKeyAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
+        await recordApiKeyAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          response,
+          logger,
+          before,
+        )
         return
       }
 

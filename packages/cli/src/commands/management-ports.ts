@@ -63,6 +63,17 @@ export function createCommentModerationPort(storeOf: () => CommentStore): Commen
     restore: async (receipt) => {
       const comment = await storeOf().get(receipt.id)
       if (comment === null) return
+      // R6: undo only what this call did. A person who decided the comment
+      // again since (approved what the agent refused, or the reverse) made a
+      // newer decision, and restoring the old status would overwrite it.
+      if (receipt.decidedStatus !== undefined && comment.status !== receipt.decidedStatus) {
+        throw new CogentaError({
+          code: 'TOOL_REVERT_REFUSED',
+          message: `Comment "${receipt.id}" is now ${comment.status}, no longer ${receipt.decidedStatus} as this call left it, so it was not put back.`,
+          hint: 'It was decided again since. Change it from the moderation screen if that is what you want.',
+          details: { id: receipt.id, status: comment.status, decidedStatus: receipt.decidedStatus },
+        })
+      }
       await storeOf().setStatus(
         receipt.id,
         receipt.previousStatus as 'pending' | 'approved' | 'spam' | 'trash',

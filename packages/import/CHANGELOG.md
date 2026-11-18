@@ -1,5 +1,16 @@
 # @cogenta/import
 
+## 0.2.23
+
+### Patch Changes
+
+- Updated dependencies [[`12bce25`](https://github.com/cogenta-cms/cogenta/commit/12bce25494679789a304947536be285f48e4bd9d), [`12bce25`](https://github.com/cogenta-cms/cogenta/commit/12bce25494679789a304947536be285f48e4bd9d), [`e9c7305`](https://github.com/cogenta-cms/cogenta/commit/e9c73055e6d239329e235ef6535755721c12b424), [`14d551a`](https://github.com/cogenta-cms/cogenta/commit/14d551a4fa75ce9265d47ab787d545af1fee6325)]:
+  - @cogenta/auth@0.8.0
+  - @cogenta/core@0.16.0
+  - @cogenta/schema@0.14.0
+  - @cogenta/blocks@1.2.6
+  - @cogenta/comments@0.2.16
+
 ## 0.2.22
 
 ### Patch Changes

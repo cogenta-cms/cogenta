@@ -2130,7 +2130,7 @@
   "agentSkills": {
     "heading": "Skills",
     "adminOnly": "Restricted to the \"admin\" role: this manages every agent's available skills.",
-    "intro": "A skill is a how-to the agents read before acting: how to write in the site’s voice, how to report a security scan… It is written in Markdown, in the SKILL.md format of Claude Code and Codex, so an existing skill imports as is. Every new agent gets the skills “enabled by default”; remove one from the agent’s own screen.",
+    "intro": "A skill is a how-to the agents read before acting: how to write in the site’s voice, how to report a security scan… It is written in Markdown, in the SKILL.md format of Claude Code and Codex, so an existing skill imports as is. Every new agent gets the skills “enabled by default”; remove one from the agent’s own screen. Every API key of the MCP server can also read these skills (the skills.list and skills.read tools, and MCP prompts): do not write anything confidential in them.",
     "createSkill": "Create skill",
     "name": "Name",
     "description": "Description",

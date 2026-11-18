@@ -879,7 +879,28 @@ commentaire sur un commentaire inconnu, déjà décidé ou contraire au verdict 
 site (`assertDecisionAllowed`) ; une redirection dont la source est une page existante ou
 dont une extrémité n'est pas un chemin du site. Les textes que ces outils rendent
 (commentaires de visiteurs, chemins et référents du journal 404) sont de la **donnée** (R8) :
-les descriptions MCP des outils le disent au client.
+les descriptions MCP des outils et les instructions du serveur le disent au client, **et
+l'hôte MCP les marque dans la réponse** (revue de sécurité du 2026-11-18). Sans toucher à la
+définition des outils : la sortie de `comments.list` et de `logs.read_not_found` garde ses
+clés et sa forme, mais chaque chaîne écrite par un visiteur (`authorName`, `body` ; `path`,
+`lastReferrer`) est enfermée dans le même bloc `<data source="tool:…">` que celui du
+contexte d'un agent interne (`fenceToolOutput`, chevrons échappés : une valeur ne peut pas le
+fermer), et deux clés sont **ajoutées** — `untrusted: true` et `notice`. Le journal d'audit
+garde la sortie brute.
+
+`redirects.create` sur MCP refuse en plus, avant toute approbation et de nouveau à
+l'exécution : une source qui porte **déjà** une redirection (`REDIRECT_EXISTS`, 409 — le
+magasin remplace en silence et le `revert` supprimerait la règle de la personne ; le
+changer est un geste d'humain dans l'écran Redirections) et une source que le routeur
+public sert hors des collections (`REDIRECT_PATH_RESERVED`, 400 : `/_*`, `/api`, `/admin`,
+`/sitemap*.xml`, `/robots.txt`, `/llms.txt`, `/feed.xml`, `/atom.xml`, `/search`,
+`/.well-known/*`, `/forms/*`, `/archive/*`…, liste dans `reserved-paths.ts`). Le refus
+d'une règle existante n'est demandé que par l'hôte MCP (`RedirectCreateOptions.exists`) :
+l'agent interne « Site Monitor » garde son comportement, qui remplace.
+
+`comments.decide` : le reçu porte déjà le statut posé (`status`) ; le `revert` ne remet
+l'ancien statut que si le commentaire le porte encore, sinon `TOOL_REVERT_REFUSED` (une
+personne a décidé de nouveau entre-temps, et l'annulation écraserait sa décision).
 
 **Prompts MCP** (`@cogenta/mcp`, hors contrat C) : `prompts/list` et `prompts/get`
 (spécification 2025-06-18), annoncés dans `initialize` seulement si un hôte fournit une

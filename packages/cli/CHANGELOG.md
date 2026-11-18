@@ -1,5 +1,47 @@
 # @cogenta/cli
 
+## 0.24.0
+
+### Minor Changes
+
+- [#71](https://github.com/cogenta-cms/cogenta/pull/71) [`918ec73`](https://github.com/cogenta-cms/cogenta/commit/918ec73afb4802482ea74861524bc123c8a58696) Thanks [@georgesmomo](https://github.com/georgesmomo)! - MCP clients can now publish a bilingual entry without falling back to REST. Four new tools (contract C `tools@1.9`, additive): `content.write_translation` creates the draft of an entry in another site language, linked to it as its translation; `taxonomy.list_terms` and `taxonomy.create_term` read and create tags or categories (creating an existing slug returns it instead of failing); `media.import_url` copies an image from a public https address into the media library through the outbound SSRF guard and the regular media ingest, keeping the author, the licence and the source address (without query string or credentials), with provenance `assisted`. Every write still waits for a human approval, and invalid requests (unknown language, a translation that already exists, an image address that is not public https) are refused before an administrator is asked. New error code `MEDIA_IMPORT_FAILED`.
+
+### Patch Changes
+
+- Updated dependencies [[`918ec73`](https://github.com/cogenta-cms/cogenta/commit/918ec73afb4802482ea74861524bc123c8a58696)]:
+  - @cogenta/agents@0.12.0
+  - @cogenta/core@0.15.0
+  - @cogenta/api@2.14.3
+  - @cogenta/agents-builtin@0.7.7
+  - @cogenta/channels@0.3.22
+  - @cogenta/mcp@0.3.20
+  - @cogenta/plugins@0.9.5
+  - @cogenta/analytics@0.3.14
+  - @cogenta/auth@0.7.4
+  - @cogenta/blocks@1.2.5
+  - @cogenta/comments@0.2.15
+  - @cogenta/commerce@0.5.17
+  - @cogenta/export@0.3.6
+  - @cogenta/forms@0.2.22
+  - @cogenta/import@0.2.22
+  - @cogenta/observability@0.2.14
+  - @cogenta/render@0.6.6
+  - @cogenta/schema@0.13.2
+  - @cogenta/seo@0.6.1
+  - @cogenta/starters@0.6.3
+  - @cogenta/widgets@0.2.13
+  - @cogenta/theme-association@0.6.6
+  - @cogenta/theme-blog@0.8.2
+  - @cogenta/theme-canonical@1.4.6
+  - @cogenta/theme-docs@0.6.6
+  - @cogenta/theme-ecommerce@1.4.6
+  - @cogenta/theme-entreprise@1.5.6
+  - @cogenta/theme-kit@0.9.3
+  - @cogenta/theme-magazine@1.4.6
+  - @cogenta/theme-portfolio@1.4.6
+  - @cogenta/theme-restaurant@0.6.6
+  - @cogenta/theme-saas@0.6.6
+
 ## 0.23.4
 
 ### Patch Changes

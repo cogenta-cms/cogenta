@@ -1,5 +1,22 @@
 # create-cogenta
 
+## 0.8.6
+
+### Patch Changes
+
+- Updated dependencies [[`918ec73`](https://github.com/cogenta-cms/cogenta/commit/918ec73afb4802482ea74861524bc123c8a58696)]:
+  - @cogenta/agents@0.12.0
+  - @cogenta/cli@0.24.0
+  - @cogenta/core@0.15.0
+  - @cogenta/api@2.14.3
+  - @cogenta/auth@0.7.4
+  - @cogenta/blocks@1.2.5
+  - @cogenta/comments@0.2.15
+  - @cogenta/render@0.6.6
+  - @cogenta/schema@0.13.2
+  - @cogenta/starters@0.6.3
+  - @cogenta/theme-canonical@1.4.6
+
 ## 0.8.5
 
 ### Patch Changes

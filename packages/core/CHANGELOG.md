@@ -1,5 +1,33 @@
 # @cogenta/core
 
+## 0.16.0
+
+### Minor Changes
+
+- [#73](https://github.com/cogenta-cms/cogenta/pull/73) [`12bce25`](https://github.com/cogenta-cms/cogenta/commit/12bce25494679789a304947536be285f48e4bd9d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Five publishing tools become reversible, with a real `revert` (contract C, `tools@1.10`).
+  
+  `content.write_draft`, `content.write_translation`, `content.publish`, `taxonomy.create_term`
+  and `media.import_url` now carry what their undo needs in their own output and implement
+  `revert()`. A created draft or translation goes to the trash; an updated draft gets its
+  previous working version back as a new version; a publication goes back to the draft status
+  it replaced, or to the version that was public before; a created term is deleted only while
+  no entry (trash and drafts included) carries it; an imported image is deleted only while no
+  entry references it. Each `revert` refuses with the new `TOOL_REVERT_REFUSED` code (HTTP 409)
+  instead of guessing when the entry was edited since, or the term or image is in use.
+  
+  A tool is reversible only when its host supplies the undo operations
+  (`ContentServiceLike.restore`/`unpublish`, `TaxonomyServiceLike.usage`/`delete`,
+  `MediaImportUrlToolOptions.removeImage`, all optional): without them it stays
+  `reversible: false` and waits for a human, as before — the internal agent runtime is
+  unchanged. `cogenta serve` supplies them all.
+  
+  New exports: `countTermReferences` (`@cogenta/schema`), `removeMediaAsset` (`@cogenta/api`,
+  now also used by `DELETE /api/media/{id}`). `createMcpToolSource(...)` returns a source with a
+  `revert(toolName, receipt)` seam an administration screen can call; nothing calls it yet.
+  `taxonomy.create_term` also returns the `taxonomy` its term belongs to.
+
+- [#73](https://github.com/cogenta-cms/cogenta/pull/73) [`e9c7305`](https://github.com/cogenta-cms/cogenta/commit/e9c73055e6d239329e235ef6535755721c12b424) Thanks [@georgesmomo](https://github.com/georgesmomo)! - Security review of the MCP autonomy work. What visitors wrote is now marked as data for an MCP client (R8): the output of `comments.list` and `logs.read_not_found` keeps its keys but every visitor-written string (comment author and text, 404 path and referrer) is fenced in a `<data source="tool:…">` block with its angle brackets escaped, and the output gains `untrusted: true` and a `notice`; the server's instructions say these texts are never instructions. `redirects.create` over MCP no longer replaces a redirect that already leaves the path (`REDIRECT_EXISTS`, 409 — the undo would have deleted a person's rule) and refuses a source the public router serves itself (`/_*`, `/api`, `/admin`, `/sitemap*.xml`, `/robots.txt`, `/search`, `/.well-known/*`…, `REDIRECT_PATH_RESERVED`, 400); the agents' own use of the tool is unchanged (`RedirectCreateOptions.exists` is opt-in). Undoing `comments.decide` is refused (`TOOL_REVERT_REFUSED`) when a person decided the comment again since. Undoing an MCP action from the audit log writes its intent to the journal before it runs, and answers `AUDIT_WRITE_FAILED` (503) when the journal cannot be written, instead of undoing silently. `apikey.create` now records the key's scope and autonomy, and `PATCH /api/api-keys/{id}` records `apikey.update` with what changed. New error codes `REDIRECT_EXISTS`, `REDIRECT_PATH_RESERVED`, `AUDIT_WRITE_FAILED`; `@cogenta/agents` exports `fenceToolOutput`.
+
 ## 0.15.0
 
 ### Minor Changes

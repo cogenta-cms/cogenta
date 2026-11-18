@@ -1,5 +1,31 @@
 # @cogenta/auth
 
+## 0.8.0
+
+### Minor Changes
+
+- [#73](https://github.com/cogenta-cms/cogenta/pull/73) [`12bce25`](https://github.com/cogenta-cms/cogenta/commit/12bce25494679789a304947536be285f48e4bd9d) Thanks [@georgesmomo](https://github.com/georgesmomo)! - An API key carries an autonomy setting for MCP clients: `manual` or `autonomous`.
+  
+  `ApiKey.autonomy` defaults to `manual` — every write of an MCP client waits for an
+  administrator's approval, exactly as before. With `autonomous`, a write that can be undone
+  (a draft, a translation, a publication, a tag, an imported image) runs at once; a write that
+  cannot be undone (`content.delete`, `media.write`) still waits (R6). The setting is re-read
+  from the key on every call, so changing it applies to the next message of an open session.
+  
+  The column is added to existing databases like the earlier columns of this store, and a key
+  that predates it reads as `manual`. `POST /api/api-keys` and `PATCH /api/api-keys/{id}` accept
+  and return `autonomy` (human administrators only, as for every key change); rotation and
+  recovery keep it. Tool descriptions and the MCP server instructions tell the client which
+  mode applies, and each audit record carries `autonomyMode` next to the level the call ran at.
+
+- [#73](https://github.com/cogenta-cms/cogenta/pull/73) [`14d551a`](https://github.com/cogenta-cms/cogenta/commit/14d551a4fa75ce9265d47ab787d545af1fee6325) Thanks [@georgesmomo](https://github.com/georgesmomo)! - An administrator can now undo what an autonomous MCP key did, from the audit log. `cogenta serve` gains `GET /api/mcp/actions/{auditId}` (can this call be undone, was it already) and `POST /api/mcp/actions/{auditId}/revert`, which runs the tool's own `revert` from the receipt the audit record keeps, as the signed-in administrator (an API key is refused whatever its role, so an agent cannot undo through itself). The undo is its own audit entry (`agent.tool.<tool>.revert`, `revertOf` naming the call); undoing the same call twice is refused, and a tool refusal (`TOOL_REVERT_REFUSED`, the content was edited since) is returned with its hint. The receipt of a very long article is no longer lost to the 64 KiB bound of an audit record. `@cogenta/api` maps `RECEIPT_UNKNOWN` to 404 and `RECEIPT_ALREADY_REVERTED`/`RECEIPT_NOT_REVERTIBLE` to 409; `@cogenta/auth` reads an undo recorded by a person as a human action, not an agent's.
+
+### Patch Changes
+
+- Updated dependencies [[`12bce25`](https://github.com/cogenta-cms/cogenta/commit/12bce25494679789a304947536be285f48e4bd9d), [`e9c7305`](https://github.com/cogenta-cms/cogenta/commit/e9c73055e6d239329e235ef6535755721c12b424)]:
+  - @cogenta/core@0.16.0
+  - @cogenta/schema@0.14.0
+
 ## 0.7.4
 
 ### Patch Changes

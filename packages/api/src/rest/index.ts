@@ -132,7 +132,7 @@ export {
   parseImageEdit,
 } from './media-edit.js'
 export type { IngestMediaUploadDeps, IngestMediaUploadInput } from './media-ingest.js'
-export { DEFAULT_MAX_UPLOAD_BYTES, ingestMediaUpload } from './media-ingest.js'
+export { DEFAULT_MAX_UPLOAD_BYTES, ingestMediaUpload, removeMediaAsset } from './media-ingest.js'
 export type {
   ImageSize,
   MediaImageProcessor,

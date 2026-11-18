@@ -100,6 +100,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   CONTENT_ROUTE_INVALID: 400,
   CONTENT_REDIRECT_LOOP: 409,
   REDIRECT_UNKNOWN: 404,
+  // `redirects.create` over MCP (L42): a rule already leaves this path (409), the
+  // source is a live page (409) or a path the public router owns (400).
+  REDIRECT_EXISTS: 409,
+  REDIRECT_FROM_LIVE_PATH: 409,
+  REDIRECT_PATH_RESERVED: 400,
   // Not FORBIDDEN (403 for "you may never do this"): a read-only instance
   // refuses a write an actor is otherwise permitted to make — 403 is still
   // the closest real status (the request is understood, authenticated where
@@ -373,6 +378,7 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // Looking an audit entry up by id and finding nothing is an ordinary 404,
   // unlike the line above.
   AUDIT_ENTRY_NOT_FOUND: 404,
+  AUDIT_WRITE_FAILED: 503,
 
   // Marketplace (L17) and the `@cogenta/plugins` verification it reuses.
   // A missing/invalid signature is the caller's install attempt failing a

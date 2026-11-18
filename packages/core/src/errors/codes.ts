@@ -153,6 +153,8 @@ export const ERROR_CODES = [
   // Fiche 21: a lookup by id (audit entry detail) found nothing — distinct
   // from `AUDIT_CHAIN_BROKEN`, which means "found it, and it lied".
   'AUDIT_ENTRY_NOT_FOUND',
+  // The journal refused a write that had to precede or follow an action (L42: undoing an MCP action).
+  'AUDIT_WRITE_FAILED',
   // Auth — self-service password reset over HTTP (L11, forgot-password route)
   'AUTH_RESET_TOKEN_INVALID',
   // Auth — recovery codes (fiche 18 task 1): the way back in when TOTP itself
@@ -228,6 +230,10 @@ export const ERROR_CODES = [
   'TOOL_OUTPUT_INVALID',
   'TOOL_CALL_REJECTED',
   'REDIRECT_FROM_LIVE_PATH',
+  // A redirect already leaves this path, and `redirects.create` over MCP does not replace one (L42).
+  'REDIRECT_EXISTS',
+  // A path the public router serves outside the collections (`/_image`, `/sitemap.xml`, `/admin`…) (L42).
+  'REDIRECT_PATH_RESERVED',
 
   // Agents — core tools (L4)
   'HTTP_FETCH_DOMAIN_DENIED',

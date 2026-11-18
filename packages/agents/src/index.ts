@@ -172,7 +172,7 @@ export type {
   SiteContext,
   TaskContext,
 } from './identity/context.js'
-export { assembleContext } from './identity/context.js'
+export { assembleContext, fenceToolOutput } from './identity/context.js'
 export type { AgentIdentityFields } from './identity/markdown.js'
 export { parseIdentityMarkdown, renderIdentityMarkdown } from './identity/markdown.js'
 export { createFileMemoryStore } from './memory/file-store.js'

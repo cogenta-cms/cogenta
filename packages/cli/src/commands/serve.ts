@@ -307,6 +307,7 @@ import {
   type ContentStore,
   columnFor,
   countTaxonomyUsage,
+  countTermReferences,
   createAdminThemeStore,
   createContentStore,
   createEmbedPreviewStore,
@@ -461,7 +462,7 @@ import {
 import { createMcpHttpEndpoint, type McpHttpEndpoint, mcpConnectionInfo } from './mcp-http.js'
 import { MCP_API_KEY_ENV } from './mcp-tools.js'
 import { selectMediaImageProcessor } from './media-images.js'
-import { createUrlImageImporter } from './media-import.js'
+import { createUrlImageImporter, createUrlImageRemover } from './media-import.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
 import { createPluginBlockRenderer, type PluginBlockRenderer } from './plugin-block-render.js'
 import {
@@ -3098,6 +3099,19 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
               ...(options.images === null || options.images === undefined
                 ? {}
                 : { images: options.images }),
+            }),
+            // What the undo of `taxonomy.create_term` and `media.import_url` needs
+            // (L42): a term or a file is only removed while nothing references it.
+            termUsage: (taxonomy, termId) =>
+              countTermReferences({ db, taxonomy, collections, termId }),
+            removeImage: createUrlImageRemover({
+              mediaStore,
+              storage,
+              ...(options.images === null || options.images === undefined
+                ? {}
+                : { images: options.images }),
+              collections,
+              storeFor,
             }),
           },
         })

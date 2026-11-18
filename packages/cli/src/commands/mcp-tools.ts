@@ -39,7 +39,7 @@ import {
   type PermissionLayer,
   type SearchRouter,
 } from '@cogenta/api'
-import type { ApiKey, ApiKeyStore, AuditLog } from '@cogenta/auth'
+import type { ApiKey, ApiKeyAutonomy, ApiKeyStore, AuditLog } from '@cogenta/auth'
 import { type BlockRegistry, safeParseBlock } from '@cogenta/blocks'
 import {
   CogentaError,
@@ -91,6 +91,14 @@ export interface McpIdentity {
   readonly authenticated: boolean
   /** Who is calling, for the person who approves: `key "Claude Desktop"`, `account editor@site.test`. */
   readonly label: string
+  /**
+   * What this caller may do without a person approving it (L42): `manual`
+   * makes every write wait, `autonomous` lets a reversible one run at once
+   * (a non-reversible one still waits). Re-read from the key on every call.
+   * Absent means `manual` — every identity that is not an API key (stdio
+   * `--email`/`--role`, anonymous) keeps the behaviour it always had.
+   */
+  readonly autonomy?: ApiKeyAutonomy
 }
 
 /** Read by `cogenta mcp` when no --api-key/--email/--role is given, so a client config can keep the key out of `args` (and out of `ps`). */
@@ -126,6 +134,7 @@ export function apiKeyIdentityResolver(
       actor: { id: `apikey:${key.id}`, roles: key.scope },
       authenticated: true,
       label: `key "${key.name}"`,
+      autonomy: key.autonomy,
     }
   }
 }
@@ -174,6 +183,17 @@ export interface McpSiteToolsOptions {
     /** Who asked, recorded in the file's provenance: `mcp:key "…"`. */
     readonly agent: string
   }) => Promise<MediaImportResult>
+  /**
+   * How many entries still reference a taxonomy term, trashed and draft ones
+   * included. Absent, `taxonomy.create_term` is not reversible (deleting a
+   * term would unclassify entries nobody checked), so it waits for a human.
+   */
+  readonly termUsage?: (taxonomy: TaxonomyDefinition, termId: string) => Promise<number>
+  /**
+   * Deletes an imported media asset, refusing while any entry still
+   * references it. Absent, `media.import_url` is not reversible.
+   */
+  readonly removeImage?: (input: { readonly id: string }) => Promise<void>
   readonly now?: () => number
 }
 
@@ -297,18 +317,33 @@ const MCP_DESCRIPTION: Readonly<Record<string, string>> = {
     'List entries of one collection, most recently updated first (drafts included when your role may see them): id, title, public path, status. Call content.collections first for the collection names; use content.search to find one entry among many.',
 }
 
-function approvalNote(): string {
-  return ` Requires a human approval: the call waits until an administrator approves or rejects it in ${APPROVALS_PLACE}; nothing is written before that, and a rejection is returned as an error. Validation errors are returned at once, before any approval is asked.`
+function approvalNote(cause: 'manual' | 'cannot-undo'): string {
+  const why =
+    cause === 'cannot-undo'
+      ? " This action cannot be undone, so it waits for a person even with this key's autonomous mode."
+      : ''
+  return ` Requires a human approval: the call waits until an administrator approves or rejects it in ${APPROVALS_PLACE}; nothing is written before that, and a rejection is returned as an error. Validation errors are returned at once, before any approval is asked.${why}`
+}
+
+function runsAtOnceNote(): string {
+  return ' Runs at once with this key (autonomous mode): no approval is asked. The change is journalled and can be undone.'
 }
 
 /** The instructions an MCP client hands its model, for this site. */
-export function mcpServerInstructions(site: McpToolSite): string {
+export function mcpServerInstructions(
+  site: McpToolSite,
+  autonomy: ApiKeyAutonomy = 'manual',
+): string {
+  const writes =
+    autonomy === 'autonomous'
+      ? `This key is autonomous: a write that can be undone (a draft, a translation, a publication, a tag, an imported image) runs at once with no approval. A write that cannot be undone (deleting, editing media details) still waits for a human approval in ${APPROVALS_PLACE}: tell the user to approve it there, and do not resend a request that is still waiting — that would ask twice. Each tool's description says which case it is, as of your last tools/list.`
+      : `Every write waits for a human approval in ${APPROVALS_PLACE}: tell the user to approve it there, and do not resend a request that is still waiting — that would ask twice.`
   return [
     `Cogenta site "${site.name}"${site.url === undefined ? '' : ` (${site.url})`}, languages: ${site.locales.join(', ')} (default ${site.defaultLocale}).`,
     'Find before you write: content.collections and content.schema give the collections, their fields and the block types; content.search and content.list give entry ids; content.read gives the current values.',
     'content.write_draft creates (no id) or updates (with id) a draft and never publishes; content.publish makes it public; content.delete moves it to the trash (restorable).',
     'Page-builder zones (fields of kind "blocks") are written inside values, as an array of { "type": "<block type>", "data": { …block fields } } that replaces the whole zone. Rich-text fields take Portable Text.',
-    `Every write waits for a human approval in ${APPROVALS_PLACE}: tell the user to approve it there, and do not resend a request that is still waiting — that would ask twice.`,
+    writes,
   ].join('\n')
 }
 
@@ -574,6 +609,19 @@ function contentServiceLikeOf(
         readOptions,
       ) as unknown as Promise<Record<string, unknown>>,
     remove: (context, collection, id) => service.remove(context, collection, id),
+    // What the undo of a draft write and of a publication need (L42). Both go
+    // through the same permission checks as the REST routes (`update` to
+    // restore, `publish` to unpublish), so an undo is never wider than the
+    // action it undoes.
+    restore: async (context, collection, id, version, readOptions) =>
+      ({
+        ...(await service.restore(context, collection, id, version, readOptions)),
+        state: 'working',
+      }) as unknown as Record<string, unknown>,
+    unpublish: (context, collection, id, input, readOptions) =>
+      service.unpublish(context, collection, id, input, readOptions) as unknown as Promise<
+        Record<string, unknown>
+      >,
   }
 }
 
@@ -748,10 +796,14 @@ function cancelledCode(error: unknown): boolean {
   return isCogentaError(error) && error.code === 'APPROVAL_REQUEST_CANCELLED'
 }
 
+export type McpToolSourceWithRevert = (() => Promise<readonly McpTool[]>) & {
+  revert(toolName: string, receipt: unknown, signal?: AbortSignal): Promise<void>
+}
+
 export function createMcpToolSource(
   options: McpSiteToolsOptions,
   resolveIdentity: () => Promise<McpIdentity>,
-): () => Promise<readonly McpTool[]> {
+): McpToolSourceWithRevert {
   const now = options.now ?? Date.now
   const byName = new Map(options.collections.map((collection) => [collection.name, collection]))
   const browse = browseServiceOf(
@@ -839,6 +891,7 @@ export function createMcpToolSource(
   /** The terms a caller may read or create, through the same gate as the REST taxonomy routes. */
   function taxonomyServiceFor(actor: Actor): TaxonomyServiceLike | undefined {
     const storeFor = options.taxonomyStoreFor
+    const termUsage = options.termUsage
     if (storeFor === undefined || (options.taxonomies ?? []).length === 0) return undefined
     const context = { actor }
     return {
@@ -852,6 +905,19 @@ export function createMcpToolSource(
         options.permissions.assertTerm('create', taxonomy, context)
         return storeFor(taxonomy).create(input)
       },
+      // The undo of `taxonomy.create_term` (L42). Deleting is its own
+      // permission: a key that may add tags but not delete them cannot undo
+      // one either, and the refusal says so.
+      ...(termUsage === undefined
+        ? {}
+        : {
+            usage: async (name: string, termId: string) => termUsage(taxonomyOf(name), termId),
+            delete: async (name: string, termId: string) => {
+              const taxonomy = taxonomyOf(name)
+              options.permissions.assertTerm('delete', taxonomy, context)
+              await storeFor(taxonomy).delete(termId)
+            },
+          }),
     }
   }
 
@@ -1060,8 +1126,18 @@ export function createMcpToolSource(
   function govern(tool: ExecutableTool, identity: McpIdentity): McpTool {
     const name = tool.spec.name
     const presentation = PRESENTATION[name]
-    const needsHuman = tool.sideEffects !== false && tool.reversible !== true
-    const description = `${MCP_DESCRIPTION[name] ?? tool.spec.description}${needsHuman ? approvalNote() : ''}`
+    // L42. `manual` (the default, and every non-key identity): every
+    // side-effect tool waits for a person. `autonomous`: one that can be
+    // undone runs at once, one that cannot still waits (R6).
+    const autonomous = identity.autonomy === 'autonomous'
+    const sideEffecting = tool.sideEffects !== false
+    const needsHuman = sideEffecting && (!autonomous || tool.reversible !== true)
+    const note = !sideEffecting
+      ? ''
+      : needsHuman
+        ? approvalNote(autonomous ? 'cannot-undo' : 'manual')
+        : runsAtOnceNote()
+    const description = `${MCP_DESCRIPTION[name] ?? tool.spec.description}${note}`
 
     return {
       spec: { ...tool.spec, description },
@@ -1125,7 +1201,11 @@ export function createMcpToolSource(
         const audited = withAudit(
           withAutonomy(guarded, {
             agentName,
-            autonomy: { default: 'autonomous' },
+            // The gate is the one `withAutonomy` already is: `manual` asks for
+            // an approval on every side-effect tool, `autonomous` leaves it to
+            // the tool's own `reversible` (a non-reversible one is forced to
+            // approval whatever the level says).
+            autonomy: { default: autonomous ? 'autonomous' : 'execute_with_approval' },
             approvalQueue: queueForCall(agentName, callerPrefix, context),
             logger: options.logger,
           }),
@@ -1144,6 +1224,9 @@ export function createMcpToolSource(
                   diff: {
                     ...record.diff,
                     origin: 'mcp',
+                    // The key's mode for this call; `autonomy` above is the level
+                    // this tool actually ran at (it can be stricter than the mode).
+                    autonomyMode: autonomous ? 'autonomous' : 'manual',
                     transport: options.transport,
                     client: identity.label,
                   },
@@ -1165,8 +1248,8 @@ export function createMcpToolSource(
     }
   }
 
-  return async () => {
-    const identity = await resolveIdentity()
+  /** The tools this caller gets, before the governance (`govern`) is wrapped around them. */
+  async function manifestFor(identity: McpIdentity): Promise<readonly ExecutableTool[]> {
     const { actor, authenticated } = identity
     const content = contentServiceLikeOf(options.contentService, {
       defaultLocale: options.site.defaultLocale,
@@ -1198,6 +1281,7 @@ export function createMcpToolSource(
           createMediaImportUrlTool({
             importImage: (input) =>
               importImage({ ...input, actorId: actor.id, agent: `mcp:${identity.label}` }),
+            ...(options.removeImage === undefined ? {} : { removeImage: options.removeImage }),
           }),
         )
       }
@@ -1233,6 +1317,40 @@ export function createMcpToolSource(
         },
       },
     )
-    return manifest.map((tool) => govern(tool, identity))
+    return manifest
   }
+
+  const source = async (): Promise<readonly McpTool[]> => {
+    const identity = await resolveIdentity()
+    return (await manifestFor(identity)).map((tool) => govern(tool, identity))
+  }
+
+  /**
+   * Undoes one past call of a reversible tool from the output it returned —
+   * the receipt, which the audit record of the call also holds. The undo runs
+   * as whoever `resolveIdentity` names now (an administrator, in practice),
+   * through the same service and permission checks as any other call, and
+   * the tool itself refuses (`TOOL_REVERT_REFUSED`) rather than guess when
+   * what it would undo has changed since (R6). Nothing in the admin calls
+   * this yet: it is the seam such a screen would use.
+   */
+  async function revert(
+    toolName: string,
+    receipt: unknown,
+    signal: AbortSignal = new AbortController().signal,
+  ): Promise<void> {
+    const identity = await resolveIdentity()
+    const tool = (await manifestFor(identity)).find((candidate) => candidate.spec.name === toolName)
+    if (tool?.revert === undefined) {
+      throw new CogentaError({
+        code: 'RECEIPT_NOT_REVERTIBLE',
+        message: `"${toolName}" has no undo available for this caller.`,
+        hint: 'Only a tool that can be undone, and that this caller may use, can be reverted.',
+      })
+    }
+    await options.refreshPermissions?.()
+    await tool.revert(receipt, { signal })
+  }
+
+  return Object.assign(source, { revert })
 }

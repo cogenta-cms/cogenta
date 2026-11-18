@@ -618,6 +618,8 @@ export {
 } from './tools/core/redirects.js'
 export type { SiteConfig } from './tools/core/site-config.js'
 export { createSiteConfigReadTool } from './tools/core/site-config.js'
+export type { SiteSkillCatalog, SiteSkillLike } from './tools/core/skills.js'
+export { createSkillsListTool, createSkillsReadTool } from './tools/core/skills.js'
 export type { TaxonomyServiceLike, TaxonomyTermLike } from './tools/core/taxonomy.js'
 export {
   createTaxonomyCreateTermTool,

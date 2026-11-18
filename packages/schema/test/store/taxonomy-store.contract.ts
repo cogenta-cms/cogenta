@@ -8,7 +8,7 @@ import { createContentStore } from '../../src/store/store.js'
 import { createSchemaTables, dropSchemaTables } from '../../src/store/tables.js'
 import type { TaxonomyStore } from '../../src/store/taxonomy-store.js'
 import { createTaxonomyStore } from '../../src/store/taxonomy-store.js'
-import { countTaxonomyUsage } from '../../src/store/taxonomy-usage.js'
+import { countTaxonomyUsage, countTermReferences } from '../../src/store/taxonomy-usage.js'
 import {
   postgresRefusingEveryStatement,
   postgresRejectingNulBytes,
@@ -656,6 +656,32 @@ export function runTaxonomyContract(name: string, create: () => Promise<Taxonomy
           includeDrafts: () => true,
         })
         expect(usage.get(cuisine.id)?.own).toBe(0)
+      })
+
+      it('counts every reference to a term for a delete decision, a trashed or draft entry included', async () => {
+        const cuisine = await categories.create({ slug: 'cuisine', labels: { fr: 'Cuisine' } })
+        const unused = await categories.create({ slug: 'unused', labels: { fr: 'Inutilisé' } })
+        const vegan = await keywords.create({ slug: 'vegan', labels: { en: 'Vegan' } })
+        const published = await recipes.create({
+          values: { title: 'Tarte', categories: [cuisine.id], keywords: vegan.id },
+        })
+        await recipes.publish(published.id)
+        // A draft and a trashed entry still hold the term: deleting it would unclassify them.
+        await recipes.create({ values: { title: 'Brouillon', categories: [cuisine.id] } })
+        const trashed = await posts.create({
+          values: { title: 'Corbeille', categories: [cuisine.id] },
+        })
+        await posts.delete(trashed.id)
+
+        const count = (taxonomy: typeof category, termId: string) =>
+          countTermReferences({ db, taxonomy, collections, termId })
+
+        expect(await count(category, cuisine.id)).toBe(3)
+        expect(await count(category, unused.id)).toBe(0)
+        // A single-valued field is counted as well.
+        expect(
+          await countTermReferences({ db, taxonomy: keyword, collections, termId: vegan.id }),
+        ).toBe(1)
       })
 
       it('never counts a collection this caller may not read at all', async () => {

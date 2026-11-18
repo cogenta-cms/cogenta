@@ -15,6 +15,9 @@ export interface ApiKeyUsage {
   readonly last30Days: number
 }
 
+/** What an MCP client holding a key may do without a person approving it (L42). */
+export type ApiKeyAutonomy = 'manual' | 'autonomous'
+
 export interface AdminApiKey {
   readonly id: string
   readonly name: string
@@ -28,6 +31,8 @@ export interface AdminApiKey {
   readonly rateLimitPerMinute: number
   /** The id of the key that replaced this one, once rotated. `null` otherwise. */
   readonly supersededBy: string | null
+  /** Absent from a server that predates the setting — read as `manual`. */
+  readonly autonomy?: ApiKeyAutonomy
   readonly usage: ApiKeyUsage
 }
 
@@ -84,6 +89,8 @@ export interface CreateApiKeyInput {
   readonly neverExpires?: boolean
   /** Requests per minute. Omit for the site's default quota. */
   readonly rateLimitPerMinute?: number
+  /** Omit for `manual`: every write of an MCP client waits for approval. */
+  readonly autonomy?: ApiKeyAutonomy
 }
 
 export function createApiKey(token: string, input: CreateApiKeyInput): Promise<CreatedApiKey> {
@@ -105,6 +112,7 @@ export interface UpdateApiKeyInput {
   readonly name?: string
   readonly scope?: readonly string[]
   readonly rateLimitPerMinute?: number | null
+  readonly autonomy?: ApiKeyAutonomy
 }
 
 export function updateApiKey(

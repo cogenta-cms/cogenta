@@ -226,6 +226,57 @@ describe('cogenta serve — API key rotation (fiche 20 task 2)', () => {
       await server.stop()
     }
   })
+
+  it('records what a key can do when it is created, and what a change of its autonomy or scope altered', async () => {
+    const root = await project()
+    const server = await startServer(root, { registry: activeServers })
+    try {
+      const token = await adminToken(root, server.base)
+      const key = await createKey(server.base, token, {
+        name: 'publisher',
+        scope: ['editor'],
+        autonomy: 'manual',
+      })
+      const patch = (body: Record<string, unknown>) =>
+        fetch(`${server.base}/api/api-keys/${key.id}`, {
+          method: 'PATCH',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+      expect((await patch({ autonomy: 'autonomous', scope: ['editor', 'admin'] })).status).toBe(200)
+      // A change of the name alone leaves the autonomy and scope out of the entry.
+      expect((await patch({ name: 'publisher (blog)' })).status).toBe(200)
+      // A refused change is not journalled.
+      expect((await patch({ autonomy: 'sometimes' })).status).toBe(400)
+
+      const audit = await fetch(`${server.base}/api/audit?limit=200`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const { data } = (await audit.json()) as {
+        data: readonly {
+          action: string
+          entryId: string | null
+          diff: Record<string, unknown> | null
+        }[]
+      }
+      const created = data.find((entry) => entry.action === 'apikey.create')
+      expect(created?.diff).toEqual({ scope: ['editor'], autonomy: 'manual' })
+
+      const updates = data.filter((entry) => entry.action === 'apikey.update')
+      expect(updates).toHaveLength(2)
+      expect(updates.every((entry) => entry.entryId === key.id)).toBe(true)
+      const power = updates.find((entry) => entry.diff?.['autonomy'] !== undefined)
+      expect(power?.diff).toEqual({
+        autonomy: { from: 'manual', to: 'autonomous' },
+        scope: { from: ['editor'], to: ['editor', 'admin'] },
+      })
+      const rename = updates.find((entry) => entry.diff?.['name'] !== undefined)
+      expect(rename?.diff).toEqual({ name: { from: 'publisher', to: 'publisher (blog)' } })
+      expect(JSON.stringify(data)).not.toContain(key.key)
+    } finally {
+      await server.stop()
+    }
+  })
 })
 
 describe('cogenta serve — recovery from a mistaken revocation (fiche 62 task 3, decision b)', () => {

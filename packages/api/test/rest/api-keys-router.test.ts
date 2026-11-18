@@ -613,6 +613,102 @@ describe('PATCH — editing a key without reissuing its secret', () => {
   })
 })
 
+describe('autonomy of a key over MCP (L42)', () => {
+  const editor: Actor = actorFor('e-1', ['editor'])
+
+  it('is manual by default and says so in the creation response and the list', async () => {
+    const created = await router().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['editor'] }),
+      admin,
+    )
+    expect(dataOf<{ autonomy: string }>(created).autonomy).toBe('manual')
+
+    const listed = await router().handle(request('GET', '/api/api-keys'), admin)
+    expect(dataOf<{ autonomy: string }[]>(listed)[0]?.autonomy).toBe('manual')
+  })
+
+  it('can be chosen at creation and changed by PATCH', async () => {
+    const created = await router().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['editor'], autonomy: 'autonomous' }),
+      admin,
+    )
+    const { id, autonomy } = dataOf<{ id: string; autonomy: string }>(created)
+    expect(autonomy).toBe('autonomous')
+
+    const patched = await router().handle(
+      request('PATCH', `/api/api-keys/${id}`, { autonomy: 'manual' }),
+      admin,
+    )
+    expect(patched.status).toBe(200)
+    expect(dataOf<{ autonomy: string }>(patched).autonomy).toBe('manual')
+    expect((await auth.apiKeys.getById(id))?.autonomy).toBe('manual')
+  })
+
+  it('refuses a word that is neither manual nor autonomous, at creation and on PATCH', async () => {
+    const created = await router().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['editor'], autonomy: 'always' }),
+      admin,
+    )
+    expect(created.status).toBe(400)
+
+    const ok = await router().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['editor'] }),
+      admin,
+    )
+    const { id } = dataOf<{ id: string }>(ok)
+    const patched = await router().handle(
+      request('PATCH', `/api/api-keys/${id}`, { autonomy: true }),
+      admin,
+    )
+    expect(patched.status).toBe(400)
+    expect((await auth.apiKeys.getById(id))?.autonomy).toBe('manual')
+  })
+
+  it('refuses a non-admin choosing or raising the autonomy of a key', async () => {
+    const created = await router().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['editor'], autonomy: 'autonomous' }),
+      editor,
+    )
+    expect(created.status).toBe(403)
+
+    const ok = await router().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['editor'] }),
+      admin,
+    )
+    const { id } = dataOf<{ id: string }>(ok)
+    const patched = await router().handle(
+      request('PATCH', `/api/api-keys/${id}`, { autonomy: 'autonomous' }),
+      editor,
+    )
+    expect(patched.status).toBe(403)
+    expect((await auth.apiKeys.getById(id))?.autonomy).toBe('manual')
+  })
+
+  it('refuses an API key, even one scoped admin, raising its own autonomy', async () => {
+    const created = await router().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['admin'] }),
+      admin,
+    )
+    const { id } = dataOf<{ id: string }>(created)
+    const patched = await router().handle(
+      request('PATCH', `/api/api-keys/${id}`, { autonomy: 'autonomous' }),
+      actorFor(`apikey:${id}`, ['admin']),
+    )
+    expect(patched.status).toBe(403)
+    expect((await auth.apiKeys.getById(id))?.autonomy).toBe('manual')
+  })
+
+  it('stays the same through a rotation', async () => {
+    const created = await router().handle(
+      request('POST', '/api/api-keys', { name: 'x', scope: ['editor'], autonomy: 'autonomous' }),
+      admin,
+    )
+    const { id } = dataOf<{ id: string }>(created)
+    const rotated = await router().handle(request('POST', `/api/api-keys/${id}/rotate`, {}), admin)
+    expect(dataOf<{ issued: { autonomy: string } }>(rotated).issued.autonomy).toBe('autonomous')
+  })
+})
+
 describe('purge (fiche 62 task 2)', () => {
   async function createAndRevoke(): Promise<string> {
     const created = dataOf<{ id: string }>(

@@ -100,6 +100,11 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   CONTENT_ROUTE_INVALID: 400,
   CONTENT_REDIRECT_LOOP: 409,
   REDIRECT_UNKNOWN: 404,
+  // `redirects.create` over MCP (L42): a rule already leaves this path (409), the
+  // source is a live page (409) or a path the public router owns (400).
+  REDIRECT_EXISTS: 409,
+  REDIRECT_FROM_LIVE_PATH: 409,
+  REDIRECT_PATH_RESERVED: 400,
   // Not FORBIDDEN (403 for "you may never do this"): a read-only instance
   // refuses a write an actor is otherwise permitted to make — 403 is still
   // the closest real status (the request is understood, authenticated where
@@ -344,6 +349,14 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   TOOL_UNKNOWN: 404,
   TOOL_INPUT_INVALID: 400,
   TOOL_CALL_REJECTED: 403,
+  // The thing a revert would undo changed since the action, or is now in use (L42).
+  TOOL_REVERT_REFUSED: 409,
+  // Undoing an MCP action from the audit log (L42): the entry is not a tool
+  // call (404), or it cannot be undone any more — already undone, failed, or
+  // a tool with no undo (409).
+  RECEIPT_UNKNOWN: 404,
+  RECEIPT_ALREADY_REVERTED: 409,
+  RECEIPT_NOT_REVERTIBLE: 409,
   PROVIDER_UNKNOWN: 503,
   PROVIDER_REQUEST_FAILED: 502,
   PROVIDER_RESPONSE_INVALID: 502,
@@ -365,6 +378,7 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // Looking an audit entry up by id and finding nothing is an ordinary 404,
   // unlike the line above.
   AUDIT_ENTRY_NOT_FOUND: 404,
+  AUDIT_WRITE_FAILED: 503,
 
   // Marketplace (L17) and the `@cogenta/plugins` verification it reuses.
   // A missing/invalid signature is the caller's install attempt failing a

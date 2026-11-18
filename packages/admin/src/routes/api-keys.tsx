@@ -3,6 +3,7 @@ import { type FormEvent, type JSX, useCallback, useEffect, useMemo, useState } f
 import { useTranslation } from 'react-i18next'
 import {
   type AdminApiKey,
+  type ApiKeyAutonomy,
   type CreatedApiKey,
   createApiKey,
   listApiKeysPage,
@@ -164,6 +165,7 @@ export function ApiKeysRoute(): JSX.Element {
   const [actionNotice, setActionNotice] = useState<string | null>(null)
   const [newExpiry, setNewExpiry] = useState<ExpiryChoice>('90d')
   const [newRateLimit, setNewRateLimit] = useState('')
+  const [newAutonomy, setNewAutonomy] = useState<ApiKeyAutonomy>('manual')
   const [created, setCreated] = useState<CreatedApiKey | null>(null)
 
   const [revoking, setRevoking] = useState<AdminApiKey | null>(null)
@@ -180,6 +182,7 @@ export function ApiKeysRoute(): JSX.Element {
   const [editName, setEditName] = useState('')
   const [editScope, setEditScope] = useState<ReadonlySet<string>>(() => new Set())
   const [editRateLimit, setEditRateLimit] = useState('')
+  const [editAutonomy, setEditAutonomy] = useState<ApiKeyAutonomy>('manual')
 
   const load = useCallback(async () => {
     if (token === null || !isAdmin) return
@@ -270,6 +273,7 @@ export function ApiKeysRoute(): JSX.Element {
         scope: [...newScope],
         ...expiryFieldsFor(newExpiry),
         ...(rateLimitPerMinute === null ? {} : { rateLimitPerMinute }),
+        autonomy: newAutonomy,
       })
       setCreated(result)
       setCreating(false)
@@ -277,6 +281,7 @@ export function ApiKeysRoute(): JSX.Element {
       setNewScope(new Set())
       setNewExpiry('90d')
       setNewRateLimit('')
+      setNewAutonomy('manual')
       await load()
     } catch (caught) {
       setCreateError(caught instanceof ApiError ? caught.message : t('apiKeys.createError'))
@@ -288,6 +293,7 @@ export function ApiKeysRoute(): JSX.Element {
     setEditName(key.name)
     setEditScope(new Set(key.scope))
     setEditError(null)
+    setEditAutonomy(key.autonomy ?? 'manual')
     setEditRateLimit(
       key.rateLimitPerMinute === DEFAULT_RATE_LIMIT_PER_MINUTE
         ? ''
@@ -318,6 +324,7 @@ export function ApiKeysRoute(): JSX.Element {
         name,
         scope: [...editScope],
         rateLimitPerMinute,
+        autonomy: editAutonomy,
       })
       setActionNotice(t('apiKeys.savedDone', { name }))
       setEditing(null)
@@ -515,6 +522,7 @@ export function ApiKeysRoute(): JSX.Element {
                 <TableHeader>{t('apiKeys.nameColumn')}</TableHeader>
                 <TableHeader>{t('apiKeys.prefixColumn')}</TableHeader>
                 <TableHeader>{t('apiKeys.scopeColumn')}</TableHeader>
+                <TableHeader>{t('apiKeys.autonomyColumn')}</TableHeader>
                 <TableHeader>{t('apiKeys.createdColumn')}</TableHeader>
                 <TableHeader>{t('apiKeys.expiresColumn')}</TableHeader>
                 <TableHeader>{t('apiKeys.usageColumn')}</TableHeader>
@@ -562,6 +570,11 @@ export function ApiKeysRoute(): JSX.Element {
                           })}
                         </p>
                       )}
+                    </TableCell>
+                    <TableCell label={t('apiKeys.autonomyColumn')}>
+                      {key.autonomy === 'autonomous'
+                        ? t('apiKeys.autonomyAutonomousShort')
+                        : t('apiKeys.autonomyManualShort')}
                     </TableCell>
                     <TableCell label={t('apiKeys.createdColumn')}>
                       {formatWhen(key.createdAt)}
@@ -639,7 +652,7 @@ export function ApiKeysRoute(): JSX.Element {
                   </TableRow>
                 )
               })}
-              {keys.length === 0 && <TableEmpty colSpan={9}>{t('apiKeys.empty')}</TableEmpty>}
+              {keys.length === 0 && <TableEmpty colSpan={10}>{t('apiKeys.empty')}</TableEmpty>}
             </TableBody>
           </Table>
         </TableRoot>
@@ -744,6 +757,30 @@ export function ApiKeysRoute(): JSX.Element {
               />
             )}
           </Field>
+          <Field
+            label={t('apiKeys.autonomyLabel')}
+            description={
+              newAutonomy === 'autonomous'
+                ? t('apiKeys.autonomyAutonomousWarning')
+                : t('apiKeys.autonomyHint')
+            }
+          >
+            {(control) => (
+              <Select
+                {...control}
+                value={newAutonomy}
+                onChange={(event) => setNewAutonomy(event.target.value as ApiKeyAutonomy)}
+              >
+                <option value="manual">{t('apiKeys.autonomyManual')}</option>
+                <option value="autonomous">{t('apiKeys.autonomyAutonomous')}</option>
+              </Select>
+            )}
+          </Field>
+          {newAutonomy === 'autonomous' && newScope.has('admin') && (
+            <Notice tone="warning" live="off">
+              {t('apiKeys.autonomyAdminWarning')}
+            </Notice>
+          )}
         </form>
       </Modal>
 
@@ -808,6 +845,30 @@ export function ApiKeysRoute(): JSX.Element {
               />
             )}
           </Field>
+          <Field
+            label={t('apiKeys.autonomyLabel')}
+            description={
+              editAutonomy === 'autonomous'
+                ? t('apiKeys.autonomyAutonomousWarning')
+                : t('apiKeys.autonomyHint')
+            }
+          >
+            {(control) => (
+              <Select
+                {...control}
+                value={editAutonomy}
+                onChange={(event) => setEditAutonomy(event.target.value as ApiKeyAutonomy)}
+              >
+                <option value="manual">{t('apiKeys.autonomyManual')}</option>
+                <option value="autonomous">{t('apiKeys.autonomyAutonomous')}</option>
+              </Select>
+            )}
+          </Field>
+          {editAutonomy === 'autonomous' && editScope.has('admin') && (
+            <Notice tone="warning" live="off">
+              {t('apiKeys.autonomyAdminWarning')}
+            </Notice>
+          )}
         </form>
       </Modal>
 

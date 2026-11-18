@@ -111,6 +111,9 @@ Ce que ce chantier prévoit d'apporter à cet écran, une fois livré :
   (« comment rédiger un article », « revue de sécurité », …) qu'un agent
   charge dans son contexte ; un nouvel agent hérite par défaut de tous les
   skills du site, avec possibilité d'en exclure certains.
+  Un assistant externe branché au MCP du site (Claude, Codex…) lit aussi ces
+  compétences — outils `skills.list`/`skills.read` et « prompts » MCP — pour
+  écrire dans le style du site : n'y mettez rien de confidentiel.
 - Un sous-écran **Fournisseurs** : activation de plusieurs fournisseurs IA
   après l'installation, avec une clé API qui n'est **plus jamais réaffichée
   en clair** une fois enregistrée (un masque, comme un mot de passe), et un

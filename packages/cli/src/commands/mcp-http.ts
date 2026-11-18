@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { AccessContext } from '@cogenta/api'
 import type { ApiKeyStore } from '@cogenta/auth'
 import { createMcpHttpHandler, createMcpServer, type McpHttpRequestRecord } from '@cogenta/mcp'
+import { createSkillPromptSource } from './mcp-prompts.js'
 import {
   apiKeyIdentityResolver,
   createMcpToolSource,
@@ -72,7 +73,6 @@ export function createMcpHttpEndpoint(options: McpHttpEndpointOptions): McpHttpE
   // runs — kept by request object, so no request can see another's.
   const actors = new WeakMap<IncomingMessage, AccessContext['actor']>()
   const siteOrigin = originOf(options.siteUrl)
-  const instructions = mcpServerInstructions(options.tools.site)
 
   const handler = createMcpHttpHandler({
     ...(options.maxBodyBytes === undefined ? {} : { maxBodyBytes: options.maxBodyBytes }),
@@ -106,11 +106,21 @@ export function createMcpHttpEndpoint(options: McpHttpEndpointOptions): McpHttpE
         options.apiKeys,
         actor.id.slice('apikey:'.length),
       )
+      // The instructions tell the client whether its writes wait for a person,
+      // which depends on this key's autonomy. A key that cannot be resolved
+      // here is reported by the first call; the safe wording is the manual one.
+      const autonomy = await resolveIdentity().then(
+        (identity) => identity.autonomy ?? 'manual',
+        () => 'manual' as const,
+      )
       const server = createMcpServer({
         name: 'cogenta',
         version: options.version,
-        instructions,
+        instructions: mcpServerInstructions(options.tools.site, autonomy),
         tools: createMcpToolSource({ ...options.tools, transport: 'http' }, resolveIdentity),
+        ...(options.tools.skills === undefined
+          ? {}
+          : { prompts: createSkillPromptSource(options.tools.skills, resolveIdentity) }),
         ...(options.onInternalError === undefined
           ? {}
           : { onInternalError: options.onInternalError }),

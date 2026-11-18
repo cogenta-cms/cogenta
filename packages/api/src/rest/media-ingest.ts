@@ -12,7 +12,7 @@ import {
   sniffImageFormat,
   stripGpsFromJpeg,
 } from '@cogenta/core'
-import type { ImageEdit } from './media-edit.js'
+import { type ImageEdit, lastEditKey, originalCopyKey } from './media-edit.js'
 
 /**
  * The core of a media upload — sniff the real type, scrub GPS, write the
@@ -312,4 +312,30 @@ export async function ingestMediaUpload(
     for (const key of written) await deps.storage.delete(key).catch(() => undefined)
     throw error
   }
+}
+
+/**
+ * Deletes an asset for good: the original, every rendition (their names are
+ * recomputed from the recorded size, because `StorageDriver` has no `list`),
+ * the kept pre-edit original, then the row. The one implementation of "delete
+ * a media file", shared by `DELETE /api/media/{id}` and by the undo of
+ * `media.import_url`. Whether anything still *uses* the asset is the caller's
+ * question, not this function's. Returns false when no such asset exists.
+ */
+export async function removeMediaAsset(
+  deps: Pick<IngestMediaUploadDeps, 'store' | 'storage' | 'images'>,
+  id: string,
+): Promise<boolean> {
+  const asset = await deps.store.get(id)
+  if (asset === null) return false
+  await deps.storage.delete(asset.storageKey)
+  if (deps.images !== undefined && asset.width !== null && asset.height !== null) {
+    for (const name of deps.images.variantNames({ width: asset.width, height: asset.height })) {
+      await deps.storage.delete(variantKeyFor(id, name)).catch(() => undefined)
+    }
+  }
+  await deps.storage.delete(originalCopyKey(id)).catch(() => undefined)
+  await deps.storage.delete(lastEditKey(id)).catch(() => undefined)
+  await deps.store.delete(id)
+  return true
 }

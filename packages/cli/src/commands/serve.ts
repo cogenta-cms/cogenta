@@ -7,7 +7,6 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import {
-  assertDecisionAllowed,
   createFileAgentDeclarationStore,
   createFileApprovalQueue,
   createFilePromptTemplateStore,
@@ -307,6 +306,7 @@ import {
   type ContentStore,
   columnFor,
   countTaxonomyUsage,
+  countTermReferences,
   createAdminThemeStore,
   createContentStore,
   createEmbedPreviewStore,
@@ -458,10 +458,16 @@ import {
   searchPathFor,
   termArchivePathFor,
 } from './locale-paths.js'
+import {
+  createAnalyticsSummaryPort,
+  createCommentFinder,
+  createCommentModerationPort,
+} from './management-ports.js'
 import { createMcpHttpEndpoint, type McpHttpEndpoint, mcpConnectionInfo } from './mcp-http.js'
-import { MCP_API_KEY_ENV } from './mcp-tools.js'
+import { MCP_API_KEY_ENV, type McpSiteToolsOptions } from './mcp-tools.js'
+import { createMcpUndoRouter, type McpUndoRouter } from './mcp-undo.js'
 import { selectMediaImageProcessor } from './media-images.js'
-import { createUrlImageImporter } from './media-import.js'
+import { createUrlImageImporter, createUrlImageRemover } from './media-import.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
 import { createPluginBlockRenderer, type PluginBlockRenderer } from './plugin-block-render.js'
 import {
@@ -517,6 +523,7 @@ import {
   type TermArchiveResolution,
 } from './term-archive-page.js'
 import { createSiteTermSlugs } from './term-slugs.js'
+import { countWorkingTermReferences } from './term-usage.js'
 import { createTextProviderSource } from './text-provider-source.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
 import { exportThemeZip, importThemeZip } from './theme-export.js'
@@ -955,6 +962,12 @@ export interface Site {
    * (hence no approval queue) was assembled.
    */
   readonly mcpHttp?: McpHttpEndpoint
+  /**
+   * `/api/mcp/actions/{id}` and `.../revert` — an administrator takes back what
+   * an MCP client did (`mcp-undo.ts`). Present whenever the agent runtime is,
+   * including when `mcp.http` is off: the stdio transport journals the same way.
+   */
+  readonly mcpUndoRouter?: McpUndoRouter
   /**
    * `/api/site-plans` — L19 task 7's document-driven planning on a live site.
    *
@@ -2164,80 +2177,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           // the narrow ports `@cogenta/agents` describes. Built from the
           // very stores the comment router and the analytics router already
           // use, never a second instance.
-          comments: {
-            pending: async (limit) =>
-              (await commentsStore.list({ status: 'pending', limit })).items.map((comment) => ({
-                id: comment.id,
-                collection: comment.collection,
-                entryId: comment.entryId,
-                authorName: comment.authorName,
-                body: comment.body,
-                status: comment.status,
-                // A comment posted before the moderation pass existed carries
-                // nothing: "not checked" reads as "not flagged", which is what
-                // leaves it in the queue for a human rather than acting on it.
-                flagged: comment.moderation.flagged ?? false,
-                severity: comment.moderation.severity ?? 'none',
-                reason: comment.moderation.reason ?? '',
-                createdAt: comment.createdAt,
-              })),
-            decide: async (id, status, reason) => {
-              const comment = await commentsStore.get(id)
-              if (comment === null) {
-                throw new CogentaError({
-                  code: 'COMMENT_NOT_FOUND',
-                  message: `No comment "${id}".`,
-                  hint: 'It may have been decided already.',
-                })
-              }
-              // The refusal the tool's own documentation promises, applied
-              // where the real record is — never in the prompt.
-              const flagged = comment.moderation.flagged ?? false
-              const severity = comment.moderation.severity ?? 'none'
-              assertDecisionAllowed({ flagged, severity }, status)
-              await commentsStore.setStatus(id, status, null)
-              await commentsStore.setModeration(id, { flagged, severity, reason })
-              return {
-                id,
-                previousStatus: comment.status,
-                previousReason: comment.moderation.reason ?? '',
-              }
-            },
-            // R6 — what makes `comments.decide` reversible for real: the
-            // comment goes back to the status and the note it had, never to a
-            // guessed `pending`.
-            restore: async (receipt) => {
-              const comment = await commentsStore.get(receipt.id)
-              if (comment === null) return
-              await commentsStore.setStatus(
-                receipt.id,
-                receipt.previousStatus as 'pending' | 'approved' | 'spam' | 'trash',
-                null,
-              )
-              await commentsStore.setModeration(receipt.id, {
-                flagged: comment.moderation.flagged ?? false,
-                severity: comment.moderation.severity ?? 'none',
-                reason: receipt.previousReason,
-              })
-            },
-          },
-          analytics: {
-            summary: async (days) => {
-              const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
-              const summary = await analyticsStore.getSummary({ since })
-              return {
-                since: summary.since,
-                until: summary.until,
-                totalViews: summary.totalViews,
-                uniqueVisitors: summary.uniqueVisitors,
-                topPages: summary.topPages.map((page) => ({
-                  path: page.path,
-                  views: page.views,
-                })),
-                previousTotalViews: summary.previousTotalViews,
-              }
-            },
-          },
+          comments: createCommentModerationPort(() => commentsStore),
+          analytics: createAnalyticsSummaryPort(() => analyticsStore),
           // L26 task 5 — "Cogenta Theme Creator"'s tool. Absent, exactly
           // like `options.theme?.generator`, whenever no LLM provider is
           // configured.
@@ -3057,8 +2998,77 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // over this site's own service, permissions, search and blocks, with the
   // approval queue the Agents screen decides on — a write asked over HTTP
   // lands where an administrator already looks.
+  // The tool assembly `/api/mcp` serves, which the undo route (`mcp-undo.ts`)
+  // rebuilds for the administrator who takes an action back.
+  const mcpToolsOptions: Omit<McpSiteToolsOptions, 'transport'> | undefined =
+    agentsRuntime === undefined
+      ? undefined
+      : {
+          collections,
+          contentService: service,
+          permissions,
+          refreshPermissions: () => rolePermissionOverlay.refresh(),
+          mediaStore,
+          terms: termSlugs,
+          search: searchRouter,
+          blocks: options.blocks ?? vocabularyRegistry,
+          site: {
+            name: site.name,
+            url: site.url,
+            locales: site.locales,
+            defaultLocale: site.defaultLocale,
+          },
+          logger,
+          auditLog: auth.audit,
+          approvalQueue: agentsRuntime.approvalQueue,
+          approvalsUrl: `${site.url.replace(/\/+$/u, '')}/admin/agents`,
+          taxonomies,
+          taxonomyStoreFor,
+          // L42: the site's skills (the very store behind the admin's
+          // Compétences screen) and the management tools, built on the
+          // stores and ports the REST routes and the internal agents use.
+          skills: agentsRuntime.skillRegistry,
+          management: {
+            comments: {
+              port: createCommentModerationPort(() => commentsStore),
+              permissions: commentsPermissions,
+              find: createCommentFinder(() => commentsStore),
+            },
+            analytics: createAnalyticsSummaryPort(() => analyticsStore),
+            notFoundLog,
+            redirects: {
+              writer: redirects,
+              isLivePath,
+              exists: async (path) => (await redirects.resolve(path)) !== null,
+            },
+          },
+          // `media.import_url`: the same storage and image processor as
+          // `POST /api/media`, behind the outbound guard.
+          importImage: createUrlImageImporter({
+            mediaStore,
+            storage,
+            ...(options.images === null || options.images === undefined
+              ? {}
+              : { images: options.images }),
+          }),
+          // What the undo of `taxonomy.create_term` and `media.import_url` needs
+          // (L42): a term or a file is only removed while nothing references it.
+          termUsage: async (taxonomy, termId) =>
+            (await countTermReferences({ db, taxonomy, collections, termId })) +
+            (await countWorkingTermReferences({ collections, storeFor, taxonomy, termId })),
+          removeImage: createUrlImageRemover({
+            mediaStore,
+            storage,
+            ...(options.images === null || options.images === undefined
+              ? {}
+              : { images: options.images }),
+            collections,
+            storeFor,
+          }),
+        }
+
   const mcpHttp: McpHttpEndpoint | undefined =
-    options.mcpHttp === false || agentsRuntime === undefined
+    options.mcpHttp === false || mcpToolsOptions === undefined
       ? undefined
       : createMcpHttpEndpoint({
           apiKeys: auth.apiKeys,
@@ -3069,44 +3079,20 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             logger.error('mcp http internal error', {
               error: error instanceof Error ? (error.stack ?? error.message) : String(error),
             }),
-          tools: {
-            collections,
-            contentService: service,
-            permissions,
-            refreshPermissions: () => rolePermissionOverlay.refresh(),
-            mediaStore,
-            terms: termSlugs,
-            search: searchRouter,
-            blocks: options.blocks ?? vocabularyRegistry,
-            site: {
-              name: site.name,
-              url: site.url,
-              locales: site.locales,
-              defaultLocale: site.defaultLocale,
-            },
-            logger,
-            auditLog: auth.audit,
-            approvalQueue: agentsRuntime.approvalQueue,
-            approvalsUrl: `${site.url.replace(/\/+$/u, '')}/admin/agents`,
-            taxonomies,
-            taxonomyStoreFor,
-            // `media.import_url`: the same storage and image processor as
-            // `POST /api/media`, behind the outbound guard.
-            importImage: createUrlImageImporter({
-              mediaStore,
-              storage,
-              ...(options.images === null || options.images === undefined
-                ? {}
-                : { images: options.images }),
-            }),
-          },
+          tools: mcpToolsOptions,
         })
+
+  const mcpUndoRouter: McpUndoRouter | undefined =
+    mcpToolsOptions === undefined
+      ? undefined
+      : createMcpUndoRouter({ tools: mcpToolsOptions, auditLog: auth.audit, logger })
 
   return {
     db,
     auth,
     cogentaVersion,
     ...(mcpHttp === undefined ? {} : { mcpHttp }),
+    ...(mcpUndoRouter === undefined ? {} : { mcpUndoRouter }),
     ...(options.pluginWidgets === undefined ? {} : { pluginWidgets: options.pluginWidgets }),
     storeFor,
     restRouter: createRestRouter({
@@ -4580,6 +4566,34 @@ async function recordImportAudit(
     .catch((error: unknown) => logger.error('audit record failed', { error: String(error) }))
 }
 
+/** The scope and autonomy of a key as its public representation states them. */
+function apiKeyPowers(
+  key: { readonly [field: string]: unknown } | undefined,
+): { readonly scope: unknown; readonly autonomy: unknown } | undefined {
+  if (key === undefined) return undefined
+  return { scope: key['scope'], autonomy: key['autonomy'] }
+}
+
+/**
+ * What a `PATCH` of a key changed, `{ from, to }` for each of its scope, its
+ * autonomy, its name and its quota that differ — a key that may now publish
+ * without a person, or that gained the `admin` role, must leave a trace in the
+ * journal. Only fields that changed; never any key material.
+ */
+function apiKeyChanges(
+  before: { readonly [field: string]: unknown } | null,
+  after: { readonly [field: string]: unknown } | undefined,
+): Record<string, { readonly from: unknown; readonly to: unknown }> | undefined {
+  if (before === null || after === undefined) return undefined
+  const changes: Record<string, { readonly from: unknown; readonly to: unknown }> = {}
+  for (const field of ['autonomy', 'scope', 'name', 'rateLimitPerMinute']) {
+    if (JSON.stringify(before[field]) !== JSON.stringify(after[field])) {
+      changes[field] = { from: before[field], to: after[field] }
+    }
+  }
+  return changes
+}
+
 /**
  * Who minted, rotated, revoked, purged or recovered a machine credential, in
  * the same append-only log as every other account action (L13 task 8;
@@ -4597,6 +4611,8 @@ async function recordApiKeyAudit(
   pathname: string,
   response: RestResponse,
   logger: Logger,
+  /** The key as it was before a `PATCH`, read before the router changed it. */
+  before: { readonly [field: string]: unknown } | null = null,
 ): Promise<void> {
   if (response.status < 200 || response.status >= 300) return
 
@@ -4612,15 +4628,21 @@ async function recordApiKeyAudit(
         ? 'apikey.rotate'
         : method === 'POST' && target !== undefined && sub === 'recover'
           ? 'apikey.recover'
-          : method === 'DELETE' && target !== undefined && sub === 'purge'
-            ? 'apikey.purge'
-            : method === 'DELETE' && target !== undefined && sub === undefined
-              ? 'apikey.revoke'
-              : null
+          : method === 'PATCH' && target !== undefined && sub === undefined
+            ? 'apikey.update'
+            : method === 'DELETE' && target !== undefined && sub === 'purge'
+              ? 'apikey.purge'
+              : method === 'DELETE' && target !== undefined && sub === undefined
+                ? 'apikey.revoke'
+                : null
   if (action === null) return
 
   const body = response.body as {
-    readonly data?: { readonly id?: unknown; readonly issued?: { readonly id?: unknown } }
+    readonly data?: {
+      readonly id?: unknown
+      readonly issued?: { readonly id?: unknown }
+      readonly [field: string]: unknown
+    }
   } | null
   const subjectId =
     action === 'apikey.rotate'
@@ -4638,7 +4660,13 @@ async function recordApiKeyAudit(
       ? { rotatedFrom: target }
       : action === 'apikey.recover' && target !== undefined
         ? { recoveredFrom: target }
-        : undefined
+        : action === 'apikey.create'
+          ? // What the key can do — its roles and whether it acts without a
+            // person — is exactly what a reviewer of the journal needs.
+            apiKeyPowers(body?.data)
+          : action === 'apikey.update'
+            ? apiKeyChanges(before, body?.data)
+            : undefined
 
   await site.auth.audit
     .record({
@@ -6471,9 +6499,23 @@ export function createRequestListener(
         const body =
           req.method === 'GET' || req.method === 'DELETE' ? undefined : await readBody(req)
         const request = toRestRequest(req, url, body)
+        // A PATCH is journalled with what it changed, so the key is read first.
+        const patchedId =
+          req.method === 'PATCH' ? (url.pathname.split('/').filter(Boolean)[2] ?? null) : null
+        const keyBefore =
+          patchedId === null ? null : await site.auth.apiKeys.getById(patchedId).catch(() => null)
+        const before = keyBefore === null ? null : { ...keyBefore }
         const response = await site.apiKeysRouter.handle(request, context.actor)
         writeRestResponse(res, response)
-        await recordApiKeyAudit(site, actor, req.method ?? 'GET', url.pathname, response, logger)
+        await recordApiKeyAudit(
+          site,
+          actor,
+          req.method ?? 'GET',
+          url.pathname,
+          response,
+          logger,
+          before,
+        )
         return
       }
 
@@ -7466,6 +7508,14 @@ export function createRequestListener(
           response,
           logger,
         )
+        return
+      }
+
+      // Undo of an MCP client's action, from the audit log (L42): admin
+      // session only, the router refuses an API key.
+      if (url.pathname.startsWith('/api/mcp/actions/') && site.mcpUndoRouter !== undefined) {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.mcpUndoRouter.handle(request, context.actor))
         return
       }
 

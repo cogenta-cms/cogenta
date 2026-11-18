@@ -168,6 +168,71 @@ describe('editing an API key', () => {
     expect(screen.queryByText(/^cogenta_sk_mock/u)).toBeNull()
   })
 
+  it('chooses the autonomy of a new key and shows it in the list', async () => {
+    render(<App />)
+    await goToApiKeys()
+    // A key is manual until said otherwise.
+    expect(within(rowFor('CI pipeline')).getByText('Manuelle')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvelle clé API' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Créer une clé API' })
+    fireEvent.change(screen.getByLabelText('Nom'), { target: { value: 'Claude publisher' } })
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Éditeur' }))
+    fireEvent.change(within(dialog).getByLabelText("Autonomie d'un assistant connecté par MCP"), {
+      target: { value: 'autonomous' },
+    })
+    // The warning only appears for the choice that needs it.
+    expect(within(dialog).getByText(/peut publier sans relecture/u)).toBeDefined()
+    fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+
+    await screen.findByText(/^cogenta_sk_mock/u)
+    await waitFor(() => {
+      expect(within(rowFor('Claude publisher')).getByText('Autonome')).toBeDefined()
+    })
+  })
+
+  it('warns that an autonomous key with the admin role also reads visitor text, and advises a separate key', async () => {
+    render(<App />)
+    await goToApiKeys()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvelle clé API' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Créer une clé API' })
+    const autonomy = within(dialog).getByLabelText("Autonomie d'un assistant connecté par MCP")
+    const adminOnlyWarning = /commentaires des visiteurs et le journal des 404/u
+
+    // Autonomous, but a publishing role: the general warning only.
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Éditeur' }))
+    fireEvent.change(autonomy, { target: { value: 'autonomous' } })
+    expect(within(dialog).queryByText(adminOnlyWarning)).toBeNull()
+
+    // Admin and autonomous: the warning, with the advice.
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Administrateur' }))
+    expect(within(dialog).getByText(adminOnlyWarning)).toBeDefined()
+    expect(within(dialog).getByText(/clé distincte, sans le rôle admin/u)).toBeDefined()
+
+    // Back to manual: nothing runs without a person, so nothing to warn of.
+    fireEvent.change(autonomy, { target: { value: 'manual' } })
+    expect(within(dialog).queryByText(adminOnlyWarning)).toBeNull()
+  })
+
+  it('changes the autonomy of an existing key', async () => {
+    render(<App />)
+    await goToApiKeys()
+
+    fireEvent.click(within(rowFor('CI pipeline')).getByRole('button', { name: /^Modifier/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Modifier CI pipeline' })
+    const choice = within(dialog).getByLabelText(
+      "Autonomie d'un assistant connecté par MCP",
+    ) as HTMLSelectElement
+    expect(choice.value).toBe('manual')
+    fireEvent.change(choice, { target: { value: 'autonomous' } })
+    fireEvent.submit(dialog.querySelector('form') as HTMLFormElement)
+
+    await waitFor(() => {
+      expect(within(rowFor('CI pipeline')).getByText('Autonome')).toBeDefined()
+    })
+  })
+
   it('does not offer editing a revoked key', async () => {
     render(<App />)
     await goToApiKeys()

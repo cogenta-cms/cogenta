@@ -42,6 +42,7 @@ import {
   type ImageSize,
   ingestMediaUpload,
   type MediaImageProcessor,
+  removeMediaAsset,
   type UploadedImageVariant,
   variantKeyFor,
 } from './media-ingest.js'
@@ -1106,11 +1107,11 @@ export function createMediaRouter(options: MediaRouterOptions): MediaRouter {
 
   async function remove(id: string, actor: Actor): Promise<RestResponse> {
     requireActor(actor)
-    const asset = await store.get(id)
-    if (asset === null) throw notFound(id)
-    await deleteAssetFiles(asset)
-    await dropOriginalCopy(id)
-    await store.delete(id)
+    const removed = await removeMediaAsset(
+      { store, storage, ...(options.images === undefined ? {} : { images: options.images }) },
+      id,
+    )
+    if (!removed) throw notFound(id)
     return jsonResponse(204, null)
   }
 

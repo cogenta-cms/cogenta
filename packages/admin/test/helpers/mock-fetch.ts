@@ -1123,6 +1123,20 @@ export function installMockFetch(
      * `at id` base64url, newest first).
      */
     readonly auditEntries?: readonly Readonly<Record<string, unknown>>[]
+    /**
+     * L42: what `GET /api/mcp/actions/{id}` answers with, and how
+     * `POST .../revert` ends — `refusal` answers it with that error, as the
+     * server does when the entry was edited since.
+     */
+    readonly mcpAction?: {
+      readonly state: Readonly<Record<string, unknown>>
+      readonly refusal?: {
+        readonly status: number
+        readonly code: string
+        readonly message: string
+        readonly hint?: string
+      }
+    }
     /** Fiche 21 task 1: what `GET /api/audit/{id}` answers with, for any id. */
     readonly auditDetail?: {
       readonly entry: Readonly<Record<string, unknown>>
@@ -2584,6 +2598,7 @@ export function installMockFetch(
     lastUsedAt: string | null
     rateLimitPerMinute: number
     supersededBy: string | null
+    autonomy: 'manual' | 'autonomous'
   }[] = [
     {
       id: 'key-1',
@@ -2597,6 +2612,7 @@ export function installMockFetch(
       lastUsedAt: '2026-03-05T00:00:00.000Z',
       rateLimitPerMinute: 600,
       supersededBy: null,
+      autonomy: 'manual' as const,
     },
     // Fiche 62 task 2: revoked well outside `MIN_PURGE_AFTER_REVOKED_DAYS`
     // (30 days) of the real wall clock, so the "purge" screen tests do not
@@ -2614,6 +2630,7 @@ export function installMockFetch(
       lastUsedAt: null,
       rateLimitPerMinute: 600,
       supersededBy: null,
+      autonomy: 'manual' as const,
     },
   ]
 
@@ -3344,6 +3361,40 @@ export function installMockFetch(
         }
       }
 
+      // L42: take back an MCP client's action, from the audit log. Admin
+      // session only, like the real route.
+      const mcpActionMatch = /\/api\/mcp\/actions\/([^/?]+)(\/revert)?/u.exec(url)
+      if (mcpActionMatch !== null) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may undo an action.' },
+          })
+        }
+        const action = options.mcpAction ?? { state: { state: 'available' } }
+        if (mcpActionMatch[2] === '/revert') {
+          if (action.refusal !== undefined) {
+            return json(action.refusal.status, {
+              error: {
+                code: action.refusal.code,
+                message: action.refusal.message,
+                ...(action.refusal.hint === undefined ? {} : { hint: action.refusal.hint }),
+              },
+            })
+          }
+          return json(200, {
+            data: {
+              id: mcpActionMatch[1],
+              tool: 'content.publish',
+              state: 'reverted',
+              revertAuditId: 'audit-undo-1',
+            },
+          })
+        }
+        return json(200, {
+          data: { id: mcpActionMatch[1], tool: 'content.publish', ...action.state },
+        })
+      }
+
       // `/api/mcp-info` — what the "MCP" screen prints client configurations from.
       if (url.endsWith('/api/mcp-info') && method === 'GET') {
         if (!user.roles.includes('admin')) {
@@ -3436,6 +3487,8 @@ export function installMockFetch(
             rateLimitPerMinute:
               typeof body.rateLimitPerMinute === 'number' ? body.rateLimitPerMinute : 600,
             supersededBy: null,
+            autonomy:
+              body.autonomy === 'autonomous' ? ('autonomous' as const) : ('manual' as const),
           }
           apiKeys.push(record)
           return json(201, {
@@ -3465,6 +3518,7 @@ export function installMockFetch(
             lastUsedAt: null,
             rateLimitPerMinute: found.rateLimitPerMinute,
             supersededBy: null,
+            autonomy: found.autonomy,
           }
           found.supersededBy = issued.id
           // Far in the future on purpose: this only has to outlive whatever
@@ -3509,6 +3563,9 @@ export function installMockFetch(
           }
           if (typeof body.name === 'string') found.name = body.name
           if (Array.isArray(body.scope)) found.scope = body.scope as readonly string[]
+          if (body.autonomy === 'manual' || body.autonomy === 'autonomous') {
+            found.autonomy = body.autonomy
+          }
           if (body.rateLimitPerMinute === null) found.rateLimitPerMinute = 600
           else if (typeof body.rateLimitPerMinute === 'number') {
             found.rateLimitPerMinute = body.rateLimitPerMinute
@@ -3589,6 +3646,7 @@ export function installMockFetch(
             lastUsedAt: null,
             rateLimitPerMinute: found.rateLimitPerMinute,
             supersededBy: null,
+            autonomy: found.autonomy,
           }
           found.supersededBy = issued.id
           apiKeys.push(issued)

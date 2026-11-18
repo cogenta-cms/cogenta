@@ -202,13 +202,15 @@ export interface AuditLog {
  *    actor's id this way since L13 task 8; nothing else produces that shape.
  *  - `action` starts with `agent.tool.` → `'agent'`. `withAudit`
  *    (`packages/agents/src/audit/with-audit.ts`, L4 task 6) is the only
- *    writer that names an action this way.
+ *    writer that names an action this way — except for an *undo*
+ *    (`agent.tool.<tool>.revert`), which a signed-in person records when
+ *    they take an agent's action back (L42): that one is `'human'`.
  *  - anything else → `'human'`.
  */
 export function classifyAuditActor(entry: Pick<AuditEntry, 'actorId' | 'action'>): AuditActorKind {
   if (entry.actorId === null) return 'system'
   if (entry.actorId.startsWith('apikey:')) return 'api_key'
-  if (entry.action.startsWith('agent.tool.')) return 'agent'
+  if (entry.action.startsWith('agent.tool.') && !entry.action.endsWith('.revert')) return 'agent'
   return 'human'
 }
 
@@ -219,9 +221,9 @@ function actorKindCondition(kind: AuditActorKind) {
     case 'api_key':
       return sql`actor_id like ${'apikey:%'}`
     case 'agent':
-      return sql`action like ${'agent.tool.%'}`
+      return sql`(action like ${'agent.tool.%'} and action not like ${'%.revert'})`
     case 'human':
-      return sql`(actor_id is not null and actor_id not like ${'apikey:%'} and action not like ${'agent.tool.%'})`
+      return sql`(actor_id is not null and actor_id not like ${'apikey:%'} and (action not like ${'agent.tool.%'} or action like ${'%.revert'}))`
   }
 }
 

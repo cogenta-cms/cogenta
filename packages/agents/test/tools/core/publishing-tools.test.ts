@@ -46,11 +46,12 @@ describe('content.write_translation', () => {
     )
   })
 
-  it('is a write a human approves: side effects, not reversible, the draft permission', () => {
+  it('is a write with side effects on the draft permission, reversible by moving the draft to the trash', () => {
     const tool = createContentWriteTranslationTool(fakeContent())
     expect(tool.permissions).toEqual(['content.write_draft'])
     expect(tool.sideEffects).toBe(true)
-    expect(tool.reversible).toBe(false)
+    expect(tool.reversible).toBe(true)
+    expect(tool.revert).toBeTypeOf('function')
   })
 })
 
@@ -107,6 +108,7 @@ describe('taxonomy.create_term', () => {
       slug: 'ai',
       parent: null,
       labels: { en: 'AI' },
+      taxonomy: 'tag',
       created: false,
     })
     expect(service.created).toHaveLength(0)

@@ -180,7 +180,20 @@ export interface ApiKey {
    * window; this field only names what it was superseded by.
    */
   readonly supersededBy: string | undefined
+  /**
+   * What an MCP client holding this key may do without a person (L42).
+   * `manual` — every write waits for an administrator's approval — is the
+   * default and what a row written before this field reads as. `autonomous`
+   * lets a *reversible* write run at once; a write that cannot be undone
+   * still waits, whatever this says.
+   */
+  readonly autonomy: ApiKeyAutonomy
 }
+
+/** How much an MCP client holding a key may do without a human approving it (L42). */
+export type ApiKeyAutonomy = 'manual' | 'autonomous'
+
+export const API_KEY_AUTONOMIES: readonly ApiKeyAutonomy[] = ['manual', 'autonomous']
 
 export interface CreateApiKeyInput {
   readonly name: string
@@ -189,6 +202,8 @@ export interface CreateApiKeyInput {
   readonly expiresAt?: string | undefined
   /** Omit for `DEFAULT_RATE_LIMIT_PER_MINUTE`. */
   readonly rateLimitPerMinute?: number | undefined
+  /** Omit for `manual`. */
+  readonly autonomy?: ApiKeyAutonomy | undefined
 }
 
 /** An API key as returned once, at creation — `key` is never stored or shown again. */

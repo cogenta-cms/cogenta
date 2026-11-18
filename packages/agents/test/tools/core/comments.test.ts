@@ -87,10 +87,13 @@ describe('comments.decide', () => {
     expect(tool.revert).toBeDefined()
     await tool.revert?.(receipt, CTX)
 
+    // The restore is told which status this call set, so the host can refuse
+    // to overwrite a later decision by a person.
     expect(port.restore).toHaveBeenCalledWith({
       id: 'c1',
       previousStatus: 'pending',
       previousReason: 'one link',
+      decidedStatus: 'spam',
     })
     // `reversible: true` without a working revert is exactly what `defineTool`
     // refuses to construct — this asserts the promise, not just the flag.

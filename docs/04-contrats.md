@@ -714,6 +714,7 @@ theme.write_sandbox
 plugin.write_sandbox
 comments.moderate · analytics.read
 taxonomy.read · taxonomy.write
+skills.read
 ```
 
 `document.extract` (ajoutée en `tools@1.1`, L19 tâche 1) autorise la lecture du texte
@@ -800,6 +801,39 @@ nouveau au moment d'écrire. Aucune signature d'outil existante
 n'est touchée : un ajout par le bas, mineur au même titre que `document.extract` en
 `tools@1.1`.
 
+**`tools@1.10` le 2026-11-18** (L42, autonomie réglable par clé MCP) : cinq outils
+d'écriture passent de `reversible: false` à `reversible: true`, **avec un vrai `revert`**
+(la règle du contrat l'autorise : « implémenter `revert` ou rester `reversible: false` »,
+R6). Aucun nom, aucune entrée, aucune permission ne change. Une clé d'API MCP en mode
+`autonomous` exécute sans approbation un outil réversible ; un outil non réversible attend
+toujours un humain, quel que soit le mode (`manual`, le défaut, fait attendre tout outil à
+effet de bord, comme avant).
+
+| Outil | Ce que fait `revert` | Il refuse (`TOOL_REVERT_REFUSED`, 409) quand |
+|---|---|---|
+| `content.write_draft` | Création : l'entrée va à la **corbeille** (restaurable). Mise à jour : la version de travail **remplacée** redevient courante, comme *nouvelle* version (l'historique reste en ajout seul). | l'entrée a été modifiée depuis (sa version de travail n'est plus celle que l'appel a produite), ou n'existe plus. N'est pas restauré : le libellé `provenance`, qui n'appartient pas à une version. |
+| `content.write_translation` | La traduction créée va à la corbeille ; la source n'est pas touchée. | la traduction a été modifiée depuis. |
+| `content.publish` | Jamais publiée avant : `unpublish` vers le statut d'avant (`draft`, `archived`, `scheduled` avec sa date). Déjà publiée avant : la version qui était publique redevient courante puis est republiée ; le brouillon en attente reste dans l'historique. | l'entrée a été modifiée ou republiée depuis, la version publique d'avant n'est plus conservée par l'historique de la collection, ou son statut d'avant est inconnu. N'est pas défait : la date de publication posée par une première publication, et le brouillon qu'une republication avait en attente (il reste dans l'historique). |
+| `taxonomy.create_term` | Supprime le terme, **seulement** s'il a été créé par cet appel (`created: true`) et qu'aucune entrée (corbeille et brouillons compris) ne le porte encore. | le terme existait déjà, est utilisé, ou a des termes enfants. |
+| `media.import_url` | Supprime le fichier importé et ses déclinaisons, **seulement** s'il a été importé depuis une adresse et qu'aucune entrée ne le référence (face de travail et face publiée, corbeille comprise ; un balayage incomplet compte comme « utilisé »). | le fichier est référencé, n'a pas été importé par cet outil, ou n'a pas pu être vérifié en entier. Non balayés : réglages du site, menus, avatars. |
+
+Pour qu'un `revert` n'ait besoin de rien d'autre que le reçu, la **sortie** de ces outils
+porte ce qu'il faut : une clé `undo` ajoutée à l'entrée sérialisée (`content.*` : le genre
+d'annulation, la version produite, la version remplacée ou l'état public d'avant) et une
+clé `taxonomy` à la sortie de `taxonomy.create_term`. Ce sont des ajouts à des sorties
+ouvertes ou lues par clé : un consommateur qui les ignore est inchangé.
+
+Un outil n'est réversible **que si son hôte fournit les opérations d'annulation**
+(`ContentServiceLike.restore`/`unpublish`, `TaxonomyServiceLike.usage`/`delete`,
+`MediaImportUrlToolOptions.removeImage`). Sans elles — c'est le cas du runtime d'agents
+interne (`agent-runtime.ts`) — l'outil reste `reversible: false` et attend un humain,
+comme avant : un agent interne ne gagne aucune autonomie par ce changement. `cogenta
+serve` les fournit tous ; `cogenta mcp` (stdio) ne fournit que ceux du contenu — il n'a ni
+pilote de stockage ni comptage d'usage des termes, donc `taxonomy.create_term` y reste
+non réversible. `content.delete` reste non réversible (le
+contrat ne dit pas à quel moment « mettre à la corbeille » devient une annulation), de
+même que `media.write` et `media.store_generated_image`.
+
 `theme.write_sandbox` (ajoutée en `tools@1.6`, fiche 73 tâche 7) autorise un agent à
 écrire un fichier de code de thème réel — mais seulement dans un bac à sable isolé
 (`<projectRoot>/.cogenta/theme-sandbox/<id>/`), jamais dans `themes/`. Aucun outil ne
@@ -807,6 +841,73 @@ porte cette permission avec un autre effet que « écrire un fichier dans ce seu
 dossier » ; déployer un bac à sable vers `themes/` reste un pipeline séparé (fiche 73
 tâche 5) qui exige un scan de sécurité et une confirmation humaine explicite avant
 toute copie.
+
+**`tools@1.11` le 2026-11-18** (L42, compétences et gestion du site par MCP) : la
+taxonomie gagne `skills.read`, et sept outils déjà connus ou nouveaux sont offerts à un
+client MCP externe. Aucune signature d'outil existante n'est touchée : un ajout par le
+bas, mineur au même titre que `taxonomy.read` en `1.9`.
+
+| Outil | Permission | Effets |
+|---|---|---|
+| `skills.list` | `skills.read` (**nouvelle**) | `sideEffects: false` — les compétences du site (identifiant, nom, description) : le contenu de l'écran *IA → Compétences*, un `SKILL.md` par compétence. |
+| `skills.read` | `skills.read` (**nouvelle**) | `sideEffects: false` — le `SKILL.md` complet d'une compétence (frontmatter et corps Markdown) : les consignes éditoriales écrites par les administrateurs du site. Elles guident la rédaction ; elles n'accordent jamais une permission et ne remplacent aucune porte d'un autre outil. |
+
+Les deux lisent l'`AgentSkillStore` de l'écran d'administration — **aucun second magasin**
+— et retrouvent une compétence en comparant l'identifiant reçu à ceux que le magasin
+liste, jamais en le lui passant (il en fait un chemin de fichier). Les ressources d'une
+compétence (`references/`, `scripts/`, `assets/`) ne sont pas offertes. Le magasin n'a pas
+de notion de compétence privée ou propre à un agent : tout ce qu'il contient est lisible
+par **toute clé authentifiée, quel que soit son rôle** (un lecteur qui lit les consignes de
+rédaction ne peut rien en faire de plus ; l'écran d'administration le dit à qui les écrit).
+Un appelant anonyme (`cogenta mcp` sans clé) ne reçoit ni l'outil ni le prompt.
+
+Les cinq outils de gestion existants du contrat C sont exposés à MCP **avec la porte de leur
+route REST** — le même contrôle, offert ou refusé de la même façon (un outil que le rôle ne
+peut pas utiliser est inconnu de lui, pas seulement refusé), sans changer leurs drapeaux
+`sideEffects`/`reversible` :
+
+| Outil | Qui l'obtient (comme la route REST) | Sur `cogenta mcp` (stdio) |
+|---|---|---|
+| `comments.list` | `comments.read` (admin, éditeur, lecteur par défaut) | oui |
+| `comments.decide` | `comments.moderate` (admin, éditeur par défaut) | oui |
+| `analytics.summary` | rôle `admin` | oui |
+| `logs.read_not_found` | rôle `admin` | oui |
+| `redirects.create` | rôle `admin` | **non** — l'outil refuse un chemin où vit une page, et ce contrôle exige la passerelle de contenu que seul `cogenta serve` assemble |
+
+Avant d'attendre un humain, l'hôte refuse ce qui est connu pour échouer : une décision de
+commentaire sur un commentaire inconnu, déjà décidé ou contraire au verdict anti-spam du
+site (`assertDecisionAllowed`) ; une redirection dont la source est une page existante ou
+dont une extrémité n'est pas un chemin du site. Les textes que ces outils rendent
+(commentaires de visiteurs, chemins et référents du journal 404) sont de la **donnée** (R8) :
+les descriptions MCP des outils et les instructions du serveur le disent au client, **et
+l'hôte MCP les marque dans la réponse** (revue de sécurité du 2026-11-18). Sans toucher à la
+définition des outils : la sortie de `comments.list` et de `logs.read_not_found` garde ses
+clés et sa forme, mais chaque chaîne écrite par un visiteur (`authorName`, `body` ; `path`,
+`lastReferrer`) est enfermée dans le même bloc `<data source="tool:…">` que celui du
+contexte d'un agent interne (`fenceToolOutput`, chevrons échappés : une valeur ne peut pas le
+fermer), et deux clés sont **ajoutées** — `untrusted: true` et `notice`. Le journal d'audit
+garde la sortie brute.
+
+`redirects.create` sur MCP refuse en plus, avant toute approbation et de nouveau à
+l'exécution : une source qui porte **déjà** une redirection (`REDIRECT_EXISTS`, 409 — le
+magasin remplace en silence et le `revert` supprimerait la règle de la personne ; le
+changer est un geste d'humain dans l'écran Redirections) et une source que le routeur
+public sert hors des collections (`REDIRECT_PATH_RESERVED`, 400 : `/_*`, `/api`, `/admin`,
+`/sitemap*.xml`, `/robots.txt`, `/llms.txt`, `/feed.xml`, `/atom.xml`, `/search`,
+`/.well-known/*`, `/forms/*`, `/archive/*`…, liste dans `reserved-paths.ts`). Le refus
+d'une règle existante n'est demandé que par l'hôte MCP (`RedirectCreateOptions.exists`) :
+l'agent interne « Site Monitor » garde son comportement, qui remplace.
+
+`comments.decide` : le reçu porte déjà le statut posé (`status`) ; le `revert` ne remet
+l'ancien statut que si le commentaire le porte encore, sinon `TOOL_REVERT_REFUSED` (une
+personne a décidé de nouveau entre-temps, et l'annulation écraserait sa décision).
+
+**Prompts MCP** (`@cogenta/mcp`, hors contrat C) : `prompts/list` et `prompts/get`
+(spécification 2025-06-18), annoncés dans `initialize` seulement si un hôte fournit une
+source de prompts. `cogenta serve` et `cogenta mcp` offrent chaque compétence comme un
+prompt : le nom est l'identifiant de la compétence, la description celle du `SKILL.md`, et
+`prompts/get` rend un message `user` portant le corps Markdown. Un nom inconnu répond
+l'erreur JSON-RPC `-32602`.
 
 ### Définition d'un agent
 

@@ -45,6 +45,17 @@ export interface RedirectCreateOptions {
    * the host has no way to tell, and nothing is refused on that ground.
    */
   readonly isLivePath?: (path: string) => Promise<boolean>
+  /**
+   * Whether a redirect already leaves this path (no query string). `add()` of
+   * the store *replaces* a rule at the same `from`, and this tool's `revert`
+   * *removes* the rule at `from`: so creating over an existing rule would
+   * silently overwrite a person's redirect, and undoing the call would then
+   * delete it for good. A host that sets this makes the tool refuse
+   * (`REDIRECT_EXISTS`) instead — the MCP host does, since an outside client
+   * is not the Site Monitor. Absent, the replace behaviour the internal agents
+   * have always had is unchanged.
+   */
+  readonly exists?: (path: string) => Promise<boolean>
 }
 
 const InputSchema = z.object({
@@ -89,6 +100,14 @@ export function createRedirectCreateTool(
           code: 'REDIRECT_FROM_LIVE_PATH',
           message: `"${path}" is a page that exists, so it cannot be redirected away.`,
           hint: 'A redirect is for a path that no longer leads anywhere. Redirecting a live page is a decision for a person, made in the Redirections screen.',
+          details: { from: path },
+        })
+      }
+      if (options.exists !== undefined && (await options.exists(path))) {
+        throw new CogentaError({
+          code: 'REDIRECT_EXISTS',
+          message: `A redirect already leaves "${path}", so this call does not replace it.`,
+          hint: 'An existing redirect is changed by a person, in the Redirections screen of the administration.',
           details: { from: path },
         })
       }

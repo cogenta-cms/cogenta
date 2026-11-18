@@ -14,7 +14,8 @@ import {
  * specification asks of a server ("the latest version it supports").
  *
  * Every version here shares the subset this server implements: `initialize`,
- * `ping`, `tools/list`, `tools/call`, `notifications/cancelled` and
+ * `ping`, `tools/list`, `tools/call`, `prompts/list`, `prompts/get` (only when
+ * a prompt source is given), `notifications/cancelled` and
  * `notifications/progress`. Nothing a later revision added (tasks, icons,
  * elicitation, sampling) is offered, and none of it is required.
  */
@@ -65,6 +66,38 @@ export interface McpTool {
  */
 export type McpToolSource = readonly McpTool[] | (() => Promise<readonly McpTool[]>)
 
+/** One prompt a client may list, as `prompts/list` describes it (MCP 2025-06-18). */
+export interface McpPromptDescriptor {
+  /** What `prompts/get` takes. */
+  readonly name: string
+  readonly title?: string
+  readonly description?: string
+}
+
+/** One message of a prompt, as `prompts/get` returns it. Text only: nothing else is offered. */
+export interface McpPromptMessage {
+  readonly role: 'user' | 'assistant'
+  readonly content: { readonly type: 'text'; readonly text: string }
+}
+
+export interface McpPromptResult {
+  readonly description?: string
+  readonly messages: readonly McpPromptMessage[]
+}
+
+/**
+ * The prompts for one caller. Like a tool source, it is asked on every
+ * request, so whoever builds it can re-resolve the caller each time: a source
+ * that throws (a revoked key) answers with the same "no longer
+ * authenticates" refusal as a tool call. `get` answers `undefined` for a name
+ * it does not know, which the server turns into the JSON-RPC error the
+ * specification asks for.
+ */
+export interface McpPromptSource {
+  list(): Promise<readonly McpPromptDescriptor[]>
+  get(name: string): Promise<McpPromptResult | undefined>
+}
+
 export interface McpServerOptions {
   readonly name: string
   readonly version: string
@@ -78,6 +111,12 @@ export interface McpServerOptions {
    * serveur MCP : aucun travail supplémentaire, seulement une exposition."
    */
   readonly tools: McpToolSource
+  /**
+   * Prompts to offer. `prompts` is advertised in `initialize` — and
+   * `prompts/list` / `prompts/get` answered — only when this is given; without
+   * it the server behaves exactly as before and those methods are unknown.
+   */
+  readonly prompts?: McpPromptSource
   /** Told about every failure that is not a `CogentaError` — what the caller is not shown. */
   readonly onInternalError?: (error: unknown) => void
 }
@@ -332,7 +371,10 @@ export function createMcpServer(options: McpServerOptions): McpServer {
         return jsonRpcSuccess(id, {
           protocolVersion: negotiatedVersion(params),
           serverInfo: { name: options.name, version: options.version },
-          capabilities: { tools: { listChanged: false } },
+          capabilities: {
+            tools: { listChanged: false },
+            ...(options.prompts === undefined ? {} : { prompts: { listChanged: false } }),
+          },
           ...(options.instructions === undefined ? {} : { instructions: options.instructions }),
         })
       }
@@ -358,6 +400,45 @@ export function createMcpServer(options: McpServerOptions): McpServer {
       }
 
       if (method === 'tools/call') return callTool(id, params, handleOptions)
+
+      const prompts = options.prompts
+      if (prompts !== undefined && method === 'prompts/list') {
+        try {
+          const listed = await prompts.list()
+          return jsonRpcSuccess(id, {
+            prompts: listed.map((prompt) => ({
+              name: prompt.name,
+              ...(prompt.title === undefined ? {} : { title: prompt.title }),
+              ...(prompt.description === undefined ? {} : { description: prompt.description }),
+            })),
+          })
+        } catch (error) {
+          return unauthorized(id, error)
+        }
+      }
+
+      if (prompts !== undefined && method === 'prompts/get') {
+        const name = params?.['name']
+        if (typeof name !== 'string' || name.length === 0) {
+          return jsonRpcError(id, JsonRpcErrorCode.INVALID_PARAMS, 'params.name must be a string.')
+        }
+        try {
+          const prompt = await prompts.get(name)
+          if (prompt === undefined) {
+            return jsonRpcError(
+              id,
+              JsonRpcErrorCode.INVALID_PARAMS,
+              `Unknown prompt "${name}": this server has no such prompt. Call prompts/list for the prompts available to you.`,
+            )
+          }
+          return jsonRpcSuccess(id, {
+            ...(prompt.description === undefined ? {} : { description: prompt.description }),
+            messages: prompt.messages,
+          })
+        } catch (error) {
+          return unauthorized(id, error)
+        }
+      }
 
       return jsonRpcError(id, JsonRpcErrorCode.METHOD_NOT_FOUND, `Unknown method "${method}".`)
     },

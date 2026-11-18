@@ -8,12 +8,14 @@ import {
   limit as sqlLimit,
 } from '@cogenta/core'
 import { TABLES } from './tables.js'
-import type {
-  ApiKey,
-  ApiKeyRotationResult,
-  ApiKeyUsage,
-  CreateApiKeyInput,
-  IssuedApiKey,
+import {
+  API_KEY_AUTONOMIES,
+  type ApiKey,
+  type ApiKeyAutonomy,
+  type ApiKeyRotationResult,
+  type ApiKeyUsage,
+  type CreateApiKeyInput,
+  type IssuedApiKey,
 } from './types.js'
 
 /**
@@ -100,6 +102,12 @@ interface ApiKeyRow {
   last_used_at: string | null
   rate_limit_per_minute: number | null
   superseded_by: string | null
+  autonomy: string | null
+}
+
+/** A null or unrecognised stored value is the safe one: every write waits. */
+function autonomyOf(stored: string | null): ApiKeyAutonomy {
+  return stored === 'autonomous' ? 'autonomous' : 'manual'
 }
 
 function fromRow(row: ApiKeyRow): ApiKey {
@@ -115,6 +123,17 @@ function fromRow(row: ApiKeyRow): ApiKey {
     lastUsedAt: row.last_used_at ?? undefined,
     rateLimitPerMinute: row.rate_limit_per_minute ?? DEFAULT_RATE_LIMIT_PER_MINUTE,
     supersededBy: row.superseded_by ?? undefined,
+    autonomy: autonomyOf(row.autonomy),
+  }
+}
+
+function assertAutonomy(autonomy: string): void {
+  if (!API_KEY_AUTONOMIES.includes(autonomy as ApiKeyAutonomy)) {
+    throw new CogentaError({
+      code: 'QUERY_INVALID',
+      message: `"${autonomy}" is not an autonomy level for an API key.`,
+      hint: 'Use "manual" (every write waits for approval) or "autonomous" (reversible writes run at once).',
+    })
   }
 }
 
@@ -164,6 +183,8 @@ export interface UpdateApiKeyInput {
   readonly name?: string
   readonly scope?: readonly string[]
   readonly rateLimitPerMinute?: number | null
+  /** L42: how much an MCP client holding this key may do without approval. */
+  readonly autonomy?: ApiKeyAutonomy
 }
 
 export interface ApiKeyStore {
@@ -222,6 +243,8 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
 
   async function create(input: CreateApiKeyInput): Promise<IssuedApiKey> {
     assertScope(input.scope)
+    if (input.autonomy !== undefined) assertAutonomy(input.autonomy)
+    const autonomy: ApiKeyAutonomy = input.autonomy ?? 'manual'
     const key = issueKey()
     const id = newId(now)
     const created = new Date(now()).toISOString()
@@ -231,11 +254,11 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
     await db.query(sql`
         insert into ${table}
           (id, name, key_hash, key_prefix, scope, created_by, created_at, expires_at, revoked_at,
-           last_used_at, rate_limit_per_minute, superseded_by)
+           last_used_at, rate_limit_per_minute, superseded_by, autonomy)
         values
           (${id}, ${input.name}, ${hashKey(key)}, ${prefix}, ${JSON.stringify(input.scope)},
            ${input.createdBy}, ${created}, ${input.expiresAt ?? null}, ${null},
-           ${null}, ${rateLimitPerMinute}, ${null})`)
+           ${null}, ${rateLimitPerMinute}, ${null}, ${autonomy})`)
 
     return {
       id,
@@ -249,6 +272,7 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
       lastUsedAt: undefined,
       rateLimitPerMinute,
       supersededBy: undefined,
+      autonomy,
       key,
     }
   }
@@ -298,6 +322,7 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
       const row = result.rows[0]
       if (row === undefined) throw keyNotFound()
       if (patch.scope !== undefined) assertScope(patch.scope)
+      if (patch.autonomy !== undefined) assertAutonomy(patch.autonomy)
 
       const name = patch.name ?? row.name
       const scopeJson = patch.scope === undefined ? row.scope : JSON.stringify(patch.scope)
@@ -305,10 +330,12 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
         patch.rateLimitPerMinute === undefined
           ? row.rate_limit_per_minute
           : patch.rateLimitPerMinute
+      const autonomy = patch.autonomy ?? autonomyOf(row.autonomy)
 
       await db.query(sql`
         update ${table}
-        set name = ${name}, scope = ${scopeJson}, rate_limit_per_minute = ${rateLimitPerMinute}
+        set name = ${name}, scope = ${scopeJson}, rate_limit_per_minute = ${rateLimitPerMinute},
+            autonomy = ${autonomy}
         where id = ${id}`)
 
       return fromRow({
@@ -316,6 +343,7 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
         name,
         scope: scopeJson,
         rate_limit_per_minute: rateLimitPerMinute,
+        autonomy,
       })
     },
 
@@ -399,6 +427,7 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
         scope,
         createdBy: row.created_by,
         rateLimitPerMinute,
+        autonomy: autonomyOf(row.autonomy),
         ...(expiresAt === undefined ? {} : { expiresAt }),
       })
 
@@ -474,6 +503,7 @@ export function createApiKeyStore(db: DatabaseHandle, now: () => number = Date.n
         scope,
         createdBy: row.created_by,
         rateLimitPerMinute,
+        autonomy: autonomyOf(row.autonomy),
         ...(expiresAt === undefined ? {} : { expiresAt }),
       })
 

@@ -41,6 +41,7 @@ export const KNOWN_AUDIT_ACTIONS: readonly string[] = [
   'apikey.rotate',
   'apikey.revoke',
   'apikey.recover',
+  'apikey.update',
   'apikey.purge',
   'site_setting.update',
   'admin_theme.update',
@@ -72,9 +73,16 @@ export const KNOWN_AUDIT_ACTIONS: readonly string[] = [
 ]
 
 const AGENT_TOOL_PREFIX = 'agent.tool.'
+/** An administrator's undo of an agent's action (`mcp-undo.ts` on the server). */
+const REVERT_SUFFIX = '.revert'
 
 /** An audit action in words a site owner reads: a translated label when one exists, a readable fallback otherwise — never the raw identifier alone. */
 export function auditActionLabel(t: TFunction, action: string): string {
+  if (action.startsWith(AGENT_TOOL_PREFIX) && action.endsWith(REVERT_SUFFIX)) {
+    return t('audit.agentToolRevert', {
+      tool: action.slice(AGENT_TOOL_PREFIX.length, -REVERT_SUFFIX.length),
+    })
+  }
   if (action.startsWith(AGENT_TOOL_PREFIX)) {
     return t('audit.agentTool', { tool: action.slice(AGENT_TOOL_PREFIX.length) })
   }

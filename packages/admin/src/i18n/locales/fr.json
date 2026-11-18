@@ -1836,6 +1836,7 @@
       "apikey.rotate": "Clé API renouvelée",
       "apikey.purge": "Clé API supprimée de la liste",
       "apikey.recover": "Clé API récupérée",
+      "apikey.update": "Clé API modifiée",
       "audit.prune": "Journal d'audit purgé",
       "content.replace": "Rechercher et remplacer appliqué",
       "content.visibility": "Visibilité d'un contenu modifiée",
@@ -2130,7 +2131,7 @@
   "agentSkills": {
     "heading": "Compétences",
     "adminOnly": "Réservé au rôle « admin » : cette page gère les compétences disponibles pour chaque agent.",
-    "intro": "Une compétence est un mode d’emploi que les agents lisent avant d’agir : comment écrire dans le ton du site, comment rendre compte d’une analyse de sécurité… Elle s’écrit en Markdown, au format SKILL.md de Claude Code et Codex : une compétence existante s’importe telle quelle. Chaque nouvel agent reçoit les compétences « activées par défaut » ; on en retire une depuis l’écran de l’agent.",
+    "intro": "Une compétence est un mode d’emploi que les agents lisent avant d’agir : comment écrire dans le ton du site, comment rendre compte d’une analyse de sécurité… Elle s’écrit en Markdown, au format SKILL.md de Claude Code et Codex : une compétence existante s’importe telle quelle. Chaque nouvel agent reçoit les compétences « activées par défaut » ; on en retire une depuis l’écran de l’agent. Toute clé d’API du serveur MCP peut aussi lire ces compétences (outils skills.list et skills.read, et invites MCP) : n’y écrivez rien de confidentiel.",
     "createSkill": "Créer une compétence",
     "name": "Nom",
     "description": "Description",

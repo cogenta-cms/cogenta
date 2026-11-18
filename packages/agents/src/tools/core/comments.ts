@@ -58,6 +58,13 @@ export interface CommentDecisionReceipt {
   /** The status the comment held before the decision, so `revert` restores it rather than guessing `pending`. */
   readonly previousStatus: string
   readonly previousReason: string
+  /**
+   * The status this decision set. `restore` refuses when the comment no longer
+   * holds it — a person decided again since, and putting the old status back
+   * would overwrite that later decision. Absent on a receipt written before
+   * this field existed, which then restores as it always did.
+   */
+  readonly decidedStatus?: string
 }
 
 const ListInputSchema = z.object({
@@ -149,6 +156,9 @@ export function createCommentsDecideTool(
         id: receipt.id,
         previousStatus: receipt.previousStatus,
         previousReason: receipt.previousReason,
+        // The status the call set is in its own output (`status`): the undo
+        // only applies while the comment still holds it.
+        decidedStatus: receipt.status,
       })
     },
   })

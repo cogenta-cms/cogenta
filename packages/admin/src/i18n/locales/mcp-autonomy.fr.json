@@ -1,0 +1,23 @@
+{
+  "mcp": {
+    "autonomyColumn": "Autonomie",
+    "autonomyLabel": "Autonomie de l'assistant",
+    "autonomyHint": "Ce qu'un assistant IA connecté avec cette clé peut faire sans votre accord. Vous pourrez le changer plus tard depuis « Clés API ».",
+    "autonomyManual": "Validation manuelle (chaque écriture attend votre accord)",
+    "autonomyAutonomous": "Autonome (les actions annulables s'exécutent sans validation ; les autres attendent toujours)",
+    "autonomyManualShort": "Manuelle",
+    "autonomyAutonomousShort": "Autonome",
+    "autonomyAutonomousWarning": "Avec une clé autonome, l'assistant peut publier sans relecture. Chaque action est journalisée et peut être annulée depuis le journal d'audit ; une suppression attend toujours votre accord."
+  },
+  "apiKeys": {
+    "autonomyColumn": "Autonomie (MCP)",
+    "autonomyLabel": "Autonomie d'un assistant connecté par MCP",
+    "autonomyHint": "Sans effet sur l'API REST : ne concerne que les assistants IA branchés avec cette clé.",
+    "autonomyManual": "Validation manuelle (chaque écriture attend votre accord)",
+    "autonomyAutonomous": "Autonome (les actions annulables s'exécutent sans validation ; les autres attendent toujours)",
+    "autonomyManualShort": "Manuelle",
+    "autonomyAutonomousShort": "Autonome",
+    "autonomyAutonomousWarning": "Avec une clé autonome, l'assistant peut publier sans relecture. Chaque action est journalisée et peut être annulée depuis le journal d'audit ; une suppression attend toujours votre accord.",
+    "autonomyAdminWarning": "Une clé autonome qui a le rôle admin peut aussi lire les commentaires des visiteurs et le journal des 404, que n'importe qui peut remplir de texte, et publier sans relecture. Utilisez une clé distincte, sans le rôle admin, pour publier."
+  }
+}

@@ -89,6 +89,36 @@ describe('redirects.create', () => {
     expect(store.add).toHaveBeenCalledTimes(1)
   })
 
+  it('refuses to replace a redirect that already leaves the path, when the host asks it to', async () => {
+    const store = fakeStore()
+    const checked: string[] = []
+    const tool = createRedirectCreateTool(store, {
+      exists: async (path) => {
+        checked.push(path)
+        return path === '/promo'
+      },
+    })
+
+    await expect(
+      tool.execute({ from: '/promo?utm=1', to: '/elsewhere' }, CTX),
+    ).rejects.toMatchObject({ code: 'REDIRECT_EXISTS' })
+    expect(checked).toEqual(['/promo'])
+    expect(store.add).not.toHaveBeenCalled()
+
+    // Another path is created as usual.
+    await tool.execute({ from: '/other', to: '/elsewhere' }, CTX)
+    expect(store.add).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps replacing a rule when the host does not ask for the refusal (the internal agents)', async () => {
+    const store = fakeStore()
+    const tool = createRedirectCreateTool(store, { isLivePath: async () => false })
+
+    await tool.execute({ from: '/promo', to: '/elsewhere' }, CTX)
+
+    expect(store.add).toHaveBeenCalledTimes(1)
+  })
+
   it('reverts by removing the redirect it created', async () => {
     const store = fakeStore()
     const tool = createRedirectCreateTool(store)

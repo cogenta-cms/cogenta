@@ -1,0 +1,16 @@
+{
+  "audit": {
+    "agentToolRevert": "Annulation d'une action d'agent : {{tool}}",
+    "undo": {
+      "button": "Annuler cette action",
+      "confirm": "Le site reviendra à l'état d'avant cette action. L'annulation sera inscrite dans le journal d'audit.",
+      "confirmButton": "Oui, annuler l'action",
+      "keepButton": "Garder l'action",
+      "undoing": "Annulation…",
+      "done": "L'action a été annulée.",
+      "refused": "L'action n'a pas été annulée.",
+      "reverted": "Annulée",
+      "revertedAt": "le {{at}}"
+    }
+  }
+}

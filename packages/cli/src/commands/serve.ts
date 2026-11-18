@@ -7,7 +7,6 @@ import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import {
-  assertDecisionAllowed,
   createFileAgentDeclarationStore,
   createFileApprovalQueue,
   createFilePromptTemplateStore,
@@ -458,6 +457,11 @@ import {
   searchPathFor,
   termArchivePathFor,
 } from './locale-paths.js'
+import {
+  createAnalyticsSummaryPort,
+  createCommentFinder,
+  createCommentModerationPort,
+} from './management-ports.js'
 import { createMcpHttpEndpoint, type McpHttpEndpoint, mcpConnectionInfo } from './mcp-http.js'
 import { MCP_API_KEY_ENV } from './mcp-tools.js'
 import { selectMediaImageProcessor } from './media-images.js'
@@ -2164,80 +2168,8 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           // the narrow ports `@cogenta/agents` describes. Built from the
           // very stores the comment router and the analytics router already
           // use, never a second instance.
-          comments: {
-            pending: async (limit) =>
-              (await commentsStore.list({ status: 'pending', limit })).items.map((comment) => ({
-                id: comment.id,
-                collection: comment.collection,
-                entryId: comment.entryId,
-                authorName: comment.authorName,
-                body: comment.body,
-                status: comment.status,
-                // A comment posted before the moderation pass existed carries
-                // nothing: "not checked" reads as "not flagged", which is what
-                // leaves it in the queue for a human rather than acting on it.
-                flagged: comment.moderation.flagged ?? false,
-                severity: comment.moderation.severity ?? 'none',
-                reason: comment.moderation.reason ?? '',
-                createdAt: comment.createdAt,
-              })),
-            decide: async (id, status, reason) => {
-              const comment = await commentsStore.get(id)
-              if (comment === null) {
-                throw new CogentaError({
-                  code: 'COMMENT_NOT_FOUND',
-                  message: `No comment "${id}".`,
-                  hint: 'It may have been decided already.',
-                })
-              }
-              // The refusal the tool's own documentation promises, applied
-              // where the real record is — never in the prompt.
-              const flagged = comment.moderation.flagged ?? false
-              const severity = comment.moderation.severity ?? 'none'
-              assertDecisionAllowed({ flagged, severity }, status)
-              await commentsStore.setStatus(id, status, null)
-              await commentsStore.setModeration(id, { flagged, severity, reason })
-              return {
-                id,
-                previousStatus: comment.status,
-                previousReason: comment.moderation.reason ?? '',
-              }
-            },
-            // R6 — what makes `comments.decide` reversible for real: the
-            // comment goes back to the status and the note it had, never to a
-            // guessed `pending`.
-            restore: async (receipt) => {
-              const comment = await commentsStore.get(receipt.id)
-              if (comment === null) return
-              await commentsStore.setStatus(
-                receipt.id,
-                receipt.previousStatus as 'pending' | 'approved' | 'spam' | 'trash',
-                null,
-              )
-              await commentsStore.setModeration(receipt.id, {
-                flagged: comment.moderation.flagged ?? false,
-                severity: comment.moderation.severity ?? 'none',
-                reason: receipt.previousReason,
-              })
-            },
-          },
-          analytics: {
-            summary: async (days) => {
-              const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
-              const summary = await analyticsStore.getSummary({ since })
-              return {
-                since: summary.since,
-                until: summary.until,
-                totalViews: summary.totalViews,
-                uniqueVisitors: summary.uniqueVisitors,
-                topPages: summary.topPages.map((page) => ({
-                  path: page.path,
-                  views: page.views,
-                })),
-                previousTotalViews: summary.previousTotalViews,
-              }
-            },
-          },
+          comments: createCommentModerationPort(() => commentsStore),
+          analytics: createAnalyticsSummaryPort(() => analyticsStore),
           // L26 task 5 — "Cogenta Theme Creator"'s tool. Absent, exactly
           // like `options.theme?.generator`, whenever no LLM provider is
           // configured.
@@ -3090,6 +3022,20 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             approvalsUrl: `${site.url.replace(/\/+$/u, '')}/admin/agents`,
             taxonomies,
             taxonomyStoreFor,
+            // L42: the site's skills (the very store behind the admin's
+            // Compétences screen) and the management tools, built on the
+            // stores and ports the REST routes and the internal agents use.
+            skills: agentsRuntime.skillRegistry,
+            management: {
+              comments: {
+                port: createCommentModerationPort(() => commentsStore),
+                permissions: commentsPermissions,
+                find: createCommentFinder(() => commentsStore),
+              },
+              analytics: createAnalyticsSummaryPort(() => analyticsStore),
+              notFoundLog,
+              redirects: { writer: redirects, isLivePath },
+            },
             // `media.import_url`: the same storage and image processor as
             // `POST /api/media`, behind the outbound guard.
             importImage: createUrlImageImporter({

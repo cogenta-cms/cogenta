@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
@@ -264,9 +264,14 @@ describe('cogenta mcp', () => {
     const listId = session.send('tools/list')
     const list = await session.waitForReply(listId)
     const names = [...toolsOf(list.result)].sort()
-    // Content tools always present; media/site-config only for an authenticated actor.
+    // Content tools always present; media/site-config/skills only for an
+    // authenticated actor; the comment tools for a role the comment permission
+    // layer lets read and moderate (an editor does). Analytics, the 404 log and
+    // redirects are admin-only, as their routes are.
     expect(names).toEqual(
       [
+        'comments.decide',
+        'comments.list',
         'content.collections',
         'content.delete',
         'content.list',
@@ -280,6 +285,8 @@ describe('cogenta mcp', () => {
         'media.read',
         'media.write',
         'site.config_read',
+        'skills.list',
+        'skills.read',
       ].sort(),
     )
 
@@ -558,6 +565,10 @@ describe('cogenta mcp', () => {
     const names = toolsOf(list.result)
     expect(names).toEqual(expect.arrayContaining(['content.read']))
     expect(names).not.toEqual(expect.arrayContaining(['media.read', 'site.config_read']))
+    // Skills are for a caller an administrator chose to hand a key to.
+    expect(names).not.toContain('skills.list')
+    const prompts = await session.waitForReply(session.send('prompts/list'))
+    expect(prompts.result).toEqual({ prompts: [] })
 
     // Content is still real and permission-checked: a public actor may read
     // (the fixture's `article` collection grants `read` to `public`).
@@ -865,4 +876,48 @@ describe('cogenta mcp — protocol, discovery and gates (MCP audit, 2026-10-21)'
     expect(textOf(sixth.result)).toMatch(/already waiting/u)
     expect(await queue.list('pending')).toHaveLength(5)
   })
+  it('offers the site skills, as tools and prompts, and the management tools that need nothing but the database', async () => {
+    const root = await project()
+    // The skills folder `cogenta serve` writes to: a SKILL.md, as the admin's screen stores it.
+    const skillDir = join(root, '.cogenta', 'agents-runtime', 'skills', 'house-tone')
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(
+      join(skillDir, 'SKILL.md'),
+      '---\nname: House tone\ndescription: How we write.\n---\n\nWrite short.\n',
+      'utf8',
+    )
+    const session = new McpSession(root, { role: 'admin' })
+    activeSessions.push(session)
+
+    const init = await session.waitForReply(session.send('initialize'))
+    expect(init.result?.['capabilities']).toMatchObject({ prompts: { listChanged: false } })
+
+    const names = toolsOf((await session.waitForReply(session.send('tools/list'))).result)
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'skills.list',
+        'skills.read',
+        'comments.list',
+        'comments.decide',
+        'analytics.summary',
+        'logs.read_not_found',
+      ]),
+    )
+    // Not over stdio: redirects.create must refuse a path where a page lives,
+    // and that check needs the content gateway only `cogenta serve` assembles.
+    expect(names).not.toContain('redirects.create')
+
+    const read = await session.waitForReply(
+      session.send('tools/call', { name: 'skills.read', arguments: { id: 'house-tone' } }),
+    )
+    expect(textOf(read.result)).toContain('Write short.')
+
+    const prompt = await session.waitForReply(session.send('prompts/get', { name: 'house-tone' }))
+    expect(prompt.result).toMatchObject({
+      messages: [{ role: 'user', content: { type: 'text', text: 'Write short.' } }],
+    })
+
+    session.close()
+    expect(await session.done).toBe(0)
+  }, 30_000)
 })

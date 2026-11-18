@@ -1,6 +1,11 @@
 import { dirname, join } from 'node:path'
 import process from 'node:process'
-import { type ApprovalQueue, createFileApprovalQueue } from '@cogenta/agents'
+import {
+  type ApprovalQueue,
+  createFileAgentSkillStore,
+  createFileApprovalQueue,
+} from '@cogenta/agents'
+import { createAnalyticsStore, ensureAnalyticsTables } from '@cogenta/analytics'
 import { createContentService, createPermissionLayer, createSearchRouter } from '@cogenta/api'
 import {
   createApiKeyStore,
@@ -10,6 +15,11 @@ import {
   looksLikeApiKey,
 } from '@cogenta/auth'
 import { vocabularyRegistry } from '@cogenta/blocks'
+import {
+  createCommentPermissions,
+  createCommentStore,
+  ensureCommentsTables,
+} from '@cogenta/comments'
 import {
   CogentaError,
   createDatabaseMediaStore,
@@ -25,6 +35,7 @@ import {
 import { createMcpServer, type McpTool, serveMcpOverStdio } from '@cogenta/mcp'
 import {
   type CollectionDefinition,
+  createNotFoundLogStore,
   createRedirectStore,
   createRolePermissionOverlay,
   createRolePermissionStore,
@@ -34,7 +45,14 @@ import {
   type TaxonomyDefinition,
 } from '@cogenta/schema'
 import type { Output, Writer } from '../output.js'
+import { SKILLS_SUBDIR } from './agent-runtime.js'
 import { createDecoratedContentStores } from './decorated-content-stores.js'
+import {
+  createAnalyticsSummaryPort,
+  createCommentFinder,
+  createCommentModerationPort,
+} from './management-ports.js'
+import { createSkillPromptSource } from './mcp-prompts.js'
 import {
   apiKeyIdentityResolver,
   createMcpToolSource,
@@ -327,8 +345,35 @@ export async function runMcp(options: McpOptions): Promise<number> {
         signal: cancellation.signal,
       })
 
+    // L42: the skills folder `cogenta serve` writes to, and the management
+    // tools that need nothing but the database. `redirects.create` is not
+    // offered here: it must refuse a path where a page lives, and that check
+    // needs the site's content gateway, which only `cogenta serve` assembles.
+    const skills = createFileAgentSkillStore({
+      dir: join(projectRoot, '.cogenta', 'agents-runtime', SKILLS_SUBDIR),
+    })
+    await ensureCommentsTables(db)
+    await ensureAnalyticsTables(db)
+    const commentsStore = createCommentStore({ db })
+    const analyticsStore = createAnalyticsStore(db)
+    const notFoundLog = createNotFoundLogStore({
+      db,
+      maxPaths: loaded.config.notFoundLog.maxPaths,
+    })
+    await notFoundLog.ensureTable()
+
     const source = createMcpToolSource(
       {
+        skills,
+        management: {
+          comments: {
+            port: createCommentModerationPort(() => commentsStore),
+            permissions: createCommentPermissions(),
+            find: createCommentFinder(() => commentsStore),
+          },
+          analytics: createAnalyticsSummaryPort(() => analyticsStore),
+          notFoundLog,
+        },
         collections,
         contentService,
         permissions,
@@ -397,6 +442,7 @@ export async function runMcp(options: McpOptions): Promise<number> {
       version: '1.1.0',
       instructions: mcpServerInstructions(site),
       tools: tracked,
+      prompts: createSkillPromptSource(skills, resolveIdentity),
       onInternalError: (error) => {
         // stderr, never stdout (which carries JSON-RPC): what the caller
         // was not shown, for whoever reads the client's MCP log.

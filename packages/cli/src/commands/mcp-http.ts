@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { AccessContext } from '@cogenta/api'
 import type { ApiKeyStore } from '@cogenta/auth'
 import { createMcpHttpHandler, createMcpServer, type McpHttpRequestRecord } from '@cogenta/mcp'
+import { createSkillPromptSource } from './mcp-prompts.js'
 import {
   apiKeyIdentityResolver,
   createMcpToolSource,
@@ -111,6 +112,9 @@ export function createMcpHttpEndpoint(options: McpHttpEndpointOptions): McpHttpE
         version: options.version,
         instructions,
         tools: createMcpToolSource({ ...options.tools, transport: 'http' }, resolveIdentity),
+        ...(options.tools.skills === undefined
+          ? {}
+          : { prompts: createSkillPromptSource(options.tools.skills, resolveIdentity) }),
         ...(options.onInternalError === undefined
           ? {}
           : { onInternalError: options.onInternalError }),

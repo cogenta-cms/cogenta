@@ -113,7 +113,8 @@ import {
  * hardcoded guess at that agent's provider preference.
  */
 export const AGENTS_SUBDIR = 'agents'
-const SKILLS_SUBDIR = 'skills'
+/** Exported for `cogenta mcp`, which reads the same skills folder as `cogenta serve`. */
+export const SKILLS_SUBDIR = 'skills'
 /**
  * Exported so `theme-wiring.ts` can point its own `ProviderConfigStore` at
  * the exact same directory `buildAgentRuntime` uses — two independent,

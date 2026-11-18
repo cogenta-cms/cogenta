@@ -464,7 +464,8 @@ import {
   createCommentModerationPort,
 } from './management-ports.js'
 import { createMcpHttpEndpoint, type McpHttpEndpoint, mcpConnectionInfo } from './mcp-http.js'
-import { MCP_API_KEY_ENV } from './mcp-tools.js'
+import { MCP_API_KEY_ENV, type McpSiteToolsOptions } from './mcp-tools.js'
+import { createMcpUndoRouter, type McpUndoRouter } from './mcp-undo.js'
 import { selectMediaImageProcessor } from './media-images.js'
 import { createUrlImageImporter, createUrlImageRemover } from './media-import.js'
 import { loadMigrations, MIGRATIONS_DIRECTORY } from './migrate.js'
@@ -960,6 +961,12 @@ export interface Site {
    * (hence no approval queue) was assembled.
    */
   readonly mcpHttp?: McpHttpEndpoint
+  /**
+   * `/api/mcp/actions/{id}` and `.../revert` — an administrator takes back what
+   * an MCP client did (`mcp-undo.ts`). Present whenever the agent runtime is,
+   * including when `mcp.http` is off: the stdio transport journals the same way.
+   */
+  readonly mcpUndoRouter?: McpUndoRouter
   /**
    * `/api/site-plans` — L19 task 7's document-driven planning on a live site.
    *
@@ -2990,8 +2997,72 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   // over this site's own service, permissions, search and blocks, with the
   // approval queue the Agents screen decides on — a write asked over HTTP
   // lands where an administrator already looks.
+  // The tool assembly `/api/mcp` serves, which the undo route (`mcp-undo.ts`)
+  // rebuilds for the administrator who takes an action back.
+  const mcpToolsOptions: Omit<McpSiteToolsOptions, 'transport'> | undefined =
+    agentsRuntime === undefined
+      ? undefined
+      : {
+          collections,
+          contentService: service,
+          permissions,
+          refreshPermissions: () => rolePermissionOverlay.refresh(),
+          mediaStore,
+          terms: termSlugs,
+          search: searchRouter,
+          blocks: options.blocks ?? vocabularyRegistry,
+          site: {
+            name: site.name,
+            url: site.url,
+            locales: site.locales,
+            defaultLocale: site.defaultLocale,
+          },
+          logger,
+          auditLog: auth.audit,
+          approvalQueue: agentsRuntime.approvalQueue,
+          approvalsUrl: `${site.url.replace(/\/+$/u, '')}/admin/agents`,
+          taxonomies,
+          taxonomyStoreFor,
+          // L42: the site's skills (the very store behind the admin's
+          // Compétences screen) and the management tools, built on the
+          // stores and ports the REST routes and the internal agents use.
+          skills: agentsRuntime.skillRegistry,
+          management: {
+            comments: {
+              port: createCommentModerationPort(() => commentsStore),
+              permissions: commentsPermissions,
+              find: createCommentFinder(() => commentsStore),
+            },
+            analytics: createAnalyticsSummaryPort(() => analyticsStore),
+            notFoundLog,
+            redirects: { writer: redirects, isLivePath },
+          },
+          // `media.import_url`: the same storage and image processor as
+          // `POST /api/media`, behind the outbound guard.
+          importImage: createUrlImageImporter({
+            mediaStore,
+            storage,
+            ...(options.images === null || options.images === undefined
+              ? {}
+              : { images: options.images }),
+          }),
+          // What the undo of `taxonomy.create_term` and `media.import_url` needs
+          // (L42): a term or a file is only removed while nothing references it.
+          termUsage: (taxonomy, termId) =>
+            countTermReferences({ db, taxonomy, collections, termId }),
+          removeImage: createUrlImageRemover({
+            mediaStore,
+            storage,
+            ...(options.images === null || options.images === undefined
+              ? {}
+              : { images: options.images }),
+            collections,
+            storeFor,
+          }),
+        }
+
   const mcpHttp: McpHttpEndpoint | undefined =
-    options.mcpHttp === false || agentsRuntime === undefined
+    options.mcpHttp === false || mcpToolsOptions === undefined
       ? undefined
       : createMcpHttpEndpoint({
           apiKeys: auth.apiKeys,
@@ -3002,71 +3073,20 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             logger.error('mcp http internal error', {
               error: error instanceof Error ? (error.stack ?? error.message) : String(error),
             }),
-          tools: {
-            collections,
-            contentService: service,
-            permissions,
-            refreshPermissions: () => rolePermissionOverlay.refresh(),
-            mediaStore,
-            terms: termSlugs,
-            search: searchRouter,
-            blocks: options.blocks ?? vocabularyRegistry,
-            site: {
-              name: site.name,
-              url: site.url,
-              locales: site.locales,
-              defaultLocale: site.defaultLocale,
-            },
-            logger,
-            auditLog: auth.audit,
-            approvalQueue: agentsRuntime.approvalQueue,
-            approvalsUrl: `${site.url.replace(/\/+$/u, '')}/admin/agents`,
-            taxonomies,
-            taxonomyStoreFor,
-            // L42: the site's skills (the very store behind the admin's
-            // Compétences screen) and the management tools, built on the
-            // stores and ports the REST routes and the internal agents use.
-            skills: agentsRuntime.skillRegistry,
-            management: {
-              comments: {
-                port: createCommentModerationPort(() => commentsStore),
-                permissions: commentsPermissions,
-                find: createCommentFinder(() => commentsStore),
-              },
-              analytics: createAnalyticsSummaryPort(() => analyticsStore),
-              notFoundLog,
-              redirects: { writer: redirects, isLivePath },
-            },
-            // `media.import_url`: the same storage and image processor as
-            // `POST /api/media`, behind the outbound guard.
-            importImage: createUrlImageImporter({
-              mediaStore,
-              storage,
-              ...(options.images === null || options.images === undefined
-                ? {}
-                : { images: options.images }),
-            }),
-            // What the undo of `taxonomy.create_term` and `media.import_url` needs
-            // (L42): a term or a file is only removed while nothing references it.
-            termUsage: (taxonomy, termId) =>
-              countTermReferences({ db, taxonomy, collections, termId }),
-            removeImage: createUrlImageRemover({
-              mediaStore,
-              storage,
-              ...(options.images === null || options.images === undefined
-                ? {}
-                : { images: options.images }),
-              collections,
-              storeFor,
-            }),
-          },
+          tools: mcpToolsOptions,
         })
+
+  const mcpUndoRouter: McpUndoRouter | undefined =
+    mcpToolsOptions === undefined
+      ? undefined
+      : createMcpUndoRouter({ tools: mcpToolsOptions, auditLog: auth.audit, logger })
 
   return {
     db,
     auth,
     cogentaVersion,
     ...(mcpHttp === undefined ? {} : { mcpHttp }),
+    ...(mcpUndoRouter === undefined ? {} : { mcpUndoRouter }),
     ...(options.pluginWidgets === undefined ? {} : { pluginWidgets: options.pluginWidgets }),
     storeFor,
     restRouter: createRestRouter({
@@ -7426,6 +7446,14 @@ export function createRequestListener(
           response,
           logger,
         )
+        return
+      }
+
+      // Undo of an MCP client's action, from the audit log (L42): admin
+      // session only, the router refuses an API key.
+      if (url.pathname.startsWith('/api/mcp/actions/') && site.mcpUndoRouter !== undefined) {
+        const request = toRestRequest(req, url, undefined)
+        writeRestResponse(res, await site.mcpUndoRouter.handle(request, context.actor))
         return
       }
 

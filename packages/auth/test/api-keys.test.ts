@@ -7,6 +7,7 @@ import {
   MIN_PURGE_AFTER_REVOKED_DAYS,
   RECOVERY_WINDOW_MS,
 } from '../src/api-keys.js'
+import { ensureAuthTables } from '../src/tables.js'
 import { testDb } from './helpers/db.js'
 
 describe('ApiKeyStore', () => {
@@ -377,6 +378,113 @@ describe('ApiKeyStore.update', () => {
     await expect(keys.update('nope', { name: 'x' })).rejects.toMatchObject({
       code: 'API_KEY_NOT_FOUND',
     })
+  })
+})
+
+describe('ApiKeyStore autonomy (L42)', () => {
+  it('is manual unless the key is minted autonomous', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+
+    const plain = await keys.create({ name: 'a', scope: ['editor'], createdBy: null })
+    const chosen = await keys.create({
+      name: 'b',
+      scope: ['editor'],
+      createdBy: null,
+      autonomy: 'autonomous',
+    })
+
+    expect(plain.autonomy).toBe('manual')
+    expect(chosen.autonomy).toBe('autonomous')
+    expect((await keys.getById(chosen.id))?.autonomy).toBe('autonomous')
+    expect((await keys.verify(chosen.key))?.autonomy).toBe('autonomous')
+    expect((await keys.list()).map((key) => key.autonomy).sort()).toEqual(['autonomous', 'manual'])
+  })
+
+  it('changes with update() and is left alone by a patch that does not name it', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({ name: 'a', scope: ['editor'], createdBy: null })
+
+    expect((await keys.update(issued.id, { autonomy: 'autonomous' })).autonomy).toBe('autonomous')
+    expect((await keys.update(issued.id, { name: 'renamed' })).autonomy).toBe('autonomous')
+    expect((await keys.update(issued.id, { autonomy: 'manual' })).autonomy).toBe('manual')
+    expect((await keys.getById(issued.id))?.autonomy).toBe('manual')
+  })
+
+  it('refuses a value that is neither manual nor autonomous instead of reading it as manual', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({ name: 'a', scope: ['editor'], createdBy: null })
+
+    await expect(
+      keys.create({
+        name: 'b',
+        scope: ['editor'],
+        createdBy: null,
+        autonomy: 'yolo' as unknown as 'manual',
+      }),
+    ).rejects.toMatchObject({ code: 'QUERY_INVALID' })
+    await expect(
+      keys.update(issued.id, { autonomy: 'yolo' as unknown as 'manual' }),
+    ).rejects.toMatchObject({ code: 'QUERY_INVALID' })
+  })
+
+  it('survives a rotation and a recovery', async () => {
+    const db = await testDb()
+    const keys = createApiKeyStore(db)
+    const issued = await keys.create({
+      name: 'a',
+      scope: ['editor'],
+      createdBy: null,
+      autonomy: 'autonomous',
+    })
+
+    const rotated = await keys.rotate(issued.id, { graceMs: 60_000 })
+    expect(rotated.issued.autonomy).toBe('autonomous')
+    expect(rotated.previous.autonomy).toBe('autonomous')
+
+    await keys.revoke(rotated.issued.id)
+    const recovered = await keys.recover(rotated.issued.id)
+    expect(recovered.autonomy).toBe('autonomous')
+  })
+
+  it('adds the column to a table that predates it, and reads an old row as manual', async () => {
+    const db = await testDb()
+    // The shape of the table before L42: no `autonomy` column, one live key.
+    await db.query(sql`drop table cogenta_api_keys`)
+    await db.query(sql`
+      create table cogenta_api_keys (
+        id text not null primary key,
+        name text not null,
+        key_hash text not null unique,
+        key_prefix text not null,
+        scope text not null,
+        created_by text,
+        created_at text not null,
+        expires_at text,
+        revoked_at text,
+        last_used_at text,
+        rate_limit_per_minute integer,
+        superseded_by text
+      )`)
+    await db.query(sql`
+      insert into cogenta_api_keys
+        (id, name, key_hash, key_prefix, scope, created_by, created_at, expires_at, revoked_at,
+         last_used_at, rate_limit_per_minute, superseded_by)
+      values
+        ('legacy', 'Old key', 'legacy-hash', 'cogenta_sk_x', '["editor"]', null,
+         '2026-01-01T00:00:00.000Z', null, null, null, null, null)`)
+
+    await ensureAuthTables(db)
+    const keys = createApiKeyStore(db)
+
+    expect((await keys.getById('legacy'))?.autonomy).toBe('manual')
+    expect((await keys.update('legacy', { autonomy: 'autonomous' })).autonomy).toBe('autonomous')
+    expect((await keys.getById('legacy'))?.autonomy).toBe('autonomous')
+    // Running the upgrade again is harmless.
+    await ensureAuthTables(db)
+    expect((await keys.getById('legacy'))?.autonomy).toBe('autonomous')
   })
 })
 

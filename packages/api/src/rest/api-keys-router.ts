@@ -1,4 +1,4 @@
-import type { ApiKeyUsage, AuthStore } from '@cogenta/auth'
+import type { ApiKeyAutonomy, ApiKeyUsage, AuthStore } from '@cogenta/auth'
 import { CogentaError } from '@cogenta/core'
 import type { Actor } from '../types.js'
 import { errorResponse, jsonResponse, type RestRequest, type RestResponse } from './http.js'
@@ -189,6 +189,26 @@ function rateLimitPerMinuteField(body: Record<string, unknown>): number | undefi
   return positiveRateLimit(value)
 }
 
+/**
+ * L42: how much an MCP client holding the key may do without a person. Only
+ * the two known words are accepted — anything else is refused rather than
+ * read as `manual`, so a typo cannot silently decide who approves a write.
+ */
+function autonomyValue(value: unknown): ApiKeyAutonomy {
+  if (value === 'manual' || value === 'autonomous') return value
+  throw new CogentaError({
+    code: 'QUERY_INVALID',
+    message: '"autonomy" must be "manual" or "autonomous".',
+    hint: '"manual": every write waits for an administrator. "autonomous": a write that can be undone runs at once; one that cannot still waits.',
+  })
+}
+
+function autonomyField(body: Record<string, unknown>): ApiKeyAutonomy | undefined {
+  const value = body['autonomy']
+  if (value === undefined) return undefined
+  return autonomyValue(value)
+}
+
 function graceHoursField(body: Record<string, unknown>): number {
   const value = body['graceHours']
   if (value === undefined) return DEFAULT_GRACE_HOURS
@@ -221,6 +241,7 @@ function publicKey(key: {
   readonly lastUsedAt: string | undefined
   readonly rateLimitPerMinute: number
   readonly supersededBy: string | undefined
+  readonly autonomy: ApiKeyAutonomy
 }): Record<string, unknown> {
   return {
     id: key.id,
@@ -234,6 +255,7 @@ function publicKey(key: {
     lastUsedAt: key.lastUsedAt ?? null,
     rateLimitPerMinute: key.rateLimitPerMinute,
     supersededBy: key.supersededBy ?? null,
+    autonomy: key.autonomy,
   }
 }
 
@@ -414,11 +436,13 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
       await assertKnownRoles(scope)
       const expiresAt = resolveExpiry(body, now)
       const rateLimitPerMinute = rateLimitPerMinuteField(body)
+      const autonomy = autonomyField(body)
 
       const issued = await auth.apiKeys.create({
         name,
         scope,
         createdBy: actor.id,
+        ...(autonomy === undefined ? {} : { autonomy }),
         ...(expiresAt === undefined ? {} : { expiresAt }),
         ...(rateLimitPerMinute === undefined ? {} : { rateLimitPerMinute }),
       })
@@ -462,10 +486,16 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
       const scope = body['scope']
       const rateLimitRaw = body['rateLimitPerMinute']
 
-      if (typeof name !== 'string' && scope === undefined && rateLimitRaw === undefined) {
+      if (
+        typeof name !== 'string' &&
+        scope === undefined &&
+        rateLimitRaw === undefined &&
+        body['autonomy'] === undefined
+      ) {
         throw new CogentaError({
           code: 'QUERY_INVALID',
-          message: 'Nothing to update — send "name", "scope" and/or "rateLimitPerMinute".',
+          message:
+            'Nothing to update — send "name", "scope", "rateLimitPerMinute" and/or "autonomy".',
           hint: 'Send at least one of these fields.',
         })
       }
@@ -474,7 +504,10 @@ export function createApiKeysRouter(options: ApiKeysRouterOptions): ApiKeysRoute
         name?: string
         scope?: readonly string[]
         rateLimitPerMinute?: number | null
+        autonomy?: ApiKeyAutonomy
       } = {}
+      const autonomy = autonomyField(body)
+      if (autonomy !== undefined) patch.autonomy = autonomy
       if (typeof name === 'string') patch.name = stringField({ name }, 'name')
       if (scope !== undefined) {
         patch.scope = scopeField({ scope })

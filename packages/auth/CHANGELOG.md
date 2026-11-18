@@ -1,5 +1,13 @@
 # @cogenta/auth
 
+## 0.7.4
+
+### Patch Changes
+
+- Updated dependencies [[`918ec73`](https://github.com/cogenta-cms/cogenta/commit/918ec73afb4802482ea74861524bc123c8a58696)]:
+  - @cogenta/core@0.15.0
+  - @cogenta/schema@0.13.2
+
 ## 0.7.3
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @cogenta/plugins
 
+## 0.9.5
+
+### Patch Changes
+
+- Updated dependencies [[`918ec73`](https://github.com/cogenta-cms/cogenta/commit/918ec73afb4802482ea74861524bc123c8a58696)]:
+  - @cogenta/agents@0.12.0
+  - @cogenta/core@0.15.0
+  - @cogenta/render@0.6.6
+
 ## 0.9.4
 
 ### Patch Changes

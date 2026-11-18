@@ -1,5 +1,23 @@
 # @cogenta/api
 
+## 2.14.3
+
+### Patch Changes
+
+- [#71](https://github.com/cogenta-cms/cogenta/pull/71) [`918ec73`](https://github.com/cogenta-cms/cogenta/commit/918ec73afb4802482ea74861524bc123c8a58696) Thanks [@georgesmomo](https://github.com/georgesmomo)! - MCP clients can now publish a bilingual entry without falling back to REST. Four new tools (contract C `tools@1.9`, additive): `content.write_translation` creates the draft of an entry in another site language, linked to it as its translation; `taxonomy.list_terms` and `taxonomy.create_term` read and create tags or categories (creating an existing slug returns it instead of failing); `media.import_url` copies an image from a public https address into the media library through the outbound SSRF guard and the regular media ingest, keeping the author, the licence and the source address (without query string or credentials), with provenance `assisted`. Every write still waits for a human approval, and invalid requests (unknown language, a translation that already exists, an image address that is not public https) are refused before an administrator is asked. New error code `MEDIA_IMPORT_FAILED`.
+- Updated dependencies [[`918ec73`](https://github.com/cogenta-cms/cogenta/commit/918ec73afb4802482ea74861524bc123c8a58696)]:
+  - @cogenta/core@0.15.0
+  - @cogenta/channels@0.3.22
+  - @cogenta/mcp@0.3.20
+  - @cogenta/analytics@0.3.14
+  - @cogenta/auth@0.7.4
+  - @cogenta/blocks@1.2.5
+  - @cogenta/export@0.3.6
+  - @cogenta/forms@0.2.22
+  - @cogenta/schema@0.13.2
+  - @cogenta/seo@0.6.1
+  - @cogenta/widgets@0.2.13
+
 ## 2.14.2
 
 ### Patch Changes

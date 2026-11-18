@@ -346,6 +346,12 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   TOOL_CALL_REJECTED: 403,
   // The thing a revert would undo changed since the action, or is now in use (L42).
   TOOL_REVERT_REFUSED: 409,
+  // Undoing an MCP action from the audit log (L42): the entry is not a tool
+  // call (404), or it cannot be undone any more — already undone, failed, or
+  // a tool with no undo (409).
+  RECEIPT_UNKNOWN: 404,
+  RECEIPT_ALREADY_REVERTED: 409,
+  RECEIPT_NOT_REVERTIBLE: 409,
   PROVIDER_UNKNOWN: 503,
   PROVIDER_REQUEST_FAILED: 502,
   PROVIDER_RESPONSE_INVALID: 502,

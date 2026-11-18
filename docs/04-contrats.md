@@ -714,6 +714,7 @@ theme.write_sandbox
 plugin.write_sandbox
 comments.moderate · analytics.read
 taxonomy.read · taxonomy.write
+skills.read
 ```
 
 `document.extract` (ajoutée en `tools@1.1`, L19 tâche 1) autorise la lecture du texte
@@ -807,6 +808,52 @@ porte cette permission avec un autre effet que « écrire un fichier dans ce seu
 dossier » ; déployer un bac à sable vers `themes/` reste un pipeline séparé (fiche 73
 tâche 5) qui exige un scan de sécurité et une confirmation humaine explicite avant
 toute copie.
+
+**`tools@1.11` le 2026-11-18** (L42, compétences et gestion du site par MCP) : la
+taxonomie gagne `skills.read`, et sept outils déjà connus ou nouveaux sont offerts à un
+client MCP externe. Aucune signature d'outil existante n'est touchée : un ajout par le
+bas, mineur au même titre que `taxonomy.read` en `1.9`.
+
+| Outil | Permission | Effets |
+|---|---|---|
+| `skills.list` | `skills.read` (**nouvelle**) | `sideEffects: false` — les compétences du site (identifiant, nom, description) : le contenu de l'écran *IA → Compétences*, un `SKILL.md` par compétence. |
+| `skills.read` | `skills.read` (**nouvelle**) | `sideEffects: false` — le `SKILL.md` complet d'une compétence (frontmatter et corps Markdown) : les consignes éditoriales écrites par les administrateurs du site. Elles guident la rédaction ; elles n'accordent jamais une permission et ne remplacent aucune porte d'un autre outil. |
+
+Les deux lisent l'`AgentSkillStore` de l'écran d'administration — **aucun second magasin**
+— et retrouvent une compétence en comparant l'identifiant reçu à ceux que le magasin
+liste, jamais en le lui passant (il en fait un chemin de fichier). Les ressources d'une
+compétence (`references/`, `scripts/`, `assets/`) ne sont pas offertes. Le magasin n'a pas
+de notion de compétence privée ou propre à un agent : tout ce qu'il contient est lisible
+par **toute clé authentifiée, quel que soit son rôle** (un lecteur qui lit les consignes de
+rédaction ne peut rien en faire de plus ; l'écran d'administration le dit à qui les écrit).
+Un appelant anonyme (`cogenta mcp` sans clé) ne reçoit ni l'outil ni le prompt.
+
+Les cinq outils de gestion existants du contrat C sont exposés à MCP **avec la porte de leur
+route REST** — le même contrôle, offert ou refusé de la même façon (un outil que le rôle ne
+peut pas utiliser est inconnu de lui, pas seulement refusé), sans changer leurs drapeaux
+`sideEffects`/`reversible` :
+
+| Outil | Qui l'obtient (comme la route REST) | Sur `cogenta mcp` (stdio) |
+|---|---|---|
+| `comments.list` | `comments.read` (admin, éditeur, lecteur par défaut) | oui |
+| `comments.decide` | `comments.moderate` (admin, éditeur par défaut) | oui |
+| `analytics.summary` | rôle `admin` | oui |
+| `logs.read_not_found` | rôle `admin` | oui |
+| `redirects.create` | rôle `admin` | **non** — l'outil refuse un chemin où vit une page, et ce contrôle exige la passerelle de contenu que seul `cogenta serve` assemble |
+
+Avant d'attendre un humain, l'hôte refuse ce qui est connu pour échouer : une décision de
+commentaire sur un commentaire inconnu, déjà décidé ou contraire au verdict anti-spam du
+site (`assertDecisionAllowed`) ; une redirection dont la source est une page existante ou
+dont une extrémité n'est pas un chemin du site. Les textes que ces outils rendent
+(commentaires de visiteurs, chemins et référents du journal 404) sont de la **donnée** (R8) :
+les descriptions MCP des outils le disent au client.
+
+**Prompts MCP** (`@cogenta/mcp`, hors contrat C) : `prompts/list` et `prompts/get`
+(spécification 2025-06-18), annoncés dans `initialize` seulement si un hôte fournit une
+source de prompts. `cogenta serve` et `cogenta mcp` offrent chaque compétence comme un
+prompt : le nom est l'identifiant de la compétence, la description celle du `SKILL.md`, et
+`prompts/get` rend un message `user` portant le corps Markdown. Un nom inconnu répond
+l'erreur JSON-RPC `-32602`.
 
 ### Définition d'un agent
 

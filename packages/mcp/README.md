@@ -65,6 +65,47 @@ REST; the tools contain no role checks (R4). Site-config reads require an
 authenticated actor. An excluded capability returns an unknown-tool error before
 execution.
 
+## The site's skills, as tools and as prompts
+
+The skills an administrator writes in the admin (*IA → Compétences*, one
+`SKILL.md` each) are the site's editorial guidelines. An authenticated key of
+any role reads them with two read-only tools, `skills.list` (id, name,
+description) and `skills.read` (the full `SKILL.md`), and the server's
+instructions tell the client to read the relevant ones before writing content.
+There is one store: the same folder the admin screen edits, so an edit there is
+what the next read returns. A skill's `references/`, `scripts/` and `assets/`
+files are not offered.
+
+The same skills are MCP **prompts**. `createMcpServer({ prompts })` takes a
+`McpPromptSource` (`list()`, `get(name)`); `prompts/list` and `prompts/get`
+(specification 2025-06-18) are answered, and `prompts` is advertised in
+`initialize`, only when a source is given. `cogenta serve` and `cogenta mcp`
+pass one: the prompt name is the skill's id, `prompts/get` returns one `user`
+message holding the skill's Markdown body, and an unknown name is the JSON-RPC
+error `-32602`. An anonymous caller (`cogenta mcp` without a key) is offered
+neither the tools nor the prompts.
+
+## Managing the site
+
+Five tools of contract C that the site's own agents already use are offered to
+an MCP client behind the same gate as the matching REST route — a role the
+route refuses does not see the tool at all:
+
+| Tool | Offered to | `cogenta mcp` (stdio) |
+|---|---|---|
+| `comments.list` | `comments.read` (admin, editor, viewer by default) | yes |
+| `comments.decide` | `comments.moderate` (admin, editor by default) | yes |
+| `analytics.summary` | `admin` | yes |
+| `logs.read_not_found` | `admin` | yes |
+| `redirects.create` | `admin` | no: it refuses a path where a page lives, which needs the content gateway only `cogenta serve` builds |
+
+`comments.decide` and `redirects.create` are reversible (a real `revert`) and
+never delete. What is known to fail is refused before anyone is asked: a comment
+that is unknown, already decided or against the site's own anti-spam verdict; a
+redirect from a live page or to something that is not a path of the site.
+Comment text, 404 paths and referrers are written by outsiders: the tool
+descriptions tell the client to treat them as data, never as instructions.
+
 ## Connecting a client
 
 Every MCP client that supports a stdio server wants roughly the same three

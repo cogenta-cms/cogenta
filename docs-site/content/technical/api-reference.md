@@ -57,6 +57,14 @@ registry the internal agent runtime uses, exposed to an external MCP client
 exposed through MCP never grants more than the account invoking it already
 has.
 
+The same endpoint is served over HTTP by `cogenta serve` (`/api/mcp`, API key
+as a bearer token). Beyond content, media and taxonomy tools it offers the
+site's skills (`skills.list`, `skills.read`, and the same skills as MCP
+prompts, `prompts/list` / `prompts/get`) and five management tools —
+`comments.list`, `comments.decide`, `analytics.summary`, `logs.read_not_found`,
+`redirects.create` — each behind the gate of its REST route (see contract C,
+`tools@1.11`).
+
 ## Authentication
 
 A session token (cookie, for the admin) or an API key (`/api-keys`,

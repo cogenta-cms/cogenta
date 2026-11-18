@@ -885,6 +885,11 @@ function actionsFor(
   return name.startsWith('content.') ? ['read'] : []
 }
 
+/** The roles that write content are the ones the site's editorial skills are for. */
+export function canReadSkills(actor: Actor): boolean {
+  return actor.roles.some((role) => role === 'admin' || role === 'editor')
+}
+
 function sameRoles(left: readonly string[], right: readonly string[]): boolean {
   const a = [...left].sort()
   const b = [...right].sort()
@@ -1272,11 +1277,11 @@ export function createMcpToolSource(
     const { actor, authenticated } = identity
     if (!authenticated) return []
     const definitions: ToolDefinition[] = []
-    // Skills are the site's editorial guidelines, read-only, for any signed-in
-    // key: there is no private or per-agent notion in the store, a skill is
-    // text an administrator wrote to be read by writers (and by the site's own
-    // agents). Listing and reading never widen what the caller may do.
-    if (options.skills !== undefined) {
+    // Skills are the site's editorial guidelines, read-only, for the roles
+    // that write (editor, admin): a skill is text an administrator wrote for
+    // writers, and a reader-only key has no use for it — so one written
+    // carelessly (a name, an internal URL) does not reach every viewer key.
+    if (options.skills !== undefined && canReadSkills(actor)) {
       definitions.push(createSkillsListTool(options.skills), createSkillsReadTool(options.skills))
     }
     const management = options.management

@@ -1,6 +1,6 @@
 import type { SiteSkillCatalog } from '@cogenta/agents'
 import type { McpPromptSource } from '@cogenta/mcp'
-import type { McpIdentity } from './mcp-tools.js'
+import { canReadSkills, type McpIdentity } from './mcp-tools.js'
 
 /**
  * The site's skills as MCP prompts (`prompts/list`, `prompts/get`), for the
@@ -22,7 +22,7 @@ export function createSkillPromptSource(
   return {
     async list() {
       const identity = await resolveIdentity()
-      if (!identity.authenticated) return []
+      if (!identity.authenticated || !canReadSkills(identity.actor)) return []
       const skills = await catalog.list()
       return skills
         .map((skill) => ({
@@ -34,7 +34,7 @@ export function createSkillPromptSource(
     },
     async get(name) {
       const identity = await resolveIdentity()
-      if (!identity.authenticated) return undefined
+      if (!identity.authenticated || !canReadSkills(identity.actor)) return undefined
       // Found among the ids the store lists, never by handing `name` to it:
       // the file store builds a path from an id.
       const skill = (await catalog.list()).find((candidate) => candidate.id === name)

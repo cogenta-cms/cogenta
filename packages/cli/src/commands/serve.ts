@@ -522,6 +522,7 @@ import {
   type TermArchiveResolution,
 } from './term-archive-page.js'
 import { createSiteTermSlugs } from './term-slugs.js'
+import { countWorkingTermReferences } from './term-usage.js'
 import { createTextProviderSource } from './text-provider-source.js'
 import { createThemeCssResolver, cssEtag } from './theme-css.js'
 import { exportThemeZip, importThemeZip } from './theme-export.js'
@@ -3048,8 +3049,9 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
             }),
             // What the undo of `taxonomy.create_term` and `media.import_url` needs
             // (L42): a term or a file is only removed while nothing references it.
-            termUsage: (taxonomy, termId) =>
-              countTermReferences({ db, taxonomy, collections, termId }),
+            termUsage: async (taxonomy, termId) =>
+              (await countTermReferences({ db, taxonomy, collections, termId })) +
+              (await countWorkingTermReferences({ collections, storeFor, taxonomy, termId })),
             removeImage: createUrlImageRemover({
               mediaStore,
               storage,

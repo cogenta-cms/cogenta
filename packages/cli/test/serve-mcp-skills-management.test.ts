@@ -229,11 +229,13 @@ describe('the site skills over MCP', () => {
     const skill = ((await created.json()) as { data: { id: string } }).data
     expect(skill.id).toBe('house-tone')
 
-    for (const key of [editorKey, viewerKey]) {
-      expect(await toolNames(base, key)).toEqual(
-        expect.arrayContaining(['skills.list', 'skills.read']),
-      )
-    }
+    expect(await toolNames(base, editorKey)).toEqual(
+      expect.arrayContaining(['skills.list', 'skills.read']),
+    )
+    // Skills are for the roles that write: a reader-only key does not get them.
+    expect(await toolNames(base, viewerKey)).not.toContain('skills.read')
+    const viewerPrompts = await rpc(base, viewerKey, 'prompts/list')
+    expect(viewerPrompts.result?.['prompts'] ?? []).toEqual([])
 
     const listed = (await callJson(base, editorKey, 'skills.list')) as {
       skills: { id: string; name: string; description: string }[]
@@ -244,7 +246,7 @@ describe('the site skills over MCP', () => {
       description: 'How we write headlines.',
     })
 
-    const read = await callJson(base, viewerKey, 'skills.read', { id: 'house-tone' })
+    const read = await callJson(base, editorKey, 'skills.read', { id: 'house-tone' })
     expect(read['name']).toBe('House tone')
     expect(read['content']).toContain('Never promise a date.')
     expect(String(read['content']).startsWith('---\n')).toBe(true)

@@ -40,6 +40,7 @@ import {
   type McpToolSourceWithRevert,
 } from '../src/commands/mcp-tools.js'
 import { createUrlImageImporter, createUrlImageRemover } from '../src/commands/media-import.js'
+import { countWorkingTermReferences } from '../src/commands/term-usage.js'
 
 /**
  * The undo of every write an autonomous MCP key may run without a person —
@@ -172,7 +173,11 @@ async function stack(): Promise<Stack> {
         lookupImpl: fakeLookup,
         pinnedFetch: fakePinnedFetch,
       }),
-      termUsage: (taxonomy, termId) => countTermReferences({ db, taxonomy, collections, termId }),
+      // The same composition as `cogenta serve`: live columns and join tables,
+      // plus the working face (a draft over a published entry is an overlay).
+      termUsage: async (taxonomy, termId) =>
+        (await countTermReferences({ db, taxonomy, collections, termId })) +
+        (await countWorkingTermReferences({ collections, storeFor, taxonomy, termId })),
       removeImage: createUrlImageRemover({
         mediaStore,
         storage,
@@ -411,6 +416,27 @@ describe('autonomous MCP writes and their undo, on a real site', () => {
     })
     const stillThere = await s.call('taxonomy.list_terms', { taxonomy: 'tag' })
     expect((stillThere['terms'] as { slug: string }[]).map((term) => term.slug)).toEqual(['ai'])
+  })
+
+  it('refuses to delete a term only the pending draft of a published entry carries', async () => {
+    const s = await stack()
+    const created = await s.call('content.write_draft', {
+      collection: 'post',
+      values: { title: 'Live', slug: 'live' },
+    })
+    const id = String(created['id'])
+    await s.call('content.publish', { collection: 'post', id })
+    const term = await s.call('taxonomy.create_term', {
+      taxonomy: 'tag',
+      slug: 'late',
+      labels: { en: 'Late' },
+    })
+    // Editing a published entry with drafts on writes an overlay only: the
+    // live row and the join table do not carry the term yet.
+    await s.call('content.write_draft', { collection: 'post', id, values: { tags: [term['id']] } })
+    await expect(s.revert('taxonomy.create_term', term)).rejects.toMatchObject({
+      code: 'TOOL_REVERT_REFUSED',
+    })
   })
 
   it('never deletes a term that already existed', async () => {

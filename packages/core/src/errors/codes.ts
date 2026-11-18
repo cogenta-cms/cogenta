@@ -195,6 +195,7 @@ export const ERROR_CODES = [
   'MEDIA_INVALID',
   'MEDIA_EDIT_UNAVAILABLE',
   'MEDIA_TYPE_REJECTED',
+  'MEDIA_IMPORT_FAILED',
 
   // Media folders (fiche 46) — same materialised-path tree shape as
   // taxonomies (ADR-0022), a table internal to the media subsystem rather

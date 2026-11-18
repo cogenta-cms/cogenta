@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { isIP } from 'node:net'
 import {
   type ApprovalQueue,
   buildManifest,
@@ -41,9 +42,9 @@ import {
 import type { ApiKey, ApiKeyStore, AuditLog } from '@cogenta/auth'
 import { type BlockRegistry, safeParseBlock } from '@cogenta/blocks'
 import {
-  assertPublicUrl,
   CogentaError,
   isCogentaError,
+  isPrivateAddress,
   type Logger,
   type MediaStore,
 } from '@cogenta/core'
@@ -170,6 +171,8 @@ export interface McpSiteToolsOptions {
     readonly filename?: string
     readonly credit?: MediaImportCredit
     readonly actorId: string | null
+    /** Who asked, recorded in the file's provenance: `mcp:key "…"`. */
+    readonly agent: string
   }) => Promise<MediaImportResult>
   readonly now?: () => number
 }
@@ -307,6 +310,43 @@ export function mcpServerInstructions(site: McpToolSite): string {
     'Page-builder zones (fields of kind "blocks") are written inside values, as an array of { "type": "<block type>", "data": { …block fields } } that replaces the whole zone. Rich-text fields take Portable Text.',
     `Every write waits for a human approval in ${APPROVALS_PLACE}: tell the user to approve it there, and do not resend a request that is still waiting — that would ask twice.`,
   ].join('\n')
+}
+
+/**
+ * The checks on an image address that need no network: https only, no
+ * credentials in it, no `localhost`, no literal private address. The rest —
+ * what the host name resolves to — is judged by the fetch itself.
+ */
+function assertImportableAddress(raw: string): void {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    throw invalid('This is not a valid address.', 'Pass the https address of the image file.')
+  }
+  if (parsed.protocol !== 'https:') {
+    throw invalid(
+      `Only https addresses are imported, not "${parsed.protocol}".`,
+      'Use the https address of the image file.',
+    )
+  }
+  if (parsed.username !== '' || parsed.password !== '') {
+    throw invalid(
+      'An image address may not carry a user name or password.',
+      'Use a public address of the image file.',
+    )
+  }
+  const host = parsed.hostname.replace(/^\[|\]$/gu, '')
+  if (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    (isIP(host) !== 0 && isPrivateAddress(host))
+  ) {
+    throw invalid(
+      'This address points inside a private network.',
+      'Only public addresses are imported.',
+    )
+  }
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -739,6 +779,48 @@ export function createMcpToolSource(
     return collection
   }
 
+  /**
+   * The entry a new translation must point at, after checking the slot is
+   * free. Contract A's family is flat — every translation points at the
+   * root, which itself points at nothing (ADR-0014) — so translating a
+   * translation (the French version of an English story) attaches the new
+   * entry to the root, never to the French one: a chain would split the
+   * family and give each language a different hreflang set.
+   *
+   * Run before a person is asked, and again when the approved call runs:
+   * the store keeps no (family, locale) uniqueness of its own, so a second
+   * translation in the same language approved meanwhile must not slip in.
+   */
+  async function translationRoot(
+    actor: Actor,
+    collection: string,
+    sourceId: string,
+    locale: string,
+  ): Promise<string> {
+    const family = await options.contentService.translations({ actor }, collection, sourceId)
+    const source = family.find((entry) => entry.id === sourceId)
+    if (source === undefined) {
+      throw new CogentaError({
+        code: 'CONTENT_NOT_FOUND',
+        message: `No "${collection}" entry with id "${sourceId}" to translate.`,
+        hint: 'content.list or content.search give the ids of existing entries.',
+      })
+    }
+    const taken = family.find((entry) => entry.locale === locale)
+    if (taken !== undefined) {
+      throw invalid(
+        taken.id === sourceId
+          ? `Entry "${sourceId}" is itself written in "${locale}".`
+          : `Entry "${sourceId}" already has a "${locale}" version (${taken.id}).`,
+        taken.id === sourceId
+          ? 'Pick another site language for the translation.'
+          : 'Update that entry with content.write_draft instead of creating a second one.',
+        { existing: taken.id },
+      )
+    }
+    return source.translationOf ?? source.id
+  }
+
   function taxonomyOf(name: unknown): TaxonomyDefinition {
     const found = (options.taxonomies ?? []).find((taxonomy) => taxonomy.name === name)
     if (found === undefined) {
@@ -875,39 +957,15 @@ export function createMcpToolSource(
       }
       const sourceId = input['sourceId']
       if (typeof sourceId !== 'string') return
-      const family = await options.contentService.translations(context, collection.name, sourceId)
-      const taken = family.find((entry) => entry.locale === locale)
-      if (taken !== undefined) {
-        throw invalid(
-          taken.id === sourceId
-            ? `Entry "${sourceId}" is itself written in "${locale}".`
-            : `Entry "${sourceId}" already has a "${locale}" version (${taken.id}).`,
-          taken.id === sourceId
-            ? 'Pick another site language for the translation.'
-            : 'Update that entry with content.write_draft instead of creating a second one.',
-          { existing: taken.id },
-        )
-      }
+      await translationRoot(actor, collection.name, sourceId, locale)
       return
     }
     if (tool === 'media.import_url' && typeof input['url'] === 'string') {
-      // Judged before a person is asked: an address that resolves inside the
-      // network is refused now, not after an administrator approved it. The
-      // fetch judges every hop again (the answer may change, redirects may
-      // not be followed blindly).
-      let parsed: URL
-      try {
-        parsed = new URL(input['url'])
-      } catch {
-        throw invalid('This is not a valid address.', 'Pass the https address of the image file.')
-      }
-      if (parsed.protocol !== 'https:') {
-        throw invalid(
-          `Only https addresses are imported, not "${parsed.protocol}".`,
-          'Use the https address of the image file.',
-        )
-      }
-      await assertPublicUrl(parsed.href)
+      // Only what the text of the address says, before a person is asked: no
+      // DNS lookup here, which a caller could aim at a slow name server to
+      // tie up the server, or use to learn which internal names exist. The
+      // fetch, after approval, resolves and judges every hop.
+      assertImportableAddress(input['url'])
       return
     }
     if (tool === 'taxonomy.list_terms' || tool === 'taxonomy.create_term') {
@@ -1044,7 +1102,23 @@ export function createMcpToolSource(
                 hint: 'Send it again: it will be checked against the current roles.',
               })
             }
-            if (name.startsWith('content.')) await options.refreshPermissions?.()
+            if (name.startsWith('content.') || name.startsWith('taxonomy.')) {
+              await options.refreshPermissions?.()
+            }
+            if (
+              name === 'content.write_translation' &&
+              typeof toolInput['collection'] === 'string' &&
+              typeof toolInput['sourceId'] === 'string' &&
+              typeof toolInput['locale'] === 'string'
+            ) {
+              const root = await translationRoot(
+                current.actor,
+                toolInput['collection'],
+                toolInput['sourceId'],
+                toolInput['locale'],
+              )
+              return tool.execute({ ...toolInput, sourceId: root }, toolContext)
+            }
             return tool.execute(toolInput, toolContext)
           },
         }
@@ -1122,7 +1196,8 @@ export function createMcpToolSource(
       if (importImage !== undefined) {
         definitions.push(
           createMediaImportUrlTool({
-            importImage: (input) => importImage({ ...input, actorId: actor.id }),
+            importImage: (input) =>
+              importImage({ ...input, actorId: actor.id, agent: `mcp:${identity.label}` }),
           }),
         )
       }

@@ -38,7 +38,6 @@ const EXTENSION_BY_TYPE: Readonly<Record<string, string>> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
-  'image/gif': 'gif',
   'image/avif': 'avif',
 }
 
@@ -62,6 +61,8 @@ export interface UrlImageImportInput {
     readonly sourcePage?: string
   }
   readonly actorId: string | null
+  /** Who asked for the import, kept in the file's provenance. */
+  readonly agent?: string
 }
 
 export interface UrlImageImportResult {
@@ -82,10 +83,22 @@ function failed(message: string, hint: string, details?: Readonly<Record<string,
   })
 }
 
+/** The address without credentials, query or fragment — a signed URL's token is never kept. */
+function sourceOf(url: URL): string {
+  return `${url.origin}${url.pathname}`
+}
+
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
+}
+
 /** The last path segment without its extension, reduced to safe characters. */
 function stemOf(url: URL, preferred: string | undefined): string {
-  const raw =
-    preferred ?? decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() ?? 'image')
+  const raw = preferred ?? decodeSegment(url.pathname.split('/').filter(Boolean).pop() ?? 'image')
   const stem = raw
     .replace(/\.[a-z0-9]{2,5}$/iu, '')
     .normalize('NFKD')
@@ -125,7 +138,14 @@ export function createUrlImageImporter(
       const location = response.headers.get('location')
       await response.body?.cancel()
       if (location === null) break
-      current = new URL(location, current)
+      try {
+        current = new URL(location, current)
+      } catch {
+        throw failed(
+          `${current.host} redirected to an invalid address.`,
+          'Use the final address of the image file.',
+        )
+      }
       response = undefined
     }
     if (response === undefined) {
@@ -174,8 +194,12 @@ export function createUrlImageImporter(
         bytes: body.bytes,
         actorId: input.actorId,
         alt: input.alt,
+        // Chosen by an AI client, made by someone else: never `human`.
+        provenance: 'assisted',
         provenanceDetail: {
-          importedFrom: input.url,
+          importedFrom: sourceOf(new URL(input.url)),
+          ...(input.agent === undefined ? {} : { agent: input.agent }),
+          at: new Date().toISOString(),
           ...(input.credit?.author === undefined ? {} : { author: input.credit.author }),
           ...(input.credit?.license === undefined ? {} : { license: input.credit.license }),
           ...(input.credit?.sourcePage === undefined

@@ -20,7 +20,7 @@ async function project(): Promise<string> {
   await writeFile(
     join(root, 'cogenta.config.mjs'),
     `export default {
-  site: { name: 'News', url: 'https://example.com', locales: ['en', 'fr'], defaultLocale: 'en' },
+  site: { name: 'News', url: 'https://example.com', locales: ['en', 'fr', 'de'], defaultLocale: 'en' },
   database: { url: ${JSON.stringify(join(root, 'site.db'))} },
   cache: { path: ${JSON.stringify(join(root, 'cache'))} },
   storage: { path: ${JSON.stringify(join(root, 'media'))} },
@@ -231,6 +231,16 @@ describe('publishing a bilingual article over MCP alone', () => {
       })
     ).json()) as { data: { id: string; locale: string; status: string }[] }
     expect(family.data.map((entry) => entry.locale).sort()).toEqual(['en', 'fr'])
+
+    // Translating the French version attaches the German one to the English
+    // root: contract A's family is flat, a chain would split it.
+    const german = await approvedCall(base, key, queue, 'content.write_translation', {
+      collection: 'post',
+      sourceId: french['id'],
+      locale: 'de',
+      values: { title: 'Agenten liefern', slug: 'agenten-liefern' },
+    })
+    expect(german).toMatchObject({ locale: 'de', translationOf: english['id'] })
   }, 120_000)
 
   it('refuses before asking anyone: a second translation, an unknown language, a private image address', async () => {
@@ -273,16 +283,36 @@ describe('publishing a bilingual article over MCP alone', () => {
       await refusedAtOnce(base, key, queue, 'content.write_translation', {
         collection: 'post',
         sourceId: english['id'],
+        locale: 'es',
+        values: { title: 'Uno', slug: 'uno' },
+      }),
+    ).toContain('not a language of this site')
+    expect(
+      await refusedAtOnce(base, key, queue, 'content.write_translation', {
+        collection: 'post',
+        sourceId: '01a1ee00-0000-7000-8000-000000000000',
         locale: 'de',
         values: { title: 'Eins', slug: 'eins' },
       }),
-    ).toContain('not a language of this site')
+    ).toContain('No "post" entry')
     expect(
       await refusedAtOnce(base, key, queue, 'media.import_url', {
         url: 'https://127.0.0.1/cover.png',
         alt: 'A cover',
       }),
-    ).toContain('private address')
+    ).toContain('private network')
+    expect(
+      await refusedAtOnce(base, key, queue, 'media.import_url', {
+        url: 'https://[::ffff:7f00:1]/cover.png',
+        alt: 'A cover',
+      }),
+    ).toContain('private network')
+    expect(
+      await refusedAtOnce(base, key, queue, 'media.import_url', {
+        url: 'https://user:secret@images.example.org/cover.png',
+        alt: 'A cover',
+      }),
+    ).toContain('user name or password')
     expect(
       await refusedAtOnce(base, key, queue, 'taxonomy.create_term', {
         taxonomy: 'colour',

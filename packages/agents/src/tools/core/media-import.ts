@@ -51,7 +51,12 @@ export interface MediaImportResult {
 const CreditSchema = z.object({
   author: z.string().min(1).max(300).optional(),
   license: z.string().min(1).max(100).optional(),
-  sourcePage: z.string().url().max(2000).optional(),
+  sourcePage: z
+    .string()
+    .url()
+    .max(2000)
+    .refine((value) => /^https?:\/\//u.test(value), 'An http(s) address.')
+    .optional(),
 })
 
 const ImportUrlInputSchema = z.object({
@@ -84,7 +89,7 @@ export function createMediaImportUrlTool(
     name: 'media.import_url',
     version: '1.0.0',
     description:
-      'Copy one image from a public https address into the media library and return its id, to use as an entry cover or in content. `url` must point at the image file itself (JPEG, PNG, WebP, GIF or AVIF), not at a web page. Give the alt text a screen reader should read, and the author and licence when the image is not yours (for example a Wikimedia Commons file).',
+      'Copy one image from a public https address into the media library and return its id, to use as an entry cover or in content. `url` must point at the image file itself (JPEG, PNG, WebP or AVIF), not at a web page. Give the alt text a screen reader should read, and the author and licence when the image is not yours (for example a Wikimedia Commons file).',
     input: ImportUrlInputSchema,
     output: ImportUrlOutputSchema,
     permissions: ['media.write'],
@@ -107,7 +112,7 @@ export function createMediaImportUrlTool(
         ...(input.filename === undefined ? {} : { filename: input.filename }),
         ...(input.credit === undefined ? {} : { credit: creditOf(input.credit) }),
       })
-      return { ...imported, sourceUrl: parsed.href }
+      return { ...imported, sourceUrl: `${parsed.origin}${parsed.pathname}` }
     },
   })
 }

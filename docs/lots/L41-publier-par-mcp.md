@@ -19,8 +19,10 @@ fige celle d'un outil déjà publié).
 - `media.import_url` — une image depuis une adresse `https:` publique, par la garde
   sortante (`fetchPublicOnce` : chaque saut résolu, jugé et épinglé ; redirection vers
   `http:` refusée ; 15 Mio ; 20 s) puis par `ingestMediaUpload` (type réel lu dans les
-  octets). L'adresse est jugée avant qu'un humain soit sollicité. Auteur et licence gardés
-  dans `provenanceDetail`. Offert sur `cogenta serve` seulement (`cogenta mcp` n'a pas de
+  octets). Avant l'approbation, l'adresse n'est jugée que sur son texte (aucune
+  résolution DNS, qu'un appelant pourrait viser pour bloquer le serveur ou sonder le DNS
+  interne). Provenance `assisted` ; auteur, licence et adresse source (sans requête ni
+  identifiants) gardés dans `provenanceDetail`. Offert sur `cogenta serve` seulement (`cogenta mcp` n'a pas de
   pilote de stockage sous la main).
 
 Toute écriture attend toujours une approbation humaine (R6 inchangé).

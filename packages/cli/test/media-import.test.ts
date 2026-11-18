@@ -180,6 +180,43 @@ describe('importing an image from an address', () => {
     ).rejects.toMatchObject({ code: 'HTTP_BODY_TOO_LARGE' })
   })
 
+  it('keeps the source address without its query string or credentials', async () => {
+    const { run, mediaStore } = await importer(png)
+    const imported = await run({
+      url: 'https://images.example.org/private.png?X-Amz-Signature=secret#frag',
+      alt: 'x',
+      agent: 'mcp:key "Publisher"',
+      actorId: null,
+    })
+    const asset = await mediaStore.get(imported.id)
+    expect(asset?.provenance).toBe('assisted')
+    expect(asset?.provenanceDetail).toMatchObject({
+      importedFrom: 'https://images.example.org/private.png',
+      agent: 'mcp:key "Publisher"',
+    })
+    expect(JSON.stringify(asset?.provenanceDetail)).not.toContain('secret')
+  })
+
+  it('names a file whose address has a broken escape without failing', async () => {
+    const { run } = await importer(png)
+    const imported = await run({
+      url: 'https://images.example.org/a%zz.png',
+      alt: 'x',
+      actorId: null,
+    })
+    expect(imported.filename).toMatch(/\.png$/u)
+  })
+
+  it('reports a redirect to an invalid address', async () => {
+    const { run } = await importer(
+      () =>
+        new Response(null, { status: 302, headers: { location: 'https://exa mple.org:99999/' } }),
+    )
+    await expect(
+      run({ url: 'https://images.example.org/a.png', alt: 'x', actorId: null }),
+    ).rejects.toMatchObject({ code: 'MEDIA_IMPORT_FAILED' })
+  })
+
   it('reports a missing file without storing anything', async () => {
     const { run } = await importer(() => new Response('gone', { status: 404 }))
     await expect(

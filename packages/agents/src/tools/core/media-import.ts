@@ -21,8 +21,11 @@ import type { ToolDefinition } from '../types.js'
  * written). This tool only shapes the call and refuses what is plainly not
  * an `https:` address before anything leaves the server.
  *
- * `sideEffects: true`, `reversible: false`: a human approves every file that
- * lands in the library, the same rule as `media.store_generated_image`.
+ * `sideEffects: true`. Reversible only when the host supplies `removeImage`:
+ * it deletes the imported file and its renditions, and only while nothing in
+ * the site's content references it (a deleted file cannot come back — the
+ * guard is what makes the undo safe). Without it every imported file waits
+ * for a human, the same rule as `media.store_generated_image`.
  */
 export interface MediaImportUrlToolOptions {
   readonly importImage: (input: {
@@ -31,6 +34,12 @@ export interface MediaImportUrlToolOptions {
     readonly filename?: string
     readonly credit?: MediaImportCredit
   }) => Promise<MediaImportResult>
+  /**
+   * Deletes an imported asset, **refusing** (with a `CogentaError`) while any
+   * entry still references it or when that cannot be checked completely.
+   * Optional: absent, `media.import_url` is not reversible.
+   */
+  readonly removeImage?: (input: { readonly id: string }) => Promise<void>
 }
 
 export interface MediaImportCredit {
@@ -85,6 +94,7 @@ export type MediaImportUrlOutput = z.infer<typeof ImportUrlOutputSchema>
 export function createMediaImportUrlTool(
   options: MediaImportUrlToolOptions,
 ): ToolDefinition<MediaImportUrlInput, MediaImportUrlOutput> {
+  const removeImage = options.removeImage
   return defineTool({
     name: 'media.import_url',
     version: '1.0.0',
@@ -94,7 +104,7 @@ export function createMediaImportUrlTool(
     output: ImportUrlOutputSchema,
     permissions: ['media.write'],
     sideEffects: true,
-    reversible: false,
+    reversible: removeImage !== undefined,
     cost: 'low',
     rateLimit: { perHour: 30 },
     async execute(input) {
@@ -114,6 +124,13 @@ export function createMediaImportUrlTool(
       })
       return { ...imported, sourceUrl: `${parsed.origin}${parsed.pathname}` }
     },
+    ...(removeImage === undefined
+      ? {}
+      : {
+          async revert(receipt: MediaImportUrlOutput) {
+            await removeImage({ id: receipt.id })
+          },
+        }),
   })
 }
 

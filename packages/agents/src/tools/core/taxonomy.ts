@@ -1,3 +1,4 @@
+import { CogentaError } from '@cogenta/core'
 import { z } from 'zod'
 import { defineTool } from '../define.js'
 import type { ToolDefinition } from '../types.js'
@@ -31,6 +32,14 @@ export interface TaxonomyServiceLike {
       readonly parent?: string
     },
   ): Promise<TaxonomyTermLike>
+  /**
+   * How many entries (live, trashed or draft — all of them) carry this term.
+   * Optional with `delete`: a host that supplies neither keeps
+   * `taxonomy.create_term` non-reversible, so it waits for a human.
+   */
+  usage?(taxonomy: string, termId: string): Promise<number>
+  /** Removes one term. Never cascades: a term with children is refused by the store. */
+  delete?(taxonomy: string, termId: string): Promise<void>
 }
 
 const TermSchema = z.object({
@@ -80,6 +89,8 @@ const CreateInputSchema = z.object({
 })
 type CreateInput = z.infer<typeof CreateInputSchema>
 const CreateOutputSchema = TermSchema.extend({
+  /** The taxonomy the term belongs to — what `revert` needs besides the id. */
+  taxonomy: z.string(),
   /** False when a term with this slug already existed and was returned as is. */
   created: z.boolean(),
 })
@@ -91,10 +102,20 @@ type CreateOutput = z.infer<typeof CreateOutputSchema>
  * exist without listing first, and a retried call never makes a duplicate.
  * Labels of an existing term are left untouched — renaming is not this
  * tool's job.
+ *
+ * Reversible when the host can count a term's uses and delete it. `revert`
+ * deletes the term only if this very call created it (`created: true` — a
+ * term that already existed is never this call's to remove) and nothing
+ * carries it any more; otherwise it refuses with a reason. Deleting a term
+ * would silently unclassify every entry carrying it (the join rows cascade),
+ * which is why "still unused" counts every entry, trashed and draft included.
  */
 export function createTaxonomyCreateTermTool(
   service: TaxonomyServiceLike,
 ): ToolDefinition<CreateInput, CreateOutput> {
+  const usage = service.usage?.bind(service)
+  const remove = service.delete?.bind(service)
+  const canUndo = usage !== undefined && remove !== undefined
   return defineTool({
     name: 'taxonomy.create_term',
     version: '1.0.0',
@@ -104,18 +125,50 @@ export function createTaxonomyCreateTermTool(
     output: CreateOutputSchema,
     permissions: ['taxonomy.write'],
     sideEffects: true,
-    reversible: false,
+    reversible: canUndo,
     cost: 'low',
     async execute(input) {
       const existing = (await service.list(input.taxonomy)).find((term) => term.slug === input.slug)
-      if (existing !== undefined) return { ...termOf(existing), created: false }
+      if (existing !== undefined) {
+        return { ...termOf(existing), taxonomy: input.taxonomy, created: false }
+      }
       const term = await service.create(input.taxonomy, {
         slug: input.slug,
         labels: input.labels,
         ...(input.parent === undefined ? {} : { parent: input.parent }),
       })
-      return { ...termOf(term), created: true }
+      return { ...termOf(term), taxonomy: input.taxonomy, created: true }
     },
+    ...(usage === undefined || remove === undefined
+      ? {}
+      : {
+          async revert(receipt: CreateOutput) {
+            const where = { taxonomy: receipt.taxonomy, id: receipt.id }
+            if (!receipt.created) {
+              throw new CogentaError({
+                code: 'TOOL_REVERT_REFUSED',
+                message: `The term "${receipt.slug}" already existed before this call, so it is not this call's to delete.`,
+                hint: 'Delete it from the Taxonomies screen if it is really unwanted.',
+                details: where,
+              })
+            }
+            const stillThere = (await service.list(receipt.taxonomy)).some(
+              (term) => term.id === receipt.id,
+            )
+            // Already deleted: the state this revert aims for.
+            if (!stillThere) return
+            const uses = await usage(receipt.taxonomy, receipt.id)
+            if (uses > 0) {
+              throw new CogentaError({
+                code: 'TOOL_REVERT_REFUSED',
+                message: `The term "${receipt.slug}" is now used by ${uses} entr${uses === 1 ? 'y' : 'ies'}; it was not deleted.`,
+                hint: 'Unclassify those entries first, or keep the term.',
+                details: { ...where, uses },
+              })
+            }
+            await remove(receipt.taxonomy, receipt.id)
+          },
+        }),
   })
 }
 

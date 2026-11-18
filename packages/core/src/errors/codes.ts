@@ -249,6 +249,8 @@ export const ERROR_CODES = [
   'RECEIPT_UNKNOWN',
   'RECEIPT_ALREADY_REVERTED',
   'RECEIPT_NOT_REVERTIBLE',
+  // A tool's own revert() refused: what it would undo changed since, or is in use (L42).
+  'TOOL_REVERT_REFUSED',
 
   // Agents — sub-agents (L4)
   'AGENT_SUBAGENT_UNKNOWN',

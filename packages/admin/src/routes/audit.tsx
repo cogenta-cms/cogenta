@@ -15,6 +15,7 @@ import {
 } from '../api/audit-client.js'
 import { ApiError } from '../api/client.js'
 import { listUsers } from '../api/users-client.js'
+import { McpUndo } from '../audit/mcp-undo.js'
 import { useAuth } from '../auth/auth-context.js'
 import { auditActionLabel, auditActorLabel, KNOWN_AUDIT_ACTIONS } from '../lib/audit-actions.js'
 import { roleLabels } from '../lib/role-label.js'
@@ -608,37 +609,42 @@ function EntryDetail({ detail }: { readonly detail: AuditEntryDetail }): JSX.Ele
   const { entry } = detail
 
   return (
-    <dl className="flex flex-col gap-3 text-sm">
-      <Row label={t('audit.detailDate')}>
-        <span title={entry.at}>{formatWhen(entry.at)}</span>
-      </Row>
-      <Row label={t('audit.detailActor')}>
-        {detail.actorLabel ?? auditActorLabel(t, entry.actorId, new Map())}
-      </Row>
-      <Row label={t('audit.detailActorKind')}>{t(`audit.actorKind.${detail.actorKind}`)}</Row>
-      <Row label={t('audit.detailRoles')}>
-        {entry.actorRoles.length === 0 ? '—' : roleLabels(t, entry.actorRoles)}
-      </Row>
-      <Row label={t('audit.detailAction')}>{auditActionLabel(t, entry.action)}</Row>
-      {entry.collection !== null && entry.entryId !== null && (
-        <Row label={t('audit.detailEntry')}>
-          <Link to={`/collections/${entry.collection}/${entry.entryId}`}>
-            {entry.collection} / {entry.entryId}
-          </Link>
+    <div className="flex flex-col gap-4">
+      <dl className="flex flex-col gap-3 text-sm">
+        <Row label={t('audit.detailDate')}>
+          <span title={entry.at}>{formatWhen(entry.at)}</span>
         </Row>
-      )}
-      <div>
-        <p className="m-0 font-medium">{t('audit.detailDiff')}</p>
-        {detail.diff !== null && <DiffView diff={detail.diff} />}
-        {detail.diff === null && detail.diffUnavailable !== null && (
-          <p className="m-0 text-muted-foreground">
-            {t(`audit.diffUnavailable.${detail.diffUnavailable}`, {
-              defaultValue: detail.diffUnavailable,
-            })}
-          </p>
+        <Row label={t('audit.detailActor')}>
+          {detail.actorLabel ?? auditActorLabel(t, entry.actorId, new Map())}
+        </Row>
+        <Row label={t('audit.detailActorKind')}>{t(`audit.actorKind.${detail.actorKind}`)}</Row>
+        <Row label={t('audit.detailRoles')}>
+          {entry.actorRoles.length === 0 ? '—' : roleLabels(t, entry.actorRoles)}
+        </Row>
+        <Row label={t('audit.detailAction')}>{auditActionLabel(t, entry.action)}</Row>
+        {entry.collection !== null && entry.entryId !== null && (
+          <Row label={t('audit.detailEntry')}>
+            <Link to={`/collections/${entry.collection}/${entry.entryId}`}>
+              {entry.collection} / {entry.entryId}
+            </Link>
+          </Row>
         )}
-      </div>
-    </dl>
+        <div>
+          <dt className="font-medium">{t('audit.detailDiff')}</dt>
+          <dd className="m-0">
+            {detail.diff !== null && <DiffView diff={detail.diff} />}
+            {detail.diff === null && detail.diffUnavailable !== null && (
+              <p className="m-0 text-muted-foreground">
+                {t(`audit.diffUnavailable.${detail.diffUnavailable}`, {
+                  defaultValue: detail.diffUnavailable,
+                })}
+              </p>
+            )}
+          </dd>
+        </div>
+      </dl>
+      <McpUndo entry={entry} />
+    </div>
   )
 }
 

@@ -7,7 +7,7 @@
     "autonomyAutonomous": "Autonome (les actions annulables s'exécutent sans validation ; les autres attendent toujours)",
     "autonomyManualShort": "Manuelle",
     "autonomyAutonomousShort": "Autonome",
-    "autonomyAutonomousWarning": "Avec une clé autonome, l'assistant peut publier sans relecture. Chaque action reste journalisée ; une suppression attend toujours votre accord."
+    "autonomyAutonomousWarning": "Avec une clé autonome, l'assistant peut publier sans relecture. Chaque action est journalisée et peut être annulée depuis le journal d'audit ; une suppression attend toujours votre accord."
   },
   "apiKeys": {
     "autonomyColumn": "Autonomie (MCP)",
@@ -17,6 +17,6 @@
     "autonomyAutonomous": "Autonome (les actions annulables s'exécutent sans validation ; les autres attendent toujours)",
     "autonomyManualShort": "Manuelle",
     "autonomyAutonomousShort": "Autonome",
-    "autonomyAutonomousWarning": "Avec une clé autonome, l'assistant peut publier sans relecture. Chaque action reste journalisée ; une suppression attend toujours votre accord."
+    "autonomyAutonomousWarning": "Avec une clé autonome, l'assistant peut publier sans relecture. Chaque action est journalisée et peut être annulée depuis le journal d'audit ; une suppression attend toujours votre accord."
   }
 }

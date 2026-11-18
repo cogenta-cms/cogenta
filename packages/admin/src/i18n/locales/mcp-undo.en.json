@@ -1,0 +1,16 @@
+{
+  "audit": {
+    "agentToolRevert": "Undo of an agent action: {{tool}}",
+    "undo": {
+      "button": "Undo this action",
+      "confirm": "The site will go back to how it was before this action. The undo is recorded in the audit log.",
+      "confirmButton": "Yes, undo the action",
+      "keepButton": "Keep the action",
+      "undoing": "Undoing…",
+      "done": "The action was undone.",
+      "refused": "The action was not undone.",
+      "reverted": "Undone",
+      "revertedAt": "on {{at}}"
+    }
+  }
+}

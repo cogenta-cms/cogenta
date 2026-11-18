@@ -1123,6 +1123,20 @@ export function installMockFetch(
      * `at id` base64url, newest first).
      */
     readonly auditEntries?: readonly Readonly<Record<string, unknown>>[]
+    /**
+     * L42: what `GET /api/mcp/actions/{id}` answers with, and how
+     * `POST .../revert` ends — `refusal` answers it with that error, as the
+     * server does when the entry was edited since.
+     */
+    readonly mcpAction?: {
+      readonly state: Readonly<Record<string, unknown>>
+      readonly refusal?: {
+        readonly status: number
+        readonly code: string
+        readonly message: string
+        readonly hint?: string
+      }
+    }
     /** Fiche 21 task 1: what `GET /api/audit/{id}` answers with, for any id. */
     readonly auditDetail?: {
       readonly entry: Readonly<Record<string, unknown>>
@@ -3345,6 +3359,40 @@ export function installMockFetch(
           channelPreferences.set(channelName, next)
           return json(200, { data: next })
         }
+      }
+
+      // L42: take back an MCP client's action, from the audit log. Admin
+      // session only, like the real route.
+      const mcpActionMatch = /\/api\/mcp\/actions\/([^/?]+)(\/revert)?/u.exec(url)
+      if (mcpActionMatch !== null) {
+        if (!user.roles.includes('admin')) {
+          return json(403, {
+            error: { code: 'FORBIDDEN', message: 'Only the admin role may undo an action.' },
+          })
+        }
+        const action = options.mcpAction ?? { state: { state: 'available' } }
+        if (mcpActionMatch[2] === '/revert') {
+          if (action.refusal !== undefined) {
+            return json(action.refusal.status, {
+              error: {
+                code: action.refusal.code,
+                message: action.refusal.message,
+                ...(action.refusal.hint === undefined ? {} : { hint: action.refusal.hint }),
+              },
+            })
+          }
+          return json(200, {
+            data: {
+              id: mcpActionMatch[1],
+              tool: 'content.publish',
+              state: 'reverted',
+              revertAuditId: 'audit-undo-1',
+            },
+          })
+        }
+        return json(200, {
+          data: { id: mcpActionMatch[1], tool: 'content.publish', ...action.state },
+        })
       }
 
       // `/api/mcp-info` — what the "MCP" screen prints client configurations from.

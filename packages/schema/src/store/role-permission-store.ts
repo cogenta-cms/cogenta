@@ -192,7 +192,7 @@ function isUniqueViolation(error: unknown): boolean {
  * should hear about it rather than spin. Three is enough for two racers to
  * settle; the last failure is rethrown untouched.
  */
-async function retryOnUniqueViolation<T>(attempt: () => Promise<T>): Promise<T> {
+export async function retryOnUniqueViolation<T>(attempt: () => Promise<T>): Promise<T> {
   for (let remaining = 3; ; remaining -= 1) {
     try {
       return await attempt()

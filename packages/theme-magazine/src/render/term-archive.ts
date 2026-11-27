@@ -70,66 +70,68 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
             ),
       ),
     ),
-    h(
-      'section',
-      { class: 'cg-section cg-listing', 'data-form': 'archive' },
-      h(
-        'div',
-        { class: 'cg-container cg-listing__inner' },
-        lead === undefined
-          ? h('p', { class: 'cg-empty' }, input.labels.empty)
-          : h(
-              'div',
-              {
-                class: 'cg-front',
-                'data-briefs': String(briefs.length),
-                'data-more': String(more.length),
-              },
-              h(
-                'div',
-                { class: 'cg-front__lead' },
-                renderStory(lead, { tag: 'h2', variant: 'lead', standfirst: true, date: true }),
-              ),
-              briefs.length === 0
-                ? null
-                : h(
-                    'ul',
-                    { class: 'cg-front__briefs' },
-                    briefs.map((story) =>
-                      h(
-                        'li',
-                        { class: 'cg-front__brief' },
-                        renderStory(story, {
-                          tag: 'h2',
-                          variant: 'brief',
-                          standfirst: true,
-                          date: true,
-                        }),
-                      ),
-                    ),
+    input.showEntries === false
+      ? null
+      : h(
+          'section',
+          { class: 'cg-section cg-listing', 'data-form': 'archive' },
+          h(
+            'div',
+            { class: 'cg-container cg-listing__inner' },
+            lead === undefined
+              ? h('p', { class: 'cg-empty' }, input.labels.empty)
+              : h(
+                  'div',
+                  {
+                    class: 'cg-front',
+                    'data-briefs': String(briefs.length),
+                    'data-more': String(more.length),
+                  },
+                  h(
+                    'div',
+                    { class: 'cg-front__lead' },
+                    renderStory(lead, { tag: 'h2', variant: 'lead', standfirst: true, date: true }),
                   ),
-              more.length === 0
-                ? null
-                : h(
-                    'ul',
-                    { class: 'cg-front__more' },
-                    more.map((story) =>
-                      h(
-                        'li',
-                        { class: 'cg-front__item' },
-                        renderStory(story, {
-                          tag: 'h2',
-                          variant: 'secondary',
-                          standfirst: true,
-                          date: true,
-                        }),
+                  briefs.length === 0
+                    ? null
+                    : h(
+                        'ul',
+                        { class: 'cg-front__briefs' },
+                        briefs.map((story) =>
+                          h(
+                            'li',
+                            { class: 'cg-front__brief' },
+                            renderStory(story, {
+                              tag: 'h2',
+                              variant: 'brief',
+                              standfirst: true,
+                              date: true,
+                            }),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-            ),
-        pager(input),
-      ),
-    ),
+                  more.length === 0
+                    ? null
+                    : h(
+                        'ul',
+                        { class: 'cg-front__more' },
+                        more.map((story) =>
+                          h(
+                            'li',
+                            { class: 'cg-front__item' },
+                            renderStory(story, {
+                              tag: 'h2',
+                              variant: 'secondary',
+                              standfirst: true,
+                              date: true,
+                            }),
+                          ),
+                        ),
+                      ),
+                ),
+            pager(input),
+          ),
+        ),
   )
 }
 

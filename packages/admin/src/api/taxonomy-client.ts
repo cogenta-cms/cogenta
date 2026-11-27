@@ -137,3 +137,44 @@ export async function deleteTerm(
     { method: 'DELETE', headers: authHeader(token) },
   )
 }
+
+/**
+ * What a term's public page shows — a host-owned presentation setting kept
+ * outside the term itself (contract A fixes a term's fields). Mirrors
+ * `TERM_ARCHIVE_DISPLAY_MODES` of `@cogenta/schema`, hand-copied for the same
+ * reason as every other shape here: this is a browser bundle.
+ */
+export const TERM_ARCHIVE_DISPLAY_MODES = [
+  'entries',
+  'subterms',
+  'entries-and-subterms',
+  'subtree',
+  'subtree-and-subterms',
+] as const
+export type TermArchiveDisplayMode = (typeof TERM_ARCHIVE_DISPLAY_MODES)[number]
+
+/** The mode of a term's page; `entries` for a term nobody configured. */
+export async function getTermArchiveDisplay(
+  token: string,
+  taxonomy: string,
+  id: string,
+): Promise<TermArchiveDisplayMode> {
+  const answer = await request<{ readonly mode: TermArchiveDisplayMode }>(
+    `/api/taxonomies/${encodeURIComponent(taxonomy)}/${encodeURIComponent(id)}/archive-display`,
+    { headers: authHeader(token) },
+  )
+  return answer.mode
+}
+
+export async function setTermArchiveDisplay(
+  token: string,
+  taxonomy: string,
+  id: string,
+  mode: TermArchiveDisplayMode,
+): Promise<TermArchiveDisplayMode> {
+  const answer = await request<{ readonly mode: TermArchiveDisplayMode }>(
+    `/api/taxonomies/${encodeURIComponent(taxonomy)}/${encodeURIComponent(id)}/archive-display`,
+    { method: 'PUT', headers: authHeader(token), body: JSON.stringify({ mode }) },
+  )
+  return answer.mode
+}

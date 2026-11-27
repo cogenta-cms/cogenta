@@ -261,6 +261,22 @@ CTE récursif, dont le support diverge entre Postgres, MySQL/MariaDB et SQLite
 (ADR-0006). « Tout le contenu de ce sous-arbre » se répond par un `like` sur le chemin,
 identique sur les trois dialectes.
 
+**Affichage de la page d'un terme — réglage de l'hôte, hors contrat.** Ce que montre la
+page publique d'un terme (`/{taxonomie}/{slug}`) est un réglage de présentation **propre
+au site**, rangé dans sa propre table fixe `cogenta_term_archive_display` (taxonomie, id
+du terme, mode, date) — même traitement que les motifs du builder (`cogenta_patterns`) et
+que la surcouche de permissions d'ADR-0028. Un terme **n'a pas de champ de plus** :
+ADR-0022 fixe ses champs (`id`, `parent`, `slug`, `position`, `labels`) et ni
+`TaxonomyTerm`, ni les tables de termes, ni `defineTaxonomy` ne changent. Le contrat A
+reste `schema@2.5`, sans montée de version. Les cinq modes sont une liste fermée
+(`TERM_ARCHIVE_DISPLAY_MODES`) : `entries` (défaut — seulement les contenus classés
+directement sous le terme, sans liste de sous-termes), `subterms`, `entries-and-subterms`,
+`subtree` (les contenus du terme et de tous ses descendants, dédoublonnés, du plus récent
+au plus ancien, par le `like` sur le chemin) et `subtree-and-subterms`. Un terme sans
+réglage se comporte comme `entries`. Lecture et écriture passent par
+`GET`/`PUT /api/taxonomies/{taxonomie}/{id}/archive-display` : lire demande `read` sur la
+taxonomie, écrire demande `update` (R4 — le routeur vérifie, jamais le magasin).
+
 ### Zones de blocs
 
 `f.blocks()` ne stocke pas un tableau JSON dans la ligne de contenu. Chaque bloc est une
@@ -955,7 +971,8 @@ defineAgent({
 > `theme@1.5` le 2026-09-14 (L27, `PageEntryMeta.fields`), puis en `theme@1.6` le 2026-09-15
 > (L30, zones de widgets), puis en `theme@1.7` le 2026-09-16 (L32, blocs et widgets de
 > plugin, ADR-0036), puis en `theme@1.8` le 2026-09-17 (L37, archives d'auteur), puis en `theme@1.9` le même
-> jour (L38, aperçu des contenus intégrés), puis en `theme@1.10` le 2026-10-28 (sélecteur de langue).**
+> jour (L38, aperçu des contenus intégrés), puis en `theme@1.10` le 2026-10-28 (sélecteur de langue),
+> puis en `theme@1.11` le 2026-11-27 (`TermArchiveInput.showEntries`).**
 > Ajouter une entrée à `ctx` est mineur ; en modifier une est majeur.
 >
 > `1.1` ajoute `ImageSource.kind` et définit `ContentEntry` et `MediaReference` — trois
@@ -1556,6 +1573,27 @@ collection par la langue (`/en/blog/hello`), la langue par défaut restant sans 
 `matchPath` résout déjà et que la canonique du SEO nomme déjà ; sans l'option, il préfixe
 toutes les langues, comme avant.
 
+### Page d'un terme sans liste de contenus — `TermArchiveInput.showEntries` — theme@1.11
+
+Ajouté pour que le propriétaire d'un site choisisse ce que montre la page d'un terme
+(réglage de l'hôte hors contrat A, voir « Taxonomies »), **optionnel et additif**.
+
+```ts
+interface TermArchiveInput {
+  /* … */
+  readonly showEntries?: boolean   // absent = true
+}
+```
+
+`false` veut dire que la page ne parle que des sous-termes (`children`) : le thème ne dessine
+alors **ni** la liste des contenus, **ni** le message « rien n'est classé ici » (faux : la page
+n'est simplement pas une page de contenus), **ni** la pagination. La liste des sous-termes, elle,
+n'a pas de champ à part : l'hôte passe `children: []` quand le mode choisi n'en veut pas, et les
+thèmes ne dessinent déjà rien pour un tableau vide. L'hôte n'envoie `showEntries: false` que si la
+liste de sous-termes existe réellement ; un terme sans sous-terme en mode « sous-termes
+seulement » reçoit la page vide habituelle plutôt qu'une page blanche. Les dix thèmes et le rendu de
+repli de l'hôte le respectent ; un thème qui l'ignore rend une page correcte, seulement redondante.
+
 ### Versionnement
 
 `theme@1.x`. Ajouter une entrée à `ctx` est mineur. En modifier une est majeur.
@@ -1594,6 +1632,12 @@ Un thème `1.9` l'ignore et rend exactement comme avant ; un hôte à une seule 
 renseigne pas. Tests : `packages/theme-kit/test/language-switcher.test.ts`,
 `packages/theme-blog/test/chrome.test.ts`,
 `packages/create-cogenta/test/blog-bilingual.e2e.test.ts`.
+
+**`theme@1.11` (2026-11-27)** — strictement additif : `TermArchiveInput.showEntries`,
+optionnel. Un thème `1.10` l'ignore et rend exactement comme avant ; un hôte qui ne le
+renseigne pas produit la même page. Tests : `packages/theme-*/test/term-archive.test.ts`,
+`packages/cli/test/term-archive-fallback.test.ts`,
+`packages/cli/test/serve-term-archive-display.test.ts`.
 
 ---
 

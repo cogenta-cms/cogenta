@@ -89,6 +89,13 @@ export interface TermArchiveResolution {
    * the query's).
    */
   readonly entries: readonly { readonly collection: string; readonly id: string }[]
+  /**
+   * `false` when the term's owner chose a page that shows only its sub-terms
+   * (`children`): the theme then draws neither the entry list nor the "nothing
+   * filed here" message. Absent means the page lists entries, as every term,
+   * date and author archive always did.
+   */
+  readonly showEntries?: boolean
   /** An author archive's portrait and bio (L37), resolved to an image here. Absent on a term or date archive. */
   readonly intro?: { readonly text?: string; readonly imageMediaId?: string }
 }
@@ -213,24 +220,35 @@ function archiveHref(
  * theme that wants an archive of its own has one extra export to write, and
  * this exists so that not writing it never breaks a site.
  */
-function fallbackArchive(input: TermArchiveInput): HtmlElement {
+export function fallbackArchive(input: TermArchiveInput): HtmlElement {
   return h(
     'main',
     { class: 'cg-main cg-archive', id: 'cg-main' },
     h('h1', { class: 'cg-page__title' }, input.term.label),
-    input.entries.length === 0
-      ? h('p', {}, input.labels.empty)
+    input.children.length === 0
+      ? null
       : h(
           'ul',
-          {},
-          ...input.entries.map((entry) =>
-            h(
-              'li',
-              {},
-              entry.href === null ? entry.title : h('a', { href: entry.href }, entry.title),
+          { class: 'cg-archive__children', 'aria-label': input.labels.subterms },
+          ...input.children.map((child) => h('li', {}, h('a', { href: child.href }, child.label))),
+        ),
+    // `showEntries: false` is a page about sub-terms: no list, and no "nothing
+    // is filed here" either, which would be false.
+    input.showEntries === false
+      ? null
+      : input.entries.length === 0
+        ? h('p', {}, input.labels.empty)
+        : h(
+            'ul',
+            {},
+            ...input.entries.map((entry) =>
+              h(
+                'li',
+                {},
+                entry.href === null ? entry.title : h('a', { href: entry.href }, entry.title),
+              ),
             ),
           ),
-        ),
   )
 }
 
@@ -449,6 +467,7 @@ export async function renderTermArchivePage(
       href: hrefFor(child.slug, 1),
     })),
     entries,
+    ...(resolution.showEntries === false ? { showEntries: false } : {}),
     page: {
       current: page,
       totalPages,

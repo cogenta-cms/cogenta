@@ -305,3 +305,101 @@ describe('the taxonomy screen', () => {
     expect(within(rows[0] as HTMLElement).getByText('Desserts')).toBeDefined()
   })
 })
+
+describe('the term page display setting', () => {
+  it('shows the default mode, saves a change through the real route and shows it on reopening', async () => {
+    signedIn(['editor'], { taxonomyTerms: [CUISINE, DESSERTS] })
+    render(<App />)
+    await goToTaxonomies()
+    await screen.findByText('Cuisine')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier Cuisine' }))
+    let dialog = await screen.findByRole('dialog')
+    const select = (await within(dialog).findByRole('combobox', {
+      name: 'Affichage de la page du terme',
+    })) as HTMLSelectElement
+    // The default, marked as such, and loaded before the select is usable.
+    await waitFor(() => expect(select.disabled).toBe(false))
+    expect(select.value).toBe('entries')
+    expect(
+      within(select).getByRole('option', {
+        name: 'Seulement les contenus de ce terme (par défaut)',
+      }),
+    ).toBeDefined()
+    expect(
+      within(select).getByRole('option', {
+        name: 'Les contenus de ce terme et de tous ses sous-termes',
+      }),
+    ).toBeDefined()
+
+    fireEvent.change(select, { target: { value: 'subtree' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    const stored = await fetch('/api/taxonomies/topic/term-existing/archive-display', {
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    })
+    expect(((await stored.json()) as { data: { mode: string } }).data.mode).toBe('subtree')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier Cuisine' }))
+    dialog = await screen.findByRole('dialog')
+    const reopened = within(dialog).getByRole('combobox', {
+      name: 'Affichage de la page du terme',
+    }) as HTMLSelectElement
+    await waitFor(() => expect(reopened.value).toBe('subtree'))
+  })
+
+  it('does not write the setting when the editor left it alone', async () => {
+    signedIn(['editor'], { taxonomyTerms: [CUISINE] })
+    const spy = vi.spyOn(globalThis, 'fetch')
+    render(<App />)
+    await goToTaxonomies()
+    await screen.findByText('Cuisine')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Modifier Cuisine' }))
+    const dialog = await screen.findByRole('dialog')
+    const select = (await within(dialog).findByRole('combobox', {
+      name: 'Affichage de la page du terme',
+    })) as HTMLSelectElement
+    await waitFor(() => expect(select.disabled).toBe(false))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    const writes = spy.mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith('/archive-display') &&
+        (init as RequestInit | undefined)?.method === 'PUT',
+    )
+    expect(writes).toHaveLength(0)
+  })
+
+  it('offers the setting on a new term too, and applies it once the term exists', async () => {
+    signedIn(['editor'], { taxonomyTerms: [CUISINE] })
+    render(<App />)
+    await goToTaxonomies()
+    await screen.findByText('Cuisine')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nouveau terme' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Libellé (fr)'), { target: { value: 'Voyage' } })
+    fireEvent.change(
+      within(dialog).getByRole('combobox', { name: 'Affichage de la page du terme' }),
+      {
+        target: { value: 'subterms' },
+      },
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    const response = await fetch('/api/taxonomies/topic', {
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    })
+    const created = ((await response.json()) as { data: { id: string; slug: string }[] }).data.find(
+      (term) => term.slug === 'voyage',
+    )
+    const stored = await fetch(`/api/taxonomies/topic/${created?.id}/archive-display`, {
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+    })
+    expect(((await stored.json()) as { data: { mode: string } }).data.mode).toBe('subterms')
+  })
+})

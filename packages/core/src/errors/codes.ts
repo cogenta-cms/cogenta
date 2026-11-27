@@ -78,6 +78,9 @@ export const ERROR_CODES = [
   'PATTERN_UNKNOWN',
   'PATTERN_INVALID',
 
+  // Taxonomy term archive display — a host-owned presentation setting, outside contract A
+  'TERM_ARCHIVE_DISPLAY_INVALID',
+
   // Embed previews (L38)
   'EMBED_URL_INVALID',
   'EMBED_RATE_LIMITED',

@@ -55,44 +55,46 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
             ),
       ),
     ),
-    h(
-      'section',
-      { class: 'cg-section cg-collection', 'data-form': 'front' },
-      h(
-        'div',
-        { class: 'cg-container cg-collection__inner' },
-        lead === undefined
-          ? h('p', { class: 'cg-collection__empty' }, input.labels.empty)
-          : h(
-              'div',
-              { class: 'cg-front', 'data-secondaries': String(secondaries.length) },
-              h(
-                'div',
-                { class: 'cg-front__lead' },
-                renderStory(lead, { tag: 'h2', variant: 'lead', standfirst: true, date: true }),
-              ),
-              secondaries.length === 0
-                ? null
-                : h(
-                    'ul',
-                    { class: 'cg-front__secondaries' },
-                    secondaries.map((story) =>
-                      h(
-                        'li',
-                        { class: 'cg-front__item' },
-                        renderStory(story, {
-                          tag: 'h2',
-                          variant: 'secondary',
-                          standfirst: true,
-                          date: true,
-                        }),
-                      ),
-                    ),
+    input.showEntries === false
+      ? null
+      : h(
+          'section',
+          { class: 'cg-section cg-collection', 'data-form': 'front' },
+          h(
+            'div',
+            { class: 'cg-container cg-collection__inner' },
+            lead === undefined
+              ? h('p', { class: 'cg-collection__empty' }, input.labels.empty)
+              : h(
+                  'div',
+                  { class: 'cg-front', 'data-secondaries': String(secondaries.length) },
+                  h(
+                    'div',
+                    { class: 'cg-front__lead' },
+                    renderStory(lead, { tag: 'h2', variant: 'lead', standfirst: true, date: true }),
                   ),
-            ),
-        pager(input),
-      ),
-    ),
+                  secondaries.length === 0
+                    ? null
+                    : h(
+                        'ul',
+                        { class: 'cg-front__secondaries' },
+                        secondaries.map((story) =>
+                          h(
+                            'li',
+                            { class: 'cg-front__item' },
+                            renderStory(story, {
+                              tag: 'h2',
+                              variant: 'secondary',
+                              standfirst: true,
+                              date: true,
+                            }),
+                          ),
+                        ),
+                      ),
+                ),
+            pager(input),
+          ),
+        ),
   )
 }
 

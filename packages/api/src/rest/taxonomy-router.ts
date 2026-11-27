@@ -1,10 +1,12 @@
 import { CogentaError, type DatabaseHandle } from '@cogenta/core'
 import {
+  assertTermArchiveDisplayMode,
   type CollectionDefinition,
   countTaxonomyUsage,
   type TaxonomyDefinition,
   type TaxonomyStore,
   type TaxonomyTerm,
+  type TermArchiveDisplayStore,
   type TermUsage,
 } from '@cogenta/schema'
 import type { AccessContext, PermissionLayer } from '../types.js'
@@ -21,6 +23,13 @@ import { single } from './query.js'
  *   PATCH  /{taxonomy}/{id}           rename, relabel, reorder
  *   DELETE /{taxonomy}/{id}           delete a term (?cascade=true for the branch)
  *   POST   /{taxonomy}/{id}/move      re-parent it
+ *   GET    /{taxonomy}/{id}/archive-display   what the term's public page shows
+ *   PUT    /{taxonomy}/{id}/archive-display   change it (`{ "mode": "subtree" }`)
+ *
+ * The archive display mode is a host-owned presentation setting kept outside
+ * contract A (a term has no such field), in its own table behind
+ * `archiveDisplay`. Reading it is reading the term; writing it is updating the
+ * term — the same `assertTerm` doors, never a check inside a handler.
  *
  * The list route also answers three query parameters (`08-taxonomies.md`,
  * task 3): `?q=` filters by label or slug, accent- and case-insensitive;
@@ -59,6 +68,11 @@ export interface TaxonomyRouterOptions {
   readonly storeFor: (taxonomy: TaxonomyDefinition) => TaxonomyStore
   /** Wires `?counts=1` and `?unused=1`. Left out, both parameters are ignored. */
   readonly usage?: TaxonomyUsageSource
+  /**
+   * Wires `/{taxonomy}/{id}/archive-display`. Left out, that route does not
+   * exist (404) — a site still lists and writes its terms without it.
+   */
+  readonly archiveDisplay?: TermArchiveDisplayStore
   /** Mount point. `/api/taxonomies` by default. */
   readonly basePath?: string
 }
@@ -325,11 +339,37 @@ export function createTaxonomyRouter(options: TaxonomyRouterOptions): TaxonomyRo
         // Explicit and opt-in: deleting "Cuisine" must not silently take
         // "Desserts" with it (the store refuses by default).
         const cascade = single(request.query, 'cascade') === 'true'
+        // The terms that go with it, read before they are gone: a cascade
+        // takes the whole branch, and each carries its own display setting.
+        const goingWith =
+          options.archiveDisplay === undefined || !cascade
+            ? [id]
+            : (await store.read(id)) === null
+              ? [id]
+              : (await store.subtree(id)).map((member) => member.id)
         const removed = await store.delete(id, { cascade })
         if (!removed) throw termNotFound(taxonomy.name, id)
+        await options.archiveDisplay?.removeMany(taxonomy.name, goingWith)
         return jsonResponse(204, null)
       }
       return methodNotAllowed(['GET', 'PATCH', 'PUT', 'DELETE'])
+    }
+
+    if (action === 'archive-display' && options.archiveDisplay !== undefined) {
+      const display = options.archiveDisplay
+      if (method === 'GET') {
+        permissions.assertTerm('read', taxonomy, context)
+        if ((await store.read(id)) === null) throw termNotFound(taxonomy.name, id)
+        return jsonResponse(200, { data: { mode: await display.get(taxonomy.name, id) } })
+      }
+      if (method === 'PUT') {
+        permissions.assertTerm('update', taxonomy, context)
+        const body = asRecord(request.body)
+        const mode = assertTermArchiveDisplayMode(body['mode'])
+        if ((await store.read(id)) === null) throw termNotFound(taxonomy.name, id)
+        return jsonResponse(200, { data: { mode: await display.set(taxonomy.name, id, mode) } })
+      }
+      return methodNotAllowed(['GET', 'PUT'])
     }
 
     if (action !== 'move') throw noRoute()
@@ -375,7 +415,7 @@ function noRoute(): CogentaError {
   return new CogentaError({
     code: 'CONTENT_NOT_FOUND',
     message: 'No route matches this path.',
-    hint: 'Taxonomy routes are /{taxonomy}, /{taxonomy}/{id} and /{taxonomy}/{id}/move.',
+    hint: 'Taxonomy routes are /{taxonomy}, /{taxonomy}/{id}, /{taxonomy}/{id}/move and /{taxonomy}/{id}/archive-display.',
   })
 }
 

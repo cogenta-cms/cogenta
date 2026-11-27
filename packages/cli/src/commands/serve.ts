@@ -325,6 +325,7 @@ import {
   createSearchIndex,
   createSiteSettingsStore,
   createTaxonomyStore,
+  createTermArchiveDisplayStore,
   DEFAULT_TRASH_RETAIN_DAYS,
   ensureAdminThemeTable,
   ensureEmbedPreviewTable,
@@ -333,6 +334,7 @@ import {
   ensurePatternTables,
   ensureSearchConsoleConnectionTable,
   ensureSiteSettingsTables,
+  ensureTermArchiveDisplayTable,
   entriesTable,
   isPublicationDue,
   type MaintenanceStore,
@@ -356,6 +358,8 @@ import {
   type TaxonomyDefinition,
   type TaxonomyStore,
   type TaxonomyTerm,
+  type TermArchiveDisplayMode,
+  type TermArchiveDisplayStore,
   type TermSlugs,
 } from '@cogenta/schema'
 import {
@@ -2282,6 +2286,12 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
   await ensurePatternTables(db)
   const patternStore: PatternStore = createPatternStore({ db })
 
+  // What each taxonomy term's public page shows (entries, sub-terms, the whole
+  // subtree). A host-owned presentation setting kept outside contract A — a
+  // term has no such field (ADR-0022) — so it gets its own fixed table.
+  await ensureTermArchiveDisplayTable(db)
+  const termArchiveDisplay: TermArchiveDisplayStore = createTermArchiveDisplayStore({ db })
+
   // Google Search Console's one stored connection (fiche 70 task 4,
   // ADR-0032) — same one-fixed-table treatment, and the table is always
   // created regardless of whether an OAuth app is configured, so enabling
@@ -2438,9 +2448,11 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
    * different feature with a different design.
    */
   const ARCHIVE_SCAN_CAP = 600
-  const entriesForTerm = async (
+  /** How many term ids one statement binds: a whole subtree can be large, and every engine caps its placeholders. */
+  const TERM_ID_CHUNK = 400
+  const entriesForTerms = async (
     taxonomyName: string,
-    termId: string,
+    termIds: readonly string[],
     /** Only the entries written in this language, for a collection routed by locale. */
     locale?: string,
   ): Promise<readonly { readonly collection: string; readonly id: string }[]> => {
@@ -2469,16 +2481,41 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
           : sql``
 
       for (const relation of relevant) {
-        if (relation.many) {
-          const join = identifier(relationTable(collection.name, relation.field), dialect)
+        // One statement per chunk of term ids: a term's own archive binds one
+        // id, a subtree archive binds the whole branch.
+        for (let start = 0; start < termIds.length; start += TERM_ID_CHUNK) {
+          const chunk = termIds.slice(start, start + TERM_ID_CHUNK)
+          const targets = chunk
+            .map((termId) => sql`${termId}`)
+            .reduce((left, right) => sql`${left}, ${right}`)
+          if (relation.many) {
+            const join = identifier(relationTable(collection.name, relation.field), dialect)
+            const rows = await db.query<{ id: unknown; created_at: unknown }>(
+              sql`select e.${idColumn} as ${idColumn}, e.${createdAtColumn} as ${createdAtColumn}
+                  from ${join} jt
+                  join ${entriesTableName} e on e.${idColumn} = jt.${identifier('entry_id', dialect)}
+                  where jt.${identifier('target_id', dialect)} in (${targets})
+                    and e.${deletedAtColumn} is null
+                    and e.${statusColumn} = ${'published'}
+                    ${inLocale}`,
+            )
+            for (const row of rows.rows) {
+              found.push({
+                collection: collection.name,
+                id: String(row.id),
+                createdAt: String(row.created_at),
+              })
+            }
+            continue
+          }
+          const column = identifier(columnFor(relation.field), dialect)
           const rows = await db.query<{ id: unknown; created_at: unknown }>(
-            sql`select e.${idColumn} as ${idColumn}, e.${createdAtColumn} as ${createdAtColumn}
-                from ${join} jt
-                join ${entriesTableName} e on e.${idColumn} = jt.${identifier('entry_id', dialect)}
-                where jt.${identifier('target_id', dialect)} = ${termId}
-                  and e.${deletedAtColumn} is null
-                  and e.${statusColumn} = ${'published'}
-                  ${inLocale}`,
+            sql`select ${idColumn}, ${createdAtColumn}
+                from ${entriesTableName}
+                where ${column} in (${targets})
+                  and ${deletedAtColumn} is null
+                  and ${statusColumn} = ${'published'}
+                  ${inLocaleBare}`,
           )
           for (const row of rows.rows) {
             found.push({
@@ -2487,23 +2524,6 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
               createdAt: String(row.created_at),
             })
           }
-          continue
-        }
-        const column = identifier(columnFor(relation.field), dialect)
-        const rows = await db.query<{ id: unknown; created_at: unknown }>(
-          sql`select ${idColumn}, ${createdAtColumn}
-              from ${entriesTableName}
-              where ${column} = ${termId}
-                and ${deletedAtColumn} is null
-                and ${statusColumn} = ${'published'}
-                ${inLocaleBare}`,
-        )
-        for (const row of rows.rows) {
-          found.push({
-            collection: collection.name,
-            id: String(row.id),
-            createdAt: String(row.created_at),
-          })
         }
       }
     }
@@ -2521,6 +2541,62 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       if (!unique.has(row.id)) unique.set(row.id, { collection: row.collection, id: row.id })
     }
     return [...unique.values()]
+  }
+
+  const entriesForTerm = async (
+    taxonomyName: string,
+    termId: string,
+    locale?: string,
+  ): Promise<readonly { readonly collection: string; readonly id: string }[]> =>
+    entriesForTerms(taxonomyName, [termId], locale)
+
+  /**
+   * What a term's page lists and links, under the mode its owner chose
+   * (`TermArchiveDisplayStore`, a host-owned setting outside contract A).
+   *
+   * One function answers it for both the page and the sitemap, so the two can
+   * never disagree about whether a term "has something to show":
+   *
+   * - `entries` (the default) — the term's own entries, no sub-term list;
+   * - `subterms` — the direct sub-terms only. A page with none has nothing to
+   *   show, so it falls back to the empty page (the theme's "nothing filed
+   *   here" message) rather than a blank one;
+   * - `entries-and-subterms` — both;
+   * - `subtree` — the term's entries and every descendant's, deduplicated by
+   *   `entriesForTerms`, newest first; no sub-term list;
+   * - `subtree-and-subterms` — the subtree's entries and the sub-term list.
+   *
+   * `showEntries: false` is only ever sent when the sub-term list is really
+   * there to carry the page.
+   */
+  const termArchiveContent = async (
+    taxonomy: TaxonomyDefinition,
+    store: TaxonomyStore,
+    termId: string,
+    mode: TermArchiveDisplayMode,
+    locale: string | undefined,
+  ): Promise<{
+    readonly children: readonly TaxonomyTerm[]
+    readonly entries: readonly { readonly collection: string; readonly id: string }[]
+    readonly showEntries: boolean
+  }> => {
+    const showsChildren =
+      mode === 'subterms' || mode === 'entries-and-subterms' || mode === 'subtree-and-subterms'
+    const children = showsChildren ? await store.list({ parent: termId }) : []
+    if (mode === 'subterms') {
+      return children.length > 0
+        ? { children, entries: [], showEntries: false }
+        : { children, entries: [], showEntries: true }
+    }
+    const scope =
+      mode === 'subtree' || mode === 'subtree-and-subterms'
+        ? (await store.subtree(termId)).map((member) => member.id)
+        : [termId]
+    return {
+      children,
+      entries: await entriesForTerms(taxonomy.name, scope, locale),
+      showEntries: true,
+    }
   }
 
   /**
@@ -2542,7 +2618,13 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     // `ancestors` is inclusive of the term itself (`taxonomy-store.ts`), and
     // a breadcrumb must not repeat the heading right below it.
     const lineage = await store.ancestors(term.id)
-    const children = await store.list({ parent: term.id })
+    const content = await termArchiveContent(
+      taxonomy,
+      store,
+      term.id,
+      await termArchiveDisplay.get(taxonomy.name, term.id),
+      locale,
+    )
 
     return {
       taxonomyName: taxonomy.name,
@@ -2556,14 +2638,19 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       ancestors: lineage
         .filter((ancestor) => ancestor.id !== term.id)
         .map((ancestor) => ({ slug: ancestor.slug, label: termLabel(ancestor, locale) })),
-      children: children.map((child) => ({ slug: child.slug, label: termLabel(child, locale) })),
-      entries: await entriesForTerm(taxonomy.name, term.id, locale),
+      children: content.children.map((child) => ({
+        slug: child.slug,
+        label: termLabel(child, locale),
+      })),
+      entries: content.entries,
+      ...(content.showEntries ? {} : { showEntries: false }),
     }
   }
 
   /**
    * Every term archive URL a crawler should know about, for `/sitemap.xml`.
-   * A term with nothing published under it is left out: the page answers 200,
+   * A term whose page shows nothing under its display mode — no entries in
+   * scope and no sub-term list to draw — is left out: the page answers 200,
    * but advertising an empty list to a crawler is asking it to spend a
    * request on nothing.
    */
@@ -2573,10 +2660,21 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
     // as `x-default`), on a site that routes by locale; one URL otherwise.
     const languages = isLocaleRouted(site, collections) ? site.locales : [site.defaultLocale]
     for (const taxonomy of taxonomies) {
-      for (const term of await taxonomyStoreFor(taxonomy).list()) {
+      const store = taxonomyStoreFor(taxonomy)
+      const modes = await termArchiveDisplay.getMany(taxonomy.name)
+      for (const term of await store.list()) {
         const addresses = new Map<string, string>()
         for (const language of languages) {
-          if ((await entriesForTerm(taxonomy.name, term.id, language)).length === 0) continue
+          // Listed when the page, under its mode, shows something: entries in
+          // scope, or a sub-term list that is not empty.
+          const content = await termArchiveContent(
+            taxonomy,
+            store,
+            term.id,
+            modes.get(term.id) ?? 'entries',
+            language,
+          )
+          if (content.entries.length === 0 && content.children.length === 0) continue
           addresses.set(
             language,
             new URL(
@@ -3167,6 +3265,7 @@ async function assembleSite(options: AssembleSiteOptions): Promise<Site> {
       // here — only the router's own tests exercise the "no usage source"
       // degradation.
       usage: { db, collections },
+      archiveDisplay: termArchiveDisplay,
     }),
     marketplaceRouter: createMarketplaceRouter({
       catalog: marketplaceCatalog,

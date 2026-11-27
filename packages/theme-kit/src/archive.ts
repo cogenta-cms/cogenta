@@ -53,6 +53,18 @@ export interface TermArchiveInput {
   readonly children: readonly TermArchiveLink[]
   /** This page's slice, newest first. Empty is a real answer, never an error. */
   readonly entries: readonly TermArchiveEntry[]
+  /**
+   * `theme@1.11`: whether this page lists entries at all. Absent means `true`,
+   * so a theme written before 1.11 and a host that never sets it behave as
+   * they always did.
+   *
+   * `false` is the site owner's choice that a term's page shows only its
+   * sub-terms (`children`). A theme must then draw **neither** the entry list
+   * **nor** the `labels.empty` message nor the pager: "nothing is filed here"
+   * would be false, the page simply is not about entries. A theme that
+   * ignores the field still renders a correct, if redundant, page.
+   */
+  readonly showEntries?: boolean
   readonly page: {
     /** 1-based. */
     readonly current: number

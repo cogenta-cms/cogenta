@@ -70,18 +70,20 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
             ),
           ),
         ),
-    h(
-      'section',
-      { class: 'cr-section cr-list', 'data-shape': rows.length === 0 ? 'empty' : 'index' },
-      h(
-        'div',
-        { class: 'cr-container cr-list__inner' },
-        rows.length === 0
-          ? h('p', { class: 'cr-empty' }, input.labels.empty)
-          : h('ul', { class: 'cr-list__items cr-index' }, rows),
-        pager(input),
-      ),
-    ),
+    input.showEntries === false
+      ? null
+      : h(
+          'section',
+          { class: 'cr-section cr-list', 'data-shape': rows.length === 0 ? 'empty' : 'index' },
+          h(
+            'div',
+            { class: 'cr-container cr-list__inner' },
+            rows.length === 0
+              ? h('p', { class: 'cr-empty' }, input.labels.empty)
+              : h('ul', { class: 'cr-list__items cr-index' }, rows),
+            pager(input),
+          ),
+        ),
   )
 }
 

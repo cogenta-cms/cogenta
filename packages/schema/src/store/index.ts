@@ -260,6 +260,22 @@ export type {
 export { createTaxonomyStore } from './taxonomy-store.js'
 export type { CountTaxonomyUsageOptions, TermUsage } from './taxonomy-usage.js'
 export { countTaxonomyUsage, countTermReferences } from './taxonomy-usage.js'
+export type {
+  TermArchiveDisplayStore,
+  TermArchiveDisplayStoreOptions,
+} from './term-archive-display-store.js'
+export {
+  assertTermArchiveDisplayMode,
+  createTermArchiveDisplayStore,
+  isTermArchiveDisplayMode,
+} from './term-archive-display-store.js'
+export type { TermArchiveDisplayMode } from './term-archive-display-tables.js'
+export {
+  DEFAULT_TERM_ARCHIVE_DISPLAY_MODE,
+  ensureTermArchiveDisplayTable,
+  TERM_ARCHIVE_DISPLAY_MODES,
+  TERM_ARCHIVE_DISPLAY_TABLE,
+} from './term-archive-display-tables.js'
 export type { TermSlugResolver, TermSlugResolverOptions } from './term-slugs.js'
 export { createTermSlugResolver, DEFAULT_TERM_SLUG_TTL_MS, fixedTermSlugs } from './term-slugs.js'
 export type {

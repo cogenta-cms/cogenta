@@ -69,14 +69,16 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
             ),
           ),
     ),
-    h(
-      'section',
-      { class: 'cg-collection cg-archive__list', 'data-layout': 'list' },
-      items.length === 0
-        ? h('p', { class: 'cg-collection__empty' }, input.labels.empty)
-        : h('ul', { class: 'cg-collection__items' }, ...items),
-      renderPager(input),
-    ),
+    input.showEntries === false
+      ? null
+      : h(
+          'section',
+          { class: 'cg-collection cg-archive__list', 'data-layout': 'list' },
+          items.length === 0
+            ? h('p', { class: 'cg-collection__empty' }, input.labels.empty)
+            : h('ul', { class: 'cg-collection__items' }, ...items),
+          renderPager(input),
+        ),
   )
 }
 

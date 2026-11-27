@@ -1,0 +1,18 @@
+{
+  "taxonomies": {
+    "archiveDisplay": {
+      "label": "Term page display",
+      "description": "What visitors and search engines see on this term's public page.",
+      "loading": "Loading the setting…",
+      "loadError": "Could not read this term's display setting.",
+      "saveError": "The term is saved, but its display setting is not: {{message}}",
+      "modes": {
+        "entries": "Only this term's content (default)",
+        "subterms": "Only the list of sub-terms",
+        "entries-and-subterms": "This term's content and the list of sub-terms",
+        "subtree": "This term's content and that of all its sub-terms",
+        "subtree-and-subterms": "This term's content and its sub-terms' content, with the list of sub-terms"
+      }
+    }
+  }
+}

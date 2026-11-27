@@ -28,7 +28,10 @@ its own path rather than giving `DELETE` a second meaning.
 
 Other notable routes: `/api/taxonomies` (taxonomies aren't collections — a
 site can name a collection and a taxonomy the same thing, which is why the
-routes are separate), `/api/media`, `/api/search`, `/api/export`,
+routes are separate; `GET`/`PUT /api/taxonomies/{taxonomy}/{id}/archive-display` reads and
+sets what a term's public page shows — `entries`, `subterms`, `entries-and-subterms`,
+`subtree` or `subtree-and-subterms` — a site setting kept outside the term itself, so
+contract A does not change), `/api/media`, `/api/search`, `/api/export`,
 `/robots.txt` and `/sitemap.xml` generated from published content.
 
 Every response follows the same error shape: a stable `code`, a message,

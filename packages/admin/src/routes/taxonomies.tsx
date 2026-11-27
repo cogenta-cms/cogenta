@@ -4,9 +4,12 @@ import { describeApiError } from '../api/describe-error.js'
 import {
   createTerm,
   deleteTerm,
+  getTermArchiveDisplay,
   listTerms,
   moveTerm,
+  setTermArchiveDisplay,
   type Term,
+  type TermArchiveDisplayMode,
   updateTerm,
 } from '../api/taxonomy-client.js'
 import { useAuth } from '../auth/auth-context.js'
@@ -151,15 +154,36 @@ export function TaxonomiesRoute(): JSX.Element {
     readonly slug: string
     readonly labels: Readonly<Record<string, string>>
     readonly parent: string | null
+    readonly archiveDisplay?: TermArchiveDisplayMode
   }): Promise<void> {
     if (token === null || current === null) return
 
+    let termId: string
     if (editingTerm === null) {
-      await createTerm(token, current, input)
+      termId = (await createTerm(token, current, input)).id
     } else {
+      termId = editingTerm.id
       await updateTerm(token, current, editingTerm.id, { slug: input.slug, labels: input.labels })
       if (input.parent !== editingTerm.parent) {
         await moveTerm(token, current, editingTerm.id, input.parent)
+      }
+    }
+    // A second request, to its own route: the setting lives outside the term.
+    // The term is already saved by now, so a refusal here says exactly that.
+    if (input.archiveDisplay !== undefined) {
+      try {
+        await setTermArchiveDisplay(token, current, termId, input.archiveDisplay)
+      } catch (caught) {
+        // Reported on the screen rather than thrown into the modal: the modal
+        // would stay open over a term that is already saved, and a second
+        // "save" would try to create it again.
+        await load()
+        setError(
+          t('taxonomies.archiveDisplay.saveError', {
+            message: describeApiError(caught, t('taxonomies.saveError')).message,
+          }),
+        )
+        return
       }
     }
     await load()
@@ -337,6 +361,11 @@ export function TaxonomiesRoute(): JSX.Element {
         hierarchical={selected?.hierarchical !== false}
         terms={terms}
         editing={editingTerm}
+        {...(mayUpdate && token !== null && current !== null
+          ? {
+              loadArchiveDisplay: (term: Term) => getTermArchiveDisplay(token, current, term.id),
+            }
+          : {})}
         onSave={saveTerm}
       />
 

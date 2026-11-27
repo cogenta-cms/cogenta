@@ -92,21 +92,23 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
             ),
       ),
     ),
-    h(
-      'section',
-      { class: 'cg-section cg-collection', 'data-form': 'index' },
-      h(
-        'div',
-        { class: 'cg-container cg-collection__inner' },
-        input.entries.length === 0
-          ? h('p', { class: 'cg-empty' }, input.labels.empty)
-          : h(
-              'ol',
-              { class: 'cg-index', 'data-count': String(input.entries.length) },
-              input.entries.map((entry) => renderIndexRow(workFromArchive(entry), 'h2')),
-            ),
-        pager(input),
-      ),
-    ),
+    input.showEntries === false
+      ? null
+      : h(
+          'section',
+          { class: 'cg-section cg-collection', 'data-form': 'index' },
+          h(
+            'div',
+            { class: 'cg-container cg-collection__inner' },
+            input.entries.length === 0
+              ? h('p', { class: 'cg-empty' }, input.labels.empty)
+              : h(
+                  'ol',
+                  { class: 'cg-index', 'data-count': String(input.entries.length) },
+                  input.entries.map((entry) => renderIndexRow(workFromArchive(entry), 'h2')),
+                ),
+            pager(input),
+          ),
+        ),
   )
 }

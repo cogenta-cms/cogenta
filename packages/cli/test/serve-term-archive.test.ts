@@ -167,9 +167,10 @@ describe('the public term archive (audit T01)', () => {
       expect(html).toContain('A long afternoon.')
       // Unpublished content never reaches a public page.
       expect(html).not.toContain('Still a draft')
-      // The sub-term is offered as a link down the tree, but its entries are
-      // not folded into the parent's list — a deliberate choice, documented.
-      expect(html).toContain('href="/topic/desserts"')
+      // By default a term's page lists only what is filed directly under it:
+      // neither the sub-term list nor the sub-term's entries
+      // (`serve-term-archive-display.test.ts` covers the other modes).
+      expect(html).not.toContain('href="/topic/desserts"')
       expect(html).not.toContain('A tart')
 
       // The site's own chrome is on the page, not a bare fragment.

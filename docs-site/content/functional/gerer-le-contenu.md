@@ -50,6 +50,29 @@ brouillon, pas de traduction séparée par langue, juste un libellé par langue
 sur le même terme (« Cuisine » et « Cooking » sont un seul concept, pas deux
 entrées liées).
 
+### Choisir ce que montre la page d'une catégorie
+
+Chaque terme a sa page publique (`/category/tutorials`, `/en/category/tutorials`…).
+Pour chaque terme, vous décidez ce qu'elle montre : ouvrez le terme (« Modifier »), puis
+choisissez dans **Affichage de la page du terme** :
+
+- **Seulement les contenus de ce terme** (par défaut) : les contenus classés directement
+  dans ce terme, sans liste de sous-termes ;
+- **Seulement la liste des sous-termes** : une page de navigation vers les sous-termes,
+  sans liste de contenus ;
+- **Les contenus de ce terme et la liste des sous-termes** ;
+- **Les contenus de ce terme et de tous ses sous-termes** : tout ce qui est classé dans
+  la branche, du plus récent au plus ancien, chaque contenu une seule fois ;
+- **Les contenus de ce terme et de ses sous-termes, avec la liste des sous-termes**.
+
+Un terme que vous n'avez jamais réglé se comporte comme le premier choix : la liste des
+sous-termes que certains thèmes dessinaient autrefois sous le titre n'apparaît donc plus
+tant que vous ne la demandez pas. Si vous choisissez « Seulement la liste des sous-termes »
+pour un terme qui n'en a aucun, la page dit que rien n'est encore classé plutôt que de rester
+blanche. Le plan du site (`/sitemap.xml`) ne liste que les pages qui montrent quelque chose
+avec le choix retenu, et ce réglage ne change pas le terme lui-même : il ne se traduit pas et
+n'est pas versionné avec lui.
+
 ### La catégorie dans l'adresse d'un article
 
 Pour le référencement, un article classé dans la catégorie « DevOps » est servi à

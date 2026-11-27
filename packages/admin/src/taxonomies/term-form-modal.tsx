@@ -1,9 +1,13 @@
 import { type FormEvent, type JSX, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { describeApiError } from '../api/describe-error.js'
-import type { Term } from '../api/taxonomy-client.js'
+import {
+  TERM_ARCHIVE_DISPLAY_MODES,
+  type Term,
+  type TermArchiveDisplayMode,
+} from '../api/taxonomy-client.js'
 import { slugify } from '../lib/slugify.js'
-import { Button, Field, Input, Modal, Notice } from '../ui/index.js'
+import { Button, Field, Input, Modal, Notice, Select } from '../ui/index.js'
 import { childrenOf, isSelfOrDescendant, subtreeSize } from './term-tree-utils.js'
 
 /**
@@ -31,10 +35,18 @@ export interface TermFormModalProps {
   readonly terms: readonly Term[]
   /** `null` creates a new root-eligible term; otherwise the term being edited. */
   readonly editing: Term | null
+  /**
+   * Reads what the edited term's public page shows. Given only to a caller
+   * that may change it (`update` on the taxonomy): without it the select is
+   * not offered at all, rather than offered and refused.
+   */
+  loadArchiveDisplay?(term: Term): Promise<TermArchiveDisplayMode>
   onSave(input: {
     readonly slug: string
     readonly labels: Readonly<Record<string, string>>
     readonly parent: string | null
+    /** Present only when the editor changed what the term's page shows. */
+    readonly archiveDisplay?: TermArchiveDisplayMode
   }): Promise<void>
 }
 
@@ -47,6 +59,7 @@ export function TermFormModal({
   hierarchical = true,
   terms,
   editing,
+  loadArchiveDisplay,
   onSave,
 }: TermFormModalProps): JSX.Element {
   const { t } = useTranslation()
@@ -57,6 +70,12 @@ export function TermFormModal({
   const [slugTouched, setSlugTouched] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // What the term's public page shows. `loaded` is what the server said (a new
+  // term starts at the default), so only a real change is written back.
+  const [displayMode, setDisplayMode] = useState<TermArchiveDisplayMode>('entries')
+  const [loadedDisplayMode, setLoadedDisplayMode] = useState<TermArchiveDisplayMode>('entries')
+  const [displayLoading, setDisplayLoading] = useState(false)
+  const [displayError, setDisplayError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -65,6 +84,29 @@ export function TermFormModal({
     setParent(editing?.parent ?? null)
     setSlugTouched(editing !== null)
     setError(null)
+    setDisplayMode('entries')
+    setLoadedDisplayMode('entries')
+    setDisplayError(null)
+    setDisplayLoading(false)
+    if (editing === null || loadArchiveDisplay === undefined) return
+
+    let cancelled = false
+    setDisplayLoading(true)
+    loadArchiveDisplay(editing)
+      .then((mode) => {
+        if (cancelled) return
+        setDisplayMode(mode)
+        setLoadedDisplayMode(mode)
+      })
+      .catch(() => {
+        if (!cancelled) setDisplayError(t('taxonomies.archiveDisplay.loadError'))
+      })
+      .finally(() => {
+        if (!cancelled) setDisplayLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [open, editing])
 
   const movedSize =
@@ -76,7 +118,14 @@ export function TermFormModal({
     setError(null)
     try {
       const finalSlug = slug.trim() === '' ? slugify(labels[locales[0] ?? ''] ?? '') : slug.trim()
-      await onSave({ slug: finalSlug, labels, parent: hierarchical ? parent : null })
+      await onSave({
+        slug: finalSlug,
+        labels,
+        parent: hierarchical ? parent : null,
+        ...(loadArchiveDisplay !== undefined && displayMode !== loadedDisplayMode
+          ? { archiveDisplay: displayMode }
+          : {}),
+      })
       onOpenChange(false)
     } catch (caught) {
       setError(describeApiError(caught, t('taxonomies.saveError')).message)
@@ -188,6 +237,35 @@ export function TermFormModal({
             </label>
             <div className="max-h-48 overflow-y-auto">{renderParentOptions(null, 0)}</div>
           </fieldset>
+        )}
+
+        {loadArchiveDisplay !== undefined && (
+          <Field
+            label={t('taxonomies.archiveDisplay.label')}
+            description={
+              displayLoading
+                ? t('taxonomies.archiveDisplay.loading')
+                : t('taxonomies.archiveDisplay.description')
+            }
+            error={displayError}
+          >
+            {(control) => (
+              <Select
+                {...control}
+                value={displayMode}
+                // Disabled until the stored value is known: saving over a
+                // setting that has not loaded would overwrite it blind.
+                disabled={displayLoading || displayError !== null}
+                onChange={(event) => setDisplayMode(event.target.value as TermArchiveDisplayMode)}
+              >
+                {TERM_ARCHIVE_DISPLAY_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {t(`taxonomies.archiveDisplay.modes.${mode}`)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
         )}
       </form>
     </Modal>

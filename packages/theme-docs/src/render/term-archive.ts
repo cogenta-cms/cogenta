@@ -62,10 +62,12 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
             { class: 'cd-archive__children', 'aria-label': input.labels.subterms },
             input.children.map((child) => h('li', {}, h('a', { href: child.href }, child.label))),
           ),
-      rows.length === 0
-        ? h('p', { class: 'cd-empty' }, input.labels.empty)
-        : h('ul', { class: 'cd-index' }, rows),
-      pager(input),
+      input.showEntries === false
+        ? null
+        : rows.length === 0
+          ? h('p', { class: 'cd-empty' }, input.labels.empty)
+          : h('ul', { class: 'cd-index' }, rows),
+      input.showEntries === false ? null : pager(input),
     ),
   )
 }

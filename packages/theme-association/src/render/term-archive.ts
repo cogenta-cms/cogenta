@@ -86,18 +86,20 @@ export function renderTermArchive(input: TermArchiveInput): HtmlElement {
             ),
           ),
         ),
-    h(
-      'section',
-      { class: 'ca-section ca-list', 'data-shape': rows.length === 0 ? 'empty' : 'index' },
-      h(
-        'div',
-        { class: 'ca-container ca-list__inner' },
-        rows.length === 0
-          ? h('p', { class: 'ca-empty' }, input.labels.empty)
-          : h('ul', { class: 'ca-list__items ca-index' }, rows),
-        pager(input),
-      ),
-    ),
+    input.showEntries === false
+      ? null
+      : h(
+          'section',
+          { class: 'ca-section ca-list', 'data-shape': rows.length === 0 ? 'empty' : 'index' },
+          h(
+            'div',
+            { class: 'ca-container ca-list__inner' },
+            rows.length === 0
+              ? h('p', { class: 'ca-empty' }, input.labels.empty)
+              : h('ul', { class: 'ca-list__items ca-index' }, rows),
+            pager(input),
+          ),
+        ),
   )
 }
 

@@ -149,6 +149,7 @@ const STATUS_BY_CODE: Partial<Record<ErrorCode, number>> = {
   // Patterns — the page builder's motif/model library (fiche 43 sub-chantier A)
   PATTERN_UNKNOWN: 404,
   PATTERN_INVALID: 400,
+  TERM_ARCHIVE_DISPLAY_INVALID: 400,
 
   // Embed previews (L38)
   EMBED_URL_INVALID: 400,

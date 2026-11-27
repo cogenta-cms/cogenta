@@ -1,0 +1,18 @@
+{
+  "taxonomies": {
+    "archiveDisplay": {
+      "label": "Affichage de la page du terme",
+      "description": "Ce que visiteurs et moteurs de recherche voient sur la page publique de ce terme.",
+      "loading": "Chargement du réglage…",
+      "loadError": "Impossible de lire le réglage d'affichage de ce terme.",
+      "saveError": "Le terme est enregistré, mais pas son affichage : {{message}}",
+      "modes": {
+        "entries": "Seulement les contenus de ce terme (par défaut)",
+        "subterms": "Seulement la liste des sous-termes",
+        "entries-and-subterms": "Les contenus de ce terme et la liste des sous-termes",
+        "subtree": "Les contenus de ce terme et de tous ses sous-termes",
+        "subtree-and-subterms": "Les contenus de ce terme et de ses sous-termes, avec la liste des sous-termes"
+      }
+    }
+  }
+}

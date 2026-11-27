@@ -66,6 +66,7 @@ import {
   ensureRolePermissionTable,
   ensureSearchConsoleConnectionTable,
   ensureSiteSettingsTables,
+  ensureTermArchiveDisplayTable,
   ensureThemeTable,
   MAINTENANCE_TABLE,
   MENU_TABLES,
@@ -81,6 +82,7 @@ import {
   SEARCH_TABLE,
   SITE_SETTINGS_TABLE,
   type TaxonomyDefinition,
+  TERM_ARCHIVE_DISPLAY_TABLE,
   THEME_TABLE,
 } from '@cogenta/schema'
 import { ensureWidgetTables, WIDGETS_TABLE } from '@cogenta/widgets'
@@ -260,6 +262,8 @@ export async function backupTables(cwd: string): Promise<readonly string[]> {
       REDIRECT_PATTERNS_TABLE,
       NOT_FOUND_LOG_TABLE,
       PATTERN_TABLE,
+      // What each taxonomy term's public page shows — after the terms it names.
+      TERM_ARCHIVE_DISPLAY_TABLE,
       WIDGETS_TABLE,
       // Publication scheduling: what ran, and what failed to.
       SCHEDULED_TASK_RUNS_TABLE,
@@ -316,6 +320,7 @@ async function ensureAllTables(
   await ensureMaintenanceTable(db)
   await ensureMenuTables(db)
   await ensurePatternTables(db)
+  await ensureTermArchiveDisplayTable(db)
   await ensureWidgetTables(db)
   await ensureSearchConsoleConnectionTable(db)
   await ensureCommentsTables(db)

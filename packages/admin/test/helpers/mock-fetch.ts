@@ -2851,6 +2851,9 @@ export function installMockFetch(
       },
     ]
   ).map((term) => ({ ...term }))
+  // What each term's public page shows (`archive-display` routes), by term id.
+  // Absent means `entries`, the default — exactly what the real store answers.
+  const termArchiveModes: Record<string, string> = {}
   // `?counts=1`'s answer, by term id — a simplified stand-in for the real
   // cross-collection aggregation `countTaxonomyUsage` performs server-side
   // (proven there, against a real database, in `@cogenta/schema`'s and
@@ -6467,7 +6470,9 @@ export function installMockFetch(
        * worthless if the stub says yes to everyone.
        */
       const taxonomyMatch =
-        /\/api\/taxonomies\/([^/?]+)(?:\/([^/?]+))?(?:\/(move))?(?:\?.*)?$/u.exec(url)
+        /\/api\/taxonomies\/([^/?]+)(?:\/([^/?]+))?(?:\/(move|archive-display))?(?:\?.*)?$/u.exec(
+          url,
+        )
       if (taxonomyMatch !== null) {
         const [, taxonomy = '', id, action] = taxonomyMatch
         const declared = MOCK_SCHEMA.taxonomies.find((entry) => entry.name === taxonomy)
@@ -6576,6 +6581,39 @@ export function installMockFetch(
           if (typeof body.position === 'number') term.position = body.position
           term.updatedAt = '2026-03-02T00:00:00.000Z'
           return json(200, { data: term })
+        }
+
+        // `GET`/`PUT .../archive-display`: what a term's public page shows.
+        // Held per `installMockFetch()` call like the terms themselves; the
+        // closed list is the real route's, so an unknown mode is a 400 here too.
+        if (id !== undefined && action === 'archive-display') {
+          if (!terms.some((candidate) => candidate.id === id)) {
+            return json(404, {
+              error: { code: 'TAXONOMY_TERM_NOT_FOUND', message: 'No such term.' },
+            })
+          }
+          if (method === 'GET') {
+            return json(200, { data: { mode: termArchiveModes[id] ?? 'entries' } })
+          }
+          if (method === 'PUT') {
+            const modes = [
+              'entries',
+              'subterms',
+              'entries-and-subterms',
+              'subtree',
+              'subtree-and-subterms',
+            ]
+            if (typeof body.mode !== 'string' || !modes.includes(body.mode)) {
+              return json(400, {
+                error: {
+                  code: 'TERM_ARCHIVE_DISPLAY_INVALID',
+                  message: 'Not a term archive display mode.',
+                },
+              })
+            }
+            termArchiveModes[id] = body.mode
+            return json(200, { data: { mode: body.mode } })
+          }
         }
 
         if (id !== undefined && action === 'move' && method === 'POST') {

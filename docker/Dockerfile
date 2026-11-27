@@ -88,11 +88,15 @@ LABEL org.opencontainers.image.title="Cogenta" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.created="${CREATED}"
 
+# Debian security updates are applied at build time: the Node base image is
+# rebuilt on its own schedule and can ship a package whose fix is already in
+# bookworm-security (e.g. libpam CVE-2025-6020), which the scan below refuses.
 # tini as PID 1: it forwards SIGTERM to the server and reaps the child processes
 # plugins run in. npm, npx and corepack are removed: nothing in a running site
 # installs packages (an upgrade is a new image), and their bundled dependencies
 # are the part of a Node image a vulnerability scanner reports most.
 RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends tini ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \

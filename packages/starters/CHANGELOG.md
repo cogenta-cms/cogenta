@@ -1,5 +1,18 @@
 # @cogenta/starters
 
+## 0.6.5
+
+### Patch Changes
+
+- Updated dependencies [[`684cbde`](https://github.com/cogenta-cms/cogenta/commit/684cbdefdd6afdb1d05349af8358c52a7ecc6949)]:
+  - @cogenta/schema@0.15.0
+  - @cogenta/core@0.17.0
+  - @cogenta/api@2.16.0
+  - @cogenta/theme-kit@0.10.0
+  - @cogenta/blocks@1.2.7
+  - @cogenta/widgets@0.2.15
+  - @cogenta/render@0.6.8
+
 ## 0.6.4
 
 ### Patch Changes

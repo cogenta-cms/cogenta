@@ -1,5 +1,15 @@
 # @cogenta/theme-portfolio
 
+## 1.4.8
+
+### Patch Changes
+
+- [#75](https://github.com/cogenta-cms/cogenta/pull/75) [`684cbde`](https://github.com/cogenta-cms/cogenta/commit/684cbdefdd6afdb1d05349af8358c52a7ecc6949) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A term archive page honours `TermArchiveInput.showEntries` (contract D `theme@1.11`): when the site owner chose a page that shows only the sub-terms, the theme draws neither the entry list, nor the "nothing is filed here" message, nor the pager. A host that does not set the field gets the page it always got.
+- Updated dependencies [[`684cbde`](https://github.com/cogenta-cms/cogenta/commit/684cbdefdd6afdb1d05349af8358c52a7ecc6949)]:
+  - @cogenta/theme-kit@0.10.0
+  - @cogenta/blocks@1.2.7
+  - @cogenta/render@0.6.8
+
 ## 1.4.7
 
 ### Patch Changes

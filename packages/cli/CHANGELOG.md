@@ -1,5 +1,51 @@
 # @cogenta/cli
 
+## 0.26.0
+
+### Minor Changes
+
+- [#75](https://github.com/cogenta-cms/cogenta/pull/75) [`684cbde`](https://github.com/cogenta-cms/cogenta/commit/684cbdefdd6afdb1d05349af8358c52a7ecc6949) Thanks [@georgesmomo](https://github.com/georgesmomo)! - A site owner now chooses, per taxonomy term, what the term's public page (`/{taxonomy}/{slug}`) shows. Five modes: `entries` (the new default: only the entries filed directly under the term, **no sub-term list**), `subterms`, `entries-and-subterms`, `subtree` (the term's entries plus every descendant's, deduplicated, newest first) and `subtree-and-subterms`. A term with no stored setting behaves as `entries`, so a theme that used to draw the sub-term list under every parent term no longer does until the owner asks for it.
+  
+  The setting is a host-owned presentation setting kept outside contract A (a term gains no field, `schema@2.5` does not change): `@cogenta/schema` exports `createTermArchiveDisplayStore`, `ensureTermArchiveDisplayTable`, `TERM_ARCHIVE_DISPLAY_MODES` and `assertTermArchiveDisplayMode` (table `cogenta_term_archive_display`, covered by `cogenta backup`/`restore`); `@cogenta/core` adds the `TERM_ARCHIVE_DISPLAY_INVALID` error code. `@cogenta/api`'s taxonomy router gains `GET`/`PUT /{taxonomy}/{id}/archive-display` (read needs `read`, write needs `update` on the taxonomy; deleting a term, with or without `cascade`, forgets its setting) and maps the new code to 400. `cogenta serve` applies the mode to the page, its pagination and `/sitemap.xml`, which lists a term page only when it shows something under its mode; its fallback archive (for a theme without `renderTermArchive`) now draws the sub-term list too.
+  
+  Contract D moves to `theme@1.11`, strictly additive: `TermArchiveInput.showEntries?: boolean` (absent means `true`). When `false`, a theme draws neither the entry list nor the "nothing is filed here" message nor the pager.
+
+### Patch Changes
+
+- Updated dependencies [[`684cbde`](https://github.com/cogenta-cms/cogenta/commit/684cbdefdd6afdb1d05349af8358c52a7ecc6949), [`684cbde`](https://github.com/cogenta-cms/cogenta/commit/684cbdefdd6afdb1d05349af8358c52a7ecc6949)]:
+  - @cogenta/schema@0.15.0
+  - @cogenta/core@0.17.0
+  - @cogenta/api@2.16.0
+  - @cogenta/theme-kit@0.10.0
+  - @cogenta/theme-canonical@1.4.8
+  - @cogenta/theme-association@0.6.8
+  - @cogenta/theme-blog@0.8.4
+  - @cogenta/theme-docs@0.6.8
+  - @cogenta/theme-ecommerce@1.4.8
+  - @cogenta/theme-entreprise@1.5.8
+  - @cogenta/theme-magazine@1.4.8
+  - @cogenta/theme-portfolio@1.4.8
+  - @cogenta/theme-restaurant@0.6.8
+  - @cogenta/theme-saas@0.6.8
+  - @cogenta/agents@0.13.1
+  - @cogenta/auth@0.8.1
+  - @cogenta/blocks@1.2.7
+  - @cogenta/export@0.3.8
+  - @cogenta/import@0.2.24
+  - @cogenta/plugins@0.9.7
+  - @cogenta/seo@0.6.3
+  - @cogenta/starters@0.6.5
+  - @cogenta/widgets@0.2.15
+  - @cogenta/agents-builtin@0.7.9
+  - @cogenta/analytics@0.3.16
+  - @cogenta/channels@0.3.24
+  - @cogenta/comments@0.2.17
+  - @cogenta/commerce@0.5.19
+  - @cogenta/forms@0.2.24
+  - @cogenta/mcp@0.4.1
+  - @cogenta/observability@0.2.16
+  - @cogenta/render@0.6.8
+
 ## 0.25.0
 
 ### Minor Changes

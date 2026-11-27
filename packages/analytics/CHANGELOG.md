@@ -1,5 +1,12 @@
 # @cogenta/analytics
 
+## 0.3.16
+
+### Patch Changes
+
+- Updated dependencies [[`684cbde`](https://github.com/cogenta-cms/cogenta/commit/684cbdefdd6afdb1d05349af8358c52a7ecc6949)]:
+  - @cogenta/core@0.17.0
+
 ## 0.3.15
 
 ### Patch Changes

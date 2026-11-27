@@ -1,5 +1,15 @@
 # @cogenta/agents
 
+## 0.13.1
+
+### Patch Changes
+
+- Updated dependencies [[`684cbde`](https://github.com/cogenta-cms/cogenta/commit/684cbdefdd6afdb1d05349af8358c52a7ecc6949)]:
+  - @cogenta/schema@0.15.0
+  - @cogenta/core@0.17.0
+  - @cogenta/blocks@1.2.7
+  - @cogenta/render@0.6.8
+
 ## 0.13.0
 
 ### Minor Changes

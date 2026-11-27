@@ -1,5 +1,13 @@
 # @cogenta/auth
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [[`684cbde`](https://github.com/cogenta-cms/cogenta/commit/684cbdefdd6afdb1d05349af8358c52a7ecc6949)]:
+  - @cogenta/schema@0.15.0
+  - @cogenta/core@0.17.0
+
 ## 0.8.0
 
 ### Minor Changes
